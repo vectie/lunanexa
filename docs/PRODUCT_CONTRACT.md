@@ -1,0 +1,121 @@
+# LunaNexa product contract
+
+## 1. Purpose
+
+LunaNexa turns a small heterogeneous GPU fleet into a governed model provider.
+Its first target is the owner's four-DGX-Spark cluster. The architecture must
+continue to work when nodes, accelerators, serving runtimes and tenants change.
+
+LunaNexa is an infrastructure product, not a MoonSuite pack and not an agent
+runtime. MoonSuite is an initial consumer, not part of LunaNexa's execution
+environment.
+
+## 2. Placement in the system
+
+MoonSuite applications ask MoonGate for a model capability. MoonGate applies
+product authority, client compatibility, provider selection and commercial
+policy. If LunaNexa is selected, MoonGate sends a provider-neutral request to
+LunaNexa. LunaNexa admits and schedules that request without knowing which
+MoonSuite product originated it.
+
+LunaNexa owns the northbound contract. A MoonGate adapter may depend on the
+published LunaNexa contract package; LunaNexa has no reverse dependency on
+MoonGate.
+
+## 3. One product, multiple components
+
+The initial distribution may produce several binaries or services:
+
+| Component | Responsibility | Runs on GPU nodes? |
+|---|---|---:|
+| API | Authentication, validation, admission and streaming | No |
+| Controller | Desired state, reconciliation, rollout and recovery | No |
+| Scheduler | Placement, queues, capacity and failover | No |
+| Registry | Models, artifacts, runtimes, licenses and evaluations | No |
+| Metering | Usage, quotas, timing and infrastructure audit | No |
+| Console | Rabbita operator experience | No |
+| Node agent | Inventory, runtime supervision and heartbeats | Yes |
+| Runtime adapter | Starts and observes an approved serving runtime | Yes |
+
+These components share one product contract, release train, operator console
+and version. Do not brand them as separate products.
+
+## 4. Northbound contract
+
+The canonical v1 request is a typed, versioned workload envelope. It should
+carry only infrastructure-relevant information:
+
+- contract version, idempotency key and opaque workload identifier;
+- opaque tenant reference and credential scope;
+- capability such as `text.generate`, `embedding.create`, `image.generate`,
+  `video.generate`, `audio.generate`, `model.evaluate` or `model.train`;
+- model alias or policy selector, never a source repository path;
+- payload plus its data classification and retention policy;
+- deadline, priority, latency class and resource ceiling;
+- streaming preference and normalized output requirements;
+- trace correlation token that reveals no application identity.
+
+Responses contain a stable status, normalized output, usage, model artifact
+digest, runtime version, timing, retryability and an auditable receipt. Public
+error bodies must not contain node addresses, filesystem paths, container IDs,
+provider credentials, stack traces or internal topology.
+
+OpenAI-, Anthropic- or other compatibility endpoints are adapters. They do not
+replace the canonical LunaNexa contract.
+
+## 5. Southbound contract
+
+The node agent accepts only signed desired-state assignments from an
+authenticated LunaNexa controller. An assignment identifies:
+
+- deployment and model artifact digests;
+- approved runtime image and immutable runtime configuration;
+- resource limits, device placement and network policy;
+- health, readiness and termination rules;
+- data, cache and retention policy;
+- rollout generation and lease expiry.
+
+Nodes report typed inventory, heartbeat, deployment state, capacity, runtime
+health and bounded telemetry. They never receive MoonSuite workflows, domain
+records or product credentials.
+
+## 6. Authority and security
+
+- Mutual authentication is required between controller and nodes.
+- Node agents initiate or maintain a narrow management channel; arbitrary
+  inbound administration is not part of the data plane.
+- Desired state is signed and generation-numbered. A stale controller cannot
+  silently overwrite a newer deployment.
+- Model artifacts and runtime images are digest-pinned and verified before use.
+- Raw prompts and outputs are absent from logs by default.
+- Secrets are referenced through deployment-owned secret stores and delivered
+  only to the runtime that requires them.
+- Every consequential operation creates an immutable audit event with actor,
+  policy, target, prior state, next state and result.
+- Administrative and inference credentials are separate.
+
+## 7. Explicit non-goals for v1
+
+- Building a new container orchestrator, object store or metrics engine.
+- Transparent shared memory or mandatory distributed inference across all four
+  DGX machines.
+- Autonomous model promotion or policy mutation.
+- A general workflow, pack or agent system.
+- MoonSuite-specific dashboards on cluster nodes.
+- Public multi-tenant hosting before the private cluster passes its operational
+  and security gates.
+
+## 8. Release acceptance
+
+The first usable release must demonstrate through the operator UI and APIs:
+
+1. enroll four nodes without installing a MoonSuite application on any node;
+2. register and verify a licensed model artifact;
+3. deploy it to a selected node and obtain a healthy readiness state;
+4. route a generic request through MoonGate to LunaNexa and stream the result;
+5. meter the request and return a replayable receipt;
+6. drain or stop one node and route subsequent eligible work elsewhere;
+7. restart the controller and reconcile durable desired state;
+8. prove that public responses and node assignments contain no forbidden
+   MoonSuite identifiers or internal secrets.
+
