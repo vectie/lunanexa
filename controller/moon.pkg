@@ -1,0 +1,9 @@
+import {
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/node",
+  "vectie/lunanexa/runtimes",
+  "vectie/lunanexa/store",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "native"

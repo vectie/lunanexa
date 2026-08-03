@@ -1,0 +1,99 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/policy"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn authorized(Role, Permission) -> Bool
+
+pub fn permits_training(@contracts.DataPolicy) -> Bool
+
+pub fn redacted_request_log(@contracts.WorkloadEnvelope) -> RequestLog
+
+pub fn strict_runtime_network_policy() -> @contracts.NetworkPolicy
+
+pub fn trusted(SignedSubject, TrustPolicy) -> Bool
+
+// Errors
+pub(all) suberror RetentionError {
+  RetentionNotPermitted
+  ConsentRequired
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct DeletionReceipt {
+  workload_id : String
+  deleted_unix_ms : Int64
+  object_ref_hash : String
+  policy_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum Permission {
+  EnrollNode
+  ManageModel
+  ManageDeployment
+  ChangePolicy
+  ReadAudit
+  InvokeModel
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RequestLog {
+  workload_id : String
+  tenant_ref : String
+  capability : @contracts.Capability
+  model_selector : String
+  classification : @contracts.DataClass
+  trace_token : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct RetentionLedger {
+  records : Map[String, RetentionRecord]
+  receipts : Array[DeletionReceipt]
+}
+pub fn RetentionLedger::active_count(Self) -> Int
+pub fn RetentionLedger::deletion_receipts(Self) -> Array[DeletionReceipt]
+pub fn RetentionLedger::expire(Self, Int64) -> Array[DeletionReceipt]
+pub fn RetentionLedger::new() -> Self
+pub fn RetentionLedger::retain(Self, String, @contracts.RetentionPolicy, String) -> Unit raise RetentionError
+
+pub(all) struct RetentionRecord {
+  workload_id : String
+  expires_unix_ms : Int64
+  consent_receipt : String
+  encrypted_object_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum Role {
+  Administrator
+  Operator
+  Auditor
+  InferenceCaller
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SecretReference {
+  name : String
+  version : Int64
+  provider_ref : String
+  rotated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SecretReference::rotate(Self, String, Int64) -> Self
+
+pub(all) struct SignedSubject {
+  digest : String
+  signer : String
+  signature_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TrustPolicy {
+  allowed_signers : Array[String]
+  require_sha256 : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+

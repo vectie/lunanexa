@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-control
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-node
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-console
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lunanexa-control-state
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-control-config
+data:
+  controller-epoch: "${CONTROLLER_EPOCH}"
+  runtime-endpoint: "${RUNTIME_ENDPOINT}"
+  runtime-version: "${RUNTIME_VERSION}"
+  runtime-image-digest: "${RUNTIME_IMAGE_DIGEST}"
+  model-artifact-digest: "${MODEL_ARTIFACT_DIGEST}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-runtime-endpoints
+data:
+  endpoints.json: |
+    ${RUNTIME_ENDPOINTS_JSON}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-node-config
+data:
+  controller-endpoint: "${CONTROLLER_ENDPOINT}"

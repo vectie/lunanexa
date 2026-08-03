@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-control
+  template:
+    metadata:
+      labels:
+        app: lunanexa-control
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: management
+    spec:
+      serviceAccountName: lunanexa-control
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control
+          image: registry.invalid/lunanexa/control@${CONTROLLER_IMAGE_DIGEST}
+          args: []
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: LUNANEXA_LISTEN_ADDRESS
+              value: 0.0.0.0:8080
+            - name: LUNANEXA_STATE_PATH
+              value: /var/lib/lunanexa/control.json
+            - name: LUNANEXA_REGISTRY_PATH
+              value: /var/lib/lunanexa/registry.json
+            - name: LUNANEXA_ENROLLMENT_PATH
+              value: /var/lib/lunanexa/enrollment.json
+            - name: LUNANEXA_SCHEDULER_PATH
+              value: /var/lib/lunanexa/scheduler.json
+            - name: LUNANEXA_TELEMETRY_PATH
+              value: /var/lib/lunanexa/telemetry.json
+            - name: LUNANEXA_ADMISSION_CAPACITY
+              value: "128"
+            - name: LUNANEXA_RUNTIME_CONCURRENCY
+              value: "4"
+            - name: LUNANEXA_RECONCILIATION_ONLY
+              value: "0"
+            - name: LUNANEXA_CONTROLLER_EPOCH
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: controller-epoch
+            - name: LUNANEXA_RUNTIME_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: runtime-endpoint
+            - name: LUNANEXA_RUNTIME_ENDPOINTS_PATH
+              value: /etc/lunanexa/runtime-routes/endpoints.json
+            - name: LUNANEXA_RUNTIME_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: runtime-version
+            - name: LUNANEXA_RUNTIME_IMAGE_DIGEST
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: runtime-image-digest
+            - name: LUNANEXA_MODEL_ARTIFACT_DIGEST
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: model-artifact-digest
+            - name: LUNANEXA_RUNTIME_CREDENTIAL
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: runtime-token
+            - name: LUNANEXA_OPERATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: operator-token
+            - name: LUNANEXA_INFERENCE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: inference-token
+            - name: LUNANEXA_AUDIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: audit-token
+            - name: LUNANEXA_MONITORING_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: monitoring-token
+            - name: LUNANEXA_ASSIGNMENT_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: assignment-signing-secret
+            - name: LUNANEXA_COSIGN_BINARY
+              value: /usr/bin/cosign
+            - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH
+              value: /etc/lunanexa/trust/cosign.pub
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/lunanexa
+            - name: cosign-trust
+              mountPath: /etc/lunanexa/trust
+              readOnly: true
+            - name: runtime-endpoints
+              mountPath: /etc/lunanexa/runtime-routes
+              readOnly: true
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: lunanexa-control-state
+        - name: cosign-trust
+          secret:
+            secretName: lunanexa-cosign-trust
+        - name: runtime-endpoints
+          configMap:
+            name: lunanexa-runtime-endpoints
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-control
+spec:
+  selector:
+    app: lunanexa-control
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

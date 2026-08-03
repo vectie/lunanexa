@@ -52,6 +52,12 @@ The API validates authentication, typed contracts, quotas, idempotency,
 deadlines and data policy. It translates compatibility requests into the
 canonical workload envelope and exposes streaming without revealing topology.
 
+The native controller sits behind a trusted ingress or service mesh that
+terminates TLS and validates client certificates. Southbound calls also carry
+per-node hashed authority, HMAC-authenticated canonical heartbeats,
+certificate-expiry checks and replay fences. These application checks do not
+replace deployment mTLS; they limit damage if a trusted path is misrouted.
+
 MoonGate remains responsible for deciding whether LunaNexa or an external
 provider should satisfy a MoonSuite request. LunaNexa never calls back into a
 MoonSuite product to make a scheduling decision.
@@ -82,6 +88,20 @@ not part of routine reconciliation.
 Inference traffic is sent only to a ready runtime selected by the scheduler.
 The platform supports streaming, bounded queues, cancellation, backpressure,
 deadline propagation and idempotent retry where the model operation permits it.
+Admission capacity bounds queued plus running work. A separately configured
+runtime-concurrency limit controls active adapter calls; accepted overflow waits
+under its request deadline, remains cancellable, and reports queue time apart
+from accelerator time. Durable active workload IDs reject reconstruction-time
+relaunch, while the scoped idempotency key is also propagated to the serving
+adapter as defense in depth.
+The serving adapter resolves that selected node either through a strict
+deployment-owned node-to-HTTPS-endpoint map or through one trusted gateway that
+enforces the authenticated node routing hint. In strict mode an absent mapping
+fails closed; the generic endpoint is never used as an implicit substitute for
+a selected node. Strict-mode placement also requires a non-expired signed
+assignment whose deployment ID appears in the node agent's ready-runtime
+heartbeat; static inventory or license labels alone cannot make a runtime
+schedulable.
 
 Runtime implementations are adapters behind a common lifecycle interface:
 inspect, prepare, start, ready, invoke, drain, stop and collect metrics. LunaNexa
@@ -107,6 +127,11 @@ Treat the four DGX Sparks as four schedulable nodes, not as one assumed shared-
 memory machine. Phase one proves single-node serving. Multi-node sharding or
 paired high-speed links are enabled only after the actual network, runtime and
 model combination passes a topology-specific benchmark.
+
+The local four-node functional simulator mirrors the four independent node
+identities and runtime endpoints with native processes. It validates protocol,
+placement and recovery behavior but is not an accelerator or performance
+emulator; see `docs/SIMULATION.md`.
 
 The initial controller should run outside the GPU execution nodes when a stable
 management host is available. Losing one GPU node must not destroy desired
@@ -191,4 +216,3 @@ Per model/version/runtime/hardware profile, record:
 
 Benchmarks are versioned evidence, not marketing claims. A deployment is
 promoted only against a named workload profile and declared service objective.
-

@@ -2,10 +2,12 @@
 
 ## Start here
 
-The next implementation thread should work in `/Users/kq/Workspace/lunanexa`
-and begin with Phase 0 of `docs/PLAN.md`. Do not start by installing services on
-the DGX machines. Freeze and test the contracts first, then use one node for the
-vertical slice.
+The repository implementation baseline is complete enough for deployment
+integration. A deployment owner should work in `/Users/kq/Workspace/lunanexa`,
+run `scripts/release-gate.sh`, review `docs/IMPLEMENTATION_STATUS.md`, and then
+collect the private inventory below. Do not install on DGX machines until the
+one-node overlay, trust roots, immutable digests and rollback evidence have been
+reviewed.
 
 Read in this order:
 
@@ -14,6 +16,7 @@ Read in this order:
 3. `docs/ARCHITECTURE.md`
 4. `docs/DECISIONS.md`
 5. `docs/PLAN.md`
+6. `docs/SIMULATION.md`
 
 ## Frozen decisions
 
@@ -51,21 +54,25 @@ Record these in a private deployment inventory, never in the repository:
 Do not commit this inventory if it contains addresses, serials, credentials or
 security topology.
 
-## Recommended first implementation slice
+## Implemented first slice
 
-Create only enough code to prove the contract and reconciliation shape:
+The repository contains this tested contract and reconciliation shape:
 
 ```text
 contracts v1
-→ in-memory controller/store adapter
-→ deterministic fake node transport
-→ fake runtime adapter
-→ API health + register/deploy/invoke/status
-→ one black-box lifecycle test
+→ durable native controller/registry/scheduler/enrollment/telemetry
+→ authenticated node reconciliation and rootless OCI supervision
+→ deterministic fake plus digest-pinned remote text adapters
+→ health/register/deploy/invoke/stream/status/cancel/stop APIs
+→ native process-boundary, restart, placement, leak and UI tests
 ```
 
-Then replace the fake node transport with mutual authentication and enroll one
-real DGX. Keep fake adapters as deterministic test providers.
+The next step is deployment integration: terminate mTLS at the trusted
+management boundary, configure the real CA/identity/S3/OCI/metrics providers,
+and enroll one real DGX. Keep fake adapters as deterministic test providers.
+Before hardware is available, run `scripts/four-node-simulation.sh` to validate
+the four-node control-plane and failure workflow without treating its output as
+hardware, model-license or performance evidence.
 
 ## Questions that remain open
 
@@ -91,4 +98,3 @@ it through declarative desired state, send one generic request, inspect usage
 and an audit receipt, restart the node agent, and observe correct reconciliation.
 The DGX contains no MoonSuite repository, application binary, pack manifest or
 product credential.
-

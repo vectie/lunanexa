@@ -1,8 +1,11 @@
 # LunaNexa
 
-> **Inception · documentation-first repository.** LunaNexa is not ready to
-> manage a production cluster. The next implementation thread should follow
-> [the phased plan](docs/PLAN.md) and [implementation handoff](docs/IMPLEMENTATION_HANDOFF.md).
+> **Implemented control-plane baseline.** LunaNexa now contains a native HTTP
+> controller, durable registry/scheduler/enrollment/telemetry state, a native
+> node reconciler and OCI supervisor, a provider-neutral client and CLI, a live
+> Rabbita console, and release evidence tooling. Production acceptance still
+> requires the private runtime, CA/identity, four-node cluster, measurements,
+> and named human approvals in [the phased plan](docs/PLAN.md).
 
 LunaNexa is a MoonBit-native model-as-a-service and hardware-cluster control
 plane. It sits below provider routing and above the GPU machines so the hardware
@@ -69,11 +72,37 @@ default, and retained only when an explicit policy permits it.
 - Persistent infrastructure: standard OCI registry, S3-compatible artifact
   storage and Prometheus-compatible telemetry rather than new Luna products.
 
+## Local validation
+
+Run the consolidated repository gate:
+
+```sh
+sh scripts/release-gate.sh
+```
+
+It formats and checks native packages, runs the native suite, checks the
+JavaScript console, and scans dependencies, deployment images, secrets,
+contracts, and public responses. It deliberately does not claim the real
+four-node or human release gate.
+
+For local four-node behavior without DGX hardware, run
+`sh scripts/four-node-simulation.sh`. It exercises isolated node identities,
+signed reconciliation, strict runtime routing, queueing, failure, drain and
+restart behavior. See [the simulation guide](docs/SIMULATION.md) for its
+deliberately narrow hardware and performance claims.
+
+Native executables live in `cmd/control`, `cmd/node`, `cmd/cli`,
+`cmd/benchmark`, `cmd/evidence`, and `cmd/recovery`; the Rabbita application
+lives in `cmd/console`. The controller requires deployment-provided secret
+values and immutable runtime/model digests.
+Node inventory is read from a host-owned JSON file, and each enrolled node uses
+its own hashed-at-rest node credential.
+
 ## Documents
 
 - [Product contract](docs/PRODUCT_CONTRACT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Phased implementation plan](docs/PLAN.md)
 - [Architecture decisions](docs/DECISIONS.md)
+- [Four-node functional simulation](docs/SIMULATION.md)
 - [Next-thread handoff](docs/IMPLEMENTATION_HANDOFF.md)
-

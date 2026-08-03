@@ -1,0 +1,76 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/client"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+
+// Errors
+pub(all) suberror ClientError {
+  ClientError(code~ : ClientErrorCode, message~ : String, retryable~ : Bool)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct CapabilityDescriptor {
+  capability : @contracts.Capability
+  selectors : Array[String]
+  streaming : Bool
+  cancellation : Bool
+  healthy : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct Client[T] {
+  config : ClientConfig
+  transport : T
+}
+pub async fn[T : ProviderTransport] Client::cancel(Self[T], String) -> Bool raise ClientError
+pub async fn[T : ProviderTransport] Client::discover(Self[T]) -> Array[CapabilityDescriptor] raise ClientError
+pub async fn[T : ProviderTransport] Client::healthy(Self[T]) -> Bool raise ClientError
+pub async fn[T : ProviderTransport] Client::invoke(Self[T], @contracts.WorkloadEnvelope) -> @contracts.WorkloadResponse
+pub fn[T] Client::new(ClientConfig, T) -> Self[T]
+pub async fn[T : ProviderTransport] Client::stream(Self[T], @contracts.WorkloadEnvelope, async (@contracts.WorkloadStreamEvent) -> Unit noraise) -> Unit raise ClientError
+
+pub(all) struct ClientConfig {
+  endpoint : String
+  inference_credential_ref : String
+  timeout_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ClientErrorCode {
+  Transport
+  Contract
+  ProviderRejected
+  ProviderUnavailable
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct FixtureTransport {
+  response : @contracts.WorkloadResponse
+  capabilities : Array[CapabilityDescriptor]
+  mut cancelled_workload : String?
+  healthy_value : Bool
+}
+pub fn FixtureTransport::cancelled_workload(Self) -> String?
+pub fn FixtureTransport::new(@contracts.WorkloadResponse, Array[CapabilityDescriptor], healthy? : Bool) -> Self
+pub impl ProviderTransport for FixtureTransport
+
+pub struct HttpTransport {
+  credential_value : String
+}
+pub fn HttpTransport::new(String) -> Self
+pub impl ProviderTransport for HttpTransport
+
+// Type aliases
+
+// Traits
+pub(open) trait ProviderTransport {
+  async fn invoke(Self, ClientConfig, String) -> String raise ClientError
+  async fn cancel(Self, ClientConfig, String) -> Bool raise ClientError
+  async fn discover(Self, ClientConfig) -> Array[CapabilityDescriptor] raise ClientError
+  async fn health(Self, ClientConfig) -> Bool raise ClientError
+  async fn stream(Self, ClientConfig, String, async (@contracts.WorkloadStreamEvent) -> Unit noraise) -> Unit raise ClientError
+}
+

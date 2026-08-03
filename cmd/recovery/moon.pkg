@@ -1,0 +1,17 @@
+import {
+  "vectie/lunanexa/node",
+  "vectie/lunanexa/registry",
+  "vectie/lunanexa/scheduler",
+  "vectie/lunanexa/store",
+  "vectie/lunanexa/telemetry",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/x/crypto",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")

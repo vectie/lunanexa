@@ -86,7 +86,9 @@ records or product credentials.
   inbound administration is not part of the data plane.
 - Desired state is signed and generation-numbered. A stale controller cannot
   silently overwrite a newer deployment.
-- Model artifacts and runtime images are digest-pinned and verified before use.
+- Model artifacts and runtime images are pinned by an exact 64-hexadecimal-digit
+  SHA-256 digest and verified before use; prefix-only digest lookalikes are
+  rejected.
 - Raw prompts and outputs are absent from logs by default.
 - Secrets are referenced through deployment-owned secret stores and delivered
   only to the runtime that requires them.
@@ -118,4 +120,3 @@ The first usable release must demonstrate through the operator UI and APIs:
 7. restart the controller and reconcile durable desired state;
 8. prove that public responses and node assignments contain no forbidden
    MoonSuite identifiers or internal secrets.
-

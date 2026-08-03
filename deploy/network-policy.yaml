@@ -1,0 +1,152 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: management
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: lunanexa
+              lunanexa.io/plane: node-agent
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: lunanexa
+              lunanexa.io/plane: console
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/ingress: trusted
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: lunanexa
+              lunanexa.io/plane: runtime
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: runtime
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: artifact-store
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-node-agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: node-agent
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-control
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: artifact-store
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-console
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: console
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/ingress: trusted
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: lunanexa
+              lunanexa.io/plane: management
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-runtime-default-deny
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: runtime
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-control
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: artifact-store
+      ports:
+        - protocol: TCP
+          port: 443

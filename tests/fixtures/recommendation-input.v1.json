@@ -1,0 +1,1 @@
+{"run_id":"run-release-1","objective":{"profile":"text-short-v1","maximum_p95_ms":25,"minimum_throughput_units_per_second":90,"maximum_failure_per_mille":0},"tested_concurrency":4,"memory_total_mib":16000,"memory_peak_mib":12000}

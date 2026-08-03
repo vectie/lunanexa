@@ -1,0 +1,161 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/node"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn assignment_signature(@contracts.DesiredAssignment, String) -> String
+
+pub fn classify_runtime_inspection(String, String, String) -> @contracts.DeploymentState raise RuntimeSupervisorError
+
+pub fn health(String) -> @contracts.HealthResponse
+
+pub fn heartbeat_signature(@contracts.NodeHeartbeat, String) -> String
+
+// Errors
+pub(all) suberror NodeError {
+  InvalidBootstrapToken
+  BootstrapTokenExpired
+  AssignmentSignatureInvalid
+  StaleControllerEpoch
+  StaleGeneration
+  LeaseExpired
+  InvalidStateSchema
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror RuntimeSupervisorError {
+  UnsupportedEngine(String)
+  InvalidAssignmentIdentity(String)
+  RuntimeCommandFailed(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct BootstrapToken {
+  token_id : String
+  secret : String
+  expires_unix_ms : Int64
+  used : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct EnrollmentService {
+  tokens : Map[String, BootstrapToken]
+  certificates : Map[String, NodeCertificate]
+  authorities : Map[String, NodeAuthority]
+}
+pub fn EnrollmentService::authorized(Self, String, String, Int64) -> Bool
+pub fn EnrollmentService::enroll(Self, String, String, String, String, String, Int64) -> NodeCertificate raise NodeError
+pub fn EnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
+pub fn EnrollmentService::new() -> Self
+pub fn EnrollmentService::restore(String) -> Self raise
+pub fn EnrollmentService::rotate(Self, String, String, Int64) -> NodeCertificate raise NodeError
+pub fn EnrollmentService::snapshot(Self) -> String
+
+pub(all) struct EnrollmentSnapshot {
+  schema_version : String
+  tokens : Array[BootstrapToken]
+  certificates : Array[NodeCertificate]
+  authorities : Array[NodeAuthority]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct FileEnrollmentService {
+  path : String
+  service : EnrollmentService
+  mutex : @async.Mutex
+}
+pub async fn FileEnrollmentService::authorized(Self, String, String, Int64) -> Bool
+pub async fn FileEnrollmentService::enroll(Self, String, String, String, String, String, Int64) -> NodeCertificate
+pub async fn FileEnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
+pub async fn FileEnrollmentService::open(String) -> Self
+pub async fn FileEnrollmentService::rotate(Self, String, String, Int64) -> NodeCertificate
+
+pub struct NodeAgent {
+  node_id : String
+  mut controller_epoch : Int64
+  mut observed_generation : Int64
+  mut state : @contracts.NodeState
+  assignments : Map[String, @contracts.DesiredAssignment]
+  ready_assignments : Map[String, Bool]
+  mut directive_generation : Int64
+}
+pub fn NodeAgent::activate(Self) -> Unit
+pub fn NodeAgent::apply_directive(Self, @contracts.NodeDirective) -> Unit raise NodeError
+pub fn NodeAgent::assignment_count(Self) -> Int
+pub fn NodeAgent::controller_epoch(Self) -> Int64
+pub fn NodeAgent::cordon(Self) -> Unit
+pub fn NodeAgent::drain(Self) -> Unit
+pub fn NodeAgent::from_snapshot(NodeAgentSnapshot) -> Self raise NodeError
+pub fn NodeAgent::new(String) -> Self
+pub fn NodeAgent::observe_runtime(Self, String, @contracts.DeploymentState) -> Unit
+pub fn NodeAgent::observed_generation(Self) -> Int64
+pub fn NodeAgent::reap_expired(Self, Int64) -> Array[String]
+pub fn[V : AssignmentVerifier] NodeAgent::reconcile(Self, @contracts.DesiredAssignment, V, Int64) -> Bool raise NodeError
+pub fn[V : AssignmentVerifier] NodeAgent::recover(String, Array[@contracts.DesiredAssignment], V, Int64) -> Self raise NodeError
+pub fn NodeAgent::remove_absent(Self, Array[String]) -> Array[String]
+pub fn NodeAgent::running_deployments(Self) -> Array[String]
+pub fn NodeAgent::snapshot(Self) -> NodeAgentSnapshot
+pub fn NodeAgent::state(Self) -> @contracts.NodeState
+
+pub(all) struct NodeAgentSnapshot {
+  schema_version : String
+  node_id : String
+  controller_epoch : Int64
+  observed_generation : Int64
+  state : @contracts.NodeState
+  assignments : Array[@contracts.DesiredAssignment]
+  ready_assignment_ids : Array[String]?
+  directive_generation : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NodeAuthority {
+  node_id : String
+  secret_digest : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NodeCertificate {
+  node_id : String
+  serial : Int64
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+  public_key_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct OciRuntimeSupervisor {
+  engine : String
+  network : String
+  engine_endpoint : String
+}
+pub async fn OciRuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment) -> RuntimeInstance
+pub fn OciRuntimeSupervisor::new(String, String, String) -> Self raise
+pub async fn OciRuntimeSupervisor::stop(Self, String) -> Unit
+
+pub(all) struct RuntimeInstance {
+  assignment_id : String
+  container_name : String
+  image_ref : String
+  observed_state : @contracts.DeploymentState
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct SharedSecretAssignmentVerifier {
+  secret : String
+}
+pub fn SharedSecretAssignmentVerifier::new(String) -> Self
+pub impl AssignmentVerifier for SharedSecretAssignmentVerifier
+
+pub struct TestAssignmentVerifier {
+  expected_signature : String
+}
+pub fn TestAssignmentVerifier::new(String) -> Self
+pub impl AssignmentVerifier for TestAssignmentVerifier
+
+// Type aliases
+
+// Traits
+pub(open) trait AssignmentVerifier {
+  fn verify(Self, @contracts.DesiredAssignment) -> Bool
+}
+

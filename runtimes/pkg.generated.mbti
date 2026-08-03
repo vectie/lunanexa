@@ -1,0 +1,98 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/runtimes"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+
+// Errors
+pub(all) suberror RemoteRuntimeError {
+  InsecureEndpoint(String)
+  InvalidNodeRouting(String)
+  RoutingTargetUnavailable(String)
+  UnsupportedCapability
+  UpstreamRejected(status~ : Int, body~ : String)
+  InvalidUpstreamResponse(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror RuntimeError {
+  InvalidSpec(String)
+  NotReady
+  Draining
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct FakeRuntime {
+  runtime_name : String
+  mut ready : Bool
+  mut draining : Bool
+  invocations : Array[String]
+}
+pub fn FakeRuntime::drain(Self) -> Unit
+pub fn FakeRuntime::invocation_count(Self) -> Int
+pub fn FakeRuntime::invoke(Self, @contracts.WorkloadEnvelope) -> Json raise RuntimeError
+pub fn FakeRuntime::is_ready(Self) -> Bool
+pub fn FakeRuntime::new(String) -> Self
+pub fn FakeRuntime::start(Self) -> Unit
+pub fn FakeRuntime::stop(Self) -> Unit
+pub impl RuntimeAdapter for FakeRuntime
+
+pub(all) struct NodeRuntimeEndpoint {
+  node_id : String
+  endpoint : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct OpenAiTextRuntime {
+  endpoint : String
+  node_endpoints : Map[String, String]
+  direct_node_routing : Bool
+  allow_http_loopback : Bool
+  credential_value : String
+  runtime_version : String
+  image_digest : String
+  artifact_digest : String
+}
+pub fn OpenAiTextRuntime::artifact_digest(Self) -> String
+pub fn OpenAiTextRuntime::image_digest(Self) -> String
+pub async fn OpenAiTextRuntime::invoke(Self, @contracts.WorkloadEnvelope) -> RuntimeInvocationResult
+pub async fn OpenAiTextRuntime::invoke_at(Self, @contracts.WorkloadEnvelope, String) -> RuntimeInvocationResult
+pub async fn OpenAiTextRuntime::invoke_stream(Self, @contracts.WorkloadEnvelope, async (Json) -> Unit) -> RuntimeInvocationResult
+pub async fn OpenAiTextRuntime::invoke_stream_at(Self, @contracts.WorkloadEnvelope, String, async (Json) -> Unit) -> RuntimeInvocationResult
+pub fn OpenAiTextRuntime::new(String, String, String, String, String, allow_http_loopback? : Bool) -> Self raise RemoteRuntimeError
+pub fn OpenAiTextRuntime::runtime_version(Self) -> String
+pub fn OpenAiTextRuntime::uses_direct_node_routing(Self) -> Bool
+pub fn OpenAiTextRuntime::with_node_endpoints(Self, Array[NodeRuntimeEndpoint]) -> Self raise RemoteRuntimeError
+pub fn OpenAiTextRuntime::with_node_endpoints_json(Self, String) -> Self raise
+
+pub(all) struct RuntimeInvocationResult {
+  output : Json
+  artifact_digest : String
+  runtime_version : String
+  input_units : Int
+  output_units : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum RuntimeLifecycle {
+  Inspect
+  Prepare
+  Start
+  Ready
+  Invoke
+  Drain
+  Stop
+  CollectMetrics
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+pub(open) trait RuntimeAdapter {
+  fn name(Self) -> String
+  fn inspect(Self, @contracts.RuntimeSpec) -> Bool
+  fn invoke(Self, @contracts.WorkloadEnvelope) -> Json raise
+}
+

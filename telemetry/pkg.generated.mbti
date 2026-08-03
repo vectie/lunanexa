@@ -1,0 +1,156 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/telemetry"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn bounded_metric(@contracts.TelemetrySample) -> Bool
+
+pub fn build_evidence_bundle(Array[BenchmarkSummary], EvidenceBundleInput) -> EvidenceBundle
+
+pub fn build_recommendation(Array[BenchmarkSummary], RecommendationInput) -> RecommendationEvidence raise BenchmarkError
+
+pub fn meets_objective(BenchmarkSummary, ServiceObjective) -> Bool
+
+pub fn recommend_capacity(BenchmarkSummary, Int, Int, Int) -> CapacityRecommendation
+
+pub fn summarize(BenchmarkRun) -> BenchmarkSummary raise BenchmarkError
+
+// Errors
+pub(all) suberror BenchmarkError {
+  EmptyRun
+  InvalidDuration
+  InvalidEvidence(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror TelemetryError {
+  PayloadMetricRejected
+  InvalidTelemetryState(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) enum BenchmarkKind {
+  Concurrency
+  Saturation
+  ColdStart
+  LongStream
+  MixedWorkload
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BenchmarkRun {
+  run_id : String
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  kind : BenchmarkKind
+  concurrency : Int
+  samples : Array[BenchmarkSample]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BenchmarkSample {
+  latency_ms : Int
+  queue_ms : Int
+  load_ms : Int
+  first_output_ms : Int
+  output_units : Int
+  duration_ms : Int
+  utilization_per_mille : Int
+  failed : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BenchmarkSummary {
+  run_id : String
+  profile : String
+  sample_count : Int
+  latency_p50_ms : Int
+  latency_p95_ms : Int
+  latency_p99_ms : Int
+  queue_p95_ms : Int
+  first_output_p95_ms : Int
+  throughput_units_per_second : Int
+  failure_per_mille : Int
+  peak_utilization_per_mille : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CapacityRecommendation {
+  profile : String
+  recommended_concurrency : Int
+  memory_headroom_mib : Int
+  evidence_run_id : String
+  statement : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EvidenceBundle {
+  release_version : String
+  benchmark_summaries : Array[BenchmarkSummary]
+  scenario_passed : Bool
+  isolation_scan_passed : Bool
+  security_report_ref : String
+  operations_report_ref : String
+  license_report_ref : String
+  accepted_by : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EvidenceBundle::export_json(Self) -> String
+pub fn EvidenceBundle::release_ready(Self) -> Bool
+
+pub(all) struct EvidenceBundleInput {
+  release_version : String
+  scenario_passed : Bool
+  isolation_scan_passed : Bool
+  security_report_ref : String
+  operations_report_ref : String
+  license_report_ref : String
+  accepted_by : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct FileTelemetry {
+  path : String
+  samples : Array[@contracts.TelemetrySample]
+  benchmark_runs : Array[BenchmarkRun]
+  benchmark_summaries : Array[BenchmarkSummary]
+  mutex : @async.Mutex
+}
+pub async fn FileTelemetry::open(String) -> Self
+pub async fn FileTelemetry::record_benchmark(Self, BenchmarkRun) -> BenchmarkSummary
+pub async fn FileTelemetry::record_sample(Self, @contracts.TelemetrySample) -> Unit
+pub async fn FileTelemetry::snapshot(Self) -> TelemetrySnapshot
+
+pub(all) struct RecommendationEvidence {
+  summary : BenchmarkSummary
+  objective : ServiceObjective
+  objective_met : Bool
+  capacity : CapacityRecommendation
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RecommendationInput {
+  run_id : String
+  objective : ServiceObjective
+  tested_concurrency : Int
+  memory_total_mib : Int
+  memory_peak_mib : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ServiceObjective {
+  profile : String
+  maximum_p95_ms : Int
+  minimum_throughput_units_per_second : Int
+  maximum_failure_per_mille : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TelemetrySnapshot {
+  schema_version : String
+  samples : Array[@contracts.TelemetrySample]
+  benchmark_runs : Array[BenchmarkRun]
+  benchmark_summaries : Array[BenchmarkSummary]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+

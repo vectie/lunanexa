@@ -1,0 +1,119 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/api"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/semaphore",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/node",
+  "vectie/lunanexa/registry",
+  "vectie/lunanexa/runtimes",
+  "vectie/lunanexa/scheduler",
+  "vectie/lunanexa/store",
+  "vectie/lunanexa/telemetry",
+}
+
+// Values
+pub fn batch_compatible(@contracts.WorkloadEnvelope, @contracts.WorkloadEnvelope) -> Bool
+
+pub fn health(String) -> @contracts.HealthResponse
+
+// Errors
+pub(all) suberror StreamError {
+  Backpressure
+  StreamClosed
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) enum ApiMethod {
+  Get
+  Post
+  Put
+  Delete
+} derive(Eq, @debug.Debug)
+
+pub struct ApiService {
+  store : @store.FileStore
+  registry : @registry.FileRegistry?
+  enrollment : @node.FileEnrollmentService?
+  scheduler : @scheduler.FileScheduler?
+  telemetry : @telemetry.FileTelemetry?
+  signature_verifier : @registry.CosignVerifier?
+  reconciliation_only : Bool
+  runtime : @runtimes.OpenAiTextRuntime
+  operator_token : String
+  inference_token : String
+  audit_token : String
+  monitoring_token : String
+  assignment_signing_secret : String
+  node_token : String
+  version : String
+  active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
+  active_mutex : @async.Mutex
+  response_cache : Map[String, @contracts.WorkloadResponse]
+  response_cache_order : Array[String]
+  audit_mutex : @async.Mutex
+  execution_slots : @semaphore.Semaphore
+}
+pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], String) -> HttpReply
+pub fn ApiService::new(@store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub async fn ApiService::serve(Self, String) -> Unit
+pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
+pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
+pub fn ApiService::with_control_plane(@store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @scheduler.FileScheduler, @telemetry.FileTelemetry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
+pub fn ApiService::with_registry(@store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_role_tokens(Self, String, String) -> Self
+pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
+pub fn ApiService::with_services(@store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
+
+pub(all) struct BatchKey {
+  model_selector : String
+  capability : @contracts.Capability
+  data_class : @contracts.DataClass
+  output_format : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CancellationReceipt {
+  workload_id : String
+  accepted : Bool
+  receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct HttpReply {
+  status : Int
+  body : String
+  content_type : String
+} derive(Eq, @debug.Debug)
+
+pub(all) enum StreamEvent {
+  Opened
+  Chunk(sequence~ : Int, output~ : Json)
+  Usage(@contracts.Usage)
+  Completed(receipt~ : String)
+  Failed(@contracts.PublicError)
+  Cancelled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct StreamSession {
+  workload_id : String
+  capacity : Int
+  events : Array[StreamEvent]
+  mut closed : Bool
+  mut cancelled : Bool
+}
+pub fn StreamSession::cancel(Self) -> Unit
+pub fn StreamSession::is_cancelled(Self) -> Bool
+pub fn StreamSession::new(String, Int) -> Self
+pub fn StreamSession::next(Self) -> StreamEvent?
+pub fn StreamSession::push(Self, StreamEvent) -> Unit raise StreamError
+pub fn StreamSession::workload_id(Self) -> String
+
+// Type aliases
+
+// Traits
+

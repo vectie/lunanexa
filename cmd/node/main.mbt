@@ -1,0 +1,344 @@
+///|
+fn environment(name : String) -> String raise {
+  guard @env.get_env_var(name) is Some(value) && value != "" else {
+    raise Failure::Failure("required environment reference is missing: \{name}")
+  }
+  value
+}
+
+///|
+async fn host_secret(
+  environment_name : String,
+  path_environment_name : String,
+  default_path : String,
+) -> String {
+  if @env.get_env_var(environment_name) is Some(value) && value != "" {
+    return value
+  }
+  let path = @env.get_env_var(path_environment_name).unwrap_or(default_path)
+  let value = @fs.read_file(path).text().trim().to_owned()
+  if value == "" {
+    raise Failure::Failure("required host credential reference is empty")
+  }
+  value
+}
+
+///|
+fn endpoint(base : String, path : String) -> String {
+  if base.has_suffix("/") {
+    "\{base[:-1]}\{path}"
+  } else {
+    "\{base}\{path}"
+  }
+}
+
+///|
+fn node_headers(node_id : String, token : String) -> Map[String, String] {
+  {
+    "Authorization": "Node \{token}",
+    "X-LunaNexa-Node-Id": node_id,
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+  }
+}
+
+///|
+async fn load_agent(path : String, node_id : String) -> @node_agent.NodeAgent {
+  if !@fs.exists(path) {
+    let agent = @node_agent.NodeAgent::new(node_id)
+    agent.activate()
+    return agent
+  }
+  let snapshot : @node_agent.NodeAgentSnapshot = @json.from_json(
+    @json.parse(@fs.read_file(path).text()),
+  )
+  if snapshot.node_id != node_id {
+    raise Failure::Failure("node state belongs to a different node identity")
+  }
+  @node_agent.NodeAgent::from_snapshot(snapshot)
+}
+
+///|
+async fn persist_agent(path : String, agent : @node_agent.NodeAgent) -> Unit {
+  let temporary = "\{path}.next"
+  @fs.write_file(
+    temporary,
+    agent.snapshot().to_json().stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+    sync=Full,
+  )
+  @fs.rename(temporary, path, replace=true)
+}
+
+///|
+async fn persist_certificate(
+  path : String,
+  certificate : @node_agent.NodeCertificate,
+) -> Unit {
+  let temporary = "\{path}.next"
+  @fs.write_file(
+    temporary,
+    certificate.to_json().stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+    sync=Full,
+  )
+  @fs.rename(temporary, path, replace=true)
+}
+
+///|
+async fn ensure_certificate(
+  base : String,
+  node_id : String,
+  node_token : String,
+  certificate_path : String,
+  public_key_ref : String,
+) -> Unit {
+  if !@fs.exists(certificate_path) {
+    let bootstrap_id = host_secret(
+      "LUNANEXA_BOOTSTRAP_TOKEN_ID", "LUNANEXA_BOOTSTRAP_TOKEN_ID_PATH", "/etc/lunanexa/bootstrap-token-id",
+    )
+    let bootstrap_secret = host_secret(
+      "LUNANEXA_BOOTSTRAP_TOKEN", "LUNANEXA_BOOTSTRAP_TOKEN_PATH", "/etc/lunanexa/bootstrap-token",
+    )
+    let body : Json = {
+      "node_id": node_id,
+      "token_id": bootstrap_id,
+      "secret": bootstrap_secret,
+      "node_auth_secret": node_token,
+      "public_key_ref": public_key_ref,
+    }
+    let (response, response_body) = @http.post(
+      endpoint(base, "/v1/enrollment"),
+      body,
+    )
+    if response.code != 201 {
+      raise Failure::Failure("node enrollment was rejected")
+    }
+    let certificate : @node_agent.NodeCertificate = @json.from_json(
+      @json.parse(response_body.text()),
+    )
+    persist_certificate(certificate_path, certificate)
+    return
+  }
+  let current : @node_agent.NodeCertificate = @json.from_json(
+    @json.parse(@fs.read_file(certificate_path).text()),
+  )
+  if current.node_id != node_id {
+    raise Failure::Failure("certificate belongs to a different node identity")
+  }
+  if current.expires_unix_ms <= @async.now() + 300000L {
+    let body : Json = { "node_id": node_id, "public_key_ref": public_key_ref }
+    let (response, response_body) = @http.post(
+      endpoint(base, "/v1/enrollment/rotate"),
+      body,
+      headers=node_headers(node_id, node_token),
+    )
+    if response.code != 200 {
+      raise Failure::Failure("node certificate rotation was rejected")
+    }
+    let certificate : @node_agent.NodeCertificate = @json.from_json(
+      @json.parse(response_body.text()),
+    )
+    persist_certificate(certificate_path, certificate)
+  }
+}
+
+///|
+async fn reconcile_once(
+  base : String,
+  node_id : String,
+  token : String,
+  inventory : @contracts.NodeInventory,
+  agent : @node_agent.NodeAgent,
+  verifier : @node_agent.SharedSecretAssignmentVerifier,
+  supervisor : @node_agent.OciRuntimeSupervisor,
+  state_path : String,
+) -> Unit {
+  let headers = node_headers(node_id, token)
+  let (directive_response, directive_body) = @http.get(
+    endpoint(base, "/v1/nodes/\{node_id}/directive"),
+    headers~,
+  )
+  if directive_response.code == 200 {
+    let directive : @contracts.NodeDirective = @json.from_json(
+      @json.parse(directive_body.text()),
+    )
+    agent.apply_directive(directive)
+  } else if directive_response.code != 404 {
+    raise Failure::Failure(
+      "node directive fetch failed with status \{directive_response.code}",
+    )
+  }
+  let (assignment_response, assignment_body) = @http.get(
+    endpoint(base, "/v1/nodes/\{node_id}/assignments"),
+    headers~,
+  )
+  if assignment_response.code < 200 || assignment_response.code >= 300 {
+    raise Failure::Failure(
+      "assignment fetch failed with status \{assignment_response.code}",
+    )
+  }
+  let assignments : Array[@contracts.DesiredAssignment] = @json.from_json(
+    @json.parse(assignment_body.text()),
+  )
+  let now = @async.now()
+  for assignment_id in agent.reap_expired(now) {
+    supervisor.stop(assignment_id)
+  }
+  let desired_ids = [
+    for assignment in assignments => assignment.assignment_id
+  ]
+  for assignment_id in agent.remove_absent(desired_ids) {
+    supervisor.stop(assignment_id)
+  }
+  for assignment in assignments {
+    if agent.reconcile(assignment, verifier, now) {
+      let instance = supervisor.ensure_started(assignment)
+      agent.observe_runtime(assignment.assignment_id, instance.observed_state)
+    }
+  }
+  persist_agent(state_path, agent)
+  let unsigned_heartbeat : @contracts.NodeHeartbeat = {
+    node_id,
+    state: agent.state(),
+    observed_generation: agent.observed_generation(),
+    controller_epoch: agent.controller_epoch(),
+    inventory,
+    running_deployments: agent.running_deployments(),
+    timestamp_unix_ms: now,
+    signature: "",
+  }
+  let heartbeat = {
+    ..unsigned_heartbeat,
+    signature: @node_agent.heartbeat_signature(unsigned_heartbeat, token),
+  }
+  let (heartbeat_response, _) = @http.put(
+    endpoint(base, "/v1/nodes/heartbeat"),
+    heartbeat.to_json(),
+    headers~,
+  )
+  if heartbeat_response.code != 202 {
+    raise Failure::Failure(
+      "heartbeat failed with status \{heartbeat_response.code}",
+    )
+  }
+  let mut total_memory = 0
+  let mut free_memory = 0
+  let mut healthy_accelerators = 0
+  for accelerator in inventory.accelerators {
+    total_memory += accelerator.memory_total_mib
+    free_memory += accelerator.memory_free_mib
+    if accelerator.healthy {
+      healthy_accelerators += 1
+    }
+  }
+  let samples : Array[@contracts.TelemetrySample] = [
+    {
+      node_id,
+      deployment_id: "",
+      metric: "accelerator_memory_total_mib",
+      value: total_memory.to_double(),
+      timestamp_unix_ms: now,
+    },
+    {
+      node_id,
+      deployment_id: "",
+      metric: "accelerator_memory_free_mib",
+      value: free_memory.to_double(),
+      timestamp_unix_ms: now,
+    },
+    {
+      node_id,
+      deployment_id: "",
+      metric: "accelerator_healthy_count",
+      value: healthy_accelerators.to_double(),
+      timestamp_unix_ms: now,
+    },
+  ]
+  if inventory.labels.get("lunanexa.accelerator-utilization-per-mille")
+    is Some(value) {
+    let utilization = @string.parse_int64(value).to_double() catch { _ => -1.0 }
+    if utilization >= 0.0 && utilization <= 1000.0 {
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_utilization_per_mille",
+        value: utilization,
+        timestamp_unix_ms: now,
+      })
+    }
+  }
+  for sample in samples {
+    try {
+      let (response, _) = @http.put(
+        endpoint(base, "/v1/telemetry"),
+        sample.to_json(),
+        headers~,
+      )
+      if response.code != 202 {
+        raise Failure::Failure("telemetry sample was rejected")
+      }
+    } catch {
+      _ => ()
+    }
+  }
+}
+
+///|
+async fn main {
+  let base = environment("LUNANEXA_ENDPOINT")
+  if !base.has_prefix("https://") &&
+    !base.has_prefix("http://127.0.0.1:") &&
+    !base.has_prefix("http://localhost:") {
+    raise Failure::Failure(
+      "node control endpoint must use HTTPS outside loopback",
+    )
+  }
+  let node_id = environment("LUNANEXA_NODE_ID")
+  let token = host_secret(
+    "LUNANEXA_NODE_TOKEN", "LUNANEXA_NODE_TOKEN_PATH", "/etc/lunanexa/node-token",
+  )
+  let certificate_path = @env.get_env_var("LUNANEXA_NODE_CERTIFICATE_PATH").unwrap_or(
+    "lunanexa-node-certificate.json",
+  )
+  ensure_certificate(
+    base,
+    node_id,
+    token,
+    certificate_path,
+    environment("LUNANEXA_NODE_PUBLIC_KEY_REF"),
+  )
+  let inventory : @contracts.NodeInventory = @json.from_json(
+    @json.parse(
+      @fs.read_file(environment("LUNANEXA_NODE_INVENTORY_PATH")).text(),
+    ),
+  )
+  if inventory.node_id != node_id {
+    raise Failure::Failure("inventory belongs to a different node identity")
+  }
+  let state_path = @env.get_env_var("LUNANEXA_NODE_STATE_PATH").unwrap_or(
+    "lunanexa-node-state.json",
+  )
+  let agent = load_agent(state_path, node_id)
+  let verifier = @node_agent.SharedSecretAssignmentVerifier::new(
+    host_secret(
+      "LUNANEXA_ASSIGNMENT_SIGNING_SECRET", "LUNANEXA_ASSIGNMENT_SIGNING_SECRET_PATH",
+      "/etc/lunanexa/assignment-verification-key",
+    ),
+  )
+  let supervisor = @node_agent.OciRuntimeSupervisor::new(
+    environment("LUNANEXA_CONTAINER_ENGINE"),
+    environment("LUNANEXA_RUNTIME_NETWORK"),
+    environment("LUNANEXA_CONTAINER_ENGINE_ENDPOINT"),
+  )
+  while true {
+    reconcile_once(
+      base, node_id, token, inventory, agent, verifier, supervisor, state_path,
+    ) catch {
+      _ => println("LunaNexa node reconciliation failed; retrying")
+    }
+    @async.sleep(5000)
+  }
+}

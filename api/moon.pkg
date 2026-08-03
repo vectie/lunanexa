@@ -1,0 +1,24 @@
+import {
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/controller",
+  "vectie/lunanexa/runtimes",
+  "vectie/lunanexa/registry",
+  "vectie/lunanexa/scheduler",
+  "vectie/lunanexa/telemetry",
+  "vectie/lunanexa/node",
+  "vectie/lunanexa/store",
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/async/socket",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/x/crypto",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/async/fs",
+} for "test"

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-console
+  template:
+    metadata:
+      labels:
+        app: lunanexa-console
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: console
+    spec:
+      serviceAccountName: lunanexa-console
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: console
+          image: registry.invalid/lunanexa/console@${CONSOLE_IMAGE_DIGEST}
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-console
+spec:
+  selector:
+    app: lunanexa-console
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

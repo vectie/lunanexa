@@ -1,0 +1,2673 @@
+///|
+pub(all) enum ApiMethod {
+  Get
+  Post
+  Put
+  Delete
+} derive(Debug, Eq)
+
+///|
+pub(all) struct HttpReply {
+  status : Int
+  body : String
+  content_type : String
+} derive(Debug, Eq)
+
+///|
+pub(all) struct CancellationReceipt {
+  workload_id : String
+  accepted : Bool
+  receipt : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub struct ApiService {
+  store : @store.FileStore
+  registry : @registry.FileRegistry?
+  enrollment : @node.FileEnrollmentService?
+  scheduler : @scheduler.FileScheduler?
+  telemetry : @telemetry.FileTelemetry?
+  signature_verifier : @registry.CosignVerifier?
+  reconciliation_only : Bool
+  runtime : @runtimes.OpenAiTextRuntime
+  operator_token : String
+  inference_token : String
+  audit_token : String
+  monitoring_token : String
+  assignment_signing_secret : String
+  node_token : String
+  version : String
+  active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
+  active_mutex : @async.Mutex
+  response_cache : Map[String, @contracts.WorkloadResponse]
+  response_cache_order : Array[String]
+  audit_mutex : @async.Mutex
+  execution_slots : @async.Semaphore
+}
+
+///|
+pub fn ApiService::new(
+  store : @store.FileStore,
+  runtime : @runtimes.OpenAiTextRuntime,
+  operator_token : String,
+  inference_token : String,
+  node_token : String,
+  version : String,
+) -> ApiService {
+  {
+    store,
+    registry: None,
+    enrollment: None,
+    scheduler: None,
+    telemetry: None,
+    signature_verifier: None,
+    reconciliation_only: false,
+    runtime,
+    operator_token,
+    inference_token,
+    audit_token: operator_token,
+    monitoring_token: operator_token,
+    assignment_signing_secret: node_token,
+    node_token,
+    version,
+    active: Map([]),
+    active_mutex: @async.Mutex::Mutex(),
+    response_cache: Map([]),
+    response_cache_order: [],
+    audit_mutex: @async.Mutex::Mutex(),
+    execution_slots: @async.Semaphore::Semaphore(128),
+  }
+}
+
+///|
+pub fn ApiService::with_registry(
+  store : @store.FileStore,
+  registry : @registry.FileRegistry,
+  runtime : @runtimes.OpenAiTextRuntime,
+  operator_token : String,
+  inference_token : String,
+  node_token : String,
+  version : String,
+) -> ApiService {
+  {
+    store,
+    registry: Some(registry),
+    enrollment: None,
+    scheduler: None,
+    telemetry: None,
+    signature_verifier: None,
+    reconciliation_only: false,
+    runtime,
+    operator_token,
+    inference_token,
+    audit_token: operator_token,
+    monitoring_token: operator_token,
+    assignment_signing_secret: node_token,
+    node_token,
+    version,
+    active: Map([]),
+    active_mutex: @async.Mutex::Mutex(),
+    response_cache: Map([]),
+    response_cache_order: [],
+    audit_mutex: @async.Mutex::Mutex(),
+    execution_slots: @async.Semaphore::Semaphore(128),
+  }
+}
+
+///|
+pub fn ApiService::with_services(
+  store : @store.FileStore,
+  registry : @registry.FileRegistry,
+  enrollment : @node.FileEnrollmentService,
+  runtime : @runtimes.OpenAiTextRuntime,
+  operator_token : String,
+  inference_token : String,
+  node_token : String,
+  version : String,
+) -> ApiService {
+  {
+    store,
+    registry: Some(registry),
+    enrollment: Some(enrollment),
+    scheduler: None,
+    telemetry: None,
+    signature_verifier: None,
+    reconciliation_only: false,
+    runtime,
+    operator_token,
+    inference_token,
+    audit_token: operator_token,
+    monitoring_token: operator_token,
+    assignment_signing_secret: node_token,
+    node_token,
+    version,
+    active: Map([]),
+    active_mutex: @async.Mutex::Mutex(),
+    response_cache: Map([]),
+    response_cache_order: [],
+    audit_mutex: @async.Mutex::Mutex(),
+    execution_slots: @async.Semaphore::Semaphore(128),
+  }
+}
+
+///|
+pub fn ApiService::with_control_plane(
+  store : @store.FileStore,
+  registry : @registry.FileRegistry,
+  enrollment : @node.FileEnrollmentService,
+  scheduler : @scheduler.FileScheduler,
+  telemetry : @telemetry.FileTelemetry,
+  runtime : @runtimes.OpenAiTextRuntime,
+  operator_token : String,
+  inference_token : String,
+  node_token : String,
+  version : String,
+) -> ApiService {
+  {
+    store,
+    registry: Some(registry),
+    enrollment: Some(enrollment),
+    scheduler: Some(scheduler),
+    telemetry: Some(telemetry),
+    signature_verifier: None,
+    reconciliation_only: false,
+    runtime,
+    operator_token,
+    inference_token,
+    audit_token: operator_token,
+    monitoring_token: operator_token,
+    assignment_signing_secret: node_token,
+    node_token,
+    version,
+    active: Map([]),
+    active_mutex: @async.Mutex::Mutex(),
+    response_cache: Map([]),
+    response_cache_order: [],
+    audit_mutex: @async.Mutex::Mutex(),
+    execution_slots: @async.Semaphore::Semaphore(128),
+  }
+}
+
+///|
+pub fn ApiService::with_signature_verifier(
+  self : ApiService,
+  verifier : @registry.CosignVerifier,
+) -> ApiService {
+  { ..self, signature_verifier: Some(verifier) }
+}
+
+///|
+pub fn ApiService::with_reconciliation_only(
+  self : ApiService,
+  enabled : Bool,
+) -> ApiService {
+  { ..self, reconciliation_only: enabled }
+}
+
+///|
+pub fn ApiService::with_role_tokens(
+  self : ApiService,
+  audit_token : String,
+  monitoring_token : String,
+) -> ApiService {
+  { ..self, audit_token, monitoring_token }
+}
+
+///|
+pub fn ApiService::with_assignment_signing_secret(
+  self : ApiService,
+  secret : String,
+) -> ApiService {
+  { ..self, assignment_signing_secret: secret }
+}
+
+///|
+pub fn ApiService::with_runtime_concurrency(
+  self : ApiService,
+  concurrency : Int,
+) -> ApiService raise {
+  if concurrency <= 0 || concurrency > 4096 {
+    raise Failure::Failure("runtime concurrency must be positive and bounded")
+  }
+  { ..self, execution_slots: @async.Semaphore::Semaphore(concurrency) }
+}
+
+///|
+async fn[X] ApiService::with_audit_lock(
+  self : ApiService,
+  operation : async () -> X,
+) -> X {
+  self.audit_mutex.acquire()
+  try operation() catch {
+    error => {
+      self.audit_mutex.release()
+      raise error
+    }
+  } noraise {
+    value => {
+      self.audit_mutex.release()
+      value
+    }
+  }
+}
+
+///|
+async fn ApiService::cached_result(
+  self : ApiService,
+  idempotency_key : String,
+) -> @contracts.WorkloadResponse? {
+  self.active_mutex.acquire()
+  let result = self.response_cache.get(idempotency_key)
+  self.active_mutex.release()
+  result
+}
+
+///|
+async fn ApiService::cache_result(
+  self : ApiService,
+  idempotency_key : String,
+  response : @contracts.WorkloadResponse,
+) -> Unit {
+  self.active_mutex.acquire()
+  if !self.response_cache.contains(idempotency_key) {
+    self.response_cache_order.push(idempotency_key)
+  }
+  self.response_cache[idempotency_key] = response
+  while self.response_cache_order.length() > 1024 {
+    let oldest = self.response_cache_order.remove(0)
+    ignore(self.response_cache.remove(oldest))
+  }
+  self.active_mutex.release()
+}
+
+///|
+priv struct PromotionRequest {
+  alias_name : String
+  model_id : String
+  version : String
+  stage : @registry.RolloutStage
+  actor : String
+} derive(FromJson)
+
+///|
+priv struct RollbackRequest {
+  alias_name : String
+  actor : String
+} derive(FromJson)
+
+///|
+priv struct ApprovalRequest {
+  model_id : String
+  version : String
+} derive(FromJson)
+
+///|
+priv struct TokenIssueRequest {
+  token_id : String
+  secret : String
+  expires_unix_ms : Int64
+} derive(FromJson)
+
+///|
+priv struct EnrollmentRequest {
+  node_id : String
+  token_id : String
+  secret : String
+  node_auth_secret : String
+  public_key_ref : String
+} derive(FromJson)
+
+///|
+priv struct RotationRequest {
+  node_id : String
+  public_key_ref : String
+} derive(FromJson)
+
+///|
+priv struct CapacityRequest {
+  instance_memory_mib : Int
+} derive(FromJson)
+
+///|
+priv struct VerificationRequest {
+  kind : String
+  subject : String
+  signature_path : String?
+  digest : String
+  provenance_verified : Bool
+} derive(FromJson)
+
+///|
+fn json_reply(status : Int, value : Json) -> HttpReply {
+  { status, body: value.stringify(), content_type: "application/json" }
+}
+
+///|
+fn api_error(
+  status : Int,
+  code : String,
+  message : String,
+  retryable : Bool,
+) -> HttpReply {
+  json_reply(status, {
+    "error": { "code": code, "message": message, "retryable": retryable },
+  })
+}
+
+///|
+fn header(headers : Map[String, String], name : String) -> String? {
+  match headers.get(name) {
+    Some(value) => Some(value)
+    None => headers.get(name.to_lower())
+  }
+}
+
+///|
+fn bearer_authorized(headers : Map[String, String], expected : String) -> Bool {
+  expected != "" &&
+  header(headers, "Authorization") == Some("Bearer \{expected}")
+}
+
+///|
+fn shared_node_authorized(
+  headers : Map[String, String],
+  expected_token : String,
+  node_id : String,
+) -> Bool {
+  expected_token != "" &&
+  header(headers, "Authorization") == Some("Node \{expected_token}") &&
+  header(headers, "X-LunaNexa-Node-Id") == Some(node_id)
+}
+
+///|
+fn node_credential(headers : Map[String, String]) -> String? {
+  guard header(headers, "Authorization") is Some(value) &&
+    value.has_prefix("Node ") else {
+    return None
+  }
+  Some(value["Node ".length():].to_owned())
+}
+
+///|
+async fn ApiService::node_authorized(
+  self : ApiService,
+  headers : Map[String, String],
+  node_id : String,
+) -> Bool {
+  guard header(headers, "X-LunaNexa-Node-Id") == Some(node_id) &&
+    node_credential(headers) is Some(credential) &&
+    credential != "" else {
+    return false
+  }
+  match self.enrollment {
+    Some(enrollment) => enrollment.authorized(node_id, credential, @async.now())
+    None => shared_node_authorized(headers, self.node_token, node_id)
+  }
+}
+
+///|
+fn digest_hex(value : String) -> String {
+  @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(value)))
+}
+
+///|
+fn idempotency_scope(request : @contracts.WorkloadEnvelope) -> String {
+  digest_hex(
+    "lunanexa.idempotency.v1|\{request.tenant_ref}|\{request.credential_scope}|\{request.idempotency_key}",
+  )
+}
+
+///|
+fn ephemeral_only(request : @contracts.WorkloadEnvelope) -> Bool {
+  request.data_policy.retention is Ephemeral &&
+  !request.data_policy.allow_cache &&
+  !request.data_policy.allow_training_reuse
+}
+
+///|
+async fn ApiService::next_audit(
+  self : ApiService,
+  actor : String,
+  action : String,
+  target : String,
+  prior_state : String,
+  next_state : String,
+  result : String,
+  receipt : String,
+  now_unix_ms : Int64,
+) -> @contracts.AuditEvent {
+  let events = self.store.audit_events()
+  let sequence = events.length() + 1
+  let previous_hash = events
+    .last()
+    .map(event => event.event_hash)
+    .unwrap_or("genesis")
+  let material = "\{previous_hash}|\{sequence}|\{now_unix_ms}|\{actor}|\{action}|\{target}|\{prior_state}|\{next_state}|\{result}|\{receipt}"
+  let event : @contracts.AuditEvent = {
+    sequence: sequence.to_int64(),
+    event_id: "audit:\{sequence}:\{digest_hex(material)}",
+    timestamp_unix_ms: now_unix_ms,
+    actor,
+    policy_version: "policy-v1",
+    action,
+    target,
+    prior_state,
+    next_state,
+    result,
+    correlation_receipt: receipt,
+    previous_hash,
+    event_hash: "",
+  }
+  { ..event, event_hash: @store.audit_event_hash(event) }
+}
+
+///|
+fn decode_assignment(body : String) -> @contracts.DesiredAssignment? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_heartbeat(body : String) -> @contracts.NodeHeartbeat? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_node_directive(body : String) -> @contracts.NodeDirective? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_workload(body : String) -> @contracts.WorkloadEnvelope? {
+  try @contracts.decode_workload(body) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn label_values(labels : Map[String, String], name : String) -> Array[String] {
+  match labels.get(name) {
+    None => []
+    Some(value) =>
+      value.split(",").map(part => part.trim().to_owned()).collect()
+  }
+}
+
+///|
+fn numeric_label(
+  labels : Map[String, String],
+  name : String,
+  fallback : Int,
+) -> Int {
+  guard labels.get(name) is Some(value) else { return fallback }
+  @string.parse_int64(value).to_int() catch {
+    _ => fallback
+  }
+}
+
+///|
+fn data_classes(labels : Map[String, String]) -> Array[@contracts.DataClass] {
+  let classes : Array[@contracts.DataClass] = []
+  for value in label_values(labels, "lunanexa.data-classes") {
+    match value {
+      "Public" => classes.push(Public)
+      "Internal" => classes.push(Internal)
+      "Confidential" => classes.push(Confidential)
+      "Restricted" => classes.push(Restricted)
+      _ => ()
+    }
+  }
+  classes
+}
+
+///|
+fn scheduler_node(
+  heartbeat : @contracts.NodeHeartbeat,
+  now_unix_ms : Int64,
+  ready_models? : Array[String]? = None,
+) -> @scheduler.NodeSnapshot {
+  let accelerators : Array[@contracts.AcceleratorInventory] = []
+  for accelerator in heartbeat.inventory.accelerators {
+    if accelerator.healthy {
+      accelerators.push(accelerator)
+    }
+  }
+  let mut memory_free_mib = 0
+  for accelerator in accelerators {
+    memory_free_mib += accelerator.memory_free_mib
+  }
+  let licensed_models = label_values(
+    heartbeat.inventory.labels,
+    "lunanexa.models",
+  )
+  {
+    node_id: heartbeat.node_id,
+    state: if now_unix_ms - heartbeat.timestamp_unix_ms > 15000L {
+      Unreachable
+    } else {
+      heartbeat.state
+    },
+    architecture: accelerators
+    .get(0)
+    .map(value => value.architecture)
+    .unwrap_or(""),
+    memory_free_mib,
+    runtimes: heartbeat.inventory.runtime_names,
+    licensed_models,
+    ready_models: ready_models.unwrap_or(licensed_models),
+    allowed_data_classes: data_classes(heartbeat.inventory.labels),
+    warm_models: label_values(
+      heartbeat.inventory.labels,
+      "lunanexa.warm-models",
+    ),
+    queue_depth: numeric_label(
+      heartbeat.inventory.labels,
+      "lunanexa.queue-depth",
+      0,
+    ),
+    reliability_per_mille: numeric_label(
+      heartbeat.inventory.labels,
+      "lunanexa.reliability-per-mille",
+      1000,
+    ),
+    accelerator_utilization_per_mille: numeric_label(
+      heartbeat.inventory.labels,
+      "lunanexa.accelerator-utilization-per-mille",
+      0,
+    ),
+  }
+}
+
+///|
+fn default_score_policy() -> @scheduler.ScorePolicy {
+  {
+    version: "placement-v1",
+    warm_model_weight: 10000,
+    headroom_weight: 1,
+    queue_weight: 2,
+    reliability_weight: 1,
+    utilization_weight: 1,
+    validated_topology_profiles: [],
+  }
+}
+
+///|
+async fn ApiService::schedule_and_admit(
+  self : ApiService,
+  request : @contracts.WorkloadEnvelope,
+) -> (HttpReply?, Array[String]) {
+  guard self.scheduler is Some(scheduler) else { return (None, []) }
+  guard self.registry is Some(registry) else {
+    return (
+      Some(
+        api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        ),
+      ),
+      [],
+    )
+  }
+  guard registry.scheduling_target(request.model_selector, request.capability)
+    is Some(target) else {
+    return (
+      Some(
+        api_error(
+          409, "NoPlacement", "model selector has no approved schedulable target",
+          false,
+        ),
+      ),
+      [],
+    )
+  }
+  if target.model.artifact.digest != self.runtime.artifact_digest() ||
+    target.runtime.version != self.runtime.runtime_version() ||
+    target.runtime.image_digest != self.runtime.image_digest() {
+    return (
+      Some(
+        api_error(
+          409, "NoPlacement", "approved target does not match the configured serving adapter",
+          false,
+        ),
+      ),
+      [],
+    )
+  }
+  guard target.model.compatible_architectures.get(0) is Some(architecture) else {
+    return (
+      Some(
+        api_error(
+          409, "NoPlacement", "approved model has no compatible architecture", false,
+        ),
+      ),
+      [],
+    )
+  }
+  let now = @async.now()
+  let assignments = self.store.assignments()
+  let nodes = [
+    for heartbeat in self.store.heartbeats() => {
+      let ready_models = if self.runtime.uses_direct_node_routing() {
+        if assignments.any(assignment => {
+            assignment.node_id == heartbeat.node_id &&
+            assignment.artifact.digest == target.model.artifact.digest &&
+            assignment.runtime.name == target.runtime.name &&
+            assignment.runtime.version == target.runtime.version &&
+            assignment.runtime.image_digest == target.runtime.image_digest &&
+            assignment.lease_expires_unix_ms > now &&
+            heartbeat.running_deployments.any(deployment_id => {
+              deployment_id == assignment.deployment_id
+            })
+          }) {
+          [target.model_key]
+        } else {
+          []
+        }
+      } else {
+        label_values(heartbeat.inventory.labels, "lunanexa.models")
+      }
+      scheduler_node(heartbeat, now, ready_models=Some(ready_models))
+    }
+  ]
+  let decision = scheduler.place(
+    nodes,
+    {
+      workload_id: request.workload_id,
+      model_key: target.model_key,
+      architecture,
+      memory_mib: target.model.minimum_memory_mib.max(
+        request.resource_ceiling.max_accelerator_memory_mib,
+      ),
+      runtime: target.runtime.name,
+      data_class: request.data_policy.classification,
+      deadline_unix_ms: request.deadline_unix_ms,
+      now_unix_ms: now,
+      estimated_runtime_ms: request.resource_ceiling.max_runtime_ms,
+      multi_node: false,
+      topology_profile: None,
+    },
+    default_score_policy(),
+  )
+  guard decision.selected_node_id is Some(_) else {
+    return (
+      Some(
+        json_reply(409, {
+          "error": {
+            "code": "NoPlacement",
+            "message": "no node satisfies the workload requirements",
+            "retryable": true,
+          },
+          "placement": decision,
+        }),
+      ),
+      [],
+    )
+  }
+  match scheduler.admit(request, now) {
+    Rejected(reason~) =>
+      (
+        Some(
+          json_reply(if reason == WorkloadAlreadyActive { 409 } else { 429 }, {
+            "error": {
+              "code": "\{to_repr(reason)}",
+              "message": "workload admission was rejected",
+              "retryable": reason == WorkloadAlreadyActive ||
+              reason == QuotaExceeded ||
+              reason == AdmissionCapacityExceeded,
+            },
+            "placement": decision,
+          }),
+        ),
+        [],
+      )
+    Accepted(_) =>
+      (None, [ for candidate in decision.candidates => candidate.node_id ])
+  }
+}
+
+///|
+async fn ApiService::complete_admission(
+  self : ApiService,
+  workload_id : String,
+  accelerator_ms : Int64,
+) -> Unit {
+  if self.scheduler is Some(scheduler) {
+    scheduler.complete(workload_id, accelerator_ms)
+  }
+}
+
+///|
+fn retryable_runtime_error(error : Error) -> Bool {
+  match error {
+    @runtimes.RemoteRuntimeError::UpstreamRejected(status~, body=_) =>
+      status >= 500
+    @runtimes.RemoteRuntimeError::UnsupportedCapability
+    | @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(_)
+    | @runtimes.RemoteRuntimeError::InsecureEndpoint(_)
+    | @runtimes.RemoteRuntimeError::InvalidNodeRouting(_) => false
+    _ => true
+  }
+}
+
+///|
+async fn ApiService::invoke_with_bounded_retry(
+  self : ApiService,
+  request : @contracts.WorkloadEnvelope,
+  routing_nodes : Array[String],
+) -> @runtimes.RuntimeInvocationResult {
+  let primary = routing_nodes.get(0).unwrap_or("")
+  let alternate = routing_nodes.get(1).unwrap_or(primary)
+  self.runtime.invoke_at(request, primary) catch {
+    error => {
+      if @async.is_cancellation_error(error) ||
+        !retryable_runtime_error(error) ||
+        !@scheduler.retry_allowed(request.idempotency_key, 1, 2, true) {
+        raise error
+      }
+      self.runtime.invoke_at(request, alternate)
+    }
+  }
+}
+
+///|
+async fn ApiService::invoke_stream_with_bounded_retry(
+  self : ApiService,
+  request : @contracts.WorkloadEnvelope,
+  routing_nodes : Array[String],
+  on_chunk : async (Json) -> Unit,
+) -> @runtimes.RuntimeInvocationResult {
+  let primary = routing_nodes.get(0).unwrap_or("")
+  let alternate = routing_nodes.get(1).unwrap_or(primary)
+  let mut emitted = false
+  self.runtime.invoke_stream_at(request, primary, output => {
+    emitted = true
+    on_chunk(output)
+  }) catch {
+    error => {
+      if @async.is_cancellation_error(error) ||
+        !retryable_runtime_error(error) ||
+        !@scheduler.retry_allowed(request.idempotency_key, 1, 2, !emitted) {
+        raise error
+      }
+      self.runtime.invoke_stream_at(request, alternate, output => {
+        emitted = true
+        on_chunk(output)
+      })
+    }
+  }
+}
+
+///|
+fn decode_model(body : String) -> @contracts.ModelRecord? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_runtime_spec(body : String) -> @contracts.RuntimeSpec? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn valid_assignment_shape(
+  assignment : @contracts.DesiredAssignment,
+  now : Int64,
+) -> Bool {
+  @contracts.valid_identifier(assignment.assignment_id, maximum_length=96) &&
+  @contracts.valid_identifier(assignment.deployment_id, maximum_length=96) &&
+  @contracts.valid_identifier(assignment.node_id, maximum_length=128) &&
+  assignment.generation > 0L &&
+  assignment.controller_epoch > 0L &&
+  assignment.lease_expires_unix_ms > now &&
+  @contracts.valid_sha256_digest(assignment.artifact.digest) &&
+  assignment.artifact.signature_ref != "" &&
+  @contracts.valid_sha256_digest(assignment.runtime.image_digest) &&
+  assignment.resources.accelerator_count > 0 &&
+  assignment.resources.accelerator_memory_mib > 0 &&
+  assignment.resources.cpu_millis > 0 &&
+  assignment.resources.memory_mib > 0 &&
+  assignment.network.allowed_egress.length() == 0 &&
+  (
+    !assignment.data_policy.allow_training_reuse ||
+    assignment.data_policy.retention is EvaluationCapture(_)
+  )
+}
+
+///|
+fn decode_license(body : String) -> @registry.LicenseRecord? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_verification_request(body : String) -> VerificationRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_evaluation(body : String) -> @registry.EvaluationRecord? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_promotion(body : String) -> PromotionRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_rollback(body : String) -> RollbackRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_approval(body : String) -> ApprovalRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_token_issue(body : String) -> TokenIssueRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_enrollment(body : String) -> EnrollmentRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_rotation(body : String) -> RotationRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_quota(body : String) -> @scheduler.TenantQuota? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_capacity(body : String) -> CapacityRequest? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_telemetry(body : String) -> @contracts.TelemetrySample? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_benchmark(body : String) -> @telemetry.BenchmarkRun? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+async fn ApiService::operator_audit(
+  self : ApiService,
+  action : String,
+  target : String,
+  receipt : String,
+) -> Unit {
+  self.with_audit_lock(() => {
+    let event = self.next_audit(
+      "operator",
+      action,
+      target,
+      "previous",
+      "updated",
+      "accepted",
+      receipt,
+      @async.now(),
+    )
+    self.store.append_audit(event)
+  })
+}
+
+///|
+async fn ApiService::stop_assignment(
+  self : ApiService,
+  assignment_id : String,
+) -> HttpReply {
+  if assignment_id == "" || self.store.assignment(assignment_id) is None {
+    return api_error(404, "NotFound", "desired assignment was not found", false)
+  }
+  let receipt = "assignment-stop:\{assignment_id}:\{@async.now()}"
+  let removed = self.with_audit_lock(() => {
+    let audit = self.next_audit(
+      "operator",
+      "assignment.stop",
+      assignment_id,
+      "desired",
+      "stopped",
+      "accepted",
+      receipt,
+      @async.now(),
+    )
+    self.store.commit_assignment_removal(assignment_id, audit)
+  })
+  if !removed {
+    return api_error(409, "Conflict", "assignment changed before removal", true)
+  }
+  json_reply(202, { "accepted": true, "receipt": receipt })
+}
+
+///|
+async fn ApiService::invoke_workload(
+  self : ApiService,
+  request : @contracts.WorkloadEnvelope,
+) -> HttpReply {
+  let idempotency_key = idempotency_scope(request)
+  match self.cached_result(idempotency_key) {
+    Some(response) => return json_reply(200, response.to_json())
+    None => ()
+  }
+  match self.store.idempotent_result(idempotency_key) {
+    Some(response) => return json_reply(200, response.to_json())
+    None => ()
+  }
+  let (admission_error, routing_nodes) = self.schedule_and_admit(request)
+  if admission_error is Some(reply) {
+    return reply
+  }
+  let accepted = @async.now()
+  let mut started = 0L
+  let runtime_result = try
+    @async.with_task_group(group => {
+      self.active_mutex.acquire()
+      if self.active.contains(request.workload_id) {
+        self.active_mutex.release()
+        raise Failure::Failure("duplicate active workload")
+      }
+      let task = group.spawn(() => {
+        let queue_deadline = (request.deadline_unix_ms - accepted)
+          .clamp(min=1L, max=86400000L)
+          .to_int()
+        @async.with_timeout(queue_deadline, () => {
+          self.execution_slots.acquire()
+          defer self.execution_slots.release()
+          started = @async.now()
+          if self.scheduler is Some(scheduler) {
+            scheduler.mark_started(request.workload_id, started)
+          }
+          @async.with_timeout(
+            request.resource_ceiling.max_runtime_ms.to_int(),
+            () => self.invoke_with_bounded_retry(request, routing_nodes),
+          )
+        })
+      })
+      self.active[request.workload_id] = task
+      self.active_mutex.release()
+      try task.wait() catch {
+        error => {
+          self.active_mutex.acquire()
+          ignore(self.active.remove(request.workload_id))
+          self.active_mutex.release()
+          raise error
+        }
+      } noraise {
+        value => {
+          self.active_mutex.acquire()
+          ignore(self.active.remove(request.workload_id))
+          self.active_mutex.release()
+          value
+        }
+      }
+    })
+  catch {
+    error => {
+      let completed = @async.now()
+      let effective_started = if started == 0L { completed } else { started }
+      let timed_out = error is @async.TimeoutError
+      let cancelled = !timed_out && @async.is_cancellation_error(error)
+      let retryable = !timed_out && !cancelled && retryable_runtime_error(error)
+      let receipt = if cancelled {
+        "cancel:\{request.workload_id}:\{digest_hex(request.workload_id)}"
+      } else if timed_out {
+        "deadline:\{request.workload_id}:\{digest_hex(request.idempotency_key)}"
+      } else {
+        "failed:\{request.workload_id}:\{digest_hex(request.idempotency_key)}"
+      }
+      let response : @contracts.WorkloadResponse = {
+        version: @contracts.contract_version,
+        workload_id: request.workload_id,
+        state: if cancelled {
+          Cancelled
+        } else {
+          Failed
+        },
+        output: None,
+        error: Some({
+          code: if cancelled {
+            CancelledByCaller
+          } else if timed_out {
+            DeadlineExceeded
+          } else {
+            RuntimeUnavailable
+          },
+          message: if cancelled {
+            "workload cancelled by caller"
+          } else if timed_out {
+            "workload deadline or runtime ceiling was exceeded"
+          } else {
+            "the selected runtime could not complete the request"
+          },
+          retryable,
+          correlation_receipt: receipt,
+        }),
+        usage: {
+          input_units: 0,
+          output_units: 0,
+          accelerator_ms: completed - effective_started,
+          queue_ms: effective_started - accepted,
+        },
+        artifact_digest: self.runtime.artifact_digest(),
+        runtime_version: self.runtime.runtime_version(),
+        timing: {
+          accepted_unix_ms: accepted,
+          started_unix_ms: effective_started,
+          first_output_unix_ms: 0L,
+          completed_unix_ms: completed,
+        },
+        retryable,
+        audit_receipt: receipt,
+      }
+      self.cache_result(idempotency_key, response)
+      self.with_audit_lock(() => {
+        let audit = self.next_audit(
+          "credential-scope:\{request.credential_scope}",
+          if cancelled {
+            "workload.cancel"
+          } else if timed_out {
+            "workload.deadline"
+          } else {
+            "workload.fail"
+          },
+          request.model_selector,
+          if started == 0L {
+            "queued"
+          } else {
+            "running"
+          },
+          if cancelled {
+            "cancelled"
+          } else {
+            "failed"
+          },
+          "accepted",
+          receipt,
+          completed,
+        )
+        self.store.commit_workload(
+          idempotency_key,
+          { ..response, output: None },
+          audit,
+        )
+      })
+      self.complete_admission(
+        request.workload_id,
+        completed - effective_started,
+      )
+      return json_reply(200, response.to_json())
+    }
+  } noraise {
+    value => value
+  }
+  let completed = @async.now()
+  let effective_started = if started == 0L { accepted } else { started }
+  let receipt = "workload:\{request.workload_id}:\{digest_hex(request.idempotency_key)}"
+  let response : @contracts.WorkloadResponse = {
+    version: @contracts.contract_version,
+    workload_id: request.workload_id,
+    state: Succeeded,
+    output: Some(runtime_result.output),
+    error: None,
+    usage: {
+      input_units: runtime_result.input_units,
+      output_units: runtime_result.output_units,
+      accelerator_ms: completed - effective_started,
+      queue_ms: effective_started - accepted,
+    },
+    artifact_digest: runtime_result.artifact_digest,
+    runtime_version: runtime_result.runtime_version,
+    timing: {
+      accepted_unix_ms: accepted,
+      started_unix_ms: effective_started,
+      first_output_unix_ms: completed,
+      completed_unix_ms: completed,
+    },
+    retryable: false,
+    audit_receipt: receipt,
+  }
+  self.cache_result(idempotency_key, response)
+  self.with_audit_lock(() => {
+    let audit = self.next_audit(
+      "credential-scope:\{request.credential_scope}",
+      "workload.invoke",
+      request.model_selector,
+      "admitted",
+      "succeeded",
+      "accepted",
+      receipt,
+      completed,
+    )
+    self.store.commit_workload(
+      idempotency_key,
+      { ..response, output: None },
+      audit,
+    )
+  })
+  self.complete_admission(request.workload_id, completed - effective_started)
+  json_reply(200, response.to_json())
+}
+
+///|
+async fn send_stream_event(
+  connection : @http.ServerConnection,
+  event : @contracts.WorkloadStreamEvent,
+) -> Unit {
+  connection.write_string("data: \{event.to_json().stringify()}\n\n")
+  connection.flush()
+}
+
+///|
+async fn ApiService::stream_workload(
+  self : ApiService,
+  request : @contracts.WorkloadEnvelope,
+  connection : @http.ServerConnection,
+) -> Unit {
+  let idempotency_key = idempotency_scope(request)
+  let replay = match self.cached_result(idempotency_key) {
+    Some(response) => Some(response)
+    None => self.store.idempotent_result(idempotency_key)
+  }
+  if replay is Some(response) {
+    connection.send_response(200, "OK", extra_headers={
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    })
+    send_stream_event(connection, {
+      workload_id: request.workload_id,
+      sequence: 1,
+      kind: Completed,
+      output: None,
+      response: Some(response),
+    })
+    connection.end_response()
+    return
+  }
+  let (admission_error, routing_nodes) = self.schedule_and_admit(request)
+  if admission_error is Some(reply) {
+    connection.send_response(reply.status, reason(reply.status), extra_headers={
+      "Content-Type": reply.content_type,
+      "Cache-Control": "no-store",
+    })
+    connection.write_string(reply.body)
+    connection.end_response()
+    return
+  }
+  connection.send_response(200, "OK", extra_headers={
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-store",
+    "X-Accel-Buffering": "no",
+  })
+  let accepted = @async.now()
+  let mut started = 0L
+  let mut sequence = 0
+  let mut first_output = 0L
+  let runtime_result = try
+    @async.with_task_group(group => {
+      self.active_mutex.acquire()
+      if self.active.contains(request.workload_id) {
+        self.active_mutex.release()
+        raise Failure::Failure("duplicate active workload")
+      }
+      let task = group.spawn(() => {
+        let queue_deadline = (request.deadline_unix_ms - accepted)
+          .clamp(min=1L, max=86400000L)
+          .to_int()
+        @async.with_timeout(queue_deadline, () => {
+          self.execution_slots.acquire()
+          defer self.execution_slots.release()
+          started = @async.now()
+          if self.scheduler is Some(scheduler) {
+            scheduler.mark_started(request.workload_id, started)
+          }
+          @async.with_timeout(
+            request.resource_ceiling.max_runtime_ms.to_int(),
+            () => {
+              self.invoke_stream_with_bounded_retry(request, routing_nodes, output => {
+                sequence += 1
+                if first_output == 0L {
+                  first_output = @async.now()
+                }
+                send_stream_event(connection, {
+                  workload_id: request.workload_id,
+                  sequence,
+                  kind: Chunk,
+                  output: Some(output),
+                  response: None,
+                })
+              })
+            },
+          )
+        })
+      })
+      self.active[request.workload_id] = task
+      self.active_mutex.release()
+      try task.wait() catch {
+        error => {
+          self.active_mutex.acquire()
+          ignore(self.active.remove(request.workload_id))
+          self.active_mutex.release()
+          raise error
+        }
+      } noraise {
+        value => {
+          self.active_mutex.acquire()
+          ignore(self.active.remove(request.workload_id))
+          self.active_mutex.release()
+          value
+        }
+      }
+    })
+  catch {
+    error => {
+      let completed = @async.now()
+      let effective_started = if started == 0L { completed } else { started }
+      let timed_out = error is @async.TimeoutError
+      let cancelled = !timed_out && @async.is_cancellation_error(error)
+      let retryable = !timed_out && !cancelled && retryable_runtime_error(error)
+      let receipt = if cancelled {
+        "cancel:\{request.workload_id}:\{digest_hex(request.workload_id)}"
+      } else if timed_out {
+        "deadline:\{request.workload_id}:\{digest_hex(request.idempotency_key)}"
+      } else {
+        "failed:\{request.workload_id}:\{digest_hex(request.idempotency_key)}"
+      }
+      let response : @contracts.WorkloadResponse = {
+        version: @contracts.contract_version,
+        workload_id: request.workload_id,
+        state: if cancelled {
+          Cancelled
+        } else {
+          Failed
+        },
+        output: None,
+        error: Some({
+          code: if cancelled {
+            CancelledByCaller
+          } else if timed_out {
+            DeadlineExceeded
+          } else {
+            RuntimeUnavailable
+          },
+          message: if cancelled {
+            "workload cancelled by caller"
+          } else if timed_out {
+            "workload deadline or runtime ceiling was exceeded"
+          } else {
+            "the selected runtime could not complete the stream"
+          },
+          retryable,
+          correlation_receipt: receipt,
+        }),
+        usage: {
+          input_units: 0,
+          output_units: 0,
+          accelerator_ms: completed - effective_started,
+          queue_ms: effective_started - accepted,
+        },
+        artifact_digest: self.runtime.artifact_digest(),
+        runtime_version: self.runtime.runtime_version(),
+        timing: {
+          accepted_unix_ms: accepted,
+          started_unix_ms: effective_started,
+          first_output_unix_ms: first_output,
+          completed_unix_ms: completed,
+        },
+        retryable,
+        audit_receipt: receipt,
+      }
+      self.cache_result(idempotency_key, response)
+      self.with_audit_lock(() => {
+        let audit = self.next_audit(
+          "credential-scope:\{request.credential_scope}",
+          if cancelled {
+            "workload.cancel"
+          } else if timed_out {
+            "workload.deadline"
+          } else {
+            "workload.fail"
+          },
+          request.model_selector,
+          if started == 0L {
+            "queued"
+          } else {
+            "streaming"
+          },
+          if cancelled {
+            "cancelled"
+          } else {
+            "failed"
+          },
+          "accepted",
+          receipt,
+          completed,
+        )
+        self.store.commit_workload(idempotency_key, response, audit)
+      })
+      self.complete_admission(
+        request.workload_id,
+        completed - effective_started,
+      )
+      sequence += 1
+      send_stream_event(connection, {
+        workload_id: request.workload_id,
+        sequence,
+        kind: if cancelled {
+          Cancelled
+        } else {
+          Failed
+        },
+        output: None,
+        response: Some(response),
+      }) catch {
+        _ => ()
+      }
+      connection.end_response() catch {
+        _ => ()
+      }
+      return
+    }
+  } noraise {
+    value => value
+  }
+  let completed = @async.now()
+  let effective_started = if started == 0L { accepted } else { started }
+  let receipt = "workload:\{request.workload_id}:\{digest_hex(request.idempotency_key)}"
+  let response : @contracts.WorkloadResponse = {
+    version: @contracts.contract_version,
+    workload_id: request.workload_id,
+    state: Succeeded,
+    output: Some(runtime_result.output),
+    error: None,
+    usage: {
+      input_units: runtime_result.input_units,
+      output_units: runtime_result.output_units,
+      accelerator_ms: completed - effective_started,
+      queue_ms: effective_started - accepted,
+    },
+    artifact_digest: runtime_result.artifact_digest,
+    runtime_version: runtime_result.runtime_version,
+    timing: {
+      accepted_unix_ms: accepted,
+      started_unix_ms: effective_started,
+      first_output_unix_ms: first_output,
+      completed_unix_ms: completed,
+    },
+    retryable: false,
+    audit_receipt: receipt,
+  }
+  self.cache_result(idempotency_key, response)
+  self.with_audit_lock(() => {
+    let audit = self.next_audit(
+      "credential-scope:\{request.credential_scope}",
+      "workload.invoke.stream",
+      request.model_selector,
+      "streaming",
+      "succeeded",
+      "accepted",
+      receipt,
+      completed,
+    )
+    self.store.commit_workload(
+      idempotency_key,
+      { ..response, output: None },
+      audit,
+    )
+  })
+  self.complete_admission(request.workload_id, completed - effective_started)
+  sequence += 1
+  send_stream_event(connection, {
+    workload_id: request.workload_id,
+    sequence,
+    kind: Completed,
+    output: None,
+    response: Some({ ..response, output: None }),
+  })
+  connection.end_response()
+}
+
+///|
+pub async fn ApiService::handle(
+  self : ApiService,
+  verb : ApiMethod,
+  path : String,
+  headers : Map[String, String],
+  body : String,
+) -> HttpReply {
+  if body.length() > 1048576 {
+    return api_error(
+      413, "PayloadTooLarge", "request body exceeds the public contract limit", false,
+    )
+  }
+  if verb != Get && !self.store.current_epoch_is_durable() {
+    return api_error(
+      409, "StaleControllerEpoch", "controller was fenced by a newer durable epoch",
+      true,
+    )
+  }
+  let reconciliation_write = verb != Get &&
+    path != "/v1/nodes/heartbeat" &&
+    path != "/v1/telemetry"
+  if self.reconciliation_only && reconciliation_write {
+    return api_error(
+      503, "ReconciliationOnly", "controller mutations are disabled until recovery reconciliation is accepted",
+      true,
+    )
+  }
+  match (verb, path) {
+    (Get, "/health") =>
+      json_reply(200, @contracts.health("control", self.version).to_json())
+    (Get, "/version") =>
+      json_reply(200, {
+        "product": "LunaNexa",
+        "version": self.version,
+        "contract": @contracts.contract_version,
+        "mode": if self.reconciliation_only {
+          "reconciliation-only"
+        } else {
+          "active"
+        },
+      })
+    (Get, "/metrics") => {
+      if !bearer_authorized(headers, self.monitoring_token) {
+        return api_error(
+          401, "Unauthenticated", "valid monitoring authority is required", false,
+        )
+      }
+      let nodes = self.store.heartbeats()
+      let assignments = self.store.assignments()
+      let events = self.store.audit_events()
+      let telemetry_samples = match self.telemetry {
+        Some(telemetry) => telemetry.snapshot().samples.length()
+        None => 0
+      }
+      let active_admissions = match self.scheduler {
+        Some(scheduler) => scheduler.snapshot().active.length()
+        None => 0
+      }
+      {
+        status: 200,
+        content_type: "text/plain; version=0.0.4",
+        body: "# TYPE lunanexa_nodes gauge\n" +
+        "lunanexa_nodes \{nodes.length()}\n" +
+        "# TYPE lunanexa_assignments gauge\n" +
+        "lunanexa_assignments \{assignments.length()}\n" +
+        "# TYPE lunanexa_audit_events counter\n" +
+        "lunanexa_audit_events \{events.length()}\n" +
+        "# TYPE lunanexa_active_admissions gauge\n" +
+        "lunanexa_active_admissions \{active_admissions}\n" +
+        "# TYPE lunanexa_telemetry_samples gauge\n" +
+        "lunanexa_telemetry_samples \{telemetry_samples}\n",
+      }
+    }
+    (Get, "/v1/capabilities") => {
+      if !bearer_authorized(headers, self.inference_token) {
+        return api_error(
+          401, "Unauthenticated", "valid inference authority is required", false,
+        )
+      }
+      let selectors = match self.registry {
+        Some(registry) =>
+          [
+            for alias_record in registry.snapshot().aliases => alias_record.name
+          ]
+        None => []
+      }
+      json_reply(200, {
+        "contract_version": @contracts.contract_version,
+        "capabilities": ["TextGenerate"],
+        "selectors": selectors,
+        "streaming": true,
+        "cancellation": true,
+        "retention_policies": ["Ephemeral"],
+      })
+    }
+    (Get, "/v1/scheduler") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.scheduler is Some(scheduler) else {
+        return api_error(
+          503, "SchedulerUnavailable", "durable scheduler is unavailable", true,
+        )
+      }
+      json_reply(200, scheduler.snapshot().to_json())
+    }
+    (Get, "/v1/recovery/plan") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let desired = self.store.assignments()
+      let heartbeats = self.store.heartbeats()
+      let observed_assignment_ids = [
+        for assignment in desired if heartbeats.any(heartbeat => {
+          heartbeat.running_deployments.any(deployment_id => {
+            deployment_id == assignment.deployment_id
+          })
+        }) => assignment.assignment_id
+      ]
+      let plan = @controller.recovery_plan(
+        self.store.controller_epoch(),
+        desired,
+        observed_assignment_ids,
+        @async.now(),
+      )
+      let actions = plan.actions.copy()
+      let now = @async.now()
+      for heartbeat in heartbeats {
+        if @controller.node_unreachable(
+            heartbeat.timestamp_unix_ms,
+            now,
+            15000L,
+          ) {
+          actions.push(MarkNodeUnreachable(heartbeat.node_id))
+        }
+      }
+      json_reply(200, { ..plan, actions, }.to_json())
+    }
+    (Put, "/v1/quotas") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.scheduler is Some(scheduler) else {
+        return api_error(
+          503, "SchedulerUnavailable", "durable scheduler is unavailable", true,
+        )
+      }
+      guard decode_quota(body) is Some(quota) else {
+        return api_error(400, "InvalidRequest", "invalid tenant quota", false)
+      }
+      try scheduler.set_quota(quota) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "tenant quota limits are invalid", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      let receipt = "quota:\{digest_hex(quota.tenant_ref)}"
+      self.operator_audit("quota.update", quota.tenant_ref, receipt)
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Post, "/v1/capacity:forecast") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard decode_capacity(body) is Some(request) &&
+        request.instance_memory_mib > 0 else {
+        return api_error(
+          400, "InvalidRequest", "positive instance memory is required", false,
+        )
+      }
+      let now = @async.now()
+      let nodes = [
+        for heartbeat in self.store.heartbeats() => {
+          scheduler_node(heartbeat, now)
+        }
+      ]
+      json_reply(
+        200,
+        @scheduler.forecast(nodes, request.instance_memory_mib).to_json(),
+      )
+    }
+    (Put, "/v1/telemetry") => {
+      guard decode_telemetry(body) is Some(sample) else {
+        return api_error(
+          400, "InvalidRequest", "invalid telemetry sample", false,
+        )
+      }
+      if !self.node_authorized(headers, sample.node_id) {
+        return api_error(
+          401, "Unauthenticated", "valid node authority is required", false,
+        )
+      }
+      guard self.telemetry is Some(telemetry) else {
+        return api_error(
+          503, "TelemetryUnavailable", "durable telemetry is unavailable", true,
+        )
+      }
+      try telemetry.record_sample(sample) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "payload-shaped telemetry is forbidden", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      json_reply(202, { "accepted": true })
+    }
+    (Get, "/v1/telemetry") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.telemetry is Some(telemetry) else {
+        return api_error(
+          503, "TelemetryUnavailable", "durable telemetry is unavailable", true,
+        )
+      }
+      json_reply(200, telemetry.snapshot().to_json())
+    }
+    (Post, "/v1/benchmarks") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.telemetry is Some(telemetry) else {
+        return api_error(
+          503, "TelemetryUnavailable", "durable telemetry is unavailable", true,
+        )
+      }
+      guard decode_benchmark(body) is Some(run) else {
+        return api_error(
+          400, "InvalidRequest", "invalid benchmark evidence", false,
+        )
+      }
+      let summary = try telemetry.record_benchmark(run) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "benchmark evidence is invalid", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "benchmark.record",
+        run.run_id,
+        "benchmark:\{run.run_id}",
+      )
+      json_reply(201, summary.to_json())
+    }
+    (Get, "/v1/nodes") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      json_reply(200, self.store.heartbeats().to_json())
+    }
+    (Post, "/v1/enrollment/tokens") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.enrollment is Some(enrollment) else {
+        return api_error(
+          503, "EnrollmentUnavailable", "durable enrollment is unavailable", true,
+        )
+      }
+      guard decode_token_issue(body) is Some(issue) else {
+        return api_error(
+          400, "InvalidRequest", "invalid bootstrap token request", false,
+        )
+      }
+      let now = @async.now()
+      if issue.token_id == "" ||
+        issue.secret.length() < 20 ||
+        issue.expires_unix_ms <= now ||
+        issue.expires_unix_ms > now + 900000L {
+        return api_error(
+          400, "InvalidRequest", "bootstrap token must be strong and expire within 15 minutes",
+          false,
+        )
+      }
+      let token = enrollment.issue_token(
+        issue.token_id,
+        issue.secret,
+        issue.expires_unix_ms,
+      )
+      self.operator_audit(
+        "node.bootstrap.issue",
+        issue.token_id,
+        "bootstrap:\{issue.token_id}",
+      )
+      json_reply(201, token.to_json())
+    }
+    (Post, "/v1/enrollment") => {
+      guard self.enrollment is Some(enrollment) else {
+        return api_error(
+          503, "EnrollmentUnavailable", "durable enrollment is unavailable", true,
+        )
+      }
+      guard decode_enrollment(body) is Some(request) else {
+        return api_error(
+          400, "InvalidRequest", "invalid enrollment request", false,
+        )
+      }
+      if !@contracts.valid_identifier(request.node_id, maximum_length=128) ||
+        request.node_auth_secret.length() < 20 ||
+        request.public_key_ref == "" ||
+        request.public_key_ref.contains_char('\n') {
+        return api_error(
+          400, "InvalidRequest", "node identity or authority is invalid", false,
+        )
+      }
+      let certificate = try
+        enrollment.enroll(
+          request.node_id,
+          request.token_id,
+          request.secret,
+          request.node_auth_secret,
+          request.public_key_ref,
+          @async.now(),
+        )
+      catch {
+        _ =>
+          return api_error(
+            401, "Unauthenticated", "bootstrap authority was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "node.enroll",
+        request.node_id,
+        "enrollment:\{request.node_id}:\{certificate.serial}",
+      )
+      json_reply(201, certificate.to_json())
+    }
+    (Post, "/v1/enrollment/rotate") => {
+      guard self.enrollment is Some(enrollment) else {
+        return api_error(
+          503, "EnrollmentUnavailable", "durable enrollment is unavailable", true,
+        )
+      }
+      guard decode_rotation(body) is Some(request) else {
+        return api_error(
+          400, "InvalidRequest", "invalid rotation request", false,
+        )
+      }
+      if !self.node_authorized(headers, request.node_id) {
+        return api_error(
+          401, "Unauthenticated", "valid node authority is required", false,
+        )
+      }
+      let certificate = try
+        enrollment.rotate(request.node_id, request.public_key_ref, @async.now())
+      catch {
+        _ =>
+          return api_error(
+            401, "Unauthenticated", "certificate rotation was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "node.certificate.rotate",
+        request.node_id,
+        "rotation:\{request.node_id}:\{certificate.serial}",
+      )
+      json_reply(200, certificate.to_json())
+    }
+    (Put, "/v1/nodes/heartbeat") => {
+      guard decode_heartbeat(body) is Some(heartbeat) else {
+        return api_error(400, "InvalidRequest", "invalid node heartbeat", false)
+      }
+      if !@contracts.valid_identifier(heartbeat.node_id, maximum_length=128) {
+        return api_error(400, "InvalidRequest", "invalid node identity", false)
+      }
+      let credential = node_credential(headers).unwrap_or("")
+      if !self.node_authorized(headers, heartbeat.node_id) ||
+        heartbeat.signature != @node.heartbeat_signature(heartbeat, credential) {
+        return api_error(
+          401, "Unauthenticated", "valid node authority is required", false,
+        )
+      }
+      let now = @async.now()
+      if heartbeat.timestamp_unix_ms < now - 60000L ||
+        heartbeat.timestamp_unix_ms > now + 60000L {
+        return api_error(
+          409, "StaleGeneration", "heartbeat timestamp is outside the replay window",
+          false,
+        )
+      }
+      let mut previous : @contracts.NodeHeartbeat? = None
+      for current in self.store.heartbeats() {
+        if current.node_id == heartbeat.node_id {
+          previous = Some(current)
+        }
+      }
+      if previous is Some(current) &&
+        (
+          heartbeat.timestamp_unix_ms <= current.timestamp_unix_ms ||
+          heartbeat.observed_generation < current.observed_generation ||
+          heartbeat.controller_epoch < current.controller_epoch
+        ) {
+        return api_error(
+          409, "StaleGeneration", "heartbeat replay was rejected", false,
+        )
+      }
+      self.store.put_heartbeat(heartbeat)
+      json_reply(202, { "accepted": true, "node_id": heartbeat.node_id })
+    }
+    (Put, "/v1/nodes/directive") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard decode_node_directive(body) is Some(directive) else {
+        return api_error(400, "InvalidRequest", "invalid node directive", false)
+      }
+      if !@contracts.valid_identifier(directive.node_id, maximum_length=128) ||
+        directive.generation <= 0L ||
+        directive.receipt == "" ||
+        !(directive.desired_state == Active ||
+        directive.desired_state == Cordoned ||
+        directive.desired_state == Draining) {
+        return api_error(
+          400, "InvalidRequest", "node directive state or generation is invalid",
+          false,
+        )
+      }
+      if self.store.node_directive(directive.node_id) is Some(current) &&
+        directive.generation <= current.generation {
+        return api_error(
+          409, "StaleGeneration", "node directive generation is stale", false,
+        )
+      }
+      self.with_audit_lock(() => {
+        let audit = self.next_audit(
+          "operator",
+          "node.state",
+          directive.node_id,
+          "previous",
+          "\{to_repr(directive.desired_state)}",
+          "accepted",
+          directive.receipt,
+          @async.now(),
+        )
+        self.store.commit_node_directive(directive, audit)
+      })
+      json_reply(202, { "accepted": true, "receipt": directive.receipt })
+    }
+    (Get, _) if path.has_prefix("/v1/nodes/") && path.has_suffix("/directive") => {
+      let prefix = "/v1/nodes/".length()
+      let suffix = "/directive".length()
+      let node_id = path[prefix:path.length() - suffix].to_owned()
+      if !self.node_authorized(headers, node_id) {
+        return api_error(
+          401, "Unauthenticated", "valid node authority is required", false,
+        )
+      }
+      match self.store.node_directive(node_id) {
+        Some(directive) => json_reply(200, directive.to_json())
+        None =>
+          api_error(404, "NotFound", "node directive was not found", false)
+      }
+    }
+    (Get, "/v1/assignments") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      json_reply(200, self.store.assignments().to_json())
+    }
+    (Get, _) if path.has_prefix("/v1/nodes/") && path.has_suffix("/assignments") => {
+      let prefix = "/v1/nodes/".length()
+      let suffix = "/assignments".length()
+      let node_id = path[prefix:path.length() - suffix].to_owned()
+      if !self.node_authorized(headers, node_id) {
+        return api_error(
+          401, "Unauthenticated", "valid node authority is required", false,
+        )
+      }
+      json_reply(
+        200,
+        [
+          for assignment in self.store.assignments() if assignment.node_id ==
+          node_id &&
+          assignment.lease_expires_unix_ms > @async.now() => assignment
+        ].to_json(),
+      )
+    }
+    (Put, "/v1/assignments") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard decode_assignment(body) is Some(assignment) else {
+        return api_error(
+          400, "InvalidRequest", "invalid desired assignment", false,
+        )
+      }
+      if assignment.signature != "" {
+        return api_error(
+          400, "InvalidRequest", "operators submit unsigned desired state; the controller owns assignment signing",
+          false,
+        )
+      }
+      if self.assignment_signing_secret == "" {
+        return api_error(
+          503, "SignerUnavailable", "assignment signing authority is unavailable",
+          true,
+        )
+      }
+      let now = @async.now()
+      if !valid_assignment_shape(assignment, now) {
+        return api_error(
+          400, "InvalidRequest", "assignment security, resource, or lease constraints are invalid",
+          false,
+        )
+      }
+      let signed_assignment = {
+        ..assignment,
+        signature: @node.assignment_signature(
+          assignment,
+          self.assignment_signing_secret,
+        ),
+      }
+      if signed_assignment.controller_epoch != self.store.controller_epoch() {
+        return api_error(
+          409, "StaleControllerEpoch", "assignment controller epoch is not current",
+          false,
+        )
+      }
+      if self.store.assignment(signed_assignment.assignment_id) is Some(current) &&
+        signed_assignment.generation <= current.generation {
+        return api_error(
+          409, "StaleGeneration", "assignment generation is stale", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      if !registry.deployment_allowed(
+          signed_assignment.artifact.digest,
+          signed_assignment.runtime,
+        ) {
+        return api_error(
+          409, "RegistryRejected", "artifact or runtime is not approved for deployment",
+          false,
+        )
+      }
+      let receipt = "assignment:\{signed_assignment.assignment_id}:\{signed_assignment.generation}"
+      self.with_audit_lock(() => {
+        let audit = self.next_audit(
+          "operator",
+          "assignment.publish",
+          signed_assignment.assignment_id,
+          "unknown",
+          "desired",
+          "accepted",
+          receipt,
+          now,
+        )
+        self.store.commit_assignment(signed_assignment, audit)
+      })
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Delete, _) if path.has_prefix("/v1/assignments/") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let assignment_id = path["/v1/assignments/".length():].to_owned()
+      self.stop_assignment(assignment_id)
+    }
+    (Post, _) if path.has_prefix("/v1/assignments/") && path.has_suffix("/stop") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let prefix = "/v1/assignments/".length()
+      let suffix = "/stop".length()
+      let assignment_id = path[prefix:path.length() - suffix].to_owned()
+      self.stop_assignment(assignment_id)
+    }
+    (Get, "/v1/registry") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      json_reply(200, registry.snapshot().to_json())
+    }
+    (Post, "/v1/models") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_model(body) is Some(model) else {
+        return api_error(400, "InvalidRequest", "invalid model record", false)
+      }
+      try registry.register_model(model) catch {
+        _ =>
+          return api_error(
+            409, "RegistryRejected", "model registration was rejected", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      let receipt = "model:\{model.model_id}:\{model.version}"
+      self.operator_audit("model.register", model.model_id, receipt)
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Post, "/v1/runtimes") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_runtime_spec(body) is Some(runtime) else {
+        return api_error(
+          400, "InvalidRequest", "invalid runtime specification", false,
+        )
+      }
+      try registry.register_runtime(runtime) catch {
+        _ =>
+          return api_error(
+            409, "RegistryRejected", "runtime registration was rejected", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      let receipt = "runtime:\{runtime.name}:\{runtime.version}"
+      self.operator_audit("runtime.register", runtime.name, receipt)
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Post, "/v1/licenses") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_license(body) is Some(license) else {
+        return api_error(400, "InvalidRequest", "invalid license record", false)
+      }
+      try registry.record_license(license) catch {
+        _ =>
+          return api_error(
+            400, "RegistryRejected", "license metadata was rejected", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      let receipt = "license:\{license.license_id}"
+      self.operator_audit("license.record", license.model_id, receipt)
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Post, "/v1/verifications") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_verification_request(body) is Some(request) else {
+        return api_error(
+          400, "InvalidRequest", "invalid signature verification request", false,
+        )
+      }
+      guard self.signature_verifier is Some(verifier) else {
+        return api_error(
+          503, "VerifierUnavailable", "the configured signature verifier is unavailable",
+          true,
+        )
+      }
+      let verification_receipt = try {
+        if request.kind == "image" {
+          verifier.verify_image(request.subject, request.digest)
+        } else if request.kind == "blob" &&
+          request.signature_path is Some(signature_path) {
+          verifier.verify_blob(request.subject, signature_path, request.digest)
+        } else {
+          return api_error(
+            400, "InvalidRequest", "verification kind or signature path is invalid",
+            false,
+          )
+        }
+      } catch {
+        _ =>
+          return api_error(
+            409, "SignatureRejected", "signature verification failed", false,
+          )
+      } noraise {
+        value => value
+      }
+      let verification : @registry.ArtifactVerification = {
+        digest: verification_receipt.digest,
+        signature_verified: verification_receipt.verified,
+        provenance_verified: request.provenance_verified,
+        verified_unix_ms: @async.now(),
+        verifier: verification_receipt.verifier,
+      }
+      try registry.record_verification(verification) catch {
+        _ =>
+          return api_error(
+            400, "RegistryRejected", "verification metadata was rejected", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      let receipt = "verification:\{verification.digest}"
+      self.operator_audit("artifact.verify", verification.digest, receipt)
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Post, "/v1/evaluations") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_evaluation(body) is Some(evaluation) else {
+        return api_error(
+          400, "InvalidRequest", "invalid evaluation record", false,
+        )
+      }
+      try registry.record_evaluation(evaluation) catch {
+        _ =>
+          return api_error(
+            400, "RegistryRejected", "evaluation metadata was rejected", false,
+          )
+      } noraise {
+        _ => ()
+      }
+      let receipt = "evaluation:\{evaluation.evaluation_id}"
+      self.operator_audit("model.evaluate", evaluation.model_id, receipt)
+      json_reply(202, { "accepted": true, "receipt": receipt })
+    }
+    (Post, "/v1/models/approve") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_approval(body) is Some(approval) else {
+        return api_error(
+          400, "InvalidRequest", "invalid approval request", false,
+        )
+      }
+      let approved = try
+        registry.approve(approval.model_id, approval.version, @async.now())
+      catch {
+        _ =>
+          return api_error(
+            409, "RegistryRejected", "model approval prerequisites were not met",
+            false,
+          )
+      } noraise {
+        value => value
+      }
+      let receipt = "approval:\{approval.model_id}:\{approval.version}"
+      self.operator_audit("model.approve", approval.model_id, receipt)
+      json_reply(200, approved.to_json())
+    }
+    (Post, "/v1/aliases/promote") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_promotion(body) is Some(promotion) else {
+        return api_error(
+          400, "InvalidRequest", "invalid promotion request", false,
+        )
+      }
+      let receipt = try
+        registry.promote(
+          promotion.alias_name,
+          promotion.model_id,
+          promotion.version,
+          promotion.stage,
+          promotion.actor,
+          @async.now(),
+        )
+      catch {
+        _ =>
+          return api_error(
+            409, "RegistryRejected", "model promotion was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "alias.promote",
+        promotion.alias_name,
+        receipt.receipt_id,
+      )
+      json_reply(200, receipt.to_json())
+    }
+    (Post, "/v1/aliases/rollback") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.registry is Some(registry) else {
+        return api_error(
+          503, "RegistryUnavailable", "durable registry is unavailable", true,
+        )
+      }
+      guard decode_rollback(body) is Some(rollback) else {
+        return api_error(
+          400, "InvalidRequest", "invalid rollback request", false,
+        )
+      }
+      let receipt = try
+        registry.rollback(rollback.alias_name, rollback.actor, @async.now())
+      catch {
+        _ =>
+          return api_error(
+            409, "RegistryRejected", "alias rollback was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "alias.rollback",
+        rollback.alias_name,
+        receipt.receipt_id,
+      )
+      json_reply(200, receipt.to_json())
+    }
+    (Post, "/v1/workloads") => {
+      if !bearer_authorized(headers, self.inference_token) {
+        return api_error(
+          401, "Unauthenticated", "valid inference authority is required", false,
+        )
+      }
+      guard decode_workload(body) is Some(request) else {
+        return api_error(
+          400, "InvalidRequest", "invalid canonical workload", false,
+        )
+      }
+      if !ephemeral_only(request) {
+        return api_error(
+          503, "RetentionUnavailable", "this deployment has no configured encrypted retention provider",
+          false,
+        )
+      }
+      self.invoke_workload(request)
+    }
+    (Get, _) if path.has_prefix("/v1/workloads/") => {
+      if !bearer_authorized(headers, self.inference_token) {
+        return api_error(
+          401, "Unauthenticated", "valid inference authority is required", false,
+        )
+      }
+      let workload_id = path["/v1/workloads/".length():].to_owned()
+      if !@contracts.valid_identifier(workload_id) {
+        return api_error(
+          400, "InvalidRequest", "invalid workload identity", false,
+        )
+      }
+      match self.store.workload_result(workload_id) {
+        Some(response) => json_reply(200, response.to_json())
+        None => {
+          let admission = match self.scheduler {
+            Some(scheduler) => scheduler.admission(workload_id)
+            None => None
+          }
+          match admission {
+            Some(active) => {
+              let now = @async.now()
+              let started = active.started_unix_ms.unwrap_or(0L)
+              let status : @contracts.WorkloadResponse = {
+                version: @contracts.contract_version,
+                workload_id,
+                state: if active.started_unix_ms is Some(_) {
+                  Running
+                } else {
+                  Queued
+                },
+                output: None,
+                error: None,
+                usage: {
+                  input_units: 0,
+                  output_units: 0,
+                  accelerator_ms: if started == 0L {
+                    0L
+                  } else {
+                    now - started
+                  },
+                  queue_ms: if started == 0L {
+                    now - active.accepted_unix_ms
+                  } else {
+                    started - active.accepted_unix_ms
+                  },
+                },
+                artifact_digest: self.runtime.artifact_digest(),
+                runtime_version: self.runtime.runtime_version(),
+                timing: {
+                  accepted_unix_ms: active.accepted_unix_ms,
+                  started_unix_ms: started,
+                  first_output_unix_ms: 0L,
+                  completed_unix_ms: 0L,
+                },
+                retryable: false,
+                audit_receipt: "pending:\{digest_hex(workload_id)}",
+              }
+              json_reply(200, status.to_json())
+            }
+            None =>
+              api_error(
+                404, "NotFound", "workload receipt was not found", false,
+              )
+          }
+        }
+      }
+    }
+    (Post, _) if path.has_prefix("/v1/workloads/") && path.has_suffix("/cancel") => {
+      if !bearer_authorized(headers, self.inference_token) {
+        return api_error(
+          401, "Unauthenticated", "valid inference authority is required", false,
+        )
+      }
+      let prefix = "/v1/workloads/".length()
+      let suffix = "/cancel".length()
+      let workload_id = path[prefix:path.length() - suffix].to_owned()
+      if !@contracts.valid_identifier(workload_id) {
+        return api_error(
+          400, "InvalidRequest", "invalid workload identity", false,
+        )
+      }
+      self.active_mutex.acquire()
+      let active = self.active.get(workload_id)
+      if active is Some(task) {
+        task.cancel()
+      }
+      self.active_mutex.release()
+      if active is None {
+        return api_error(
+          404, "NotFound", "active workload was not found", false,
+        )
+      }
+      if self.scheduler is Some(scheduler) {
+        ignore(scheduler.cancel(workload_id))
+      }
+      let receipt : CancellationReceipt = {
+        workload_id,
+        accepted: true,
+        receipt: "cancel:\{workload_id}:\{digest_hex(workload_id)}",
+      }
+      json_reply(202, receipt.to_json())
+    }
+    (Get, "/v1/audit") => {
+      if !bearer_authorized(headers, self.audit_token) {
+        return api_error(
+          401, "Unauthenticated", "valid audit authority is required", false,
+        )
+      }
+      json_reply(200, self.store.audit_events().to_json())
+    }
+    _ => api_error(404, "NotFound", "route was not found", false)
+  }
+}
+
+///|
+fn api_method(request_method : @http.RequestMethod) -> ApiMethod? {
+  match request_method {
+    @http.RequestMethod::Get => Some(Get)
+    Post => Some(Post)
+    Put => Some(Put)
+    Delete => Some(Delete)
+    _ => None
+  }
+}
+
+///|
+fn reason(status : Int) -> String {
+  match status {
+    200 => "OK"
+    201 => "Created"
+    202 => "Accepted"
+    400 => "Bad Request"
+    401 => "Unauthorized"
+    404 => "Not Found"
+    409 => "Conflict"
+    413 => "Payload Too Large"
+    429 => "Too Many Requests"
+    503 => "Service Unavailable"
+    _ => "Response"
+  }
+}
+
+///|
+pub async fn ApiService::serve_on(
+  self : ApiService,
+  server : @http.Server,
+) -> Unit {
+  server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    if request.meth == Post && request.path == "/v1/workloads:stream" {
+      if !self.store.current_epoch_is_durable() {
+        let reply = api_error(
+          409, "StaleControllerEpoch", "controller was fenced by a newer durable epoch",
+          true,
+        )
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      if self.reconciliation_only {
+        let reply = api_error(
+          503, "ReconciliationOnly", "controller mutations are disabled until recovery reconciliation is accepted",
+          true,
+        )
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      if !bearer_authorized(request.headers, self.inference_token) {
+        let reply = api_error(
+          401, "Unauthenticated", "valid inference authority is required", false,
+        )
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      let request_body = reader.read_all().text()
+      if request_body.length() > 1048576 {
+        let reply = api_error(
+          413, "PayloadTooLarge", "request body exceeds the public contract limit",
+          false,
+        )
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      guard decode_workload(request_body) is Some(workload) else {
+        let reply = api_error(
+          400, "InvalidRequest", "invalid canonical workload", false,
+        )
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      if !ephemeral_only(workload) {
+        let reply = api_error(
+          503, "RetentionUnavailable", "this deployment has no configured encrypted retention provider",
+          false,
+        )
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      self.stream_workload(workload, connection)
+      return
+    }
+    guard api_method(request.meth) is Some(verb) else {
+      connection.send_response(405, "Method Not Allowed")
+      return
+    }
+    let body = match verb {
+      Post | Put => reader.read_all().text()
+      _ => ""
+    }
+    let reply = self.handle(verb, request.path, request.headers, body)
+    connection.send_response(reply.status, reason(reply.status), extra_headers={
+      "Content-Type": reply.content_type,
+      "Cache-Control": "no-store",
+    })
+    connection.write_string(reply.body)
+    connection.end_response()
+  })
+}
+
+///|
+pub async fn ApiService::serve(self : ApiService, address : String) -> Unit {
+  let server = @http.Server(@socket.Addr::parse(address))
+  self.serve_on(server)
+}

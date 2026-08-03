@@ -1,0 +1,1 @@
+{"sequence":"1","event_id":"audit-001","timestamp_unix_ms":"1000","actor":"operator","policy_version":"policy-v1","action":"assignment.publish","target":"assignment-001","prior_state":"none","next_state":"desired","result":"accepted","correlation_receipt":"receipt-001","previous_hash":"genesis","event_hash":"hash-001"}

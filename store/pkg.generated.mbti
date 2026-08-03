@@ -1,0 +1,144 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/store"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn audit_event_hash(@contracts.AuditEvent) -> String
+
+pub fn create_backup(String, String, String, String, Int64) -> String raise BackupError
+
+pub fn create_full_backup(String, String, String, String, String, String, String, Int64) -> String raise BackupError
+
+pub fn full_backup_manifest_digest(Int64, String, String, String, String, String, String) -> String
+
+pub fn inspect_backup(String) -> BackupBundle raise
+
+pub fn inspect_full_backup(String) -> FullBackupBundle raise
+
+pub fn validate_audit_chain(Array[@contracts.AuditEvent]) -> Bool
+
+// Errors
+pub(all) suberror BackupError {
+  UnsignedBackup
+  UnsupportedBackupVersion(String)
+  ManifestDigestMismatch
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror DurableStoreError {
+  InvalidState(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct BackupBundle {
+  version : String
+  created_unix_ms : Int64
+  controller_snapshot : String
+  registry_snapshot : String
+  audit_tail_hash : String
+  signature_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct FileStore {
+  path : String
+  mut state : MemoryStore
+  mutex : @async.Mutex
+  requires_epoch_advance : Bool
+  mut controller_fenced : Bool
+}
+pub async fn FileStore::append_audit(Self, @contracts.AuditEvent) -> Unit
+pub async fn FileStore::assignment(Self, String) -> @contracts.DesiredAssignment?
+pub async fn FileStore::assignments(Self) -> Array[@contracts.DesiredAssignment]
+pub async fn FileStore::audit_events(Self) -> Array[@contracts.AuditEvent]
+pub async fn FileStore::backup_snapshot(Self) -> String
+pub async fn FileStore::commit_assignment(Self, @contracts.DesiredAssignment, @contracts.AuditEvent) -> Unit
+pub async fn FileStore::commit_assignment_removal(Self, String, @contracts.AuditEvent) -> Bool
+pub async fn FileStore::commit_node_directive(Self, @contracts.NodeDirective, @contracts.AuditEvent) -> Unit
+pub async fn FileStore::commit_workload(Self, String, @contracts.WorkloadResponse, @contracts.AuditEvent) -> Unit
+pub async fn FileStore::controller_epoch(Self) -> Int64
+pub async fn FileStore::current_epoch_is_durable(Self) -> Bool
+pub async fn FileStore::fence_controller(Self, Int64) -> Unit
+pub async fn FileStore::heartbeats(Self) -> Array[@contracts.NodeHeartbeat]
+pub async fn FileStore::idempotent_result(Self, String) -> @contracts.WorkloadResponse?
+pub async fn FileStore::node_directive(Self, String) -> @contracts.NodeDirective?
+pub async fn FileStore::open(String) -> Self
+pub async fn FileStore::put_assignment(Self, @contracts.DesiredAssignment) -> Unit
+pub async fn FileStore::put_heartbeat(Self, @contracts.NodeHeartbeat) -> Unit
+pub async fn FileStore::put_node_directive(Self, @contracts.NodeDirective) -> Unit
+pub async fn FileStore::put_workload_result(Self, String, @contracts.WorkloadResponse) -> Unit
+pub async fn FileStore::workload_result(Self, String) -> @contracts.WorkloadResponse?
+
+pub(all) struct FullBackupBundle {
+  version : String
+  created_unix_ms : Int64
+  controller_snapshot : String
+  registry_snapshot : String
+  enrollment_snapshot : String
+  scheduler_snapshot : String
+  telemetry_snapshot : String
+  audit_tail_hash : String
+  manifest_digest : String
+  signature_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct MemoryStore {
+  assignments : Map[String, @contracts.DesiredAssignment]
+  audits : Array[@contracts.AuditEvent]
+  heartbeats : Map[String, @contracts.NodeHeartbeat]
+  workload_by_id : Map[String, WorkloadResultRecord]
+  workload_by_idempotency : Map[String, WorkloadResultRecord]
+  node_directives : Map[String, @contracts.NodeDirective]
+  mut controller_epoch : Int64
+}
+pub fn MemoryStore::append_audit(Self, @contracts.AuditEvent) -> Unit
+pub fn MemoryStore::assignments(Self) -> Array[@contracts.DesiredAssignment]
+pub fn MemoryStore::audit_events(Self) -> Array[@contracts.AuditEvent]
+pub fn MemoryStore::controller_epoch(Self) -> Int64
+pub fn MemoryStore::get_assignment(Self, String) -> @contracts.DesiredAssignment?
+pub fn MemoryStore::heartbeats(Self) -> Array[@contracts.NodeHeartbeat]
+pub fn MemoryStore::idempotent_result(Self, String) -> @contracts.WorkloadResponse?
+pub fn MemoryStore::new() -> Self
+pub fn MemoryStore::node_directive(Self, String) -> @contracts.NodeDirective?
+pub fn MemoryStore::node_directives(Self) -> Array[@contracts.NodeDirective]
+pub fn MemoryStore::put_assignment(Self, @contracts.DesiredAssignment) -> Unit
+pub fn MemoryStore::put_heartbeat(Self, @contracts.NodeHeartbeat) -> Unit
+pub fn MemoryStore::put_node_directive(Self, @contracts.NodeDirective) -> Unit
+pub fn MemoryStore::put_workload_result(Self, String, @contracts.WorkloadResponse) -> Unit
+pub fn MemoryStore::remove_assignment(Self, String) -> Bool
+pub fn MemoryStore::restore(String) -> Self raise
+pub fn MemoryStore::set_controller_epoch(Self, Int64) -> Unit
+pub fn MemoryStore::snapshot(Self) -> String
+pub fn MemoryStore::workload_result(Self, String) -> @contracts.WorkloadResponse?
+pub fn MemoryStore::workload_results(Self) -> Array[WorkloadResultRecord]
+pub impl MetadataStore for MemoryStore
+
+pub(all) struct StoreSnapshot {
+  schema_version : String
+  assignments : Array[@contracts.DesiredAssignment]
+  audits : Array[@contracts.AuditEvent]
+  heartbeats : Array[@contracts.NodeHeartbeat]
+  workload_results : Array[WorkloadResultRecord]
+  node_directives : Array[@contracts.NodeDirective]
+  controller_epoch : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkloadResultRecord {
+  idempotency_key : String
+  response : @contracts.WorkloadResponse
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+pub(open) trait MetadataStore {
+  fn put_assignment(Self, @contracts.DesiredAssignment) -> Unit raise
+  fn get_assignment(Self, String) -> @contracts.DesiredAssignment? raise
+  fn append_audit(Self, @contracts.AuditEvent) -> Unit raise
+  fn audit_events(Self) -> Array[@contracts.AuditEvent] raise
+}
+

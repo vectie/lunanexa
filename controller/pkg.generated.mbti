@@ -1,0 +1,63 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/controller"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/node",
+  "vectie/lunanexa/runtimes",
+  "vectie/lunanexa/store",
+}
+
+// Values
+pub fn authenticate_local_operator(String, String, String) -> OperatorIdentity raise AuthenticationError
+
+pub fn health(String) -> @contracts.HealthResponse
+
+pub fn node_unreachable(Int64, Int64, Int64) -> Bool
+
+pub fn recovery_plan(Int64, Array[@contracts.DesiredAssignment], Array[String], Int64) -> RecoveryPlan
+
+// Errors
+pub(all) suberror AuthenticationError {
+  InvalidOperatorCredential
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct ControlPlane {
+  version : String
+  epoch : Int64
+  store : @store.MemoryStore
+  enrollment : @node.EnrollmentService
+}
+pub fn ControlPlane::enrollment(Self) -> @node.EnrollmentService
+pub fn ControlPlane::from_snapshot(String, Int64, String) -> Self raise
+pub fn ControlPlane::invoke(Self, @runtimes.FakeRuntime, @contracts.WorkloadEnvelope, Int64) -> @contracts.WorkloadResponse raise
+pub fn ControlPlane::new(String, Int64) -> Self
+pub fn ControlPlane::publish_assignment(Self, @contracts.DesiredAssignment) -> Unit
+pub fn ControlPlane::snapshot(Self) -> String
+pub fn ControlPlane::store(Self) -> @store.MemoryStore
+
+pub(all) struct OperatorIdentity {
+  subject : String
+  roles : Array[String]
+  authenticated : Bool
+} derive(Eq, @debug.Debug)
+
+pub(all) enum RecoveryAction {
+  StartMissing(String)
+  StopOrphan(String)
+  ExpireLease(String)
+  MarkNodeUnreachable(String)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RecoveryPlan {
+  controller_epoch : Int64
+  actions : Array[RecoveryAction]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+

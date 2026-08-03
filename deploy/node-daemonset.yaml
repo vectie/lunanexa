@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lunanexa-node
+spec:
+  selector:
+    matchLabels:
+      app: lunanexa-node
+  template:
+    metadata:
+      labels:
+        app: lunanexa-node
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: node-agent
+    spec:
+      serviceAccountName: lunanexa-node
+      automountServiceAccountToken: false
+      hostPID: false
+      hostNetwork: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: node-agent
+          image: registry.invalid/lunanexa/node@${NODE_IMAGE_DIGEST}
+          env:
+            - name: LUNANEXA_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-node-config
+                  key: controller-endpoint
+            - name: LUNANEXA_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: LUNANEXA_NODE_INVENTORY_PATH
+              value: /etc/lunanexa/inventory.json
+            - name: LUNANEXA_NODE_STATE_PATH
+              value: /var/lib/lunanexa/node-state.json
+            - name: LUNANEXA_NODE_CERTIFICATE_PATH
+              value: /var/lib/lunanexa/node-certificate.json
+            - name: LUNANEXA_NODE_PUBLIC_KEY_REF
+              value: host-ref:/etc/lunanexa/node-public-key
+            - name: LUNANEXA_CONTAINER_ENGINE
+              value: /usr/bin/podman
+            - name: LUNANEXA_RUNTIME_NETWORK
+              value: lunanexa-runtime
+            - name: LUNANEXA_CONTAINER_ENGINE_ENDPOINT
+              value: unix:///run/podman/podman.sock
+            - name: LUNANEXA_NODE_TOKEN_PATH
+              value: /etc/lunanexa/node-token
+            - name: LUNANEXA_ASSIGNMENT_SIGNING_SECRET_PATH
+              value: /etc/lunanexa/assignment-verification-key
+            - name: LUNANEXA_BOOTSTRAP_TOKEN_ID_PATH
+              value: /etc/lunanexa/bootstrap-token-id
+            - name: LUNANEXA_BOOTSTRAP_TOKEN_PATH
+              value: /etc/lunanexa/bootstrap-token
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: node-config
+              mountPath: /etc/lunanexa
+              readOnly: true
+            - name: node-state
+              mountPath: /var/lib/lunanexa
+            - name: podman-socket
+              mountPath: /run/podman/podman.sock
+      volumes:
+        - name: node-config
+          hostPath:
+            path: /etc/lunanexa
+            type: Directory
+        - name: node-state
+          hostPath:
+            path: /var/lib/lunanexa
+            type: DirectoryOrCreate
+        - name: podman-socket
+          hostPath:
+            path: /run/podman/podman.sock
+            type: Socket

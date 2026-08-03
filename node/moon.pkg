@@ -1,0 +1,12 @@
+import {
+  "vectie/lunanexa/contracts",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/x/crypto",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/io",
+  "moonbitlang/async/process",
+}
+
+supported_targets = "native"

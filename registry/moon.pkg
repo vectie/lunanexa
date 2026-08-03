@@ -1,0 +1,16 @@
+import {
+  "vectie/lunanexa/contracts",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/io",
+  "moonbitlang/async/process",
+  "moonbitlang/async/http",
+  "moonbitlang/core/json",
+  "moonbitlang/x/crypto",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/async/socket",
+} for "test"

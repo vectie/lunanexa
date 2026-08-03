@@ -1,0 +1,16 @@
+import {
+  "vectie/lunanexa/client",
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/telemetry",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")

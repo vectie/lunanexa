@@ -1,0 +1,185 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/scheduler"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn forecast(Array[NodeSnapshot], Int) -> CapacityForecast
+
+pub fn place(Array[NodeSnapshot], PlacementRequirements, ScorePolicy) -> PlacementDecision
+
+pub fn priority_capacity_limit(Int, @contracts.Priority) -> Int
+
+pub fn retry_allowed(String, Int, Int, Bool) -> Bool
+
+// Errors
+pub(all) suberror SchedulerStateError {
+  InvalidSchedulerState(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct ActiveAdmission {
+  workload_id : String
+  tenant_ref : String
+  accepted_unix_ms : Int64
+  deadline_unix_ms : Int64
+  priority : @contracts.Priority
+  started_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct AdmissionController {
+  quotas : Map[String, TenantQuota]
+  inflight : Map[String, Int]
+  accelerator_ms : Map[String, Int64]
+  window_started_unix_ms : Map[String, Int64]
+  cancelled : Map[String, Bool]
+  mut queue_depth : Int
+  capacity : Int
+}
+pub fn AdmissionController::admit(Self, @contracts.WorkloadEnvelope, Int64) -> AdmissionResult
+pub fn AdmissionController::cancel(Self, String) -> Unit
+pub fn AdmissionController::complete(Self, String, Int64) -> Unit
+pub fn AdmissionController::is_cancelled(Self, String) -> Bool
+pub fn AdmissionController::new(Int) -> Self
+pub fn AdmissionController::set_quota(Self, TenantQuota) -> Unit
+
+pub(all) enum AdmissionResult {
+  Accepted(queue_position~ : Int)
+  Rejected(reason~ : RejectionReason)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CandidateScore {
+  node_id : String
+  total : Int
+  warm_model : Int
+  headroom : Int
+  queue : Int
+  reliability : Int
+  utilization : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CapacityForecast {
+  schedulable_nodes : Int
+  total_free_memory_mib : Int
+  estimated_additional_instances : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct FileScheduler {
+  path : String
+  mut capacity : Int
+  quotas : Map[String, TenantQuota]
+  active : Map[String, ActiveAdmission]
+  usage : Map[String, TenantUsage]
+  decisions : Array[PlacementDecision]
+  mutex : @async.Mutex
+}
+pub async fn FileScheduler::admission(Self, String) -> ActiveAdmission?
+pub async fn FileScheduler::admit(Self, @contracts.WorkloadEnvelope, Int64) -> AdmissionResult
+pub async fn FileScheduler::cancel(Self, String) -> Bool
+pub async fn FileScheduler::complete(Self, String, Int64) -> Unit
+pub async fn FileScheduler::mark_started(Self, String, Int64) -> Unit
+pub async fn FileScheduler::open(String, Int) -> Self
+pub async fn FileScheduler::place(Self, Array[NodeSnapshot], PlacementRequirements, ScorePolicy) -> PlacementDecision
+pub async fn FileScheduler::set_quota(Self, TenantQuota) -> Unit
+pub async fn FileScheduler::snapshot(Self) -> SchedulerSnapshot
+
+pub(all) struct NodeSnapshot {
+  node_id : String
+  state : @contracts.NodeState
+  architecture : String
+  memory_free_mib : Int
+  runtimes : Array[String]
+  licensed_models : Array[String]
+  ready_models : Array[String]
+  allowed_data_classes : Array[@contracts.DataClass]
+  warm_models : Array[String]
+  queue_depth : Int
+  reliability_per_mille : Int
+  accelerator_utilization_per_mille : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PlacementDecision {
+  workload_id : String
+  policy_version : String
+  selected_node_id : String?
+  candidates : Array[CandidateScore]
+  rejected : Array[RejectedNode]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PlacementRequirements {
+  workload_id : String
+  model_key : String
+  architecture : String
+  memory_mib : Int
+  runtime : String
+  data_class : @contracts.DataClass
+  deadline_unix_ms : Int64
+  now_unix_ms : Int64
+  estimated_runtime_ms : Int64
+  multi_node : Bool
+  topology_profile : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RejectedNode {
+  node_id : String
+  reasons : Array[RejectionReason]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum RejectionReason {
+  NoHealthyNode
+  ArchitectureMismatch
+  InsufficientMemory
+  RuntimeUnsupported
+  RuntimeNotReady
+  LicenseDenied
+  DataClassDenied
+  QuotaExceeded
+  AdmissionCapacityExceeded
+  DeadlineImpossible
+  WorkloadAlreadyActive
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SchedulerSnapshot {
+  schema_version : String
+  capacity : Int
+  quotas : Array[TenantQuota]
+  active : Array[ActiveAdmission]
+  usage : Array[TenantUsage]
+  decisions : Array[PlacementDecision]
+  queued_count : Int?
+  running_count : Int?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ScorePolicy {
+  version : String
+  warm_model_weight : Int
+  headroom_weight : Int
+  queue_weight : Int
+  reliability_weight : Int
+  utilization_weight : Int
+  validated_topology_profiles : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TenantQuota {
+  tenant_ref : String
+  max_inflight : Int
+  max_accelerator_ms : Int64
+  window_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TenantUsage {
+  tenant_ref : String
+  accelerator_ms : Int64
+  completed_workloads : Int64
+  window_started_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+

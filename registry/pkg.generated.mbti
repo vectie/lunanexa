@@ -1,0 +1,231 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/registry"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+
+// Errors
+pub(all) suberror RegistryError {
+  ModelNotFound(String)
+  LicenseNotAccepted(String)
+  ArtifactNotVerified(String)
+  EvaluationNotPassed(String)
+  ModelNotApproved(String)
+  AliasNotFound(String)
+  NoRollbackTarget(String)
+  InvalidMetadata(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror SignatureVerificationError {
+  InvalidVerifierConfiguration
+  UnsafeVerificationSubject
+  SubjectDigestMismatch
+  SignatureVerificationFailed
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror StorageError {
+  DigestNotPinned(String)
+  EmptyObjectKey
+  UntrustedEndpoint
+  ArtifactTooLarge
+  DigestMismatch
+  ArtifactFetchFailed
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct Alias {
+  name : String
+  model_id : String
+  version : String
+  generation : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AliasHistory {
+  name : String
+  values : Array[Alias]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ArtifactVerification {
+  digest : String
+  signature_verified : Bool
+  provenance_verified : Bool
+  verified_unix_ms : Int64
+  verifier : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BenchmarkProfile {
+  profile_id : String
+  model_id : String
+  model_version : String
+  runtime_version : String
+  hardware_profile : String
+  workload_profile : String
+  p50_ms : Double
+  p95_ms : Double
+  p99_ms : Double
+  throughput_per_second : Double
+  peak_memory_mib : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct CosignVerifier {
+  binary : String
+  public_key_path : String
+}
+pub fn CosignVerifier::new(String, String) -> Self raise SignatureVerificationError
+pub async fn CosignVerifier::verify_blob(Self, String, String, String) -> SignatureVerificationReceipt
+pub async fn CosignVerifier::verify_image(Self, String, String) -> SignatureVerificationReceipt
+
+pub(all) struct EvaluationRecord {
+  evaluation_id : String
+  model_id : String
+  model_version : String
+  suite_version : String
+  passed : Bool
+  score : Double
+  benchmark : BenchmarkProfile
+  evidence_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct FileRegistry {
+  path : String
+  registry : ModelRegistry
+  mutex : @async.Mutex
+}
+pub async fn FileRegistry::approve(Self, String, String, Int64) -> @contracts.ModelRecord
+pub async fn FileRegistry::deployment_allowed(Self, String, @contracts.RuntimeSpec) -> Bool
+pub async fn FileRegistry::open(String) -> Self
+pub async fn FileRegistry::promote(Self, String, String, String, RolloutStage, String, Int64) -> PromotionReceipt
+pub async fn FileRegistry::record_evaluation(Self, EvaluationRecord) -> Unit
+pub async fn FileRegistry::record_license(Self, LicenseRecord) -> Unit
+pub async fn FileRegistry::record_verification(Self, ArtifactVerification) -> Unit
+pub async fn FileRegistry::register_model(Self, @contracts.ModelRecord) -> Unit
+pub async fn FileRegistry::register_runtime(Self, @contracts.RuntimeSpec) -> Unit
+pub async fn FileRegistry::rollback(Self, String, String, Int64) -> PromotionReceipt
+pub async fn FileRegistry::scheduling_target(Self, String, @contracts.Capability) -> SchedulingTarget?
+pub async fn FileRegistry::snapshot(Self) -> RegistrySnapshot
+
+pub(all) struct LicenseRecord {
+  license_id : String
+  model_id : String
+  status : LicenseStatus
+  accepted_by : String
+  evidence_ref : String
+  expires_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LicenseStatus {
+  Pending
+  Accepted
+  Expired
+  Revoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct ModelRegistry {
+  models : Map[String, @contracts.ModelRecord]
+  licenses : Map[String, LicenseRecord]
+  verifications : Map[String, ArtifactVerification]
+  evaluations : Map[String, EvaluationRecord]
+  aliases : Map[String, Alias]
+  alias_history : Map[String, Array[Alias]]
+  receipts : Array[PromotionReceipt]
+  runtimes : Map[String, @contracts.RuntimeSpec]
+}
+pub fn ModelRegistry::approve(Self, String, String, Int64) -> @contracts.ModelRecord raise RegistryError
+pub fn ModelRegistry::deployment_allowed(Self, String, @contracts.RuntimeSpec) -> Bool
+pub fn ModelRegistry::model(Self, String, String) -> @contracts.ModelRecord?
+pub fn ModelRegistry::new() -> Self
+pub fn ModelRegistry::promote(Self, String, String, String, RolloutStage, String, Int64) -> PromotionReceipt raise RegistryError
+pub fn ModelRegistry::receipts(Self) -> Array[PromotionReceipt]
+pub fn ModelRegistry::record_evaluation(Self, EvaluationRecord) -> Unit raise RegistryError
+pub fn ModelRegistry::record_license(Self, LicenseRecord) -> Unit raise RegistryError
+pub fn ModelRegistry::record_verification(Self, ArtifactVerification) -> Unit raise RegistryError
+pub fn ModelRegistry::register_model(Self, @contracts.ModelRecord) -> Unit raise RegistryError
+pub fn ModelRegistry::register_runtime(Self, @contracts.RuntimeSpec) -> Unit raise RegistryError
+pub fn ModelRegistry::resolve_alias(Self, String) -> Alias?
+pub fn ModelRegistry::restore(String) -> Self raise
+pub fn ModelRegistry::rollback(Self, String, String, Int64) -> PromotionReceipt raise RegistryError
+pub fn ModelRegistry::scheduling_target(Self, String, @contracts.Capability) -> SchedulingTarget?
+pub fn ModelRegistry::snapshot(Self) -> String
+pub fn ModelRegistry::verification_valid(Self, String) -> Bool
+
+pub(all) struct OciRuntimeRegistry {
+  registry_ref : String
+  credential_ref : String
+  require_signature : Bool
+} derive(Eq, @debug.Debug)
+pub fn OciRuntimeRegistry::runtime_spec(Self, String, String, String, Array[String], Array[@contracts.Capability], supports_batching? : Bool, supports_multi_node? : Bool) -> @contracts.RuntimeSpec raise StorageError
+
+pub(all) struct PromotionReceipt {
+  receipt_id : String
+  alias_name : String
+  from_version : String?
+  to_version : String
+  stage : RolloutStage
+  actor : String
+  evaluation_id : String
+  generation : Int64
+  timestamp_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RegistrySnapshot {
+  schema_version : String
+  models : Array[@contracts.ModelRecord]
+  licenses : Array[LicenseRecord]
+  verifications : Array[ArtifactVerification]
+  evaluations : Array[EvaluationRecord]
+  aliases : Array[Alias]
+  receipts : Array[PromotionReceipt]
+  alias_history : Array[AliasHistory]
+  runtimes : Array[@contracts.RuntimeSpec]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum RolloutStage {
+  Canary
+  Stable
+  RolledBack
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct S3ArtifactStore {
+  endpoint_ref : String
+  bucket : String
+  credential_ref : String
+  require_tls : Bool
+} derive(Eq, @debug.Debug)
+pub fn S3ArtifactStore::artifact_ref(Self, String, String, Int64, String) -> @contracts.ArtifactRef raise StorageError
+pub fn S3ArtifactStore::new(String, String, String, require_tls? : Bool) -> Self raise StorageError
+
+pub struct S3HttpVerifier {
+  endpoint : String
+  credential_value : String
+}
+pub fn S3HttpVerifier::new(String, String, allow_http_loopback? : Bool) -> Self raise StorageError
+pub async fn S3HttpVerifier::verify(Self, String, String, Int64) -> VerifiedArtifactDownload
+
+pub(all) struct SchedulingTarget {
+  model_key : String
+  model : @contracts.ModelRecord
+  runtime : @contracts.RuntimeSpec
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SignatureVerificationReceipt {
+  subject : String
+  digest : String
+  verifier : String
+  verified : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct VerifiedArtifactDownload {
+  digest : String
+  size_bytes : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
+

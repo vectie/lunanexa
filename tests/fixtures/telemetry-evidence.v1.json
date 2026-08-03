@@ -1,0 +1,1 @@
+{"schema_version":"lunanexa.telemetry.v1","samples":[],"benchmark_runs":[],"benchmark_summaries":[{"run_id":"run-release-1","profile":"text-short-v1","sample_count":10,"latency_p50_ms":10,"latency_p95_ms":20,"latency_p99_ms":30,"queue_p95_ms":2,"first_output_p95_ms":5,"throughput_units_per_second":100,"failure_per_mille":0,"peak_utilization_per_mille":800}]}

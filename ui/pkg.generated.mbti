@@ -1,0 +1,191 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn all_routes() -> Array[OperatorRoute]
+
+pub fn confirmation_receipt(DestructiveAction, String) -> Confirmation
+
+pub fn default_state() -> ConsoleState
+
+pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage]) -> @html.Html
+
+pub fn render(ConsoleState) -> String
+
+pub fn view(ConsoleState) -> @html.Html
+
+// Errors
+pub(all) suberror WorkflowError {
+  InvalidSequence(OperatorCommand)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct AuditRow {
+  actor : String
+  decision : String
+  evidence : String
+  result : String
+  receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct Confirmation {
+  action : DestructiveAction
+  scope : String
+  receipt : String
+  confirmed : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ConsoleMessage {
+  Navigate(OperatorRoute)
+  BeginCordon(String)
+  BeginDrain(String)
+  BeginRollback(String)
+  BeginStopDeployment(String)
+  DismissConfirmation
+  ConfirmAction(DestructiveAction)
+  Refresh
+  OperationChanged(String)
+  OperationBodyChanged(String)
+  SubmitOperation
+} derive(Eq)
+
+pub(all) struct ConsoleState {
+  route : OperatorRoute
+  overview : OverviewMetrics
+  nodes : Array[NodeRow]
+  models : Array[ModelRow]
+  deployments : Array[DeploymentRow]
+  requests : RequestMetrics
+  request_details : Array[RequestDetail]
+  stream_events : Array[StreamEventView]
+  benchmark_evidence : Array[String]
+  policies : PolicySummary
+  audit : Array[AuditRow]
+  confirmation : Confirmation?
+  error_message : String?
+  success_message : String?
+  loading : Bool
+  operation_name : String
+  operation_body : String
+} derive(Eq)
+
+pub(all) struct DeploymentRow {
+  assignment_id : String
+  deployment_id : String
+  desired : @contracts.DeploymentState
+  observed : @contracts.DeploymentState
+  placement_reason : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum DestructiveAction {
+  CordonNode(String)
+  DrainNode(String)
+  StopDeployment(String)
+  RollbackAlias(String)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelRow {
+  model_id : String
+  version : String
+  state : @contracts.ModelState
+  license_status : String
+  evaluation_status : String
+  compatibility : String
+  alias_name : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NodeRow {
+  node_id : String
+  state : @contracts.NodeState
+  architecture : String
+  free_memory_mib : Int
+  workloads : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OperatorCommand {
+  EnrollNode
+  RegisterModel
+  VerifyModel
+  EvaluateModel
+  ApproveModel
+  DeployModel
+  MarkReady
+  InvokeRequest
+  CompleteRequest
+  DrainNode
+  ObserveReroute
+  RollbackModel
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OperatorRoute {
+  Overview
+  Nodes
+  Models
+  Deployments
+  Requests
+  Benchmarks
+  Policies
+  Audit
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OperatorWorkflow {
+  node_state : @contracts.NodeState
+  model_state : @contracts.ModelState
+  deployment_state : @contracts.DeploymentState
+  workload_state : @contracts.WorkloadState
+  rerouted : Bool
+  receipts : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperatorWorkflow::apply(Self, OperatorCommand) -> Self raise WorkflowError
+pub fn OperatorWorkflow::initial() -> Self
+
+pub(all) struct OverviewMetrics {
+  active_nodes : Int
+  total_nodes : Int
+  active_models : Int
+  queue_depth : Int
+  alerts : Int
+  recent_changes : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PolicySummary {
+  quota_count : Int
+  data_class_count : Int
+  default_retention : @contracts.RetentionPolicy
+  allowed_runtimes : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RequestDetail {
+  timestamp_unix_ms : Int64
+  action : String
+  model_selector : String
+  result : String
+  receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RequestMetrics {
+  count : Int
+  p95_ms : Int
+  throughput_per_second : Int
+  errors : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct StreamEventView {
+  sequence : Int
+  kind : String
+  text : String
+  receipt : String
+} derive(Eq)
+
+// Type aliases
+
+// Traits
+
