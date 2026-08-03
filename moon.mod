@@ -6,6 +6,10 @@ readme = "README.mbt.md"
 
 description = "MoonBit-native model-as-a-service and cluster control plane"
 
+repository = "https://github.com/vectie/lunanexa"
+
+license = "Apache-2.0"
+
 preferred_target = "native"
 
 import {
