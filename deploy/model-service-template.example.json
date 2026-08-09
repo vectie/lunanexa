@@ -1,0 +1,58 @@
+{
+  "template_id": "text-small",
+  "version": "v1",
+  "display_name": "Approved text service",
+  "description": "Example digest-pinned text generation service for the private cluster",
+  "model_selector": "text.default",
+  "model_id": "model.text",
+  "model_version": "v1",
+  "artifact": {
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "uri": "s3://models/model.text/v1",
+    "size_bytes": "1",
+    "signature_ref": "cosign:model.text:v1"
+  },
+  "runtime": {
+    "name": "text-runtime",
+    "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "version": "runtime-v1",
+    "architectures": ["nvidia-gb10"],
+    "capabilities": ["TextGenerate"],
+    "supports_batching": true,
+    "supports_multi_node": false
+  },
+  "capability": "TextGenerate",
+  "architecture": "nvidia-gb10",
+  "resources": {
+    "accelerator_count": 1,
+    "accelerator_memory_mib": 32768,
+    "cpu_millis": 4000,
+    "memory_mib": 65536
+  },
+  "network": {
+    "allow_controller": true,
+    "allow_artifact_store": true,
+    "allowed_egress": []
+  },
+  "health": {
+    "readiness_path": "/health",
+    "interval_ms": 5000,
+    "failure_threshold": 6,
+    "termination_grace_ms": 60000
+  },
+  "data_policy": {
+    "classification": "Internal",
+    "retention": "Ephemeral",
+    "allow_cache": false,
+    "allow_training_reuse": false
+  },
+  "secret_refs": ["runtime-token"],
+  "rollout": {
+    "canary_replicas": 1,
+    "automatic_promotion": false,
+    "automatic_rollback": true,
+    "readiness_timeout_ms": "600000"
+  },
+  "approval_receipt": "",
+  "signature": ""
+}

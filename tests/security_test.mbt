@@ -27,7 +27,7 @@ test "retention is explicit and expiry emits deletion receipt" {
   let ledger = @policy.RetentionLedger::new()
   try ledger.retain("ephemeral", Ephemeral, "encrypted:1") catch {
     @policy.RetentionError::RetentionNotPermitted => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("ephemeral content must not be retained")
   }
@@ -130,7 +130,7 @@ test "malicious model metadata is rejected before persistence" {
   }
   try registry.register_model(malicious) catch {
     @registry.RegistryError::InvalidMetadata(_) => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected malicious metadata rejection")
   }
@@ -167,7 +167,7 @@ test "signed backup restores durable snapshots and audit chain" {
   )
   try @store.inspect_full_backup(tampered) catch {
     @store.BackupError::ManifestDigestMismatch => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("tampered backup manifest was accepted")
   }

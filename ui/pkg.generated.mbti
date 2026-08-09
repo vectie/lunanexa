@@ -7,6 +7,9 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/deployment",
+  "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/workspace",
 }
 
 // Values
@@ -28,12 +31,31 @@ pub(all) suberror WorkflowError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct AccessGrantRow {
+  grant_id : String
+  user_id : String
+  role : @workspace.WorkspaceAccess
+  scope : String
+  expires_at : String
+  state : @workspace.WorkspaceAccessGrantState
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct AuditRow {
   actor : String
   decision : String
   evidence : String
   result : String
   receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ComputeLeaseRow {
+  lease_id : String
+  user_id : String
+  workspace : String
+  resource : String
+  started_at : String
+  expires_at : String
+  state : @workspace.WorkspaceLeaseState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct Confirmation {
@@ -44,37 +66,60 @@ pub(all) struct Confirmation {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum ConsoleMessage {
+  LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
   BeginCordon(String)
   BeginDrain(String)
   BeginRollback(String)
   BeginStopDeployment(String)
+  BeginRollbackServiceDeployment(String)
+  BeginDeleteServiceDeployment(String)
+  PromoteServiceDeployment(String)
+  ActivateUser(String)
+  BeginSuspendUser(String)
+  BeginRevokeUser(String)
+  BeginRevokeAccessGrant(String)
+  ActivateComputeLease(String)
+  BeginEndComputeLease(String)
   DismissConfirmation
   ConfirmAction(DestructiveAction)
   Refresh
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
+  QuickDeploymentIdChanged(String)
+  QuickTemplateChanged(String)
+  QuickReplicasChanged(String)
+  SubmitQuickDeployment
 } derive(Eq)
 
 pub(all) struct ConsoleState {
+  locale : @i18n.Locale
   route : OperatorRoute
   overview : OverviewMetrics
   nodes : Array[NodeRow]
   models : Array[ModelRow]
   deployments : Array[DeploymentRow]
+  catalog_templates : Array[@deployment.ModelServiceTemplate]
+  service_deployments : Array[@deployment.DeploymentOperation]
   requests : RequestMetrics
   request_details : Array[RequestDetail]
   stream_events : Array[StreamEventView]
   benchmark_evidence : Array[String]
   policies : PolicySummary
   audit : Array[AuditRow]
+  users : Array[UserAccessRow]
+  access_grants : Array[AccessGrantRow]
+  compute_leases : Array[ComputeLeaseRow]
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
   loading : Bool
   operation_name : String
   operation_body : String
+  quick_deployment_id : String
+  quick_template : String
+  quick_replicas : String
 } derive(Eq)
 
 pub(all) struct DeploymentRow {
@@ -90,6 +135,12 @@ pub(all) enum DestructiveAction {
   DrainNode(String)
   StopDeployment(String)
   RollbackAlias(String)
+  RollbackServiceDeployment(String)
+  DeleteServiceDeployment(String)
+  SuspendUser(String)
+  RevokeUser(String)
+  RevokeAccessGrant(String)
+  EndComputeLease(String)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelRow {
@@ -127,8 +178,11 @@ pub(all) enum OperatorCommand {
 
 pub(all) enum OperatorRoute {
   Overview
+  Users
+  Leases
   Nodes
   Models
+  Catalog
   Deployments
   Requests
   Benchmarks
@@ -185,7 +239,15 @@ pub(all) struct StreamEventView {
   receipt : String
 } derive(Eq)
 
+pub(all) struct UserAccessRow {
+  user_id : String
+  display_name : String
+  email : String
+  state : @workspace.WorkspaceUserState
+  last_active : String
+  grant_count : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 // Type aliases
 
 // Traits
-

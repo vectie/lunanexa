@@ -1,0 +1,225 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/workspace"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn access_grant_transition_allowed(WorkspaceAccessGrantState, WorkspaceAccessGrantState) -> Bool
+
+pub fn capability_limit(WorkspaceLease, WorkspaceCapability) -> CapabilityLimit?
+
+pub fn connection_transition_allowed(ConnectionState, ConnectionState) -> Bool
+
+pub let contract_version : String
+
+pub let directory_schema_version : String
+
+pub fn lease_transition_allowed(WorkspaceLeaseState, WorkspaceLeaseState) -> Bool
+
+pub fn valid_identifier(String, maximum_length? : Int) -> Bool
+
+pub fn validate_capability_limit(CapabilityLimit) -> Unit raise WorkspaceContractError
+
+pub fn validate_session_against_lease(WorkspaceSession, WorkspaceLease) -> Unit raise WorkspaceContractError
+
+pub fn validate_workspace_access_grant(WorkspaceAccessGrant) -> Unit raise WorkspaceContractError
+
+pub fn validate_workspace_lease(WorkspaceLease) -> Unit raise WorkspaceContractError
+
+pub fn validate_workspace_limits(WorkspaceLimits) -> Unit raise WorkspaceContractError
+
+pub fn validate_workspace_session(WorkspaceSession) -> Unit raise WorkspaceContractError
+
+pub fn validate_workspace_user(WorkspaceUser) -> Unit raise WorkspaceContractError
+
+pub fn workspace_access_satisfies(WorkspaceAccess, WorkspaceAccess) -> Bool
+
+pub fn workspace_user_transition_allowed(WorkspaceUserState, WorkspaceUserState) -> Bool
+
+// Errors
+pub(all) suberror WorkspaceContractError {
+  UnsupportedVersion(String)
+  MissingField(String)
+  InvalidIdentifier(String)
+  InvalidTimeRange(String)
+  InvalidLimit(String)
+  DuplicateCapability(WorkspaceCapability)
+  LeaseMismatch(String)
+  LeaseUnavailable(WorkspaceLeaseState)
+  TransitionDenied(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror WorkspaceDirectoryError {
+  DuplicateRecord(String)
+  RecordNotFound(String)
+  SubjectConflict(String)
+  InvalidDirectoryState(String)
+  AccessDenied(WorkspaceReadiness)
+  ConcurrentRequestLimitExceeded(String)
+  HourlyRequestLimitExceeded(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct CapabilityLimit {
+  capability : WorkspaceCapability
+  max_concurrent_requests : Int
+  max_requests_per_hour : Int
+  max_input_units_per_request : Int
+  max_output_units_per_request : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ConnectionState {
+  Pending
+  Connecting
+  Connected
+  Disconnected
+  Failed
+  Revoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum EditorConnectionKind {
+  WebIde
+  VSCode
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum IntegrationProvider {
+  CodeBuddy
+  WorkBuddy
+  Trae
+  Qoder
+  Generic
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum WorkspaceAccess {
+  Administrator
+  Developer
+  Observer
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceAccessGrant {
+  version : String
+  grant_id : String
+  user_id : String
+  tenant_ref : String
+  access : WorkspaceAccess
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  state : WorkspaceAccessGrantState
+  policy_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkspaceAccessGrant::transition(Self, WorkspaceAccessGrantState, Int64) -> Self raise WorkspaceContractError
+
+pub(all) enum WorkspaceAccessGrantState {
+  GrantActive
+  GrantExpired
+  GrantRevoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceAuthorization {
+  subject_ref : String
+  user_id : String
+  access_grant : WorkspaceAccessGrant
+  lease : WorkspaceLease
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum WorkspaceCapability {
+  TextGenerate
+  EmbeddingCreate
+  ImageGenerate
+  VideoGenerate
+  AudioGenerate
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceDirectorySnapshot {
+  schema_version : String
+  users : Array[WorkspaceUser]
+  access_grants : Array[WorkspaceAccessGrant]
+  leases : Array[WorkspaceLease]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceLease {
+  version : String
+  lease_id : String
+  tenant_ref : String
+  subject_ref : String
+  access : WorkspaceAccess
+  limits : WorkspaceLimits
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  state : WorkspaceLeaseState
+  policy_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkspaceLease::transition(Self, WorkspaceLeaseState, Int64) -> Self raise WorkspaceContractError
+
+pub(all) enum WorkspaceLeaseState {
+  Requested
+  Active
+  Suspended
+  Expired
+  Revoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceLimits {
+  max_active_sessions : Int
+  max_session_duration_ms : Int64
+  capabilities : Array[CapabilityLimit]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum WorkspaceReadiness {
+  WorkspaceReady
+  UserUnavailable
+  AccessUnavailable
+  LeaseUnavailable
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceSelfContract {
+  version : String
+  subject_ref : String
+  user : WorkspaceUser
+  access_grants : Array[WorkspaceAccessGrant]
+  leases : Array[WorkspaceLease]
+  active_lease : WorkspaceLease?
+  authorized : Bool
+  readiness : WorkspaceReadiness
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct WorkspaceSession {
+  version : String
+  session_id : String
+  lease_id : String
+  subject_ref : String
+  editor : EditorConnectionKind
+  integration : IntegrationProvider?
+  connection : ConnectionState
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  correlation_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkspaceSession::transition(Self, ConnectionState, Int64) -> Self raise WorkspaceContractError
+
+pub(all) struct WorkspaceUser {
+  version : String
+  user_id : String
+  subject_ref : String
+  display_name : String
+  email : String
+  state : WorkspaceUserState
+  created_unix_ms : Int64
+  last_active_unix_ms : Int64?
+  identity_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkspaceUser::transition(Self, WorkspaceUserState, Int64) -> Self raise WorkspaceContractError
+
+pub(all) enum WorkspaceUserState {
+  UserInvited
+  UserActive
+  UserSuspended
+  UserRevoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

@@ -72,6 +72,6 @@ pub fn OperatorWorkflow::apply(
     RollbackModel if self.model_state == Approved => ()
     _ => raise InvalidSequence(command)
   }
-  let receipt = "ui:\{next.receipts.length() + 1}:\{to_repr(command)}"
+  let receipt = "ui:\{next.receipts.length() + 1}:\{Repr(command)}"
   { ..next, receipts: next.receipts + [receipt] }
 }

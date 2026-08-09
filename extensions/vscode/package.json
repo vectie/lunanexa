@@ -1,0 +1,96 @@
+{
+  "name": "lunanexa-vscode",
+  "displayName": "LunaNexa",
+  "description": "A scoped, provider-neutral LunaNexa client for VS Code.",
+  "version": "0.1.0",
+  "publisher": "lunanexa",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check extension.mjs && node --check client-core.mjs",
+    "test": "node --test client-core.test.mjs"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "main": "./extension.mjs",
+  "activationEvents": [
+    "onCommand:lunanexa.configureToken",
+    "onCommand:lunanexa.openWorkbench",
+    "onCommand:lunanexa.sendSelection"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "lunanexa.configureToken",
+        "title": "LunaNexa: Configure Access Token"
+      },
+      {
+        "command": "lunanexa.openWorkbench",
+        "title": "LunaNexa: Open Developer Workbench"
+      },
+      {
+        "command": "lunanexa.sendSelection",
+        "title": "LunaNexa: Send Selected Text"
+      }
+    ],
+    "configuration": {
+      "title": "LunaNexa",
+      "properties": {
+        "lunanexa.apiBaseUrl": {
+          "type": "string",
+          "default": "https://lunanexa.example.invalid",
+          "scope": "machine",
+          "description": "LunaNexa management-ingress base URL. HTTPS is required except for loopback development. Do not include credentials or query parameters."
+        },
+        "lunanexa.workbenchUrl": {
+          "type": "string",
+          "default": "https://lunanexa.example.invalid/workbench/",
+          "description": "Developer workbench URL. HTTPS is required except for loopback development. Do not include credentials or query parameters."
+        },
+        "lunanexa.subjectRef": {
+          "type": "string",
+          "default": "subject-local",
+          "scope": "machine",
+          "description": "Opaque workspace subject assertion for trusted-proxy or loopback use. Production ingress must overwrite this from authenticated identity."
+        },
+        "lunanexa.modelAlias": {
+          "type": "string",
+          "default": "text.default",
+          "description": "Approved provider-neutral LunaNexa model alias."
+        },
+        "lunanexa.deadlineSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 5,
+          "maximum": 3600,
+          "description": "Request deadline and local network timeout, in seconds."
+        },
+        "lunanexa.maxOutputUnits": {
+          "type": "number",
+          "default": 512,
+          "minimum": 1,
+          "maximum": 8192,
+          "description": "Maximum generated output units requested from LunaNexa."
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "lunanexa.sendSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@100"
+        }
+      ]
+    }
+  }
+}

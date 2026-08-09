@@ -1,0 +1,28 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/i18n"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn default_locale() -> Locale
+
+pub fn parse_locale(String) -> Locale
+
+// Errors
+
+// Types and methods
+pub(all) enum Locale {
+  English
+  ChineseSimplified
+} derive(Eq, @debug.Debug)
+pub fn Locale::alternate(Self) -> Self
+pub fn Locale::is_chinese(Self) -> Bool
+pub fn Locale::label(Self) -> String
+pub fn Locale::language_tag(Self) -> String
+pub fn Locale::storage_value(Self) -> String
+
+// Type aliases
+
+// Traits

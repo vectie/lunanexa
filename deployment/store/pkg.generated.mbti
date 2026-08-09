@@ -1,0 +1,38 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/deployment/store"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/deployment",
+}
+
+// Values
+
+// Errors
+pub(all) suberror DeploymentStoreError {
+  InvalidSnapshot(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct FileDeploymentStore {
+  path : String
+  signing_secret : String
+  templates : Map[String, @deployment.ModelServiceTemplate]
+  operations : Map[String, @deployment.DeploymentOperation]
+  mutex : @async.Mutex
+}
+pub async fn FileDeploymentStore::create_operation(Self, @deployment.DeploymentPlan, Int64) -> @deployment.DeploymentOperation
+pub async fn FileDeploymentStore::deployment(Self, String) -> @deployment.DeploymentOperation?
+pub async fn FileDeploymentStore::open(String, String) -> Self
+pub async fn FileDeploymentStore::operation(Self, String) -> @deployment.DeploymentOperation?
+pub async fn FileDeploymentStore::operations(Self) -> Array[@deployment.DeploymentOperation]
+pub async fn FileDeploymentStore::register_template(Self, @deployment.ModelServiceTemplate) -> @deployment.ModelServiceTemplate
+pub async fn FileDeploymentStore::snapshot(Self) -> @deployment.DeploymentSnapshot
+pub async fn FileDeploymentStore::template(Self, @deployment.TemplateRef) -> @deployment.ModelServiceTemplate?
+pub async fn FileDeploymentStore::templates(Self) -> Array[@deployment.ModelServiceTemplate]
+pub async fn FileDeploymentStore::transition(Self, String, @deployment.DeploymentOperationState, String, Int64) -> @deployment.DeploymentOperation
+
+// Type aliases
+
+// Traits

@@ -20,7 +20,7 @@ async test "telemetry is bounded durable and rejects payload-shaped metrics" {
     })
   catch {
     @telemetry.TelemetryError::PayloadMetricRejected => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("payload metric was retained")
   }

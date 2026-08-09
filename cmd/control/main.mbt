@@ -7,6 +7,16 @@ fn required_environment(name : String) -> String raise {
 }
 
 ///|
+fn secret_references() -> Array[String] {
+  @env.get_env_var("LUNANEXA_AVAILABLE_SECRET_REFS")
+  .unwrap_or("")
+  .split(",")
+  .map(value => value.trim().to_owned())
+  .filter(value => value != "")
+  .collect()
+}
+
+///|
 async fn main {
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
     "127.0.0.1:8080",
@@ -25,6 +35,12 @@ async fn main {
   )
   let telemetry_path = @env.get_env_var("LUNANEXA_TELEMETRY_PATH").unwrap_or(
     "lunanexa-telemetry.json",
+  )
+  let workspace_path = @env.get_env_var("LUNANEXA_WORKSPACE_PATH").unwrap_or(
+    "lunanexa-workspace.json",
+  )
+  let deployment_path = @env.get_env_var("LUNANEXA_DEPLOYMENT_PATH").unwrap_or(
+    "lunanexa-deployments.json",
   )
   let scheduler_capacity = @string.parse_int64(
     @env.get_env_var("LUNANEXA_ADMISSION_CAPACITY").unwrap_or("128"),
@@ -53,6 +69,16 @@ async fn main {
     scheduler_path, scheduler_capacity,
   )
   let telemetry = @telemetry.FileTelemetry::open(telemetry_path)
+  let workspace_directory = @directory.FileWorkspaceDirectory::open(
+    workspace_path,
+  )
+  let assignment_signing_secret = required_environment(
+    "LUNANEXA_ASSIGNMENT_SIGNING_SECRET",
+  )
+  let deployment_store = @deployment_store.FileDeploymentStore::open(
+    deployment_path,
+    required_environment("LUNANEXA_CATALOG_SIGNING_SECRET"),
+  )
   let service = @api.ApiService::with_control_plane(
       durable,
       registry,
@@ -71,6 +97,14 @@ async fn main {
         required_environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
       ),
     )
+    .with_workspace_directory(
+      workspace_directory,
+      @env.get_env_var("LUNANEXA_REQUIRE_WORKSPACE_LEASE") == Some("1"),
+    )
+    .with_deployment_store(
+      deployment_store,
+      available_secret_refs=secret_references(),
+    )
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
@@ -78,9 +112,7 @@ async fn main {
       required_environment("LUNANEXA_AUDIT_TOKEN"),
       required_environment("LUNANEXA_MONITORING_TOKEN"),
     )
-    .with_assignment_signing_secret(
-      required_environment("LUNANEXA_ASSIGNMENT_SIGNING_SECRET"),
-    )
+    .with_assignment_signing_secret(assignment_signing_secret)
     .with_runtime_concurrency(
       @string.parse_int64(
         @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("4"),

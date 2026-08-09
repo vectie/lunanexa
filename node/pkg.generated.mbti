@@ -158,4 +158,3 @@ pub impl AssignmentVerifier for TestAssignmentVerifier
 pub(open) trait AssignmentVerifier {
   fn verify(Self, @contracts.DesiredAssignment) -> Bool
 }
-

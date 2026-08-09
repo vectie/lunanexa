@@ -28,6 +28,17 @@ The repository now implements the deployable LunaNexa baseline:
 - live Rabbita views for cluster, registry, assignments, policies, telemetry,
   benchmarks and audit, with confirmed cordon/drain/rollback controls and
   shared public read-contract DTOs used by both browser and automation clients;
+- durable workspace users, access grants and leases with restart-safe state,
+  expiry/revocation enforcement, trusted-ingress subject derivation and
+  immutable operator audit receipts;
+- live Rabbita management views for workspace authority, plus a separately
+  deployable individual workbench with browser-local editing, self-readiness,
+  canonical inference transport, bounded receipts and typed
+  VS Code/CodeBuddy/WorkBuddy/Trae/Qoder handoff states;
+- shared native/JavaScript workspace user, grant, lease, session, capability
+  and integration contracts, and a VS Code extension that stores a scoped
+  token in SecretStorage and sends only explicitly selected text under
+  ephemeral policy;
 - a MoonBit benchmark driver for named concurrency, saturation, cold-start,
   long-stream and mixed-workload evidence with node-utilization joining;
 - a native evidence exporter that binds named benchmark summaries to capacity
@@ -96,3 +107,9 @@ disabled until their deployment profiles are measured and approved.
 Non-ephemeral workload retention is rejected unless an encrypted external
 retention provider is added; LunaNexa never silently drops or stores a
 retention request.
+
+The durable workspace directory is not an identity provider: production still
+requires an ingress or service-mesh identity mapping, credential issuance and
+revocation operations. The workbench and VS Code extension are working
+northbound transports; third-party developer-tool handoffs remain typed
+integration points rather than bundled vendor runtimes.

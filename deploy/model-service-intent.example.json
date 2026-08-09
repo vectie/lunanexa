@@ -1,0 +1,13 @@
+{
+  "version": "lunanexa.v1",
+  "idempotency_key": "deploy-text-small-001",
+  "deployment_id": "text-small-service",
+  "template": {
+    "template_id": "text-small",
+    "version": "v1"
+  },
+  "replicas": 1,
+  "data_class": "Internal",
+  "lease_duration_ms": "86400000",
+  "promote_when_ready": false
+}

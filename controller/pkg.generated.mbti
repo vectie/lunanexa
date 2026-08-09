@@ -5,6 +5,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/deployment",
   "vectie/lunanexa/node",
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/store",
@@ -12,6 +13,12 @@ import {
 
 // Values
 pub fn authenticate_local_operator(String, String, String) -> OperatorIdentity raise AuthenticationError
+
+pub fn deployment_assignment_owned(String, @contracts.DesiredAssignment) -> Bool
+
+pub fn deployment_assignments(@deployment.DeploymentOperation, Int64, Int64) -> Array[@contracts.DesiredAssignment] raise @deployment.DeploymentError
+
+pub fn deployment_operation_ready(@deployment.DeploymentOperation, Array[@contracts.DesiredAssignment], Array[@contracts.NodeHeartbeat], Int64, heartbeat_timeout_ms? : Int64) -> Bool
 
 pub fn health(String) -> @contracts.HealthResponse
 
@@ -60,4 +67,3 @@ pub(all) struct RecoveryPlan {
 // Type aliases
 
 // Traits
-

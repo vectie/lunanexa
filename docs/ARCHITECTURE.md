@@ -23,12 +23,14 @@ flowchart TB
       SCH["Scheduler and admission"]
       REG["Model/runtime registry"]
       STORE["Metadata and audit store"]
-      UI["Rabbita console"]
+      UI["Rabbita management console"]
+      WB["Rabbita developer workbench"]
       API --> SCH
       CTRL <--> SCH
       CTRL <--> REG
       CTRL <--> STORE
       UI --> API
+      WB --> API
     end
 
     subgraph Cluster["GPU execution trust domain"]
@@ -72,6 +74,36 @@ The scheduler filters by hard requirements first—runtime, architecture,
 memory, license, data locality and health—then scores remaining nodes by
 available capacity, warm models, queue delay, reliability and operator policy.
 Its decision is deterministic for the same state and policy version.
+
+### Management intent plane
+
+The management intent plane owns controller-signed catalog templates,
+deterministic deployment preflight, durable model-service operations, and
+provider-neutral service endpoints. A one-click deployment submits one compact,
+idempotent intent; the controller expands an executable plan into the same
+signed desired assignments used by existing automation.
+
+This layer cannot waive registry, license, verification, evaluation, alias,
+data-class, secret-reference, or capacity requirements. Missing prerequisites
+produce a durable blocked operation with typed findings. See
+`docs/MANAGEMENT_PLANE.md`.
+
+### Browser experience plane
+
+LunaNexa ships two Rabbita browser components from shared public contracts:
+
+- the management console presents cluster health, users, access grants,
+  capacity leases, models, deployments, policy and audit evidence;
+- the developer workbench presents one user's lease and quota, a local browser
+  editing surface, generic model invocation, usage receipts and client-side
+  handoffs to approved editor integrations.
+
+The workbench is not a remote administration channel. Project state and editor
+credentials remain in the user/workspace trust domain. A workspace lease is a
+time-bounded entitlement to control-plane admission and model capacity, not a
+lease of a DGX login, filesystem or shell. VS Code, CodeBuddy, WorkBuddy, Trae,
+Qoder and future integrations connect northbound through scoped contracts;
+their runtimes and product-specific state never cross the node boundary.
 
 ### Node plane
 
@@ -184,6 +216,8 @@ lunanexa/
   contracts/             # public typed v1 envelopes and receipts
   api/                   # auth, validation, admission and streaming
   controller/            # desired-state reconciliation
+  deployment/            # public catalog, intent, plan and operation types
+  deployment/store/      # native durable management-plane state and signing
   scheduler/             # filtering, scoring, queues and leases
   registry/              # models, artifacts, runtimes and licenses
   node/                   # node inventory and supervision
@@ -192,7 +226,9 @@ lunanexa/
   store/                  # durable state ports and adapters
   telemetry/              # metrics, events and bounded logs
   policy/                 # quotas, data classes and placement policy
-  ui/                     # Rabbita console generated from typed contracts
+  workspace/              # provider-neutral workspace, lease and integration contracts
+  ui/                     # Rabbita management console generated from typed contracts
+  ui/workbench/           # Rabbita individual developer workbench
   tests/fixtures/         # non-secret deterministic fixtures
   deploy/                 # manifests and documented deployment overlays
   docs/

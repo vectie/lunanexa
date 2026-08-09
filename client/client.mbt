@@ -55,8 +55,7 @@ pub fn[T] Client::new(config : ClientConfig, transport : T) -> Client[T] {
 ///|
 fn validate_client_config(config : ClientConfig) -> Unit raise ClientError {
   let secure = config.endpoint.has_prefix("https://")
-  let loopback = config.endpoint.has_prefix("http://127.0.0.1:") ||
-    config.endpoint.has_prefix("http://localhost:")
+  let loopback = canonical_http_loopback_endpoint(config.endpoint)
   if !secure && !loopback {
     raise ClientError(
       code=Contract,
@@ -76,6 +75,40 @@ fn validate_client_config(config : ClientConfig) -> Unit raise ClientError {
 }
 
 ///|
+fn canonical_port(value : StringView) -> Bool {
+  if value == "" ||
+    !value.all(character => character >= '0' && character <= '9') {
+    return false
+  }
+  let port = @string.parse_int64(value) catch { _ => return false }
+  port >= 1L && port <= 65535L && value.to_owned() == "\{port}"
+}
+
+///|
+/// Reports whether an endpoint is a canonical HTTP loopback origin.
+///
+/// Accepted hosts are `localhost`, `127.0.0.1`, and `[::1]`, with an optional
+/// decimal port and optional single trailing slash. Paths, credentials, query
+/// strings, fragments, non-canonical ports, and non-loopback hosts are rejected.
+pub fn canonical_http_loopback_endpoint(value : String) -> Bool {
+  let endpoint = if value.has_suffix("/") {
+    value[:value.length() - 1].to_owned()
+  } else {
+    value
+  }
+  for origin in ["http://localhost", "http://127.0.0.1", "http://[::1]"] {
+    if endpoint == origin {
+      return true
+    }
+    let port_prefix = "\{origin}:"
+    if endpoint.has_prefix(port_prefix) {
+      return canonical_port(endpoint[port_prefix.length():])
+    }
+  }
+  false
+}
+
+///|
 pub async fn[T : ProviderTransport] Client::invoke(
   self : Client[T],
   request : @contracts.WorkloadEnvelope,
@@ -85,7 +118,7 @@ pub async fn[T : ProviderTransport] Client::invoke(
     error =>
       raise ClientError(
         code=Contract,
-        message="invalid canonical request: \{to_repr(error)}",
+        message="invalid canonical request: \{Repr(error)}",
         retryable=false,
       )
   }
@@ -101,7 +134,7 @@ pub async fn[T : ProviderTransport] Client::invoke(
     error =>
       raise ClientError(
         code=Contract,
-        message="invalid canonical response: \{to_repr(error)}",
+        message="invalid canonical response: \{Repr(error)}",
         retryable=false,
       )
   }
@@ -151,7 +184,7 @@ pub async fn[T : ProviderTransport] Client::stream(
     error =>
       raise ClientError(
         code=Contract,
-        message="invalid canonical request: \{to_repr(error)}",
+        message="invalid canonical request: \{Repr(error)}",
         retryable=false,
       )
   }
@@ -197,7 +230,7 @@ pub impl ProviderTransport for FixtureTransport with fn invoke(
     error =>
       raise ClientError(
         code=Contract,
-        message="fixture received invalid request: \{to_repr(error)}",
+        message="fixture received invalid request: \{Repr(error)}",
         retryable=false,
       )
   }
@@ -266,26 +299,52 @@ priv struct CapabilityResponse {
 ///|
 pub struct HttpTransport {
   credential_value : String
+  subject_ref : String?
 }
 
 ///|
 pub fn HttpTransport::new(credential_value : String) -> HttpTransport {
-  { credential_value, }
+  { credential_value, subject_ref: None }
+}
+
+///|
+/// Adds an opaque workspace subject assertion to every transport request.
+///
+/// The caller owns the transport trust boundary. LunaNexa's native HTTP server
+/// accepts this direct assertion only from an actual loopback TCP peer;
+/// production edge clients must rely on verified mTLS ingress identity.
+pub fn HttpTransport::with_subject_ref(
+  self : HttpTransport,
+  subject_ref : String,
+) -> HttpTransport raise ClientError {
+  if !@contracts.valid_identifier(subject_ref) {
+    raise ClientError(
+      code=Contract,
+      message="workspace subject reference is invalid",
+      retryable=false,
+    )
+  }
+  { ..self, subject_ref: Some(subject_ref) }
 }
 
 ///|
 fn HttpTransport::headers(self : HttpTransport) -> Map[String, String] {
-  {
+  let headers : Map[String, String] = {
     "Authorization": "Bearer \{self.credential_value}",
     "Content-Type": "application/json",
     "Accept": "application/json",
   }
+  match self.subject_ref {
+    Some(subject_ref) => headers["X-LunaNexa-Subject"] = subject_ref
+    None => ()
+  }
+  headers
 }
 
 ///|
 fn endpoint(config : ClientConfig, path : String) -> String {
   if config.endpoint.has_suffix("/") {
-    "\{config.endpoint[:-1]}\{path}"
+    "\{config.endpoint[:config.endpoint.length() - 1]}\{path}"
   } else {
     "\{config.endpoint}\{path}"
   }

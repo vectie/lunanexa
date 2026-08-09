@@ -27,7 +27,7 @@ async test "S3-compatible verifier streams and checks the pinned artifact digest
       )
     catch {
       @registry.StorageError::DigestMismatch => ()
-      error => fail("unexpected error: \{to_repr(error)}")
+      error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("digest mismatch was accepted")
     }

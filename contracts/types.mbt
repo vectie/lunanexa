@@ -44,6 +44,9 @@ pub(all) enum LatencyClass {
 
 ///|
 pub(all) struct ResourceCeiling {
+  /// Northbound admission safety ceiling measured as UTF-8 bytes of the
+  /// canonical `payload` JSON. Runtime-reported provider units remain separate
+  /// usage evidence and cannot weaken this byte ceiling.
   max_input_units : Int
   max_output_units : Int
   max_runtime_ms : Int64

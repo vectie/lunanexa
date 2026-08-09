@@ -40,6 +40,14 @@ spec:
               value: /var/lib/lunanexa/scheduler.json
             - name: LUNANEXA_TELEMETRY_PATH
               value: /var/lib/lunanexa/telemetry.json
+            - name: LUNANEXA_WORKSPACE_PATH
+              value: /var/lib/lunanexa/workspace.json
+            - name: LUNANEXA_DEPLOYMENT_PATH
+              value: /var/lib/lunanexa/deployments.json
+            - name: LUNANEXA_AVAILABLE_SECRET_REFS
+              value: "runtime-token"
+            - name: LUNANEXA_REQUIRE_WORKSPACE_LEASE
+              value: "1"
             - name: LUNANEXA_ADMISSION_CAPACITY
               value: "128"
             - name: LUNANEXA_RUNTIME_CONCURRENCY
@@ -103,6 +111,11 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: assignment-signing-secret
+            - name: LUNANEXA_CATALOG_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: catalog-signing-secret
             - name: LUNANEXA_COSIGN_BINARY
               value: /usr/bin/cosign
             - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH

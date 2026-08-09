@@ -8,7 +8,24 @@ Use the pinned dependencies in `moon.mod`:
 sh scripts/release-gate.sh
 moon build cmd/control cmd/node cmd/cli cmd/benchmark cmd/evidence cmd/recovery --target native
 moon build cmd/console --target js
+moon build cmd/workbench --target js
+sh scripts/build-browser-bundles.sh
 ```
+
+The browser bundle command produces self-contained static roots at
+`_build/browser-dist/console` and `_build/browser-dist/workbench`. Serve the
+console at `/` and the workbench at `/workbench/` behind the same trusted TLS
+origin as `/v1`; both default to that page origin unless
+`globalThis.LUNANEXA_API_ENDPOINT` is injected before their module script.
+
+The console image copies the contents of `browser-dist/console` to its document
+root. The workbench image copies the complete `browser-dist` directory to its
+document root, so `/workbench/index.html` and `/workbench/workbench.js` exist
+without an ingress rewrite. Its readiness probe deliberately checks
+`/workbench/`. Keep this path contract when replacing the static server image;
+the release gate verifies the bundle layout, while the deployment pipeline is
+responsible for building and signing the immutable images referenced by the
+templates.
 
 The repository gate is necessary but does not replace cluster acceptance.
 
@@ -43,6 +60,10 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_ENROLLMENT_PATH` | Durable enrollment/certificate snapshot |
 | `LUNANEXA_SCHEDULER_PATH` | Durable quota/usage/placement snapshot |
 | `LUNANEXA_TELEMETRY_PATH` | Durable bounded telemetry/evidence snapshot |
+| `LUNANEXA_WORKSPACE_PATH` | Durable user, access-grant and workspace-lease snapshot |
+| `LUNANEXA_DEPLOYMENT_PATH` | Durable catalog and model-service operation snapshot |
+| `LUNANEXA_AVAILABLE_SECRET_REFS` | Comma-separated deployment-owned secret reference names available to preflight; never secret values |
+| `LUNANEXA_REQUIRE_WORKSPACE_LEASE` | `1` requires trusted subject, active grant and active lease before workload admission |
 | `LUNANEXA_CONTROLLER_EPOCH` | Positive fencing epoch, monotonically raised |
 | `LUNANEXA_ADMISSION_CAPACITY` | Maximum concurrent admitted workloads |
 | `LUNANEXA_RUNTIME_CONCURRENCY` | Maximum actively executing adapter calls; additional admitted work waits in the bounded queue |
@@ -58,14 +79,36 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_AUDIT_TOKEN` | Read-only audit authority |
 | `LUNANEXA_MONITORING_TOKEN` | Read-only `/metrics` authority |
 | `LUNANEXA_ASSIGNMENT_SIGNING_SECRET` | Controller HMAC signer; matching verifier key is host-owned on nodes |
+| `LUNANEXA_CATALOG_SIGNING_SECRET` | Independent controller HMAC authority for immutable management-plane templates |
 | `LUNANEXA_COSIGN_BINARY` | Allowlisted absolute Cosign binary path |
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only mounted public trust key |
 
-Expose the console and `/v1` API on one TLS origin as shown in
+Expose the console, workbench and `/v1` API on one TLS origin as shown in
 `deploy/ingress.yaml`. Keep `/metrics` management-only. Production ingress or a
 service mesh owns server TLS, client-certificate validation and identity
 translation; the native process accepts traffic only from that trusted
 management boundary.
+
+With ingress-nginx client-certificate authentication, the controller accepts
+only `ssl-client-verify: SUCCESS` and derives the subject reference as
+`mtls:sha256:<hex(sha256(utf8(trim(ssl-client-subject-dn))))>`. The raw
+distinguished name is not persisted. A different identity-aware proxy must
+strip any client-supplied `X-LunaNexa-Subject` and inject its own opaque mapped
+value through an authenticated transport signal understood by the controller.
+The explicit subject header is accepted only when the controller observes an
+actual loopback TCP peer. Native CLI and benchmark acceptance runs may set
+`LUNANEXA_SUBJECT_REF` for that loopback path; remote callers cannot use the
+header as a production identity assertion.
+
+When workspace enforcement is enabled, the controller also writes
+`$LUNANEXA_WORKSPACE_PATH.admissions`. Back up and restore that `0600` file with
+the main workspace directory and controller workload state: it carries rolling
+hour counts, crash-recoverable concurrency reservations, and durable
+subject/tenant ownership for status and cancellation. Admission measures
+`resource_ceiling.max_input_units` and the lease input limit as UTF-8 bytes of
+canonical payload JSON. The current browser-local workbench does not create a
+server-side `WorkspaceSession`, so session-count and session-duration fields
+remain validated policy rather than enforced runtime limits.
 
 For direct four-node routing, mount a route document at
 `LUNANEXA_RUNTIME_ENDPOINTS_PATH`:
@@ -142,6 +185,21 @@ lunanexa invoke workload.json
 lunanexa stop-assignment assignment-id
 ```
 
+For the management-plane deployment path, first register an unsigned approved
+template candidate and then submit one compact intent:
+
+```sh
+lunanexa register-template deploy/model-service-template.example.json
+lunanexa plan-deployment deploy/model-service-intent.example.json
+lunanexa deploy deploy/model-service-intent.example.json
+lunanexa deployments
+lunanexa deployment text-small-service
+```
+
+The controller fills the template approval receipt and signature. The example
+digests and artifact location are placeholders and must be replaced by the
+already registered, verified, evaluated and approved deployment inventory.
+
 `record-verification` accepts a verification request, never a successful
 verification claim. For an image, provide `kind`, the registry `subject`
 without a digest, the expected `digest`, and `provenance_verified`. For a blob,
@@ -160,10 +218,12 @@ matching host-owned HMAC verifier key; compromise of that key is therefore a
 node/assignment trust-root incident and requires cluster-wide rotation.
 
 The console Policies view exposes the same typed operations for enrollment,
-registry, approval, promotion, quota, controller-signed assignment submission,
-invocation and benchmark JSON. Draft bodies and the operator, inference, and
-audit password inputs exist only in browser memory; console state deliberately
-has no JSON/debug serialization. Prefer the
+registry, approval, promotion, quota, workspace users/grants/leases,
+controller-signed assignment submission, invocation and benchmark JSON. Its
+Users and Leases routes read the durable workspace snapshot and require
+confirmation before revocation or early termination. Draft bodies and the
+operator, inference, and audit password inputs exist only in browser memory;
+console state deliberately has no JSON/debug serialization. Prefer the
 CLI for repeatable automation and never paste deployment credentials into an
 operation body.
 
@@ -188,27 +248,29 @@ the value at zero and must be called out in the acceptance report.
    `IMPLEMENTATION_HANDOFF.md`; do not commit it.
 2. Provision the transactional metadata service, OCI registry, S3-compatible
    artifact store, metrics backend, certificate authority, and secret provider.
-3. Build native control, node, and CLI binaries and the JavaScript Rabbita
-   console. Bundle the allowlisted Cosign binary in the controller image, mount
+3. Build native control, node, and CLI binaries and both JavaScript Rabbita
+   browser components. Bundle the allowlisted Cosign binary in the controller image, mount
    the public trust key as the read-only `lunanexa-cosign-trust` Secret, sign
    images, and substitute immutable digests in the deployment overlay.
-4. Apply management-plane identity/RBAC, controller, console, and default-deny
-   policies. Create a short-lived enrollment token for one node only.
+4. Apply management-plane identity/RBAC, controller, console, workbench and
+   default-deny policies. Create a short-lived enrollment token for one node
+   only.
 5. Complete the one-node acceptance slice before enrolling the remaining three
    nodes.
 
-Apply `deploy/prerequisites.yaml`, controller, console, ingress, node DaemonSet
-and network policies only after substituting immutable digests, endpoints,
-epochs, host inventory and TLS names. Secret objects are intentionally absent
+Apply `deploy/prerequisites.yaml`, controller, console, workbench, ingress,
+node DaemonSet and network policies only after substituting immutable digests,
+endpoints, epochs, host inventory and TLS names. Secret objects are intentionally absent
 from the repository templates. Provision the `lunanexa-client-ca` Secret in the
 target namespace and substitute `${LUNANEXA_NAMESPACE}` in the NGINX ingress
 annotation. Label the ingress-controller namespace
-`lunanexa.io/ingress=trusted`; no other namespace receives direct controller or
-console ingress through the default network policies.
+`lunanexa.io/ingress=trusted`; no other namespace receives direct controller,
+console or workbench ingress through the default network policies.
 
 ## Upgrade
 
-Back up controller, registry, enrollment, scheduler and telemetry state,
+Back up controller, registry, enrollment, scheduler, telemetry, workspace and
+deployment-operation state,
 validate the recomputed audit hash chain and signed manifest, deploy the new
 controller in reconciliation-only mode with a higher epoch, inspect its plan,
 using `lunanexa recovery-plan`, then enable mutations. Upgrade node agents one

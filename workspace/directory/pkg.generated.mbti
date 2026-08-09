@@ -1,0 +1,57 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/workspace/directory"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/workspace",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct FileWorkspaceDirectory {
+  path : String
+  admission_path : String
+  users : Map[String, @workspace.WorkspaceUser]
+  mut access_grants : Map[String, @workspace.WorkspaceAccessGrant]
+  mut leases : Map[String, @workspace.WorkspaceLease]
+  mut workload_reservations : Map[String, WorkloadReservation]
+  mutex : @async.Mutex
+}
+pub async fn FileWorkspaceDirectory::activate_lease(Self, String, Int64) -> @workspace.WorkspaceLease
+pub async fn FileWorkspaceDirectory::activate_lease_with_prior(Self, String, Int64) -> (@workspace.WorkspaceLease, @workspace.WorkspaceLease)
+pub async fn FileWorkspaceDirectory::activate_user(Self, String, Int64) -> @workspace.WorkspaceUser
+pub async fn FileWorkspaceDirectory::activate_user_with_prior(Self, String, Int64) -> (@workspace.WorkspaceUser, @workspace.WorkspaceUser)
+pub async fn FileWorkspaceDirectory::authorize_subject(Self, String, @workspace.WorkspaceAccess, Int64) -> @workspace.WorkspaceAuthorization
+pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant(Self, String, String, @workspace.WorkspaceAccess, Int64) -> @workspace.WorkspaceAuthorization
+pub async fn FileWorkspaceDirectory::create_user(Self, @workspace.WorkspaceUser) -> @workspace.WorkspaceUser
+pub async fn FileWorkspaceDirectory::invite_user(Self, @workspace.WorkspaceUser) -> @workspace.WorkspaceUser
+pub async fn FileWorkspaceDirectory::issue_access_grant(Self, @workspace.WorkspaceAccessGrant, Int64) -> @workspace.WorkspaceAccessGrant
+pub async fn FileWorkspaceDirectory::issue_lease(Self, @workspace.WorkspaceLease, Int64) -> @workspace.WorkspaceLease
+pub async fn FileWorkspaceDirectory::open(String, now_unix_ms? : Int64) -> Self
+pub async fn FileWorkspaceDirectory::release_workload(Self, String, String, Int64) -> Unit
+pub async fn FileWorkspaceDirectory::reserve_workload(Self, String, String, String, @workspace.WorkspaceCapability, String, String, Int64, Int64) -> Unit
+pub async fn FileWorkspaceDirectory::revoke_access_grant(Self, String, Int64) -> @workspace.WorkspaceAccessGrant
+pub async fn FileWorkspaceDirectory::revoke_lease(Self, String, Int64) -> @workspace.WorkspaceLease
+pub async fn FileWorkspaceDirectory::revoke_user(Self, String, Int64) -> @workspace.WorkspaceUser
+pub async fn FileWorkspaceDirectory::revoke_user_with_prior(Self, String, Int64) -> (@workspace.WorkspaceUser, @workspace.WorkspaceUser)
+pub async fn FileWorkspaceDirectory::self_view(Self, String, Int64) -> @workspace.WorkspaceSelfContract
+pub async fn FileWorkspaceDirectory::snapshot(Self, Int64) -> @workspace.WorkspaceDirectorySnapshot
+pub async fn FileWorkspaceDirectory::suspend_user(Self, String, Int64) -> @workspace.WorkspaceUser
+pub async fn FileWorkspaceDirectory::suspend_user_with_prior(Self, String, Int64) -> (@workspace.WorkspaceUser, @workspace.WorkspaceUser)
+pub async fn FileWorkspaceDirectory::workload_owned_by(Self, String, String, String, Int64) -> Bool
+pub async fn FileWorkspaceDirectory::workload_owned_by_subject(Self, String, String, Int64) -> Bool
+
+type WorkloadReservation derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type WorkloadReservationState derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type WorkspaceAdmissionSnapshot derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

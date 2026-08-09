@@ -95,4 +95,3 @@ pub(open) trait RuntimeAdapter {
   fn inspect(Self, @contracts.RuntimeSpec) -> Bool
   fn invoke(Self, @contracts.WorkloadEnvelope) -> Json raise
 }
-

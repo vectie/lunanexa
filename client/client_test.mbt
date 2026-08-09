@@ -53,6 +53,25 @@ fn request() -> @contracts.WorkloadEnvelope {
 }
 
 ///|
+test "HTTP subject assertions accept only canonical loopback origins" {
+  for
+    endpoint in [
+      "http://localhost", "http://localhost:8080/", "http://127.0.0.1:1", "http://[::1]:65535",
+    ] {
+    assert_true(@client.canonical_http_loopback_endpoint(endpoint))
+  }
+  for
+    endpoint in [
+      "https://localhost:8080", "http://LOCALHOST:8080", "http://localhost:08080",
+      "http://localhost:0", "http://localhost:65536", "http://localhost:8080/path",
+      "http://localhost:8080?subject=x", "http://localhost:8080#fragment", "http://localhost@evil.example:8080",
+      "http://127.0.0.1.example:8080", "http://[::1]@evil.example:8080",
+    ] {
+    assert_false(@client.canonical_http_loopback_endpoint(endpoint))
+  }
+}
+
+///|
 async test "published client covers discovery invocation usage cancellation and health" {
   let transport = @client.FixtureTransport::new(response(), [
     {
@@ -217,6 +236,76 @@ async test "HTTP client rejects a stream without a canonical terminal event" {
     } noraise {
       _ => fail("truncated provider stream was accepted")
     }
+    server.close()
+  }
+}
+
+///|
+test "HTTP transport rejects an unsafe asserted workspace subject" {
+  try
+    @client.HttpTransport::new("inference-token").with_subject_ref("../admin")
+  catch {
+    @client.ClientError::ClientError(code~, message~, retryable~) => {
+      assert_eq(code, Contract)
+      assert_true(message.contains("subject"))
+      assert_false(retryable)
+    }
+  } noraise {
+    _ => fail("unsafe workspace subject was accepted")
+  }
+}
+
+///|
+async test "HTTP transport sends the workspace subject on invoke and cancel" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  let received : Array[(String, String?)] = []
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever() <| ((request, body, connection) => {
+        ignore(body.read_all())
+        received.push((request.path, request.headers.get("x-lunanexa-subject")))
+        if request.path == "/v1/workloads" {
+          connection.send_response(200, "OK", extra_headers={
+            "Content-Type": "application/json",
+          })
+          connection.write_string(response().to_json().stringify())
+        } else if request.path == "/v1/workloads/subject-cancel/cancel" {
+          connection.send_response(202, "Accepted", extra_headers={
+            "Content-Type": "application/json",
+          })
+          connection.write_string("{\"accepted\":true}")
+        } else {
+          connection.send_response(404, "Not Found")
+        }
+        connection.end_response()
+      })
+    }
+    let transport = @client.HttpTransport::new("inference-token").with_subject_ref(
+      "subject:opaque-01",
+    )
+    let provider = @client.Client::new(
+      {
+        endpoint: "http://\{server.addr}/",
+        inference_credential_ref: "test-ref",
+        timeout_ms: 2000L,
+      },
+      transport,
+    )
+    ignore(
+      provider.invoke({
+        ..request(),
+        idempotency_key: "subject-invoke",
+        workload_id: "subject-invoke",
+        deadline_unix_ms: @async.now() + 2000L,
+      }),
+    )
+    assert_true(provider.cancel("subject-cancel"))
+    assert_eq(received.length(), 2)
+    assert_eq(received[0], ("/v1/workloads", Some("subject:opaque-01")))
+    assert_eq(
+      received[1],
+      ("/v1/workloads/subject-cancel/cancel", Some("subject:opaque-01")),
+    )
     server.close()
   }
 }

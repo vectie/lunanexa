@@ -67,3 +67,31 @@ it, under typed data and retention policy.
 ordinary inference. The enforceable promise is minimization, encryption,
 bounded retention and no implicit training reuse.
 
+## ADR-008: Two Rabbita surfaces, one contract boundary
+
+**Decision:** Ship a management console for administrators and a separately
+deployable developer workbench for individual users. Both consume shared typed
+LunaNexa contracts. Editor extensions and third-party developer-tool
+integrations are northbound clients, not managed-node components.
+
+**Reason:** Cluster operations and day-to-day development have different
+authority, density and failure-recovery needs. Keeping their shells separate
+prevents administrator controls from leaking into user sessions while shared
+lease, capability and receipt types prevent policy vocabulary from drifting.
+A workspace lease grants bounded model capacity; it never grants a DGX login,
+filesystem or arbitrary shell.
+
+## ADR-009: One-click means one governed intent
+
+**Decision:** Add a management intent layer inside LunaNexa. One-click model
+deployment submits one idempotent intent from a controller-signed template; it
+does not bypass lifecycle or security gates.
+
+**Reason:** The existing low-level assignment contract is appropriate for the
+controller and node agent but too detailed for product users. A durable intent
+and plan layer improves usability while preserving deterministic scheduling,
+reconciliation, audit, and node isolation.
+
+**Boundary:** Platform installation remains a signed Kubernetes or GitOps
+operation. LunaNexa does not become a general container orchestrator and does
+not give its controller or GPU nodes broad Kubernetes administration authority.

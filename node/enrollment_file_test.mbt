@@ -20,7 +20,7 @@ async test "bootstrap enrollment is one-use durable and secret-hashed at rest" {
     )
   catch {
     @node.NodeError::InvalidBootstrapToken => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("one-use token was accepted twice")
   }

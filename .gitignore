@@ -15,4 +15,5 @@
 /artifacts/
 /benchmarks/results/
 /deploy/local/
-
+/lunanexa-*.json
+/lunanexa-*.json.*

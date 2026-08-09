@@ -19,7 +19,7 @@ async fn read_snapshot(path : String) -> MemoryStore {
   }
   let text = @fs.read_file(path).text()
   MemoryStore::restore(text) catch {
-    error => raise DurableStoreError::InvalidState("\{to_repr(error)}")
+    error => raise DurableStoreError::InvalidState("\{Repr(error)}")
   }
 }
 

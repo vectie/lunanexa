@@ -12,6 +12,7 @@ audit_token='simulation-audit-authority'
 monitoring_token='simulation-monitoring-authority'
 runtime_token='simulation-runtime-authority'
 assignment_secret='simulation-assignment-authority'
+workspace_subject='subject-simulated-user'
 
 keep_artifacts=0
 if [ "$#" -eq 0 ]; then
@@ -96,6 +97,9 @@ start_controller() {
     LUNANEXA_ENROLLMENT_PATH="$simulation_directory/enrollment.json" \
     LUNANEXA_SCHEDULER_PATH="$simulation_directory/scheduler.json" \
     LUNANEXA_TELEMETRY_PATH="$simulation_directory/telemetry.json" \
+    LUNANEXA_WORKSPACE_PATH="$simulation_directory/workspace.json" \
+    LUNANEXA_DEPLOYMENT_PATH="$simulation_directory/deployments.json" \
+    LUNANEXA_REQUIRE_WORKSPACE_LEASE=1 \
     LUNANEXA_RUNTIME_ENDPOINT='http://127.0.0.1:1/v1/responses' \
     LUNANEXA_RUNTIME_ENDPOINTS_PATH="$simulation_directory/runtime-endpoints.json" \
     LUNANEXA_RUNTIME_CREDENTIAL="$runtime_token" \
@@ -110,6 +114,7 @@ start_controller() {
     LUNANEXA_AUDIT_TOKEN="$audit_token" \
     LUNANEXA_MONITORING_TOKEN="$monitoring_token" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="$assignment_secret" \
+    LUNANEXA_CATALOG_SIGNING_SECRET="simulation-catalog-authority" \
     LUNANEXA_COSIGN_BINARY='/usr/bin/cosign' \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$simulation_directory/cosign.pub" \
     LUNANEXA_RUNTIME_CONCURRENCY=1 \
@@ -215,10 +220,11 @@ invoke() {
   output=$2
   now_ms=$(($(date +%s) * 1000))
   deadline=$((now_ms + 15000))
-  body="{\"version\":\"lunanexa.v1\",\"idempotency_key\":\"idem-$id\",\"workload_id\":\"workload-$id\",\"tenant_ref\":\"simulated-tenant\",\"credential_scope\":\"inference\",\"capability\":\"TextGenerate\",\"model_selector\":\"text.default\",\"payload\":{\"input\":\"functional simulator request\"},\"data_policy\":{\"classification\":\"Confidential\",\"retention\":\"Ephemeral\",\"allow_cache\":false,\"allow_training_reuse\":false},\"deadline_unix_ms\":\"$deadline\",\"priority\":\"Interactive\",\"latency_class\":\"Realtime\",\"resource_ceiling\":{\"max_input_units\":32,\"max_output_units\":32,\"max_runtime_ms\":\"5000\",\"max_accelerator_memory_mib\":8192},\"stream\":false,\"output_format\":\"text\",\"trace_token\":\"simulation-trace-$id\"}"
+  body="{\"version\":\"lunanexa.v1\",\"idempotency_key\":\"idem-$id\",\"workload_id\":\"workload-$id\",\"tenant_ref\":\"simulated-tenant\",\"credential_scope\":\"inference\",\"capability\":\"TextGenerate\",\"model_selector\":\"text.default\",\"payload\":{\"input\":\"functional simulator request\"},\"data_policy\":{\"classification\":\"Confidential\",\"retention\":\"Ephemeral\",\"allow_cache\":false,\"allow_training_reuse\":false},\"deadline_unix_ms\":\"$deadline\",\"priority\":\"Interactive\",\"latency_class\":\"Realtime\",\"resource_ceiling\":{\"max_input_units\":64,\"max_output_units\":32,\"max_runtime_ms\":\"5000\",\"max_accelerator_memory_mib\":8192},\"stream\":false,\"output_format\":\"text\",\"trace_token\":\"simulation-trace-$id\"}"
   status=$(curl --silent --output "$output" --write-out '%{http_code}' \
     --request POST \
     --header "Authorization: Bearer $inference_token" \
+    --header "X-LunaNexa-Subject: $workspace_subject" \
     --header 'Content-Type: application/json' \
     --data "$body" "$base_url/v1/workloads")
   test "$status" = '200'
@@ -257,6 +263,28 @@ status=$(curl --silent --output "$simulation_directory/quota.json" \
   --data '{"tenant_ref":"simulated-tenant","max_inflight":8,"max_accelerator_ms":"600000","window_ms":"60000"}' \
   "$base_url/v1/quotas")
 test "$status" = '202'
+
+workspace_starts=$((now_ms - 1000))
+workspace_expires=$((now_ms + 600000))
+operator_post '/v1/workspace/users' \
+  "{\"version\":\"lunanexa.workspace.v1\",\"user_id\":\"sim-user\",\"subject_ref\":\"$workspace_subject\",\"display_name\":\"Simulation Developer\",\"email\":\"simulation@example.invalid\",\"state\":\"UserInvited\",\"created_unix_ms\":\"$workspace_starts\",\"identity_receipt\":\"identity-sim-user\"}" \
+  "$simulation_directory/workspace-user.json"
+operator_post '/v1/workspace/users/sim-user:activate' '' \
+  "$simulation_directory/workspace-user-activated.json"
+operator_post '/v1/workspace/access-grants' \
+  "{\"version\":\"lunanexa.workspace.v1\",\"grant_id\":\"grant-sim-user\",\"user_id\":\"sim-user\",\"tenant_ref\":\"simulated-tenant\",\"access\":\"Developer\",\"starts_unix_ms\":\"$workspace_starts\",\"expires_unix_ms\":\"$workspace_expires\",\"state\":\"GrantActive\",\"policy_receipt\":\"grant-sim-user\"}" \
+  "$simulation_directory/workspace-grant.json"
+operator_post '/v1/workspace/leases' \
+  "{\"version\":\"lunanexa.workspace.v1\",\"lease_id\":\"lease-sim-user\",\"tenant_ref\":\"simulated-tenant\",\"subject_ref\":\"$workspace_subject\",\"access\":\"Developer\",\"limits\":{\"max_active_sessions\":2,\"max_session_duration_ms\":\"600000\",\"capabilities\":[{\"capability\":\"TextGenerate\",\"max_concurrent_requests\":2,\"max_requests_per_hour\":100,\"max_input_units_per_request\":64,\"max_output_units_per_request\":64}]},\"starts_unix_ms\":\"$workspace_starts\",\"expires_unix_ms\":\"$workspace_expires\",\"state\":\"Requested\",\"policy_receipt\":\"lease-sim-user\"}" \
+  "$simulation_directory/workspace-lease.json"
+operator_post '/v1/workspace/leases/lease-sim-user:activate' '' \
+  "$simulation_directory/workspace-lease-activated.json"
+curl --fail --silent --max-time 2 \
+  --header "Authorization: Bearer $inference_token" \
+  --header "X-LunaNexa-Subject: $workspace_subject" \
+  "$base_url/v1/workspace/self" >"$simulation_directory/workspace-self.json"
+rg -q '"authorized":true' "$simulation_directory/workspace-self.json"
+rg -q '"lease_id":"lease-sim-user"' "$simulation_directory/workspace-self.json"
 
 invoke 'initial' "$simulation_directory/workload-initial.json"
 test "$(wc -l <"$simulation_directory/sim-dgx-1-invocations.log" | tr -d ' ')" -eq 1
@@ -309,6 +337,39 @@ curl --fail --silent --max-time 2 \
 curl --fail --silent --max-time 2 \
   --header "Authorization: Bearer $operator_token" \
   "$base_url/v1/telemetry" >"$simulation_directory/telemetry.json"
+curl --fail --silent --max-time 2 \
+  --header "Authorization: Bearer $operator_token" \
+  "$base_url/v1/workspace" >"$simulation_directory/workspace.json.read"
+rg -q '"grant_id":"grant-sim-user"' "$simulation_directory/workspace.json.read"
+rg -q '"lease_id":"lease-sim-user"' "$simulation_directory/workspace.json.read"
+
+operator_post '/v1/workspace/access-grants/grant-sim-user:revoke' '' \
+  "$simulation_directory/workspace-grant-revoked.json"
+operator_post '/v1/workspace/leases/lease-sim-user:end' '' \
+  "$simulation_directory/workspace-lease-ended.json"
+denied_now_ms=$(($(date +%s) * 1000))
+denied_deadline=$((denied_now_ms + 15000))
+denied_body="{\"version\":\"lunanexa.v1\",\"idempotency_key\":\"idem-after-revoke\",\"workload_id\":\"workload-after-revoke\",\"tenant_ref\":\"simulated-tenant\",\"credential_scope\":\"inference\",\"capability\":\"TextGenerate\",\"model_selector\":\"text.default\",\"payload\":{\"input\":\"revoked workspace request\"},\"data_policy\":{\"classification\":\"Confidential\",\"retention\":\"Ephemeral\",\"allow_cache\":false,\"allow_training_reuse\":false},\"deadline_unix_ms\":\"$denied_deadline\",\"priority\":\"Interactive\",\"latency_class\":\"Realtime\",\"resource_ceiling\":{\"max_input_units\":64,\"max_output_units\":32,\"max_runtime_ms\":\"5000\",\"max_accelerator_memory_mib\":8192},\"stream\":false,\"output_format\":\"text\",\"trace_token\":\"simulation-trace-after-revoke\"}"
+status=$(curl --silent --output "$simulation_directory/workload-after-revoke.json" \
+  --write-out '%{http_code}' --request POST \
+  --header "Authorization: Bearer $inference_token" \
+  --header "X-LunaNexa-Subject: $workspace_subject" \
+  --header 'Content-Type: application/json' \
+  --data "$denied_body" "$base_url/v1/workloads")
+test "$status" = '403'
+rg -q 'WorkspaceAccessDenied' "$simulation_directory/workload-after-revoke.json"
+curl --fail --silent --max-time 2 \
+  --header "Authorization: Bearer $inference_token" \
+  --header "X-LunaNexa-Subject: $workspace_subject" \
+  "$base_url/v1/workspace/self" >"$simulation_directory/workspace-self-revoked.json"
+rg -q '"authorized":false' "$simulation_directory/workspace-self-revoked.json"
+curl --fail --silent --max-time 2 \
+  --header "Authorization: Bearer $audit_token" \
+  "$base_url/v1/audit" >"$simulation_directory/audit.json"
+rg -q 'workspace.user.activate' "$simulation_directory/audit.json"
+rg -q 'workspace.lease.activate' "$simulation_directory/audit.json"
+rg -q 'workspace.access.revoke' "$simulation_directory/audit.json"
+rg -q 'workspace.lease.end' "$simulation_directory/audit.json"
 
 for index in 1 2 3 4; do
   rg -q "sim-dgx-$index" "$simulation_directory/nodes.json"
@@ -322,7 +383,7 @@ for response in "$simulation_directory"/workload-*.json; do
 done
 
 printf '%s\n' \
-  "{\"schema_version\":\"lunanexa.simulation.v1\",\"nodes\":4,\"enrollment\":\"passed\",\"signed_assignment_reconciliation\":\"passed\",\"bounded_queueing\":\"passed\",\"runtime_failover\":\"passed\",\"drain_reroute\":\"passed\",\"controller_restart\":\"passed\",\"node_restart\":\"passed\",\"public_response_scan\":\"passed\",\"hardware_performance_validated\":false}" \
+  "{\"schema_version\":\"lunanexa.simulation.v1\",\"nodes\":4,\"enrollment\":\"passed\",\"workspace_authority\":\"passed\",\"signed_assignment_reconciliation\":\"passed\",\"bounded_queueing\":\"passed\",\"runtime_failover\":\"passed\",\"drain_reroute\":\"passed\",\"controller_restart\":\"passed\",\"node_restart\":\"passed\",\"public_response_scan\":\"passed\",\"hardware_performance_validated\":false}" \
   >"$simulation_directory/summary.json"
 
 printf '%s\n' 'four-node functional DGX simulation passed'

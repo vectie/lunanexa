@@ -17,6 +17,12 @@ metadata:
 automountServiceAccountToken: false
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-workbench
+automountServiceAccountToken: false
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: lunanexa-control-state

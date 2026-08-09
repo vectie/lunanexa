@@ -54,7 +54,7 @@ test "training reuse requires explicit evaluation consent" {
   }
   try @contracts.validate_workload(invalid) catch {
     @contracts.ContractError::InvalidPolicy(_) => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected validation failure")
   }
@@ -69,7 +69,7 @@ test "resource ceilings and ephemeral cache policy are enforced at decode" {
   }
   try @contracts.decode_workload(invalid.to_json().stringify()) catch {
     @contracts.ContractError::InvalidResourceCeiling("max_runtime_ms") => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("zero runtime ceiling was accepted")
   }
@@ -80,7 +80,7 @@ test "resource ceilings and ephemeral cache policy are enforced at decode" {
     })
   catch {
     @contracts.ContractError::InvalidPolicy(_) => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("ephemeral cache was accepted")
   }
@@ -98,7 +98,7 @@ test "public identifiers reject path and log injection characters" {
     try @contracts.validate_workload(invalid) catch {
       @contracts.ContractError::InvalidPolicy(message) =>
         assert_true(message.contains("identifier"))
-      error => fail("unexpected error: \{to_repr(error)}")
+      error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("unsafe public identifier was accepted")
     }

@@ -23,10 +23,14 @@ pub(all) struct CancellationReceipt {
 ///|
 pub struct ApiService {
   store : @store.FileStore
+  deployment_store : @deployment_store.FileDeploymentStore?
+  available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
   scheduler : @scheduler.FileScheduler?
   telemetry : @telemetry.FileTelemetry?
+  workspace_directory : @directory.FileWorkspaceDirectory?
+  require_workspace_lease : Bool
   signature_verifier : @registry.CosignVerifier?
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
@@ -56,10 +60,14 @@ pub fn ApiService::new(
 ) -> ApiService {
   {
     store,
+    deployment_store: None,
+    available_secret_refs: [],
     registry: None,
     enrollment: None,
     scheduler: None,
     telemetry: None,
+    workspace_directory: None,
+    require_workspace_lease: false,
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
@@ -91,10 +99,14 @@ pub fn ApiService::with_registry(
 ) -> ApiService {
   {
     store,
+    deployment_store: None,
+    available_secret_refs: [],
     registry: Some(registry),
     enrollment: None,
     scheduler: None,
     telemetry: None,
+    workspace_directory: None,
+    require_workspace_lease: false,
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
@@ -127,10 +139,14 @@ pub fn ApiService::with_services(
 ) -> ApiService {
   {
     store,
+    deployment_store: None,
+    available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
     scheduler: None,
     telemetry: None,
+    workspace_directory: None,
+    require_workspace_lease: false,
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
@@ -165,10 +181,14 @@ pub fn ApiService::with_control_plane(
 ) -> ApiService {
   {
     store,
+    deployment_store: None,
+    available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
     scheduler: Some(scheduler),
     telemetry: Some(telemetry),
+    workspace_directory: None,
+    require_workspace_lease: false,
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
@@ -186,6 +206,28 @@ pub fn ApiService::with_control_plane(
     audit_mutex: @async.Mutex::Mutex(),
     execution_slots: @async.Semaphore::Semaphore(128),
   }
+}
+
+///|
+/// Enables durable workspace administration and, when requested, requires a
+/// trusted-ingress subject assertion with an active grant and lease before a
+/// new workload can be admitted.
+pub fn ApiService::with_workspace_directory(
+  self : ApiService,
+  directory : @directory.FileWorkspaceDirectory,
+  require_workspace_lease : Bool,
+) -> ApiService {
+  { ..self, workspace_directory: Some(directory), require_workspace_lease }
+}
+
+///|
+/// Enables the durable management-plane catalog and deployment-intent API.
+pub fn ApiService::with_deployment_store(
+  self : ApiService,
+  deployment_store : @deployment_store.FileDeploymentStore,
+  available_secret_refs? : Array[String] = [],
+) -> ApiService {
+  { ..self, deployment_store: Some(deployment_store), available_secret_refs }
 }
 
 ///|
@@ -356,10 +398,13 @@ fn api_error(
 
 ///|
 fn header(headers : Map[String, String], name : String) -> String? {
-  match headers.get(name) {
-    Some(value) => Some(value)
-    None => headers.get(name.to_lower())
+  let wanted = name.to_lower()
+  for key, value in headers {
+    if key.to_lower() == wanted {
+      return Some(value)
+    }
   }
+  None
 }
 
 ///|
@@ -721,7 +766,7 @@ async fn ApiService::schedule_and_admit(
         Some(
           json_reply(if reason == WorkloadAlreadyActive { 409 } else { 429 }, {
             "error": {
-              "code": "\{to_repr(reason)}",
+              "code": "\{Repr(reason)}",
               "message": "workload admission was rejected",
               "retryable": reason == WorkloadAlreadyActive ||
               reason == QuotaExceeded ||
@@ -983,6 +1028,30 @@ async fn ApiService::operator_audit(
       target,
       "previous",
       "updated",
+      "accepted",
+      receipt,
+      @async.now(),
+    )
+    self.store.append_audit(event)
+  })
+}
+
+///|
+async fn ApiService::operator_transition_audit(
+  self : ApiService,
+  action : String,
+  target : String,
+  prior_state : String,
+  next_state : String,
+  receipt : String,
+) -> Unit {
+  self.with_audit_lock(() => {
+    let event = self.next_audit(
+      "operator",
+      action,
+      target,
+      prior_state,
+      next_state,
       "accepted",
       receipt,
       @async.now(),
@@ -1508,12 +1577,13 @@ async fn ApiService::stream_workload(
 }
 
 ///|
-pub async fn ApiService::handle(
+async fn ApiService::handle_with_transport(
   self : ApiService,
   verb : ApiMethod,
   path : String,
   headers : Map[String, String],
   body : String,
+  allow_asserted_subject : Bool,
 ) -> HttpReply {
   if body.length() > 1048576 {
     return api_error(
@@ -1534,6 +1604,9 @@ pub async fn ApiService::handle(
       503, "ReconciliationOnly", "controller mutations are disabled until recovery reconciliation is accepted",
       true,
     )
+  }
+  if deployment_management_path(path) {
+    return self.handle_deployment_management(verb, path, headers, body)
   }
   match (verb, path) {
     (Get, "/health") =>
@@ -1602,6 +1675,305 @@ pub async fn ApiService::handle(
         "cancellation": true,
         "retention_policies": ["Ephemeral"],
       })
+    }
+    (Get, "/v1/workspace") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      let snapshot = try directory.snapshot(@async.now()) catch {
+        _ =>
+          return api_error(
+            503, "WorkspaceUnavailable", "durable workspace state could not be read",
+            true,
+          )
+      } noraise {
+        value => value
+      }
+      json_reply(200, snapshot.to_json())
+    }
+    (Get, "/v1/workspace/self") => {
+      if !bearer_authorized(headers, self.inference_token) {
+        return api_error(
+          401, "Unauthenticated", "valid inference authority is required", false,
+        )
+      }
+      guard trusted_workspace_subject(headers, allow_asserted_subject)
+        is Some(subject_ref) else {
+        return api_error(
+          401, "Unauthenticated", "a verified auth-TLS identity or accepted loopback subject assertion is required",
+          false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      let view = try directory.self_view(subject_ref, @async.now()) catch {
+        _ =>
+          return api_error(
+            403, "WorkspaceAccessDenied", "the asserted workspace subject is not recognized",
+            false,
+          )
+      } noraise {
+        value => value
+      }
+      json_reply(200, view.to_json())
+    }
+    (Post, "/v1/workspace/users") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      guard decode_workspace_user(body) is Some(user) else {
+        return api_error(
+          400, "InvalidRequest", "invalid workspace user record", false,
+        )
+      }
+      let persisted = try {
+        match user.state {
+          UserInvited => directory.invite_user(user)
+          UserActive => directory.create_user(user)
+          UserSuspended | UserRevoked =>
+            return api_error(
+              400, "InvalidRequest", "a new workspace user must be invited or active",
+              false,
+            )
+        }
+      } catch {
+        _ =>
+          return api_error(
+            409, "WorkspaceRejected", "workspace user creation was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        if persisted.state == UserInvited {
+          "workspace.user.invite"
+        } else {
+          "workspace.user.create"
+        },
+        persisted.user_id,
+        persisted.identity_receipt,
+      )
+      json_reply(201, persisted.to_json())
+    }
+    (Post, _) if path.has_prefix("/v1/workspace/users/") &&
+      path.has_suffix(":activate") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let prefix = "/v1/workspace/users/".length()
+      let suffix = ":activate".length()
+      let user_id = path[prefix:path.length() - suffix].to_owned()
+      self.transition_workspace_user(
+        user_id,
+        UserActive,
+        "workspace.user.activate",
+      )
+    }
+    (Post, _) if path.has_prefix("/v1/workspace/users/") &&
+      path.has_suffix(":suspend") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let prefix = "/v1/workspace/users/".length()
+      let suffix = ":suspend".length()
+      let user_id = path[prefix:path.length() - suffix].to_owned()
+      self.transition_workspace_user(
+        user_id,
+        UserSuspended,
+        "workspace.user.suspend",
+      )
+    }
+    (Post, _) if path.has_prefix("/v1/workspace/users/") &&
+      path.has_suffix(":revoke") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let prefix = "/v1/workspace/users/".length()
+      let suffix = ":revoke".length()
+      let user_id = path[prefix:path.length() - suffix].to_owned()
+      self.transition_workspace_user(
+        user_id,
+        UserRevoked,
+        "workspace.user.revoke",
+      )
+    }
+    (Post, "/v1/workspace/access-grants") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      guard decode_workspace_access_grant(body) is Some(grant) else {
+        return api_error(
+          400, "InvalidRequest", "invalid workspace access grant", false,
+        )
+      }
+      let persisted = try
+        directory.issue_access_grant(grant, @async.now())
+      catch {
+        _ =>
+          return api_error(
+            409, "WorkspaceRejected", "workspace access grant was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "workspace.access.issue",
+        persisted.grant_id,
+        persisted.policy_receipt,
+      )
+      json_reply(201, persisted.to_json())
+    }
+    (Post, "/v1/workspace/leases") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      guard decode_workspace_lease(body) is Some(lease) else {
+        return api_error(
+          400, "InvalidRequest", "invalid workspace lease", false,
+        )
+      }
+      let persisted = try directory.issue_lease(lease, @async.now()) catch {
+        _ =>
+          return api_error(
+            409, "WorkspaceRejected", "workspace lease creation was rejected", false,
+          )
+      } noraise {
+        value => value
+      }
+      self.operator_audit(
+        "workspace.lease.issue",
+        persisted.lease_id,
+        persisted.policy_receipt,
+      )
+      json_reply(201, persisted.to_json())
+    }
+    (Post, _) if path.has_prefix("/v1/workspace/access-grants/") &&
+      path.has_suffix(":revoke") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      let prefix = "/v1/workspace/access-grants/".length()
+      let suffix = ":revoke".length()
+      let grant_id = path[prefix:path.length() - suffix].to_owned()
+      if !@workspace.valid_identifier(grant_id) {
+        return api_error(
+          400, "InvalidRequest", "invalid workspace access grant identity", false,
+        )
+      }
+      let persisted = try
+        directory.revoke_access_grant(grant_id, @async.now())
+      catch {
+        _ =>
+          return api_error(
+            409, "WorkspaceRejected", "workspace access revocation was rejected",
+            false,
+          )
+      } noraise {
+        value => value
+      }
+      let receipt = "workspace-access-revoke:\{persisted.grant_id}:\{@async.now()}"
+      self.operator_audit(
+        "workspace.access.revoke",
+        persisted.grant_id,
+        receipt,
+      )
+      json_reply(200, { "access_grant": persisted, "receipt": receipt })
+    }
+    (Post, _) if path.has_prefix("/v1/workspace/leases/") &&
+      path.has_suffix(":activate") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let prefix = "/v1/workspace/leases/".length()
+      let suffix = ":activate".length()
+      let lease_id = path[prefix:path.length() - suffix].to_owned()
+      self.activate_workspace_lease(lease_id)
+    }
+    (Post, _) if path.has_prefix("/v1/workspace/leases/") &&
+      path.has_suffix(":end") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      guard self.workspace_directory is Some(directory) else {
+        return api_error(
+          503, "WorkspaceUnavailable", "durable workspace state is unavailable",
+          true,
+        )
+      }
+      let prefix = "/v1/workspace/leases/".length()
+      let suffix = ":end".length()
+      let lease_id = path[prefix:path.length() - suffix].to_owned()
+      if !@workspace.valid_identifier(lease_id) {
+        return api_error(
+          400, "InvalidRequest", "invalid workspace lease identity", false,
+        )
+      }
+      let persisted = try directory.revoke_lease(lease_id, @async.now()) catch {
+        _ =>
+          return api_error(
+            409, "WorkspaceRejected", "workspace lease termination was rejected",
+            false,
+          )
+      } noraise {
+        value => value
+      }
+      let receipt = "workspace-lease-end:\{persisted.lease_id}:\{@async.now()}"
+      self.operator_audit("workspace.lease.end", persisted.lease_id, receipt)
+      json_reply(200, { "lease": persisted, "receipt": receipt })
     }
     (Get, "/v1/scheduler") => {
       if !bearer_authorized(headers, self.operator_token) {
@@ -1930,6 +2302,7 @@ pub async fn ApiService::handle(
         )
       }
       self.store.put_heartbeat(heartbeat)
+      self.refresh_deployment_operations()
       json_reply(202, { "accepted": true, "node_id": heartbeat.node_id })
     }
     (Put, "/v1/nodes/directive") => {
@@ -1964,7 +2337,7 @@ pub async fn ApiService::handle(
           "node.state",
           directive.node_id,
           "previous",
-          "\{to_repr(directive.desired_state)}",
+          "\{Repr(directive.desired_state)}",
           "accepted",
           directive.receipt,
           @async.now(),
@@ -2416,7 +2789,23 @@ pub async fn ApiService::handle(
           false,
         )
       }
-      self.invoke_workload(request)
+      let (workspace_error, reserved) = self.workspace_admit(
+        headers, request, allow_asserted_subject,
+      )
+      if workspace_error is Some(reply) {
+        return reply
+      }
+      try self.invoke_workload(request) catch {
+        error => {
+          self.release_workspace_admission(request, reserved)
+          raise error
+        }
+      } noraise {
+        reply => {
+          self.release_workspace_admission(request, reserved)
+          reply
+        }
+      }
     }
     (Get, _) if path.has_prefix("/v1/workloads/") => {
       if !bearer_authorized(headers, self.inference_token) {
@@ -2429,6 +2818,12 @@ pub async fn ApiService::handle(
         return api_error(
           400, "InvalidRequest", "invalid workload identity", false,
         )
+      }
+      if self.workspace_workload_access_error(
+          headers, workload_id, allow_asserted_subject,
+        )
+        is Some(reply) {
+        return reply
       }
       match self.store.workload_result(workload_id) {
         Some(response) => json_reply(200, response.to_json())
@@ -2500,6 +2895,12 @@ pub async fn ApiService::handle(
           400, "InvalidRequest", "invalid workload identity", false,
         )
       }
+      if self.workspace_workload_access_error(
+          headers, workload_id, allow_asserted_subject,
+        )
+        is Some(reply) {
+        return reply
+      }
       self.active_mutex.acquire()
       let active = self.active.get(workload_id)
       if active is Some(task) {
@@ -2534,6 +2935,20 @@ pub async fn ApiService::handle(
 }
 
 ///|
+/// Trusted in-process request adapter. Network listeners use transport-aware
+/// dispatch so asserted subjects are accepted only from a proved loopback TCP
+/// peer; callers of this method are part of the controller trust boundary.
+pub async fn ApiService::handle(
+  self : ApiService,
+  verb : ApiMethod,
+  path : String,
+  headers : Map[String, String],
+  body : String,
+) -> HttpReply {
+  self.handle_with_transport(verb, path, headers, body, true)
+}
+
+///|
 fn api_method(request_method : @http.RequestMethod) -> ApiMethod? {
   match request_method {
     @http.RequestMethod::Get => Some(Get)
@@ -2552,6 +2967,7 @@ fn reason(status : Int) -> String {
     202 => "Accepted"
     400 => "Bad Request"
     401 => "Unauthorized"
+    403 => "Forbidden"
     404 => "Not Found"
     409 => "Conflict"
     413 => "Payload Too Large"
@@ -2562,11 +2978,21 @@ fn reason(status : Int) -> String {
 }
 
 ///|
+fn loopback_client(address : @socket.Addr) -> Bool {
+  let rendered = address.to_string()
+  rendered.has_prefix("127.") ||
+  rendered.has_prefix("[::1]:") ||
+  rendered.has_prefix("::1:")
+}
+
+///|
 pub async fn ApiService::serve_on(
   self : ApiService,
   server : @http.Server,
 ) -> Unit {
+  self.refresh_deployment_operations()
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    let allow_asserted_subject = loopback_client(connection.client_addr())
     if request.meth == Post && request.path == "/v1/workloads:stream" {
       if !self.store.current_epoch_is_durable() {
         let reply = api_error(
@@ -2645,7 +3071,28 @@ pub async fn ApiService::serve_on(
         connection.end_response()
         return
       }
-      self.stream_workload(workload, connection)
+      let (workspace_error, reserved) = self.workspace_admit(
+        request.headers,
+        workload,
+        allow_asserted_subject,
+      )
+      if workspace_error is Some(reply) {
+        connection.send_response(reply.status, reason(reply.status), extra_headers={
+          "Content-Type": reply.content_type,
+          "Cache-Control": "no-store",
+        })
+        connection.write_string(reply.body)
+        connection.end_response()
+        return
+      }
+      try self.stream_workload(workload, connection) catch {
+        error => {
+          self.release_workspace_admission(workload, reserved)
+          raise error
+        }
+      } noraise {
+        _ => self.release_workspace_admission(workload, reserved)
+      }
       return
     }
     guard api_method(request.meth) is Some(verb) else {
@@ -2656,7 +3103,13 @@ pub async fn ApiService::serve_on(
       Post | Put => reader.read_all().text()
       _ => ""
     }
-    let reply = self.handle(verb, request.path, request.headers, body)
+    let reply = self.handle_with_transport(
+      verb,
+      request.path,
+      request.headers,
+      body,
+      allow_asserted_subject,
+    )
     connection.send_response(reply.status, reason(reply.status), extra_headers={
       "Content-Type": reply.content_type,
       "Cache-Control": "no-store",

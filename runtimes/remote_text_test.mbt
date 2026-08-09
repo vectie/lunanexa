@@ -52,7 +52,7 @@ test "runtime routing configuration rejects ambiguous or credential-bearing endp
   for entries in cases {
     try runtime.with_node_endpoints(entries) catch {
       @runtimes.RemoteRuntimeError::InvalidNodeRouting(_) => ()
-      error => fail("unexpected error: \{to_repr(error)}")
+      error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("unsafe runtime routing configuration was accepted")
     }
@@ -154,7 +154,7 @@ async test "scheduler node selection resolves to a concrete runtime endpoint" {
     try runtime.invoke_at(remote_request(), "node-c") catch {
       @runtimes.RemoteRuntimeError::RoutingTargetUnavailable(node_id) =>
         assert_eq(node_id, "node-c")
-      error => fail("unexpected error: \{to_repr(error)}")
+      error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("unmapped scheduler target used the fallback endpoint")
     }
@@ -234,7 +234,7 @@ async test "approved text adapter rejects a truncated SSE stream" {
     try runtime.invoke_stream(remote_request(), _ => ()) catch {
       @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(message) =>
         assert_true(message.contains("completion marker"))
-      error => fail("unexpected error: \{to_repr(error)}")
+      error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("truncated stream was accepted")
     }

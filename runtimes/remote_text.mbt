@@ -232,7 +232,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
     raise UpstreamRejected(status=response.code, body=body_text)
   }
   let output = @json.parse(body_text) catch {
-    error => raise InvalidUpstreamResponse("\{to_repr(error)}")
+    error => raise InvalidUpstreamResponse("\{Repr(error)}")
   }
   let envelope : UpstreamEnvelope = @json.from_json(output) catch {
     _ => { usage: None }
@@ -316,7 +316,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       break
     }
     let event_json = @json.parse(data) catch {
-      error => raise InvalidUpstreamResponse("\{to_repr(error)}")
+      error => raise InvalidUpstreamResponse("\{Repr(error)}")
     }
     let event : UpstreamStreamEnvelope = @json.from_json(event_json) catch {
       _ => { delta: None, output_text: None, usage: None }

@@ -141,4 +141,3 @@ pub(open) trait MetadataStore {
   fn append_audit(Self, @contracts.AuditEvent) -> Unit raise
   fn audit_events(Self) -> Array[@contracts.AuditEvent] raise
 }
-

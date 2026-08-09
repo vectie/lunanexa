@@ -1,5 +1,7 @@
 import {
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/deployment",
+  "vectie/lunanexa/deployment/store" @deployment_store,
   "vectie/lunanexa/controller",
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/registry",
@@ -7,6 +9,8 @@ import {
   "vectie/lunanexa/telemetry",
   "vectie/lunanexa/node",
   "vectie/lunanexa/store",
+  "vectie/lunanexa/workspace",
+  "vectie/lunanexa/workspace/directory",
   "moonbitlang/async",
   "moonbitlang/async/http",
   "moonbitlang/async/io",

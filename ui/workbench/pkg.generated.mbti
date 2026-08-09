@@ -1,0 +1,86 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/workbench"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/workspace",
+}
+
+// Values
+pub fn active_file(WorkbenchState) -> DraftFile?
+
+pub fn can_send(WorkbenchState) -> Bool
+
+pub fn default_state(Int64) -> WorkbenchState
+
+pub fn demo_state() -> WorkbenchState
+
+pub fn interactive_view(WorkbenchState, @cmd.Emit[WorkbenchMessage]) -> @html.Html
+
+pub fn lease_ready(WorkbenchState) -> Bool
+
+pub fn render(WorkbenchState) -> String
+
+pub fn view(WorkbenchState) -> @html.Html
+
+// Errors
+
+// Types and methods
+pub(all) struct DraftFile {
+  path : String
+  language : String
+  content : String
+} derive(Eq, @debug.Debug)
+
+pub(all) struct IntegrationSummary {
+  provider : @workspace.IntegrationProvider
+  state : @workspace.ConnectionState
+  description : String
+} derive(Eq, @debug.Debug)
+
+pub(all) struct UsageSummary {
+  requests_used : Int
+  requests_limit : Int
+  input_units : Int
+  output_units : Int
+  accelerator_ms : Int64
+} derive(Eq, @debug.Debug)
+
+pub(all) enum WorkbenchMessage {
+  LocaleChanged(@i18n.Locale)
+  SelectFile(String)
+  DraftChanged(String)
+  ModelChanged(String)
+  InstructionChanged(String)
+  SendRequest
+  SelectEditor(@workspace.EditorConnectionKind)
+  SelectIntegration(@workspace.IntegrationProvider)
+  ClearNotice
+} derive(Eq)
+
+pub(all) struct WorkbenchState {
+  locale : @i18n.Locale
+  lease : @workspace.WorkspaceLease?
+  now_unix_ms : Int64
+  files : Array[DraftFile]
+  active_path : String
+  model_selector : String
+  instruction : String
+  output_text : String
+  receipt : String
+  usage : UsageSummary
+  integrations : Array[IntegrationSummary]
+  selected_editor : @workspace.EditorConnectionKind?
+  selected_integration : @workspace.IntegrationProvider?
+  loading : Bool
+  success_message : String?
+  error_message : String?
+} derive(Eq)
+pub fn WorkbenchState::update(Self, WorkbenchMessage) -> Self
+
+// Type aliases
+
+// Traits

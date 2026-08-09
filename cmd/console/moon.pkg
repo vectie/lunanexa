@@ -1,10 +1,14 @@
 import {
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/deployment",
+  "vectie/lunanexa/workspace",
   "vectie/lunanexa/ui",
+  "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",
   "moonbit-community/rabbita/js",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
 }
 
 supported_targets = "js"

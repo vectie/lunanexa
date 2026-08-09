@@ -96,4 +96,3 @@ pub(all) struct TrustPolicy {
 // Type aliases
 
 // Traits
-

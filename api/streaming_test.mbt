@@ -6,7 +6,7 @@ test "streaming applies backpressure and cancellation" {
   stream.push(Chunk(sequence=2, output={ "text": "b" }))
   try stream.push(Chunk(sequence=3, output={ "text": "c" })) catch {
     @api.StreamError::Backpressure => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected bounded stream backpressure")
   }

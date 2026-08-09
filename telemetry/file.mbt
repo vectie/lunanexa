@@ -57,7 +57,7 @@ pub async fn FileTelemetry::open(path : String) -> FileTelemetry {
     let snapshot : TelemetrySnapshot = @json.from_json(
       @json.parse(@fs.read_file(path).text()),
     ) catch {
-      error => raise InvalidTelemetryState("\{to_repr(error)}")
+      error => raise InvalidTelemetryState("\{Repr(error)}")
     }
     if snapshot.schema_version != "lunanexa.telemetry.v1" {
       raise InvalidTelemetryState("unsupported telemetry snapshot")

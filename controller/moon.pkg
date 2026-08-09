@@ -1,5 +1,6 @@
 import {
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/deployment",
   "vectie/lunanexa/node",
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/store",

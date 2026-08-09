@@ -1,0 +1,15 @@
+import {
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/workspace",
+  "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/ui/workbench" @workbench_ui,
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/html",
+  "moonbit-community/rabbita/js",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "js"
+
+pkgtype(kind: "executable")

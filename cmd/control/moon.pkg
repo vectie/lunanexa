@@ -1,11 +1,13 @@
 import {
   "vectie/lunanexa/api",
+  "vectie/lunanexa/deployment/store" @deployment_store,
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/node",
   "vectie/lunanexa/store",
   "vectie/lunanexa/scheduler",
   "vectie/lunanexa/telemetry",
+  "vectie/lunanexa/workspace/directory",
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/core/env",

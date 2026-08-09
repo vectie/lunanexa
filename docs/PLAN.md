@@ -100,6 +100,10 @@ Deliver one clean operator flow with these views:
 - Policies: quotas, data classes, retention and runtime allowlists;
 - Audit: actor, decision, evidence, result and correlation receipt.
 
+The management surface additionally exposes user access and capacity leases.
+Access revocation and early lease termination are destructive operations with
+explicit confirmation receipts and immutable audit evidence.
+
 The UI reads the same typed contracts as automation. Destructive controls show
 scope and require an explicit confirmation receipt.
 
@@ -109,6 +113,31 @@ Gate:
   receipt → drain → observe rerouting → roll back;
 - keyboard navigation, empty/error states and narrow-screen layout are usable;
 - no UI-only state or duplicate hard-coded lifecycle vocabulary exists.
+
+## Phase 4b — Rabbita developer workbench and editor clients
+
+Deliver a separately deployable individual-user surface:
+
+- lease and quota status, expiration and bounded usage evidence;
+- a browser editing shell with project navigation, tabs and local draft state;
+- provider-neutral model selection, invocation and receipt inspection;
+- scoped handoff metadata for VS Code and approved external developer tools;
+- typed integration capability and connection states shared with automation.
+
+The workbench does not expose node addresses, a DGX shell or managed-node
+filesystem access. Repository checkout, editor agents and third-party product
+credentials remain outside the GPU execution trust domain.
+
+Gate:
+
+- management UI grants access and issues a bounded lease; the user workbench
+  reflects that authority without acquiring administrator permissions;
+- an expired or revoked lease cannot start a new workload;
+- Web IDE and external editor clients use the same scoped provider contract;
+- keyboard navigation, empty/error/expired states and narrow-screen layout are
+  usable in both browser components;
+- node assignments and runtime environments contain no editor or integration
+  product identity.
 
 ## Phase 5 — MoonGate integration without coupling
 
@@ -191,3 +220,28 @@ Release gate:
 - a separate training product only if it gains an independent customer,
   security boundary and release lifecycle.
 
+## Phase 8 — Management intent and one-click model services
+
+Deliver:
+
+- controller-signed, immutable model-service catalog templates;
+- compact idempotent deployment intents and deterministic dry-run plans;
+- restart-safe deployment operations with typed preflight findings;
+- intent-to-assignment reconciliation, readiness observation, scaling,
+  promotion, rollback and deletion;
+- a Rabbita catalog and deployment workflow using the same public contracts;
+- CLI coverage for catalog, plan, deploy, operation, scale and rollback.
+
+Gate:
+
+- an approved template deploys through one API request without hand-authoring a
+  node-specific assignment;
+- a missing approval, verification, license, evaluation, secret reference,
+  data-class capability, or capacity blocks before assignment publication;
+- repeated idempotency keys never create duplicate operations or assignments;
+- controller restart resumes a persisted operation and readiness converges from
+  signed assignments plus live node heartbeats;
+- scale-down, rollback and deletion remove only assignments owned by the named
+  model service and emit immutable audit receipts;
+- public plans, operations and endpoints contain no node credentials, runtime
+  credentials, internal runtime URLs, filesystem paths or MoonSuite identity.

@@ -97,7 +97,7 @@ pub async fn FileScheduler::open(
     let snapshot : SchedulerSnapshot = @json.from_json(
       @json.parse(@fs.read_file(path).text()),
     ) catch {
-      error => raise InvalidSchedulerState("\{to_repr(error)}")
+      error => raise InvalidSchedulerState("\{Repr(error)}")
     }
     if snapshot.schema_version != "lunanexa.scheduler.v2" ||
       snapshot.capacity <= 0 {

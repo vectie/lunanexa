@@ -1,7 +1,7 @@
 # LunaNexa
 
 > **Implemented control-plane baseline.** LunaNexa now contains a native HTTP
-> controller, durable registry/scheduler/enrollment/telemetry state, a native
+> controller, durable registry/scheduler/enrollment/telemetry/workspace state, a native
 > node reconciler and OCI supervisor, a provider-neutral client and CLI, a live
 > Rabbita console, and release evidence tooling. Production acceptance still
 > requires the private runtime, CA/identity, four-node cluster, measurements,
@@ -93,7 +93,11 @@ deliberately narrow hardware and performance claims.
 
 Native executables live in `cmd/control`, `cmd/node`, `cmd/cli`,
 `cmd/benchmark`, `cmd/evidence`, and `cmd/recovery`; the Rabbita application
-lives in `cmd/console`. The controller requires deployment-provided secret
+for administrators lives in `cmd/console`, and the individual developer
+workbench lives in `cmd/workbench`. Both use the shared provider-neutral
+workspace contract described in [the workspace guide](docs/WORKSPACES.md).
+The initial scoped editor client lives in `extensions/vscode`.
+The controller requires deployment-provided secret
 values and immutable runtime/model digests.
 Node inventory is read from a host-owned JSON file, and each enrolled node uses
 its own hashed-at-rest node credential.
@@ -105,4 +109,6 @@ its own hashed-at-rest node credential.
 - [Phased implementation plan](docs/PLAN.md)
 - [Architecture decisions](docs/DECISIONS.md)
 - [Four-node functional simulation](docs/SIMULATION.md)
+- [Developer workspaces and integrations](docs/WORKSPACES.md)
+- [Management plane and one-click model services](docs/MANAGEMENT_PLANE.md)
 - [Next-thread handoff](docs/IMPLEMENTATION_HANDOFF.md)

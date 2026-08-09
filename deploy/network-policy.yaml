@@ -14,10 +14,6 @@ spec:
             matchLabels:
               app.kubernetes.io/part-of: lunanexa
               lunanexa.io/plane: node-agent
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/part-of: lunanexa
-              lunanexa.io/plane: console
         - namespaceSelector:
             matchLabels:
               lunanexa.io/ingress: trusted
@@ -110,14 +106,6 @@ spec:
           port: 8080
   egress:
     - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/part-of: lunanexa
-              lunanexa.io/plane: management
-      ports:
-        - protocol: TCP
-          port: 8080
-    - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
@@ -150,3 +138,32 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-workbench
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: workbench
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/ingress: trusted
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

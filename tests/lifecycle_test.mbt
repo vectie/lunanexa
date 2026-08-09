@@ -141,7 +141,7 @@ test "bootstrap tokens are one use and stale controller epochs are fenced" {
     enrollment.enroll("node-2", "token", "secret", "node-auth", "key", 11L)
   catch {
     @node.NodeError::InvalidBootstrapToken => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected token reuse rejection")
   }
@@ -154,7 +154,7 @@ test "bootstrap tokens are one use and stale controller epochs are fenced" {
   )
   try agent.reconcile(current, verifier, 1L) catch {
     @node.NodeError::StaleControllerEpoch => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected stale controller rejection")
   }

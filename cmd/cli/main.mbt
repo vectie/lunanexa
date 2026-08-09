@@ -9,7 +9,7 @@ fn environment(name : String) -> String raise {
 ///|
 fn endpoint(base : String, path : String) -> String {
   if base.has_suffix("/") {
-    "\{base[:-1]}\{path}"
+    "\{base[:base.length() - 1]}\{path}"
   } else {
     "\{base}\{path}"
   }
@@ -25,8 +25,48 @@ fn bearer(token : String) -> Map[String, String] {
 }
 
 ///|
-async fn print_get(base : String, path : String, token? : String = "") -> Unit {
+fn workspace_subject(base : String) -> String? raise {
+  match @env.get_env_var("LUNANEXA_SUBJECT_REF") {
+    Some(value) if value != "" => {
+      guard @contracts.valid_identifier(value) else {
+        raise Failure::Failure(
+          "LUNANEXA_SUBJECT_REF must be a valid opaque identifier",
+        )
+      }
+      guard @client.canonical_http_loopback_endpoint(base) else {
+        raise Failure::Failure(
+          "LUNANEXA_SUBJECT_REF is allowed only with a canonical HTTP loopback LUNANEXA_ENDPOINT",
+        )
+      }
+      Some(value)
+    }
+    _ => None
+  }
+}
+
+///|
+fn inference_transport(
+  base : String,
+  token : String,
+) -> @client.HttpTransport raise {
+  let transport = @client.HttpTransport::new(token)
+  match workspace_subject(base) {
+    Some(subject_ref) => transport.with_subject_ref(subject_ref)
+    None => transport
+  }
+}
+
+///|
+async fn print_get(
+  base : String,
+  path : String,
+  token? : String = "",
+  subject_ref? : String = "",
+) -> Unit {
   let headers = if token == "" { Map([]) } else { bearer(token) }
+  if subject_ref != "" {
+    headers["X-LunaNexa-Subject"] = subject_ref
+  }
   let (response, body) = @http.get(endpoint(base, path), headers~)
   let output = body.text()
   if response.code < 200 || response.code >= 300 {
@@ -77,7 +117,7 @@ async fn print_post_empty(base : String, path : String, token : String) -> Unit 
 ///|
 fn usage() -> String {
   (
-    #|usage: lunanexa <health|capabilities|invoke FILE|status ID|cancel ID|nodes|node-state ID active|cordoned|draining GENERATION|assignments|assign FILE|stop-assignment ID|registry|scheduler|recovery-plan|telemetry|set-quota FILE|capacity FILE|record-benchmark FILE|register-model FILE|register-runtime FILE|record-license FILE|record-verification FILE|record-evaluation FILE|approve FILE|promote FILE|rollback FILE|issue-enrollment-token FILE|audit>
+    #|usage: lunanexa <health|capabilities|invoke FILE|status ID|cancel ID|nodes|node-state ID active|cordoned|draining GENERATION|assignments|assign FILE|stop-assignment ID|registry|scheduler|recovery-plan|telemetry|set-quota FILE|capacity FILE|record-benchmark FILE|register-model FILE|register-runtime FILE|record-license FILE|record-verification FILE|record-evaluation FILE|approve FILE|promote FILE|rollback FILE|issue-enrollment-token FILE|audit|catalog|register-template FILE|plan-deployment FILE|deploy FILE|deployments|deployment ID|operation ID|promote-deployment ID|rollback-deployment ID|scale-deployment ID FILE|delete-deployment ID>
   )
 }
 
@@ -178,6 +218,34 @@ async fn main {
         "/v1/telemetry",
         token=environment("LUNANEXA_OPERATOR_TOKEN"),
       )
+    "catalog" =>
+      print_get(
+        base,
+        "/v1/catalog/templates",
+        token=environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    "deployments" =>
+      print_get(
+        base,
+        "/v1/service-deployments",
+        token=environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    "deployment" => {
+      guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      print_get(
+        base,
+        "/v1/service-deployments/\{args[2]}",
+        token=environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    }
+    "operation" => {
+      guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      print_get(
+        base,
+        "/v1/operations/\{args[2]}",
+        token=environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    }
     "set-quota" => {
       guard args.length() == 3 else { raise Failure::Failure(usage()) }
       print_put(
@@ -220,19 +288,62 @@ async fn main {
         args[2],
       )
     }
+    "register-template" | "plan-deployment" | "deploy" => {
+      guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      let path = match args[1] {
+        "register-template" => "/v1/catalog/templates"
+        "plan-deployment" => "/v1/deployment-plans"
+        "deploy" => "/v1/service-deployments"
+        _ => abort("unreachable")
+      }
+      print_post_file(
+        base,
+        path,
+        environment("LUNANEXA_OPERATOR_TOKEN"),
+        args[2],
+      )
+    }
+    "promote-deployment" | "rollback-deployment" | "delete-deployment" => {
+      guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      let action = match args[1] {
+        "promote-deployment" => "promote"
+        "rollback-deployment" => "rollback"
+        "delete-deployment" => "delete"
+        _ => abort("unreachable")
+      }
+      print_post_empty(
+        base,
+        "/v1/service-deployments/\{args[2]}/\{action}",
+        environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    }
+    "scale-deployment" => {
+      guard args.length() == 4 else { raise Failure::Failure(usage()) }
+      print_post_file(
+        base,
+        "/v1/service-deployments/\{args[2]}/scale",
+        environment("LUNANEXA_OPERATOR_TOKEN"),
+        args[3],
+      )
+    }
     "status" => {
       guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      guard @contracts.valid_identifier(args[2]) else {
+        raise Failure::Failure("workload identifier is invalid")
+      }
       print_get(
         base,
         "/v1/workloads/\{args[2]}",
         token=environment("LUNANEXA_INFERENCE_TOKEN"),
+        subject_ref=workspace_subject(base).unwrap_or(""),
       )
     }
     "invoke" => {
       guard args.length() == 3 else { raise Failure::Failure(usage()) }
       let body = @fs.read_file(args[2]).text()
       let request = @contracts.decode_workload(body)
-      let transport = @client.HttpTransport::new(
+      let transport = inference_transport(
+        base,
         environment("LUNANEXA_INFERENCE_TOKEN"),
       )
       let provider = @client.Client::new(
@@ -247,7 +358,8 @@ async fn main {
     }
     "cancel" => {
       guard args.length() == 3 else { raise Failure::Failure(usage()) }
-      let transport = @client.HttpTransport::new(
+      let transport = inference_transport(
+        base,
         environment("LUNANEXA_INFERENCE_TOKEN"),
       )
       let provider = @client.Client::new(

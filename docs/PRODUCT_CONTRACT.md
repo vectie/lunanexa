@@ -33,12 +33,26 @@ The initial distribution may produce several binaries or services:
 | Scheduler | Placement, queues, capacity and failover | No |
 | Registry | Models, artifacts, runtimes, licenses and evaluations | No |
 | Metering | Usage, quotas, timing and infrastructure audit | No |
-| Console | Rabbita operator experience | No |
+| Management console | Rabbita cluster operations, access and lease administration | No |
+| Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
+| Developer workbench | Rabbita user workspace and provider-neutral model tooling | No |
 | Node agent | Inventory, runtime supervision and heartbeats | Yes |
 | Runtime adapter | Starts and observes an approved serving runtime | Yes |
 
 These components share one product contract, release train, operator console
 and version. Do not brand them as separate products.
+
+The two browser surfaces have different authorities. The management console is
+for cluster operators and administrators. The developer workbench is for an
+individual authorized consumer and may expose a Web IDE shell, lease status,
+usage, model invocation and client-side editor handoffs. Neither browser
+surface runs on a managed GPU node.
+
+VS Code extensions and integrations with external developer tools are clients
+of the published LunaNexa contract. They receive scoped, expiring access and
+provider-neutral capability metadata. They do not place repository checkouts,
+editor agents, arbitrary shells, application credentials or product-specific
+control paths on managed nodes.
 
 ## 4. Northbound contract
 
@@ -96,6 +110,20 @@ records or product credentials.
   policy, target, prior state, next state and result.
 - Administrative and inference credentials are separate.
 
+## 6a. Management-plane deployment contract
+
+The one-click path accepts only a compact, idempotent model-service intent that
+references a controller-signed catalog template. Templates pin model artifacts
+and runtime images, policy, resource and health profiles, secret references,
+and rollout rules. The management plane expands accepted intent into ordinary
+signed node assignments; nodes never receive the catalog, operator identity,
+or management credentials.
+
+One-click deployment is fail-closed. Unapproved models, unverified artifacts or
+images, failed evaluations, missing license acceptance, missing secret
+references, incompatible data classes, or insufficient capacity create typed
+preflight blockers rather than partially launching a runtime.
+
 ## 7. Explicit non-goals for v1
 
 - Building a new container orchestrator, object store or metrics engine.
@@ -106,6 +134,8 @@ records or product credentials.
 - MoonSuite-specific dashboards on cluster nodes.
 - Public multi-tenant hosting before the private cluster passes its operational
   and security gates.
+- Hosting source repositories, arbitrary development containers or IDE agent
+  runtimes on managed GPU nodes.
 
 ## 8. Release acceptance
 

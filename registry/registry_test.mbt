@@ -81,7 +81,7 @@ test "unsafe artifact cannot deploy" {
   registry.register_model(candidate("v1"))
   try registry.approve("model.text", "v1", 1L) catch {
     @registry.RegistryError::LicenseNotAccepted(_) => ()
-    err => fail("unexpected error: \{to_repr(err)}")
+    err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected unsafe model rejection")
   }

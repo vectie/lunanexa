@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-workbench
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-workbench
+  template:
+    metadata:
+      labels:
+        app: lunanexa-workbench
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: workbench
+    spec:
+      serviceAccountName: lunanexa-workbench
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: workbench
+          image: registry.invalid/lunanexa/workbench@${WORKBENCH_IMAGE_DIGEST}
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet:
+              # The workbench image serves the generated bundle below this
+              # prefix so ingress can forward /workbench without a rewrite.
+              path: /workbench/
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-workbench
+spec:
+  selector:
+    app: lunanexa-workbench
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -7,9 +7,33 @@ fn environment(name : String) -> String raise {
 }
 
 ///|
+fn inference_transport(
+  base : String,
+  token : String,
+) -> @client.HttpTransport raise {
+  let transport = @client.HttpTransport::new(token)
+  match @env.get_env_var("LUNANEXA_SUBJECT_REF") {
+    Some(subject_ref) if subject_ref != "" => {
+      guard @contracts.valid_identifier(subject_ref) else {
+        raise Failure::Failure(
+          "LUNANEXA_SUBJECT_REF must be a valid opaque identifier",
+        )
+      }
+      guard @client.canonical_http_loopback_endpoint(base) else {
+        raise Failure::Failure(
+          "LUNANEXA_SUBJECT_REF is allowed only with a canonical HTTP loopback LUNANEXA_ENDPOINT",
+        )
+      }
+      transport.with_subject_ref(subject_ref)
+    }
+    _ => transport
+  }
+}
+
+///|
 fn endpoint(base : String, path : String) -> String {
   if base.has_suffix("/") {
-    "\{base[:-1]}\{path}"
+    "\{base[:base.length() - 1]}\{path}"
   } else {
     "\{base}\{path}"
   }
@@ -49,7 +73,7 @@ async fn run_sample(
     trace_token: "benchmark-\{index}",
     stream: false,
   }
-  let transport = @client.HttpTransport::new(inference_token)
+  let transport = inference_transport(base, inference_token)
   let provider = @client.Client::new(
     {
       endpoint: base,

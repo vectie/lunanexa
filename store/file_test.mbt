@@ -39,13 +39,13 @@ async test "durable controller epoch fences stale leaders across restart" {
   assert_eq(restarted.controller_epoch(), 2L)
   try restarted.fence_controller(2L) catch {
     @store.DurableStoreError::InvalidState(_) => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("restart reused an already acquired controller epoch")
   }
   try restarted.fence_controller(1L) catch {
     @store.DurableStoreError::InvalidState(_) => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("stale controller epoch was accepted")
   }
@@ -65,7 +65,7 @@ async test "new durable epoch rejects mutations from a still-running old process
   try old_controller.append_audit(durable_event()) catch {
     @store.DurableStoreError::InvalidState(message) =>
       assert_true(message.contains("newer durable epoch"))
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("stale controller mutated state after successor fencing")
   }

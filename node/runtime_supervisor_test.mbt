@@ -6,7 +6,7 @@ test "runtime supervisor rejects arbitrary executables and unsafe network names"
     )
   catch {
     @node.RuntimeSupervisorError::UnsupportedEngine(_) => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("arbitrary executable was accepted")
   }
@@ -16,7 +16,7 @@ test "runtime supervisor rejects arbitrary executables and unsafe network names"
     )
   catch {
     @node.RuntimeSupervisorError::InvalidAssignmentIdentity(_) => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("unsafe network name was accepted")
   }
@@ -56,7 +56,7 @@ test "runtime inspection requires the assigned image label and healthy state" {
     )
   catch {
     @node.RuntimeSupervisorError::InvalidAssignmentIdentity(_) => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("runtime image substitution was accepted")
   }

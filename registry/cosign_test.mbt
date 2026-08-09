@@ -4,7 +4,7 @@ async test "cosign adapter rejects executable injection and unsafe subjects befo
     @registry.CosignVerifier::new("/tmp/cosign", "/etc/lunanexa/cosign.pub")
   catch {
     @registry.SignatureVerificationError::InvalidVerifierConfiguration => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("unapproved verifier executable was accepted")
   }
@@ -17,7 +17,7 @@ async test "cosign adapter rejects executable injection and unsafe subjects befo
     )
   catch {
     @registry.SignatureVerificationError::UnsafeVerificationSubject => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("unsafe image subject was accepted")
   }
@@ -39,7 +39,7 @@ async test "blob verification binds the claimed digest before launching cosign" 
     )
   catch {
     @registry.SignatureVerificationError::SubjectDigestMismatch => ()
-    error => fail("unexpected error: \{to_repr(error)}")
+    error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("mismatched blob digest reached signature acceptance")
   }
