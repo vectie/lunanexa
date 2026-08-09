@@ -113,10 +113,12 @@ VLLM_OMNI_MINICPMO45_NPU_CFM_GRAPH=0
 VLLM_OMNI_NPU_SYNC_BEFORE_DEVICE_EVENT=0
 ```
 
-The installed CANN environment did not expose the custom-op package expected
-by vLLM-Ascend. Custom ops and `fuse_norm_quant` were therefore disabled. These
-settings are part of the benchmark profile; later custom-op-capable results
-must use a different profile ID.
+The launch profile requested `VLLM_ASCEND_ENABLE_CUSTOM_OPS=0` and
+`fuse_norm_quant=false`, but the installed development vLLM-Ascend build did
+not honor those legacy controls. Its engine log reports enabled `norm_quant`
+and `act_quant` fusions and `pass_config.fuse_norm_quant=true`. Valid A/B runs
+held that observed backend state fixed; results from another build or pass
+configuration require a different profile ID.
 
 ## Repeated results
 
@@ -174,6 +176,36 @@ published values. It does not claim a controlled same-host speedup over a
 runnable organizer binary. Failed and zero-output attempts were quarantined
 outside the valid result directory.
 
+## Same-backend allocation-reuse experiment
+
+A later installed vLLM-Ascend development tree required additional compatibility
+work before a current same-host A/B could run. The retained fixes cover the
+legacy/current context-parallel manager APIs, optional profiling-config
+locations, the full-graph update hook's added `positions` argument, and the
+scheduler `_free_request` transition from a two-value tuple to a KV-transfer
+dict or `None`. The retained remote Code2Wav, NPU, and scheduler tests pass
+48/48 after removing the rejected candidate-only test.
+
+The tested speed candidate preallocated all ten CFM step-output buffers as
+stacks, removed final `torch.stack` copies, and elided single-request flow/HIFT
+cache clones. Its same-backend control kept every compatibility file identical
+and restored only `batched_token2wav.py` to commit `b1192725`.
+
+All six 32-request runs completed without failure or continuity loss. Every
+run produced the same 4,801 input tokens, 480 output tokens, 3,321,600 audio
+frames, and 138.40 seconds of audio.
+
+| Variant | TTFT | Audio TTFP | Whole-audio RTF | Per-chunk RTF | E2E |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Same-backend control | 330.97 ± 11.15 ms | 987.16 ± 8.87 ms | 0.4485 ± 0.0020 | 0.4792 ± 0.0021 | 1,890.08 ± 8.59 ms |
+| Allocation-reuse candidate | 328.31 ± 3.37 ms | 1,015.15 ± 1.22 ms | 0.4900 ± 0.0011 | 0.5307 ± 0.0025 | 2,062.55 ± 5.72 ms |
+
+The fail-closed median gate rejected the candidate: RTF regressed 9.49%, TTFP
+3.06%, and E2E 9.25%; TTFT improved only 0.39%. The allocation/copy patch was
+reverted, while the independently required compatibility fixes were retained.
+Raw results and `allocation-reuse-performance-gate.json` remain under the
+host's `allocation-v2` experiment directory.
+
 ## Competition quality gates
 
 The organizer materials require performance submissions to validate accuracy
@@ -208,9 +240,9 @@ the timestep MLP for every diffusion step of every streamed chunk. Cache fill
 keeps the original per-step MLP batch shape and Euler order. Flow-matching
 steps, chunk geometry and sampling parameters remain unchanged.
 
-The full targeted Code2Wav test file passes 35/35 on the benchmark host. The
-structural output signature is unchanged, but this does not replace official
-WER and speaker-similarity evaluation.
+The original targeted Code2Wav gate passes, and the expanded current-backend
+Code2Wav/NPU/scheduler set passes 48/48 on the benchmark host. Structural output
+parity does not replace official WER and speaker-similarity evaluation.
 
 The result changes the urgent performance picture:
 
@@ -231,7 +263,8 @@ internal-format experiment was reverted and graph mode is explicitly off.
 The next optimization sweep should hold the same 32-request manifest fixed and
 change one factor at a time:
 
-1. fixed or padded Code2Wav cache buckets and output-buffer reuse;
+1. profile-guided per-step Code2Wav workspace reuse; do not retry whole-stack
+   output preallocation unchanged;
 2. custom-op-capable vLLM-Ascend image;
 3. initial and steady codec chunk geometry, behind quality validation;
 4. flow-matching timestep count, behind quality validation;
