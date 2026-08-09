@@ -108,8 +108,24 @@ their runtimes and product-specific state never cross the node boundary.
 ### Node plane
 
 Each DGX runs one small LunaNexa node agent. It inventories devices, verifies
-assignments, pulls pinned artifacts, supervises runtime containers, performs
-health checks, enforces local limits and reports bounded telemetry.
+assignments, materializes pinned artifacts only for assignments naming that
+node, supervises runtime containers, performs health checks, enforces local
+limits and reports bounded telemetry.
+
+Materialization is a node-owned state transition before runtime preparation:
+
+```text
+assigned → downloading → digest verified → signature verified
+         → atomically cached → read-only mounted → runtime ready
+```
+
+Downloads use an assignment-sized, content-addressed cache under the
+deployment-owned node state directory. Partial transfers are resumable and
+never become visible as complete artifacts. Cache hits are reverified after an
+agent restart. A digest or signature mismatch quarantines the local candidate
+and prevents runtime launch. When no desired assignment on that node references
+a digest, reconciliation removes the local cache entry. The runtime container
+sees a fixed local model path and no artifact URI or storage credential.
 
 The node agent does not implement application workflows or accept arbitrary
 remote shell commands. Debug access is a separately authorized operator action,
@@ -152,6 +168,11 @@ Use durable standard infrastructure through narrow ports:
 
 Development adapters may be local, but production state must survive controller
 restart and must not live only on a DGX node.
+
+The artifact store is authoritative; node-local materializations are disposable
+assignment-scoped replicas. This keeps model transfer out of the management API
+process while allowing a selected DGX to start without the serving container
+holding object-store credentials.
 
 ## Initial four-node topology
 

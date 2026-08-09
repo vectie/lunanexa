@@ -40,6 +40,21 @@ spec:
               value: /var/lib/lunanexa/node-state.json
             - name: LUNANEXA_NODE_CERTIFICATE_PATH
               value: /var/lib/lunanexa/node-certificate.json
+            - name: LUNANEXA_MODEL_CACHE_PATH
+              value: /var/lib/lunanexa/models
+            - name: LUNANEXA_ARTIFACT_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-node-config
+                  key: artifact-endpoint
+            - name: LUNANEXA_ARTIFACT_CREDENTIAL_PATH
+              value: /etc/lunanexa/artifact-credential
+            - name: LUNANEXA_ARTIFACT_MAX_SIZE_BYTES
+              value: "1099511627776"
+            - name: LUNANEXA_COSIGN_BINARY
+              value: /usr/bin/cosign
+            - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH
+              value: /etc/lunanexa/cosign.pub
             - name: LUNANEXA_NODE_PUBLIC_KEY_REF
               value: host-ref:/etc/lunanexa/node-public-key
             - name: LUNANEXA_CONTAINER_ENGINE

@@ -12,7 +12,7 @@ fn management_template() -> @deployment.ModelServiceTemplate {
       digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       uri: "s3://models/model.text/v1",
       size_bytes: 1024L,
-      signature_ref: "cosign:model",
+      signature_ref: "s3://models/model.text/v1.sig",
     },
     runtime: {
       name: "text-runtime",

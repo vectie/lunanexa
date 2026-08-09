@@ -5,8 +5,13 @@ import {
   "moonbitlang/x/crypto",
   "moonbitlang/async",
   "moonbitlang/async/fs",
+  "moonbitlang/async/http",
   "moonbitlang/async/io",
   "moonbitlang/async/process",
 }
 
 supported_targets = "native"
+
+import {
+  "moonbitlang/async/socket",
+} for "test"

@@ -245,3 +245,27 @@ Gate:
   model service and emit immutable audit receipts;
 - public plans, operations and endpoints contain no node credentials, runtime
   credentials, internal runtime URLs, filesystem paths or MoonSuite identity.
+
+## Phase 9 — Assignment-scoped model materialization
+
+Deliver:
+
+- selected-node, pull-based S3 artifact and detached-signature download;
+- resumable partial files and atomic content-addressed cache publication;
+- node-local size, digest and Cosign verification before runtime launch;
+- a fixed read-only model mount with no artifact credential in the runtime;
+- removal of cache entries no longer referenced by any local assignment;
+- node configuration and operator documentation for cache, endpoint and trust.
+
+Gate:
+
+- an assignment to node A downloads only on node A and starts only after local
+  verification succeeds;
+- a second assignment for the same digest reuses the verified local copy;
+- truncated, oversized, digest-mismatched or signature-invalid downloads never
+  reach the runtime supervisor;
+- removing the final local assignment prunes that digest without affecting a
+  copy still assigned on another node;
+- node restart reverifies an existing cache entry and resumes a partial transfer;
+- runtime arguments contain only a fixed read-only local model mount and never
+  the artifact URI or artifact-store credential.

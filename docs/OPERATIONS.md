@@ -163,6 +163,27 @@ prerequisites. The agent invokes only an allowlisted Podman/Docker binary with a
 fixed argument vector, digest-pinned pull, read-only root filesystem, dropped
 capabilities, private IPC, bounded PIDs/CPU/memory, and no arbitrary egress.
 
+Each node also requires these materialization values:
+
+| Variable | Meaning |
+| --- | --- |
+| `LUNANEXA_MODEL_CACHE_PATH` | Absolute host-backed cache root; defaults to `/var/lib/lunanexa/models` |
+| `LUNANEXA_ARTIFACT_ENDPOINT` | HTTPS base URL of the deployment-owned S3-compatible artifact service |
+| `LUNANEXA_ARTIFACT_CREDENTIAL_PATH` | Host-owned bearer credential file; its value is never passed to runtimes |
+| `LUNANEXA_ARTIFACT_MAX_SIZE_BYTES` | Per-artifact safety ceiling; defaults to 1 TiB |
+| `LUNANEXA_COSIGN_BINARY` | Allowlisted Cosign path in the node-agent image |
+| `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only node-local public key used for detached model signatures |
+
+The model reference in an approved template is an `s3://bucket/object` value.
+Its detached signature may be another S3 reference; an opaque Cosign evidence
+reference resolves to the sibling `<model-object>.sig` object. The selected
+node maps these beneath `LUNANEXA_ARTIFACT_ENDPOINT`, resumes an incomplete
+transfer when the service honors `Range`, verifies the declared size, SHA-256
+digest and detached Cosign signature, and atomically publishes the model under
+the cache root. The runtime receives only `/var/lib/lunanexa/model/model` as a
+read-only bind mount. When no local desired assignment references the digest,
+reconciliation prunes that node's copy.
+
 ## Operator sequence
 
 Set `LUNANEXA_ENDPOINT` and the appropriate token environment variables, then

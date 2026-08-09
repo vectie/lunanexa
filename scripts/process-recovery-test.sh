@@ -38,6 +38,12 @@ start_node() {
     LUNANEXA_NODE_INVENTORY_PATH="$repo_root/tests/fixtures/node-process-inventory.json" \
     LUNANEXA_NODE_STATE_PATH="$test_directory/node-state.json" \
     LUNANEXA_NODE_CERTIFICATE_PATH="$test_directory/node-certificate.json" \
+    LUNANEXA_MODEL_CACHE_PATH="$test_directory/models" \
+    LUNANEXA_ARTIFACT_ENDPOINT="$base_url/artifacts" \
+    LUNANEXA_ARTIFACT_CREDENTIAL="process-test-artifact-authority" \
+    LUNANEXA_ALLOW_HTTP_LOOPBACK=1 \
+    LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
+    LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
     LUNANEXA_CONTAINER_ENGINE="/usr/bin/podman" \
     LUNANEXA_RUNTIME_NETWORK="lunanexa-process-test" \

@@ -13,6 +13,10 @@ The repository now implements the deployable LunaNexa baseline:
   telemetry snapshots, each with an explicit schema version;
 - model/license/evaluation/alias lifecycle enforcement, S3 digest streaming,
   fixed-command Cosign verification adapters and digest-pinned OCI supervision;
+- controller-signed model-service catalog templates, deterministic one-click
+  deployment plans and restart-safe operations, plus selected-node resumable
+  model download, local size/digest/Cosign verification, atomic cache
+  publication and read-only runtime mounting;
 - per-node hashed credentials, short-lived enrollment, certificate expiry and
   rotation, HMAC-authenticated/replay-fenced heartbeats, signed assignments,
   generation/epoch fencing, OCI identity/health inspection, truthful-ready

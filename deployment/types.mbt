@@ -97,6 +97,7 @@ pub(all) enum FindingCode {
   ModelNotApproved
   RuntimeNotRegistered
   ArtifactNotVerified
+  ArtifactMaterializationUnsupported
   RuntimeNotVerified
   LicenseNotAccepted
   EvaluationNotPassed

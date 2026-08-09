@@ -12,7 +12,7 @@ fn template() -> @deployment.ModelServiceTemplate {
       digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       uri: "s3://models/model.text/v1",
       size_bytes: 1L,
-      signature_ref: "cosign:model",
+      signature_ref: "s3://models/model.text/v1.sig",
     },
     runtime: {
       name: "text-runtime",
@@ -130,4 +130,28 @@ test "preflight blocks missing evidence secrets and capacity" {
     plan.findings.any(value => value.message.contains("runtime-token")),
   )
   assert_true(plan.findings.any(value => value.code == NoCompatibleNode))
+}
+
+///|
+test "one-click catalog rejects container-managed artifact downloads" {
+  let unsupported = {
+    ..template(),
+    artifact: { ..template().artifact, uri: "oci://models/model.text:v1" },
+  }
+  try
+    @deployment.validate_template(unsupported, require_signature=false)
+  catch {
+    @deployment.DeploymentError::InvalidTemplate(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a non-materializable template was accepted")
+  }
+  let plan = @deployment.preflight([unsupported], intent(), {
+    registry: [],
+    nodes: [],
+    available_secret_refs: [],
+  })
+  assert_true(
+    plan.findings.any(value => value.code == ArtifactMaterializationUnsupported),
+  )
 }

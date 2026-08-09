@@ -36,7 +36,7 @@ The initial distribution may produce several binaries or services:
 | Management console | Rabbita cluster operations, access and lease administration | No |
 | Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
 | Developer workbench | Rabbita user workspace and provider-neutral model tooling | No |
-| Node agent | Inventory, runtime supervision and heartbeats | Yes |
+| Node agent | Inventory, assignment-scoped model materialization, runtime supervision and heartbeats | Yes |
 | Runtime adapter | Starts and observes an approved serving runtime | Yes |
 
 These components share one product contract, release train, operator console
@@ -89,6 +89,15 @@ authenticated LunaNexa controller. An assignment identifies:
 - data, cache and retention policy;
 - rollout generation and lease expiry.
 
+For every accepted assignment, only the named node downloads the referenced
+model blob and detached signature from deployment-owned S3-compatible storage.
+The node verifies the exact size, SHA-256 digest and signature before atomically
+publishing the blob in its content-addressed local cache. The runtime receives
+a read-only local bind mount; it never receives the artifact-store credential
+or downloads the model itself. Nodes without an assignment do not materialize
+the artifact. Removing the last local assignment for a digest removes that
+node's cached copy.
+
 Nodes report typed inventory, heartbeat, deployment state, capacity, runtime
 health and bounded telemetry. They never receive MoonSuite workflows, domain
 records or product credentials.
@@ -123,6 +132,13 @@ One-click deployment is fail-closed. Unapproved models, unverified artifacts or
 images, failed evaluations, missing license acceptance, missing secret
 references, incompatible data classes, or insufficient capacity create typed
 preflight blockers rather than partially launching a runtime.
+
+The v1 one-click materialization contract accepts model references using
+`s3://bucket/object` URIs. A detached signature may have its own S3 reference;
+an existing opaque Cosign evidence reference resolves to the sibling
+`<model-object>.sig` object. OCI remains the digest-pinned runtime-image
+transport. Artifact transfer is pull-based from the selected node; the
+controller never opens an SSH, copy or arbitrary shell channel.
 
 ## 7. Explicit non-goals for v1
 

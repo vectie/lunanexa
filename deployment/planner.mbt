@@ -13,6 +13,9 @@ pub fn validate_template(
     !@contracts.valid_identifier(template.model_version, maximum_length=128) ||
     !@contracts.valid_identifier(template.architecture, maximum_length=128) ||
     !@contracts.valid_sha256_digest(template.artifact.digest) ||
+    !template.artifact.uri.has_prefix("s3://") ||
+    template.artifact.signature_ref == "" ||
+    !template.network.allow_artifact_store ||
     !@contracts.valid_sha256_digest(template.runtime.image_digest) ||
     template.resources.accelerator_count <= 0 ||
     template.resources.accelerator_memory_mib <= 0 ||
@@ -158,6 +161,17 @@ pub fn preflight(
       )
   } noraise {
     _ => ()
+  }
+  if !template.artifact.uri.has_prefix("s3://") ||
+    template.artifact.signature_ref == "" ||
+    !template.network.allow_artifact_store {
+    findings.push(
+      finding(
+        ArtifactMaterializationUnsupported,
+        Blocking,
+        "the model blob and detached signature must be materializable from the artifact store",
+      ),
+    )
   }
   match evidence_for(context, template) {
     None =>

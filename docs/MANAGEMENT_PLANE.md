@@ -27,6 +27,8 @@ catalog template
 → deterministic preflight plan
 → durable deployment operation
 → signed desired assignments
+→ selected-node artifact materialization
+→ read-only local runtime mount
 → node reconciliation
 → observed runtime readiness
 → provider-neutral service endpoint and audit receipt
@@ -35,6 +37,14 @@ catalog template
 If a prerequisite is absent, the operation is durable but `Blocked`; its
 preflight findings identify the missing approval, evidence, secret reference,
 or capacity. Re-submitting the same idempotency key returns the same operation.
+
+The catalog template carries separate immutable references for the runtime OCI
+image and the model blob. For v1, the model blob uses an S3-compatible `s3://`
+reference. Its detached signature either uses another S3 reference or the
+sibling `<model-object>.sig` convention for an existing opaque Cosign evidence
+reference. Only nodes selected in `DeploymentPlan` receive assignments and pull
+those objects. Runtime readiness cannot converge until the node has verified
+and atomically cached the exact model bytes.
 
 ## Public resources
 

@@ -10,7 +10,7 @@
     "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "uri": "s3://models/model.text/v1",
     "size_bytes": "1",
-    "signature_ref": "cosign:model.text:v1"
+    "signature_ref": "s3://models/model.text/v1.sig"
   },
   "runtime": {
     "name": "text-runtime",

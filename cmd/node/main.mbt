@@ -146,6 +146,63 @@ async fn ensure_certificate(
 }
 
 ///|
+async fn send_heartbeat(
+  base : String,
+  node_id : String,
+  token : String,
+  inventory : @contracts.NodeInventory,
+  agent : @node_agent.NodeAgent,
+) -> Unit {
+  let unsigned : @contracts.NodeHeartbeat = {
+    node_id,
+    state: agent.state(),
+    observed_generation: agent.observed_generation(),
+    controller_epoch: agent.controller_epoch(),
+    inventory,
+    running_deployments: agent.running_deployments(),
+    timestamp_unix_ms: @async.now(),
+    signature: "",
+  }
+  let heartbeat = {
+    ..unsigned,
+    signature: @node_agent.heartbeat_signature(unsigned, token),
+  }
+  let (response, _) = @http.put(
+    endpoint(base, "/v1/nodes/heartbeat"),
+    heartbeat.to_json(),
+    headers=node_headers(node_id, token),
+  )
+  if response.code != 202 {
+    raise Failure::Failure("heartbeat was rejected")
+  }
+}
+
+///|
+async fn materialize_while_heartbeating(
+  base : String,
+  node_id : String,
+  token : String,
+  inventory : @contracts.NodeInventory,
+  agent : @node_agent.NodeAgent,
+  materializer : @node_agent.ArtifactMaterializer,
+  artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
+  assignment : @contracts.DesiredAssignment,
+) -> @node_agent.MaterializedArtifact {
+  @async.with_task_group <| group => {
+    let task = group.spawn(() => {
+      materializer.materialize(assignment, artifact_verifier)
+    })
+    for ;; {
+      send_heartbeat(base, node_id, token, inventory, agent)
+      match task.try_wait() {
+        Some(artifact) => return artifact
+        None => @async.sleep(3000)
+      }
+    }
+  }
+}
+
+///|
 async fn reconcile_once(
   base : String,
   node_id : String,
@@ -154,6 +211,8 @@ async fn reconcile_once(
   agent : @node_agent.NodeAgent,
   verifier : @node_agent.SharedSecretAssignmentVerifier,
   supervisor : @node_agent.OciRuntimeSupervisor,
+  materializer : @node_agent.ArtifactMaterializer,
+  artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
   state_path : String,
 ) -> Unit {
   let headers = node_headers(node_id, token)
@@ -195,35 +254,32 @@ async fn reconcile_once(
   }
   for assignment in assignments {
     if agent.reconcile(assignment, verifier, now) {
-      let instance = supervisor.ensure_started(assignment)
-      agent.observe_runtime(assignment.assignment_id, instance.observed_state)
+      try {
+        let artifact = materialize_while_heartbeating(
+          base, node_id, token, inventory, agent, materializer, artifact_verifier,
+          assignment,
+        )
+        if assignment.lease_expires_unix_ms <= @async.now() {
+          agent.observe_runtime(assignment.assignment_id, Failed)
+        } else {
+          let instance = supervisor.ensure_started(assignment, artifact)
+          agent.observe_runtime(
+            assignment.assignment_id,
+            instance.observed_state,
+          )
+        }
+      } catch {
+        _ => agent.observe_runtime(assignment.assignment_id, Failed)
+      }
     }
   }
-  persist_agent(state_path, agent)
-  let unsigned_heartbeat : @contracts.NodeHeartbeat = {
-    node_id,
-    state: agent.state(),
-    observed_generation: agent.observed_generation(),
-    controller_epoch: agent.controller_epoch(),
-    inventory,
-    running_deployments: agent.running_deployments(),
-    timestamp_unix_ms: now,
-    signature: "",
-  }
-  let heartbeat = {
-    ..unsigned_heartbeat,
-    signature: @node_agent.heartbeat_signature(unsigned_heartbeat, token),
-  }
-  let (heartbeat_response, _) = @http.put(
-    endpoint(base, "/v1/nodes/heartbeat"),
-    heartbeat.to_json(),
-    headers~,
+  materializer.prune_unassigned(
+    [
+      for assignment in assignments => assignment.artifact.digest
+    ],
   )
-  if heartbeat_response.code != 202 {
-    raise Failure::Failure(
-      "heartbeat failed with status \{heartbeat_response.code}",
-    )
-  }
+  persist_agent(state_path, agent)
+  send_heartbeat(base, node_id, token, inventory, agent)
   let mut total_memory = 0
   let mut free_memory = 0
   let mut healthy_accelerators = 0
@@ -240,21 +296,21 @@ async fn reconcile_once(
       deployment_id: "",
       metric: "accelerator_memory_total_mib",
       value: total_memory.to_double(),
-      timestamp_unix_ms: now,
+      timestamp_unix_ms: @async.now(),
     },
     {
       node_id,
       deployment_id: "",
       metric: "accelerator_memory_free_mib",
       value: free_memory.to_double(),
-      timestamp_unix_ms: now,
+      timestamp_unix_ms: @async.now(),
     },
     {
       node_id,
       deployment_id: "",
       metric: "accelerator_healthy_count",
       value: healthy_accelerators.to_double(),
-      timestamp_unix_ms: now,
+      timestamp_unix_ms: @async.now(),
     },
   ]
   if inventory.labels.get("lunanexa.accelerator-utilization-per-mille")
@@ -266,7 +322,7 @@ async fn reconcile_once(
         deployment_id: "",
         metric: "accelerator_utilization_per_mille",
         value: utilization,
-        timestamp_unix_ms: now,
+        timestamp_unix_ms: @async.now(),
       })
     }
   }
@@ -333,9 +389,31 @@ async fn main {
     environment("LUNANEXA_RUNTIME_NETWORK"),
     environment("LUNANEXA_CONTAINER_ENGINE_ENDPOINT"),
   )
+  let maximum_artifact_size_bytes = @env.get_env_var(
+      "LUNANEXA_ARTIFACT_MAX_SIZE_BYTES",
+    )
+    .map(value => @string.parse_int64(value))
+    .unwrap_or(1099511627776L)
+  let materializer = @node_agent.ArtifactMaterializer::open(
+    @env.get_env_var("LUNANEXA_MODEL_CACHE_PATH").unwrap_or(
+      "/var/lib/lunanexa/models",
+    ),
+    environment("LUNANEXA_ARTIFACT_ENDPOINT"),
+    host_secret(
+      "LUNANEXA_ARTIFACT_CREDENTIAL", "LUNANEXA_ARTIFACT_CREDENTIAL_PATH", "/etc/lunanexa/artifact-credential",
+    ),
+    maximum_artifact_size_bytes~,
+    allow_http_loopback=@env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") ==
+      Some("1"),
+  )
+  let artifact_verifier = @node_agent.CosignArtifactSignatureVerifier::new(
+    environment("LUNANEXA_COSIGN_BINARY"),
+    environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
+  )
   while true {
     reconcile_once(
-      base, node_id, token, inventory, agent, verifier, supervisor, state_path,
+      base, node_id, token, inventory, agent, verifier, supervisor, materializer,
+      artifact_verifier, state_path,
     ) catch {
       _ => println("LunaNexa node reconciliation failed; retrying")
     }
