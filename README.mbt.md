@@ -109,6 +109,7 @@ its own hashed-at-rest node credential.
 - [Phased implementation plan](docs/PLAN.md)
 - [Architecture decisions](docs/DECISIONS.md)
 - [Four-node functional simulation](docs/SIMULATION.md)
+- [MiniCPM-o 4.5 Ascend 910C benchmark](docs/MINICPMO45_910C_BENCHMARK.md)
 - [Developer workspaces and integrations](docs/WORKSPACES.md)
 - [Management plane and one-click model services](docs/MANAGEMENT_PLANE.md)
 - [Next-thread handoff](docs/IMPLEMENTATION_HANDOFF.md)
