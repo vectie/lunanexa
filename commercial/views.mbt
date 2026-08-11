@@ -215,6 +215,66 @@ pub fn CommercialStore::snapshot(
 }
 
 ///|
+pub fn CommercialStore::durable_snapshot(
+  self : CommercialStore,
+) -> CommercialDurableSnapshot {
+  let callbacks = self.signature_callbacks.values().to_array()
+  callbacks.sort_by_key(value => value.callback_id)
+  let organizations = self.organizations.values().to_array()
+  let cost_centers = self.cost_centers.values().to_array()
+  let projects = self.projects.values().to_array()
+  let usage_observations = self.observations.values().to_array()
+  let ledger_entries = self.entries.values().to_array()
+  let finalized_periods = self.periods.values().to_array()
+  let budgets = self.budgets.values().to_array()
+  let quotas = self.quotas.values().to_array()
+  let commitments = self.commitments.values().to_array()
+  let consumptions = self.consumptions.values().to_array()
+  let agreement_templates = self.templates.values().to_array()
+  let clickwrap_acceptances = self.acceptances.values().to_array()
+  let agreements = self.agreements.values().to_array()
+  let role_grants = self.grants.values().to_array()
+  organizations.sort_by_key(value => value.organization_id)
+  cost_centers.sort_by_key(value => value.cost_center_id)
+  projects.sort_by_key(value => value.project_id)
+  usage_observations.sort_by_key(value => value.event_id)
+  ledger_entries.sort_by(entry_compare)
+  finalized_periods.sort_by_key(value => value.period_id)
+  budgets.sort_by_key(value => value.budget_id)
+  quotas.sort_by_key(value => value.quota_id)
+  commitments.sort_by_key(value => value.commitment_id)
+  consumptions.sort_by_key(value => value.consumption_id)
+  agreement_templates.sort_by_key(value => {
+    template_key(value.template_id, value.version)
+  })
+  clickwrap_acceptances.sort_by_key(value => value.acceptance_id)
+  agreements.sort_by_key(value => value.agreement_id)
+  role_grants.sort_by_key(value => value.grant_id)
+  let commercial : CommercialSnapshot = {
+    schema_version: snapshot_schema_version,
+    organizations,
+    cost_centers,
+    projects,
+    usage_observations,
+    ledger_entries,
+    finalized_periods,
+    budgets,
+    quotas,
+    commitments,
+    consumptions,
+    agreement_templates,
+    clickwrap_acceptances,
+    agreements,
+    role_grants,
+  }
+  {
+    schema_version: snapshot_schema_version,
+    commercial,
+    signature_callbacks: callbacks,
+  }
+}
+
+///|
 pub fn CommercialStore::summary(
   self : CommercialStore,
   organization_id : String,

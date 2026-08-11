@@ -102,3 +102,11 @@ pub(all) struct IntegrationSnapshot {
   records : Array[ExternalRecordView]
   reconciliation_exception_count : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct IntegrationDurableSnapshot {
+  schema_version : String
+  records : Array[ExternalRecord]
+  callbacks : Array[ExternalCallback]
+  reconciliation_exception_counts : Map[String, Int]
+} derive(Debug, Eq, ToJson, FromJson)

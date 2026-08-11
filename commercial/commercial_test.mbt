@@ -574,3 +574,36 @@ test "tenant-scoped snapshot and privacy-safe CSV resist formula injection" {
   let summary = store.summary("org-a", "CNY", 2, 4000L)
   assert_eq(summary.provisional_total.minor_units, 20L)
 }
+
+///|
+test "durable commercial snapshot restores tenant hierarchy and idempotency indexes" {
+  let store = @commercial.CommercialStore::new()
+  store.add_organization({
+    organization_id: "org-durable",
+    display_name: "Durable Organization",
+    state: Active,
+    verification_ref: Some("identity-evidence"),
+    created_unix_ms: 1000L,
+  })
+  store.add_cost_center({
+    cost_center_id: "cc-durable",
+    organization_id: "org-durable",
+    parent_cost_center_id: None,
+    display_name: "Durable Cost Center",
+    created_unix_ms: 1001L,
+  })
+  store.add_project({
+    project_id: "project-durable",
+    organization_id: "org-durable",
+    cost_center_id: "cc-durable",
+    display_name: "Durable Project",
+    created_unix_ms: 1002L,
+  })
+  let snapshot = store.durable_snapshot()
+  let encoded = snapshot.to_json().stringify()
+  let decoded : @commercial.CommercialDurableSnapshot = @json.from_json(
+    @json.parse(encoded),
+  )
+  let restored = @commercial.CommercialStore::from_durable_snapshot(decoded)
+  assert_eq(restored.durable_snapshot(), snapshot)
+}

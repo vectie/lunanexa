@@ -1,0 +1,46 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/technical/store"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/database",
+  "vectie/lunanexa/technical",
+}
+
+// Values
+pub let snapshot_schema_version : String
+
+// Errors
+pub(all) suberror TechnicalStoreError {
+  InvalidSnapshot(String)
+  OperationConflict(String)
+  OperationNotFound(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+type TechnicalPersistence
+
+pub(all) struct TechnicalSnapshot {
+  schema_version : String
+  prewarm_operations : Array[@technical.PrewarmOperation]
+  consumed_transfer_nonces : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct TechnicalStore {
+  persistence : TechnicalPersistence
+  mut prewarm : Map[String, @technical.PrewarmOperation]
+  consumed_nonces : Map[String, Unit]
+  mutex : @async.Mutex
+}
+pub async fn TechnicalStore::advance_prewarm(Self, @technical.PrewarmOperation, @technical.PrewarmEvent, Int64) -> @technical.PrewarmDecision
+pub async fn TechnicalStore::begin_prewarm(Self, @technical.PrewarmIntent, Int64) -> @technical.PrewarmDecision
+pub async fn TechnicalStore::open(String) -> Self
+pub async fn TechnicalStore::open_postgres(@database.PostgresDatabase) -> Self
+pub async fn TechnicalStore::snapshot(Self) -> TechnicalSnapshot
+pub async fn TechnicalStore::validate_and_consume_transfer(Self, @technical.TransferGrant, @technical.TransferGrantUse, @technical.GrantAuthenticity, Int64, Int64) -> @technical.TransferGrantDecision
+
+// Type aliases
+
+// Traits

@@ -292,7 +292,26 @@ fn commercial_organization_path(path : String) -> (String, String)? {
 }
 
 ///|
-fn ApiService::handle_commercial_management(
+async fn ApiService::persist_commercial_state(self : ApiService) -> Unit {
+  guard self.management_database is Some(database) else { return }
+  let commercial = self.commercial_store.durable_snapshot()
+  let integrations = self.commercial_integrations.durable_snapshot()
+  database.save_opaque_snapshots([
+    (
+      "commercial",
+      @commercial.snapshot_schema_version,
+      commercial.to_json().stringify(),
+    ),
+    (
+      "commercial_integrations",
+      @commercial_integrations.integration_schema_version,
+      integrations.to_json().stringify(),
+    ),
+  ])
+}
+
+///|
+async fn ApiService::handle_commercial_management(
   self : ApiService,
   verb : ApiMethod,
   path : String,
@@ -329,7 +348,9 @@ fn ApiService::handle_commercial_management(
     }
     return json_reply(200, snapshot.to_json())
   }
-  match (verb, path) {
+  let before_commercial = self.commercial_store.durable_snapshot()
+  let before_integrations = self.commercial_integrations.durable_snapshot()
+  let reply = match (verb, path) {
     (Post, "/v1/commercial/organizations") => {
       guard decode_organization(body) is Some(value) else {
         return api_error(400, "InvalidRequest", "invalid organization", false)
@@ -638,4 +659,23 @@ fn ApiService::handle_commercial_management(
     }
     _ => api_error(404, "NotFound", "commercial route was not found", false)
   }
+  if verb != Get && reply.status >= 200 && reply.status < 300 {
+    self.persist_commercial_state() catch {
+      _ => {
+        ignore(
+          self.commercial_store.replace_from_durable_snapshot(before_commercial),
+        )
+        ignore(
+          self.commercial_integrations.replace_from_durable_snapshot(
+            before_integrations,
+          ),
+        )
+        return api_error(
+          503, "CommercialPersistenceFailed", "commercial mutation was rolled back because durable commit failed",
+          true,
+        )
+      }
+    }
+  }
+  reply
 }

@@ -1,9 +1,9 @@
 ///|
 pub struct IntegrationStore {
-  records : Map[String, ExternalRecord]
-  external_index : Map[String, String]
-  callbacks : Map[String, ExternalCallback]
-  reconciliation_exception_counts : Map[String, Int]
+  mut records : Map[String, ExternalRecord]
+  mut external_index : Map[String, String]
+  mut callbacks : Map[String, ExternalCallback]
+  mut reconciliation_exception_counts : Map[String, Int]
 }
 
 ///|
@@ -14,6 +14,55 @@ pub fn IntegrationStore::new() -> IntegrationStore {
     callbacks: Map([]),
     reconciliation_exception_counts: Map([]),
   }
+}
+
+///|
+pub fn IntegrationStore::from_durable_snapshot(
+  snapshot : IntegrationDurableSnapshot,
+) -> IntegrationStore raise IntegrationError {
+  if snapshot.schema_version != integration_schema_version {
+    raise InvalidInput("unsupported integration snapshot")
+  }
+  let store = IntegrationStore::new()
+  let callbacks = snapshot.callbacks.copy()
+  callbacks.sort_by_key(value => value.received_unix_ms)
+  for current in snapshot.records {
+    let initial = {
+      ..current,
+      state: Pending,
+      updated_unix_ms: current.created_unix_ms,
+    }
+    ignore(store.register(initial))
+  }
+  for callback in callbacks {
+    ignore(store.reconcile_callback(callback))
+  }
+  for organization_id, count in snapshot.reconciliation_exception_counts {
+    if count < 0 {
+      raise InvalidInput("negative reconciliation exception count")
+    }
+    store.reconciliation_exception_counts[organization_id] = count
+  }
+  for current in snapshot.records {
+    if store.records.get(current.record_id) != Some(current) {
+      raise EvidenceMismatch(
+        "integration snapshot does not match callback history",
+      )
+    }
+  }
+  store
+}
+
+///|
+pub fn IntegrationStore::replace_from_durable_snapshot(
+  self : IntegrationStore,
+  snapshot : IntegrationDurableSnapshot,
+) -> Unit raise IntegrationError {
+  let restored = IntegrationStore::from_durable_snapshot(snapshot)
+  self.records = restored.records
+  self.external_index = restored.external_index
+  self.callbacks = restored.callbacks
+  self.reconciliation_exception_counts = restored.reconciliation_exception_counts
 }
 
 ///|
@@ -296,5 +345,21 @@ pub fn IntegrationStore::snapshot(
     reconciliation_exception_count: self.reconciliation_exception_counts
     .get(organization_id)
     .unwrap_or(0),
+  }
+}
+
+///|
+pub fn IntegrationStore::durable_snapshot(
+  self : IntegrationStore,
+) -> IntegrationDurableSnapshot {
+  let records = self.records.values().to_array()
+  records.sort_by_key(value => value.record_id)
+  let callbacks = self.callbacks.values().to_array()
+  callbacks.sort_by_key(value => value.callback_id)
+  {
+    schema_version: integration_schema_version,
+    records,
+    callbacks,
+    reconciliation_exception_counts: self.reconciliation_exception_counts.copy(),
   }
 }

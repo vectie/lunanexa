@@ -393,6 +393,15 @@ pub(all) struct CommercialSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Restart-complete state. Public tenant views continue to use
+/// `CommercialSnapshot`; callback payloads stay inside the trusted store.
+pub(all) struct CommercialDurableSnapshot {
+  schema_version : String
+  commercial : CommercialSnapshot
+  signature_callbacks : Array[SignatureCallback]
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct CommercialExport {
   schema_version : String
   organization_id : String

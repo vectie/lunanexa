@@ -153,6 +153,12 @@ pub(all) struct ClickwrapAcceptance {
   accepted_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct CommercialDurableSnapshot {
+  schema_version : String
+  commercial : CommercialSnapshot
+  signature_callbacks : Array[SignatureCallback]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct CommercialExport {
   schema_version : String
   organization_id : String
@@ -195,23 +201,23 @@ pub(all) struct CommercialSnapshot {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct CommercialStore {
-  organizations : Map[String, Organization]
-  cost_centers : Map[String, CostCenter]
-  projects : Map[String, Project]
-  observations : Map[String, UsageObservation]
-  entries : Map[String, LedgerEntry]
-  rated_events : Map[String, String]
-  periods : Map[String, FinalizedPeriod]
-  budgets : Map[String, Budget]
-  quotas : Map[String, Quota]
-  commitments : Map[String, CapacityCommitment]
-  consumptions : Map[String, EntitlementConsumption]
-  templates : Map[String, AgreementTemplate]
-  acceptances : Map[String, ClickwrapAcceptance]
-  acceptance_keys : Map[String, String]
-  agreements : Map[String, Agreement]
-  signature_callbacks : Map[String, SignatureCallback]
-  grants : Map[String, RoleGrant]
+  mut organizations : Map[String, Organization]
+  mut cost_centers : Map[String, CostCenter]
+  mut projects : Map[String, Project]
+  mut observations : Map[String, UsageObservation]
+  mut entries : Map[String, LedgerEntry]
+  mut rated_events : Map[String, String]
+  mut periods : Map[String, FinalizedPeriod]
+  mut budgets : Map[String, Budget]
+  mut quotas : Map[String, Quota]
+  mut commitments : Map[String, CapacityCommitment]
+  mut consumptions : Map[String, EntitlementConsumption]
+  mut templates : Map[String, AgreementTemplate]
+  mut acceptances : Map[String, ClickwrapAcceptance]
+  mut acceptance_keys : Map[String, String]
+  mut agreements : Map[String, Agreement]
+  mut signature_callbacks : Map[String, SignatureCallback]
+  mut grants : Map[String, RoleGrant]
 }
 pub fn CommercialStore::accept_clickwrap(Self, ClickwrapAcceptance) -> IdempotencyResult raise CommercialError
 pub fn CommercialStore::add_budget(Self, Budget) -> Unit raise CommercialError
@@ -225,8 +231,10 @@ pub fn CommercialStore::append_adjustment(Self, String, String, String, LedgerEn
 pub fn CommercialStore::approve_commitment(Self, String, String, String, Int64) -> CapacityCommitment raise CommercialError
 pub fn CommercialStore::consume_entitlement(Self, EntitlementConsumption) -> IdempotencyResult raise CommercialError
 pub fn CommercialStore::create_agreement(Self, Agreement) -> Unit raise CommercialError
+pub fn CommercialStore::durable_snapshot(Self) -> CommercialDurableSnapshot
 pub fn CommercialStore::export_ledger_csv(Self, String, String, String?, Int64) -> CommercialExport raise CommercialError
 pub fn CommercialStore::finalize_period(Self, String, String, Int64, Int64, String, String, Int, String, Int64) -> FinalizedPeriod raise CommercialError
+pub fn CommercialStore::from_durable_snapshot(CommercialDurableSnapshot) -> Self raise CommercialError
 pub fn CommercialStore::grant_role(Self, RoleGrant) -> Unit raise CommercialError
 pub fn CommercialStore::has_permission(Self, String, String, CommercialPermission, Int64) -> Bool
 pub fn CommercialStore::ingest_usage(Self, UsageObservation) -> IdempotencyResult raise CommercialError
@@ -236,6 +244,7 @@ pub fn CommercialStore::rate_usage(Self, String, String, RateCard, Int64) -> (Le
 pub fn CommercialStore::reconcile_signature_callback(Self, SignatureCallback) -> (Agreement, IdempotencyResult) raise CommercialError
 pub fn CommercialStore::register_agreement_template(Self, AgreementTemplate) -> Unit raise CommercialError
 pub fn CommercialStore::remaining_capacity(Self, String) -> Int64 raise CommercialError
+pub fn CommercialStore::replace_from_durable_snapshot(Self, CommercialDurableSnapshot) -> Unit raise CommercialError
 pub fn CommercialStore::set_template_state(Self, String, String, AgreementTemplateState) -> AgreementTemplate raise CommercialError
 pub fn CommercialStore::snapshot(Self, String) -> CommercialSnapshot raise CommercialError
 pub fn CommercialStore::summary(Self, String, String, Int, Int64) -> CommercialSummary raise CommercialError

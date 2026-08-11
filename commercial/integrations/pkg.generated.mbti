@@ -95,6 +95,13 @@ pub(all) struct ExternalRecordView {
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct IntegrationDurableSnapshot {
+  schema_version : String
+  records : Array[ExternalRecord]
+  callbacks : Array[ExternalCallback]
+  reconciliation_exception_counts : Map[String, Int]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct IntegrationSnapshot {
   schema_version : String
   organization_id : String
@@ -103,14 +110,17 @@ pub(all) struct IntegrationSnapshot {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct IntegrationStore {
-  records : Map[String, ExternalRecord]
-  external_index : Map[String, String]
-  callbacks : Map[String, ExternalCallback]
-  reconciliation_exception_counts : Map[String, Int]
+  mut records : Map[String, ExternalRecord]
+  mut external_index : Map[String, String]
+  mut callbacks : Map[String, ExternalCallback]
+  mut reconciliation_exception_counts : Map[String, Int]
 }
+pub fn IntegrationStore::durable_snapshot(Self) -> IntegrationDurableSnapshot
+pub fn IntegrationStore::from_durable_snapshot(IntegrationDurableSnapshot) -> Self raise IntegrationError
 pub fn IntegrationStore::new() -> Self
 pub fn IntegrationStore::reconcile_callback(Self, ExternalCallback) -> (ExternalRecord, ReconciliationResult) raise IntegrationError
 pub fn IntegrationStore::register(Self, ExternalRecord) -> ReconciliationResult raise IntegrationError
+pub fn IntegrationStore::replace_from_durable_snapshot(Self, IntegrationDurableSnapshot) -> Unit raise IntegrationError
 pub fn IntegrationStore::snapshot(Self, String) -> IntegrationSnapshot
 
 pub(all) enum ReconciliationResult {

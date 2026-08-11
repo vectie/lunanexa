@@ -220,3 +220,49 @@ test "identity records reject money and signature evidence binds document hash" 
   assert_true(snapshot.records[0].external_ref_sha256.has_prefix("sha256:"))
   assert_false(snapshot.to_json().stringify().contains("envelope-secret-1"))
 }
+
+///|
+test "durable integration snapshot replays verified callback history" {
+  let store = @integrations.IntegrationStore::new()
+  let record : @integrations.ExternalRecord = {
+    record_id: "payment-durable",
+    organization_id: "org-durable",
+    kind: Payment,
+    provider: "provider-a",
+    environment: "sandbox",
+    external_ref: "payment-ref",
+    state: Pending,
+    expected_amount_minor: Some(1000L),
+    currency: Some("CNY"),
+    money_scale: Some(2),
+    expected_document_hash: None,
+    entitlement_transaction_ref: None,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1000L,
+  }
+  ignore(store.register(record))
+  ignore(
+    store.reconcile_callback({
+      callback_id: "callback-durable",
+      record_id: record.record_id,
+      organization_id: record.organization_id,
+      provider: record.provider,
+      environment: record.environment,
+      external_ref: record.external_ref,
+      expected_previous_state: Pending,
+      next_state: Settled,
+      amount_minor: Some(1000L),
+      currency: Some("CNY"),
+      document_hash: None,
+      provider_event_unix_ms: 1100L,
+      received_unix_ms: 1200L,
+      signature_verified: true,
+    }),
+  )
+  let snapshot = store.durable_snapshot()
+  let decoded : @integrations.IntegrationDurableSnapshot = @json.from_json(
+    @json.parse(snapshot.to_json().stringify()),
+  )
+  let restored = @integrations.IntegrationStore::from_durable_snapshot(decoded)
+  assert_eq(restored.durable_snapshot(), snapshot)
+}

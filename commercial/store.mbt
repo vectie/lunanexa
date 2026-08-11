@@ -1,22 +1,22 @@
 ///|
 pub struct CommercialStore {
-  organizations : Map[String, Organization]
-  cost_centers : Map[String, CostCenter]
-  projects : Map[String, Project]
-  observations : Map[String, UsageObservation]
-  entries : Map[String, LedgerEntry]
-  rated_events : Map[String, String]
-  periods : Map[String, FinalizedPeriod]
-  budgets : Map[String, Budget]
-  quotas : Map[String, Quota]
-  commitments : Map[String, CapacityCommitment]
-  consumptions : Map[String, EntitlementConsumption]
-  templates : Map[String, AgreementTemplate]
-  acceptances : Map[String, ClickwrapAcceptance]
-  acceptance_keys : Map[String, String]
-  agreements : Map[String, Agreement]
-  signature_callbacks : Map[String, SignatureCallback]
-  grants : Map[String, RoleGrant]
+  mut organizations : Map[String, Organization]
+  mut cost_centers : Map[String, CostCenter]
+  mut projects : Map[String, Project]
+  mut observations : Map[String, UsageObservation]
+  mut entries : Map[String, LedgerEntry]
+  mut rated_events : Map[String, String]
+  mut periods : Map[String, FinalizedPeriod]
+  mut budgets : Map[String, Budget]
+  mut quotas : Map[String, Quota]
+  mut commitments : Map[String, CapacityCommitment]
+  mut consumptions : Map[String, EntitlementConsumption]
+  mut templates : Map[String, AgreementTemplate]
+  mut acceptances : Map[String, ClickwrapAcceptance]
+  mut acceptance_keys : Map[String, String]
+  mut agreements : Map[String, Agreement]
+  mut signature_callbacks : Map[String, SignatureCallback]
+  mut grants : Map[String, RoleGrant]
 }
 
 ///|
@@ -40,6 +40,144 @@ pub fn CommercialStore::new() -> CommercialStore {
     signature_callbacks: Map([]),
     grants: Map([]),
   }
+}
+
+///|
+pub fn CommercialStore::from_durable_snapshot(
+  durable : CommercialDurableSnapshot,
+) -> CommercialStore raise CommercialError {
+  if durable.schema_version != snapshot_schema_version ||
+    durable.commercial.schema_version != snapshot_schema_version {
+    raise InvalidInput("unsupported commercial snapshot")
+  }
+  let store = CommercialStore::new()
+  for value in durable.commercial.organizations {
+    if store.organizations.contains(value.organization_id) {
+      raise InvalidInput("duplicate organization")
+    }
+    store.organizations[value.organization_id] = value
+  }
+  for value in durable.commercial.cost_centers {
+    if store.cost_centers.contains(value.cost_center_id) ||
+      !store.organizations.contains(value.organization_id) {
+      raise InvalidInput("invalid cost center snapshot")
+    }
+    store.cost_centers[value.cost_center_id] = value
+  }
+  for value in durable.commercial.projects {
+    if store.projects.contains(value.project_id) ||
+      !store.organizations.contains(value.organization_id) ||
+      !store.cost_centers.contains(value.cost_center_id) {
+      raise InvalidInput("invalid project snapshot")
+    }
+    store.projects[value.project_id] = value
+  }
+  for value in durable.commercial.usage_observations {
+    if store.observations.contains(value.event_id) ||
+      !store.projects.contains(value.project_id) {
+      raise InvalidInput("invalid usage snapshot")
+    }
+    store.observations[value.event_id] = value
+  }
+  for value in durable.commercial.ledger_entries {
+    if store.entries.contains(value.entry_id) ||
+      !store.observations.contains(value.source_event_id) {
+      raise InvalidInput("invalid ledger snapshot")
+    }
+    store.entries[value.entry_id] = value
+    store.rated_events[value.source_event_id] = value.entry_id
+  }
+  for value in durable.commercial.finalized_periods {
+    let key = period_key(value.organization_id, value.period_id)
+    if store.periods.contains(key) {
+      raise InvalidInput("duplicate period")
+    }
+    store.periods[key] = value
+  }
+  for value in durable.commercial.budgets {
+    if store.budgets.contains(value.budget_id) {
+      raise InvalidInput("duplicate budget")
+    }
+    store.budgets[value.budget_id] = value
+  }
+  for value in durable.commercial.quotas {
+    if store.quotas.contains(value.quota_id) {
+      raise InvalidInput("duplicate quota")
+    }
+    store.quotas[value.quota_id] = value
+  }
+  for value in durable.commercial.commitments {
+    if store.commitments.contains(value.commitment_id) {
+      raise InvalidInput("duplicate commitment")
+    }
+    store.commitments[value.commitment_id] = value
+  }
+  for value in durable.commercial.consumptions {
+    if store.consumptions.contains(value.consumption_id) {
+      raise InvalidInput("duplicate consumption")
+    }
+    store.consumptions[value.consumption_id] = value
+  }
+  for value in durable.commercial.agreement_templates {
+    let key = template_key(value.template_id, value.version)
+    if store.templates.contains(key) {
+      raise InvalidInput("duplicate agreement template")
+    }
+    store.templates[key] = value
+  }
+  for value in durable.commercial.clickwrap_acceptances {
+    if store.acceptances.contains(value.acceptance_id) ||
+      store.acceptance_keys.contains(value.idempotency_key) {
+      raise InvalidInput("duplicate clickwrap acceptance")
+    }
+    store.acceptances[value.acceptance_id] = value
+    store.acceptance_keys[value.idempotency_key] = value.acceptance_id
+  }
+  for value in durable.commercial.agreements {
+    if store.agreements.contains(value.agreement_id) {
+      raise InvalidInput("duplicate agreement")
+    }
+    store.agreements[value.agreement_id] = value
+  }
+  for value in durable.signature_callbacks {
+    if store.signature_callbacks.contains(value.callback_id) ||
+      !store.agreements.contains(value.agreement_id) {
+      raise InvalidInput("invalid signature callback snapshot")
+    }
+    store.signature_callbacks[value.callback_id] = value
+  }
+  for value in durable.commercial.role_grants {
+    if store.grants.contains(value.grant_id) {
+      raise InvalidInput("duplicate role grant")
+    }
+    store.grants[value.grant_id] = value
+  }
+  store
+}
+
+///|
+pub fn CommercialStore::replace_from_durable_snapshot(
+  self : CommercialStore,
+  durable : CommercialDurableSnapshot,
+) -> Unit raise CommercialError {
+  let restored = CommercialStore::from_durable_snapshot(durable)
+  self.organizations = restored.organizations
+  self.cost_centers = restored.cost_centers
+  self.projects = restored.projects
+  self.observations = restored.observations
+  self.entries = restored.entries
+  self.rated_events = restored.rated_events
+  self.periods = restored.periods
+  self.budgets = restored.budgets
+  self.quotas = restored.quotas
+  self.commitments = restored.commitments
+  self.consumptions = restored.consumptions
+  self.templates = restored.templates
+  self.acceptances = restored.acceptances
+  self.acceptance_keys = restored.acceptance_keys
+  self.agreements = restored.agreements
+  self.signature_callbacks = restored.signature_callbacks
+  self.grants = restored.grants
 }
 
 ///|
