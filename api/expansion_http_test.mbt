@@ -12,6 +12,66 @@ async fn expansion_service(path : String) -> @api.ApiService {
 }
 
 ///|
+async test "operator-issued API key authorizes model discovery and revocation is immediate" {
+  let directory = @fs.tmpdir(prefix="lunanexa-access-api-")
+  let access = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "0123456789abcdef0123456789abcdef",
+  )
+  let service = expansion_service("\{directory}/state.json").with_access_store(
+    access,
+  )
+  let operator = { "Authorization": "Bearer operator-token" }
+  let intent : @access.ApiKeyIssueIntent = {
+    key_id: "key-api-test",
+    tenant_ref: "tenant-api-test",
+    subject_ref: "subject-api-test",
+    display_name: "API test key",
+    scopes: [ModelList, Inference],
+    allowed_models: ["model-api-test"],
+    expires_unix_ms: @async.now() + 60000L,
+    maximum_requests: 10L,
+  }
+  let issued_reply = service.handle(
+    Post,
+    "/v1/access/api-keys",
+    operator,
+    intent.to_json().stringify(),
+  )
+  assert_eq(issued_reply.status, 201)
+  let issued : @access.IssuedApiKey = @json.from_json(
+    @json.parse(issued_reply.body),
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{issued.secret}" },
+      "",
+    ).status,
+    200,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/access/api-keys/key-api-test:revoke",
+      operator,
+      "",
+    ).status,
+    200,
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{issued.secret}" },
+      "",
+    ).status,
+    401,
+  )
+}
+
+///|
 async test "commercial API exposes tenant-scoped cost ledger vertical slice" {
   let directory = @fs.tmpdir(prefix="lunanexa-commercial-api-")
   let service = expansion_service("\{directory}/state.json")
