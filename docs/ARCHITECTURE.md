@@ -133,13 +133,18 @@ corresponding runtime action occurred.
 
 ### Browser experience plane
 
-LunaNexa ships two Rabbita browser components from shared public contracts:
+LunaNexa ships two Rabbita browser sites from shared public contracts:
 
 - the management console presents cluster health, users, access grants,
   capacity leases, models, deployments, policy and audit evidence;
-- the developer workbench presents one user's lease and quota, a local browser
-  editing surface, generic model invocation, usage receipts and client-side
-  handoffs to approved editor integrations.
+- the enterprise site presents onboarding, agreement signing requests, lease
+  requests/status, tenant cost/model views and a local-browser WebIDE with
+  generic model invocation and approved editor handoffs.
+
+The enterprise portal writes only tenant-scoped intent. It does not accept a
+node ID or raw access secret. The operator console selects one eligible node;
+the controller then creates a credential reference and reserves the existing
+exclusive-node lease authority idempotently. See `docs/ENTERPRISE_PORTAL.md`.
 
 The workbench is not implicitly a remote administration channel. A
 `WorkspaceLease` remains a time-bounded entitlement to control-plane admission
@@ -228,6 +233,14 @@ Use durable standard infrastructure through narrow ports:
 Development adapters may be local, but production state must survive controller
 restart and must not live only on a DGX node.
 
+PostgreSQL schema v1 is implemented for enterprise memberships, agreements,
+tenant lease requests, workspace users, grants, leases and admission
+reservations. Each mutation commits a canonical typed snapshot and normalized
+indexed projections together. File persistence for these domains is now an
+explicit development fallback. Remaining controller, registry, commercial and
+technical-policy stores retain their existing adapters and must be migrated
+before claiming a fully database-backed control plane.
+
 The artifact store is authoritative; node-local materializations are disposable
 assignment-scoped replicas. This keeps model transfer out of the management API
 process while allowing a selected DGX to start without the serving container
@@ -307,7 +320,10 @@ lunanexa/
   telemetry/              # metrics, events and bounded logs
   policy/                 # quotas, data classes and placement policy
   workspace/              # provider-neutral workspace, lease and integration contracts
+  portal/                 # enterprise membership, agreement and lease-request contracts
+  portal/store/           # durable centralized enterprise workflow state
   ui/                     # Rabbita management console generated from typed contracts
+  ui/enterprise/          # Rabbita enterprise portal
   ui/workbench/           # Rabbita individual developer workbench
   tests/fixtures/         # non-secret deterministic fixtures
   deploy/                 # manifests and documented deployment overlays

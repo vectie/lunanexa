@@ -11,15 +11,15 @@ Use the pinned dependencies in `moon.mod`:
 ```sh
 sh scripts/release-gate.sh
 moon build cmd/control cmd/node cmd/cli cmd/benchmark cmd/evidence cmd/recovery --target native
-moon build cmd/console --target js
-moon build cmd/workbench --target js
+moon build cmd/console cmd/enterprise cmd/workbench --target js
 sh scripts/build-browser-bundles.sh
 ```
 
 The browser bundle command produces self-contained static roots at
-`_build/browser-dist/console` and `_build/browser-dist/workbench`. Serve the
-console at `/` and the workbench at `/workbench/` behind the same trusted TLS
-origin as `/v1`; both default to that page origin unless
+`_build/browser-dist/console`, `_build/browser-dist/enterprise` and
+`_build/browser-dist/workbench`. Serve the console on the operator origin and
+serve `/enterprise/` plus `/workbench/` on the enterprise origin. Both origins
+proxy `/v1` to the same controller and default to their page origin unless
 `globalThis.LUNANEXA_API_ENDPOINT` is injected before their module script.
 
 The console image copies the contents of `browser-dist/console` to its document
@@ -67,6 +67,9 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_WORKSPACE_PATH` | Durable user, access-grant and workspace-lease snapshot |
 | `LUNANEXA_DEPLOYMENT_PATH` | Durable catalog and model-service operation snapshot |
 | `LUNANEXA_EXCLUSIVE_LEASE_PATH` | Durable exclusive-node lease snapshot |
+| `LUNANEXA_PORTAL_PATH` | Durable enterprise memberships, agreement projections and lease requests |
+| `LUNANEXA_PERSISTENCE_BACKEND` | `postgres` in production; `file` is an explicit development fallback |
+| `LUNANEXA_DATABASE_URL` | Secret-provided PostgreSQL URL; required when the backend is `postgres` |
 | `LUNANEXA_AVAILABLE_SECRET_REFS` | Comma-separated deployment-owned secret reference names available to preflight; never secret values |
 | `LUNANEXA_REQUIRE_WORKSPACE_LEASE` | `1` requires trusted subject, active grant and active lease before workload admission |
 | `LUNANEXA_CONTROLLER_EPOCH` | Positive fencing epoch, monotonically raised |
@@ -89,8 +92,14 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_COSIGN_BINARY` | Allowlisted absolute Cosign binary path |
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only mounted public trust key |
 
-Expose the console, workbench and `/v1` API on one TLS origin as shown in
-`deploy/ingress.yaml`. Keep `/metrics` management-only. Production ingress or a
+PostgreSQL stores enterprise registrations, portal agreements and lease
+requests, workspace users, grants, leases and admission snapshots. It never
+stores login passwords. See `docs/DATABASE.md` for migrations, least-privilege
+roles, backup and recovery.
+
+Expose the operator console and enterprise portal/WebIDE as separate sites as
+shown in `deploy/ingress.yaml`; both proxy the same `/v1` API. Keep `/metrics`
+management-only. Production ingress or a
 service mesh owns server TLS, client-certificate validation and identity
 translation; the native process accepts traffic only from that trusted
 management boundary.

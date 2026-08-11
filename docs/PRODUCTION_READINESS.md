@@ -1,6 +1,6 @@
 # Production readiness and adversarial test record
 
-Date: 2026-08-10
+Date: 2026-08-11
 Target topology: one management node, `/data/models`, and four DGX Spark nodes
 
 ## Decision
@@ -12,8 +12,10 @@ physical-cluster, transport, artifact, runtime, backup and human acceptance
 evidence listed in this document.
 
 The managed model-service path is the path under test. Interactive exclusive
-node leasing remains non-production because the DGX-side account, short-lived
-SSH access, offline expiry, cleanup and sanitization daemon is not implemented.
+node leasing remains non-production even though the node-local signed-generation
+guard, offline expiry and fixed helper protocol are implemented: the deployment
+must still supply and physically validate its privileged account/SSH/container
+sanitization helper.
 
 ## Security and failure model
 
@@ -85,6 +87,13 @@ existing installation, fence mutations, retain a verified v1 backup, and use a
 reviewed migration or recreate the deployment-operation snapshot from an
 authoritative source. Do not point the new controller at an unreviewed v1 file.
 
+PostgreSQL schema v2 scopes enterprise lease-request idempotency to tenant and
+subject. This prevents a tenant from colliding with another tenant's retry key.
+Portal snapshot restore also rejects duplicate active subjects, cross-membership
+lease records and duplicate scoped retry keys. Free-text limits are enforced on
+the stored value before trimming and reject NUL/line controls, preventing
+whitespace amplification and forged multiline audit/UI values.
+
 ### Operator console
 
 - The one-click action is disabled until the service identifier matches the
@@ -115,6 +124,16 @@ This is deterministic mutation and boundary fuzzing, not coverage-guided native
 fuzzing. It is deliberately reproducible in the release gate. A future
 coverage-guided harness should be added when the native MoonBit toolchain offers
 a supported sanitizer/fuzzer integration suitable for the production build.
+
+`portal/adversarial_test.mbt` adds more than 10,000 deterministic portal
+mutations covering every identifier length through 300, injection bytes at
+every position of 256-character identifiers, requested-model cardinality,
+free-text length/control boundaries, reserved Unix accounts and extreme time
+ranges. The PostgreSQL integration harness starts from schema v1, upgrades to
+v2, round-trips SQL-injection payloads only as bound data, rejects dynamic table
+names outside an allowlist, proves cross-tenant retry independence, and proves
+that a duplicate active-identity constraint failure rolls back both snapshot
+and projections.
 
 ### API and native transport
 
@@ -178,8 +197,8 @@ does not replace them.
 After hardening, a focused four-node run and `scripts/release-gate.sh` passed
 back-to-back. The consolidated result was:
 
-- 154/154 native MoonBit tests;
-- 45/45 MoonBit JavaScript tests across console, workbench and workspace;
+- 228/228 native MoonBit tests;
+- 51/51 MoonBit JavaScript tests across console, enterprise, workbench and workspace;
 - 8/8 editor-client tests;
 - process recovery, four-node simulation, isolation, dependency, image,
   contract, secret, response and evidence-export checks.
@@ -205,8 +224,10 @@ From a clean reviewed checkout:
 
 ```sh
 moon test deployment/adversarial_test.mbt --target native --deny-warn
+moon test portal/adversarial_test.mbt --target native --deny-warn
 moon test deployment/store --target native --deny-warn
 moon test api/deployment_http_test.mbt --target native --deny-warn
+sh scripts/postgres-integration-test.sh
 moon test ui cmd/console --target js --deny-warn
 sh scripts/four-node-simulation.sh /secure/evidence/lunanexa-simulation
 sh scripts/release-gate.sh
@@ -228,7 +249,7 @@ The 2026-08-10 campaign passed with retained evidence at
 materialization across four independent cache roots, corrupt artifact
 quarantine, assigned-cache preservation, hardened OCI arguments, generic
 network rejection, control-plane attacks, restart fencing and four-node
-disruption. The final repository gate then passed 154/154 native tests.
+disruption. The final repository gate then passed 228/228 native tests.
 
 Run the process and four-node commands only on an isolated test host. The
 explicit simulation path retains credentials and state generated for the test;
@@ -272,7 +293,9 @@ immutable evidence reference:
 
 ## Release blockers that must remain visible
 
-- DGX exclusive-user provisioning and sanitization are not implemented.
+- The DGX lease watchdog and fixed helper protocol are implemented; the
+  privileged host-specific provisioning/sanitization service is not bundled
+  and remains a required physical deployment component.
 - LunaNexa relies on an external mTLS proxy/service mesh, artifact service, OCI
   registry, certificate authority, secret manager and metrics backend.
 - The base deployment templates contain placeholders and are not production
@@ -281,5 +304,5 @@ immutable evidence reference:
   approved node-local HTTPS route must be supplied and tested externally.
 - Real DGX performance, thermal behavior and NVIDIA/runtime compatibility have
   not been demonstrated by the local simulation.
-- A complete backup format for every management-plane snapshot is not yet
-  implemented.
+- PostgreSQL plus signed controller-PVC backups cover the implemented stores;
+  production WAL archiving, PITR and restore evidence are still external gates.

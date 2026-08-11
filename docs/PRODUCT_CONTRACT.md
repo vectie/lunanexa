@@ -38,7 +38,8 @@ The initial distribution may produce several binaries or services:
 | Qualified-service ports | Normalized identity, signature, payment and invoice evidence | No |
 | Management console | Rabbita cluster operations, access and lease administration | No |
 | Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
-| Developer workbench | Rabbita user workspace and provider-neutral model tooling | No |
+| Enterprise portal | Rabbita onboarding, agreements, lease requests, cost/model views | No |
+| Developer workbench | Rabbita user workspace and provider-neutral model tooling inside the enterprise site | No |
 | Exclusive lease manager | Node reservation, access lifecycle, expiry and sanitization authority | No |
 | Node agent | Inventory, assignment-scoped model materialization, runtime supervision and heartbeats | Yes |
 | Runtime adapter | Starts and observes an approved serving runtime | Yes |
@@ -46,11 +47,12 @@ The initial distribution may produce several binaries or services:
 These components share one product contract, release train, operator console
 and version. Do not brand them as separate products.
 
-The two browser surfaces have different authorities. The management console is
-for cluster operators and administrators. The developer workbench is for an
-individual authorized consumer and may expose a Web IDE shell, lease status,
-usage, model invocation and client-side editor handoffs. Neither browser
-surface runs on a managed GPU node.
+The two browser sites have different authorities. The management console is
+for cluster operators and administrators. The enterprise site is for customer
+administrators, legal signers, lease requesters, billing viewers and developers;
+it includes the WebIDE. Both sites read one authoritative management API.
+Neither site runs on a managed GPU node, and enterprise users cannot select or
+activate a DGX node.
 
 Commercial control is infrastructure governance, not application billing
 logic. It accepts opaque organization, project, actor and provider references;
@@ -139,6 +141,9 @@ have produced accepted receipts.
 - Every consequential operation creates an immutable audit event with actor,
   policy, target, prior state, next state and result.
 - Administrative and inference credentials are separate.
+- Production enterprise registration and workspace authority are committed to
+  PostgreSQL; authentication passwords remain owned by the external identity
+  provider and are never LunaNexa database fields.
 
 ## 6a. Management-plane deployment contract
 

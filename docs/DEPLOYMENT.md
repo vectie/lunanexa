@@ -56,13 +56,15 @@ verified and cached locally before its runtime container starts.
 | Capability | Status | Deployment implication |
 | --- | --- | --- |
 | Controller, scheduler, registry, API and audit | Implemented | Deploy on the management node |
-| Rabbita console and workbench | Implemented | Serve behind the trusted TLS ingress |
+| Rabbita operator console and enterprise portal/WebIDE | Implemented | Serve as two sites behind the trusted TLS ingress |
+| Durable enterprise signing and lease-request workflow | Implemented | Configure `LUNANEXA_PORTAL_PATH`; production execution still needs a real signature provider |
 | DGX heartbeat, telemetry and assignment reconciliation | Implemented | Deploy one protected agent per DGX |
 | Selected-node model pull and local verification | Implemented | Requires an external S3-compatible HTTPS artifact service |
 | Digest-pinned runtime supervision | Implemented | Requires Podman/Docker, an OCI registry and an approved runtime image |
 | Controller/node transport mTLS termination | External | Provide a trusted service-mesh or loopback proxy; do not expose controller HTTP directly |
 | Exclusive lease reservation and managed-placement fence | Implemented | Safe for control-plane testing |
-| Exclusive user account/SSH provisioning and sanitization | Not implemented | Do not offer production interactive leases yet |
+| Exclusive lease watchdog and helper protocol | Implemented | Persists signed generation, expires offline, reports provision/revoke/sanitize/quarantine evidence |
+| Privileged account/SSH/sanitization helper | External host component | Install a reviewed root-owned helper behind `/run/lunanexa/lease-helper.sock`; fail closed if absent |
 | OCI registry, CA, secret manager and metrics backend | External | Provision independently; they are not LunaNexa services |
 
 ## 2. Non-negotiable boundaries
@@ -119,6 +121,9 @@ Each DGX needs:
 - Podman or Docker at an allowlisted path;
 - a protected engine socket at `unix:///run/podman/podman.sock` or an approved
   equivalent below `/run`;
+- a root-owned exclusive-lease helper service listening only on
+  `/run/lunanexa/lease-helper.sock`, plus the unprivileged fixed-protocol client
+  at `/usr/libexec/lunanexa-lease-helper-client`;
 - a pre-created OCI network named `lunanexa-runtime`;
 - host directories `/etc/lunanexa` and `/var/lib/lunanexa`;
 - network access to the controller, artifact HTTPS endpoint, OCI registry and
@@ -129,6 +134,13 @@ Each DGX needs:
 The supplied DaemonSet uses host paths for configuration, state and the Podman
 socket. Confirm that its non-root process identity can read the configuration
 files, write `/var/lib/lunanexa`, and access only the intended engine socket.
+It also requires the lease-helper socket. The node agent never invokes a shell
+or accepts controller-supplied commands: it calls only the fixed
+`provision|revoke|sanitize|quarantine` client actions with validated lease IDs,
+usernames, credential references and expiry. The privileged service must resolve
+credential references locally, lock access at expiry, remove lease-labelled
+containers and user state, and return a bounded receipt. Its absence or nonzero
+result quarantines the node.
 
 ### Node transport boundary
 
@@ -297,7 +309,14 @@ The `lunanexa-control-credentials` Secret must provide:
 - `monitoring-token`;
 - `assignment-signing-secret`;
 - `catalog-signing-secret`;
-- `exclusive-lease-signing-secret`.
+- `exclusive-lease-signing-secret`;
+- `api-key-issuer-secret` (at least 32 random bytes, independent of every other
+  signing authority).
+
+The separate `lunanexa-database` Secret must provide `database`, `username`,
+`password`, and `url`. The URL is consumed only by the management controller
+and must enable verified TLS when the database is external. Never expose
+PostgreSQL to a GPU node or public ingress.
 
 Use independent random values. `assignment-signing-secret` is also provisioned
 to each node as the protected assignment verification key. Treat disclosure of
@@ -395,11 +414,13 @@ order:
 
 1. namespace labels, service accounts, PVC, ConfigMaps and secret-provider
    resources derived from `deploy/prerequisites.yaml`;
-2. controller from `deploy/controller.yaml`;
-3. console and workbench;
-4. network policies;
-5. ingress;
-6. the node-agent DaemonSet after the first DGX has been prepared.
+2. PostgreSQL from `deploy/postgres.yaml`, or the approved external PostgreSQL
+   service, then run the `cmd/database` migration check;
+3. controller from `deploy/controller.yaml`;
+4. console and enterprise/workbench sites;
+5. network policies;
+6. ingress;
+7. the node-agent DaemonSet after the first DGX has been prepared.
 
 Check the management plane before enrollment:
 
@@ -531,11 +552,13 @@ lunanexa transition-node-lease LEASE_ID TRANSITION_FILE.json
 The lease body contains a validated username and an `ssh-cert:` or `secret:`
 reference. It never contains a password, private key or certificate value.
 
-Production interactive access is not ready until the protected DGX daemon can
-perform typed account provisioning, install short-lived SSH access, enforce
-offline expiry, revoke access, stop tenant containers, sanitize lease data and
-report cleanup evidence. Until that node-side slice is implemented and tested,
-do not transition real leases to `Active` or give users DGX login access.
+The protected DGX node agent now persists the signed lease generation, enforces
+offline expiry, drives typed provision/revoke/sanitize/quarantine actions and
+reports lifecycle evidence. Production interactive access is not ready until
+the deployment's root-owned helper service implements those fixed actions for
+the chosen account, SSH and container engine policy and passes the physical
+adversarial gate. Until then, do not transition real leases to `Active` or give
+users DGX login access.
 
 ## 13. Acceptance checklist
 

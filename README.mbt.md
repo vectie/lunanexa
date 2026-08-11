@@ -104,10 +104,12 @@ composed synthetic production-fault campaign. The resulting summary keeps real
 mTLS, container-engine, DGX, thermal and human-approval claims explicitly false.
 
 Native executables live in `cmd/control`, `cmd/node`, `cmd/cli`,
-`cmd/benchmark`, `cmd/evidence`, and `cmd/recovery`; the Rabbita application
-for administrators lives in `cmd/console`, and the individual developer
-workbench lives in `cmd/workbench`. Both use the shared provider-neutral
-workspace contract described in [the workspace guide](docs/WORKSPACES.md).
+`cmd/benchmark`, `cmd/evidence`, and `cmd/recovery`. The Rabbita operator site
+lives in `cmd/console`; the enterprise portal lives in `cmd/enterprise`, with
+the same-site WebIDE in `cmd/workbench`. Both sites consume one central API and
+shared provider-neutral contracts. See the
+[enterprise portal guide](docs/ENTERPRISE_PORTAL.md) and
+[workspace guide](docs/WORKSPACES.md).
 The initial scoped editor client lives in `extensions/vscode`.
 The controller requires deployment-provided secret
 values and immutable runtime/model digests.
@@ -123,6 +125,8 @@ signature, payment or tax-invoice providers.
 ## Documents
 
 - [Product contract](docs/PRODUCT_CONTRACT.md)
+- [Enterprise portal and lease workflow](docs/ENTERPRISE_PORTAL.md)
+- [PostgreSQL management database](docs/DATABASE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Phased implementation plan](docs/PLAN.md)
 - [Architecture decisions](docs/DECISIONS.md)

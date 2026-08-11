@@ -46,6 +46,19 @@ spec:
               value: /var/lib/lunanexa/deployments.json
             - name: LUNANEXA_EXCLUSIVE_LEASE_PATH
               value: /var/lib/lunanexa/exclusive-leases.json
+            - name: LUNANEXA_PORTAL_PATH
+              value: /var/lib/lunanexa/enterprise-portal.json
+            - name: LUNANEXA_ACCESS_PATH
+              value: /var/lib/lunanexa/access.json
+            - name: LUNANEXA_TECHNICAL_PATH
+              value: /var/lib/lunanexa/technical.json
+            - name: LUNANEXA_PERSISTENCE_BACKEND
+              value: postgres
+            - name: LUNANEXA_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-database
+                  key: url
             - name: LUNANEXA_AVAILABLE_SECRET_REFS
               value: "runtime-token"
             - name: LUNANEXA_REQUIRE_WORKSPACE_LEASE
@@ -123,6 +136,11 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: exclusive-lease-signing-secret
+            - name: LUNANEXA_API_KEY_ISSUER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: api-key-issuer-secret
             - name: LUNANEXA_COSIGN_BINARY
               value: /usr/bin/cosign
             - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH

@@ -35,9 +35,10 @@ The repository now implements the deployable LunaNexa baseline:
 - deterministic technical policy cores and authenticated decision endpoints for
   prewarm, probes, cache reconciliation, autoscaling, backpressure, transfer
   grants and reviewed sidecars;
-- an in-memory commercial contract core for organizations, cost centers,
+- a commercial contract core for organizations, cost centers,
   projects, rating, ledger finalization, budgets, quotas, commitments, RBAC and
-  digital agreements, plus normalized external-provider evidence records;
+  digital agreements, plus normalized external-provider evidence records,
+  with restart-complete PostgreSQL snapshots and atomic callback/business commits;
 - Rabbita routes for cost-center posture, digital agreement evidence and
   qualified-service adapters, with explicit non-production marking for the
   LunaFide deterministic test simulator;
@@ -49,8 +50,19 @@ The repository now implements the deployable LunaNexa baseline:
   non-terminal lease per node, management API/CLI operations, node cordon/drain
   directives and immediate exclusion from managed assignment, placement,
   deployment-preflight and capacity calculations;
-- live Rabbita management views for workspace authority, plus a separately
-  deployable individual workbench with browser-local editing, self-readiness,
+- a durable enterprise portal authority with tenant memberships and roles,
+  immutable agreement projections, external-signature request/execution
+  separation, agreement-gated lease submissions and generation-fenced operator
+  review that reserves exactly one selected node without accepting a password;
+- durable hashed API credentials with tenant/subject/model scopes, expiry,
+  revocation, bounded request counters, one-time secret disclosure, model
+  discovery and canonical/OpenAI-compatible non-streaming inference entry;
+- a DGX-side exclusive-lease guard with local generation state, offline expiry,
+  fixed helper actions, sanitization/quarantine fencing and authenticated
+  lifecycle observations back to the controller;
+- live Rabbita management views for workspace authority and enterprise lease
+  approval, plus an enterprise portal for agreements, lease requests, costs and
+  the shared model catalog, and a same-site individual workbench with browser-local editing, self-readiness,
   canonical inference transport, bounded receipts and typed
   VS Code/CodeBuddy/WorkBuddy/Trae/Qoder handoff states;
 - shared native/JavaScript workspace user, grant, lease, session, capability
@@ -96,10 +108,14 @@ The simulator is functional evidence only. Its summary always records
 production-provider, measured-performance or human-acceptance requirements
 below.
 
-The commercial API integration and LunaFide are also functional contract
-evidence, not production accounting or trust infrastructure. Commercial state
-and external-callback indexes are currently in memory. Production acceptance
-requires a transactional persistent adapter and approved real providers.
+Enterprise membership, portal agreement/lease-request, workspace user/grant/
+lease and admission state have a transactional PostgreSQL adapter with
+normalized indexes and restart tests. Commercial ledger state, provider
+callback history, API credentials, prewarm operations and transfer replay
+nonces are now restart durable; commercial callback and business snapshots
+commit atomically. LunaFide remains functional contract evidence, not
+production trust infrastructure, and must be replaced by approved real
+providers.
 
 ## External acceptance still required
 
@@ -138,9 +154,9 @@ revocation operations. The workbench and VS Code extension are working
 northbound transports; third-party developer-tool handoffs remain typed
 integration points rather than bundled vendor runtimes.
 
-Exclusive-node leasing currently implements the management-plane authority and
-placement safety fence. The protected node-side host provisioner, short-lived
-SSH-certificate installation, local offline expiry watchdog, scoped model/OCI
-pull grants, sanitization executor and quarantine recovery are the next slices;
-until those exist and pass the physical-node gate, a lease must not be treated
-as production interactive access.
+Exclusive-node leasing implements the management authority, placement fence,
+node-local offline-expiry watchdog, fixed provision/revoke/sanitize/quarantine
+protocol and observation receipts. The root-owned host helper remains a
+deployment component because account databases, SSH policy and container-engine
+isolation are host-specific. Until that reviewed helper and its physical-DGX
+tests exist, a lease must not be treated as production interactive access.

@@ -325,10 +325,10 @@ Repository gate:
 
 Production gate still required:
 
-- replace the in-memory commercial and integration stores with a transactional,
-  restart-durable adapter and prove callback/business atomicity under crash;
-- persist prewarm reservations and consumed transfer nonces; execute autoscale
-  decisions through idempotent deployment operations under a generation fence;
+- crash-test the implemented transactional commercial/integration snapshot
+  adapter against the selected production PostgreSQL failover system;
+- physically validate the implemented prewarm/nonce persistence and idempotent
+  generation-fenced autoscale execution against the four DGX nodes;
 - connect node probe/cache telemetry and approved digest-pinned sidecar catalog;
 - replace LunaFide with approved production identity, signature, payment and
   invoice providers and validate their real webhook trust and retention rules;

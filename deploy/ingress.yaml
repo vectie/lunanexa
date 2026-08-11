@@ -13,7 +13,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
 spec:
   tls:
-    - hosts: [lunanexa.invalid]
+    - hosts: [lunanexa.invalid, enterprise.lunanexa.invalid]
       secretName: lunanexa-ingress-tls
   rules:
     - host: lunanexa.invalid
@@ -52,5 +52,29 @@ spec:
             backend:
               service:
                 name: lunanexa-console
+                port:
+                  number: 8080
+    - host: enterprise.lunanexa.invalid
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-control
+                port:
+                  number: 8080
+          - path: /workbench
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-enterprise
+                port:
+                  number: 8080
+          - path: /enterprise
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-enterprise
                 port:
                   number: 8080

@@ -82,6 +82,7 @@ start_controller() {
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
     LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
+    LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
     LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
     "$control_binary" >"$log_path" 2>&1 &
@@ -211,6 +212,7 @@ env \
   LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
   LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority" \
   LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
+  LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
   LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
   LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
   "$control_binary" >"$stale_log" 2>&1 && {

@@ -117,6 +117,7 @@ start_controller() {
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="$assignment_secret" \
     LUNANEXA_CATALOG_SIGNING_SECRET="simulation-catalog-authority" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="simulation-exclusive-lease-authority" \
+    LUNANEXA_API_KEY_ISSUER_SECRET="simulation-api-key-authority-0123456789" \
     LUNANEXA_COSIGN_BINARY='/usr/bin/cosign' \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$simulation_directory/cosign.pub" \
     LUNANEXA_RUNTIME_CONCURRENCY=1 \
