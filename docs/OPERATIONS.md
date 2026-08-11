@@ -1,5 +1,9 @@
 # Installation, upgrade, rollback, and handoff
 
+For the concrete management-node plus four-DGX installation sequence, use
+`docs/DEPLOYMENT.md`. This document remains the detailed configuration and
+operator reference.
+
 ## Build and repository gate
 
 Use the pinned dependencies in `moon.mod`:
@@ -62,6 +66,7 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_TELEMETRY_PATH` | Durable bounded telemetry/evidence snapshot |
 | `LUNANEXA_WORKSPACE_PATH` | Durable user, access-grant and workspace-lease snapshot |
 | `LUNANEXA_DEPLOYMENT_PATH` | Durable catalog and model-service operation snapshot |
+| `LUNANEXA_EXCLUSIVE_LEASE_PATH` | Durable exclusive-node lease snapshot |
 | `LUNANEXA_AVAILABLE_SECRET_REFS` | Comma-separated deployment-owned secret reference names available to preflight; never secret values |
 | `LUNANEXA_REQUIRE_WORKSPACE_LEASE` | `1` requires trusted subject, active grant and active lease before workload admission |
 | `LUNANEXA_CONTROLLER_EPOCH` | Positive fencing epoch, monotonically raised |
@@ -80,6 +85,7 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_MONITORING_TOKEN` | Read-only `/metrics` authority |
 | `LUNANEXA_ASSIGNMENT_SIGNING_SECRET` | Controller HMAC signer; matching verifier key is host-owned on nodes |
 | `LUNANEXA_CATALOG_SIGNING_SECRET` | Independent controller HMAC authority for immutable management-plane templates |
+| `LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET` | Independent controller HMAC authority for exclusive-node lease generations |
 | `LUNANEXA_COSIGN_BINARY` | Allowlisted absolute Cosign binary path |
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only mounted public trust key |
 
@@ -216,6 +222,22 @@ lunanexa deploy deploy/model-service-intent.example.json
 lunanexa deployments
 lunanexa deployment text-small-service
 ```
+
+For an exclusive machine lease, submit a credential reference rather than a
+password or private key, then advance only with receipts from the node-side
+provisioning and cleanup workflow:
+
+```sh
+lunanexa lease-node exclusive-lease.json
+lunanexa exclusive-leases
+lunanexa transition-node-lease lease-id provisioning-transition.json
+```
+
+The first request immediately removes the selected node from managed placement
+and publishes a cordon or drain directive. Do not transition to `Active` until
+managed assignments and observed deployments on that node are empty. See
+`docs/EXCLUSIVE_NODE_LEASES.md` for the required revocation and sanitization
+sequence.
 
 The controller fills the template approval receipt and signature. The example
 digests and artifact location are placeholders and must be replaced by the

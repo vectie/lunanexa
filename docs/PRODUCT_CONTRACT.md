@@ -33,9 +33,13 @@ The initial distribution may produce several binaries or services:
 | Scheduler | Placement, queues, capacity and failover | No |
 | Registry | Models, artifacts, runtimes, licenses and evaluations | No |
 | Metering | Usage, quotas, timing and infrastructure audit | No |
+| Commercial control | Organizations, cost centers, rating, ledger, budgets, commitments and agreements | No |
+| Technical policy | Prewarm, probes, cache reconciliation, autoscaling, backpressure and transfer grants | No |
+| Qualified-service ports | Normalized identity, signature, payment and invoice evidence | No |
 | Management console | Rabbita cluster operations, access and lease administration | No |
 | Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
 | Developer workbench | Rabbita user workspace and provider-neutral model tooling | No |
+| Exclusive lease manager | Node reservation, access lifecycle, expiry and sanitization authority | No |
 | Node agent | Inventory, assignment-scoped model materialization, runtime supervision and heartbeats | Yes |
 | Runtime adapter | Starts and observes an approved serving runtime | Yes |
 
@@ -48,11 +52,20 @@ individual authorized consumer and may expose a Web IDE shell, lease status,
 usage, model invocation and client-side editor handoffs. Neither browser
 surface runs on a managed GPU node.
 
+Commercial control is infrastructure governance, not application billing
+logic. It accepts opaque organization, project, actor and provider references;
+raw prompts, identity documents, payment credentials and provider secrets are
+not commercial state. Qualified-service implementations remain external
+providers behind normalized ports. A test double may exercise the port only
+when it identifies itself as non-production.
+
 VS Code extensions and integrations with external developer tools are clients
-of the published LunaNexa contract. They receive scoped, expiring access and
-provider-neutral capability metadata. They do not place repository checkouts,
-editor agents, arbitrary shells, application credentials or product-specific
-control paths on managed nodes.
+of the published LunaNexa contract. In managed-service mode they receive
+scoped, expiring provider access and do not place repository checkouts, editor
+agents, arbitrary shells, application credentials or product-specific control
+paths on GPU nodes. Exclusive-node mode is a separate infrastructure contract:
+one subject receives time-bounded access to one named node after managed
+placement has been disabled.
 
 ## 4. Northbound contract
 
@@ -102,11 +115,19 @@ Nodes report typed inventory, heartbeat, deployment state, capacity, runtime
 health and bounded telemetry. They never receive MoonSuite workflows, domain
 records or product credentials.
 
+An exclusive-node directive is distinct from a model-service assignment. It
+names one node, one opaque subject, one validated local username, one host-owned
+credential reference, one expiry and one generation. Raw passwords and private
+keys are not contract fields. A node under a non-terminal exclusive lease is
+ineligible for managed assignments until access revocation and sanitization
+have produced accepted receipts.
+
 ## 6. Authority and security
 
 - Mutual authentication is required between controller and nodes.
-- Node agents initiate or maintain a narrow management channel; arbitrary
-  inbound administration is not part of the data plane.
+- Node agents initiate or maintain a narrow management channel. Interactive
+  access exists only in explicit exclusive-node mode and is provisioned through
+  a typed lease directive, never arbitrary controller-supplied shell text.
 - Desired state is signed and generation-numbered. A stale controller cannot
   silently overwrite a newer deployment.
 - Model artifacts and runtime images are pinned by an exact 64-hexadecimal-digit
@@ -151,7 +172,8 @@ controller never opens an SSH, copy or arbitrary shell channel.
 - Public multi-tenant hosting before the private cluster passes its operational
   and security gates.
 - Hosting source repositories, arbitrary development containers or IDE agent
-  runtimes on managed GPU nodes.
+  runtimes while a node is in managed-service mode. An exclusive lessee may run
+  their own development workload inside the separately governed lease boundary.
 
 ## 8. Release acceptance
 

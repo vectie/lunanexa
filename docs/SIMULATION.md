@@ -56,3 +56,24 @@ Those remain part of the real four-node and named-human release gate in
 If VM or container isolation is later required, each simulation-only process
 can be wrapped in a separate guest without changing its LunaNexa protocol. The
 functional campaign should remain the portable baseline used in CI.
+
+## Synthetic production fault campaign
+
+For a broader, still synthetic, production rehearsal run:
+
+```sh
+sh scripts/production-fault-simulation.sh ./production-fault-evidence
+```
+
+This composes the deterministic deployment mutation corpus, four independent
+artifact caches, digest/signature quarantine, assigned-cache pruning safety,
+OCI argument confinement, generic network rejection, authentication/replay
+fences, backup integrity, process fencing, release scans and the four-node
+disruption scenario. Each component writes a separate log and `summary.json`
+states exactly which claims are synthetic and which real-cluster fields remain
+false.
+
+The synthetic campaign deliberately does not turn protocol simulation into
+hardware evidence. In particular, real mTLS, a real Podman/Docker engine,
+complete management-plane restore, DGX behavior, thermals, power and human
+approval remain false in its summary.

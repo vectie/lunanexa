@@ -23,15 +23,27 @@ flowchart TB
       SCH["Scheduler and admission"]
       REG["Model/runtime registry"]
       STORE["Metadata and audit store"]
+      COM["Commercial control<br/>cost centers, ledger, agreements"]
+      TECH["Technical policy<br/>prewarm, probes, scaling"]
+      QPORT["Qualified-service ports"]
       UI["Rabbita management console"]
       WB["Rabbita developer workbench"]
       API --> SCH
       CTRL <--> SCH
       CTRL <--> REG
       CTRL <--> STORE
+      API --> COM
+      CTRL --> TECH
+      COM --> QPORT
       UI --> API
       WB --> API
     end
+
+    subgraph External["External provider trust domains"]
+      QSP["Approved identity, signature,<br/>payment and invoice providers"]
+    end
+
+    QPORT <-->|"signed normalized callbacks"| QSP
 
     subgraph Cluster["GPU execution trust domain"]
       N1["Node agent + runtimes · DGX 1"]
@@ -88,6 +100,37 @@ data-class, secret-reference, or capacity requirements. Missing prerequisites
 produce a durable blocked operation with typed findings. See
 `docs/MANAGEMENT_PLANE.md`.
 
+### Commercial and agreement plane
+
+The commercial core owns an opaque organization → cost center → project
+hierarchy, exactly-once usage rating, immutable finalized periods, linked
+adjustments, budgets, quotas, capacity commitments, RBAC and versioned agreement
+evidence. Provider-specific identity, payment, invoice and signature records
+are normalized at the boundary; raw provider references are hashed in public
+snapshots.
+
+Commercial mutations are subject to the same authenticated operator boundary
+as deployment control. Production requires a transactional persistence adapter
+that commits the tenant snapshot, callback idempotency index and business
+transition together. The repository's current commercial store is an in-memory
+core and API integration, so it is suitable for contract and UI validation but
+not restart-durable production accounting.
+
+`LunaFide` is an isolated deterministic test double for this external boundary.
+Its callbacks are replay-, sequence-, tenant- and aggregate-checked, but its
+test MAC is explicitly not a qualified signature. It cannot satisfy a
+production trust, payment or tax requirement.
+
+### Technical decision plane
+
+Prewarm transitions, health-probe evaluation, safe cache telemetry,
+metrics-driven autoscaling, bounded admission, short-lived transfer grants and
+reviewed sidecar profiles are pure deterministic decisions. Controllers must
+persist prewarm state and consumed nonces transactionally, execute scale plans
+idempotently under the deployment generation fence, and resolve only approved
+digest-pinned sidecar image keys. A decision endpoint alone does not prove the
+corresponding runtime action occurred.
+
 ### Browser experience plane
 
 LunaNexa ships two Rabbita browser components from shared public contracts:
@@ -98,19 +141,35 @@ LunaNexa ships two Rabbita browser components from shared public contracts:
   editing surface, generic model invocation, usage receipts and client-side
   handoffs to approved editor integrations.
 
-The workbench is not a remote administration channel. Project state and editor
-credentials remain in the user/workspace trust domain. A workspace lease is a
-time-bounded entitlement to control-plane admission and model capacity, not a
-lease of a DGX login, filesystem or shell. VS Code, CodeBuddy, WorkBuddy, Trae,
-Qoder and future integrations connect northbound through scoped contracts;
-their runtimes and product-specific state never cross the node boundary.
+The workbench is not implicitly a remote administration channel. A
+`WorkspaceLease` remains a time-bounded entitlement to control-plane admission
+and model capacity, not a DGX login. A separate `ExclusiveNodeLease` may name
+one DGX and one user. The two contracts cannot be substituted for one another.
+VS Code, CodeBuddy, WorkBuddy, Trae, Qoder and future integrations use scoped
+northbound contracts in managed-service mode; any user runtime on a DGX exists
+only inside an explicit exclusive lease.
+
+### Exclusive access plane
+
+Each node has one effective operating mode: `ManagedService` or
+`ExclusiveLease`. Reserving an exclusive lease immediately removes the node
+from scheduler eligibility and issues a cordon directive. The lease authority
+then reconciles provisioning, activation, expiry, drain, access revocation and
+sanitization. Completion is the only normal path back to managed service;
+unproven cleanup quarantines the node.
+
+The contract carries a username and credential reference, never a password or
+private key. A narrow host provisioner resolves that reference and performs
+allowlisted account and access operations. See `docs/EXCLUSIVE_NODE_LEASES.md`.
 
 ### Node plane
 
 Each DGX runs one small LunaNexa node agent. It inventories devices, verifies
 assignments, materializes pinned artifacts only for assignments naming that
 node, supervises runtime containers, performs health checks, enforces local
-limits and reports bounded telemetry.
+limits and reports bounded telemetry. In exclusive mode the same protected
+daemon also observes the lease generation and local expiry; the leased account
+cannot modify or stop it.
 
 Materialization is a node-owned state transition before runtime preparation:
 

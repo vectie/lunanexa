@@ -10,7 +10,9 @@
 LunaNexa is a MoonBit-native model-as-a-service and hardware-cluster control
 plane. It sits below provider routing and above the GPU machines so the hardware
 cluster remains an independent execution environment rather than becoming
-another MoonSuite deployment target.
+another MoonSuite deployment target. A node may alternatively enter a governed,
+time-bounded exclusive-user mode; that mode is isolated from managed inference
+and must complete access revocation and sanitization before the node returns.
 
 ```mermaid
 flowchart LR
@@ -32,7 +34,12 @@ LunaNexa owns:
 - inference queues, admission, batching, load balancing and failover;
 - runtime adapters for approved model servers;
 - evaluation, performance baselines, quotas, metering and audit events;
-- one Rabbita operator console for models, deployments, nodes, jobs and alerts.
+- deterministic prewarm, probe, cache, autoscale, admission and transfer-grant
+  policy decisions;
+- organizations, cost centers, projects, budgets, quotas, capacity commitments,
+  rated usage, ledger evidence and versioned digital agreements;
+- one Rabbita operator console for models, deployments, nodes, commercial
+  governance, qualified-service evidence, jobs and alerts.
 
 LunaNexa does **not** own:
 
@@ -88,8 +95,13 @@ four-node or human release gate.
 For local four-node behavior without DGX hardware, run
 `sh scripts/four-node-simulation.sh`. It exercises isolated node identities,
 signed reconciliation, strict runtime routing, queueing, failure, drain and
-restart behavior. See [the simulation guide](docs/SIMULATION.md) for its
-deliberately narrow hardware and performance claims.
+restart behavior, including the one-click single-node assignment path. See
+[the simulation guide](docs/SIMULATION.md) for its deliberately narrow hardware
+and performance claims.
+
+Run `sh scripts/production-fault-simulation.sh EVIDENCE_DIRECTORY` for the
+composed synthetic production-fault campaign. The resulting summary keeps real
+mTLS, container-engine, DGX, thermal and human-approval claims explicitly false.
 
 Native executables live in `cmd/control`, `cmd/node`, `cmd/cli`,
 `cmd/benchmark`, `cmd/evidence`, and `cmd/recovery`; the Rabbita application
@@ -102,6 +114,12 @@ values and immutable runtime/model digests.
 Node inventory is read from a host-owned JSON file, and each enrolled node uses
 its own hashed-at-rest node credential.
 
+The repository also includes **LunaFide**, a deterministic, ephemeral
+qualified-service test double under `testsupport/lunafide` with a native JSONL
+scenario runner in `cmd/lunafide`. It is deliberately marked `TestOnly` and
+`production_ready=false`; it is never a substitute for approved identity,
+signature, payment or tax-invoice providers.
+
 ## Documents
 
 - [Product contract](docs/PRODUCT_CONTRACT.md)
@@ -112,4 +130,10 @@ its own hashed-at-rest node credential.
 - [MiniCPM-o 4.5 Ascend 910C benchmark](docs/MINICPMO45_910C_BENCHMARK.md)
 - [Developer workspaces and integrations](docs/WORKSPACES.md)
 - [Management plane and one-click model services](docs/MANAGEMENT_PLANE.md)
+- [Exclusive DGX node leases](docs/EXCLUSIVE_NODE_LEASES.md)
+- [Management node and four-DGX deployment guide](docs/DEPLOYMENT.md)
+- [Production readiness and adversarial test record](docs/PRODUCTION_READINESS.md)
+- [Suanli documentation research and applicability review](docs/research/suanli/README.md)
+- [Cost center, digital agreements, and commercial controls](docs/research/suanli/COMMERCIAL_CONTROL_PLANE.md)
+- [Commercial, technical, and qualified-service expansion](docs/COMMERCIAL_AND_QUALIFIED_SERVICES.md)
 - [Next-thread handoff](docs/IMPLEMENTATION_HANDOFF.md)

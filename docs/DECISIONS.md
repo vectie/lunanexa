@@ -95,3 +95,21 @@ reconciliation, audit, and node isolation.
 **Boundary:** Platform installation remains a signed Kubernetes or GitOps
 operation. LunaNexa does not become a general container orchestrator and does
 not give its controller or GPU nodes broad Kubernetes administration authority.
+
+## ADR-010: Managed service and exclusive node access are explicit modes
+
+**Decision:** A GPU node runs either governed model services or one exclusive,
+time-bounded user lease. A workspace capacity lease never implies machine
+access. Reserving an exclusive node removes it from managed scheduling before
+account provisioning begins, and it returns only after access revocation and
+sanitization succeed.
+
+**Reason:** Interactive development and multi-tenant model serving have
+different trust, cleanup and availability requirements. Making the mode switch
+explicit prevents a user shell from coexisting accidentally with managed model
+credentials or another tenant's runtime.
+
+**Credential boundary:** Public and durable contracts contain a validated
+username and a deployment-owned credential reference. Raw passwords, private
+keys and SSH certificates are never LunaNexa state. The preferred production
+access mechanism is a short-lived SSH certificate bounded by lease expiry.

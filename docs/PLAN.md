@@ -269,3 +269,68 @@ Gate:
 - node restart reverifies an existing cache entry and resumes a partial transfer;
 - runtime arguments contain only a fixed read-only local model mount and never
   the artifact URI or artifact-store credential.
+
+## Phase 10 — Exclusive DGX node leases
+
+Deliver:
+
+- separate typed contracts for workspace capacity and exclusive machine access;
+- durable, idempotent lease authority with one non-terminal lease per node;
+- immediate exclusion of reserved nodes from managed placement and assignment;
+- signed node lease directives, observed generations and a local expiry fence;
+- narrow account and short-lived SSH-certificate provisioning;
+- scoped model/OCI pull grants for the selected node;
+- access revocation, tenant-container drain, sanitization and quarantine;
+- management API, CLI, Rabbita workflows and immutable audit receipts.
+
+Gate:
+
+- assigning user A to DGX 2 neither provisions nor transfers artifacts to any
+  other DGX;
+- a reserved or active exclusive node cannot receive managed placements even
+  before its next heartbeat;
+- no raw password, private key, node credential, model-store credential or
+  registry token appears in lease state, logs, audit or public responses;
+- local expiry disables access while the management node is unavailable;
+- failed revocation or sanitization quarantines the node;
+- successful sanitization is required before managed assignments resume;
+- restart reconciliation preserves the lease generation and never creates a
+  second active lease for the same node.
+
+## Phase 11 — Technical hardening and commercial governance
+
+Deliver:
+
+- deterministic prewarm, startup/readiness/liveness probe, cache, autoscale,
+  admission/backpressure, transfer-grant and reviewed-sidecar policy cores;
+- operator-authenticated technical decision endpoints with lease-generation
+  fencing and bounded transfer-grant validation;
+- organization, cost-center and project hierarchy; exactly-once usage rating;
+  immutable billing periods and adjustments; budgets, quotas and commitments;
+- RBAC, versioned clickwrap and e-signature agreement state machines;
+- provider-neutral normalized identity, payment, invoice and signature records;
+- Rabbita cost-center, agreement and qualified-service evidence routes;
+- LunaFide, an isolated `TestOnly` deterministic provider simulator.
+
+Repository gate:
+
+- adversarial unit and black-box suites cover money overflow, tenant mismatch,
+  idempotency conflicts, replay, stale observations, invalid transitions,
+  transfer expiry and generation fencing;
+- every new API requires operator authority and emits bounded typed responses;
+- browser routes are keyboard reachable, table content scrolls at narrow widths,
+  hostile labels are escaped, and LunaFide is visibly non-production;
+- no raw provider reference, credential, prompt, model payload, filesystem path
+  or MoonSuite identity appears in public commercial or technical state.
+
+Production gate still required:
+
+- replace the in-memory commercial and integration stores with a transactional,
+  restart-durable adapter and prove callback/business atomicity under crash;
+- persist prewarm reservations and consumed transfer nonces; execute autoscale
+  decisions through idempotent deployment operations under a generation fence;
+- connect node probe/cache telemetry and approved digest-pinned sidecar catalog;
+- replace LunaFide with approved production identity, signature, payment and
+  invoice providers and validate their real webhook trust and retention rules;
+- pass real ingress, database, four-DGX, security, finance, legal and operations
+  acceptance. Repository tests do not waive these external gates.

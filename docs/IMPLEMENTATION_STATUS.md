@@ -32,9 +32,23 @@ The repository now implements the deployable LunaNexa baseline:
 - live Rabbita views for cluster, registry, assignments, policies, telemetry,
   benchmarks and audit, with confirmed cordon/drain/rollback controls and
   shared public read-contract DTOs used by both browser and automation clients;
+- deterministic technical policy cores and authenticated decision endpoints for
+  prewarm, probes, cache reconciliation, autoscaling, backpressure, transfer
+  grants and reviewed sidecars;
+- an in-memory commercial contract core for organizations, cost centers,
+  projects, rating, ledger finalization, budgets, quotas, commitments, RBAC and
+  digital agreements, plus normalized external-provider evidence records;
+- Rabbita routes for cost-center posture, digital agreement evidence and
+  qualified-service adapters, with explicit non-production marking for the
+  LunaFide deterministic test simulator;
 - durable workspace users, access grants and leases with restart-safe state,
   expiry/revocation enforcement, trusted-ingress subject derivation and
   immutable operator audit receipts;
+- a separate signed, durable exclusive-node lease authority with validated
+  username/credential references, generation-fenced cleanup states, one
+  non-terminal lease per node, management API/CLI operations, node cordon/drain
+  directives and immediate exclusion from managed assignment, placement,
+  deployment-preflight and capacity calculations;
 - live Rabbita management views for workspace authority, plus a separately
   deployable individual workbench with browser-local editing, self-readiness,
   canonical inference transport, bounded receipts and typed
@@ -82,6 +96,11 @@ The simulator is functional evidence only. Its summary always records
 production-provider, measured-performance or human-acceptance requirements
 below.
 
+The commercial API integration and LunaFide are also functional contract
+evidence, not production accounting or trust infrastructure. Commercial state
+and external-callback indexes are currently in memory. Production acceptance
+requires a transactional persistent adapter and approved real providers.
+
 ## External acceptance still required
 
 The following are release acceptance work, not facts this repository can
@@ -91,7 +110,8 @@ systems:
 - enroll and exercise the four physical DGX Spark nodes;
 - choose and run a licensed model with a signed upstream serving image;
 - configure and verify production OCI, S3, metrics, CA/mTLS termination,
-  identity, encrypted-retention and secret providers;
+  identity, commercial database, qualified signature, payment, invoice,
+  encrypted-retention and secret providers;
 - implement and test the consumer-side adapter in its owning repository;
 - collect real concurrency, saturation, cold-start, long-stream, mixed-load,
   restart, drain, and failover measurements;
@@ -117,3 +137,10 @@ requires an ingress or service-mesh identity mapping, credential issuance and
 revocation operations. The workbench and VS Code extension are working
 northbound transports; third-party developer-tool handoffs remain typed
 integration points rather than bundled vendor runtimes.
+
+Exclusive-node leasing currently implements the management-plane authority and
+placement safety fence. The protected node-side host provisioner, short-lived
+SSH-certificate installation, local offline expiry watchdog, scoped model/OCI
+pull grants, sanitization executor and quarantine recovery are the next slices;
+until those exist and pass the physical-node gate, a lease must not be treated
+as production interactive access.
