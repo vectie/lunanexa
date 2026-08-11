@@ -1,5 +1,7 @@
 import {
+  "vectie/lunanexa/access",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/deployment",
@@ -10,9 +12,12 @@ import {
   "vectie/lunanexa/scheduler",
   "vectie/lunanexa/telemetry",
   "vectie/lunanexa/technical",
+  "vectie/lunanexa/technical/store" @technical_store,
   "vectie/lunanexa/node",
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/nodelease/store" @nodelease_store,
+  "vectie/lunanexa/portal",
+  "vectie/lunanexa/portal/store" @portal_store,
   "vectie/lunanexa/store",
   "vectie/lunanexa/workspace",
   "vectie/lunanexa/workspace/directory",
@@ -32,3 +37,9 @@ supported_targets = "native"
 import {
   "moonbitlang/async/fs",
 } for "test"
+
+options(
+  link: {
+    "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq" },
+  },
+)

@@ -8,9 +8,14 @@ sh scripts/phase-gate.sh
 sh scripts/process-recovery-test.sh
 sh scripts/four-node-simulation.sh
 sh scripts/evidence-export-test.sh
+if [ "${LUNANEXA_RUN_POSTGRES_TEST:-0}" = "1" ]; then
+  sh scripts/postgres-integration-test.sh
+fi
 moon check --target js --deny-warn
 moon test ui --target js --deny-warn
 moon test ui/workbench --target js --deny-warn
+moon test ui/enterprise --target js --deny-warn
+moon test cmd/enterprise --target js --deny-warn
 moon test cmd/workbench --target js --deny-warn
 moon test workspace --target js --deny-warn
 node --check extensions/vscode/extension.mjs

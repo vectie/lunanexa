@@ -45,6 +45,32 @@ async fn main {
   let exclusive_lease_path = @env.get_env_var("LUNANEXA_EXCLUSIVE_LEASE_PATH").unwrap_or(
     "lunanexa-exclusive-leases.json",
   )
+  let portal_path = @env.get_env_var("LUNANEXA_PORTAL_PATH").unwrap_or(
+    "lunanexa-enterprise-portal.json",
+  )
+  let access_path = @env.get_env_var("LUNANEXA_ACCESS_PATH").unwrap_or(
+    "lunanexa-access.json",
+  )
+  let technical_path = @env.get_env_var("LUNANEXA_TECHNICAL_PATH").unwrap_or(
+    "lunanexa-technical.json",
+  )
+  let persistence_backend = @env.get_env_var("LUNANEXA_PERSISTENCE_BACKEND").unwrap_or(
+    "file",
+  )
+  let management_database : @database.PostgresDatabase? = match
+    persistence_backend {
+    "file" => None
+    "postgres" =>
+      Some(
+        @database.PostgresDatabase::open(
+          required_environment("LUNANEXA_DATABASE_URL"),
+        ),
+      )
+    _ =>
+      raise Failure::Failure(
+        "LUNANEXA_PERSISTENCE_BACKEND must be 'postgres' or 'file'",
+      )
+  }
   let scheduler_capacity = @string.parse_int64(
     @env.get_env_var("LUNANEXA_ADMISSION_CAPACITY").unwrap_or("128"),
   ).to_int()
@@ -72,9 +98,10 @@ async fn main {
     scheduler_path, scheduler_capacity,
   )
   let telemetry = @telemetry.FileTelemetry::open(telemetry_path)
-  let workspace_directory = @directory.FileWorkspaceDirectory::open(
-    workspace_path,
-  )
+  let workspace_directory = match management_database {
+    Some(database) => @directory.FileWorkspaceDirectory::open_postgres(database)
+    None => @directory.FileWorkspaceDirectory::open(workspace_path)
+  }
   let assignment_signing_secret = required_environment(
     "LUNANEXA_ASSIGNMENT_SIGNING_SECRET",
   )
@@ -86,7 +113,51 @@ async fn main {
     exclusive_lease_path,
     required_environment("LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET"),
   )
-  let service = @api.ApiService::with_control_plane(
+  let portal_store = match management_database {
+    Some(database) => @portal_store.FilePortalStore::open_postgres(database)
+    None => @portal_store.FilePortalStore::open(portal_path)
+  }
+  let api_key_issuer_secret = required_environment(
+    "LUNANEXA_API_KEY_ISSUER_SECRET",
+  )
+  let access_store = match management_database {
+    Some(database) =>
+      @access.AccessStore::open_postgres(database, api_key_issuer_secret)
+    None => @access.AccessStore::open(access_path, api_key_issuer_secret)
+  }
+  let technical_operations = match management_database {
+    Some(database) => @technical_store.TechnicalStore::open_postgres(database)
+    None => @technical_store.TechnicalStore::open(technical_path)
+  }
+  let commercial_store = match management_database {
+    Some(database) =>
+      match
+        database.load_snapshot(
+          "commercial", @commercial.snapshot_schema_version,
+        ) {
+        Some(payload) =>
+          @commercial.CommercialStore::from_durable_snapshot(
+            @json.from_json(@json.parse(payload)),
+          )
+        None => @commercial.CommercialStore::new()
+      }
+    None => @commercial.CommercialStore::new()
+  }
+  let commercial_integrations = match management_database {
+    Some(database) =>
+      match
+        database.load_snapshot(
+          "commercial_integrations", @commercial_integrations.integration_schema_version,
+        ) {
+        Some(payload) =>
+          @commercial_integrations.IntegrationStore::from_durable_snapshot(
+            @json.from_json(@json.parse(payload)),
+          )
+        None => @commercial_integrations.IntegrationStore::new()
+      }
+    None => @commercial_integrations.IntegrationStore::new()
+  }
+  let base_service = @api.ApiService::with_control_plane(
       durable,
       registry,
       enrollment,
@@ -108,11 +179,14 @@ async fn main {
       workspace_directory,
       @env.get_env_var("LUNANEXA_REQUIRE_WORKSPACE_LEASE") == Some("1"),
     )
+    .with_access_store(access_store)
+    .with_technical_store(technical_operations)
     .with_deployment_store(
       deployment_store,
       available_secret_refs=secret_references(),
     )
     .with_exclusive_lease_store(exclusive_lease_store)
+    .with_portal_store(portal_store)
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
@@ -126,5 +200,12 @@ async fn main {
         @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("4"),
       ).to_int(),
     )
+  let service = match management_database {
+    Some(database) =>
+      base_service.with_commercial_persistence(
+        commercial_store, commercial_integrations, database,
+      )
+    None => base_service
+  }
   service.serve(address)
 }

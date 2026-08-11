@@ -487,6 +487,19 @@ async fn load_console(
   let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/service-deployments", token)),
   )
+  let portal_snapshot : @portal.PortalSnapshot? = try
+    Some(
+      @json.from_json(
+        @json.parse(
+          request("GET", endpoint, "/v1/portal/operator/snapshot", token),
+        ),
+      ),
+    )
+  catch {
+    _ => None
+  } noraise {
+    value => value
+  }
   let commercial_snapshot : @commercial.CommercialSnapshot? = if commercial_organization ==
     "" {
     None
@@ -715,6 +728,26 @@ async fn load_console(
       ]
     None => []
   }
+  let enterprise_lease_requests : Array[@ui.EnterpriseLeaseRequestRow] = match
+    portal_snapshot {
+    Some(snapshot) =>
+      [
+        for request in snapshot.lease_requests => {
+          {
+            request_id: request.submission.request_id,
+            organization_id: request.submission.organization_id,
+            subject_ref: request.subject_ref,
+            project_id: request.submission.project_id,
+            unix_username: request.submission.unix_username,
+            requested_models: request.submission.requested_model_ids.join(", "),
+            state: "\{Repr(request.state)}",
+            generation: request.generation,
+            assigned_node_id: request.assigned_node_id.unwrap_or("—"),
+          }
+        }
+      ]
+    None => []
+  }
   {
     locale,
     route,
@@ -776,6 +809,8 @@ async fn load_console(
     compute_leases,
     cost_centers,
     agreements,
+    enterprise_lease_requests,
+    portal_node_id: "",
     qualified_services,
     confirmation: None,
     error_message: None,
@@ -844,6 +879,7 @@ fn merge_loaded_console(
       current.quick_template
     },
     quick_replicas: current.quick_replicas,
+    portal_node_id: current.portal_node_id,
     success_message: current.success_message,
   }
 }
@@ -1357,6 +1393,117 @@ fn update_live(
         { ..model, console: { ..model.console, quick_replicas: value } },
         @rabbita.none,
       )
+    Console(PortalNodeChanged(value)) =>
+      (
+        { ..model, console: { ..model.console, portal_node_id: value } },
+        @rabbita.none,
+      )
+    Console(ApproveEnterpriseLease(request_id, generation)) => {
+      let node_id = model.console.portal_node_id.trim().to_owned()
+      if node_id == "" ||
+        !@contracts.valid_identifier(node_id, maximum_length=128) {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Choose a valid enrolled node before approval.",
+                  "批准前请选择一个有效的已纳管节点。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let body = @portal.LeaseReview::{
+          request_id,
+          expected_generation: generation,
+          decision: Approve,
+          node_id: Some(node_id),
+          evidence_receipt: "console:approve:\{request_id}:\{generation}",
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/portal/operator/lease-reviews",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The enterprise lease request could not be approved.",
+                "无法批准该企业租用申请。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Lease request \{request_id} reserved node \{node_id}.",
+                "租用申请 \{request_id} 已预留节点 \{node_id}。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(RejectEnterpriseLease(request_id, generation)) => {
+      let body = @portal.LeaseReview::{
+          request_id,
+          expected_generation: generation,
+          decision: Reject,
+          node_id: None,
+          evidence_receipt: "console:reject:\{request_id}:\{generation}",
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/portal/operator/lease-reviews",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The enterprise lease request could not be rejected.",
+                "无法拒绝该企业租用申请。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Lease request \{request_id} was rejected.",
+                "租用申请 \{request_id} 已拒绝。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
     Console(SubmitQuickDeployment) => {
       guard quick_deployment_intent(model.console, current_unix_ms())
         is Some(intent) else {
@@ -1435,6 +1582,12 @@ fn update_live(
         "register-agreement-template" =>
           ("POST", "/v1/commercial/agreement-templates", false)
         "create-agreement" => ("POST", "/v1/commercial/agreements", false)
+        "create-enterprise-membership" =>
+          ("POST", "/v1/portal/operator/memberships", false)
+        "publish-portal-agreement" =>
+          ("POST", "/v1/portal/operator/agreements", false)
+        "record-portal-execution" =>
+          ("POST", "/v1/portal/operator/agreement-executions", false)
         "register-external-record" =>
           ("POST", "/v1/commercial/external-records", false)
         "decide-autoscale" => ("POST", "/v1/technical/autoscale:decide", false)
@@ -1922,7 +2075,27 @@ fn update(
       | Console(Navigate(_))
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
-      | Console(QuickReplicasChanged(_)) => update_live(model, message, emit)
+      | Console(QuickReplicasChanged(_))
+      | Console(PortalNodeChanged(_)) => update_live(model, message, emit)
+      Console(ApproveEnterpriseLease(_, _))
+      | Console(RejectEnterpriseLease(_, _)) =>
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: None,
+              success_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Demo is read-only; no lease decision was persisted.",
+                  "演示为只读；未持久化租约决策。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
       Console(SubmitQuickDeployment) => {
         guard quick_deployment_intent(model.console, 0L) is Some(intent) else {
           return (

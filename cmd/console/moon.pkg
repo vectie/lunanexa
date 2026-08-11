@@ -3,6 +3,7 @@ import {
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/deployment",
+  "vectie/lunanexa/portal",
   "vectie/lunanexa/workspace",
   "vectie/lunanexa/ui",
   "vectie/lunanexa/ui/i18n",

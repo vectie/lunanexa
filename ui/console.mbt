@@ -132,6 +132,19 @@ pub(all) struct AgreementRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct EnterpriseLeaseRequestRow {
+  request_id : String
+  organization_id : String
+  subject_ref : String
+  project_id : String
+  unix_username : String
+  requested_models : String
+  state : String
+  generation : Int64
+  assigned_node_id : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct QualifiedServiceRow {
   provider : String
   capability : String
@@ -184,6 +197,8 @@ pub(all) struct ConsoleState {
   compute_leases : Array[ComputeLeaseRow]
   cost_centers : Array[CostCenterRow]
   agreements : Array[AgreementRow]
+  enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
+  portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
   confirmation : Confirmation?
   error_message : String?
@@ -223,6 +238,9 @@ pub(all) enum ConsoleMessage {
   QuickTemplateChanged(String)
   QuickReplicasChanged(String)
   SubmitQuickDeployment
+  PortalNodeChanged(String)
+  ApproveEnterpriseLease(String, Int64)
+  RejectEnterpriseLease(String, Int64)
 } derive(Eq)
 
 ///|
@@ -272,6 +290,8 @@ pub fn default_state() -> ConsoleState {
     compute_leases: [],
     cost_centers: [],
     agreements: [],
+    enterprise_lease_requests: [],
+    portal_node_id: "",
     qualified_services: [],
     confirmation: None,
     error_message: None,
@@ -533,6 +553,20 @@ pub fn demo_state() -> ConsoleState {
         evidence_receipt: "evidence:agreement:2026:02",
       },
     ],
+    enterprise_lease_requests: [
+      {
+        request_id: "request-eval-042",
+        organization_id: "org-northstar",
+        subject_ref: "subject-alice",
+        project_id: "project-vision-lab",
+        unix_username: "alice",
+        requested_models: "qwen3-32b, bge-m3",
+        state: "Submitted",
+        generation: 1L,
+        assigned_node_id: "—",
+      },
+    ],
+    portal_node_id: "dgx-spark-04",
     qualified_services: [
       {
         provider: "LunaFide",
@@ -2978,6 +3012,33 @@ fn policies_view(
                 ),
               ),
               @html.option(
+                value="create-enterprise-membership",
+                selected=state.operation_name == "create-enterprise-membership",
+                localized(
+                  state.locale,
+                  "Create enterprise membership",
+                  "创建企业成员关系",
+                ),
+              ),
+              @html.option(
+                value="publish-portal-agreement",
+                selected=state.operation_name == "publish-portal-agreement",
+                localized(
+                  state.locale,
+                  "Publish portal agreement",
+                  "发布企业门户协议",
+                ),
+              ),
+              @html.option(
+                value="record-portal-execution",
+                selected=state.operation_name == "record-portal-execution",
+                localized(
+                  state.locale,
+                  "Record verified portal execution",
+                  "记录已验证的门户协议签署",
+                ),
+              ),
+              @html.option(
                 value="register-external-record",
                 selected=state.operation_name == "register-external-record",
                 localized(
@@ -3217,7 +3278,10 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
-fn agreements_view(state : ConsoleState) -> @rabbita.Html {
+fn agreements_view(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
   @html.section(
     attrs=@html.Attrs::build().aria_labelledby("agreements-title"),
     [
@@ -3310,6 +3374,131 @@ fn agreements_view(state : ConsoleState) -> @rabbita.Html {
                       ),
                     ),
                     @html.td(class="mono secondary", agreement.evidence_receipt),
+                  ])
+                }
+              ],
+            ),
+          ]),
+        ])
+      },
+      @html.div(class="section-heading enterprise-request-heading", [
+        @html.div([
+          @html.h2(
+            localized(
+              state.locale,
+              "Enterprise lease requests",
+              "企业租用申请",
+            ),
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Select one eligible node, then approve the tenant request into the exclusive-node lease authority.",
+              "选择一个符合条件的节点，然后将租户申请批准到独占节点租约权限中。",
+            ),
+          ),
+        ]),
+        @html.div(class="portal-node-picker", [
+          @html.label(
+            for_="portal-node-id",
+            localized(state.locale, "Assigned node", "分配节点"),
+          ),
+          @html.input(
+            id="portal-node-id",
+            value=state.portal_node_id,
+            maxlength=128,
+            placeholder="dgx-spark-01",
+            on_input=text_command(emit, value => PortalNodeChanged(value)),
+          ),
+        ]),
+      ]),
+      if state.enterprise_lease_requests.length() == 0 {
+        @html.p(
+          class="empty-state",
+          localized(
+            state.locale,
+            "No enterprise lease requests are waiting.",
+            "没有待处理的企业租用申请。",
+          ),
+        )
+      } else {
+        @html.div(class="table-scroll", [
+          @html.table(class="resource-table", [
+            @html.thead(
+              @html.tr([
+                @html.th(localized(state.locale, "Request", "申请")),
+                @html.th(localized(state.locale, "Organization", "组织")),
+                @html.th(
+                  localized(state.locale, "Project / user", "项目 / 用户"),
+                ),
+                @html.th(localized(state.locale, "Models", "模型")),
+                @html.th(localized(state.locale, "State", "状态")),
+                @html.th(localized(state.locale, "Decision", "决策")),
+              ]),
+            ),
+            @html.tbody(
+              [
+                for request in state.enterprise_lease_requests => {
+                  @html.tr([
+                    @html.td(class="mono", request.request_id),
+                    @html.td([
+                      @html.strong(request.organization_id),
+                      @html.span(class="mono secondary", request.subject_ref),
+                    ]),
+                    @html.td([
+                      @html.strong(request.project_id),
+                      @html.span(class="mono secondary", request.unix_username),
+                    ]),
+                    @html.td(request.requested_models),
+                    @html.td(
+                      status_badge(
+                        request.state,
+                        if request.state == "Submitted" {
+                          "pending"
+                        } else {
+                          "ok"
+                        },
+                      ),
+                    ),
+                    @html.td(
+                      if request.state == "Submitted" {
+                        @html.div(class="table-actions", [
+                          @html.button(
+                            type_="button",
+                            class="action-button primary",
+                            disabled=state.loading ||
+                              state.portal_node_id.trim() == "",
+                            on_click=command(
+                              emit,
+                              ApproveEnterpriseLease(
+                                request.request_id,
+                                request.generation,
+                              ),
+                            ),
+                            localized(state.locale, "Approve", "批准"),
+                          ),
+                          @html.button(
+                            type_="button",
+                            class="action-button",
+                            disabled=state.loading,
+                            on_click=command(
+                              emit,
+                              RejectEnterpriseLease(
+                                request.request_id,
+                                request.generation,
+                              ),
+                            ),
+                            localized(state.locale, "Reject", "拒绝"),
+                          ),
+                        ])
+                      } else {
+                        @html.span(
+                          class="mono secondary",
+                          request.assigned_node_id,
+                        )
+                      },
+                    ),
                   ])
                 }
               ],
@@ -3984,6 +4173,14 @@ fn console_styles() -> String {
     #|.readiness-item div { display: grid; gap: .15rem; min-width: 0; }
     #|.section-heading, .subsection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
     #|.section-heading h2 { margin-bottom: .2rem; }
+    #|.enterprise-request-heading { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+    #|.portal-node-picker { min-width: 16rem; }
+    #|.portal-node-picker label { display: block; margin-bottom: .3rem; color: var(--muted); font-size: .68rem; font-weight: 700; }
+    #|.portal-node-picker input { width: 100%; min-height: 2.5rem; padding: .55rem .65rem; border: 1px solid var(--line-strong); border-radius: .45rem; background: var(--panel-strong); color: var(--text); }
+    #|.table-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+    #|.action-button { min-height: 2.25rem; padding: .4rem .65rem; border: 1px solid var(--line-strong); border-radius: .4rem; background: var(--panel-strong); color: var(--text); font: inherit; font-weight: 750; cursor: pointer; }
+    #|.action-button.primary { border-color: var(--accent); color: var(--accent); }
+    #|.action-button:disabled { opacity: .45; cursor: not-allowed; }
     #|.section-copy { max-width: 52rem; margin: 0; color: var(--muted); }
     #|.resource-count { flex: none; margin-top: .15rem; color: var(--muted); font-size: .75rem; }
     #|.subsection-heading { align-items: center; margin: 1.6rem 0 .65rem; }
@@ -4109,7 +4306,7 @@ fn console_view(
     Users => users_view(state, emit)
     Leases => leases_view(state, emit)
     CostCenters => cost_centers_view(state)
-    Agreements => agreements_view(state)
+    Agreements => agreements_view(state, emit)
     QualifiedServices => qualified_services_view(state)
     Nodes => nodes_view(state, emit)
     Models => models_view(state, emit)

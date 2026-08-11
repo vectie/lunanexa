@@ -23,10 +23,14 @@ pub(all) struct CancellationReceipt {
 ///|
 pub struct ApiService {
   store : @store.FileStore
+  access_store : @access.AccessStore?
+  management_database : @database.PostgresDatabase?
+  technical_store : @technical_store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @commercial_integrations.IntegrationStore
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
+  portal_store : @portal_store.FilePortalStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -63,10 +67,14 @@ pub fn ApiService::new(
 ) -> ApiService {
   {
     store,
+    access_store: None,
+    management_database: None,
+    technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
     exclusive_lease_store: None,
+    portal_store: None,
     available_secret_refs: [],
     registry: None,
     enrollment: None,
@@ -105,10 +113,14 @@ pub fn ApiService::with_registry(
 ) -> ApiService {
   {
     store,
+    access_store: None,
+    management_database: None,
+    technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
     exclusive_lease_store: None,
+    portal_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: None,
@@ -148,10 +160,14 @@ pub fn ApiService::with_services(
 ) -> ApiService {
   {
     store,
+    access_store: None,
+    management_database: None,
+    technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
     exclusive_lease_store: None,
+    portal_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -193,10 +209,14 @@ pub fn ApiService::with_control_plane(
 ) -> ApiService {
   {
     store,
+    access_store: None,
+    management_database: None,
+    technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
     exclusive_lease_store: None,
+    portal_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -236,6 +256,41 @@ pub fn ApiService::with_workspace_directory(
 }
 
 ///|
+/// Enables durable, hashed, tenant-scoped northbound API credentials. The
+/// external identity provider still owns interactive authentication.
+pub fn ApiService::with_access_store(
+  self : ApiService,
+  access_store : @access.AccessStore,
+) -> ApiService {
+  { ..self, access_store: Some(access_store) }
+}
+
+///|
+/// Installs restart-restored commercial stores and their transactional
+/// PostgreSQL persistence boundary.
+pub fn ApiService::with_commercial_persistence(
+  self : ApiService,
+  commercial_store : @commercial.CommercialStore,
+  commercial_integrations : @commercial_integrations.IntegrationStore,
+  management_database : @database.PostgresDatabase,
+) -> ApiService {
+  {
+    ..self,
+    commercial_store,
+    commercial_integrations,
+    management_database: Some(management_database),
+  }
+}
+
+///|
+pub fn ApiService::with_technical_store(
+  self : ApiService,
+  technical_store : @technical_store.TechnicalStore,
+) -> ApiService {
+  { ..self, technical_store: Some(technical_store) }
+}
+
+///|
 /// Enables the durable management-plane catalog and deployment-intent API.
 pub fn ApiService::with_deployment_store(
   self : ApiService,
@@ -253,6 +308,16 @@ pub fn ApiService::with_exclusive_lease_store(
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore,
 ) -> ApiService {
   { ..self, exclusive_lease_store: Some(exclusive_lease_store) }
+}
+
+///|
+/// Enables the centralized enterprise portal authority used by both the
+/// customer-facing site and the operator approval workflow.
+pub fn ApiService::with_portal_store(
+  self : ApiService,
+  portal_store : @portal_store.FilePortalStore,
+) -> ApiService {
+  { ..self, portal_store: Some(portal_store) }
 }
 
 ///|
@@ -1652,6 +1717,17 @@ async fn ApiService::handle_with_transport(
   if deployment_management_path(path) {
     return self.handle_deployment_management(verb, path, headers, body)
   }
+  if access_management_path(path) {
+    return self.handle_access_management(verb, path, headers, body)
+  }
+  if openai_compatibility_path(path) {
+    return self.handle_openai_compatibility(verb, path, headers, body)
+  }
+  if enterprise_portal_path(path) {
+    return self.handle_enterprise_portal(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   if exclusive_lease_management_path(path) {
     return self.handle_exclusive_lease_management(verb, path, headers, body)
   }
@@ -1708,7 +1784,8 @@ async fn ApiService::handle_with_transport(
       }
     }
     (Get, "/v1/capabilities") => {
-      if !bearer_authorized(headers, self.inference_token) {
+      if !bearer_authorized(headers, self.inference_token) &&
+        self.api_key_authorization(headers, ModelList, false) is None {
         return api_error(
           401, "Unauthenticated", "valid inference authority is required", false,
         )
@@ -2358,6 +2435,13 @@ async fn ApiService::handle_with_transport(
       self.refresh_deployment_operations()
       json_reply(202, { "accepted": true, "node_id": heartbeat.node_id })
     }
+    (Post, _) if path.has_prefix("/v1/nodes/") &&
+      path.has_suffix("/exclusive-lease:observe") => {
+      let prefix = "/v1/nodes/".length()
+      let suffix = "/exclusive-lease:observe".length()
+      let node_id = path[prefix:path.length() - suffix].to_owned()
+      self.observe_node_lease_action(node_id, headers, body)
+    }
     (Put, "/v1/nodes/directive") => {
       if !bearer_authorized(headers, self.operator_token) {
         return api_error(
@@ -2412,6 +2496,28 @@ async fn ApiService::handle_with_transport(
         Some(directive) => json_reply(200, directive.to_json())
         None =>
           api_error(404, "NotFound", "node directive was not found", false)
+      }
+    }
+    (Get, _) if path.has_prefix("/v1/nodes/") &&
+      path.has_suffix("/exclusive-lease") => {
+      let prefix = "/v1/nodes/".length()
+      let suffix = "/exclusive-lease".length()
+      let node_id = path[prefix:path.length() - suffix].to_owned()
+      if !@contracts.valid_identifier(node_id, maximum_length=128) ||
+        !self.node_authorized(headers, node_id) {
+        return api_error(
+          401, "Unauthenticated", "valid node authority is required", false,
+        )
+      }
+      guard self.exclusive_lease_store is Some(leases) else {
+        return api_error(
+          503, "ExclusiveLeaseUnavailable", "exclusive lease authority is unavailable",
+          true,
+        )
+      }
+      match leases.lease_for_node(node_id) {
+        Some(lease) => json_reply(200, lease.to_json())
+        None => api_error(404, "NotFound", "node has no exclusive lease", false)
       }
     }
     (Get, "/v1/assignments") => {
@@ -2832,15 +2938,31 @@ async fn ApiService::handle_with_transport(
       json_reply(200, receipt.to_json())
     }
     (Post, "/v1/workloads") => {
-      if !bearer_authorized(headers, self.inference_token) {
-        return api_error(
-          401, "Unauthenticated", "valid inference authority is required", false,
-        )
-      }
       guard decode_workload(body) is Some(request) else {
         return api_error(
           400, "InvalidRequest", "invalid canonical workload", false,
         )
+      }
+      if !bearer_authorized(headers, self.inference_token) {
+        match
+          self.api_key_check(
+            headers,
+            Inference,
+            Some(request.tenant_ref),
+            Some(request.model_selector),
+            true,
+          ) {
+          KeyAuthorized(_) => ()
+          KeyQuotaExceeded =>
+            return api_error(
+              429, "QuotaExceeded", "API key request quota is exhausted", false,
+            )
+          KeyDenied =>
+            return api_error(
+              401, "Unauthenticated", "valid tenant-scoped inference authority is required",
+              false,
+            )
+        }
       }
       if !ephemeral_only(request) {
         return api_error(

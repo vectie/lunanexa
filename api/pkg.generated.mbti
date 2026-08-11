@@ -7,9 +7,11 @@ import {
   "moonbitlang/async/semaphore",
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
+  "vectie/lunanexa/access",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
   "vectie/lunanexa/node",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/runtimes",
@@ -39,10 +41,14 @@ pub(all) enum ApiMethod {
 
 pub struct ApiService {
   store : @vectie/lunanexa/store.FileStore
+  access_store : @access.AccessStore?
+  management_database : @database.PostgresDatabase?
+  technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @integrations.IntegrationStore
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
+  portal_store : @vectie/lunanexa/portal/store.FilePortalStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -71,16 +77,20 @@ pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], St
 pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
+pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
+pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_control_plane(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @scheduler.FileScheduler, @telemetry.FileTelemetry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
+pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
 pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
+pub fn ApiService::with_technical_store(Self, @vectie/lunanexa/technical/store.TechnicalStore) -> Self
 pub fn ApiService::with_workspace_directory(Self, @directory.FileWorkspaceDirectory, Bool) -> Self
 
 pub(all) struct BatchKey {

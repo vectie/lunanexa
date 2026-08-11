@@ -141,6 +141,20 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         evidence_receipt: "evidence:agreement:1",
       },
     ],
+    enterprise_lease_requests: [
+      {
+        request_id: "request-1",
+        organization_id: "org-1",
+        subject_ref: "subject-1",
+        project_id: "project-1",
+        unix_username: "alice",
+        requested_models: "model.text",
+        state: "Submitted",
+        generation: 1L,
+        assigned_node_id: "—",
+      },
+    ],
+    portal_node_id: "node-1",
     qualified_services: [
       {
         provider: "LunaFide",
@@ -187,6 +201,11 @@ test "commercial and qualified-service routes expose bounded evidence" {
   assert_true(agreements.contains("Digital agreement lifecycle"))
   assert_true(agreements.contains("agreement-1"))
   assert_true(agreements.contains("evidence:agreement:1"))
+  assert_true(agreements.contains("Enterprise lease requests"))
+  assert_true(agreements.contains("request-1"))
+  assert_true(agreements.contains("portal-node-id"))
+  assert_true(agreements.contains("Approve"))
+  assert_true(agreements.contains("Reject"))
   let qualified = @ui.render({ ..base, route: QualifiedServices })
   assert_true(qualified.contains("LunaFide"))
   assert_true(qualified.contains("TestOnly"))
@@ -201,6 +220,8 @@ test "typed operation surface exposes commercial and technical commands" {
   assert_true(html.contains("Create cost center"))
   assert_true(html.contains("Register agreement template"))
   assert_true(html.contains("Register external evidence"))
+  assert_true(html.contains("Create enterprise membership"))
+  assert_true(html.contains("Publish portal agreement"))
   assert_true(html.contains("Evaluate autoscaling"))
   assert_true(html.contains("Validate transfer grant"))
 }

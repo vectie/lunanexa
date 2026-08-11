@@ -1,20 +1,33 @@
 import {
+  "vectie/lunanexa/access",
+  "vectie/lunanexa/commercial",
+  "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/api",
+  "vectie/lunanexa/database",
   "vectie/lunanexa/deployment/store" @deployment_store,
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/node",
   "vectie/lunanexa/nodelease/store" @nodelease_store,
+  "vectie/lunanexa/portal/store" @portal_store,
   "vectie/lunanexa/store",
   "vectie/lunanexa/scheduler",
   "vectie/lunanexa/telemetry",
+  "vectie/lunanexa/technical/store" @technical_store,
   "vectie/lunanexa/workspace/directory",
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/core/env",
+  "moonbitlang/core/json",
   "moonbitlang/core/string",
 }
 
 supported_targets = "native"
 
 pkgtype(kind: "executable")
+
+options(
+  link: {
+    "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq" },
+  },
+)

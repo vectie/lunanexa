@@ -102,6 +102,9 @@ pub(all) enum ConsoleMessage {
   QuickTemplateChanged(String)
   QuickReplicasChanged(String)
   SubmitQuickDeployment
+  PortalNodeChanged(String)
+  ApproveEnterpriseLease(String, Int64)
+  RejectEnterpriseLease(String, Int64)
 } derive(Eq)
 
 pub(all) struct ConsoleState {
@@ -124,6 +127,8 @@ pub(all) struct ConsoleState {
   compute_leases : Array[ComputeLeaseRow]
   cost_centers : Array[CostCenterRow]
   agreements : Array[AgreementRow]
+  enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
+  portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
   confirmation : Confirmation?
   error_message : String?
@@ -165,6 +170,18 @@ pub(all) enum DestructiveAction {
   RevokeUser(String)
   RevokeAccessGrant(String)
   EndComputeLease(String)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EnterpriseLeaseRequestRow {
+  request_id : String
+  organization_id : String
+  subject_ref : String
+  project_id : String
+  unix_username : String
+  requested_models : String
+  state : String
+  generation : Int64
+  assigned_node_id : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelRow {
