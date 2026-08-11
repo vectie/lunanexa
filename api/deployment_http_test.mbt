@@ -136,11 +136,14 @@ async fn management_registry(
 }
 
 ///|
-fn management_heartbeat(running : Array[String]) -> @contracts.NodeHeartbeat {
+fn management_heartbeat(
+  running : Array[String],
+  observed_generation? : Int64 = 1L,
+) -> @contracts.NodeHeartbeat {
   {
     node_id: "node-a",
     state: Active,
-    observed_generation: 1L,
+    observed_generation,
     controller_epoch: 1L,
     inventory: {
       node_id: "node-a",
@@ -224,6 +227,20 @@ async test "one request creates durable assignments and converges to ready" {
   assert_eq(assignments.length(), 1)
   assert_true(assignments[0].signature != "")
   durable.put_heartbeat(management_heartbeat([intent.deployment_id]))
+  let observed = durable.heartbeats()[0]
+  assert_eq(observed.state, Active)
+  assert_eq(observed.inventory.node_id, assignments[0].node_id)
+  assert_eq(observed.controller_epoch, assignments[0].controller_epoch)
+  assert_true(observed.observed_generation >= assignments[0].generation)
+  assert_true(assignments[0].lease_expires_unix_ms > @async.now())
+  assert_true(
+    @controller.deployment_operation_ready(
+      operation,
+      assignments,
+      [observed],
+      @async.now(),
+    ),
+  )
   let ready = service.handle(
     Get,
     "/v1/operations/\{operation.operation_id}",
@@ -258,8 +275,21 @@ async test "one request creates durable assignments and converges to ready" {
     @json.parse(scaled.body),
   )
   assert_eq(scaled_operation.generation, 2L)
-  assert_eq(scaled_operation.state, Ready)
+  assert_eq(scaled_operation.state, Reconciling)
   assert_eq(durable.assignments()[0].generation, 2L)
+  durable.put_heartbeat(
+    management_heartbeat([intent.deployment_id], observed_generation=2L),
+  )
+  let scaled_ready = service.handle(
+    Get,
+    "/v1/operations/\{scaled_operation.operation_id}",
+    headers,
+    "",
+  )
+  let scaled_ready_operation : @deployment.DeploymentOperation = @json.from_json(
+    @json.parse(scaled_ready.body),
+  )
+  assert_eq(scaled_ready_operation.state, Ready)
   let rolled_back = service.handle(
     Post,
     "/v1/service-deployments/\{intent.deployment_id}/rollback",
@@ -279,4 +309,199 @@ async test "one request creates durable assignments and converges to ready" {
     @json.parse(deleted.body),
   )
   assert_eq(deleted_operation.state, Deleted)
+}
+
+///|
+async test "deployment HTTP adversarial corpus fails closed without side effects" {
+  let directory = @fs.tmpdir(prefix="lunanexa-management-adversarial-")
+  let template = management_template()
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  durable.put_heartbeat(management_heartbeat([]))
+  let registry = management_registry("\{directory}/registry.json", template)
+  let deployments = @deployment_store.FileDeploymentStore::open(
+    "\{directory}/deployments.json",
+    "catalog-secret",
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    template.runtime.version,
+    template.runtime.image_digest,
+    template.artifact.digest,
+    allow_http_loopback=true,
+  )
+  let service = @api.ApiService::with_registry(
+      durable, registry, runtime, "operator-token", "inference-token", "node-token",
+      "0.1.0",
+    )
+    .with_assignment_signing_secret("assignment-secret")
+    .with_deployment_store(deployments, available_secret_refs=["runtime-token"])
+  let headers = { "Authorization": "Bearer operator-token" }
+  for
+    path in [
+      "/v1/catalog/templates", "/v1/deployment-plans", "/v1/service-deployments",
+      "/v1/service-deployments/service-1/delete",
+    ] {
+    for
+      hostile_headers in [
+        ({} : Map[String, String]),
+        { "Authorization": "Bearer inference-token" },
+        { "Authorization": "Bearer operator-token-suffix" },
+        { "Authorization": "Basic operator-token" },
+      ] {
+      let denied = service.handle(Post, path, hostile_headers, "{}")
+      assert_eq(denied.status, 401)
+      assert_false(denied.body.contains("operator-token"))
+    }
+  }
+  assert_eq(deployments.templates().length(), 0)
+  assert_eq(deployments.operations().length(), 0)
+  assert_eq(durable.assignments().length(), 0)
+  for
+    malformed in [
+      "", "{", "[]", "null", "true", "{\"version\":\"lunanexa.v1\"}", "{\"replicas\":1e999999}",
+    ] {
+    assert_eq(
+      service.handle(Post, "/v1/catalog/templates", headers, malformed).status,
+      400,
+    )
+    assert_eq(
+      service.handle(Post, "/v1/deployment-plans", headers, malformed).status,
+      400,
+    )
+    assert_eq(
+      service.handle(Post, "/v1/service-deployments", headers, malformed).status,
+      400,
+    )
+  }
+  let hostile_template = {
+    ..template,
+    artifact: { ..template.artifact, uri: "s3://models/../../private-key" },
+  }
+  let rejected_template = service.handle(
+    Post,
+    "/v1/catalog/templates",
+    headers,
+    hostile_template.to_json().stringify(),
+  )
+  assert_eq(rejected_template.status, 409)
+  assert_false(rejected_template.body.contains("private-key"))
+  assert_eq(deployments.templates().length(), 0)
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/catalog/templates",
+      headers,
+      template.to_json().stringify(),
+    ).status,
+    201,
+  )
+  let intent : @deployment.ModelServiceIntent = {
+    version: @contracts.contract_version,
+    idempotency_key: "console:service-1",
+    deployment_id: "service-1",
+    template: { template_id: template.template_id, version: template.version },
+    replicas: 1,
+    data_class: Internal,
+    lease_duration_ms: 60000L,
+    promote_when_ready: false,
+  }
+  for
+    hostile_intent in [
+      { ..intent, deployment_id: "../../service" },
+      { ..intent, deployment_id: "service<script>" },
+      { ..intent, replicas: 0 },
+      { ..intent, replicas: 65 },
+      { ..intent, lease_duration_ms: 0L },
+      { ..intent, idempotency_key: "x".repeat(257) },
+    ] {
+    let plan_reply = service.handle(
+      Post,
+      "/v1/deployment-plans",
+      headers,
+      hostile_intent.to_json().stringify(),
+    )
+    assert_eq(plan_reply.status, 200)
+    let plan : @deployment.DeploymentPlan = @json.from_json(
+      @json.parse(plan_reply.body),
+    )
+    assert_false(plan.executable)
+    assert_true(plan.findings.any(value => value.code == InvalidIntent))
+    let deploy_reply = service.handle(
+      Post,
+      "/v1/service-deployments",
+      headers,
+      hostile_intent.to_json().stringify(),
+    )
+    assert_eq(deploy_reply.status, 409)
+  }
+  assert_eq(deployments.operations().length(), 0)
+  assert_eq(durable.assignments().length(), 0)
+  let first = service.handle(
+    Post,
+    "/v1/service-deployments",
+    headers,
+    intent.to_json().stringify(),
+  )
+  assert_eq(first.status, 202)
+  let replay = service.handle(
+    Post,
+    "/v1/service-deployments",
+    headers,
+    intent.to_json().stringify(),
+  )
+  assert_eq(replay.status, 202)
+  let first_operation : @deployment.DeploymentOperation = @json.from_json(
+    @json.parse(first.body),
+  )
+  let replay_operation : @deployment.DeploymentOperation = @json.from_json(
+    @json.parse(replay.body),
+  )
+  assert_eq(replay_operation.operation_id, first_operation.operation_id)
+  assert_eq(deployments.operations().length(), 1)
+  assert_eq(durable.assignments().length(), 1)
+  let conflict = service.handle(
+    Post,
+    "/v1/service-deployments",
+    headers,
+    { ..intent, replicas: 2 }.to_json().stringify(),
+  )
+  assert_eq(conflict.status, 409)
+  assert_true(conflict.body.contains("IdempotencyConflict"))
+  assert_eq(deployments.operations().length(), 1)
+  assert_eq(durable.assignments().length(), 1)
+  let oversized = "x".repeat(1048577)
+  let oversized_reply = service.handle(
+    Post,
+    "/v1/service-deployments",
+    headers,
+    oversized,
+  )
+  assert_eq(oversized_reply.status, 413)
+  for
+    hostile_path in [
+      "/v1/service-deployments/../../etc/passwd", "/v1/service-deployments/%2e%2e%2fsecret",
+      "/v1/operations/<script>alert(1)</script>",
+    ] {
+    let reply = service.handle(Get, hostile_path, headers, "")
+    assert_eq(reply.status, 404)
+    assert_false(reply.body.contains(hostile_path))
+  }
+  for
+    response in [
+      first.body,
+      replay.body,
+      conflict.body,
+      oversized_reply.body,
+      rejected_template.body,
+    ] {
+    for
+      forbidden in [
+        "runtime-secret", "assignment-secret", "catalog-secret", "operator-token",
+        "127.0.0.1", "/Users/", "private-key",
+      ] {
+      assert_false(response.contains(forbidden))
+    }
+  }
 }

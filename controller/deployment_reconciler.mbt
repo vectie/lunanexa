@@ -29,8 +29,14 @@ pub fn deployment_operation_ready(
       assignment.assignment_id == assignment_id &&
       assignment.generation == operation.generation &&
       assignment.deployment_id == operation.deployment_id &&
+      assignment.signature != "" &&
+      assignment.lease_expires_unix_ms > now_unix_ms &&
       heartbeats.any(heartbeat => {
         heartbeat.node_id == assignment.node_id &&
+        heartbeat.inventory.node_id == assignment.node_id &&
+        heartbeat.state == Active &&
+        heartbeat.controller_epoch == assignment.controller_epoch &&
+        heartbeat.observed_generation >= assignment.generation &&
         now_unix_ms - heartbeat.timestamp_unix_ms <= heartbeat_timeout_ms &&
         heartbeat.running_deployments.any(value => {
           value == operation.deployment_id

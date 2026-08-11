@@ -1,4 +1,76 @@
 ///|
+fn safe_runtime_name(value : String) -> Bool {
+  value != "" &&
+  value.length() <= 256 &&
+  !value.contains("..") &&
+  !value.contains_char('@') &&
+  value.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.' ||
+    character == ':' ||
+    character == '/'
+  })
+}
+
+///|
+fn safe_s3_reference(value : String) -> Bool {
+  guard value.has_prefix("s3://") else { return false }
+  let object = value[5:].to_owned()
+  object != "" &&
+  object.length() <= 2048 &&
+  object.contains_char('/') &&
+  !object.has_prefix("/") &&
+  !object.has_suffix("/") &&
+  !object.contains("..") &&
+  !object.contains("//") &&
+  object.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.' ||
+    character == '/'
+  })
+}
+
+///|
+fn safe_signature_reference(value : String) -> Bool {
+  safe_s3_reference(value) ||
+  @contracts.valid_identifier(value, maximum_length=256)
+}
+
+///|
+fn unique_strings(values : Array[String]) -> Bool {
+  for index, value in values {
+    if values[:index].any(previous => previous == value) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn safe_readiness_path(value : String) -> Bool {
+  value.has_prefix("/") &&
+  value.length() <= 256 &&
+  !value.contains("..") &&
+  value.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.' ||
+    character == '/'
+  })
+}
+
+///|
 pub fn validate_template(
   template : ModelServiceTemplate,
   require_signature? : Bool = true,
@@ -13,23 +85,50 @@ pub fn validate_template(
     !@contracts.valid_identifier(template.model_version, maximum_length=128) ||
     !@contracts.valid_identifier(template.architecture, maximum_length=128) ||
     !@contracts.valid_sha256_digest(template.artifact.digest) ||
-    !template.artifact.uri.has_prefix("s3://") ||
-    template.artifact.signature_ref == "" ||
+    template.artifact.size_bytes <= 0L ||
+    template.artifact.size_bytes > 1099511627776L ||
+    !safe_s3_reference(template.artifact.uri) ||
+    !safe_signature_reference(template.artifact.signature_ref) ||
     !template.network.allow_artifact_store ||
+    !template.network.allow_controller ||
+    template.network.allowed_egress.length() > 0 ||
+    !safe_runtime_name(template.runtime.name) ||
+    !@contracts.valid_identifier(template.runtime.version, maximum_length=128) ||
     !@contracts.valid_sha256_digest(template.runtime.image_digest) ||
+    template.runtime.architectures.length() == 0 ||
+    template.runtime.architectures.length() > 64 ||
+    !template.runtime.architectures.all(value => {
+      @contracts.valid_identifier(value, maximum_length=128)
+    }) ||
+    !unique_strings(template.runtime.architectures) ||
+    !template.runtime.architectures.any(value => value == template.architecture) ||
+    template.runtime.capabilities.length() == 0 ||
+    template.runtime.capabilities.length() > 16 ||
+    !template.runtime.capabilities.any(value => value == template.capability) ||
     template.resources.accelerator_count <= 0 ||
+    template.resources.accelerator_count > 64 ||
     template.resources.accelerator_memory_mib <= 0 ||
+    template.resources.accelerator_memory_mib > 1048576 ||
     template.resources.cpu_millis <= 0 ||
+    template.resources.cpu_millis > 1000000 ||
     template.resources.memory_mib <= 0 ||
-    template.health.readiness_path == "" ||
+    template.resources.memory_mib > 1048576 ||
+    !safe_readiness_path(template.health.readiness_path) ||
     template.health.interval_ms <= 0 ||
+    template.health.interval_ms > 3600000 ||
     template.health.failure_threshold <= 0 ||
+    template.health.failure_threshold > 100 ||
     template.health.termination_grace_ms <= 0 ||
+    template.health.termination_grace_ms > 3600000 ||
     template.rollout.canary_replicas <= 0 ||
+    template.rollout.canary_replicas > 64 ||
     template.rollout.readiness_timeout_ms <= 0L ||
+    template.rollout.readiness_timeout_ms > 86400000L ||
+    template.secret_refs.length() > 64 ||
     template.secret_refs.any(value => {
       !@contracts.valid_identifier(value, maximum_length=256)
     }) ||
+    !unique_strings(template.secret_refs) ||
     (
       require_signature &&
       (template.approval_receipt == "" || template.signature == "")
@@ -104,14 +203,23 @@ fn compatible_nodes(
   template : ModelServiceTemplate,
   intent : ModelServiceIntent,
 ) -> Array[ManagementNode] {
-  let nodes = context.nodes.filter(node => {
-    node.state == Active &&
-    node.architecture == template.architecture &&
-    node.memory_free_mib >= template.resources.accelerator_memory_mib &&
-    node.runtime_names.any(value => value == template.runtime.name) &&
-    node.device_ids.length() >= template.resources.accelerator_count &&
-    node.allowed_data_classes.any(value => value == intent.data_class)
-  })
+  let nodes : Array[ManagementNode] = []
+  for node in context.nodes {
+    if node.state == Active &&
+      @contracts.valid_identifier(node.node_id, maximum_length=96) &&
+      node.architecture == template.architecture &&
+      node.memory_free_mib >= template.resources.accelerator_memory_mib &&
+      node.runtime_names.any(value => value == template.runtime.name) &&
+      node.device_ids.length() >= template.resources.accelerator_count &&
+      node.device_ids.all(value => {
+        @contracts.valid_identifier(value, maximum_length=96)
+      }) &&
+      unique_strings(node.device_ids) &&
+      node.allowed_data_classes.any(value => value == intent.data_class) &&
+      !nodes.any(existing => existing.node_id == node.node_id) {
+      nodes.push(node)
+    }
+  }
   nodes.sort_by_key(node => node.node_id)
   nodes
 }

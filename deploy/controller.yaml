@@ -44,6 +44,8 @@ spec:
               value: /var/lib/lunanexa/workspace.json
             - name: LUNANEXA_DEPLOYMENT_PATH
               value: /var/lib/lunanexa/deployments.json
+            - name: LUNANEXA_EXCLUSIVE_LEASE_PATH
+              value: /var/lib/lunanexa/exclusive-leases.json
             - name: LUNANEXA_AVAILABLE_SECRET_REFS
               value: "runtime-token"
             - name: LUNANEXA_REQUIRE_WORKSPACE_LEASE
@@ -116,6 +118,11 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: catalog-signing-secret
+            - name: LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: exclusive-lease-signing-secret
             - name: LUNANEXA_COSIGN_BINARY
               value: /usr/bin/cosign
             - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH

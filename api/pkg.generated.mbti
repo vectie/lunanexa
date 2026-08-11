@@ -7,6 +7,8 @@ import {
   "moonbitlang/async/semaphore",
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
+  "vectie/lunanexa/commercial",
+  "vectie/lunanexa/commercial/integrations",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/node",
   "vectie/lunanexa/registry",
@@ -37,7 +39,10 @@ pub(all) enum ApiMethod {
 
 pub struct ApiService {
   store : @vectie/lunanexa/store.FileStore
+  commercial_store : @commercial.CommercialStore
+  commercial_integrations : @integrations.IntegrationStore
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
+  exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -69,6 +74,7 @@ pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_control_plane(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @scheduler.FileScheduler, @telemetry.FileTelemetry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
+pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self

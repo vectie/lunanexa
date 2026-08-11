@@ -173,6 +173,7 @@ pub(all) struct DeploymentSnapshot {
   schema_version : String
   templates : Array[ModelServiceTemplate]
   operations : Array[DeploymentOperation]
+  signature : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

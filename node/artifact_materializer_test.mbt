@@ -299,3 +299,94 @@ async test "declared artifact size is enforced before transfer" {
   }
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "assignment materializes on only the selected node cache" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  let request_count = Ref(0)
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever() <| ((request, _, connection) => {
+        request_count.val += 1
+        connection.send_response(200, "OK")
+        if request.path.has_suffix(".sig") {
+          connection.write_string("detached-signature")
+        } else {
+          connection.write_string("artifact-bytes")
+        }
+        connection.end_response()
+      })
+    }
+    let roots = [
+      @fs.tmpdir(prefix="lunanexa-dgx-1-cache-"),
+      @fs.tmpdir(prefix="lunanexa-dgx-2-cache-"),
+      @fs.tmpdir(prefix="lunanexa-dgx-3-cache-"),
+      @fs.tmpdir(prefix="lunanexa-dgx-4-cache-"),
+    ]
+    let materializers = [
+      for root in roots => {
+        @node.ArtifactMaterializer::open(
+          root,
+          "http://\{server.addr}",
+          "assignment-scoped-token",
+          maximum_artifact_size_bytes=1024L,
+          allow_http_loopback=true,
+        )
+      }
+    ]
+    let selected = 2
+    let artifact = materializers[selected].materialize(
+      { ..materialization_assignment(), node_id: "node-c" },
+      { calls: 0 },
+    )
+    assert_true(@fs.exists(artifact.host_path()))
+    assert_eq(request_count.val, 2)
+    for index, root in roots {
+      let entries = @fs.readdir("\{root}/sha256")
+      if index == selected {
+        assert_true(entries.any(value => value.has_suffix(".model")))
+        assert_true(entries.any(value => value.has_suffix(".ready")))
+      } else {
+        assert_eq(entries, [])
+      }
+      @fs.rmdir(root, recursive=true)
+    }
+    server.close()
+  }
+}
+
+///|
+async test "cache pressure pruning preserves every file for an assigned digest" {
+  let directory = @fs.tmpdir(prefix="lunanexa-cache-pressure-")
+  let materializer = @node.ArtifactMaterializer::open(
+    directory,
+    "http://127.0.0.1:1",
+    "artifact-token",
+    maximum_artifact_size_bytes=1024L,
+    allow_http_loopback=true,
+  )
+  let assigned = "6521df166eb07efaf36eba5b6bedefd9d6a252e9c80bab1c99653700ec71473c"
+  let stale = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  for suffix in ["model", "sig", "ready", "model.partial"] {
+    @fs.write_file(
+      "\{directory}/sha256/\{assigned}.\{suffix}",
+      "assigned",
+      create_mode=CreateOrTruncate,
+      permission=0o600,
+      sync=Full,
+    )
+    @fs.write_file(
+      "\{directory}/sha256/\{stale}.\{suffix}",
+      "stale-pressure-data",
+      create_mode=CreateOrTruncate,
+      permission=0o600,
+      sync=Full,
+    )
+  }
+  materializer.prune_unassigned(["sha256:\{assigned}"])
+  let remaining = @fs.readdir("\{directory}/sha256")
+  assert_true(remaining.length() == 4)
+  assert_true(remaining.all(value => value.has_prefix("\{assigned}.")))
+  assert_false(remaining.any(value => value.has_prefix("\{stale}.")))
+  @fs.rmdir(directory, recursive=true)
+}

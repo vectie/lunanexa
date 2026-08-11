@@ -23,15 +23,42 @@ fn canonical_template(template : @deployment.ModelServiceTemplate) -> String {
 }
 
 ///|
+fn sign_material(material : String, secret : String) -> String {
+  let key = @utf8.encode(secret)
+  let encoded = @utf8.encode(material)
+  @crypto.bytes_to_hex_string(
+    @crypto.hmac(@crypto.SHA256::new(), key.view(), encoded.view()),
+  )
+}
+
+///|
 fn sign_template(
   template : @deployment.ModelServiceTemplate,
   secret : String,
 ) -> String {
-  let key = @utf8.encode(secret)
-  let material = @utf8.encode(canonical_template(template))
-  @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
-  )
+  sign_material(canonical_template(template), secret)
+}
+
+///|
+fn canonical_snapshot(snapshot : @deployment.DeploymentSnapshot) -> String {
+  { ..snapshot, signature: "" }.to_json().stringify()
+}
+
+///|
+fn sign_snapshot(
+  snapshot : @deployment.DeploymentSnapshot,
+  secret : String,
+) -> String {
+  sign_material(canonical_snapshot(snapshot), secret)
+}
+
+///|
+fn snapshot_signature_valid(
+  snapshot : @deployment.DeploymentSnapshot,
+  secret : String,
+) -> Bool {
+  snapshot.signature != "" &&
+  snapshot.signature == sign_snapshot(snapshot, secret)
 }
 
 ///|
@@ -65,7 +92,13 @@ fn FileDeploymentStore::snapshot_unlocked(
       by_deployment
     }
   })
-  { schema_version: "lunanexa.deployments.v1", templates, operations }
+  let unsigned : @deployment.DeploymentSnapshot = {
+    schema_version: "lunanexa.deployments.v2",
+    templates,
+    operations,
+    signature: "",
+  }
+  { ..unsigned, signature: sign_snapshot(unsigned, self.signing_secret) }
 }
 
 ///|
@@ -107,8 +140,11 @@ pub async fn FileDeploymentStore::open(
     ) catch {
       error => raise InvalidSnapshot("\{Repr(error)}")
     }
-    if snapshot.schema_version != "lunanexa.deployments.v1" {
+    if snapshot.schema_version != "lunanexa.deployments.v2" {
       raise InvalidSnapshot("unsupported deployment snapshot")
+    }
+    if !snapshot_signature_valid(snapshot, signing_secret) {
+      raise InvalidSnapshot("deployment snapshot integrity check failed")
     }
     for template in snapshot.templates {
       @deployment.validate_template(template) catch {

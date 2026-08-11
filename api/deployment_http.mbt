@@ -158,7 +158,13 @@ async fn ApiService::deployment_planning_context(
     registry: registry_evidence(snapshot, now),
     nodes: [
       for heartbeat in self.store.heartbeats() => {
-        management_node(heartbeat, now)
+        let node = management_node(heartbeat, now)
+        match self.exclusive_lease_store {
+          Some(leases) if leases.node_blocks_managed_placement(
+              heartbeat.node_id,
+            ) => { ..node, state: Cordoned }
+          _ => node
+        }
       }
     ],
     available_secret_refs: self.available_secret_refs,
@@ -202,6 +208,12 @@ async fn ApiService::publish_planned_assignment(
   if !registry.deployment_allowed(unsigned.artifact.digest, unsigned.runtime) {
     raise @deployment.DeploymentError::InvalidState(
       "registry rejected deployment",
+    )
+  }
+  if self.exclusive_lease_store is Some(leases) &&
+    leases.node_blocks_managed_placement(unsigned.node_id) {
+    raise @deployment.DeploymentError::InvalidState(
+      "node is reserved for an exclusive lease",
     )
   }
   let signed = {

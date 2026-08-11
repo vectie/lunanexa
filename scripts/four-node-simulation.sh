@@ -99,6 +99,7 @@ start_controller() {
     LUNANEXA_TELEMETRY_PATH="$simulation_directory/telemetry.json" \
     LUNANEXA_WORKSPACE_PATH="$simulation_directory/workspace.json" \
     LUNANEXA_DEPLOYMENT_PATH="$simulation_directory/deployments.json" \
+    LUNANEXA_EXCLUSIVE_LEASE_PATH="$simulation_directory/exclusive-leases.json" \
     LUNANEXA_REQUIRE_WORKSPACE_LEASE=1 \
     LUNANEXA_RUNTIME_ENDPOINT='http://127.0.0.1:1/v1/responses' \
     LUNANEXA_RUNTIME_ENDPOINTS_PATH="$simulation_directory/runtime-endpoints.json" \
@@ -115,6 +116,7 @@ start_controller() {
     LUNANEXA_MONITORING_TOKEN="$monitoring_token" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="$assignment_secret" \
     LUNANEXA_CATALOG_SIGNING_SECRET="simulation-catalog-authority" \
+    LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="simulation-exclusive-lease-authority" \
     LUNANEXA_COSIGN_BINARY='/usr/bin/cosign' \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$simulation_directory/cosign.pub" \
     LUNANEXA_RUNTIME_CONCURRENCY=1 \
@@ -194,7 +196,10 @@ wait_for_pattern() {
   path=$1
   pattern=$2
   attempts=0
-  while [ "$attempts" -lt 200 ]; do
+  # Process scheduling under the complete release gate can be materially slower
+  # than a focused run. Keep the wait bounded, but allow 30 seconds for the
+  # controller -> node -> heartbeat reconciliation loop to complete.
+  while [ "$attempts" -lt 600 ]; do
     curl --fail --silent --max-time 1 \
       --header "Authorization: Bearer $operator_token" \
       "$base_url$path" >"$simulation_directory/poll.json" 2>/dev/null || true
@@ -205,6 +210,8 @@ wait_for_pattern() {
     sleep 0.05
   done
   printf '%s\n' "timed out waiting for $pattern at $path" >&2
+  tail -n 30 "$simulation_directory"/controller-epoch-*.log >&2 || true
+  tail -n 20 "$simulation_directory"/sim-dgx-*-node.log >&2 || true
   return 1
 }
 
@@ -244,6 +251,57 @@ for index in 1 2 3 4; do
   start_node "$index"
 done
 wait_for_pattern '/v1/nodes' 'sim-dgx-4'
+
+catalog_template="{\"template_id\":\"text-small\",\"version\":\"v1\",\"display_name\":\"Text small\",\"description\":\"Simulation-only approved text service\",\"model_selector\":\"text.default\",\"model_id\":\"model.text\",\"model_version\":\"v1\",\"artifact\":{\"digest\":\"$artifact_digest\",\"uri\":\"s3://simulator/model.text/v1\",\"size_bytes\":\"1024\",\"signature_ref\":\"simulator-evidence:model.text:v1\"},\"runtime\":{\"name\":\"text-runtime\",\"image_digest\":\"$image_digest\",\"version\":\"sim-runtime-v1\",\"architectures\":[\"nvidia-gb10\"],\"capabilities\":[\"TextGenerate\"],\"supports_batching\":false,\"supports_multi_node\":false},\"capability\":\"TextGenerate\",\"architecture\":\"nvidia-gb10\",\"resources\":{\"accelerator_count\":1,\"accelerator_memory_mib\":8192,\"cpu_millis\":2000,\"memory_mib\":16384},\"network\":{\"allow_controller\":true,\"allow_artifact_store\":true,\"allowed_egress\":[]},\"health\":{\"readiness_path\":\"/health\",\"interval_ms\":1000,\"failure_threshold\":3,\"termination_grace_ms\":5000},\"data_policy\":{\"classification\":\"Confidential\",\"retention\":\"Ephemeral\",\"allow_cache\":false,\"allow_training_reuse\":false},\"secret_refs\":[],\"rollout\":{\"canary_replicas\":1,\"automatic_promotion\":false,\"automatic_rollback\":true,\"readiness_timeout_ms\":\"60000\"},\"approval_receipt\":\"\",\"signature\":\"\"}"
+deployment_intent='{"version":"lunanexa.v1","idempotency_key":"console:deployment-one-click","deployment_id":"deployment-one-click","template":{"template_id":"text-small","version":"v1"},"replicas":1,"data_class":"Confidential","lease_duration_ms":"600000","promote_when_ready":false}'
+operator_post '/v1/catalog/templates' "$catalog_template" \
+  "$simulation_directory/catalog-template.json"
+operator_post '/v1/deployment-plans' "$deployment_intent" \
+  "$simulation_directory/deployment-plan.json"
+rg -q '"executable":true' "$simulation_directory/deployment-plan.json"
+rg -q '"node_id":"sim-dgx-1"' "$simulation_directory/deployment-plan.json"
+if rg -q '"node_id":"sim-dgx-[234]"' "$simulation_directory/deployment-plan.json"; then
+  printf '%s\n' 'one-click plan selected more than its assigned DGX' >&2
+  exit 1
+fi
+operator_post '/v1/service-deployments' "$deployment_intent" \
+  "$simulation_directory/deployment-one-click.json"
+wait_for_pattern '/v1/nodes' 'deployment-one-click'
+curl --fail --silent --max-time 2 \
+  --header "Authorization: Bearer $operator_token" \
+  "$base_url/v1/assignments" >"$simulation_directory/one-click-assignments.json"
+rg -q '"assignment_id":"deployment-one-click-r1","deployment_id":"deployment-one-click","node_id":"sim-dgx-1"' \
+  "$simulation_directory/one-click-assignments.json"
+if rg -q '"deployment_id":"deployment-one-click","node_id":"sim-dgx-[234]"' \
+  "$simulation_directory/one-click-assignments.json"; then
+  printf '%s\n' 'one-click assignment escaped its selected DGX' >&2
+  exit 1
+fi
+operator_post '/v1/service-deployments' "$deployment_intent" \
+  "$simulation_directory/deployment-one-click-replay.json"
+curl --fail --silent --max-time 2 \
+  --header "Authorization: Bearer $operator_token" \
+  "$base_url/v1/assignments" >"$simulation_directory/one-click-assignments-replay.json"
+test "$(rg -o 'deployment-one-click-r1' "$simulation_directory/one-click-assignments-replay.json" | wc -l | tr -d ' ')" -eq 1
+conflicting_intent=$(printf '%s' "$deployment_intent" | sed 's/"replicas":1/"replicas":2/')
+status=$(curl --silent --output "$simulation_directory/deployment-one-click-conflict.json" \
+  --write-out '%{http_code}' --request POST \
+  --header "Authorization: Bearer $operator_token" \
+  --header 'Content-Type: application/json' \
+  --data "$conflicting_intent" "$base_url/v1/service-deployments")
+test "$status" = '409'
+rg -q 'IdempotencyConflict' "$simulation_directory/deployment-one-click-conflict.json"
+status=$(curl --silent --output "$simulation_directory/deployment-one-click-unauthorized.json" \
+  --write-out '%{http_code}' --request POST \
+  --header 'Content-Type: application/json' \
+  --data "$deployment_intent" "$base_url/v1/service-deployments")
+test "$status" = '401'
+status=$(curl --silent --output "$simulation_directory/deployment-one-click-malformed.json" \
+  --write-out '%{http_code}' --request POST \
+  --header "Authorization: Bearer $operator_token" \
+  --header 'Content-Type: application/json' \
+  --data '{' "$base_url/v1/service-deployments")
+test "$status" = '400'
 
 for index in 1 2 3 4; do
   body=$(assignment_body "$index" "$assignment_expiry")
@@ -383,7 +441,7 @@ for response in "$simulation_directory"/workload-*.json; do
 done
 
 printf '%s\n' \
-  "{\"schema_version\":\"lunanexa.simulation.v1\",\"nodes\":4,\"enrollment\":\"passed\",\"workspace_authority\":\"passed\",\"signed_assignment_reconciliation\":\"passed\",\"bounded_queueing\":\"passed\",\"runtime_failover\":\"passed\",\"drain_reroute\":\"passed\",\"controller_restart\":\"passed\",\"node_restart\":\"passed\",\"public_response_scan\":\"passed\",\"hardware_performance_validated\":false}" \
+  "{\"schema_version\":\"lunanexa.simulation.v1\",\"nodes\":4,\"enrollment\":\"passed\",\"one_click_preflight\":\"passed\",\"one_click_single_node_assignment\":\"passed\",\"one_click_idempotency\":\"passed\",\"workspace_authority\":\"passed\",\"signed_assignment_reconciliation\":\"passed\",\"bounded_queueing\":\"passed\",\"runtime_failover\":\"passed\",\"drain_reroute\":\"passed\",\"controller_restart\":\"passed\",\"node_restart\":\"passed\",\"public_response_scan\":\"passed\",\"hardware_performance_validated\":false}" \
   >"$simulation_directory/summary.json"
 
 printf '%s\n' 'four-node functional DGX simulation passed'

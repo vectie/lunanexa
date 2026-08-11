@@ -4,6 +4,7 @@ import {
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/node",
+  "vectie/lunanexa/nodelease/store" @nodelease_store,
   "vectie/lunanexa/store",
   "vectie/lunanexa/scheduler",
   "vectie/lunanexa/telemetry",

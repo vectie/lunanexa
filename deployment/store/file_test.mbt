@@ -88,3 +88,71 @@ async test "catalog and operation state survive restart" {
   assert_eq(reopened.templates().length(), 1)
   assert_eq(reopened.operation(operation.operation_id), Some(operation))
 }
+
+///|
+async test "deployment snapshot rejects tampering and wrong authority" {
+  let directory = @fs.tmpdir(prefix="lunanexa-deployments-integrity-")
+  let path = "\{directory}/deployments.json"
+  let signing_secret = "catalog-integrity-secret"
+  let store = @store.FileDeploymentStore::open(path, signing_secret)
+  ignore(store.register_template(unsigned_template()))
+  let persisted = @fs.read_file(path).text()
+  assert_true(persisted.contains("lunanexa.deployments.v2"))
+  assert_true(persisted.contains("\"signature\":"))
+  assert_false(persisted.contains(signing_secret))
+  try @store.FileDeploymentStore::open(path, "wrong-authority") catch {
+    @store.DeploymentStoreError::InvalidSnapshot(_) => ()
+    error => fail("unexpected wrong-authority error: \{Repr(error)}")
+  } noraise {
+    _ => fail("snapshot opened under the wrong signing authority")
+  }
+  @fs.write_file(
+    path,
+    persisted.replace_all(old="Text small", new="Hostile template"),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+    sync=Full,
+  )
+  try @store.FileDeploymentStore::open(path, signing_secret) catch {
+    @store.DeploymentStoreError::InvalidSnapshot(_) => ()
+    error => fail("unexpected tamper error: \{Repr(error)}")
+  } noraise {
+    _ => fail("tampered deployment snapshot was accepted")
+  }
+}
+
+///|
+async test "concurrent idempotent deployment retries create one operation" {
+  let directory = @fs.tmpdir(prefix="lunanexa-deployments-concurrency-")
+  let store = @store.FileDeploymentStore::open(
+    "\{directory}/deployments.json",
+    "catalog-concurrency-secret",
+  )
+  let template = store.register_template(unsigned_template())
+  let intent : @deployment.ModelServiceIntent = {
+    version: @contracts.contract_version,
+    idempotency_key: "deploy-concurrent",
+    deployment_id: "service-concurrent",
+    template: { template_id: template.template_id, version: template.version },
+    replicas: 1,
+    data_class: Internal,
+    lease_duration_ms: 60000L,
+    promote_when_ready: false,
+  }
+  let plan = @deployment.preflight([template], intent, {
+    registry: [],
+    nodes: [],
+    available_secret_refs: [],
+  })
+  @async.with_task_group(group => {
+    for attempt in 0..<32 {
+      group.spawn_bg(() => {
+        ignore(store.create_operation(plan, attempt.to_int64() + 1L))
+      })
+    }
+  })
+  let operations = store.operations()
+  assert_eq(operations.length(), 1)
+  assert_eq(operations[0].plan.intent, intent)
+  assert_eq(operations[0].generation, 1L)
+}

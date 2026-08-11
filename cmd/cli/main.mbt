@@ -117,7 +117,7 @@ async fn print_post_empty(base : String, path : String, token : String) -> Unit 
 ///|
 fn usage() -> String {
   (
-    #|usage: lunanexa <health|capabilities|invoke FILE|status ID|cancel ID|nodes|node-state ID active|cordoned|draining GENERATION|assignments|assign FILE|stop-assignment ID|registry|scheduler|recovery-plan|telemetry|set-quota FILE|capacity FILE|record-benchmark FILE|register-model FILE|register-runtime FILE|record-license FILE|record-verification FILE|record-evaluation FILE|approve FILE|promote FILE|rollback FILE|issue-enrollment-token FILE|audit|catalog|register-template FILE|plan-deployment FILE|deploy FILE|deployments|deployment ID|operation ID|promote-deployment ID|rollback-deployment ID|scale-deployment ID FILE|delete-deployment ID>
+    #|usage: lunanexa <health|capabilities|invoke FILE|status ID|cancel ID|nodes|node-state ID active|cordoned|draining GENERATION|exclusive-leases|exclusive-lease ID|lease-node FILE|transition-node-lease ID FILE|assignments|assign FILE|stop-assignment ID|registry|scheduler|recovery-plan|telemetry|set-quota FILE|capacity FILE|record-benchmark FILE|register-model FILE|register-runtime FILE|record-license FILE|record-verification FILE|record-evaluation FILE|approve FILE|promote FILE|rollback FILE|issue-enrollment-token FILE|audit|catalog|register-template FILE|plan-deployment FILE|deploy FILE|deployments|deployment ID|operation ID|promote-deployment ID|rollback-deployment ID|scale-deployment ID FILE|delete-deployment ID>
   )
 }
 
@@ -160,6 +160,38 @@ async fn main {
       )
     "nodes" =>
       print_get(base, "/v1/nodes", token=environment("LUNANEXA_OPERATOR_TOKEN"))
+    "exclusive-leases" =>
+      print_get(
+        base,
+        "/v1/exclusive-node-leases",
+        token=environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    "exclusive-lease" => {
+      guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      print_get(
+        base,
+        "/v1/exclusive-node-leases/\{args[2]}",
+        token=environment("LUNANEXA_OPERATOR_TOKEN"),
+      )
+    }
+    "lease-node" => {
+      guard args.length() == 3 else { raise Failure::Failure(usage()) }
+      print_post_file(
+        base,
+        "/v1/exclusive-node-leases",
+        environment("LUNANEXA_OPERATOR_TOKEN"),
+        args[2],
+      )
+    }
+    "transition-node-lease" => {
+      guard args.length() == 4 else { raise Failure::Failure(usage()) }
+      print_post_file(
+        base,
+        "/v1/exclusive-node-leases/\{args[2]}:transition",
+        environment("LUNANEXA_OPERATOR_TOKEN"),
+        args[3],
+      )
+    }
     "node-state" => {
       guard args.length() == 5 else { raise Failure::Failure(usage()) }
       let desired_state : @contracts.NodeState = match args[3] {

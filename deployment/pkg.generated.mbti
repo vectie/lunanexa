@@ -69,6 +69,7 @@ pub(all) struct DeploymentSnapshot {
   schema_version : String
   templates : Array[ModelServiceTemplate]
   operations : Array[DeploymentOperation]
+  signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum FindingCode {

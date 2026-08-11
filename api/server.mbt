@@ -23,7 +23,10 @@ pub(all) struct CancellationReceipt {
 ///|
 pub struct ApiService {
   store : @store.FileStore
+  commercial_store : @commercial.CommercialStore
+  commercial_integrations : @commercial_integrations.IntegrationStore
   deployment_store : @deployment_store.FileDeploymentStore?
+  exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -60,7 +63,10 @@ pub fn ApiService::new(
 ) -> ApiService {
   {
     store,
+    commercial_store: @commercial.CommercialStore::new(),
+    commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
+    exclusive_lease_store: None,
     available_secret_refs: [],
     registry: None,
     enrollment: None,
@@ -99,7 +105,10 @@ pub fn ApiService::with_registry(
 ) -> ApiService {
   {
     store,
+    commercial_store: @commercial.CommercialStore::new(),
+    commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
+    exclusive_lease_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: None,
@@ -139,7 +148,10 @@ pub fn ApiService::with_services(
 ) -> ApiService {
   {
     store,
+    commercial_store: @commercial.CommercialStore::new(),
+    commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
+    exclusive_lease_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -181,7 +193,10 @@ pub fn ApiService::with_control_plane(
 ) -> ApiService {
   {
     store,
+    commercial_store: @commercial.CommercialStore::new(),
+    commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     deployment_store: None,
+    exclusive_lease_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -228,6 +243,16 @@ pub fn ApiService::with_deployment_store(
   available_secret_refs? : Array[String] = [],
 ) -> ApiService {
   { ..self, deployment_store: Some(deployment_store), available_secret_refs }
+}
+
+///|
+/// Enables durable exclusive-node lease authority. A non-terminal lease is an
+/// immediate managed-placement fence, independent of heartbeat propagation.
+pub fn ApiService::with_exclusive_lease_store(
+  self : ApiService,
+  exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore,
+) -> ApiService {
+  { ..self, exclusive_lease_store: Some(exclusive_lease_store) }
 }
 
 ///|
@@ -637,6 +662,21 @@ fn scheduler_node(
 }
 
 ///|
+async fn ApiService::managed_scheduler_node(
+  self : ApiService,
+  heartbeat : @contracts.NodeHeartbeat,
+  now_unix_ms : Int64,
+  ready_models? : Array[String]? = None,
+) -> @scheduler.NodeSnapshot {
+  let snapshot = scheduler_node(heartbeat, now_unix_ms, ready_models~)
+  match self.exclusive_lease_store {
+    Some(leases) if leases.node_blocks_managed_placement(heartbeat.node_id) =>
+      { ..snapshot, state: Cordoned }
+    _ => snapshot
+  }
+}
+
+///|
 fn default_score_policy() -> @scheduler.ScorePolicy {
   {
     version: "placement-v1",
@@ -723,7 +763,11 @@ async fn ApiService::schedule_and_admit(
       } else {
         label_values(heartbeat.inventory.labels, "lunanexa.models")
       }
-      scheduler_node(heartbeat, now, ready_models=Some(ready_models))
+      self.managed_scheduler_node(
+        heartbeat,
+        now,
+        ready_models=Some(ready_models),
+      )
     }
   ]
   let decision = scheduler.place(
@@ -1608,6 +1652,15 @@ async fn ApiService::handle_with_transport(
   if deployment_management_path(path) {
     return self.handle_deployment_management(verb, path, headers, body)
   }
+  if exclusive_lease_management_path(path) {
+    return self.handle_exclusive_lease_management(verb, path, headers, body)
+  }
+  if commercial_management_path(path) {
+    return self.handle_commercial_management(verb, path, headers, body)
+  }
+  if technical_management_path(path) {
+    return self.handle_technical_management(verb, path, headers, body)
+  }
   match (verb, path) {
     (Get, "/health") =>
       json_reply(200, @contracts.health("control", self.version).to_json())
@@ -2063,7 +2116,7 @@ async fn ApiService::handle_with_transport(
       let now = @async.now()
       let nodes = [
         for heartbeat in self.store.heartbeats() => {
-          scheduler_node(heartbeat, now)
+          self.managed_scheduler_node(heartbeat, now)
         }
       ]
       json_reply(
@@ -2415,6 +2468,12 @@ async fn ApiService::handle_with_transport(
         return api_error(
           400, "InvalidRequest", "assignment security, resource, or lease constraints are invalid",
           false,
+        )
+      }
+      if self.exclusive_lease_store is Some(leases) &&
+        leases.node_blocks_managed_placement(assignment.node_id) {
+        return api_error(
+          409, "NodeExclusiveLease", "node is reserved for an exclusive lease", false,
         )
       }
       let signed_assignment = {
@@ -2960,6 +3019,44 @@ fn api_method(request_method : @http.RequestMethod) -> ApiMethod? {
 }
 
 ///|
+priv enum BoundedRequestBody {
+  RequestBody(String)
+  RequestBodyTooLarge
+  RequestBodyInvalidUtf8
+}
+
+/// Read at most one byte beyond the public body limit. This keeps an attacker
+/// from forcing the native listener to buffer an unbounded request before the
+/// ordinary contract-size check runs.
+
+///|
+async fn read_bounded_request_body(
+  reader : &@io.Reader,
+  maximum_bytes : Int,
+) -> BoundedRequestBody {
+  let buffer = @buffer.Buffer(size_hint=maximum_bytes.min(65536))
+  for total = 0 {
+    let remaining = maximum_bytes - total + 1
+    match reader.read_some(max_len=remaining.min(65536)) {
+      None =>
+        try @utf8.decode(buffer.to_bytes()) catch {
+          _ => return RequestBodyInvalidUtf8
+        } noraise {
+          value => return RequestBody(value)
+        }
+      Some(chunk) => {
+        let next = total + chunk.length()
+        if next > maximum_bytes {
+          return RequestBodyTooLarge
+        }
+        buffer.write_bytes(chunk)
+        continue next
+      }
+    }
+  }
+}
+
+///|
 fn reason(status : Int) -> String {
   match status {
     200 => "OK"
@@ -3032,7 +3129,34 @@ pub async fn ApiService::serve_on(
         connection.end_response()
         return
       }
-      let request_body = reader.read_all().text()
+      let request_body = match read_bounded_request_body(reader, 1048576) {
+        RequestBody(value) => value
+        RequestBodyTooLarge => {
+          let reply = api_error(
+            413, "PayloadTooLarge", "request body exceeds the public contract limit",
+            false,
+          )
+          connection.send_response(reply.status, reason(reply.status), extra_headers={
+            "Content-Type": reply.content_type,
+            "Cache-Control": "no-store",
+          })
+          connection.write_string(reply.body)
+          connection.end_response()
+          return
+        }
+        RequestBodyInvalidUtf8 => {
+          let reply = api_error(
+            400, "InvalidRequest", "request body is not valid UTF-8", false,
+          )
+          connection.send_response(reply.status, reason(reply.status), extra_headers={
+            "Content-Type": reply.content_type,
+            "Cache-Control": "no-store",
+          })
+          connection.write_string(reply.body)
+          connection.end_response()
+          return
+        }
+      }
       if request_body.length() > 1048576 {
         let reply = api_error(
           413, "PayloadTooLarge", "request body exceeds the public contract limit",
@@ -3100,7 +3224,35 @@ pub async fn ApiService::serve_on(
       return
     }
     let body = match verb {
-      Post | Put => reader.read_all().text()
+      Post | Put =>
+        match read_bounded_request_body(reader, 1048576) {
+          RequestBody(value) => value
+          RequestBodyTooLarge => {
+            let reply = api_error(
+              413, "PayloadTooLarge", "request body exceeds the public contract limit",
+              false,
+            )
+            connection.send_response(reply.status, reason(reply.status), extra_headers={
+              "Content-Type": reply.content_type,
+              "Cache-Control": "no-store",
+            })
+            connection.write_string(reply.body)
+            connection.end_response()
+            return
+          }
+          RequestBodyInvalidUtf8 => {
+            let reply = api_error(
+              400, "InvalidRequest", "request body is not valid UTF-8", false,
+            )
+            connection.send_response(reply.status, reason(reply.status), extra_headers={
+              "Content-Type": reply.content_type,
+              "Cache-Control": "no-store",
+            })
+            connection.write_string(reply.body)
+            connection.end_response()
+            return
+          }
+        }
       _ => ""
     }
     let reply = self.handle_with_transport(

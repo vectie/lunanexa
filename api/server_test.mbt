@@ -128,6 +128,25 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
     )
     assert_eq(health_response.code, 200)
     assert_true(health_body.text().contains("LunaNexa"))
+    let operator_headers = {
+      "Authorization": "Bearer operator-token",
+      "Content-Type": "application/json",
+    }
+    let (oversized_response, oversized_body) = @http.post(
+      "http://\{api_server.addr}/v1/catalog/templates",
+      "x".repeat(1048577),
+      headers=operator_headers,
+    )
+    assert_eq(oversized_response.code, 413)
+    assert_true(oversized_body.text().contains("PayloadTooLarge"))
+    let invalid_utf8 : Bytes = [0xff, 0xfe, 0xfd]
+    let (encoding_response, encoding_body) = @http.post(
+      "http://\{api_server.addr}/v1/catalog/templates",
+      invalid_utf8,
+      headers=operator_headers,
+    )
+    assert_eq(encoding_response.code, 400)
+    assert_true(encoding_body.text().contains("InvalidRequest"))
     let (unauthorized, _) = @http.post(
       "http://\{api_server.addr}/v1/workloads",
       api_request().to_json(),
@@ -169,10 +188,6 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
     assert_false(@fs.read_file(state_path).text().contains("network result"))
     assert_false(@fs.read_file(state_path).text().contains("hello through API"))
     assert_eq(reopened.audit_events().length(), 1)
-    let operator_headers = {
-      "Authorization": "Bearer operator-token",
-      "Content-Type": "application/json",
-    }
     let token_secret = "one-use-bootstrap-secret-value"
     let token_body : Json = {
       "token_id": "bootstrap-1",

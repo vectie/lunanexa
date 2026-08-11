@@ -78,4 +78,14 @@ test "runtime arguments mount only the verified local model" {
   )
   assert_false(arguments.any(value => value.contains("s3://")))
   assert_false(arguments.any(value => value.contains("artifact-token")))
+  assert_false(arguments.any(value => value.contains("podman.sock")))
+  assert_false(arguments.any(value => value == "--privileged"))
+  assert_false(arguments.any(value => value == "host"))
+  for
+    required in [
+      "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pull=never",
+      "--restart=no",
+    ] {
+    assert_true(arguments.any(value => value == required))
+  }
 }

@@ -66,6 +66,7 @@ start_controller() {
     LUNANEXA_TELEMETRY_PATH="$test_directory/telemetry.json" \
     LUNANEXA_WORKSPACE_PATH="$test_directory/workspace.json" \
     LUNANEXA_DEPLOYMENT_PATH="$test_directory/deployments.json" \
+    LUNANEXA_EXCLUSIVE_LEASE_PATH="$test_directory/exclusive-leases.json" \
     LUNANEXA_RUNTIME_ENDPOINT="http://127.0.0.1:1/v1/responses" \
     LUNANEXA_RUNTIME_CREDENTIAL="process-test-runtime-authority" \
     LUNANEXA_RUNTIME_VERSION="process-test-v1" \
@@ -80,6 +81,7 @@ start_controller() {
     LUNANEXA_MONITORING_TOKEN="process-test-monitoring-authority" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
     LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority" \
+    LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
     LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
     "$control_binary" >"$log_path" 2>&1 &
@@ -193,6 +195,7 @@ env \
   LUNANEXA_TELEMETRY_PATH="$test_directory/telemetry.json" \
   LUNANEXA_WORKSPACE_PATH="$test_directory/workspace.json" \
   LUNANEXA_DEPLOYMENT_PATH="$test_directory/deployments.json" \
+  LUNANEXA_EXCLUSIVE_LEASE_PATH="$test_directory/exclusive-leases.json" \
   LUNANEXA_RUNTIME_ENDPOINT="http://127.0.0.1:1/v1/responses" \
   LUNANEXA_RUNTIME_CREDENTIAL="process-test-runtime-authority" \
   LUNANEXA_RUNTIME_VERSION="process-test-v1" \
@@ -207,6 +210,7 @@ env \
   LUNANEXA_MONITORING_TOKEN="process-test-monitoring-authority" \
   LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
   LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority" \
+  LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
   LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
   LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
   "$control_binary" >"$stale_log" 2>&1 && {

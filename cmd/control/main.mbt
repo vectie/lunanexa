@@ -42,6 +42,9 @@ async fn main {
   let deployment_path = @env.get_env_var("LUNANEXA_DEPLOYMENT_PATH").unwrap_or(
     "lunanexa-deployments.json",
   )
+  let exclusive_lease_path = @env.get_env_var("LUNANEXA_EXCLUSIVE_LEASE_PATH").unwrap_or(
+    "lunanexa-exclusive-leases.json",
+  )
   let scheduler_capacity = @string.parse_int64(
     @env.get_env_var("LUNANEXA_ADMISSION_CAPACITY").unwrap_or("128"),
   ).to_int()
@@ -79,6 +82,10 @@ async fn main {
     deployment_path,
     required_environment("LUNANEXA_CATALOG_SIGNING_SECRET"),
   )
+  let exclusive_lease_store = @nodelease_store.FileExclusiveLeaseStore::open(
+    exclusive_lease_path,
+    required_environment("LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET"),
+  )
   let service = @api.ApiService::with_control_plane(
       durable,
       registry,
@@ -105,6 +112,7 @@ async fn main {
       deployment_store,
       available_secret_refs=secret_references(),
     )
+    .with_exclusive_lease_store(exclusive_lease_store)
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )

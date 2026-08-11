@@ -116,4 +116,36 @@ test "deployment readiness requires matching generation and live heartbeat" {
       1100L,
     ),
   )
+  for
+    hostile_heartbeat in [
+      { ..heartbeat, state: Cordoned },
+      { ..heartbeat, observed_generation: 1L },
+      { ..heartbeat, controller_epoch: 2L },
+      { ..heartbeat, inventory: { ..heartbeat.inventory, node_id: "node-b" } },
+      { ..heartbeat, timestamp_unix_ms: -20000L },
+    ] {
+    assert_false(
+      @controller.deployment_operation_ready(
+        operation,
+        [assignment],
+        [hostile_heartbeat],
+        1100L,
+      ),
+    )
+  }
+  for
+    hostile_assignment in [
+      { ..assignment, signature: "" },
+      { ..assignment, lease_expires_unix_ms: 1100L },
+      { ..assignment, controller_epoch: 2L },
+    ] {
+    assert_false(
+      @controller.deployment_operation_ready(
+        operation,
+        [hostile_assignment],
+        [heartbeat],
+        1100L,
+      ),
+    )
+  }
 }

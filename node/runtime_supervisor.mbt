@@ -33,7 +33,7 @@ pub fn OciRuntimeSupervisor::new(
     engine != "/opt/homebrew/bin/docker" {
     raise RuntimeSupervisorError::UnsupportedEngine(engine)
   }
-  if !safe_identity(network) {
+  if !safe_identity(network) || !network.has_prefix("lunanexa-") {
     raise RuntimeSupervisorError::InvalidAssignmentIdentity(network)
   }
   if !engine_endpoint.has_prefix("unix:///run/") ||
