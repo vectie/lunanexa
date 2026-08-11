@@ -19,6 +19,8 @@ pub fn confirmation_receipt(DestructiveAction, String) -> Confirmation
 
 pub fn default_state() -> ConsoleState
 
+pub fn demo_state() -> ConsoleState
+
 pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage]) -> @html.Html
 
 pub fn render(ConsoleState) -> String
@@ -38,6 +40,15 @@ pub(all) struct AccessGrantRow {
   scope : String
   expires_at : String
   state : @workspace.WorkspaceAccessGrantState
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AgreementRow {
+  agreement_id : String
+  agreement_type : String
+  template_version : String
+  organization_id : String
+  state : String
+  evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct AuditRow {
@@ -111,6 +122,9 @@ pub(all) struct ConsoleState {
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
+  cost_centers : Array[CostCenterRow]
+  agreements : Array[AgreementRow]
+  qualified_services : Array[QualifiedServiceRow]
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
@@ -121,6 +135,16 @@ pub(all) struct ConsoleState {
   quick_template : String
   quick_replicas : String
 } derive(Eq)
+
+pub(all) struct CostCenterRow {
+  cost_center_id : String
+  organization_id : String
+  display_name : String
+  parent_cost_center_id : String
+  project_count : Int
+  provisional_spend : String
+  budget_posture : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct DeploymentRow {
   assignment_id : String
@@ -180,6 +204,9 @@ pub(all) enum OperatorRoute {
   Overview
   Users
   Leases
+  CostCenters
+  Agreements
+  QualifiedServices
   Nodes
   Models
   Catalog
@@ -215,6 +242,15 @@ pub(all) struct PolicySummary {
   data_class_count : Int
   default_retention : @contracts.RetentionPolicy
   allowed_runtimes : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct QualifiedServiceRow {
+  provider : String
+  capability : String
+  environment : String
+  state : String
+  evidence_policy : String
+  production_ready : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct RequestDetail {

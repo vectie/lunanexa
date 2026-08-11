@@ -8,6 +8,15 @@ test "console validates only optional opaque loopback subjects" {
 }
 
 ///|
+test "console validates tenant-scoped commercial organization identifiers" {
+  assert_true(commercial_organization_is_valid(""))
+  assert_true(commercial_organization_is_valid("org:research-01"))
+  assert_false(commercial_organization_is_valid("../organizations/admin"))
+  assert_false(commercial_organization_is_valid("org with spaces"))
+  assert_false(commercial_organization_is_valid("a".repeat(161)))
+}
+
+///|
 test "console workspace lifecycle routes match the operator API" {
   assert_eq(
     workspace_lifecycle_path(ActivateWorkspaceUser("user-1")),
@@ -53,6 +62,59 @@ test "console service deployment action routes stay canonical" {
     )
     is None,
   )
+  let ready : @ui.ConsoleState = {
+    ..@ui.demo_state(),
+    quick_deployment_id: "service-1",
+    quick_replicas: "1",
+  }
+  guard quick_deployment_intent(ready, 1000L) is Some(first) else {
+    fail("expected a valid quick deployment intent")
+  }
+  guard quick_deployment_intent(ready, 2000L) is Some(retry) else {
+    fail("expected a valid retry intent")
+  }
+  assert_eq(first.idempotency_key, "console:service-1")
+  assert_eq(retry.idempotency_key, first.idempotency_key)
+}
+
+///|
+test "console quick-deployment fuzz matches the public intent boundary" {
+  let base = @ui.demo_state()
+  for length in 0..<=140 {
+    let candidate = quick_deployment_intent(
+      { ..base, quick_deployment_id: "a".repeat(length) },
+      length.to_int64(),
+    )
+    assert_eq(candidate is Some(_), length > 0 && length <= 128)
+  }
+  for
+    hostile in [
+      "../service", "service/name", "service name", "service\nname", "<script>alert(1)</script>",
+      "服务",
+    ] {
+    assert_true(
+      quick_deployment_intent({ ..base, quick_deployment_id: hostile }, 1L)
+      is None,
+    )
+  }
+  for replicas in ["", "0", "-1", "65", "1e2", "1.5", "NaN", "∞"] {
+    assert_true(
+      quick_deployment_intent(
+        { ..base, quick_deployment_id: "service-1", quick_replicas: replicas },
+        1L,
+      )
+      is None,
+    )
+  }
+  for replicas in ["1", "2", "64"] {
+    assert_true(
+      quick_deployment_intent(
+        { ..base, quick_deployment_id: "service-1", quick_replicas: replicas },
+        1L,
+      )
+      is Some(_),
+    )
+  }
 }
 
 ///|
@@ -110,6 +172,8 @@ test "locale switch is local and preserves operational session state" {
     audit_credential: "audit-secret",
     inference_credential: "inference-secret",
     inference_subject_ref: "subject:opaque-1",
+    commercial_organization: "org-1",
+    demo_mode: false,
     console: state,
     next_directive_generation: 42L,
   }
@@ -128,6 +192,7 @@ test "locale switch is local and preserves operational session state" {
   assert_eq(switched.credential, "operator-secret")
   assert_eq(switched.audit_credential, "audit-secret")
   assert_eq(switched.inference_credential, "inference-secret")
+  assert_eq(switched.commercial_organization, "org-1")
 }
 
 ///|
@@ -213,6 +278,8 @@ test "Simplified Chinese connection drawer localizes security copy" {
     audit_credential: "",
     inference_credential: "",
     inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
     console: { ..@ui.default_state(), locale: ChineseSimplified },
     next_directive_generation: 1L,
   }
@@ -223,10 +290,62 @@ test "Simplified Chinese connection drawer localizes security copy" {
   for
     value in [
       "控制器连接", "需要凭据", "运维令牌", "审计令牌", "推理令牌（可选）",
-      "不透明主体引用（可选）", "凭据仅保存在浏览器内存中",
+      "商业组织（可选）", "不透明主体引用（可选）", "凭据仅保存在浏览器内存中",
       "连接并刷新",
     ] {
     assert_true(html.contains(value))
   }
   assert_true(html.contains("https://controller.example.test"))
+}
+
+///|
+#warnings("-alert_unstable")
+test "demo mode presents a read-only cluster snapshot" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    console: @ui.demo_state(),
+    next_directive_generation: 1L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("Read-only demo snapshot"))
+  assert_true(html.contains("4/4 machines running"))
+}
+
+///|
+test "demo mode exercises one-click preflight without controller mutation" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    console: { ..@ui.demo_state(), route: Catalog },
+    next_directive_generation: 1L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (named, _) = update(
+    model,
+    Console(QuickDeploymentIdChanged("demo-service")),
+    emit,
+  )
+  assert_eq(named.console.quick_deployment_id, "demo-service")
+  let (submitted, _) = update(named, Console(SubmitQuickDeployment), emit)
+  assert_eq(
+    submitted.console.success_message,
+    Some(
+      "Demo preflight passed for demo-service. No controller operation was created.",
+    ),
+  )
+  assert_eq(submitted.console.service_deployments.length(), 0)
 }

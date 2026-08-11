@@ -11,7 +11,26 @@ extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
 ///|
+extern "js" fn demo_mode() -> Bool =
+  #| () => {
+  #|   try {
+  #|     const value = new URL(globalThis.location.href).searchParams.get("demo");
+  #|     return value === "1" || value === "true";
+  #|   } catch (_) {
+  #|     return false;
+  #|   }
+  #| }
+
+///|
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
+
+///|
+extern "js" fn scroll_console_top() -> Unit =
+  #| () => {
+  #|   try {
+  #|     globalThis.requestAnimationFrame?.(() => globalThis.scrollTo?.(0, 0));
+  #|   } catch (_) {}
+  #| }
 
 ///|
 extern "js" fn stored_locale_preference() -> String =
@@ -58,6 +77,23 @@ fn console_copy(
 fn console_document_title(locale : @i18n.Locale) -> String {
   console_copy(
     locale, "LunaNexa | Cluster Operations", "LunaNexa | 集群运维",
+  )
+}
+
+///|
+fn commercial_organization_is_valid(value : String) -> Bool {
+  value == "" ||
+  (
+    value.length() <= 160 &&
+    value.all(character => {
+      character.is_ascii_alphabetic() ||
+      character.is_ascii_digit() ||
+      character == '-' ||
+      character == '_' ||
+      character == ':' ||
+      character == '.' ||
+      character == '@'
+    })
   )
 }
 
@@ -330,7 +366,7 @@ fn catalog_template_key(template : @deployment.ModelServiceTemplate) -> String {
 ///|
 fn quick_deployment_intent(
   state : @ui.ConsoleState,
-  now_unix_ms : Int64,
+  _now_unix_ms : Int64,
 ) -> @deployment.ModelServiceIntent? {
   let deployment_id = state.quick_deployment_id.trim().to_owned()
   let replicas = @string.parse_int64(state.quick_replicas.trim()).to_int() catch {
@@ -349,7 +385,7 @@ fn quick_deployment_intent(
   }
   Some({
     version: @contracts.contract_version,
-    idempotency_key: "console:\{deployment_id}:\{now_unix_ms}",
+    idempotency_key: "console:\{deployment_id}",
     deployment_id,
     template: { template_id: template.template_id, version: template.version },
     replicas,
@@ -420,6 +456,7 @@ async fn load_console(
   endpoint : String,
   token : String,
   audit_token : String,
+  commercial_organization : String,
   route : @ui.OperatorRoute,
   locale : @i18n.Locale,
 ) -> @ui.ConsoleState {
@@ -450,6 +487,40 @@ async fn load_console(
   let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/service-deployments", token)),
   )
+  let commercial_snapshot : @commercial.CommercialSnapshot? = if commercial_organization ==
+    "" {
+    None
+  } else {
+    Some(
+      @json.from_json(
+        @json.parse(
+          request(
+            "GET",
+            endpoint,
+            "/v1/commercial/organizations/\{commercial_organization}/snapshot",
+            token,
+          ),
+        ),
+      ),
+    )
+  }
+  let integration_snapshot : @commercial_integrations.IntegrationSnapshot? = if commercial_organization ==
+    "" {
+    None
+  } else {
+    Some(
+      @json.from_json(
+        @json.parse(
+          request(
+            "GET",
+            endpoint,
+            "/v1/commercial/organizations/\{commercial_organization}/integrations",
+            token,
+          ),
+        ),
+      ),
+    )
+  }
   let now = current_unix_ms()
   let nodes : Array[@ui.NodeRow] = [
     for heartbeat in heartbeats => {
@@ -560,6 +631,90 @@ async fn load_console(
   while request_details.length() > 50 {
     ignore(request_details.remove(0))
   }
+  let cost_centers : Array[@ui.CostCenterRow] = match commercial_snapshot {
+    Some(snapshot) =>
+      [
+        for center in snapshot.cost_centers => {
+          let center_projects = snapshot.projects.filter(project => {
+            project.cost_center_id == center.cost_center_id
+          })
+          let entries = snapshot.ledger_entries.filter(entry => {
+            entry.cost_center_id == center.cost_center_id
+          })
+          let budget_count = snapshot.budgets.count_if(budget => {
+            budget.project_id is None ||
+            center_projects.any(project => {
+              budget.project_id == Some(project.project_id)
+            })
+          })
+          {
+            cost_center_id: center.cost_center_id,
+            organization_id: center.organization_id,
+            display_name: center.display_name,
+            parent_cost_center_id: center.parent_cost_center_id.unwrap_or("—"),
+            project_count: center_projects.length(),
+            provisional_spend: if entries.length() == 0 {
+              "—"
+            } else {
+              let first = entries[0].amount
+              let total : @commercial.FixedMoney? = try {
+                let mut sum = @commercial.money(0L, first.currency, first.scale)
+                for entry in entries {
+                  sum = sum.add(entry.amount)
+                }
+                Some(sum)
+              } catch {
+                _ => None
+              } noraise {
+                value => value
+              }
+              match total {
+                Some(value) =>
+                  "\{value.currency} \{value.minor_units} minor units · scale \{value.scale}"
+                None => "Unavailable"
+              }
+            },
+            budget_posture: "\{budget_count} budget policies",
+          }
+        }
+      ]
+    None => []
+  }
+  let agreements : Array[@ui.AgreementRow] = match commercial_snapshot {
+    Some(snapshot) =>
+      [
+        for agreement in snapshot.agreements => {
+          {
+            agreement_id: agreement.agreement_id,
+            agreement_type: agreement.template_id,
+            template_version: "\{agreement.template_id}@\{agreement.template_version}",
+            organization_id: agreement.organization_id,
+            state: "\{Repr(agreement.state)}",
+            evidence_receipt: agreement.executed_artifact_hash.unwrap_or(
+              agreement.rendered_document_hash,
+            ),
+          }
+        }
+      ]
+    None => []
+  }
+  let qualified_services : Array[@ui.QualifiedServiceRow] = match
+    integration_snapshot {
+    Some(snapshot) =>
+      [
+        for record in snapshot.records => {
+          {
+            provider: record.provider,
+            capability: "\{Repr(record.kind)}",
+            environment: record.environment,
+            state: "\{Repr(record.state)}",
+            evidence_policy: "Hashed provider reference · tenant-bound record",
+            production_ready: false,
+          }
+        }
+      ]
+    None => []
+  }
   {
     locale,
     route,
@@ -619,6 +774,9 @@ async fn load_console(
     users,
     access_grants,
     compute_leases,
+    cost_centers,
+    agreements,
+    qualified_services,
     confirmation: None,
     error_message: None,
     success_message: None,
@@ -650,6 +808,8 @@ priv struct AppModel {
   audit_credential : String
   inference_credential : String
   inference_subject_ref : String
+  commercial_organization : String
+  demo_mode : Bool
   console : @ui.ConsoleState
   next_directive_generation : Int64
 } derive(Eq)
@@ -660,6 +820,7 @@ priv enum AppMessage {
   AuditCredentialChanged(String)
   InferenceCredentialChanged(String)
   InferenceSubjectChanged(String)
+  CommercialOrganizationChanged(String)
   Connect
   Console(@ui.ConsoleMessage)
   Outcome(LoadOutcome)
@@ -733,6 +894,7 @@ fn load_command(
         model.endpoint,
         model.credential,
         model.audit_credential,
+        model.commercial_organization,
         model.console.route,
         model.console.locale,
       )
@@ -753,7 +915,7 @@ fn load_command(
 }
 
 ///|
-fn update(
+fn update_live(
   model : AppModel,
   message : AppMessage,
   emit : @rabbita.Emit[AppMessage],
@@ -766,11 +928,31 @@ fn update(
       ({ ..model, inference_credential: value }, @rabbita.none)
     InferenceSubjectChanged(value) =>
       ({ ..model, inference_subject_ref: value }, @rabbita.none)
+    CommercialOrganizationChanged(value) =>
+      ({ ..model, commercial_organization: value }, @rabbita.none)
     Console(LocaleChanged(locale)) => {
       apply_console_locale(locale)
       (switch_app_locale(model, locale), @rabbita.none)
     }
     Connect => {
+      if !commercial_organization_is_valid(model.commercial_organization) {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "The optional commercial organization must be an opaque identifier of at most 160 safe characters.",
+                  "可选商业组织必须是最多 160 个安全字符的不透明标识符。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
       let next = {
         ..model,
         console: { ..model.console, loading: true, error_message: None },
@@ -864,8 +1046,10 @@ fn update(
         },
         @rabbita.none,
       )
-    Console(Navigate(route)) =>
+    Console(Navigate(route)) => {
+      scroll_console_top()
       ({ ..model, console: { ..model.console, route, } }, @rabbita.none)
+    }
     Console(BeginDrain(node_id)) =>
       (
         {
@@ -1241,6 +1425,23 @@ fn update(
         "approve-model" => ("POST", "/v1/models/approve", false)
         "promote-alias" => ("POST", "/v1/aliases/promote", false)
         "set-quota" => ("PUT", "/v1/quotas", false)
+        "create-organization" => ("POST", "/v1/commercial/organizations", false)
+        "create-cost-center" => ("POST", "/v1/commercial/cost-centers", false)
+        "create-project" => ("POST", "/v1/commercial/projects", false)
+        "record-commercial-usage" => ("POST", "/v1/commercial/usage", false)
+        "rate-commercial-usage" => ("POST", "/v1/commercial/usage:rate", false)
+        "create-commercial-budget" => ("POST", "/v1/commercial/budgets", false)
+        "create-commercial-quota" => ("POST", "/v1/commercial/quotas", false)
+        "register-agreement-template" =>
+          ("POST", "/v1/commercial/agreement-templates", false)
+        "create-agreement" => ("POST", "/v1/commercial/agreements", false)
+        "register-external-record" =>
+          ("POST", "/v1/commercial/external-records", false)
+        "decide-autoscale" => ("POST", "/v1/technical/autoscale:decide", false)
+        "decide-backpressure" =>
+          ("POST", "/v1/technical/backpressure:decide", false)
+        "validate-transfer-grant" =>
+          ("POST", "/v1/technical/transfer-grants:validate", false)
         "invite-user" => ("POST", "/v1/workspace/users", false)
         "grant-access" => ("POST", "/v1/workspace/access-grants", false)
         "create-compute-lease" => ("POST", "/v1/workspace/leases", false)
@@ -1706,6 +1907,67 @@ fn update(
   }
 }
 
+/// Demo mode keeps navigation and language switching interactive while making
+/// all controller mutations and refreshes no-ops.
+
+///|
+fn update(
+  model : AppModel,
+  message : AppMessage,
+  emit : @rabbita.Emit[AppMessage],
+) -> (AppModel, @rabbita.Cmd) {
+  if model.demo_mode {
+    match message {
+      Console(LocaleChanged(_))
+      | Console(Navigate(_))
+      | Console(QuickDeploymentIdChanged(_))
+      | Console(QuickTemplateChanged(_))
+      | Console(QuickReplicasChanged(_)) => update_live(model, message, emit)
+      Console(SubmitQuickDeployment) => {
+        guard quick_deployment_intent(model.console, 0L) is Some(intent) else {
+          return (
+            {
+              ..model,
+              console: {
+                ..model.console,
+                success_message: None,
+                error_message: Some(
+                  console_copy(
+                    model.console.locale,
+                    "Choose an approved template, a valid service name, and 1–64 replicas.",
+                    "请选择已批准模板、有效服务名称以及 1–64 个副本。",
+                  ),
+                ),
+              },
+            },
+            @rabbita.none,
+          )
+        }
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: None,
+              success_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Demo preflight passed for \{intent.deployment_id}. No controller operation was created.",
+                  "\{intent.deployment_id} 的演示预检已通过。未创建控制器操作。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      _ => (model, @rabbita.none)
+    }
+  } else {
+    update_live(model, message, emit)
+  }
+}
+
 ///|
 fn app_view(
   model : AppModel,
@@ -1750,6 +2012,28 @@ fn app_view(
               value=model.credential,
               auto_complete=Off,
               on_input=emit.map(value => CredentialChanged(value)),
+            ),
+          ]),
+          @html.div(class="connection-field", [
+            @html.label(
+              for_="commercial-organization",
+              console_copy(
+                locale, "Commercial organization (optional)", "商业组织（可选）",
+              ),
+            ),
+            @html.input(
+              id="commercial-organization",
+              value=model.commercial_organization,
+              maxlength=160,
+              auto_complete=Off,
+              on_input=emit.map(value => CommercialOrganizationChanged(value)),
+            ),
+            @html.span(
+              class="connection-help",
+              console_copy(
+                locale, "Loads tenant-scoped cost centers, agreements, and normalized provider evidence on refresh.",
+                "刷新时加载限定租户范围的成本中心、协议与规范化供应商证据。",
+              ),
             ),
           ]),
           @html.div(class="connection-field", [
@@ -1827,6 +2111,22 @@ fn app_view(
         ]),
       ],
     ),
+    if model.demo_mode {
+      @html.div(class="demo-banner", [
+        @html.span(class="demo-banner-mark", "DEMO"),
+        @html.strong(
+          console_copy(locale, "Read-only demo snapshot", "只读演示快照"),
+        ),
+        @html.span(
+          console_copy(
+            locale, "4/4 machines running · 9 models available · controller mutations disabled",
+            "4/4 台机器运行中 · 9 个模型可用 · 控制器变更已禁用",
+          ),
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
     @ui.interactive_view(model.console, emit.map(message => Console(message))),
   ])
 }
@@ -1834,6 +2134,7 @@ fn app_view(
 ///|
 fn main {
   let locale = @i18n.parse_locale(stored_locale_preference())
+  let is_demo = demo_mode()
   apply_console_locale(locale)
   @rabbita.elmish(
     model={
@@ -1842,7 +2143,13 @@ fn main {
       audit_credential: "",
       inference_credential: "",
       inference_subject_ref: "",
-      console: { ..@ui.default_state(), locale, },
+      commercial_organization: "",
+      demo_mode: is_demo,
+      console: if is_demo {
+        { ..@ui.demo_state(), locale, }
+      } else {
+        { ..@ui.default_state(), locale, }
+      },
       next_directive_generation: 1L,
     },
     view=app_view,

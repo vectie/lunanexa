@@ -111,6 +111,37 @@ pub(all) struct ComputeLeaseRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct CostCenterRow {
+  cost_center_id : String
+  organization_id : String
+  display_name : String
+  parent_cost_center_id : String
+  project_count : Int
+  provisional_spend : String
+  budget_posture : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct AgreementRow {
+  agreement_id : String
+  agreement_type : String
+  template_version : String
+  organization_id : String
+  state : String
+  evidence_receipt : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct QualifiedServiceRow {
+  provider : String
+  capability : String
+  environment : String
+  state : String
+  evidence_policy : String
+  production_ready : Bool
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) enum DestructiveAction {
   CordonNode(String)
   DrainNode(String)
@@ -151,6 +182,9 @@ pub(all) struct ConsoleState {
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
+  cost_centers : Array[CostCenterRow]
+  agreements : Array[AgreementRow]
+  qualified_services : Array[QualifiedServiceRow]
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
@@ -236,6 +270,9 @@ pub fn default_state() -> ConsoleState {
     users: [],
     access_grants: [],
     compute_leases: [],
+    cost_centers: [],
+    agreements: [],
+    qualified_services: [],
     confirmation: None,
     error_message: None,
     success_message: None,
@@ -245,6 +282,268 @@ pub fn default_state() -> ConsoleState {
     quick_deployment_id: "",
     quick_template: "",
     quick_replicas: "1",
+  }
+}
+
+/// A deterministic, read-only snapshot for product demos and UI review.
+/// It is never used by the live controller loading path.
+
+///|
+pub fn demo_state() -> ConsoleState {
+  let nodes : Array[NodeRow] = [
+    {
+      node_id: "dgx-spark-01",
+      state: Active,
+      architecture: "nvidia-gb10",
+      free_memory_mib: 81920,
+      workloads: 3,
+    },
+    {
+      node_id: "dgx-spark-02",
+      state: Active,
+      architecture: "nvidia-gb10",
+      free_memory_mib: 79872,
+      workloads: 2,
+    },
+    {
+      node_id: "dgx-spark-03",
+      state: Active,
+      architecture: "nvidia-gb10",
+      free_memory_mib: 80896,
+      workloads: 4,
+    },
+    {
+      node_id: "dgx-spark-04",
+      state: Active,
+      architecture: "nvidia-gb10",
+      free_memory_mib: 79872,
+      workloads: 2,
+    },
+  ]
+  let models : Array[ModelRow] = [
+    {
+      model_id: "lunanexa.text.general",
+      version: "v3",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "text.default",
+    },
+    {
+      model_id: "lunanexa.text.fast",
+      version: "v2",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "text.fast",
+    },
+    {
+      model_id: "lunanexa.text.reasoning",
+      version: "v1",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "text.reasoning",
+    },
+    {
+      model_id: "lunanexa.code.assist",
+      version: "v4",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "code.assist",
+    },
+    {
+      model_id: "lunanexa.embedding.multilingual",
+      version: "v2",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "embedding.multilingual",
+    },
+    {
+      model_id: "lunanexa.embedding.base",
+      version: "v1",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "embedding.default",
+    },
+    {
+      model_id: "lunanexa.vision.general",
+      version: "v2",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "vision.default",
+    },
+    {
+      model_id: "lunanexa.rerank.base",
+      version: "v1",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "rerank.default",
+    },
+    {
+      model_id: "lunanexa.speech.transcribe",
+      version: "v2",
+      state: Approved,
+      license_status: "accepted",
+      evaluation_status: "passed",
+      compatibility: "DGX Spark",
+      alias_name: "speech.transcribe",
+    },
+  ]
+  let templates : Array[@deployment.ModelServiceTemplate] = [
+    {
+      template_id: "text-small",
+      version: "v1",
+      display_name: "Text small",
+      description: "Approved DGX Spark text service",
+      model_selector: "text.default",
+      model_id: "lunanexa.text.general",
+      model_version: "v3",
+      artifact: {
+        digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        uri: "s3://models/lunanexa.text.general/v3",
+        size_bytes: 16000000000L,
+        signature_ref: "s3://models/lunanexa.text.general/v3.sig",
+      },
+      runtime: {
+        name: "text-runtime",
+        image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        version: "runtime-v1",
+        architectures: ["nvidia-gb10"],
+        capabilities: [TextGenerate],
+        supports_batching: true,
+        supports_multi_node: false,
+      },
+      capability: TextGenerate,
+      architecture: "nvidia-gb10",
+      resources: {
+        accelerator_count: 1,
+        accelerator_memory_mib: 24000,
+        cpu_millis: 4000,
+        memory_mib: 32000,
+      },
+      network: {
+        allow_controller: true,
+        allow_artifact_store: true,
+        allowed_egress: [],
+      },
+      health: {
+        readiness_path: "/health",
+        interval_ms: 1000,
+        failure_threshold: 3,
+        termination_grace_ms: 30000,
+      },
+      data_policy: {
+        classification: Internal,
+        retention: Ephemeral,
+        allow_cache: false,
+        allow_training_reuse: false,
+      },
+      secret_refs: ["runtime-token"],
+      rollout: {
+        canary_replicas: 1,
+        automatic_promotion: false,
+        automatic_rollback: true,
+        readiness_timeout_ms: 60000L,
+      },
+      approval_receipt: "catalog:text-small:v1",
+      signature: "demo-signed",
+    },
+  ]
+  {
+    ..default_state(),
+    overview: {
+      active_nodes: 4,
+      total_nodes: 4,
+      active_models: 9,
+      queue_depth: 1,
+      alerts: 0,
+      recent_changes: 6,
+    },
+    nodes,
+    models,
+    catalog_templates: templates,
+    requests: { count: 1842, p95_ms: 142, throughput_per_second: 38, errors: 3 },
+    benchmark_evidence: [
+      "demo-throughput · p95 142 ms · 38/s · failures 1‰ · demo-run-01",
+    ],
+    policies: {
+      quota_count: 6,
+      data_class_count: 4,
+      default_retention: Ephemeral,
+      allowed_runtimes: ["text-runtime", "embedding-runtime", "vision-runtime"],
+    },
+    audit: [
+      {
+        actor: "demo-operator",
+        decision: "cluster.snapshot",
+        evidence: "4-node demo fleet",
+        result: "accepted",
+        receipt: "demo:audit:01",
+      },
+    ],
+    cost_centers: [
+      {
+        cost_center_id: "cc-research",
+        organization_id: "org-luna",
+        display_name: "Research",
+        parent_cost_center_id: "—",
+        project_count: 3,
+        provisional_spend: "CNY 12,840.00",
+        budget_posture: "Within budget",
+      },
+      {
+        cost_center_id: "cc-platform",
+        organization_id: "org-luna",
+        display_name: "Platform",
+        parent_cost_center_id: "—",
+        project_count: 2,
+        provisional_spend: "CNY 8,120.00",
+        budget_posture: "Approval at 80%",
+      },
+    ],
+    agreements: [
+      {
+        agreement_id: "agreement-capacity-2026",
+        agreement_type: "Reserved capacity",
+        template_version: "capacity-v2",
+        organization_id: "org-luna",
+        state: "Executed",
+        evidence_receipt: "evidence:agreement:2026:01",
+      },
+      {
+        agreement_id: "agreement-dpa-2026",
+        agreement_type: "Data processing",
+        template_version: "dpa-v1",
+        organization_id: "org-luna",
+        state: "Awaiting signature",
+        evidence_receipt: "evidence:agreement:2026:02",
+      },
+    ],
+    qualified_services: [
+      {
+        provider: "LunaFide",
+        capability: "Identity · signature · payment · invoice",
+        environment: "TestOnly",
+        state: "Available",
+        evidence_policy: "Signed, sequenced, tenant-bound callbacks",
+        production_ready: false,
+      },
+    ],
+    quick_template: "text-small@v1",
   }
 }
 
@@ -376,6 +675,9 @@ fn route_label(locale : @i18n.Locale, route : OperatorRoute) -> String {
     Overview => localized(locale, "Overview", "概览")
     Users => localized(locale, "Users & access", "用户与访问权限")
     Leases => localized(locale, "Leases", "租约")
+    CostCenters => localized(locale, "Cost centers", "成本中心")
+    Agreements => localized(locale, "Agreements", "数字协议")
+    QualifiedServices => localized(locale, "Qualified services", "资质服务")
     Nodes => localized(locale, "Nodes", "节点")
     Models => localized(locale, "Models", "模型")
     Catalog => localized(locale, "Catalog", "目录")
@@ -402,6 +704,21 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
     Leases =>
       localized(
         locale, "Time-bounded workspace entitlements and inference capacity.", "管理有时限的工作区权益与推理容量。",
+      )
+    CostCenters =>
+      localized(
+        locale, "Tenant hierarchy, metered spend, budgets, quotas, and finance evidence.",
+        "管理租户层级、计量支出、预算、配额与财务证据。",
+      )
+    Agreements =>
+      localized(
+        locale, "Versioned clickwrap and e-signature lifecycles with immutable evidence receipts.",
+        "管理带不可变证据回执的版本化点击接受与电子签名生命周期。",
+      )
+    QualifiedServices =>
+      localized(
+        locale, "Provider-neutral identity, signature, payment, and invoice integration posture.",
+        "查看供应商中立的身份、签名、支付与发票集成状态。",
       )
     Nodes =>
       localized(
@@ -488,8 +805,11 @@ fn navigation(
       @html.p(class="nav-group-label", localized(locale, "Govern", "治理")),
       nav_link(locale, Users, current, emit),
       nav_link(locale, Leases, current, emit),
+      nav_link(locale, CostCenters, current, emit),
+      nav_link(locale, Agreements, current, emit),
       nav_link(locale, Policies, current, emit),
       @html.p(class="nav-group-label", localized(locale, "Evidence", "证据")),
+      nav_link(locale, QualifiedServices, current, emit),
       nav_link(locale, Benchmarks, current, emit),
       nav_link(locale, Audit, current, emit),
     ],
@@ -534,7 +854,54 @@ fn stat(
 }
 
 ///|
-fn overview_view(state : ConsoleState) -> @rabbita.Html {
+fn readiness_item(
+  locale : @i18n.Locale,
+  ready : Bool,
+  label : String,
+  detail : String,
+) -> @rabbita.Html {
+  @html.li(
+    class=if ready { "readiness-item ready" } else { "readiness-item" },
+    [
+      @html.span(
+        class="readiness-mark",
+        attrs=@html.Attrs::build().aria_hidden("true"),
+        if ready {
+          "✓"
+        } else {
+          "!"
+        },
+      ),
+      @html.div([
+        @html.strong(label),
+        @html.span(
+          class="secondary",
+          if ready {
+            detail
+          } else {
+            localized(locale, "Action required · ", "需要操作 · ") +
+            detail
+          },
+        ),
+      ]),
+    ],
+  )
+}
+
+///|
+fn deployment_ready(state : ConsoleState) -> Bool {
+  state.overview.total_nodes == 4 &&
+  state.overview.active_nodes == 4 &&
+  state.overview.alerts == 0 &&
+  state.overview.active_models > 0 &&
+  state.catalog_templates.length() > 0
+}
+
+///|
+fn overview_view(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("overview-title"), [
     @html.div(class="overview-grid", [
       @html.div(
@@ -715,6 +1082,107 @@ fn overview_view(state : ConsoleState) -> @rabbita.Html {
         },
       ),
     ]),
+    @html.section(
+      class="readiness-panel",
+      attrs=@html.Attrs::build().aria_labelledby("deployment-readiness-title"),
+      [
+        @html.div(class="readiness-copy", [
+          @html.p(
+            class="eyebrow",
+            localized(state.locale, "Deployment launchpad", "部署启动台"),
+          ),
+          @html.h2(
+            id="deployment-readiness-title",
+            if deployment_ready(state) {
+              localized(
+                state.locale,
+                "Ready for one-click deployment",
+                "已可一键部署",
+              )
+            } else {
+              localized(
+                state.locale,
+                "Deployment prerequisites remain",
+                "仍有部署前提未满足",
+              )
+            },
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "This live gate mirrors the final operator checks in the deployment guide. The controller still performs the authoritative preflight on click.",
+              "此实时门禁对应部署指南中的最终运维检查。点击后控制器仍会执行权威预检。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button readiness-action",
+            disabled=!deployment_ready(state),
+            on_click=command(emit, Navigate(Catalog)),
+            localized(
+              state.locale,
+              "Open one-click deployment",
+              "打开一键部署",
+            ),
+          ),
+        ]),
+        @html.ul(class="readiness-list", [
+          readiness_item(
+            state.locale,
+            state.overview.total_nodes == 4,
+            localized(
+              state.locale,
+              "Four DGX nodes enrolled",
+              "已注册四台 DGX 节点",
+            ),
+            localized(
+              state.locale,
+              "\{state.overview.total_nodes} of 4 reporting telemetry",
+              "4 台中有 \{state.overview.total_nodes} 台上报遥测",
+            ),
+          ),
+          readiness_item(
+            state.locale,
+            state.overview.active_nodes == 4 && state.overview.alerts == 0,
+            localized(state.locale, "Fleet healthy", "机群健康"),
+            localized(
+              state.locale,
+              "\{state.overview.active_nodes} active · \{state.overview.alerts} alerts",
+              "\{state.overview.active_nodes} 台活跃 · \{state.overview.alerts} 个告警",
+            ),
+          ),
+          readiness_item(
+            state.locale,
+            state.overview.active_models > 0,
+            localized(
+              state.locale,
+              "Approved model available",
+              "已有批准模型",
+            ),
+            localized(
+              state.locale,
+              "\{state.overview.active_models} approved models",
+              "\{state.overview.active_models} 个已批准模型",
+            ),
+          ),
+          readiness_item(
+            state.locale,
+            state.catalog_templates.length() > 0,
+            localized(
+              state.locale,
+              "Service template approved",
+              "服务模板已批准",
+            ),
+            localized(
+              state.locale,
+              "\{state.catalog_templates.length()} immutable templates",
+              "\{state.catalog_templates.length()} 个不可变模板",
+            ),
+          ),
+        ]),
+      ],
+    ),
   ])
 }
 
@@ -1488,6 +1956,17 @@ fn model_item(
 }
 
 ///|
+fn quick_service_name_valid(value : String) -> Bool {
+  @contracts.valid_identifier(value.trim().to_owned(), maximum_length=128)
+}
+
+///|
+fn quick_replica_count_valid(value : String) -> Bool {
+  let replicas = @string.parse_int64(value.trim()) catch { _ => return false }
+  replicas >= 1L && replicas <= 64L
+}
+
+///|
 fn catalog_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -1509,6 +1988,10 @@ fn catalog_view(
       ),
     )
   }
+  let service_name_present = state.quick_deployment_id.trim() != ""
+  let service_name_valid = quick_service_name_valid(state.quick_deployment_id)
+  let replicas_present = state.quick_replicas.trim() != ""
+  let replicas_valid = quick_replica_count_valid(state.quick_replicas)
   @html.section(attrs=@html.Attrs::build().aria_labelledby("catalog-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -1562,6 +2045,30 @@ fn catalog_view(
           "发布任何分配前都会检查许可证、验证、评测、别名、密钥引用、数据分类与容量阻塞项。",
         ),
       ),
+      @html.ol(class="deployment-steps", [
+        @html.li([
+          @html.span("1"),
+          @html.strong(
+            localized(
+              state.locale,
+              "Select approved template",
+              "选择已批准模板",
+            ),
+          ),
+        ]),
+        @html.li([
+          @html.span("2"),
+          @html.strong(
+            localized(state.locale, "Name the service", "命名服务"),
+          ),
+        ]),
+        @html.li([
+          @html.span("3"),
+          @html.strong(
+            localized(state.locale, "Preflight and deploy", "预检并部署"),
+          ),
+        ]),
+      ]),
       @html.div(class="operation-form", [
         @html.div(class="field-group", [
           @html.label(
@@ -1572,9 +2079,31 @@ fn catalog_view(
             input_type=Text,
             id="quick-deployment-id",
             maxlength=128,
+            attrs=@html.Attrs::build()
+              .aria_describedby("quick-deployment-id-help")
+              .aria_invalid(
+                if service_name_present && !service_name_valid {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
             placeholder="text-service",
             value=state.quick_deployment_id,
             on_input=text_command(emit, value => QuickDeploymentIdChanged(value)),
+          ),
+          @html.p(
+            id="quick-deployment-id-help",
+            class=if service_name_present && !service_name_valid {
+              "field-help field-error"
+            } else {
+              "field-help"
+            },
+            localized(
+              state.locale,
+              "Use 1–128 letters, numbers, hyphens, underscores, dots, or colons.",
+              "使用 1–128 个字母、数字、连字符、下划线、点或冒号。",
+            ),
           ),
         ]),
         @html.div(class="field-group", [
@@ -1598,8 +2127,30 @@ fn catalog_view(
             id="quick-replicas",
             min=1,
             max=64,
+            attrs=@html.Attrs::build()
+              .aria_describedby("quick-replicas-help")
+              .aria_invalid(
+                if replicas_present && !replicas_valid {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
             value=state.quick_replicas,
             on_input=text_command(emit, value => QuickReplicasChanged(value)),
+          ),
+          @html.p(
+            id="quick-replicas-help",
+            class=if replicas_present && !replicas_valid {
+              "field-help field-error"
+            } else {
+              "field-help"
+            },
+            localized(
+              state.locale,
+              "Enter a whole number from 1 to 64.",
+              "输入 1 到 64 之间的整数。",
+            ),
           ),
         ]),
       ]),
@@ -1616,9 +2167,9 @@ fn catalog_view(
           type_="button",
           class="primary-button",
           disabled=state.loading ||
-            state.quick_deployment_id.trim() == "" ||
+            !service_name_valid ||
             state.quick_template == "" ||
-            state.quick_replicas.trim() == "",
+            !replicas_valid,
           on_click=command(emit, SubmitQuickDeployment),
           localized(state.locale, "Deploy model service", "部署模型服务"),
         ),
@@ -2350,6 +2901,115 @@ fn policies_view(
                 localized(state.locale, "Set quota", "设置配额"),
               ),
               @html.option(
+                value="create-organization",
+                selected=state.operation_name == "create-organization",
+                localized(state.locale, "Create organization", "创建组织"),
+              ),
+              @html.option(
+                value="create-cost-center",
+                selected=state.operation_name == "create-cost-center",
+                localized(
+                  state.locale,
+                  "Create cost center",
+                  "创建成本中心",
+                ),
+              ),
+              @html.option(
+                value="create-project",
+                selected=state.operation_name == "create-project",
+                localized(
+                  state.locale,
+                  "Create commercial project",
+                  "创建商业项目",
+                ),
+              ),
+              @html.option(
+                value="record-commercial-usage",
+                selected=state.operation_name == "record-commercial-usage",
+                localized(
+                  state.locale,
+                  "Record commercial usage",
+                  "记录商业用量",
+                ),
+              ),
+              @html.option(
+                value="rate-commercial-usage",
+                selected=state.operation_name == "rate-commercial-usage",
+                localized(
+                  state.locale,
+                  "Rate commercial usage",
+                  "计费商业用量",
+                ),
+              ),
+              @html.option(
+                value="create-commercial-budget",
+                selected=state.operation_name == "create-commercial-budget",
+                localized(
+                  state.locale,
+                  "Create commercial budget",
+                  "创建商业预算",
+                ),
+              ),
+              @html.option(
+                value="create-commercial-quota",
+                selected=state.operation_name == "create-commercial-quota",
+                localized(
+                  state.locale,
+                  "Create commercial quota",
+                  "创建商业配额",
+                ),
+              ),
+              @html.option(
+                value="register-agreement-template",
+                selected=state.operation_name == "register-agreement-template",
+                localized(
+                  state.locale,
+                  "Register agreement template",
+                  "注册协议模板",
+                ),
+              ),
+              @html.option(
+                value="create-agreement",
+                selected=state.operation_name == "create-agreement",
+                localized(
+                  state.locale,
+                  "Create digital agreement",
+                  "创建数字协议",
+                ),
+              ),
+              @html.option(
+                value="register-external-record",
+                selected=state.operation_name == "register-external-record",
+                localized(
+                  state.locale,
+                  "Register external evidence",
+                  "登记外部证据",
+                ),
+              ),
+              @html.option(
+                value="decide-autoscale",
+                selected=state.operation_name == "decide-autoscale",
+                localized(
+                  state.locale,
+                  "Evaluate autoscaling",
+                  "评估自动扩缩容",
+                ),
+              ),
+              @html.option(
+                value="decide-backpressure",
+                selected=state.operation_name == "decide-backpressure",
+                localized(state.locale, "Evaluate backpressure", "评估背压"),
+              ),
+              @html.option(
+                value="validate-transfer-grant",
+                selected=state.operation_name == "validate-transfer-grant",
+                localized(
+                  state.locale,
+                  "Validate transfer grant",
+                  "验证传输授权",
+                ),
+              ),
+              @html.option(
                 value="invite-user",
                 selected=state.operation_name == "invite-user",
                 localized(state.locale, "Invite user", "邀请用户"),
@@ -2432,6 +3092,353 @@ fn policies_view(
       ]),
     ]),
   ])
+}
+
+///|
+fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
+  @html.section(
+    attrs=@html.Attrs::build().aria_labelledby("cost-centers-title"),
+    [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.h2(
+            id="cost-centers-title",
+            localized(
+              state.locale,
+              "Cost center governance",
+              "成本中心治理",
+            ),
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Allocate metered model usage to a tenant hierarchy before rating, budget admission, and ledger finalization.",
+              "在计费、预算准入和账本结算前，将模型用量分配至租户层级。",
+            ),
+          ),
+        ]),
+        @html.span(
+          class="resource-count",
+          localized(
+            state.locale,
+            "\{state.cost_centers.length()} cost centers",
+            "\{state.cost_centers.length()} 个成本中心",
+          ),
+        ),
+      ]),
+      @html.p(
+        class="privacy-note",
+        localized(
+          state.locale,
+          "Financial exports are tenant-scoped, formula-safe, and contain immutable ledger snapshots—not prompts or model payloads.",
+          "财务导出限定租户范围、防公式注入，并仅包含不可变账本快照，不含提示词或模型载荷。",
+        ),
+      ),
+      if state.cost_centers.length() == 0 {
+        @html.p(
+          class="empty-state",
+          localized(
+            state.locale,
+            "No cost centers are loaded. Create the organization hierarchy through the commercial API, then refresh.",
+            "尚未加载成本中心。请通过商业管理 API 创建组织层级后刷新。",
+          ),
+        )
+      } else {
+        @html.div(class="table-scroll", [
+          @html.table(class="resource-table", [
+            @html.caption(
+              class="sr-only",
+              localized(
+                state.locale,
+                "Cost center financial posture",
+                "成本中心财务状态",
+              ),
+            ),
+            @html.thead(
+              @html.tr([
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Cost center", "成本中心"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Organization", "组织"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "Parent", "上级")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Projects", "项目"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Provisional spend", "暂计支出"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Budget posture", "预算状态"),
+                ),
+              ]),
+            ),
+            @html.tbody(
+              [
+                for center in state.cost_centers => {
+                  @html.tr([
+                    @html.td([
+                      @html.strong(center.display_name),
+                      @html.span(class="mono secondary", center.cost_center_id),
+                    ]),
+                    @html.td(class="mono", center.organization_id),
+                    @html.td(
+                      class="mono secondary",
+                      center.parent_cost_center_id,
+                    ),
+                    @html.td(center.project_count.to_string()),
+                    @html.td(class="mono", center.provisional_spend),
+                    @html.td(
+                      status_badge(
+                        center.budget_posture,
+                        if center.budget_posture.contains("Within") {
+                          "ok"
+                        } else {
+                          "warning"
+                        },
+                      ),
+                    ),
+                  ])
+                }
+              ],
+            ),
+          ]),
+        ])
+      },
+    ],
+  )
+}
+
+///|
+fn agreements_view(state : ConsoleState) -> @rabbita.Html {
+  @html.section(
+    attrs=@html.Attrs::build().aria_labelledby("agreements-title"),
+    [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.h2(
+            id="agreements-title",
+            localized(
+              state.locale,
+              "Digital agreement lifecycle",
+              "数字协议生命周期",
+            ),
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Track immutable template versions, clickwrap acceptance, signature callbacks, and separation-of-duties evidence.",
+              "跟踪不可变模板版本、点击接受、签名回调与职责分离证据。",
+            ),
+          ),
+        ]),
+        @html.span(
+          class="resource-count",
+          localized(
+            state.locale,
+            "\{state.agreements.length()} agreements",
+            "\{state.agreements.length()} 份协议",
+          ),
+        ),
+      ]),
+      if state.agreements.length() == 0 {
+        @html.p(
+          class="empty-state",
+          localized(
+            state.locale,
+            "No agreement evidence is loaded.",
+            "尚未加载协议证据。",
+          ),
+        )
+      } else {
+        @html.div(class="table-scroll", [
+          @html.table(class="resource-table", [
+            @html.caption(
+              class="sr-only",
+              localized(
+                state.locale,
+                "Digital agreement evidence",
+                "数字协议证据",
+              ),
+            ),
+            @html.thead(
+              @html.tr([
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Agreement", "协议"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "Type", "类型")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Template", "模板"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Organization", "组织"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "State", "状态")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Evidence receipt", "证据回执"),
+                ),
+              ]),
+            ),
+            @html.tbody(
+              [
+                for agreement in state.agreements => {
+                  @html.tr([
+                    @html.td(class="mono", agreement.agreement_id),
+                    @html.td(agreement.agreement_type),
+                    @html.td(class="mono", agreement.template_version),
+                    @html.td(class="mono", agreement.organization_id),
+                    @html.td(
+                      status_badge(
+                        agreement.state,
+                        if agreement.state == "Executed" {
+                          "ok"
+                        } else {
+                          "pending"
+                        },
+                      ),
+                    ),
+                    @html.td(class="mono secondary", agreement.evidence_receipt),
+                  ])
+                }
+              ],
+            ),
+          ]),
+        ])
+      },
+    ],
+  )
+}
+
+///|
+fn qualified_services_view(state : ConsoleState) -> @rabbita.Html {
+  @html.section(
+    attrs=@html.Attrs::build().aria_labelledby("qualified-services-title"),
+    [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.h2(
+            id="qualified-services-title",
+            localized(
+              state.locale,
+              "Qualified service adapters",
+              "资质服务适配器",
+            ),
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Inspect normalized provider capabilities and callback evidence without exposing provider references or credentials.",
+              "查看规范化供应商能力与回调证据，不暴露供应商引用或凭据。",
+            ),
+          ),
+        ]),
+        @html.span(
+          class="resource-count",
+          localized(
+            state.locale,
+            "\{state.qualified_services.length()} adapters",
+            "\{state.qualified_services.length()} 个适配器",
+          ),
+        ),
+      ]),
+      @html.p(
+        class="privacy-note",
+        localized(
+          state.locale,
+          "LunaFide is a deterministic test simulator only. It is not a qualified trust service, payment processor, tax platform, or production security boundary.",
+          "LunaFide 仅为确定性测试模拟器，不是合格信任服务、支付处理器、税务平台或生产安全边界。",
+        ),
+      ),
+      if state.qualified_services.length() == 0 {
+        @html.p(
+          class="empty-state",
+          localized(
+            state.locale,
+            "No provider adapters are loaded.",
+            "尚未加载供应商适配器。",
+          ),
+        )
+      } else {
+        @html.div(class="table-scroll", [
+          @html.table(class="resource-table", [
+            @html.caption(
+              class="sr-only",
+              localized(
+                state.locale,
+                "Qualified service adapter posture",
+                "资质服务适配器状态",
+              ),
+            ),
+            @html.thead(
+              @html.tr([
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Provider", "供应商"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Capability", "能力"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Environment", "环境"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "State", "状态")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Evidence policy", "证据策略"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Production", "生产"),
+                ),
+              ]),
+            ),
+            @html.tbody(
+              [
+                for service in state.qualified_services => {
+                  @html.tr([
+                    @html.td(@html.strong(service.provider)),
+                    @html.td(service.capability),
+                    @html.td(status_badge(service.environment, "warning")),
+                    @html.td(status_badge(service.state, "ok")),
+                    @html.td(service.evidence_policy),
+                    @html.td(
+                      status_badge(
+                        if service.production_ready {
+                          localized(state.locale, "Ready", "就绪")
+                        } else {
+                          localized(state.locale, "Not ready", "未就绪")
+                        },
+                        if service.production_ready {
+                          "ok"
+                        } else {
+                          "danger"
+                        },
+                      ),
+                    ),
+                  ])
+                }
+              ],
+            ),
+          ]),
+        ])
+      },
+    ],
+  )
 }
 
 ///|
@@ -2857,6 +3864,28 @@ fn console_styles() -> String {
     #|.connection-state::before { width: .45rem; height: .45rem; border-radius: 999px; background: currentColor; content: ""; }
     #|.connection-state-ready { color: var(--success); }
     #|.connection-state-needed { color: var(--warning); }
+    #|.demo-banner {
+    #|  display: flex;
+    #|  align-items: center;
+    #|  gap: .6rem;
+    #|  margin: 0 2rem;
+    #|  padding: .65rem .8rem;
+    #|  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    #|  border-radius: .55rem;
+    #|  background: var(--accent-soft);
+    #|  color: var(--muted-strong);
+    #|  font-size: .76rem;
+    #|}
+    #|.demo-banner-mark {
+    #|  padding: .2rem .38rem;
+    #|  border-radius: .3rem;
+    #|  background: var(--accent);
+    #|  color: white;
+    #|  font-size: .62rem;
+    #|  font-weight: 800;
+    #|  letter-spacing: .08em;
+    #|}
+    #|.demo-banner strong { color: var(--ink); }
     #|.connection-form {
     #|  display: grid;
     #|  grid-template-columns: repeat(2, minmax(13rem, 1fr));
@@ -2869,14 +3898,17 @@ fn console_styles() -> String {
     #|  background: var(--surface-subtle);
     #|}
     #|.connection-field label, .field-group label { display: block; margin-bottom: .35rem; color: var(--muted-strong); font-size: .75rem; font-weight: 700; }
-    #|.connection-field input, .field-group select, .field-group textarea {
+    #|.connection-field input, .field-group input, .field-group select, .field-group textarea {
     #|  width: 100%;
     #|  border: 1px solid var(--line-strong);
     #|  border-radius: .4rem;
     #|  background: var(--surface);
     #|  color: var(--ink);
     #|}
-    #|.connection-field input { padding: .55rem .65rem; }
+    #|.connection-field input, .field-group input { padding: .55rem .65rem; }
+    #|.field-group input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger-soft); }
+    #|.field-help { margin: .35rem 0 0; color: var(--muted); font-size: .7rem; line-height: 1.4; }
+    #|.field-error { color: var(--danger); }
     #|.connection-help { display: block; margin-top: .35rem; color: var(--muted); font-size: .7rem; line-height: 1.4; }
     #|.connection-actions { display: flex; align-items: end; justify-content: space-between; gap: 1rem; grid-column: 1 / -1; }
     #|.connection-actions .secondary { max-width: 34rem; }
@@ -2941,6 +3973,15 @@ fn console_styles() -> String {
     #|.stat dt { color: var(--muted); font-size: .72rem; font-weight: 650; }
     #|.stat dd { margin: .3rem 0 .15rem; font-size: 1.6rem; font-weight: 780; line-height: 1.15; letter-spacing: -.035em; }
     #|.stat-detail { color: var(--muted); font-size: .7rem; }
+    #|.readiness-panel { display: grid; grid-template-columns: minmax(18rem, .85fr) minmax(24rem, 1.15fr); gap: 1.5rem; margin-top: 1rem; padding: 1.25rem 1.35rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
+    #|.readiness-copy h2 { margin-bottom: .35rem; }
+    #|.readiness-action { margin-top: 1rem; }
+    #|.readiness-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: 0; padding: 0; list-style: none; }
+    #|.readiness-item { display: flex; align-items: flex-start; gap: .65rem; min-width: 0; padding: .75rem; border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--line)); border-radius: .5rem; background: var(--warning-soft); }
+    #|.readiness-item.ready { border-color: color-mix(in srgb, var(--success) 28%, var(--line)); background: var(--success-soft); }
+    #|.readiness-mark { display: grid; place-items: center; width: 1.35rem; height: 1.35rem; flex: none; border-radius: 999px; background: var(--warning); color: white; font-size: .72rem; font-weight: 800; }
+    #|.readiness-item.ready .readiness-mark { background: var(--success); }
+    #|.readiness-item div { display: grid; gap: .15rem; min-width: 0; }
     #|.section-heading, .subsection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
     #|.section-heading h2 { margin-bottom: .2rem; }
     #|.section-copy { max-width: 52rem; margin: 0; color: var(--muted); }
@@ -2995,6 +4036,9 @@ fn console_styles() -> String {
     #|.operation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
     #|.operation-heading h3 { margin: 0; font-size: 1.05rem; }
     #|.operation-form { display: grid; grid-template-columns: minmax(13rem, .72fr) minmax(20rem, 1.6fr); gap: 1rem; margin-top: 1rem; }
+    #|.deployment-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+    #|.deployment-steps li { display: flex; align-items: center; gap: .5rem; color: var(--muted-strong); font-size: .74rem; }
+    #|.deployment-steps li > span { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; flex: none; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 800; }
     #|.field-group select { padding: .55rem .65rem; }
     #|.field-group textarea { display: block; min-height: 15rem; padding: .7rem; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.55; }
     #|.operation-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
@@ -3010,6 +4054,7 @@ fn console_styles() -> String {
     #|  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #|  .operation-form { grid-template-columns: 1fr; }
     #|  .policy-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #|  .readiness-panel { grid-template-columns: 1fr; }
     #|  .policy-summary > div:nth-child(2) { border-right: 0; }
     #|  .policy-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     #|}
@@ -3032,6 +4077,7 @@ fn console_styles() -> String {
     #|}
     #|@media (max-width: 40rem) {
     #|  .connection-endpoint { display: none; }
+    #|  .demo-banner { align-items: flex-start; flex-direction: column; margin: 0 .75rem; }
     #|  .nav-group-label { display: none; }
     #|  .workspace-topbar, .section-heading, .operation-heading { flex-direction: column; }
     #|  .topbar-actions { width: 100%; flex-wrap: wrap; justify-content: space-between; }
@@ -3040,6 +4086,7 @@ fn console_styles() -> String {
     #|  .health-facts { grid-template-columns: 1fr; }
     #|  .health-facts > div { border-left: 0; border-top: 1px solid var(--line); }
     #|  .stats, .policy-summary { grid-template-columns: 1fr; }
+    #|  .readiness-list, .deployment-steps { grid-template-columns: 1fr; }
     #|  .policy-summary > div { border-right: 0; border-bottom: 1px solid var(--line); }
     #|  .policy-summary > div:last-child { border-bottom: 0; }
     #|  .operation-actions { align-items: stretch; flex-direction: column; }
@@ -3058,9 +4105,12 @@ fn console_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   let content = match state.route {
-    Overview => overview_view(state)
+    Overview => overview_view(state, emit)
     Users => users_view(state, emit)
     Leases => leases_view(state, emit)
+    CostCenters => cost_centers_view(state)
+    Agreements => agreements_view(state)
+    QualifiedServices => qualified_services_view(state)
     Nodes => nodes_view(state, emit)
     Models => models_view(state, emit)
     Catalog => catalog_view(state, emit)

@@ -120,6 +120,37 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         state: Requested,
       },
     ],
+    cost_centers: [
+      {
+        cost_center_id: "cc-1",
+        organization_id: "org-1",
+        display_name: "Research",
+        parent_cost_center_id: "—",
+        project_count: 2,
+        provisional_spend: "CNY 100.00",
+        budget_posture: "Within budget",
+      },
+    ],
+    agreements: [
+      {
+        agreement_id: "agreement-1",
+        agreement_type: "Data processing",
+        template_version: "dpa-v1",
+        organization_id: "org-1",
+        state: "Executed",
+        evidence_receipt: "evidence:agreement:1",
+      },
+    ],
+    qualified_services: [
+      {
+        provider: "LunaFide",
+        capability: "Identity · signature · payment · invoice",
+        environment: "TestOnly",
+        state: "Available",
+        evidence_policy: "Tenant-bound callbacks",
+        production_ready: false,
+      },
+    ],
     confirmation: Some(@ui.confirmation_receipt(DrainNode("node-1"), "node-1")),
     error_message: None,
     success_message: None,
@@ -146,15 +177,130 @@ test "all operator routes render from the shared typed state" {
 }
 
 ///|
+test "commercial and qualified-service routes expose bounded evidence" {
+  let base = console_state(CostCenters)
+  let cost_centers = @ui.render(base)
+  assert_true(cost_centers.contains("Cost center governance"))
+  assert_true(cost_centers.contains("cc-1"))
+  assert_true(cost_centers.contains("CNY 100.00"))
+  let agreements = @ui.render({ ..base, route: Agreements })
+  assert_true(agreements.contains("Digital agreement lifecycle"))
+  assert_true(agreements.contains("agreement-1"))
+  assert_true(agreements.contains("evidence:agreement:1"))
+  let qualified = @ui.render({ ..base, route: QualifiedServices })
+  assert_true(qualified.contains("LunaFide"))
+  assert_true(qualified.contains("TestOnly"))
+  assert_true(qualified.contains("Not ready"))
+  assert_true(qualified.contains("not a qualified trust service"))
+}
+
+///|
+test "typed operation surface exposes commercial and technical commands" {
+  let html = @ui.render({ ..console_state(Policies), confirmation: None })
+  assert_true(html.contains("Create organization"))
+  assert_true(html.contains("Create cost center"))
+  assert_true(html.contains("Register agreement template"))
+  assert_true(html.contains("Register external evidence"))
+  assert_true(html.contains("Evaluate autoscaling"))
+  assert_true(html.contains("Validate transfer grant"))
+}
+
+///|
+test "commercial rows escape adversarial tenant and provider values" {
+  let hostile = "<img src=x onerror=alert(1)>"
+  let base = console_state(CostCenters)
+  let cost_centers = @ui.render({
+    ..base,
+    cost_centers: [{ ..base.cost_centers[0], display_name: hostile }],
+  })
+  assert_false(cost_centers.contains(hostile))
+  assert_true(cost_centers.contains("&lt;img"))
+  let qualified = @ui.render({
+    ..base,
+    route: QualifiedServices,
+    qualified_services: [{ ..base.qualified_services[0], provider: hostile }],
+  })
+  assert_false(qualified.contains(hostile))
+  assert_true(qualified.contains("&lt;img"))
+}
+
+///|
+test "demo snapshot presents the four-node nine-model fleet" {
+  let state = @ui.demo_state()
+  assert_eq(state.overview.active_nodes, 4)
+  assert_eq(state.overview.total_nodes, 4)
+  assert_eq(state.overview.active_models, 9)
+  assert_eq(state.nodes.length(), 4)
+  assert_eq(state.models.length(), 9)
+  assert_eq(state.catalog_templates.length(), 1)
+  let overview = @ui.render(state)
+  assert_true(overview.contains("4 of 4"))
+  assert_true(overview.contains("9"))
+  assert_true(overview.contains("Ready for one-click deployment"))
+  assert_true(overview.contains("Open one-click deployment"))
+  let nodes = @ui.render({ ..state, route: Nodes })
+  assert_true(nodes.contains("dgx-spark-04"))
+  let models = @ui.render({ ..state, route: Models })
+  assert_true(models.contains("lunanexa.speech.transcribe"))
+}
+
+///|
 test "catalog route exposes governed one-click deployment controls" {
   let html = @ui.render({ ..console_state(Catalog), confirmation: None })
   assert_true(html.contains("Model service catalog"))
   assert_true(html.contains("One-click model service"))
   assert_true(html.contains("Preflight enforced"))
+  assert_true(html.contains("Select approved template"))
+  assert_true(html.contains("Preflight and deploy"))
   assert_true(html.contains("quick-deployment-id"))
   assert_true(html.contains("quick-template"))
   assert_true(html.contains("quick-replicas"))
   assert_true(html.contains("Deploy model service"))
+}
+
+///|
+test "catalog escapes adversarial operator and template text" {
+  let demo = @ui.demo_state()
+  let hostile = "<img src=x onerror=alert(1)>"
+  let html = @ui.render({
+    ..demo,
+    route: Catalog,
+    quick_deployment_id: hostile,
+    catalog_templates: [{ ..demo.catalog_templates[0], display_name: hostile }],
+  })
+  assert_false(html.contains(hostile))
+  assert_false(html.contains("<img"))
+  assert_false(html.contains("onerror=alert(1)>"))
+  assert_true(html.contains("&lt;img"))
+}
+
+///|
+test "one-click form exposes and blocks adversarial validation failures" {
+  let demo = @ui.demo_state()
+  let hostile_name = @ui.render({
+    ..demo,
+    route: Catalog,
+    quick_deployment_id: "<script>alert(1)</script>",
+  })
+  assert_true(hostile_name.contains("aria-invalid=\"true\""))
+  assert_true(hostile_name.contains("field-help field-error"))
+  assert_true(hostile_name.contains("disabled"))
+  let invalid_replicas = @ui.render({
+    ..demo,
+    route: Catalog,
+    quick_deployment_id: "valid-service",
+    quick_replicas: "65",
+  })
+  assert_true(invalid_replicas.contains("aria-invalid=\"true\""))
+  assert_true(invalid_replicas.contains("Enter a whole number from 1 to 64."))
+  assert_true(invalid_replicas.contains("disabled"))
+  let valid = @ui.render({
+    ..demo,
+    route: Catalog,
+    quick_deployment_id: "valid-service",
+    quick_replicas: "64",
+  })
+  assert_true(valid.contains("aria-invalid=\"false\""))
 }
 
 ///|
