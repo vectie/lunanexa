@@ -1,0 +1,6 @@
+import {
+  "vectie/lunanexa/contracts",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "js+native"

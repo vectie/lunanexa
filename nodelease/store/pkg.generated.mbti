@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/nodelease/store"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/nodelease",
+}
+
+// Values
+
+// Errors
+pub(all) suberror ExclusiveLeaseStoreError {
+  InvalidSnapshot(String)
+  DuplicateLease(String)
+  IdempotencyConflict(String)
+  NodeUnavailable(String)
+  LeaseNotFound(String)
+  LeaseExpired(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct FileExclusiveLeaseStore {
+  path : String
+  signing_secret : String
+  mut leases : Map[String, @nodelease.ExclusiveNodeLease]
+  mutex : @async.Mutex
+}
+pub async fn FileExclusiveLeaseStore::issue(Self, @nodelease.ExclusiveNodeLeaseIntent, Int64) -> @nodelease.ExclusiveNodeLease
+pub async fn FileExclusiveLeaseStore::lease(Self, String) -> @nodelease.ExclusiveNodeLease?
+pub async fn FileExclusiveLeaseStore::leases(Self) -> Array[@nodelease.ExclusiveNodeLease]
+pub async fn FileExclusiveLeaseStore::node_blocks_managed_placement(Self, String) -> Bool
+pub async fn FileExclusiveLeaseStore::open(String, String) -> Self
+pub async fn FileExclusiveLeaseStore::reconcile_expired(Self, Int64) -> Bool
+pub async fn FileExclusiveLeaseStore::transition(Self, String, @nodelease.ExclusiveLeaseTransitionRequest, Int64) -> @nodelease.ExclusiveNodeLease
+
+// Type aliases
+
+// Traits

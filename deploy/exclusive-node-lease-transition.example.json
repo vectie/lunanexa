@@ -1,0 +1,5 @@
+{
+  "expected_generation": "1",
+  "state": "Provisioning",
+  "evidence_receipt": "node:dgx-spark-02:provisioning:1"
+}
