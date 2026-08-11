@@ -1,0 +1,123 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/commercial/integrations"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn external_transition_allowed(ExternalRecordKind, ExternalRecordState, ExternalRecordState) -> Bool
+
+pub let integration_schema_version : String
+
+// Errors
+pub(all) suberror IntegrationError {
+  InvalidInput(String)
+  NotFound(String)
+  AlreadyExists(String)
+  TenantMismatch
+  IdempotencyConflict(String)
+  InvalidTransition(String)
+  EvidenceMismatch(String)
+  UnverifiedCallback
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct ExternalCallback {
+  callback_id : String
+  record_id : String
+  organization_id : String
+  provider : String
+  environment : String
+  external_ref : String
+  expected_previous_state : ExternalRecordState
+  next_state : ExternalRecordState
+  amount_minor : Int64?
+  currency : String?
+  document_hash : String?
+  provider_event_unix_ms : Int64
+  received_unix_ms : Int64
+  signature_verified : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ExternalRecord {
+  record_id : String
+  organization_id : String
+  kind : ExternalRecordKind
+  provider : String
+  environment : String
+  external_ref : String
+  state : ExternalRecordState
+  expected_amount_minor : Int64?
+  currency : String?
+  money_scale : Int?
+  expected_document_hash : String?
+  entitlement_transaction_ref : String?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ExternalRecordKind {
+  IdentityVerification
+  Payment
+  TaxInvoice
+  QualifiedSignature
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ExternalRecordState {
+  Pending
+  Submitted
+  Verified
+  Authorized
+  Settled
+  Issued
+  Failed
+  Expired
+  Voided
+  Credited
+  Refunded
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ExternalRecordView {
+  record_id : String
+  organization_id : String
+  kind : ExternalRecordKind
+  provider : String
+  environment : String
+  external_ref_sha256 : String
+  state : ExternalRecordState
+  expected_amount_minor : Int64?
+  currency : String?
+  money_scale : Int?
+  expected_document_hash : String?
+  entitlement_transaction_ref_sha256 : String?
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct IntegrationSnapshot {
+  schema_version : String
+  organization_id : String
+  records : Array[ExternalRecordView]
+  reconciliation_exception_count : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct IntegrationStore {
+  records : Map[String, ExternalRecord]
+  external_index : Map[String, String]
+  callbacks : Map[String, ExternalCallback]
+  reconciliation_exception_counts : Map[String, Int]
+}
+pub fn IntegrationStore::new() -> Self
+pub fn IntegrationStore::reconcile_callback(Self, ExternalCallback) -> (ExternalRecord, ReconciliationResult) raise IntegrationError
+pub fn IntegrationStore::register(Self, ExternalRecord) -> ReconciliationResult raise IntegrationError
+pub fn IntegrationStore::snapshot(Self, String) -> IntegrationSnapshot
+
+pub(all) enum ReconciliationResult {
+  Applied
+  Replayed
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

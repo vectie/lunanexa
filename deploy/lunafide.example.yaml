@@ -1,0 +1,16 @@
+# TEST ONLY. LunaFide is not a production qualified service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunafide-test-only
+  labels:
+    lunanexa.example/component: lunafide
+    lunanexa.example/production-ready: "false"
+data:
+  protocol-version: qualified-services.v1
+  state-backend: ephemeral-in-memory
+  webhook-auth-scheme: HMAC-SHA256-TEST-ONLY
+  notice: >-
+    Deterministic integration-test fixture only. It performs no real identity
+    verification, qualified signing, payment processing, tax invoicing, or
+    cryptographic trust service and accepts no real PII or payment credentials.

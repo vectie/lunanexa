@@ -1,0 +1,402 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/technical"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn advance_prewarm(PrewarmOperation, PrewarmEvent, Int64) -> PrewarmDecision
+
+pub fn begin_prewarm(PrewarmIntent, Int64) -> PrewarmDecision
+
+pub fn cache_reconcile_action(CacheEntryTelemetry, Int64, Int64) -> CacheAction
+
+pub fn decide_admission(AdmissionLimits, AdmissionSnapshot) -> BackpressureDecision
+
+pub fn decide_autoscale(AutoscalePolicy, AutoscaleSnapshot) -> AutoscaleDecision
+
+pub fn evaluate_probe(ProbeState, ProbeObservation, ProbePolicy) -> ProbeDecision
+
+pub fn initial_probe_state(Int64) -> ProbeState
+
+pub fn reviewed_sidecar_profile(ReviewedSidecar) -> SidecarProfile
+
+pub fn select_sidecar_profiles(Array[SidecarRequest], Array[ReviewedSidecar]) -> SidecarDecision
+
+pub let transfer_grant_absolute_max_lifetime_ms : Int64
+
+pub fn valid_probe_policy(ProbePolicy) -> Bool
+
+pub fn validate_cache_telemetry(CacheEntryTelemetry) -> Array[CacheTelemetryFinding]
+
+pub fn validate_transfer_grant(TransferGrant, TransferGrantUse, GrantAuthenticity, Array[String], Int64, Int64) -> TransferGrantDecision
+
+// Errors
+
+// Types and methods
+pub(all) struct AdmissionLimits {
+  max_running : Int
+  max_queued : Int
+  max_tenant_running : Int
+  max_tenant_queued : Int
+  max_payload_bytes : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AdmissionRejection {
+  InvalidLimits
+  InvalidSnapshot
+  LeaseUnavailable
+  DeadlineExpired
+  PayloadTooLarge
+  TenantRunningLimit
+  TenantQueueLimit
+  RunningCapacity
+  QueueCapacity
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AdmissionSnapshot {
+  running : Int
+  queued : Int
+  tenant_running : Int
+  tenant_queued : Int
+  payload_bytes : Int64
+  deadline_unix_ms : Int64
+  now_unix_ms : Int64
+  lease_valid : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AutoscaleDecision {
+  Hold(reason~ : AutoscaleReason)
+  ScaleUp(target_replicas~ : Int, reason~ : AutoscaleReason)
+  ScaleDown(target_replicas~ : Int, reason~ : AutoscaleReason)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AutoscalePolicy {
+  policy_version : String
+  min_replicas : Int
+  max_replicas : Int
+  scale_up_step : Int
+  scale_down_step : Int
+  sample_window_ms : Int64
+  cooldown_ms : Int64
+  target_p95_latency_ms : Int64
+  target_queue_depth : Int
+  required_lease_generation : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AutoscaleReason {
+  InvalidPolicy
+  InvalidSnapshot
+  LeaseFenceMismatch
+  LeaseExpired
+  InsufficientWindow
+  CooldownActive
+  Stabilizing
+  AtReplicaBound
+  NoAvailableCapacity
+  MetricsWithinTarget
+  LatencyPressure
+  QueuePressure
+  SustainedLowUtilization
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AutoscaleSnapshot {
+  deployment_id : String
+  desired_replicas : Int
+  ready_replicas : Int
+  available_replica_capacity : Int
+  p95_latency_ms : Int64
+  queue_depth : Int
+  oldest_sample_unix_ms : Int64
+  newest_sample_unix_ms : Int64
+  last_scale_unix_ms : Int64?
+  observed_lease_generation : Int64
+  lease_expires_unix_ms : Int64
+  now_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum BackpressureDecision {
+  StartImmediately
+  Queue(position~ : Int)
+  Reject(reason~ : AdmissionRejection, retryable~ : Bool)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CacheAction {
+  RetainReferenced
+  RetainBelowHighWater
+  EligibleForEviction
+  QuarantineInvalidTelemetry(Array[CacheTelemetryFinding])
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CacheEntryTelemetry {
+  node_ref : String
+  model_digest : String
+  lifecycle : CacheLifecycleState
+  logical_bytes : Int64
+  transferred_bytes : Int64
+  assignment_references : Int
+  signature_verified : Bool
+  last_access_unix_ms : Int64
+  observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CacheLifecycleState {
+  Reserved
+  Partial
+  Verifying
+  Ready
+  Evicting
+  Quarantined
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CacheReservation {
+  node_id : String
+  model_digest : String
+  bytes : Int64
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CacheTelemetryFinding {
+  MissingNodeReference
+  InvalidDigest
+  InvalidByteCount
+  InvalidReferenceCount
+  InvalidTimestamp
+  ReadyWithoutCompleteTransfer
+  ReadyWithoutSignature
+  InvalidPressureBounds
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum GrantAuthenticity {
+  Verified
+  Unverified
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum PrewarmDecision {
+  Accepted(PrewarmOperation)
+  Rejected(PrewarmRejection)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum PrewarmEvent {
+  Reserve
+  StartTransfer
+  ReportProgress(transferred_bytes~ : Int64)
+  BeginVerification
+  PublishReady
+  RequestCancellation
+  ObserveCancellation
+  Fail(reason~ : PrewarmFailure)
+  ObserveTime
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum PrewarmFailure {
+  TransferUnavailable
+  DigestMismatch
+  SignatureRejected
+  InsufficientCache
+  NodeUnavailable
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PrewarmIntent {
+  operation_id : String
+  deployment_id : String
+  node_id : String
+  model_digest : String
+  size_bytes : Int64
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PrewarmOperation {
+  intent : PrewarmIntent
+  state : PrewarmState
+  progress : PrewarmProgress
+  reservation : CacheReservation?
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PrewarmProgress {
+  transferred_bytes : Int64
+  total_bytes : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum PrewarmRejection {
+  InvalidIdentity
+  InvalidDigest
+  InvalidSize
+  InvalidTimeRange
+  AlreadyExpired
+  TerminalState
+  InvalidTransition
+  ProgressRegressed
+  ProgressExceedsArtifact
+  TransferIncomplete
+  ObservationBeforeLastUpdate
+  InvalidOperation
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum PrewarmState {
+  Queued
+  Reserved
+  Transferring
+  Verifying
+  Ready
+  CancellationRequested
+  Cancelled
+  Failed(PrewarmFailure)
+  Expired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ProbeCounters {
+  consecutive_successes : Int
+  consecutive_failures : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ProbeDecision {
+  Applied(ProbeState)
+  Rejected(ProbeRejection)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ProbeKind {
+  Startup
+  Readiness
+  Liveness
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ProbeObservation {
+  kind : ProbeKind
+  success : Bool
+  observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ProbePolicy {
+  startup : ProbeStagePolicy
+  readiness : ProbeStagePolicy
+  liveness : ProbeStagePolicy
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ProbeRejection {
+  InvalidPolicy
+  StaleObservation
+  StartupIncomplete
+  StartupAlreadyComplete
+  RuntimeAlreadyTerminal
+  InitialDelayActive
+  InvalidState
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ProbeStagePolicy {
+  initial_delay_ms : Int64
+  period_ms : Int64
+  timeout_ms : Int64
+  success_threshold : Int
+  failure_threshold : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ProbeState {
+  runtime_state : RuntimeHealthState
+  startup_complete : Bool
+  startup : ProbeCounters
+  readiness : ProbeCounters
+  liveness : ProbeCounters
+  runtime_created_unix_ms : Int64
+  startup_completed_unix_ms : Int64?
+  last_observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ProbeState::route_eligible(Self) -> Bool
+
+pub(all) enum ReviewedSidecar {
+  InferenceGateway
+  TelemetryExporter
+  CertificateReloader
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum RuntimeHealthState {
+  Starting
+  NotReady
+  Ready
+  RestartRequired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum SidecarDecision {
+  Accepted(Array[SidecarProfile])
+  Rejected(SidecarRejection)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum SidecarEgress {
+  ControllerOnly
+  TelemetrySinkOnly
+  Disabled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SidecarProfile {
+  name : ReviewedSidecar
+  profile_version : String
+  catalog_image_key : String
+  image_must_be_digest_pinned : Bool
+  configuration_schema : String
+  egress : SidecarEgress
+  read_only_root : Bool
+  drops_all_capabilities : Bool
+  host_network : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum SidecarRejection {
+  ProfileNotAllowed
+  DuplicateProfile
+  InvalidConfigurationReference
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SidecarRequest {
+  profile : ReviewedSidecar
+  configuration_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TransferGrant {
+  grant_id : String
+  nonce : String
+  node_id : String
+  deployment_id : String
+  model_digest : String
+  scope : TransferScope
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum TransferGrantDecision {
+  Accepted(consumed_nonce~ : String)
+  Rejected(TransferGrantRejection)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum TransferGrantRejection {
+  AuthenticityRequired
+  InvalidGrant
+  GrantNotYetValid
+  GrantExpired
+  GrantLifetimeExceeded
+  UnsafeLifetimePolicy
+  NonceReplayed
+  NodeMismatch
+  DeploymentMismatch
+  ModelMismatch
+  ScopeMismatch
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TransferGrantUse {
+  node_id : String
+  deployment_id : String
+  model_digest : String
+  scope : TransferScope
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum TransferScope {
+  ModelRead
+  RuntimeImageRead
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

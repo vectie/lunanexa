@@ -1,0 +1,7 @@
+import {
+  "vectie/lunanexa/testsupport/lunafide" @provider,
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
