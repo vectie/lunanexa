@@ -1,9 +1,10 @@
 import {
-  "vectie/lunanexa/database",
+  "vectie/lunanexa/internal/postgres",
+  "vectie/lunanexa/portal",
   "vectie/lunanexa/workspace",
   "moonbitlang/async",
-  "moonbitlang/async/fs",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
 }
 
 import {

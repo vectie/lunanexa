@@ -221,16 +221,21 @@ test "access grant expiry and revocation are terminal checked transitions" {
 
 ///|
 test "identity metadata rejects control characters and invalid timestamps" {
-  try
-    @workspace.validate_workspace_user({
-      ..active_user(),
-      display_name: "Ari\noperator",
-    })
-  catch {
-    InvalidIdentifier("display_name") => ()
-    error => fail("unexpected error: \{Repr(error)}")
-  } noraise {
-    _ => fail("control character in identity metadata was accepted")
+  for
+    display_name in [
+      "Ari\noperator",
+      "Ari\roperator",
+      "Ari\u0000operator",
+      " ".repeat(128) + "x",
+    ] {
+    try
+      @workspace.validate_workspace_user({ ..active_user(), display_name, })
+    catch {
+      InvalidIdentifier("display_name") => ()
+      error => fail("unexpected error: \{Repr(error)}")
+    } noraise {
+      _ => fail("control or oversized identity metadata was accepted")
+    }
   }
   try
     @workspace.validate_workspace_access_grant({

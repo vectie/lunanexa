@@ -2,6 +2,7 @@
 pub struct FileWorkspaceDirectory {
   path : String
   admission_path : String
+  database : @database.PostgresDatabase?
   users : Map[String, @workspace.WorkspaceUser]
   mut access_grants : Map[String, @workspace.WorkspaceAccessGrant]
   mut leases : Map[String, @workspace.WorkspaceLease]
@@ -161,6 +162,7 @@ pub async fn FileWorkspaceDirectory::open(
   let directory : FileWorkspaceDirectory = {
     path,
     admission_path: "\{path}.admissions",
+    database: None,
     users: Map([]),
     access_grants: Map([]),
     leases: Map([]),
@@ -189,8 +191,51 @@ pub async fn FileWorkspaceDirectory::open(
 }
 
 ///|
+pub async fn FileWorkspaceDirectory::open_postgres(
+  database : @database.PostgresDatabase,
+  now_unix_ms? : Int64,
+) -> FileWorkspaceDirectory {
+  let directory : FileWorkspaceDirectory = {
+    path: "",
+    admission_path: "",
+    database: Some(database),
+    users: Map([]),
+    access_grants: Map([]),
+    leases: Map([]),
+    workload_reservations: Map([]),
+    mutex: Mutex(),
+  }
+  let now = now_unix_ms.unwrap_or(@async.now())
+  match
+    database.load_snapshot(
+      "workspace_directory", @workspace.directory_schema_version,
+    ) {
+    Some(payload) => {
+      let snapshot : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
+        @json.parse(payload),
+      ) catch {
+        error =>
+          raise @workspace.WorkspaceDirectoryError::InvalidDirectoryState(
+            "invalid database workspace directory JSON: \{Repr(error)}",
+          )
+      }
+      directory.restore_snapshot(snapshot)
+      if directory.reconcile_expiry_unlocked(now) {
+        database.save_workspace_snapshot(directory.snapshot_unlocked())
+      }
+    }
+    None => database.save_workspace_snapshot(directory.snapshot_unlocked())
+  }
+  directory.open_postgres_admissions(database, now)
+  directory
+}
+
+///|
 async fn FileWorkspaceDirectory::persist(self : FileWorkspaceDirectory) -> Unit {
-  write_directory(self.path, self.snapshot_unlocked())
+  match self.database {
+    None => write_directory(self.path, self.snapshot_unlocked())
+    Some(database) => database.save_workspace_snapshot(self.snapshot_unlocked())
+  }
 }
 
 ///|

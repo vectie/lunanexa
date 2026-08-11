@@ -60,7 +60,9 @@ fn require_bounded_text(
     raise MissingField(field)
   }
   if value.length() > maximum_length ||
-    value.any(character => character == '\n' || character == '\r') {
+    value.any(character => {
+      character == '\u0000' || character == '\n' || character == '\r'
+    }) {
     raise InvalidIdentifier(field)
   }
 }

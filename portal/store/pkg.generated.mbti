@@ -1,0 +1,38 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/portal/store"
+
+import {
+  "moonbitlang/async",
+  "vectie/lunanexa/database",
+  "vectie/lunanexa/portal",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct FilePortalStore {
+  persistence : PortalPersistence
+  mut memberships : Map[String, @portal.EnterpriseMembership]
+  mut agreements : Map[String, @portal.PortalAgreement]
+  mut lease_requests : Map[String, @portal.EnterpriseLeaseRequest]
+  mutex : @async.Mutex
+}
+pub async fn FilePortalStore::lease_request(Self, String) -> @portal.EnterpriseLeaseRequest?
+pub async fn FilePortalStore::open(String) -> Self
+pub async fn FilePortalStore::open_postgres(@database.PostgresDatabase) -> Self
+pub async fn FilePortalStore::publish_agreement(Self, @portal.PortalAgreement) -> @portal.PortalAgreement
+pub async fn FilePortalStore::put_membership(Self, @portal.EnterpriseMembership) -> @portal.EnterpriseMembership
+pub async fn FilePortalStore::record_execution(Self, @portal.AgreementExecution, Int64) -> @portal.PortalAgreement
+pub async fn FilePortalStore::request_signature(Self, String, @portal.SignatureRequest, Int64) -> @portal.PortalAgreement
+pub async fn FilePortalStore::review_lease_request(Self, @portal.LeaseReview, String?, Int64) -> @portal.EnterpriseLeaseRequest
+pub async fn FilePortalStore::self_view(Self, String) -> @portal.EnterpriseSelfView
+pub async fn FilePortalStore::snapshot(Self) -> @portal.PortalSnapshot
+pub async fn FilePortalStore::submit_lease_request(Self, String, @portal.LeaseRequestSubmission, Int64) -> @portal.EnterpriseLeaseRequest
+
+type PortalPersistence
+
+// Type aliases
+
+// Traits

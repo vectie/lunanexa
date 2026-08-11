@@ -1,0 +1,13 @@
+import {
+  "vectie/lunanexa/commercial",
+  "vectie/lunanexa/portal",
+  "vectie/lunanexa/ui/enterprise" @enterprise_ui,
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/html",
+  "moonbit-community/rabbita/js",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "js"
+
+pkgtype(kind: "executable")

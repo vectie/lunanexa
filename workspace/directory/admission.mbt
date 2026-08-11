@@ -171,10 +171,54 @@ async fn FileWorkspaceDirectory::open_admissions(
 }
 
 ///|
+async fn FileWorkspaceDirectory::open_postgres_admissions(
+  self : FileWorkspaceDirectory,
+  database : @database.PostgresDatabase,
+  now_unix_ms : Int64,
+) -> Unit {
+  match
+    database.load_snapshot("workspace_admissions", admission_schema_version) {
+    Some(payload) => {
+      let snapshot : WorkspaceAdmissionSnapshot = @json.from_json(
+        @json.parse(payload),
+      ) catch {
+        error =>
+          raise @workspace.WorkspaceDirectoryError::InvalidDirectoryState(
+            "invalid database workspace admission JSON: \{Repr(error)}",
+          )
+      }
+      self.restore_admissions(snapshot)
+      if self.reconcile_reservations_unlocked(now_unix_ms) {
+        database.save_opaque_snapshot(
+          "workspace_admissions",
+          admission_schema_version,
+          self.admission_snapshot_unlocked().to_json().stringify(),
+        )
+      }
+    }
+    None =>
+      database.save_opaque_snapshot(
+        "workspace_admissions",
+        admission_schema_version,
+        self.admission_snapshot_unlocked().to_json().stringify(),
+      )
+  }
+}
+
+///|
 async fn FileWorkspaceDirectory::persist_admissions(
   self : FileWorkspaceDirectory,
 ) -> Unit {
-  write_admissions(self.admission_path, self.admission_snapshot_unlocked())
+  match self.database {
+    None =>
+      write_admissions(self.admission_path, self.admission_snapshot_unlocked())
+    Some(database) =>
+      database.save_opaque_snapshot(
+        "workspace_admissions",
+        admission_schema_version,
+        self.admission_snapshot_unlocked().to_json().stringify(),
+      )
+  }
 }
 
 ///|

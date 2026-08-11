@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/internal/postgres"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn connect(String) -> Connection raise PostgresError
+
+// Errors
+pub(all) suberror PostgresError {
+  ConnectionFailed(String)
+  QueryFailed(String)
+  InvalidParameter(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct Connection {
+  handle : NativeConnection
+}
+pub fn Connection::close(Self) -> Unit
+pub fn Connection::execute(Self, String, parameters? : Array[String?]) -> QueryResult raise PostgresError
+
+type NativeConnection
+
+type NativeResult
+
+pub struct QueryResult {
+  handle : NativeResult
+}
+pub fn QueryResult::affected_rows(Self) -> Int64
+pub fn QueryResult::column_count(Self) -> Int
+pub fn QueryResult::row_count(Self) -> Int
+pub fn QueryResult::value(Self, Int, Int) -> String?
+
+// Type aliases
+
+// Traits

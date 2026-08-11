@@ -1,0 +1,167 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/portal"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub let contract_version : String
+
+pub fn role_allows(Array[EnterpriseRole], EnterpriseRole) -> Bool
+
+pub let snapshot_schema_version : String
+
+pub fn validate_agreement(PortalAgreement) -> Unit raise PortalError
+
+pub fn validate_membership(EnterpriseMembership) -> Unit raise PortalError
+
+pub fn validate_submission(LeaseRequestSubmission) -> Unit raise PortalError
+
+// Errors
+pub(all) suberror PortalError {
+  InvalidInput(String)
+  NotFound(String)
+  AlreadyExists(String)
+  Unauthorized(String)
+  TenantMismatch
+  IdempotencyConflict(String)
+  InvalidTransition(String)
+  StaleGeneration
+  AgreementRequired
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct AgreementExecution {
+  agreement_id : String
+  expected_generation : Int64
+  signer_subject_ref : String
+  executed_artifact_hash : String
+  evidence_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EnterpriseLeaseRequest {
+  submission : LeaseRequestSubmission
+  subject_ref : String
+  state : LeaseRequestState
+  generation : Int64
+  assigned_node_id : String?
+  exclusive_lease_id : String?
+  decision_receipt : String?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EnterpriseLeaseRequest::review(Self, LeaseReview, String?, Int64) -> Self raise PortalError
+
+pub(all) struct EnterpriseMembership {
+  membership_id : String
+  tenant_ref : String
+  organization_id : String
+  subject_ref : String
+  roles : Array[EnterpriseRole]
+  active : Bool
+  created_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EnterpriseModelSummary {
+  model_id : String
+  version : String
+  alias_name : String?
+  compatible_architectures : Array[String]
+  minimum_memory_mib : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum EnterpriseRole {
+  OrganizationAdministrator
+  LegalSigner
+  LeaseRequester
+  BillingViewer
+  Developer
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EnterpriseSelfView {
+  version : String
+  membership : EnterpriseMembership
+  agreements : Array[PortalAgreement]
+  lease_requests : Array[EnterpriseLeaseRequest]
+  can_sign : Bool
+  can_request_lease : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LeaseRequestState {
+  Submitted
+  Approved
+  Rejected
+  Cancelled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LeaseRequestSubmission {
+  request_id : String
+  idempotency_key : String
+  tenant_ref : String
+  organization_id : String
+  project_id : String
+  unix_username : String
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  requested_model_ids : Array[String]
+  justification : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LeaseReview {
+  request_id : String
+  expected_generation : Int64
+  decision : LeaseReviewDecision
+  node_id : String?
+  evidence_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LeaseReviewDecision {
+  Approve
+  Reject
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PortalAgreement {
+  agreement_id : String
+  tenant_ref : String
+  organization_id : String
+  template_ref : String
+  title : String
+  summary : String
+  rendered_document_hash : String
+  state : PortalAgreementState
+  generation : Int64
+  signer_subject_ref : String?
+  signature_request_receipt : String?
+  executed_artifact_hash : String?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PortalAgreement::record_execution(Self, AgreementExecution, Int64) -> Self raise PortalError
+pub fn PortalAgreement::request_signature(Self, String, String, Int64, Int64) -> Self raise PortalError
+
+pub(all) enum PortalAgreementState {
+  ReviewRequired
+  SignatureRequested
+  Executed
+  Declined
+  Superseded
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PortalSnapshot {
+  schema_version : String
+  memberships : Array[EnterpriseMembership]
+  agreements : Array[PortalAgreement]
+  lease_requests : Array[EnterpriseLeaseRequest]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SignatureRequest {
+  agreement_id : String
+  expected_generation : Int64
+  idempotency_key : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

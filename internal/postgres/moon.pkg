@@ -1,0 +1,18 @@
+import {
+  "moonbitlang/core/encoding/utf8",
+}
+
+import {
+  "moonbitlang/core/env",
+} for "test"
+
+options(
+  "native-stub": [ "libpq.c" ],
+  targets: { "postgres.mbt": [ "native" ], "postgres_test.mbt": [ "native" ] },
+  link: {
+    "native": {
+      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq",
+      "stub-cc-flags": "-I/usr/include/postgresql -I/opt/homebrew/include/postgresql@17",
+    },
+  },
+)

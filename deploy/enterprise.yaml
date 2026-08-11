@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-enterprise
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lunanexa-enterprise
+  template:
+    metadata:
+      labels:
+        app: lunanexa-enterprise
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: enterprise
+    spec:
+      serviceAccountName: lunanexa-workbench
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: enterprise
+          # This image serves both /enterprise/ and /workbench/ from the same
+          # immutable browser bundle. Both consume the central /v1 API.
+          image: registry.invalid/lunanexa/workbench@${WORKBENCH_IMAGE_DIGEST}
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet:
+              path: /enterprise/
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-enterprise
+spec:
+  selector:
+    app: lunanexa-enterprise
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

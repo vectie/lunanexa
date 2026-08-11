@@ -1,6 +1,7 @@
 import {
+  "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
-  "vectie/lunanexa/workspace",
+  "vectie/lunanexa/portal",
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/core/json",

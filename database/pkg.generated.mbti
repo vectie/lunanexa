@@ -1,0 +1,44 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/database"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/internal/postgres",
+  "vectie/lunanexa/portal",
+  "vectie/lunanexa/workspace",
+}
+
+// Values
+pub let projection_table_names : Array[String]
+
+pub let schema_sql : String
+
+pub let schema_version : Int
+
+// Errors
+pub(all) suberror DatabaseError {
+  ConnectionUnavailable(String)
+  MigrationFailed(String)
+  QueryFailed(String)
+  UnsupportedSnapshot(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct PostgresDatabase {
+  connection : @postgres.Connection
+  mutex : @async.Mutex
+}
+pub fn PostgresDatabase::close(Self) -> Unit
+pub async fn PostgresDatabase::load_snapshot(Self, String, String) -> String?
+pub fn PostgresDatabase::open(String) -> Self raise DatabaseError
+pub fn PostgresDatabase::ping(Self) -> Bool
+pub fn PostgresDatabase::projection_count(Self, String) -> Int64 raise DatabaseError
+pub async fn PostgresDatabase::save_opaque_snapshot(Self, String, String, String) -> Unit
+pub async fn PostgresDatabase::save_opaque_snapshots(Self, Array[(String, String, String)]) -> Unit
+pub async fn PostgresDatabase::save_portal_snapshot(Self, @portal.PortalSnapshot) -> Unit
+pub async fn PostgresDatabase::save_workspace_snapshot(Self, @workspace.WorkspaceDirectorySnapshot) -> Unit
+
+// Type aliases
+
+// Traits

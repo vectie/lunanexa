@@ -1,0 +1,51 @@
+///|
+test "enterprise portal separates customer requests from operator assignment" {
+  let state = @enterprise.demo_state()
+  let agreements = @enterprise.render({ ..state, route: Agreements })
+  let requests = @enterprise.render({ ..state, route: LeaseRequests })
+  let models = @enterprise.render({ ..state, route: Models })
+  assert_true(agreements.contains("Enterprise capacity framework"))
+  assert_true(agreements.contains("Review &amp; sign"))
+  assert_true(requests.contains("Submit lease request"))
+  assert_true(requests.contains("Request requirements, not a specific machine"))
+  assert_true(
+    requests.contains("operators select and prepare the assigned DGX node"),
+  )
+  assert_true(requests.contains("Password is not accepted"))
+  assert_true(requests.contains("href=\"/workbench/\""))
+  assert_true(models.contains("Shared model catalog"))
+  assert_true(models.contains("Usage &amp; costs"))
+  assert_true(models.contains("aria-current=\"page\""))
+  assert_true(models.contains("prefers-reduced-motion:reduce"))
+}
+
+///|
+test "lease form requires every bounded field" {
+  let state = @enterprise.demo_state()
+  assert_true(@enterprise.lease_form_valid(state))
+  assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "" }))
+  assert_false(@enterprise.lease_form_valid({ ..state, model_ids: "" }))
+  assert_false(@enterprise.lease_form_valid({ ..state, loading: true }))
+}
+
+///|
+test "tenant-provided content is escaped" {
+  let state = @enterprise.demo_state()
+  let html = @enterprise.render({
+    ..state,
+    route: LeaseRequests,
+    justification: "<script>alert(1)</script>",
+    lease_requests: [
+      {
+        ..state.lease_requests[0],
+        submission: {
+          ..state.lease_requests[0].submission,
+          justification: "<img src=x onerror=alert(1)>",
+        },
+      },
+    ],
+  })
+  assert_false(html.contains("<script>alert(1)</script>"))
+  assert_false(html.contains("<img src=x onerror=alert(1)>"))
+  assert_true(html.contains("&lt;img src=x onerror=alert(1)&gt;"))
+}

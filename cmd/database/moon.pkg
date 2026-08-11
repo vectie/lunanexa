@@ -1,16 +1,11 @@
 import {
-  "vectie/lunanexa/database",
-  "vectie/lunanexa/workspace",
-  "moonbitlang/async",
-  "moonbitlang/async/fs",
-  "moonbitlang/core/json",
+  "vectie/lunanexa/database" @db,
+  "moonbitlang/core/env",
 }
 
-import {
-  "moonbitlang/core/env",
-} for "test"
-
 supported_targets = "native"
+
+pkgtype(kind: "executable")
 
 options(
   link: {
