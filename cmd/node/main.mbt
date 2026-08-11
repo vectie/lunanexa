@@ -88,6 +88,154 @@ async fn persist_certificate(
 }
 
 ///|
+async fn load_lease_guard(
+  path : String,
+  node_id : String,
+) -> @nodelease.LeaseAgentGuard {
+  if !@fs.exists(path) {
+    return @nodelease.LeaseAgentGuard::new(node_id)
+  }
+  let snapshot : @nodelease.LeaseAgentSnapshot = @json.from_json(
+    @json.parse(@fs.read_file(path).text()),
+  )
+  if snapshot.node_id != node_id {
+    raise Failure::Failure("exclusive lease state belongs to a different node")
+  }
+  @nodelease.LeaseAgentGuard::from_snapshot(snapshot)
+}
+
+///|
+async fn persist_lease_guard(
+  path : String,
+  lease_guard : @nodelease.LeaseAgentGuard,
+) -> Unit {
+  let temporary = "\{path}.next"
+  @fs.write_file(
+    temporary,
+    lease_guard.snapshot().to_json().stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+    sync=Full,
+  )
+  @fs.rename(temporary, path, replace=true)
+}
+
+///|
+fn valid_helper_path(path : String) -> Bool {
+  path.has_prefix("/") &&
+  path.length() <= 512 &&
+  path.all(character => character.is_printable() && !character.is_whitespace())
+}
+
+///|
+async fn execute_lease_action(
+  helper : String,
+  action : @nodelease.LeaseAgentAction,
+) -> Bool {
+  if action is NoAction {
+    return true
+  }
+  if !valid_helper_path(helper) {
+    return false
+  }
+  let args = match action {
+    ProvisionAccess(lease_id~, username~, credential_ref~, expires_unix_ms~) =>
+      [
+        "provision",
+        "--lease-id",
+        lease_id,
+        "--username",
+        username,
+        "--credential-ref",
+        credential_ref,
+        "--expires-unix-ms",
+        expires_unix_ms.to_string(),
+      ]
+    RevokeAccess(lease_id~, username~) =>
+      ["revoke", "--lease-id", lease_id, "--username", username]
+    SanitizeLease(lease_id~, username~) =>
+      ["sanitize", "--lease-id", lease_id, "--username", username]
+    QuarantineNode(lease_id~) => ["quarantine", "--lease-id", lease_id]
+    NoAction => []
+  }
+  @process.run(helper, args, inherit_env=false) == 0
+}
+
+///|
+fn lease_action_name(action : @nodelease.LeaseAgentAction) -> String {
+  match action {
+    ProvisionAccess(..) => "provision"
+    RevokeAccess(..) => "revoke"
+    SanitizeLease(..) => "sanitize"
+    QuarantineNode(..) => "quarantine"
+    NoAction => "none"
+  }
+}
+
+///|
+async fn reconcile_exclusive_lease(
+  base : String,
+  node_id : String,
+  token : String,
+  helper : String,
+  lease_guard : @nodelease.LeaseAgentGuard,
+  state_path : String,
+) -> Unit {
+  let (response, body) = @http.get(
+    endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease"),
+    headers=node_headers(node_id, token),
+  )
+  let action = if response.code == 200 {
+    let lease : @nodelease.ExclusiveNodeLease = @json.from_json(
+      @json.parse(body.text()),
+    )
+    lease_guard.observe_remote(Some(lease), @async.now())
+  } else if response.code == 404 {
+    lease_guard.observe_remote(None, @async.now())
+  } else {
+    // The local tick is the offline expiry fence. A management outage cannot
+    // extend access beyond the last signed lease expiry.
+    lease_guard.tick(@async.now())
+  }
+  if action is NoAction {
+    persist_lease_guard(state_path, lease_guard)
+    return
+  }
+  if execute_lease_action(helper, action) {
+    let receipt = "helper:accepted:\{@async.now()}"
+    let before = lease_guard.snapshot()
+    lease_guard.record_success(action, receipt)
+    if before.lease is Some(lease) {
+      let observation : @nodelease.LeaseAgentObservation = {
+        lease_id: lease.intent.lease_id,
+        observed_generation: before.observed_generation,
+        action: lease_action_name(action),
+        receipt,
+        observed_unix_ms: @async.now(),
+      }
+      try {
+        let (observe_response, _) = @http.post(
+          endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease:observe"),
+          observation.to_json(),
+          headers=node_headers(node_id, token),
+        )
+        if observe_response.code < 200 || observe_response.code >= 300 {
+          raise Failure::Failure("lease observation was rejected")
+        }
+      } catch {
+        // Local access safety has already converged. The signed observation is
+        // retried after the next controller reconciliation; expiry is never extended.
+        _ => ()
+      }
+    }
+  } else {
+    let quarantine = lease_guard.record_failure(action)
+    ignore(execute_lease_action(helper, quarantine))
+  }
+  persist_lease_guard(state_path, lease_guard)
+}
+
+///|
 async fn ensure_certificate(
   base : String,
   node_id : String,
@@ -214,7 +362,13 @@ async fn reconcile_once(
   materializer : @node_agent.ArtifactMaterializer,
   artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
   state_path : String,
+  lease_helper : String,
+  lease_guard : @nodelease.LeaseAgentGuard,
+  lease_state_path : String,
 ) -> Unit {
+  reconcile_exclusive_lease(
+    base, node_id, token, lease_helper, lease_guard, lease_state_path,
+  )
   let headers = node_headers(node_id, token)
   let (directive_response, directive_body) = @http.get(
     endpoint(base, "/v1/nodes/\{node_id}/directive"),
@@ -410,10 +564,17 @@ async fn main {
     environment("LUNANEXA_COSIGN_BINARY"),
     environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
   )
+  let lease_state_path = @env.get_env_var("LUNANEXA_LEASE_STATE_PATH").unwrap_or(
+    "lunanexa-exclusive-lease-agent.json",
+  )
+  let lease_guard = load_lease_guard(lease_state_path, node_id)
+  let lease_helper = @env.get_env_var("LUNANEXA_LEASE_HELPER").unwrap_or(
+    "/usr/libexec/lunanexa-lease-helper",
+  )
   while true {
     reconcile_once(
       base, node_id, token, inventory, agent, verifier, supervisor, materializer,
-      artifact_verifier, state_path,
+      artifact_verifier, state_path, lease_helper, lease_guard, lease_state_path,
     ) catch {
       _ => println("LunaNexa node reconciliation failed; retrying")
     }

@@ -28,6 +28,7 @@ pub struct FileExclusiveLeaseStore {
 }
 pub async fn FileExclusiveLeaseStore::issue(Self, @nodelease.ExclusiveNodeLeaseIntent, Int64) -> @nodelease.ExclusiveNodeLease
 pub async fn FileExclusiveLeaseStore::lease(Self, String) -> @nodelease.ExclusiveNodeLease?
+pub async fn FileExclusiveLeaseStore::lease_for_node(Self, String) -> @nodelease.ExclusiveNodeLease?
 pub async fn FileExclusiveLeaseStore::leases(Self) -> Array[@nodelease.ExclusiveNodeLease]
 pub async fn FileExclusiveLeaseStore::node_blocks_managed_placement(Self, String) -> Bool
 pub async fn FileExclusiveLeaseStore::open(String, String) -> Self

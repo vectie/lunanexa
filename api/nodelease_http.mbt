@@ -27,6 +27,105 @@ fn decode_exclusive_lease_transition(
 }
 
 ///|
+fn decode_lease_agent_observation(
+  body : String,
+) -> @nodelease.LeaseAgentObservation? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+async fn ApiService::observe_node_lease_action(
+  self : ApiService,
+  node_id : String,
+  headers : Map[String, String],
+  body : String,
+) -> HttpReply {
+  if !@contracts.valid_identifier(node_id, maximum_length=128) ||
+    !self.node_authorized(headers, node_id) {
+    return api_error(
+      401, "Unauthenticated", "valid node authority is required", false,
+    )
+  }
+  guard self.exclusive_lease_store is Some(leases) &&
+    decode_lease_agent_observation(body) is Some(observation) &&
+    leases.lease(observation.lease_id) is Some(initial) else {
+    return api_error(
+      400, "InvalidRequest", "invalid lease agent observation", false,
+    )
+  }
+  if initial.intent.node_id != node_id ||
+    initial.generation != observation.observed_generation ||
+    observation.observed_unix_ms < initial.updated_unix_ms ||
+    observation.observed_unix_ms > @async.now() + 60000L ||
+    !@contracts.valid_identifier(observation.receipt, maximum_length=512) {
+    return api_error(
+      409, "StaleGeneration", "lease agent observation is stale or misbound", false,
+    )
+  }
+  let advance = (
+    current : @nodelease.ExclusiveNodeLease,
+    state : @nodelease.ExclusiveLeaseState,
+  ) => {
+    leases.transition(
+      current.intent.lease_id,
+      {
+        expected_generation: current.generation,
+        state,
+        evidence_receipt: observation.receipt,
+      },
+      observation.observed_unix_ms,
+    )
+  }
+  let transitioned = try {
+    match observation.action {
+      "provision" => {
+        let provisioning = advance(initial, Provisioning)
+        advance(provisioning, Active)
+      }
+      "revoke" => {
+        let draining = match initial.state {
+          Active | Expiring => advance(initial, Draining)
+          Draining => initial
+          _ => raise Failure::Failure("lease is not ready for revocation")
+        }
+        advance(draining, RevokingAccess)
+      }
+      "sanitize" => {
+        let sanitizing = if initial.state == RevokingAccess {
+          advance(initial, Sanitizing)
+        } else {
+          initial
+        }
+        advance(sanitizing, Completed)
+      }
+      "quarantine" => advance(initial, Quarantined)
+      _ => raise Failure::Failure("unsupported lease agent action")
+    }
+  } catch {
+    _ =>
+      return api_error(
+        409, "InvalidTransition", "lease observation transition was rejected", false,
+      )
+  } noraise {
+    value => value
+  }
+  self.publish_exclusive_lease_directive(
+    transitioned,
+    directive_state_for_exclusive_lease(transitioned.state),
+  )
+  self.operator_audit(
+    "exclusive-lease.node-observation",
+    transitioned.intent.lease_id,
+    observation.receipt,
+  )
+  json_reply(200, transitioned.to_json())
+}
+
+///|
 async fn ApiService::node_exists(self : ApiService, node_id : String) -> Bool {
   self.store.heartbeats().any(heartbeat => heartbeat.node_id == node_id)
 }

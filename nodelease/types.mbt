@@ -63,6 +63,15 @@ pub(all) struct ExclusiveLeaseSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct LeaseAgentObservation {
+  lease_id : String
+  observed_generation : Int64
+  action : String
+  receipt : String
+  observed_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) suberror ExclusiveLeaseError {
   UnsupportedVersion(String)
   InvalidIntent(String)

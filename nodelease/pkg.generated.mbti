@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub let agent_snapshot_schema_version : String
+
 pub let contract_version : String
 
 pub let snapshot_schema_version : String
@@ -76,6 +78,52 @@ pub(all) struct ExclusiveNodeLeaseIntent {
   access_credential_ref : String
   starts_unix_ms : Int64
   expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LeaseAgentAction {
+  NoAction
+  ProvisionAccess(lease_id~ : String, username~ : String, credential_ref~ : String, expires_unix_ms~ : Int64)
+  RevokeAccess(lease_id~ : String, username~ : String)
+  SanitizeLease(lease_id~ : String, username~ : String)
+  QuarantineNode(lease_id~ : String)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct LeaseAgentGuard {
+  mut snapshot : LeaseAgentSnapshot
+}
+pub fn LeaseAgentGuard::from_snapshot(LeaseAgentSnapshot) -> Self raise ExclusiveLeaseError
+pub fn LeaseAgentGuard::new(String) -> Self
+pub fn LeaseAgentGuard::observe_remote(Self, ExclusiveNodeLease?, Int64) -> LeaseAgentAction raise ExclusiveLeaseError
+pub fn LeaseAgentGuard::record_failure(Self, LeaseAgentAction) -> LeaseAgentAction
+pub fn LeaseAgentGuard::record_success(Self, LeaseAgentAction, String) -> Unit raise ExclusiveLeaseError
+pub fn LeaseAgentGuard::snapshot(Self) -> LeaseAgentSnapshot
+pub fn LeaseAgentGuard::tick(Self, Int64) -> LeaseAgentAction
+
+pub(all) struct LeaseAgentObservation {
+  lease_id : String
+  observed_generation : Int64
+  action : String
+  receipt : String
+  observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LeaseAgentSnapshot {
+  schema_version : String
+  node_id : String
+  lease : ExclusiveNodeLease?
+  state : LeaseAgentState
+  observed_generation : Int64
+  last_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LeaseAgentState {
+  Idle
+  ProvisionPending
+  AccessActive
+  RevocationPending
+  SanitizationPending
+  Sanitized
+  QuarantinedAgent
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum NodeOperatingMode {

@@ -288,6 +288,22 @@ pub async fn FileExclusiveLeaseStore::leases(
 }
 
 ///|
+pub async fn FileExclusiveLeaseStore::lease_for_node(
+  self : FileExclusiveLeaseStore,
+  node_id : String,
+) -> @nodelease.ExclusiveNodeLease? {
+  self.mutex.acquire()
+  let lease = self.leases
+    .values()
+    .find_first(value => {
+      value.intent.node_id == node_id &&
+      @nodelease.state_blocks_managed_placement(value.state)
+    })
+  self.mutex.release()
+  lease
+}
+
+///|
 /// Advances expired pre-access reservations to Cancelled and any possibly
 /// provisioned lease to Expiring. Expiry never makes a provisioned node
 /// available; revocation and sanitization must still complete.
