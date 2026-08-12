@@ -30,10 +30,11 @@ paths, protocol IDs, model names, and other copy-sensitive technical values.
 Real product screenshots live below `images/` and state exactly which live UI
 condition was captured.
 
-The current projection is marked `draft` because it records commit
-`db481df6104c5c93056eae6dc4e03b62ddbe096c` plus a dirty working tree. Refresh
-it after the deployment/runtime changes are committed and after tomorrow's
-physical-cluster evidence is available.
+The current reviewed repository projection records clean commit
+`b314f4a6234281a53cb245b587f3526dcbc95fe6`. This freshness label covers the
+published source ledger and local acceptance evidence only; it does not replace
+tomorrow's physical-cluster, external-adapter, legal, finance, security, or
+named-human acceptance.
 
 ## Validate
 

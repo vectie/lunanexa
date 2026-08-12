@@ -6,9 +6,9 @@
     "tagline": "Operate a private GPU fleet as a governed model provider.",
     "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting LunaNexa.",
     "language": "en",
-    "revision": "bd06831ac6da086252abcf8b61e3b55a6af0a249 + reviewed operations work",
-    "freshness": "draft",
-    "updated_at": "2026-08-12T15:07:06Z"
+    "revision": "b314f4a6234281a53cb245b587f3526dcbc95fe6",
+    "freshness": "reviewed",
+    "updated_at": "2026-08-12T15:14:47Z"
   },
   "navigation": [
     {"id":"overview","label":"Overview","page_ids":["welcome","feature-map","boundaries"]},

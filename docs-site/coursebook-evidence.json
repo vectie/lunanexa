@@ -2,9 +2,9 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "bd06831ac6da086252abcf8b61e3b55a6af0a249",
-    "working_tree": "dirty",
-    "inspected_at": "2026-08-12T15:07:06Z"
+    "revision": "b314f4a6234281a53cb245b587f3526dcbc95fe6",
+    "working_tree": "clean",
+    "inspected_at": "2026-08-12T15:14:47Z"
   },
   "sources": [
     {"id":"readme","path":"README.mbt.md","digest":"sha256:9bcea9a7bc2e9ffefa5a84e68c9aba83a3f5df09a1df1a858cf01b8062edf858","kind":"overview","public":true},
@@ -36,14 +36,14 @@
     {"id":"claim-postgres","statement":"PostgreSQL is the production system of record for enterprise and workspace authority, with other control-plane stores still using signed file/PVC adapters.","status":"implemented","source_ids":["database","architecture"],"limitations":["The reference PostgreSQL StatefulSet is single-instance and not highly available."]},
     {"id":"claim-workbench","statement":"The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.","status":"implemented","source_ids":["workspaces","client-integration"],"limitations":["Third-party editor handoffs are typed integration points, not bundled vendor runtimes."]},
     {"id":"claim-one-click","statement":"A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.","status":"implemented","source_ids":["management-plane","implementation-status"],"limitations":["Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."]},
-    {"id":"claim-vllm-sglang","statement":"The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.","status":"documented","source_ids":["dgx-qualification","deployment"],"limitations":["The files are currently uncommitted and require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."]},
+    {"id":"claim-vllm-sglang","statement":"The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.","status":"documented","source_ids":["dgx-qualification","deployment"],"limitations":["They require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."]},
     {"id":"claim-notifications-observability","statement":"The repository implements durable tenant notifications, actionable operator alerts, bounded structured operational events, low-cardinality metrics and receipt-based audit correlation.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["External email, SMS, webhook, metrics, log and paging destinations remain deployment-owned integrations."]},
     {"id":"claim-offline-commerce","statement":"The repository implements a generation-fenced hybrid online/offline order, document, evidence-review and fulfillment workflow with MoonLeaf OOXML verification and renderer-bound release evidence.","status":"implemented","source_ids":["operations-commerce-guide","deployment"],"limitations":["Legal templates, object storage, malware scanning, rendering authority, payment, invoice, seal and retention procedures require named external owners before production use."]},
     {"id":"claim-machine-access","statement":"The enterprise portal exposes a tenant-safe exclusive-machine lifecycle with opaque credential handoff, coarse reachability, automatic expiry and explicit early termination without exposing physical topology or raw credentials.","status":"implemented","source_ids":["operations-commerce-guide","security"],"limitations":["Production IdP, trusted ingress, SSH certificate authority or broker, node-local watchdog and sanitization rehearsal remain required."]},
     {"id":"claim-guide-admin-diagnostics","statement":"The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."]}
   ],
   "open_gaps": [
-    "The inspected working tree is dirty; regenerate the coursebook after the deployment/runtime changes are committed.",
+    "The repository source ledger is current, but production evidence must be refreshed after the physical deployment and external-adapter acceptance run.",
     "No physical DGX Spark node has been exercised by this documentation generation run.",
     "The vLLM/SGLang qualification path uses a separate multi-file model directory; production assignment-bound extraction/packaging still needs review.",
     "Production CA/mTLS, identity provider, OCI registry, metrics, secret provider, managed PostgreSQL, model license, and named human acceptors remain external deployment inputs.",
