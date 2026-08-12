@@ -15,9 +15,13 @@ pub fn classify_materialized_runtime_inspection(String, String, String, String) 
 
 pub fn classify_runtime_inspection(String, String, String) -> @contracts.DeploymentState raise RuntimeSupervisorError
 
+pub async fn collect_accelerator_sensors(String) -> AcceleratorSensorSnapshot
+
 pub fn health(String) -> @contracts.HealthResponse
 
 pub fn heartbeat_signature(@contracts.NodeHeartbeat, String) -> String
+
+pub fn parse_nvidia_smi_csv(String) -> AcceleratorSensorSnapshot raise
 
 // Errors
 pub(all) suberror ArtifactMaterializationError {
@@ -47,16 +51,32 @@ pub(all) suberror RuntimeSupervisorError {
   RuntimeCommandFailed(String)
 } derive(Eq, @debug.Debug)
 
+pub(all) suberror TelemetryCollectorError {
+  UnsupportedBinary(String)
+  CommandFailed(Int)
+  MalformedSample(String)
+} derive(Eq, @debug.Debug)
+
 // Types and methods
+pub(all) struct AcceleratorSensorSnapshot {
+  accelerator_count : Int
+  memory_used_mib : Double
+  memory_total_mib : Double
+  utilization_per_mille : Double
+  maximum_temperature_celsius : Double
+  power_watts : Double
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub struct ArtifactMaterializer {
   cache_root : String
   endpoint : String
   credential : String
+  node_id : String
   maximum_artifact_size_bytes : Int64
   verified : Map[String, Bool]
 }
 pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(Self, @contracts.DesiredAssignment, V) -> MaterializedArtifact
-pub async fn ArtifactMaterializer::open(String, String, String, maximum_artifact_size_bytes? : Int64, allow_http_loopback? : Bool) -> Self
+pub async fn ArtifactMaterializer::open(String, String, String, node_id? : String, maximum_artifact_size_bytes? : Int64, allow_http_loopback? : Bool) -> Self
 pub async fn ArtifactMaterializer::prune_unassigned(Self, Array[String]) -> Unit
 
 pub(all) struct BootstrapToken {

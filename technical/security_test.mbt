@@ -178,16 +178,3 @@ test "cache telemetry exposes safe lifecycle fields and never evicts references"
   assert_false(encoded.contains("uri"))
   assert_false(encoded.contains("credential"))
 }
-
-///|
-test "decision snapshots round trip through JSON" {
-  let decision = @technical.decide_autoscale(
-    autoscale_policy(),
-    autoscale_snapshot(),
-  )
-  let encoded = decision.to_json().stringify()
-  let decoded : @technical.AutoscaleDecision = @json.from_json(
-    @json.parse(encoded),
-  )
-  assert_eq(decoded, decision)
-}

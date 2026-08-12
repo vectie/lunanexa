@@ -11,6 +11,8 @@ pub fn agreement_transition_allowed(AgreementState, AgreementState) -> Bool
 
 pub let contract_version : String
 
+pub fn estimate_cost(Int64, FixedMoney) -> FixedMoney raise CommercialError
+
 pub let export_schema_version : String
 
 pub fn money(Int64, String, Int) -> FixedMoney raise CommercialError
@@ -242,6 +244,7 @@ pub fn CommercialStore::new() -> Self
 pub fn CommercialStore::organization(Self, String) -> Organization?
 pub fn CommercialStore::rate_usage(Self, String, String, RateCard, Int64) -> (LedgerEntry, IdempotencyResult) raise CommercialError
 pub fn CommercialStore::reconcile_signature_callback(Self, SignatureCallback) -> (Agreement, IdempotencyResult) raise CommercialError
+pub fn CommercialStore::record_identity_verification(Self, String, String) -> Organization raise CommercialError
 pub fn CommercialStore::register_agreement_template(Self, AgreementTemplate) -> Unit raise CommercialError
 pub fn CommercialStore::remaining_capacity(Self, String) -> Int64 raise CommercialError
 pub fn CommercialStore::replace_from_durable_snapshot(Self, CommercialDurableSnapshot) -> Unit raise CommercialError

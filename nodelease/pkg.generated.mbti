@@ -11,6 +11,10 @@ pub let agent_snapshot_schema_version : String
 
 pub let contract_version : String
 
+pub fn helper_receipt(LeaseAgentAction, Int64) -> String
+
+pub fn helper_receipt_timestamp(LeaseAgentAction, String) -> Int64?
+
 pub let snapshot_schema_version : String
 
 pub fn state_blocks_managed_placement(ExclusiveLeaseState) -> Bool
@@ -18,6 +22,8 @@ pub fn state_blocks_managed_placement(ExclusiveLeaseState) -> Bool
 pub fn transition_allowed(ExclusiveLeaseState, ExclusiveLeaseState) -> Bool
 
 pub fn valid_access_credential_ref(String) -> Bool
+
+pub fn valid_helper_receipt(LeaseAgentAction, String) -> Bool
 
 pub fn valid_unix_username(String) -> Bool
 
@@ -51,6 +57,11 @@ pub(all) enum ExclusiveLeaseState {
   Quarantined
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct ExclusiveLeaseTerminationRequest {
+  expected_generation : Int64
+  reason : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ExclusiveLeaseTransitionRequest {
   expected_generation : Int64
   state : ExclusiveLeaseState
@@ -82,18 +93,21 @@ pub(all) struct ExclusiveNodeLeaseIntent {
 
 pub(all) enum LeaseAgentAction {
   NoAction
-  ProvisionAccess(lease_id~ : String, username~ : String, credential_ref~ : String, expires_unix_ms~ : Int64)
-  RevokeAccess(lease_id~ : String, username~ : String)
-  SanitizeLease(lease_id~ : String, username~ : String)
-  QuarantineNode(lease_id~ : String)
+  ProvisionAccess(lease_id~ : String, username~ : String, credential_ref~ : String, expires_unix_ms~ : Int64, generation~ : Int64)
+  RevokeAccess(lease_id~ : String, username~ : String, generation~ : Int64)
+  SanitizeLease(lease_id~ : String, username~ : String, generation~ : Int64)
+  QuarantineNode(lease_id~ : String, generation~ : Int64)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct LeaseAgentGuard {
   mut snapshot : LeaseAgentSnapshot
 }
+pub fn LeaseAgentGuard::acknowledge_observation(Self, String) -> Unit raise ExclusiveLeaseError
 pub fn LeaseAgentGuard::from_snapshot(LeaseAgentSnapshot) -> Self raise ExclusiveLeaseError
 pub fn LeaseAgentGuard::new(String) -> Self
 pub fn LeaseAgentGuard::observe_remote(Self, ExclusiveNodeLease?, Int64) -> LeaseAgentAction raise ExclusiveLeaseError
+pub fn LeaseAgentGuard::pending_helper_action(Self) -> LeaseAgentAction
+pub fn LeaseAgentGuard::pending_observation(Self, Int64) -> LeaseAgentObservation?
 pub fn LeaseAgentGuard::record_failure(Self, LeaseAgentAction) -> LeaseAgentAction
 pub fn LeaseAgentGuard::record_success(Self, LeaseAgentAction, String) -> Unit raise ExclusiveLeaseError
 pub fn LeaseAgentGuard::snapshot(Self) -> LeaseAgentSnapshot

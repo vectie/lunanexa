@@ -1,7 +1,7 @@
 import {
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/nodelease",
   "moonbitlang/core/json",
-  "moonbitlang/core/string",
 }
 
-supported_targets = "js+native"
+supported_targets = "native"

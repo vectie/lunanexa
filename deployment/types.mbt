@@ -177,12 +177,6 @@ pub(all) struct DeploymentSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub(all) struct ScaleRequest {
-  replicas : Int
-  idempotency_key : String
-} derive(Debug, Eq, ToJson, FromJson)
-
-///|
 pub(all) suberror DeploymentError {
   InvalidTemplate(String)
   InvalidIntent(String)

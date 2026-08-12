@@ -94,6 +94,7 @@ pub struct ArtifactMaterializer {
   cache_root : String
   endpoint : String
   credential : String
+  node_id : String
   maximum_artifact_size_bytes : Int64
   verified : Map[String, Bool]
 }
@@ -178,6 +179,7 @@ pub async fn ArtifactMaterializer::open(
   cache_root : String,
   endpoint : String,
   credential : String,
+  node_id? : String = "",
   maximum_artifact_size_bytes? : Int64 = 1099511627776L,
   allow_http_loopback? : Bool = false,
 ) -> ArtifactMaterializer {
@@ -196,6 +198,7 @@ pub async fn ArtifactMaterializer::open(
     endpoint.contains_char(' ') ||
     endpoint.contains_char('\n') ||
     endpoint.contains_char('\r') ||
+    (node_id != "" && !@contracts.valid_identifier(node_id, maximum_length=128)) ||
     maximum_artifact_size_bytes <= 0L {
     raise ArtifactMaterializationError::InvalidConfiguration
   }
@@ -207,6 +210,7 @@ pub async fn ArtifactMaterializer::open(
     cache_root: content_root,
     endpoint: base_endpoint(endpoint),
     credential,
+    node_id,
     maximum_artifact_size_bytes,
     verified: Map([]),
   }
@@ -278,6 +282,7 @@ async fn ArtifactMaterializer::download(
   partial_path : String,
   expected_size_bytes : Int64,
   maximum_size_bytes : Int64,
+  assignment : @contracts.DesiredAssignment,
 ) -> (String, Int64) {
   let mut offset = 0L
   let digest = @crypto.SHA256::new()
@@ -301,7 +306,15 @@ async fn ArtifactMaterializer::download(
   }
   let headers : Map[String, String] = { "Accept": "application/octet-stream" }
   if self.credential != "" {
-    headers["Authorization"] = "Bearer \{self.credential}"
+    if self.node_id == "" {
+      headers["Authorization"] = "Bearer \{self.credential}"
+    } else {
+      headers["Authorization"] = "Node \{self.credential}"
+      headers["X-LunaNexa-Node-Id"] = self.node_id
+      headers["X-LunaNexa-Assignment-Id"] = assignment.assignment_id
+      headers["X-LunaNexa-Deployment-Id"] = assignment.deployment_id
+      headers["X-LunaNexa-Model-Digest"] = assignment.artifact.digest
+    }
   }
   if offset > 0L {
     headers["Range"] = "bytes=\{offset}-"
@@ -423,6 +436,7 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
     artifact_partial,
     artifact.size_bytes,
     self.maximum_artifact_size_bytes,
+    assignment,
   )
   if actual_size != artifact.size_bytes {
     raise ArtifactSizeMismatch
@@ -431,7 +445,11 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
     quarantine_if_present(artifact_partial)
     raise ArtifactDigestMismatch
   }
-  ignore(self.download(detached_signature_uri, signature_partial, 0L, 1048576L))
+  ignore(
+    self.download(
+      detached_signature_uri, signature_partial, 0L, 1048576L, assignment,
+    ),
+  )
   ArtifactSignatureVerifier::verify(
     verifier,
     artifact_partial,

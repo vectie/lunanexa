@@ -268,6 +268,39 @@ pub fn CommercialStore::add_organization(
   self.organizations[value.organization_id] = value
 }
 
+///| Promote a pending organization only from authenticated external identity
+
+///| evidence. Replays with the same evidence are idempotent; suspended or
+
+///|
+/// closed organizations cannot be reactivated by a provider callback.
+pub fn CommercialStore::record_identity_verification(
+  self : CommercialStore,
+  organization_id : String,
+  verification_ref : String,
+) -> Organization raise CommercialError {
+  let organization = self.require_organization(organization_id)
+  if !safe_identifier(verification_ref) {
+    raise InvalidInput("invalid organization verification evidence")
+  }
+  if organization.state == Active &&
+    organization.verification_ref == Some(verification_ref) {
+    return organization
+  }
+  if organization.state != PendingVerification {
+    raise InvalidTransition(
+      "only a pending organization can complete identity verification",
+    )
+  }
+  let verified = {
+    ..organization,
+    state: Active,
+    verification_ref: Some(verification_ref),
+  }
+  self.organizations[organization_id] = verified
+  verified
+}
+
 ///|
 pub fn CommercialStore::add_cost_center(
   self : CommercialStore,

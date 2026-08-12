@@ -97,3 +97,24 @@ async test "expiry never releases a possibly provisioned node" {
   assert_true(store.node_blocks_managed_placement("node-1"))
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "expiry keeps even a reserved lease fenced until sanitization" {
+  let directory = @fs.tmpdir(prefix="lunanexa-exclusive-reserved-expiry-")
+  let store = @store.FileExclusiveLeaseStore::open(
+    "\{directory}/leases.json",
+    "lease-secret",
+  )
+  let intent = {
+    ..lease_intent("lease-reserved", "node-reserved", "request-reserved"),
+    starts_unix_ms: 1000L,
+    expires_unix_ms: 2000L,
+  }
+  let reserved = store.issue(intent, 1000L)
+  assert_eq(reserved.state, Reserved)
+  assert_true(store.reconcile_expired(2000L))
+  let expiring = store.lease(intent.lease_id).unwrap()
+  assert_eq(expiring.state, Expiring)
+  assert_true(store.node_blocks_managed_placement(intent.node_id))
+  @fs.rmdir(directory, recursive=true)
+}

@@ -17,8 +17,15 @@ pub fn valid_unix_username(value : String) -> Bool {
 
 ///|
 pub fn valid_access_credential_ref(value : String) -> Bool {
+  let suffix = if value.has_prefix("ssh-cert:") {
+    value["ssh-cert:".length():].to_owned()
+  } else if value.has_prefix("secret:") {
+    value["secret:".length():].to_owned()
+  } else {
+    ""
+  }
   @contracts.valid_identifier(value, maximum_length=512) &&
-  (value.has_prefix("ssh-cert:") || value.has_prefix("secret:"))
+  @contracts.valid_identifier(suffix, maximum_length=480)
 }
 
 ///|
@@ -71,7 +78,7 @@ pub fn transition_allowed(
 ) -> Bool {
   match (from, to) {
     (Requested, Reserved | Cancelled | Quarantined) => true
-    (Reserved, Provisioning | Cancelled | Quarantined) => true
+    (Reserved, Provisioning | Expiring | Cancelled | Quarantined) => true
     (Provisioning, Active | Expiring | RevokingAccess | Quarantined) => true
     (Active, Expiring | Draining | Quarantined) => true
     (Expiring, Draining | Quarantined) => true
@@ -93,6 +100,9 @@ pub fn ExclusiveNodeLease::transition(
 ) -> ExclusiveNodeLease raise ExclusiveLeaseError {
   if expected_generation != self.generation {
     raise StaleGeneration
+  }
+  if self.generation == 9223372036854775807L {
+    raise InvalidIntent("lease generation is exhausted")
   }
   if !transition_allowed(self.state, to) {
     raise InvalidTransition(self.state, to)

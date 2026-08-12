@@ -318,9 +318,8 @@ pub async fn FileExclusiveLeaseStore::reconcile_expired(
     for lease_id, lease in self.leases.copy() {
       if now_unix_ms >= lease.intent.expires_unix_ms {
         let next = match lease.state {
-          Requested | Reserved =>
-            Some(@nodelease.ExclusiveLeaseState::Cancelled)
-          Provisioning | Active => Some(Expiring)
+          Requested => Some(@nodelease.ExclusiveLeaseState::Cancelled)
+          Reserved | Provisioning | Active => Some(Expiring)
           Expiring
           | Draining
           | RevokingAccess

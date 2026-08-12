@@ -1,0 +1,34 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/leasehelper"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn scoped_host_path(String, String, maximum_identifier_length? : Int) -> String?
+
+pub fn valid_helper_request(String, String, String, Int64, Int64, Int64) -> Bool
+
+pub fn valid_host_root(String) -> Bool
+
+pub fn valid_runtime_object_id(String) -> Bool
+
+// Errors
+
+// Types and methods
+pub(all) struct CleanupEvidence {
+  account_absent : Bool
+  processes_absent : Bool
+  containers_absent : Bool
+  volumes_absent : Bool
+  home_absent : Bool
+  lease_state_absent : Bool
+  access_material_absent : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CleanupEvidence::verified(Self) -> Bool
+
+// Type aliases
+
+// Traits

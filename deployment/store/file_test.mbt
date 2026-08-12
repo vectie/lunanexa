@@ -20,7 +20,7 @@ fn unsigned_template() -> @deployment.ModelServiceTemplate {
       version: "runtime-v1",
       architectures: ["nvidia-gb10"],
       capabilities: [TextGenerate],
-      supports_batching: true,
+      supports_batching: false,
       supports_multi_node: false,
     },
     capability: TextGenerate,

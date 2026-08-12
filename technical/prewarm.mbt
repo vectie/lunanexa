@@ -92,10 +92,15 @@ pub(all) enum PrewarmDecision {
 
 ///|
 fn valid_digest(value : String) -> Bool {
-  if value.length() != 64 {
+  let raw = if value.has_prefix("sha256:") {
+    value["sha256:".length():].to_owned()
+  } else {
+    value
+  }
+  if raw.length() != 64 {
     return false
   }
-  value.all(char => {
+  raw.all(char => {
     match char {
       '0'..='9' | 'a'..='f' => true
       _ => false

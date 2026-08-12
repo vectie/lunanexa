@@ -263,6 +263,7 @@ pub fn CommercialStore::admit(
   self : CommercialStore,
   request : AdmissionRequest,
 ) -> AdmissionDecision raise CommercialError {
+  let organization = self.require_organization(request.organization_id)
   ignore(self.require_project(request.organization_id, request.project_id))
   ignore(
     money(
@@ -279,6 +280,12 @@ pub fn CommercialStore::admit(
   }
   let reasons : Array[String] = []
   let mut approval_required = false
+  if organization.state != Active {
+    reasons.push("organization is not active")
+  }
+  if organization.verification_ref is None {
+    reasons.push("organization verification is incomplete")
+  }
   for agreement_type in request.required_agreement_types {
     if !self.agreement_type_satisfied(request.organization_id, agreement_type) {
       reasons.push("missing agreement:\{agreement_type}")

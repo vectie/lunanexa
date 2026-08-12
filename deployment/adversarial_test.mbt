@@ -20,7 +20,7 @@ fn adversarial_template() -> @deployment.ModelServiceTemplate {
       version: "runtime-v1",
       architectures: ["nvidia-gb10"],
       capabilities: [TextGenerate],
-      supports_batching: true,
+      supports_batching: false,
       supports_multi_node: false,
     },
     capability: TextGenerate,
@@ -111,10 +111,7 @@ test "deterministic fuzz exhausts deployment intent boundaries" {
     )
   }
   for replicas in -128..<=128 {
-    assert_eq(
-      intent_is_valid({ ..base, replicas, }),
-      replicas >= 1 && replicas <= 64,
-    )
+    assert_eq(intent_is_valid({ ..base, replicas, }), replicas == 1)
   }
   for
     hostile in [
@@ -177,6 +174,8 @@ test "adversarial catalog corpus fails before assignment planning" {
       runtime: { ..base.runtime, architectures: ["nvidia-gb10", "nvidia-gb10"] },
     },
     { ..base, runtime: { ..base.runtime, capabilities: [] } },
+    { ..base, runtime: { ..base.runtime, supports_batching: true } },
+    { ..base, runtime: { ..base.runtime, supports_multi_node: true } },
     { ..base, capability: ImageGenerate },
     { ..base, resources: { ..base.resources, accelerator_count: 65 } },
     { ..base, resources: { ..base.resources, memory_mib: 1048577 } },
@@ -267,7 +266,7 @@ test "placement fuzz is deterministic and duplicate-node fail closed" {
     assert_true(plan.executable)
     assert_eq(plan.replicas[0].node_id, "node-a")
   }
-  let duplicate_plan = @deployment.preflight(
+  let multi_machine_plan = @deployment.preflight(
     [catalog],
     { ..intent, replicas: 2 },
     {
@@ -276,9 +275,9 @@ test "placement fuzz is deterministic and duplicate-node fail closed" {
       available_secret_refs: ["runtime-token"],
     },
   )
-  assert_false(duplicate_plan.executable)
+  assert_false(multi_machine_plan.executable)
   assert_true(
-    duplicate_plan.findings.any(value => value.code == InsufficientCapacity),
+    multi_machine_plan.findings.any(value => value.code == InvalidIntent),
   )
-  assert_eq(duplicate_plan.replicas, [])
+  assert_eq(multi_machine_plan.replicas, [])
 }

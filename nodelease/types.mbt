@@ -57,6 +57,12 @@ pub(all) struct ExclusiveLeaseTransitionRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct ExclusiveLeaseTerminationRequest {
+  expected_generation : Int64
+  reason : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct ExclusiveLeaseSnapshot {
   schema_version : String
   leases : Array[ExclusiveNodeLease]

@@ -15,8 +15,6 @@ pub fn cache_reconcile_action(CacheEntryTelemetry, Int64, Int64) -> CacheAction
 
 pub fn decide_admission(AdmissionLimits, AdmissionSnapshot) -> BackpressureDecision
 
-pub fn decide_autoscale(AutoscalePolicy, AutoscaleSnapshot) -> AutoscaleDecision
-
 pub fn evaluate_probe(ProbeState, ProbeObservation, ProbePolicy) -> ProbeDecision
 
 pub fn initial_probe_state(Int64) -> ProbeState
@@ -65,56 +63,6 @@ pub(all) struct AdmissionSnapshot {
   deadline_unix_ms : Int64
   now_unix_ms : Int64
   lease_valid : Bool
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-
-pub(all) enum AutoscaleDecision {
-  Hold(reason~ : AutoscaleReason)
-  ScaleUp(target_replicas~ : Int, reason~ : AutoscaleReason)
-  ScaleDown(target_replicas~ : Int, reason~ : AutoscaleReason)
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-
-pub(all) struct AutoscalePolicy {
-  policy_version : String
-  min_replicas : Int
-  max_replicas : Int
-  scale_up_step : Int
-  scale_down_step : Int
-  sample_window_ms : Int64
-  cooldown_ms : Int64
-  target_p95_latency_ms : Int64
-  target_queue_depth : Int
-  required_lease_generation : Int64
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-
-pub(all) enum AutoscaleReason {
-  InvalidPolicy
-  InvalidSnapshot
-  LeaseFenceMismatch
-  LeaseExpired
-  InsufficientWindow
-  CooldownActive
-  Stabilizing
-  AtReplicaBound
-  NoAvailableCapacity
-  MetricsWithinTarget
-  LatencyPressure
-  QueuePressure
-  SustainedLowUtilization
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-
-pub(all) struct AutoscaleSnapshot {
-  deployment_id : String
-  desired_replicas : Int
-  ready_replicas : Int
-  available_replica_capacity : Int
-  p95_latency_ms : Int64
-  queue_depth : Int
-  oldest_sample_unix_ms : Int64
-  newest_sample_unix_ms : Int64
-  last_scale_unix_ms : Int64?
-  observed_lease_generation : Int64
-  lease_expires_unix_ms : Int64
-  now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum BackpressureDecision {

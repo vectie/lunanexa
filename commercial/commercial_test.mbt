@@ -433,6 +433,87 @@ test "budgets, quotas, and agreement gates compose at admission" {
 }
 
 ///|
+test "admission rejects inactive or unverified organizations" {
+  let cases : Array[(String, @commercial.OrganizationState, String?)] = [
+    ("org-pending", PendingVerification, Some("verify:pending")),
+    ("org-unverified", Active, None),
+  ]
+  for item in cases {
+    let (organization_id, state, verification_ref) = item
+    let store = @commercial.CommercialStore::new()
+    store.add_organization({
+      organization_id,
+      display_name: organization_id,
+      state,
+      verification_ref,
+      created_unix_ms: 1000L,
+    })
+    store.add_cost_center({
+      cost_center_id: "cc-\{organization_id}",
+      organization_id,
+      parent_cost_center_id: None,
+      display_name: "Lease",
+      created_unix_ms: 1000L,
+    })
+    store.add_project({
+      project_id: "project-\{organization_id}",
+      organization_id,
+      cost_center_id: "cc-\{organization_id}",
+      display_name: "Exclusive lease",
+      created_unix_ms: 1000L,
+    })
+    let decision = store.admit({
+      organization_id,
+      project_id: "project-\{organization_id}",
+      meter: "exclusive-node-second",
+      expected_quantity: 3600L,
+      expected_cost: @commercial.estimate_cost(
+        3600L,
+        @commercial.money(2L, "CNY", 2),
+      ),
+      required_capacity_units: 0L,
+      required_agreement_types: [],
+      now_unix_ms: 2000L,
+    })
+    assert_eq(decision.kind, Blocked)
+    assert_true(decision.reasons.length() == 1)
+  }
+}
+
+///|
+test "verified identity evidence activates pending organization idempotently" {
+  let store = @commercial.CommercialStore::new()
+  store.add_organization({
+    organization_id: "org-verify",
+    display_name: "Verify Me",
+    state: PendingVerification,
+    verification_ref: None,
+    created_unix_ms: 1000L,
+  })
+  let verified = store.record_identity_verification(
+    "org-verify", "provider:identity:event-a",
+  )
+  assert_eq(verified.state, Active)
+  assert_eq(verified.verification_ref, Some("provider:identity:event-a"))
+  assert_eq(
+    store.record_identity_verification(
+      "org-verify", "provider:identity:event-a",
+    ),
+    verified,
+  )
+  try
+    store.record_identity_verification(
+      "org-verify", "provider:identity:event-b",
+    )
+  catch {
+    InvalidTransition(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("identity evidence was silently replaced")
+  }
+}
+
+///|
 test "clickwrap and signature evidence are version and tenant bound" {
   let store = base_store()
   store.register_agreement_template({

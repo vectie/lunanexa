@@ -86,6 +86,16 @@ fn materialization_assignment() -> @contracts.DesiredAssignment {
 }
 
 ///|
+fn request_header(headers : Map[String, String], name : String) -> String? {
+  for key, value in headers {
+    if key.to_lower() == name.to_lower() {
+      return Some(value)
+    }
+  }
+  None
+}
+
+///|
 async test "assigned node materializes verifies reuses and prunes its model" {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let request_count = Ref(0)
@@ -304,10 +314,25 @@ async test "declared artifact size is enforced before transfer" {
 async test "assignment materializes on only the selected node cache" {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let request_count = Ref(0)
+  let node_authority_seen = Ref(false)
+  let assignment_binding_seen = Ref(false)
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       server.run_forever() <| ((request, _, connection) => {
         request_count.val += 1
+        if request_header(request.headers, "Authorization") ==
+          Some("Node assignment-scoped-token") &&
+          request_header(request.headers, "X-LunaNexa-Node-Id") ==
+          Some("node-c") {
+          node_authority_seen.val = true
+        }
+        if request_header(request.headers, "X-LunaNexa-Assignment-Id") ==
+          Some("assignment-materialize-1") &&
+          request_header(request.headers, "X-LunaNexa-Deployment-Id") ==
+          Some("deployment-materialize-1") &&
+          request_header(request.headers, "X-LunaNexa-Model-Digest") is Some(_) {
+          assignment_binding_seen.val = true
+        }
         connection.send_response(200, "OK")
         if request.path.has_suffix(".sig") {
           connection.write_string("detached-signature")
@@ -323,12 +348,14 @@ async test "assignment materializes on only the selected node cache" {
       @fs.tmpdir(prefix="lunanexa-dgx-3-cache-"),
       @fs.tmpdir(prefix="lunanexa-dgx-4-cache-"),
     ]
+    let node_ids = ["node-a", "node-b", "node-c", "node-d"]
     let materializers = [
-      for root in roots => {
+      for index, root in roots => {
         @node.ArtifactMaterializer::open(
           root,
           "http://\{server.addr}",
           "assignment-scoped-token",
+          node_id=node_ids[index],
           maximum_artifact_size_bytes=1024L,
           allow_http_loopback=true,
         )
@@ -341,6 +368,8 @@ async test "assignment materializes on only the selected node cache" {
     )
     assert_true(@fs.exists(artifact.host_path()))
     assert_eq(request_count.val, 2)
+    assert_true(node_authority_seen.val)
+    assert_true(assignment_binding_seen.val)
     for index, root in roots {
       let entries = @fs.readdir("\{root}/sha256")
       if index == selected {

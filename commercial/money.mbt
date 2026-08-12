@@ -93,6 +93,17 @@ fn rated_amount(
   }
 }
 
+///| Compute a bounded estimate using the same exact fixed-point arithmetic as
+
+///|
+/// ledger rating. This is used by admission before a lease is committed.
+pub fn estimate_cost(
+  quantity : Int64,
+  unit_price : FixedMoney,
+) -> FixedMoney raise CommercialError {
+  rated_amount(quantity, unit_price)
+}
+
 ///|
 fn zero_like(value : FixedMoney) -> FixedMoney {
   { ..value, minor_units: 0L }

@@ -16,7 +16,7 @@ fn assignment() -> @contracts.DesiredAssignment {
       version: "1.0.0",
       architectures: ["nvidia-gb10"],
       capabilities: [TextGenerate],
-      supports_batching: true,
+      supports_batching: false,
       supports_multi_node: false,
     },
     resources: {

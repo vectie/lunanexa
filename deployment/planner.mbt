@@ -105,6 +105,8 @@ pub fn validate_template(
     template.runtime.capabilities.length() == 0 ||
     template.runtime.capabilities.length() > 16 ||
     !template.runtime.capabilities.any(value => value == template.capability) ||
+    template.runtime.supports_batching ||
+    template.runtime.supports_multi_node ||
     template.resources.accelerator_count <= 0 ||
     template.resources.accelerator_count > 64 ||
     template.resources.accelerator_memory_mib <= 0 ||
@@ -149,8 +151,7 @@ pub fn validate_intent(
       maximum_length=128,
     ) ||
     !@contracts.valid_identifier(intent.template.version, maximum_length=128) ||
-    intent.replicas <= 0 ||
-    intent.replicas > 64 ||
+    intent.replicas != 1 ||
     intent.lease_duration_ms <= 0L ||
     intent.lease_duration_ms > 2592000000L {
     raise InvalidIntent(intent.deployment_id)
