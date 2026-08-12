@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "${DOCS_NAMESPACE}"
+  labels:
+    app.kubernetes.io/part-of: lunanexa
+    lunanexa.io/service: coursebook
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-coursebook
+  namespace: "${DOCS_NAMESPACE}"
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-coursebook
+  namespace: "${DOCS_NAMESPACE}"
+  labels:
+    app.kubernetes.io/name: lunanexa-coursebook
+    app.kubernetes.io/part-of: lunanexa
+    lunanexa.io/plane: documentation
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lunanexa-coursebook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunanexa-coursebook
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: documentation
+    spec:
+      serviceAccountName: lunanexa-coursebook
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 20
+      nodeSelector:
+        lunanexa.io/role: management
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: coursebook
+          image: "${COURSEBOOK_IMAGE_REPOSITORY}@${COURSEBOOK_IMAGE_DIGEST}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: COURSEBOOK_HOST
+              value: 0.0.0.0
+            - name: COURSEBOOK_ALLOW_REMOTE_BIND
+              value: "1"
+            - name: COURSEBOOK_PORT
+              value: "4390"
+            - name: COURSEBOOK_ALLOWED_HOSTS
+              value: "${DOCS_HOST}"
+            - name: COURSEBOOK_ENABLE_PET
+              value: "1"
+            - name: MOONCLAW_GATEWAY_URL
+              value: "${MOONCLAW_GATEWAY_URL}"
+            - name: COURSEBOOK_ALLOW_HTTPS_GATEWAY
+              value: "1"
+            - name: MOONCLAW_MODEL
+              value: "${MOONCLAW_MODEL}"
+            - name: MOONCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "${MOONCLAW_GATEWAY_SECRET}"
+                  key: token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 4390
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: "${DOCS_HOST}"
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: "${DOCS_HOST}"
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-coursebook
+  namespace: "${DOCS_NAMESPACE}"
+  labels:
+    app.kubernetes.io/name: lunanexa-coursebook
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: lunanexa-coursebook
+  ports:
+    - name: http
+      port: 4390
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-coursebook
+  namespace: "${DOCS_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: lunanexa-coursebook
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "${INGRESS_NAMESPACE}"
+      ports:
+        - protocol: TCP
+          port: 4390
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "${MOONCLAW_NAMESPACE}"
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: moonclaw-gateway
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lunanexa-coursebook
+  namespace: "${DOCS_NAMESPACE}"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-tls-secret: "${DOCS_NAMESPACE}/${DOCS_CLIENT_CA_SECRET}"
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
+    nginx.ingress.kubernetes.io/auth-tls-verify-depth: "2"
+    nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "32k"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "310"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["${DOCS_HOST}"]
+      secretName: "${DOCS_TLS_SECRET}"
+  rules:
+    - host: "${DOCS_HOST}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-coursebook
+                port:
+                  number: 4390

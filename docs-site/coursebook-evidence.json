@@ -1,0 +1,47 @@
+{
+  "contract_version": "moonbook.repository-coursebook-evidence.v1",
+  "repository": {
+    "name": "lunanexa",
+    "revision": "db481df6104c5c93056eae6dc4e03b62ddbe096c",
+    "working_tree": "dirty",
+    "inspected_at": "2026-08-12T10:35:14Z"
+  },
+  "sources": [
+    {"id":"readme","path":"README.mbt.md","digest":"sha256:9bcea9a7bc2e9ffefa5a84e68c9aba83a3f5df09a1df1a858cf01b8062edf858","kind":"overview","public":true},
+    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:a8037295bd49f8a95cec0065b76f234482916d65b9a9e866b53170717c079af3","kind":"product-contract","public":true},
+    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:87d85dd135c55b92f0b7088c23dfc14a8ae79ce8eac6aaa9bfb3742f03b34ac8","kind":"architecture","public":true},
+    {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:d504e8d22b6a8bf689772aaac75cdb6bfd3cf8bf976021ac8138e54157d5fdcc","kind":"readiness","public":true},
+    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:3ed12458db5c4d8f51c7c8e545e11eb7d8b4c6cdf80895a7ceeb1f650d58299d","kind":"deployment","public":true},
+    {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:9b37d31dba7d1469f22ee34902fd3ed613b69c85b799da36ed96f4ed18222194","kind":"operations","public":true},
+    {"id":"recovery","path":"docs/RECOVERY_RUNBOOK.md","digest":"sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361","kind":"recovery","public":true},
+    {"id":"security","path":"docs/SECURITY_OPERATIONS.md","digest":"sha256:6446246bd965f4994adad4c5197813dfe1fc44ee509eaa93db3a8c580b42d73f","kind":"security","public":true},
+    {"id":"management-plane","path":"docs/MANAGEMENT_PLANE.md","digest":"sha256:7bc83d7f12387e198b6482fde3919e8467cab0bce0273453972b6a280ce23b43","kind":"model-service-management","public":true},
+    {"id":"workspaces","path":"docs/WORKSPACES.md","digest":"sha256:3aa4ad015579598015d2783f1047f75dee1b202082c4ac255ef2a9fe583f9f99","kind":"workspace-authority","public":true},
+    {"id":"client-integration","path":"docs/CLIENT_INTEGRATION.md","digest":"sha256:0beb04fb744a301f772ed26e23c3b89529c34f1229a7812880f95b217c4c6e69","kind":"client-contract","public":true},
+    {"id":"database","path":"docs/DATABASE.md","digest":"sha256:efd2f4c908f80599cffa494b519db9050347f4a765a34ad3998645d80e8f946b","kind":"database","public":true},
+    {"id":"production-readiness","path":"docs/PRODUCTION_READINESS.md","digest":"sha256:34dbe44472e75933589cc9794454be93c662cf2bae3ac865f67364bd05a82903","kind":"production-readiness","public":true},
+    {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
+    {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:01ee6e6b19689428b3d1790a62a4bd99eb0984a2dd48fbfab9ad6b3d66a45d31","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:6836669d8fda5c9ca1c0b82cd362b8617ec9b35afda3a90c29370faa60497ba8","kind":"implementation","public":true},
+    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:d59bb8bb5b124d76360cdfc78242bfc6764a88de06eaf1dcebcf58bac3d9a1bd","kind":"acceptance-script","public":true},
+    {"id":"dgx-qualification","path":"deploy/dgx-spark/README.md","digest":"sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512","kind":"runtime-qualification","public":true}
+  ],
+  "claims": [
+    {"id":"claim-provider-neutral-plane","statement":"LunaNexa is a provider-neutral model and GPU-cluster control plane, not a MoonSuite application or agent runtime.","status":"implemented","source_ids":["product-contract","architecture"],"limitations":[]},
+    {"id":"claim-managed-node-boundary","statement":"Managed GPU nodes receive the LunaNexa node agent, approved runtime containers, signed model artifacts, and bounded telemetry—not application repositories or product credentials.","status":"implemented","source_ids":["product-contract","security"],"limitations":["Live image and runtime-environment scans remain part of physical-cluster acceptance."]},
+    {"id":"claim-control-baseline","statement":"The repository implements controller, scheduling, enrollment, registry, workspace authority, deployment operations, Rabbita sites, client transport, and recovery evidence baselines.","status":"implemented","source_ids":["implementation-status"],"limitations":["Implementation is not equivalent to real four-node production acceptance."]},
+    {"id":"claim-four-node-production","statement":"The four physical DGX Spark fleet has passed complete production acceptance.","status":"planned","source_ids":["implementation-status","production-readiness"],"limitations":["Physical enrollment, real serving, measured performance, live security scans, and named human acceptance are still required."]},
+    {"id":"claim-simulation","statement":"The local four-node simulator exercises placement, routing, drain, queueing, restart, and leak-check behavior.","status":"simulated","source_ids":["simulation","implementation-status"],"limitations":["It does not validate NVIDIA hardware, thermal behavior, network topology, container runtime, or service objectives."]},
+    {"id":"claim-postgres","statement":"PostgreSQL is the production system of record for enterprise and workspace authority, with other control-plane stores still using signed file/PVC adapters.","status":"implemented","source_ids":["database","architecture"],"limitations":["The reference PostgreSQL StatefulSet is single-instance and not highly available."]},
+    {"id":"claim-workbench","statement":"The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.","status":"implemented","source_ids":["workspaces","client-integration"],"limitations":["Third-party editor handoffs are typed integration points, not bundled vendor runtimes."]},
+    {"id":"claim-one-click","statement":"A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.","status":"implemented","source_ids":["management-plane","implementation-status"],"limitations":["Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."]},
+    {"id":"claim-vllm-sglang","statement":"The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.","status":"documented","source_ids":["dgx-qualification","deployment"],"limitations":["The files are currently uncommitted and require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."]}
+  ],
+  "open_gaps": [
+    "The inspected working tree is dirty; regenerate the coursebook after the deployment/runtime changes are committed.",
+    "No physical DGX Spark node has been exercised by this documentation generation run.",
+    "The vLLM/SGLang qualification path uses a separate multi-file model directory; production assignment-bound extraction/packaging still needs review.",
+    "Production CA/mTLS, identity provider, OCI registry, metrics, secret provider, managed PostgreSQL, model license, and named human acceptors remain external deployment inputs.",
+    "The optional documentation pet is implemented and locally testable, but a live MoonClaw model route is not claimed until configured and exercised."
+  ]
+}

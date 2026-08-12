@@ -1,0 +1,18 @@
+ARG NODE_BASE_IMAGE
+FROM ${NODE_BASE_IMAGE}
+
+WORKDIR /opt/lunanexa-coursebook
+
+COPY --chown=node:node index.html styles.css app.js server.mjs ./
+COPY --chown=node:node coursebook.json coursebook-evidence.json ./
+COPY --chown=node:node coursebook.json coursebook-evidence.json ./knowledge/
+
+ENV NODE_ENV=production \
+    COURSEBOOK_SITE_ROOT=/opt/lunanexa-coursebook \
+    COURSEBOOK_KNOWLEDGE_ROOT=/opt/lunanexa-coursebook/knowledge \
+    COURSEBOOK_PORT=4390
+
+USER node
+EXPOSE 4390
+
+CMD ["node", "server.mjs"]

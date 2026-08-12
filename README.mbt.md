@@ -133,6 +133,7 @@ signature, payment or tax-invoice providers.
 
 ## Documents
 
+- [Standalone source-grounded LunaNexa coursebook](docs-site/README.md)
 - [Product contract](docs/PRODUCT_CONTRACT.md)
 - [Enterprise portal and lease workflow](docs/ENTERPRISE_PORTAL.md)
 - [PostgreSQL management database](docs/DATABASE.md)
