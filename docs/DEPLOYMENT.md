@@ -659,6 +659,15 @@ gateway or equivalent endpoint attached to the `lunanexa-runtime` network.
 That gateway must route only to the assigned, healthy container and must be
 measured as part of cluster acceptance.
 
+Before approving a vLLM or SGLang runtime for a real DGX Spark, use the
+secret-free qualification manifests in `deploy/dgx-spark/`. They pin one ARM64
+image to one named GPU node, mount only an already verified node-local model
+directory, allocate bounded shared memory, disable model downloads and expose
+only a ClusterIP service under a default-deny policy. They are acceptance
+fixtures, not a replacement for signed assignments or node-agent supervision.
+See the [DGX Spark runtime qualification guide](../deploy/dgx-spark/README.md)
+for rendering, framework-specific compatibility and evidence requirements.
+
 Create the strict route document used by the controller:
 
 ```json

@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sglang-dgx-spark
+  namespace: lunanexa-runtime-qualification
+  labels:
+    app.kubernetes.io/name: sglang-dgx-spark
+    app.kubernetes.io/part-of: lunanexa
+    lunanexa.io/plane: runtime-qualification
+  annotations:
+    lunanexa.io/model-artifact-digest: "sha256:${MODEL_ARTIFACT_DIGEST_HEX}"
+    lunanexa.io/runtime-image-digest: "${SGLANG_IMAGE_DIGEST}"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sglang-dgx-spark
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sglang-dgx-spark
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: runtime-qualification
+    spec:
+      serviceAccountName: lunanexa-runtime
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      enableServiceLinks: false
+      hostNetwork: false
+      hostIPC: false
+      terminationGracePeriodSeconds: 120
+      nodeSelector:
+        kubernetes.io/arch: arm64
+        kubernetes.io/hostname: "${DGX_NODE_NAME}"
+        lunanexa.io/role: gpu
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sglang
+          image: "nvcr.io/nvidia/sglang@${SGLANG_IMAGE_DIGEST}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -m
+            - sglang.launch_server
+          args:
+            - --model-path
+            - /models
+            - --served-model-name
+            - "${MODEL_SELECTOR}"
+            - --host
+            - 0.0.0.0
+            - --port
+            - "30000"
+            - --dtype
+            - bfloat16
+            - --tp
+            - "1"
+            - --context-length
+            - "${MAX_MODEL_LEN}"
+            - --mem-fraction-static
+            - "${SGLANG_MEMORY_FRACTION}"
+            - --max-running-requests
+            - "${MAX_RUNNING_REQUESTS}"
+          env:
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            - name: HF_HOME
+              value: /runtime-tmp/huggingface
+            - name: XDG_CACHE_HOME
+              value: /runtime-tmp/cache
+          ports:
+            - name: http
+              containerPort: 30000
+          resources:
+            requests:
+              cpu: "4"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "16"
+              memory: 96Gi
+              nvidia.com/gpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 180
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 4
+          volumeMounts:
+            - name: verified-model
+              mountPath: /models
+              readOnly: true
+            - name: shared-memory
+              mountPath: /dev/shm
+            - name: runtime-tmp
+              mountPath: /runtime-tmp
+      volumes:
+        - name: verified-model
+          hostPath:
+            path: "/var/lib/lunanexa/qualification-models/sha256/${MODEL_ARTIFACT_DIGEST_HEX}/model"
+            type: Directory
+        - name: shared-memory
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: runtime-tmp
+          emptyDir:
+            sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sglang-dgx-spark
+  namespace: lunanexa-runtime-qualification
+  labels:
+    app.kubernetes.io/name: sglang-dgx-spark
+    app.kubernetes.io/part-of: lunanexa
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: sglang-dgx-spark
+  ports:
+    - name: http
+      port: 30000
+      targetPort: http
