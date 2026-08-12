@@ -19,7 +19,7 @@
     "height": 920,
     "resizable": true,
     "source": {
-      "url": "https://management.example.invalid/console/"
+      "packaged": "startup"
     }
   },
   "plugins": [],

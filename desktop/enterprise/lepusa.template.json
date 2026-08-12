@@ -19,7 +19,7 @@
     "height": 900,
     "resizable": true,
     "source": {
-      "url": "https://management.example.invalid/enterprise/"
+      "packaged": "startup"
     }
   },
   "plugins": [],

@@ -1,0 +1,287 @@
+:root {
+  color-scheme: dark;
+  --bg: #071016;
+  --panel: #0d1820;
+  --panel-raised: #111f29;
+  --line: #223743;
+  --ink: #ecf5f2;
+  --muted: #91a7ad;
+  --mint: #7ee0bd;
+  --mint-strong: #35bd8d;
+  --danger: #f5a0a0;
+  font-family: Inter, "PingFang SC", "Noto Sans SC", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 78% 6%, rgba(53, 189, 141, 0.13), transparent 26rem),
+    var(--bg);
+  color: var(--ink);
+}
+
+button,
+summary {
+  font: inherit;
+}
+
+.startup-shell {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 1.2rem;
+  padding: 2rem;
+}
+
+.startup-card {
+  width: min(38rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgba(17, 31, 41, 0.98), rgba(10, 22, 29, 0.98));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.4);
+}
+
+.product-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.product-header > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.product-header small,
+.startup-shell footer,
+.status-copy p,
+.endpoint-block span,
+.attempt-state,
+details p,
+dt {
+  color: var(--muted);
+}
+
+.product-mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: var(--mint);
+  color: #06251a;
+  font-weight: 900;
+}
+
+.status-visual {
+  position: relative;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 3rem auto 2rem;
+  display: grid;
+  place-items: center;
+}
+
+.status-ring,
+.status-node {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.status-ring {
+  inset: 0;
+  border: 2px solid rgba(126, 224, 189, 0.22);
+  border-top-color: var(--mint);
+  animation: spin 1.15s linear infinite;
+}
+
+.status-node {
+  width: 2.8rem;
+  height: 2.8rem;
+  border: 0.55rem solid var(--panel);
+  background: var(--mint);
+  box-shadow: 0 0 0 1px rgba(126, 224, 189, 0.28);
+}
+
+.startup-card.is-error .status-ring {
+  border-color: rgba(245, 160, 160, 0.35);
+  animation: none;
+}
+
+.startup-card.is-error .status-node {
+  background: var(--danger);
+}
+
+.status-copy {
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--mint) !important;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.startup-card.is-error .eyebrow {
+  color: var(--danger) !important;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.55rem, 4vw, 2.15rem);
+  line-height: 1.15;
+}
+
+.status-copy p:last-child {
+  max-width: 31rem;
+  margin: 0.7rem auto 0;
+  line-height: 1.6;
+}
+
+.endpoint-block {
+  margin-top: 1.5rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: rgba(7, 16, 22, 0.72);
+}
+
+.endpoint-block span {
+  display: block;
+  margin-bottom: 0.28rem;
+  font-size: 0.7rem;
+}
+
+code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 600 0.74rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.startup-actions {
+  min-height: 3.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+button {
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--mint-strong);
+  border-radius: 0.55rem;
+  background: var(--mint);
+  color: #06251a;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #9be9cc;
+}
+
+button:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgba(126, 224, 189, 0.45);
+  outline-offset: 3px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.attempt-state {
+  margin-left: auto;
+  font-size: 0.72rem;
+}
+
+details {
+  margin-top: 0.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  color: var(--mint);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+dl {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.5rem 0 0;
+}
+
+dl div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 1rem;
+}
+
+dd {
+  min-width: 0;
+  margin: 0;
+}
+
+details p {
+  margin: 1rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.startup-shell footer {
+  text-align: center;
+  font-size: 0.68rem;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 34rem) {
+  .startup-shell {
+    place-content: start center;
+    padding: 1rem;
+  }
+
+  .startup-card {
+    padding: 1.1rem;
+  }
+
+  dl div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-ring {
+    animation-duration: 2.5s;
+  }
+}

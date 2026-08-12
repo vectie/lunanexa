@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#071016">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src https://* http://127.0.0.1:* http://localhost:*; img-src 'self' data:; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    >
+    <title>LunaNexa Desktop</title>
+    <link rel="stylesheet" href="./startup.css">
+  </head>
+  <body>
+    <main class="startup-shell">
+      <section class="startup-card" aria-labelledby="startup-title">
+        <header class="product-header">
+          <span class="product-mark" aria-hidden="true">LN</span>
+          <span>
+            <strong>LunaNexa</strong>
+            <small id="product-edition">Desktop</small>
+          </span>
+        </header>
+
+        <div class="status-visual" aria-hidden="true">
+          <span class="status-ring"></span>
+          <span class="status-node"></span>
+        </div>
+
+        <div class="status-copy" aria-live="polite" aria-atomic="true">
+          <p class="eyebrow" id="status-eyebrow">MANAGEMENT CONNECTION</p>
+          <h1 id="startup-title">Connecting to LunaNexa</h1>
+          <p id="status-message">
+            Checking the configured management node before opening the app.
+          </p>
+        </div>
+
+        <div class="endpoint-block">
+          <span>Configured management origin</span>
+          <code id="management-origin">Loading…</code>
+        </div>
+
+        <div class="startup-actions">
+          <button id="retry-button" type="button" hidden>Retry connection</button>
+          <span id="attempt-state" class="attempt-state">Checking…</span>
+        </div>
+
+        <details id="diagnostics" hidden>
+          <summary>Connection details</summary>
+          <dl>
+            <div>
+              <dt>Application route</dt>
+              <dd><code id="application-route">—</code></dd>
+            </div>
+            <div>
+              <dt>Required transport</dt>
+              <dd id="required-transport">HTTPS</dd>
+            </div>
+            <div>
+              <dt>Credentials</dt>
+              <dd>Entered only after the management UI loads</dd>
+            </div>
+          </dl>
+          <p>
+            Confirm that this Mac can reach the management node and that its TLS
+            certificate is trusted. The desktop app does not fall back to another
+            server.
+          </p>
+        </details>
+      </section>
+      <footer>Central management plane · No GPU-node credentials stored locally</footer>
+    </main>
+    <script src="./config.js"></script>
+    <script src="./startup.js"></script>
+  </body>
+</html>
