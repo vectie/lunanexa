@@ -14,9 +14,24 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(requests.contains("Password is not accepted"))
   assert_true(requests.contains("href=\"/workbench/\""))
   assert_true(models.contains("Shared model catalog"))
+  assert_true(models.contains("Managed centrally"))
+  assert_false(models.contains("/data/models"))
   assert_true(models.contains("Usage &amp; costs"))
   assert_true(models.contains("aria-current=\"page\""))
   assert_true(models.contains("prefers-reduced-motion:reduce"))
+}
+
+///|
+test "enterprise locale control renders Chinese and preserves opaque data" {
+  let state = @enterprise.demo_state()
+  let chinese = state.update(LocaleChanged(ChineseSimplified))
+  let html = @enterprise.render({ ..chinese, route: Models })
+  assert_true(html.contains("界面语言"))
+  assert_true(html.contains("共享模型目录"))
+  assert_true(html.contains("中央托管"))
+  assert_true(html.contains("qwen3-32b"))
+  assert_true(html.contains("text.default"))
+  assert_false(html.contains("/data/models"))
 }
 
 ///|

@@ -18,7 +18,7 @@ priv enum Outcome {
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
-  Failed(String)
+  Failed(@i18n.Locale, String)
 }
 
 ///|
@@ -45,6 +45,54 @@ extern "js" fn demo_mode() -> Bool =
   #|     return false;
   #|   }
   #| }
+
+///|
+extern "js" fn stored_locale_preference() -> String =
+  #| () => {
+  #|   try { return globalThis.localStorage?.getItem("lunanexa.locale") || ""; }
+  #|   catch (_) { return ""; }
+  #| }
+
+///|
+extern "js" fn commit_enterprise_locale(
+  storage_value : String,
+  language_tag : String,
+  title : String,
+) -> Unit =
+  #| (storageValue, languageTag, title) => {
+  #|   try { globalThis.localStorage?.setItem("lunanexa.locale", storageValue); }
+  #|   catch (_) {}
+  #|   try {
+  #|     if (globalThis.document?.documentElement) {
+  #|       globalThis.document.documentElement.lang = languageTag;
+  #|     }
+  #|     if (globalThis.document) globalThis.document.title = title;
+  #|   } catch (_) {}
+  #| }
+
+///|
+fn portal_copy(
+  locale : @i18n.Locale,
+  english : String,
+  chinese : String,
+) -> String {
+  if locale.is_chinese() {
+    chinese
+  } else {
+    english
+  }
+}
+
+///|
+fn apply_enterprise_locale(locale : @i18n.Locale) -> Unit {
+  commit_enterprise_locale(
+    locale.storage_value(),
+    locale.language_tag(),
+    portal_copy(
+      locale, "LunaNexa | Enterprise Portal", "LunaNexa | 企业门户",
+    ),
+  )
+}
 
 ///|
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
@@ -281,7 +329,15 @@ fn load_command(
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
     try load_self(model) catch {
-      error => Failed("Unable to load enterprise access: \{Repr(error)}")
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to load enterprise access: \{Repr(error)}",
+            "无法加载企业访问权限：\{Repr(error)}",
+          ),
+        )
     } noraise {
       (view, cost_centers, provisional_spend, models) =>
         Loaded(view, cost_centers, provisional_spend, models)
@@ -297,7 +353,15 @@ fn signature_command(
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
     try request_signature(model, agreement_id) catch {
-      error => Failed("Signature request was rejected: \{Repr(error)}")
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Signature request was rejected: \{Repr(error)}",
+            "签署请求被拒绝：\{Repr(error)}",
+          ),
+        )
     } noraise {
       value => AgreementUpdated(value)
     }
@@ -311,7 +375,15 @@ fn lease_command(
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
     try submit_lease(model) catch {
-      error => Failed("Lease request was rejected: \{Repr(error)}")
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Lease request was rejected: \{Repr(error)}",
+            "租用申请被拒绝：\{Repr(error)}",
+          ),
+        )
     } noraise {
       value => LeaseCreated(value)
     }
@@ -352,7 +424,11 @@ fn update(
             portal: {
               ..model.portal,
               error_message: Some(
-                "A scoped token and controller endpoint are required.",
+                portal_copy(
+                  model.portal.locale,
+                  "A scoped token and controller endpoint are required.",
+                  "需要限定范围的令牌和控制器端点。",
+                ),
               ),
             },
           },
@@ -361,6 +437,13 @@ fn update(
       } else {
         ({ ..model, connecting: true }, load_command(model, emit))
       }
+    Portal(LocaleChanged(locale)) => {
+      apply_enterprise_locale(locale)
+      (
+        { ..model, portal: model.portal.update(LocaleChanged(locale)) },
+        @rabbita.none,
+      )
+    }
     Portal(SignAgreement(agreement_id)) => {
       let next = model.portal.update(SignAgreement(agreement_id))
       if model.demo_mode {
@@ -387,7 +470,11 @@ fn update(
               agreements,
               loading: false,
               success_message: Some(
-                "Signature ceremony requested. Execution waits for verified provider evidence.",
+                portal_copy(
+                  next.locale,
+                  "Signature ceremony requested. Execution waits for verified provider evidence.",
+                  "已发起签署流程。协议将在验证提供商证据后执行。",
+                ),
               ),
             },
           },
@@ -410,7 +497,11 @@ fn update(
               ..next,
               loading: false,
               success_message: Some(
-                "Lease request submitted to the operator queue.",
+                portal_copy(
+                  next.locale,
+                  "Lease request submitted to the operator queue.",
+                  "租用申请已提交至运维审核队列。",
+                ),
               ),
             },
           },
@@ -436,7 +527,13 @@ fn update(
             provisional_spend,
             model_catalog: models,
             loading: false,
-            success_message: Some("Enterprise access loaded."),
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Enterprise access loaded.",
+                "企业访问权限已加载。",
+              ),
+            ),
             error_message: None,
           },
         },
@@ -451,7 +548,11 @@ fn update(
             agreements: replace_agreement(model.portal.agreements, agreement),
             loading: false,
             success_message: Some(
-              "Signature ceremony requested. Execution waits for verified provider evidence.",
+              portal_copy(
+                model.portal.locale,
+                "Signature ceremony requested. Execution waits for verified provider evidence.",
+                "已发起签署流程。协议将在验证提供商证据后执行。",
+              ),
             ),
             error_message: None,
           },
@@ -467,14 +568,18 @@ fn update(
             lease_requests: [request, ..model.portal.lease_requests],
             loading: false,
             success_message: Some(
-              "Lease request submitted to the operator queue.",
+              portal_copy(
+                model.portal.locale,
+                "Lease request submitted to the operator queue.",
+                "租用申请已提交至运维审核队列。",
+              ),
             ),
             error_message: None,
           },
         },
         @rabbita.none,
       )
-    Outcome(Failed(message)) =>
+    Outcome(Failed(dispatched_locale, message)) =>
       (
         {
           ..model,
@@ -483,7 +588,17 @@ fn update(
             ..model.portal,
             loading: false,
             success_message: None,
-            error_message: Some(message),
+            error_message: Some(
+              if dispatched_locale == model.portal.locale {
+                message
+              } else {
+                portal_copy(
+                  model.portal.locale,
+                  "The enterprise operation failed. Retry the operation.",
+                  "企业操作失败。请重试。",
+                )
+              },
+            ),
           },
         },
         @rabbita.none,
@@ -497,28 +612,45 @@ fn app_view(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Html {
   let ready = model.portal.membership is Some(_)
+  let locale = model.portal.locale
   let connection_styles =
     #|.portal-connection{position:fixed;z-index:50;right:1rem;top:1rem;width:min(28rem,calc(100vw - 2rem));border:1px solid #2b4654;border-radius:.7rem;background:#0b1720;color:#edf7f3;box-shadow:0 20px 70px rgba(0,0,0,.45)}.portal-connection summary{padding:.75rem 1rem;cursor:pointer;font-weight:800}.portal-connection-body{display:grid;gap:.65rem;padding:0 1rem 1rem}.portal-connection label{display:block;margin-bottom:.25rem;color:#9db0b6;font-size:.7rem}.portal-connection input{width:100%;min-height:2.6rem;padding:.55rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#071218;color:#edf7f3}.portal-connection button{min-height:2.6rem;border:1px solid #35bd8d;border-radius:.45rem;background:#7ee0bd;color:#06251a;font-weight:850}.portal-connection p{margin:0;color:#91a7ad;font-size:.7rem}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}
   @html.div([
     @html.style_tag(connection_styles),
     if model.demo_mode {
-      @html.div(class="demo-flag", "DEMO · enterprise portal")
+      @html.div(
+        class="demo-flag",
+        portal_copy(
+          locale, "DEMO · enterprise portal", "演示 · 企业门户",
+        ),
+      )
     } else {
       @html.details(
         class="portal-connection",
         open=!ready,
-        attrs=@html.Attrs::build().aria_label("Enterprise connection"),
+        attrs=@html.Attrs::build().aria_label(
+          portal_copy(locale, "Enterprise connection", "企业门户连接"),
+        ),
         [
           @html.summary(
             if ready {
-              "Enterprise connection ready"
+              portal_copy(
+                locale, "Enterprise connection ready", "企业连接就绪",
+              )
             } else {
-              "Connect enterprise identity"
+              portal_copy(
+                locale, "Connect enterprise identity", "连接企业身份",
+              )
             },
           ),
           @html.div(class="portal-connection-body", [
             @html.div([
-              @html.label(for_="portal-token", "Scoped inference token"),
+              @html.label(
+                for_="portal-token",
+                portal_copy(
+                  locale, "Scoped inference token", "限定范围的推理令牌",
+                ),
+              ),
               @html.input(
                 id="portal-token",
                 input_type=Password,
@@ -530,7 +662,9 @@ fn app_view(
             @html.div([
               @html.label(
                 for_="portal-subject",
-                "Opaque subject (loopback acceptance only)",
+                portal_copy(
+                  locale, "Opaque subject (loopback acceptance only)", "不透明主体引用（仅限环回验收）",
+                ),
               ),
               @html.input(
                 id="portal-subject",
@@ -541,7 +675,10 @@ fn app_view(
               ),
             ]),
             @html.div([
-              @html.label(for_="portal-endpoint", "Controller endpoint"),
+              @html.label(
+                for_="portal-endpoint",
+                portal_copy(locale, "Controller endpoint", "控制器端点"),
+              ),
               @html.input(
                 id="portal-endpoint",
                 value=model.endpoint,
@@ -553,13 +690,16 @@ fn app_view(
               disabled=model.connecting || model.token == "",
               on_click=emit(Connect),
               if model.connecting {
-                "Connecting…"
+                portal_copy(locale, "Connecting…", "正在连接…")
               } else {
-                "Connect / refresh"
+                portal_copy(locale, "Connect / refresh", "连接 / 刷新")
               },
             ),
             @html.p(
-              "Credentials remain in this page's browser memory and are never sent to a managed GPU node.",
+              portal_copy(
+                locale, "Credentials remain in this page's browser memory and are never sent to a managed GPU node.",
+                "凭据仅保留在此页面的浏览器内存中，绝不会发送到受管 GPU 节点。",
+              ),
             ),
           ]),
         ],
@@ -575,6 +715,8 @@ fn app_view(
 ///|
 fn main {
   let is_demo = demo_mode()
+  let initial_locale = @i18n.parse_locale(stored_locale_preference())
+  apply_enterprise_locale(initial_locale)
   @rabbita.elmish(
     model={
       endpoint: configured_endpoint(),
@@ -583,9 +725,12 @@ fn main {
       connecting: false,
       demo_mode: is_demo,
       portal: if is_demo {
-        @enterprise_ui.demo_state()
+        { ..@enterprise_ui.demo_state(), locale: initial_locale }
       } else {
-        @enterprise_ui.default_state(current_unix_ms())
+        {
+          ..@enterprise_ui.default_state(current_unix_ms()),
+          locale: initial_locale,
+        }
       },
     },
     view=app_view,
