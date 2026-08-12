@@ -1,6 +1,7 @@
 ///|
 pub(all) enum OperatorRoute {
   Overview
+  Alerts
   Users
   Leases
   CostCenters
@@ -20,6 +21,7 @@ pub(all) enum OperatorRoute {
 pub fn all_routes() -> Array[OperatorRoute] {
   [
     Overview,
+    Alerts,
     Users,
     Leases,
     CostCenters,

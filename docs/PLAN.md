@@ -1,5 +1,11 @@
 # LunaNexa phased implementation plan
 
+The post-audit implementation contract for durable notifications, operational
+events, hybrid offline commerce, customer machine access and role-safe guide
+diagnostics is [Operations, offline commerce, machine access and guide
+diagnostics](OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md). Those phases are release
+requirements; external providers and physical-DGX checks remain explicit gates.
+
 ## Working policy
 
 Implement a meaningful phase, then run its phase gate. Avoid repeatedly running

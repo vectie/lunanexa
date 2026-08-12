@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/notifications",
   "vectie/lunanexa/portal",
   "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",

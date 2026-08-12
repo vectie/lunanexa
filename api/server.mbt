@@ -32,6 +32,7 @@ pub struct ApiService {
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   portal_store : @portal_store.FilePortalStore?
+  notification_store : @notification_store.NotificationStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -80,6 +81,7 @@ pub fn ApiService::new(
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
+    notification_store: None,
     available_secret_refs: [],
     registry: None,
     enrollment: None,
@@ -130,6 +132,7 @@ pub fn ApiService::with_registry(
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
+    notification_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: None,
@@ -181,6 +184,7 @@ pub fn ApiService::with_services(
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
+    notification_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -234,6 +238,7 @@ pub fn ApiService::with_control_plane(
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
+    notification_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -338,6 +343,15 @@ pub fn ApiService::with_portal_store(
   portal_store : @portal_store.FilePortalStore,
 ) -> ApiService {
   { ..self, portal_store: Some(portal_store) }
+}
+
+///|
+/// Enables the durable operator alert center and tenant notification inbox.
+pub fn ApiService::with_notification_store(
+  self : ApiService,
+  notification_store : @notification_store.NotificationStore,
+) -> ApiService {
+  { ..self, notification_store: Some(notification_store) }
 }
 
 ///|
@@ -1977,6 +1991,11 @@ async fn ApiService::handle_with_transport(
       verb, path, headers, body, allow_asserted_subject,
     )
   }
+  if notification_path(path) {
+    return self.handle_notifications(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   if exclusive_lease_management_path(path) {
     return self.handle_exclusive_lease_management(verb, path, headers, body)
   }
@@ -2716,6 +2735,7 @@ async fn ApiService::handle_with_transport(
         )
       }
       self.store.put_heartbeat(heartbeat)
+      self.refresh_node_health_notifications(now)
       self.refresh_deployment_operations()
       json_reply(202, { "accepted": true, "node_id": heartbeat.node_id })
     }

@@ -3,6 +3,7 @@ pub(all) enum EnterpriseRoute {
   Overview
   Agreements
   LeaseRequests
+  Notifications
   Costs
   Models
 } derive(Debug, Eq)
@@ -23,6 +24,7 @@ pub(all) struct EnterpriseState {
   membership : @portal.EnterpriseMembership?
   agreements : Array[@portal.PortalAgreement]
   lease_requests : Array[@portal.EnterpriseLeaseRequest]
+  notifications : Array[@notifications.NotificationRecord]
   cost_centers : Array[EnterpriseCostCenterRow]
   provisional_spend : String
   model_catalog : Array[@portal.EnterpriseModelSummary]
@@ -47,6 +49,7 @@ pub(all) enum EnterpriseMessage {
   JustificationChanged(String)
   SignAgreement(String)
   SubmitLease
+  MarkNotificationRead(String, Int64)
   ClearNotice
 } derive(Eq)
 
@@ -67,6 +70,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     membership: None,
     agreements: [],
     lease_requests: [],
+    notifications: [],
     cost_centers: [],
     provisional_spend: "—",
     model_catalog: [],
@@ -154,6 +158,40 @@ pub fn demo_state() -> EnterpriseState {
         updated_unix_ms: now - 3600000L,
       },
     ],
+    notifications: [
+      {
+        event: {
+          version: @notifications.contract_version,
+          notification_id: "notice-access-ready-demo",
+          deduplication_key: "access-ready-demo",
+          source_receipt: "exclusive-lease:demo:5",
+          topic: AccessCredential,
+          code: "LeaseAccessReady",
+          severity: Information,
+          audience: Subject(
+            tenant_ref="tenant-northstar",
+            subject_ref="subject-alice",
+          ),
+          title_key: "notifications.lease_access_ready.title",
+          body_key: "notifications.lease_access_ready.body",
+          parameters: {
+            "lease_ref": "exclusive-lease-demo",
+            "credential_ref": "credential://vault/access-demo",
+          },
+          created_unix_ms: now - 1800000L,
+          expires_unix_ms: None,
+        },
+        lifecycle: Unread,
+        generation: 1L,
+        assigned_to: None,
+        acknowledged_by: None,
+        acknowledged_unix_ms: None,
+        silenced_until_unix_ms: None,
+        resolved_by: None,
+        resolved_unix_ms: None,
+        updated_unix_ms: now - 1800000L,
+      },
+    ],
     cost_centers: [
       {
         cost_center_id: "cc-research",
@@ -212,6 +250,7 @@ pub fn EnterpriseState::update(
       { ..self, loading: true, success_message: None, error_message: None }
     SubmitLease =>
       { ..self, loading: true, success_message: None, error_message: None }
+    MarkNotificationRead(_, _) => self
     ClearNotice => { ..self, success_message: None, error_message: None }
   }
 }
@@ -255,6 +294,7 @@ fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
     Overview => copy(locale, "Overview", "概览")
     Agreements => copy(locale, "Agreements", "协议")
     LeaseRequests => copy(locale, "Lease requests", "租用申请")
+    Notifications => copy(locale, "Notifications", "通知")
     Costs => copy(locale, "Usage & costs", "用量与成本")
     Models => copy(locale, "Model catalog", "模型目录")
   }
@@ -293,7 +333,15 @@ fn navigation(
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   let items = [
-    for route in [Overview, Agreements, LeaseRequests, Costs, Models] => {
+    for
+      route in [
+        Overview,
+        Agreements,
+        LeaseRequests,
+        Notifications,
+        Costs,
+        Models,
+      ] => {
       @html.button(
         type_="button",
         class=if state.route == route {
@@ -953,6 +1001,210 @@ fn model_card(
 }
 
 ///|
+fn notification_code_label(locale : @i18n.Locale, code : String) -> String {
+  match code {
+    "LeaseRequestApproved" =>
+      copy(locale, "Capacity request approved", "容量申请已批准")
+    "LeaseAccessReady" =>
+      copy(locale, "Machine access is ready", "机器访问已就绪")
+    "LeaseExpiring" =>
+      copy(locale, "Machine access expires soon", "机器访问即将到期")
+    "LeaseTerminating" =>
+      copy(locale, "Machine access is terminating", "机器访问正在终止")
+    "LeaseCompleted" =>
+      copy(locale, "Machine access ended", "机器访问已结束")
+    "AgreementActionRequired" =>
+      copy(locale, "Agreement action required", "协议需要处理")
+    "OfflineDocumentsRequired" =>
+      copy(locale, "Offline documents required", "需要线下文件")
+    _ => code
+  }
+}
+
+///|
+fn notification_severity_label(
+  locale : @i18n.Locale,
+  severity : @notifications.NotificationSeverity,
+) -> String {
+  match severity {
+    Information => copy(locale, "Information", "提示")
+    Warning => copy(locale, "Warning", "警告")
+    Critical => copy(locale, "Critical", "严重")
+  }
+}
+
+///|
+fn notification_lifecycle_label(
+  locale : @i18n.Locale,
+  lifecycle : @notifications.NotificationLifecycle,
+) -> String {
+  match lifecycle {
+    Unread => copy(locale, "Unread", "未读")
+    Read => copy(locale, "Read", "已读")
+    Acknowledged => copy(locale, "Acknowledged", "已确认")
+    Resolved => copy(locale, "Resolved", "已解决")
+  }
+}
+
+///|
+fn notification_detail(
+  locale : @i18n.Locale,
+  record : @notifications.NotificationRecord,
+) -> String {
+  let reference = match record.event.parameters.get("lease_ref") {
+    Some(value) => value
+    None => record.event.parameters.get("agreement_ref").unwrap_or("")
+  }
+  let explanation = match record.event.code {
+    "LeaseRequestApproved" =>
+      copy(
+        locale, "An operator approved your capacity request. Provisioning starts next.",
+        "运维人员已批准您的容量申请，接下来将开始配置。",
+      )
+    "LeaseAccessReady" =>
+      copy(
+        locale, "Your exclusive machine is ready. Open its access details before the credential expires.",
+        "您的独占机器已就绪。请在凭据到期前查看访问详情。",
+      )
+    "LeaseExpiring" =>
+      copy(
+        locale, "Save your work and request an extension if needed. Access closes automatically at the lease boundary.",
+        "请保存工作；如有需要请申请延期。访问权限将在租约边界自动关闭。",
+      )
+    "LeaseTerminating" =>
+      copy(
+        locale, "New sessions are blocked while the node is drained and sanitized.",
+        "节点正在排空并清理，新的会话已被阻止。",
+      )
+    "LeaseCompleted" =>
+      copy(
+        locale, "Credentials are revoked and the node has left your tenant boundary.",
+        "凭据已撤销，节点已离开您的租户边界。",
+      )
+    "AgreementActionRequired" =>
+      copy(
+        locale, "Review the agreement and complete the requested action.", "请审阅协议并完成所需操作。",
+      )
+    "OfflineDocumentsRequired" =>
+      copy(
+        locale, "Upload the executed contract, payment receipt, and invoice evidence to continue.",
+        "请上传已签署合同、付款回执和发票证据以继续流程。",
+      )
+    _ =>
+      copy(
+        locale, "Open the related record for details.", "请打开相关记录查看详情。",
+      )
+  }
+  if reference == "" {
+    explanation
+  } else {
+    "\{explanation} · \{reference}"
+  }
+}
+
+///|
+fn notifications_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  let unread = state.notifications.count_if(record => record.lifecycle == Unread)
+  @html.div(class="page-stack", [
+    @html.section(class="section-heading", [
+      @html.div([
+        @html.h2(copy(state.locale, "Notification inbox", "通知收件箱")),
+        @html.p(
+          copy(
+            state.locale,
+            "Durable updates for agreements, machine access, expiry, and offline reconciliation.",
+            "查看协议、机器访问、到期与线下对账的持久化更新。",
+          ),
+        ),
+      ]),
+      @html.span(
+        class="count-pill",
+        copy(state.locale, "\{unread} unread", "\{unread} 条未读"),
+      ),
+    ]),
+    if state.notifications.length() == 0 {
+      @html.p(
+        class="empty",
+        copy(state.locale, "No notifications yet.", "暂无通知。"),
+      )
+    } else {
+      @html.div(
+        class="record-list",
+        [
+          for record in state.notifications => {
+            @html.article(
+              class=if record.lifecycle == Unread {
+                "record-card notification-card is-unread"
+              } else {
+                "record-card notification-card"
+              },
+              [
+                @html.div(class="record-main", [
+                  @html.div(class="record-title", [
+                    @html.h3(
+                      notification_code_label(state.locale, record.event.code),
+                    ),
+                    @html.span(
+                      class="state-pill",
+                      notification_severity_label(
+                        state.locale,
+                        record.event.severity,
+                      ),
+                    ),
+                    @html.span(
+                      class="state-pill",
+                      notification_lifecycle_label(
+                        state.locale,
+                        record.lifecycle,
+                      ),
+                    ),
+                  ]),
+                  @html.p(notification_detail(state.locale, record)),
+                  @html.dl(class="record-meta", [
+                    @html.div([
+                      @html.dt(copy(state.locale, "Received", "接收时间")),
+                      @html.dd(
+                        class="mono",
+                        record.event.created_unix_ms.to_string(),
+                      ),
+                    ]),
+                    @html.div([
+                      @html.dt(copy(state.locale, "Receipt", "回执")),
+                      @html.dd(class="mono", record.event.source_receipt),
+                    ]),
+                  ]),
+                ]),
+                if record.lifecycle == Unread {
+                  @html.div(class="record-actions", [
+                    @html.button(
+                      type_="button",
+                      class="primary-action",
+                      on_click=command(
+                        emit,
+                        MarkNotificationRead(
+                          record.event.notification_id,
+                          record.generation,
+                        ),
+                      ),
+                      copy(state.locale, "Mark as read", "标记为已读"),
+                    ),
+                  ])
+                } else {
+                  @html.nothing
+                },
+              ],
+            )
+          }
+        ],
+      )
+    },
+  ])
+}
+
+///|
 fn content(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
@@ -961,6 +1213,7 @@ fn content(
     Overview => overview_view(state, emit)
     Agreements => agreements_view(state, emit)
     LeaseRequests => lease_requests_view(state, emit)
+    Notifications => notifications_view(state, emit)
     Costs => costs_view(state)
     Models => models_view(state)
   }

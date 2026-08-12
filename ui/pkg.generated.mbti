@@ -8,6 +8,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/deployment",
+  "vectie/lunanexa/notifications",
   "vectie/lunanexa/ui/i18n",
   "vectie/lunanexa/workspace",
 }
@@ -105,6 +106,9 @@ pub(all) enum ConsoleMessage {
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
   RejectEnterpriseLease(String, Int64)
+  AcknowledgeAlert(String, Int64)
+  SilenceAlert(String, Int64)
+  ResolveAlert(String, Int64)
 } derive(Eq)
 
 pub(all) struct ConsoleState {
@@ -122,6 +126,7 @@ pub(all) struct ConsoleState {
   benchmark_evidence : Array[String]
   policies : PolicySummary
   audit : Array[AuditRow]
+  notifications : Array[NotificationRow]
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -221,6 +226,19 @@ pub(all) struct NodeRow {
   last_seen : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct NotificationRow {
+  notification_id : String
+  code : String
+  severity : @notifications.NotificationSeverity
+  lifecycle : @notifications.NotificationLifecycle
+  topic : @notifications.NotificationTopic
+  created_unix_ms : Int64
+  generation : Int64
+  node_ref : String
+  assigned_to : String
+  silenced_until_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) enum OperatorCommand {
   EnrollNode
   RegisterModel
@@ -238,6 +256,7 @@ pub(all) enum OperatorCommand {
 
 pub(all) enum OperatorRoute {
   Overview
+  Alerts
   Users
   Leases
   CostCenters

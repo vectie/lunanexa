@@ -14,10 +14,12 @@ priv enum Outcome {
     @portal.EnterpriseSelfView,
     Array[@enterprise_ui.EnterpriseCostCenterRow],
     String,
-    Array[@portal.EnterpriseModelSummary]
+    Array[@portal.EnterpriseModelSummary],
+    Array[@notifications.NotificationRecord]
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
+  NotificationRead(@notifications.NotificationRecord)
   Failed(@i18n.Locale, String)
 }
 
@@ -159,6 +161,7 @@ async fn load_self(
   Array[@enterprise_ui.EnterpriseCostCenterRow],
   String,
   Array[@portal.EnterpriseModelSummary],
+  Array[@notifications.NotificationRecord],
 ) {
   let body = request(
     "GET",
@@ -194,6 +197,23 @@ async fn load_self(
           "GET",
           model.endpoint,
           "/v1/portal/self/models",
+          model.token,
+          model.subject_ref,
+        ),
+      ),
+    )
+  catch {
+    _ => []
+  } noraise {
+    value => value
+  }
+  let notifications : Array[@notifications.NotificationRecord] = try
+    @json.from_json(
+      @json.parse(
+        request(
+          "GET",
+          model.endpoint,
+          "/v1/notifications/self",
           model.token,
           model.subject_ref,
         ),
@@ -249,7 +269,7 @@ async fn load_self(
     }
     _ => "—"
   }
-  (view, cost_centers, provisional_spend, models)
+  (view, cost_centers, provisional_spend, models, notifications)
 }
 
 ///|
@@ -323,6 +343,24 @@ async fn submit_lease(model : AppModel) -> @portal.EnterpriseLeaseRequest {
 }
 
 ///|
+async fn mark_notification_read(
+  model : AppModel,
+  notification_id : String,
+  generation : Int64,
+) -> @notifications.NotificationRecord {
+  let body = "{\"expected_generation\":\"\{generation}\"}"
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/notifications/self/\{notification_id}:read",
+    model.token,
+    model.subject_ref,
+    body~,
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
 fn load_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
@@ -339,10 +377,50 @@ fn load_command(
           ),
         )
     } noraise {
-      (view, cost_centers, provisional_spend, models) =>
-        Loaded(view, cost_centers, provisional_spend, models)
+      (view, cost_centers, provisional_spend, models, notifications) =>
+        Loaded(view, cost_centers, provisional_spend, models, notifications)
     }
   })
+}
+
+///|
+fn notification_read_command(
+  model : AppModel,
+  notification_id : String,
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try mark_notification_read(model, notification_id, generation) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to update notification: \{Repr(error)}",
+            "无法更新通知：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => NotificationRead(value)
+    }
+  })
+}
+
+///|
+fn replace_notification(
+  values : Array[@notifications.NotificationRecord],
+  updated : @notifications.NotificationRecord,
+) -> Array[@notifications.NotificationRecord] {
+  [
+    for value in values => {
+      if value.event.notification_id == updated.event.notification_id {
+        updated
+      } else {
+        value
+      }
+    }
+  ]
 }
 
 ///|
@@ -511,9 +589,34 @@ fn update(
         ({ ..model, portal: next }, lease_command(model, emit))
       }
     }
+    Portal(MarkNotificationRead(notification_id, generation)) =>
+      if model.demo_mode {
+        let notifications = [
+          for value in model.portal.notifications => {
+            if value.event.notification_id == notification_id {
+              {
+                ..value,
+                lifecycle: Read,
+                generation: value.generation + 1L,
+                updated_unix_ms: current_unix_ms(),
+              }
+            } else {
+              value
+            }
+          }
+        ]
+        ({ ..model, portal: { ..model.portal, notifications, } }, @rabbita.none)
+      } else {
+        (
+          model,
+          notification_read_command(model, notification_id, generation, emit),
+        )
+      }
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
-    Outcome(Loaded(view, cost_centers, provisional_spend, models)) =>
+    Outcome(
+      Loaded(view, cost_centers, provisional_spend, models, notifications)
+    ) =>
       (
         {
           ..model,
@@ -526,6 +629,7 @@ fn update(
             cost_centers,
             provisional_spend,
             model_catalog: models,
+            notifications,
             loading: false,
             success_message: Some(
               portal_copy(
@@ -572,6 +676,28 @@ fn update(
                 model.portal.locale,
                 "Lease request submitted to the operator queue.",
                 "租用申请已提交至运维审核队列。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(NotificationRead(notification)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            notifications: replace_notification(
+              model.portal.notifications,
+              notification,
+            ),
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Notification marked as read.",
+                "通知已标记为已读。",
               ),
             ),
             error_message: None,

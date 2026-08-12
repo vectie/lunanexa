@@ -68,6 +68,7 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_DEPLOYMENT_PATH` | Durable catalog and model-service operation snapshot |
 | `LUNANEXA_EXCLUSIVE_LEASE_PATH` | Durable exclusive-node lease snapshot |
 | `LUNANEXA_PORTAL_PATH` | Durable enterprise memberships, agreement projections and lease requests |
+| `LUNANEXA_NOTIFICATION_PATH` | Durable notification, alert, delivery-outbox and preference snapshot |
 | `LUNANEXA_PERSISTENCE_BACKEND` | `postgres` in production; `file` is an explicit development fallback |
 | `LUNANEXA_DATABASE_URL` | Secret-provided PostgreSQL URL; required when the backend is `postgres` |
 | `LUNANEXA_AVAILABLE_SECRET_REFS` | Comma-separated deployment-owned secret reference names available to preflight; never secret values |
@@ -94,9 +95,27 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only mounted public trust key |
 
 PostgreSQL stores enterprise registrations, portal agreements and lease
-requests, workspace users, grants, leases and admission snapshots. It never
+requests, workspace users, grants, leases, admission snapshots and the durable
+notification outbox. It never
 stores login passwords. See `docs/DATABASE.md` for migrations, least-privilege
 roles, backup and recovery.
+
+The notification surface is intentionally split by authority:
+
+- `GET /v1/notifications/operator` lists platform incidents for an operator;
+- operator actions append `:acknowledge`, `:silence`, `:assign`, or `:resolve`;
+- `GET /v1/notifications/self` lists only the authenticated subject's tenant
+  inbox; `POST /v1/notifications/self/{id}:read` marks a subject-addressed item
+  read with an expected generation.
+
+The controller reconciles stale-node alerts and customer exclusive-lease
+notices from durable authority. An active lease produces access-ready and the
+current 72/24/1-hour expiry-window notice; draining, revocation, sanitization,
+completion and quarantine produce corresponding lifecycle notices. Repeated
+refresh and controller restart do not duplicate a notice. In-app delivery is
+always available. Email, SMS and webhook deliveries remain pending until an
+explicit deployment adapter claims them; retry exhaustion is retained as a
+dead-letter record rather than silently discarded.
 
 Expose the operator console and enterprise portal/WebIDE as separate sites as
 shown in `deploy/ingress.yaml`; both proxy the same `/v1` API. Keep `/metrics`

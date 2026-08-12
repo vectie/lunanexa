@@ -21,8 +21,8 @@ Schema version 2 maintains the following normalized, indexed projections:
 - `lunanexa.workspace_leases` — time-bounded model/workbench entitlement;
 - `lunanexa.snapshots` — canonical typed snapshots used for deterministic
   restart recovery, including admission reservations, hashed API credentials,
-  the commercial ledger and callback history, and technical prewarm/replay
-  state.
+  the commercial ledger and callback history, technical prewarm/replay state,
+  and the durable notification/outbox snapshot.
 
 The `commercial` and `commercial_integrations` snapshot rows are committed in
 one PostgreSQL transaction. A verified signature/payment/invoice callback and
@@ -32,6 +32,10 @@ nonces; a controller restart cannot make a transfer grant reusable. The
 `access_keys` row stores only SHA-256 secret digests, tenant/subject bindings,
 model allowlists, scopes, expiry, revocation and bounded request counters. The
 one-time API-key secret is never stored.
+The `notifications` snapshot row retains subject/platform-scoped events,
+lifecycle generations, channel preferences and retry/dead-letter delivery
+records. It stores bounded localization parameters and evidence receipts, not
+message-provider credentials or raw email/SMS content.
 
 Every mutation writes the canonical snapshot and its normalized projections in
 one transaction. A failed projection constraint rolls back the snapshot too.
@@ -66,6 +70,8 @@ export LUNANEXA_PERSISTENCE_BACKEND=file
 
 In PostgreSQL mode, `LUNANEXA_PORTAL_PATH`, `LUNANEXA_WORKSPACE_PATH`,
 `LUNANEXA_ACCESS_PATH`, and `LUNANEXA_TECHNICAL_PATH` are not authoritative.
+`LUNANEXA_NOTIFICATION_PATH` is likewise a development/recovery fixture rather
+than the production authority.
 Controller registry, scheduler, assignment, enrollment, telemetry, deployment
 operation and exclusive-lease stores retain their signed file/PVC adapters;
 they are included in the controller backup set and fenced by controller epoch.

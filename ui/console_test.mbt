@@ -80,6 +80,20 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         receipt: "receipt-1",
       },
     ],
+    notifications: [
+      {
+        notification_id: "alert-node-1",
+        code: "NodeUnreachable",
+        severity: Critical,
+        lifecycle: Unread,
+        topic: ClusterHealth,
+        created_unix_ms: 1786200000000L,
+        generation: 1L,
+        node_ref: "node-1",
+        assigned_to: "",
+        silenced_until_unix_ms: None,
+      },
+    ],
     users: [
       {
         user_id: "user-1",
@@ -229,6 +243,21 @@ test "commercial and qualified-service routes expose bounded evidence" {
   assert_true(qualified.contains("TestOnly"))
   assert_true(qualified.contains("Not ready"))
   assert_true(qualified.contains("not a qualified trust service"))
+}
+
+///|
+test "alerts route localizes durable incident state and actions" {
+  let state = console_state(Alerts)
+  let english = @ui.render(state)
+  assert_true(english.contains("Operator alert center"))
+  assert_true(english.contains("Node heartbeat is stale"))
+  assert_true(english.contains("Acknowledge"))
+  assert_true(english.contains("Silence 1h"))
+  assert_true(english.contains("Resolve"))
+  let chinese = @ui.render({ ..state, locale: ChineseSimplified })
+  assert_true(chinese.contains("运维告警中心"))
+  assert_true(chinese.contains("节点心跳已超时"))
+  assert_true(chinese.contains("静默 1 小时"))
 }
 
 ///|

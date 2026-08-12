@@ -51,6 +51,7 @@ pub struct ApiService {
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
   portal_store : @vectie/lunanexa/portal/store.FilePortalStore?
+  notification_store : @vectie/lunanexa/notifications/store.NotificationStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -91,6 +92,7 @@ pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
+pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self

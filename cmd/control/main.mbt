@@ -91,6 +91,9 @@ async fn main {
   let portal_path = @env.get_env_var("LUNANEXA_PORTAL_PATH").unwrap_or(
     "lunanexa-enterprise-portal.json",
   )
+  let notification_path = @env.get_env_var("LUNANEXA_NOTIFICATION_PATH").unwrap_or(
+    "lunanexa-notifications.json",
+  )
   let access_path = @env.get_env_var("LUNANEXA_ACCESS_PATH").unwrap_or(
     "lunanexa-access.json",
   )
@@ -169,6 +172,11 @@ async fn main {
     Some(database) => @portal_store.FilePortalStore::open_postgres(database)
     None => @portal_store.FilePortalStore::open(portal_path)
   }
+  let notification_store = match management_database {
+    Some(database) =>
+      @notification_store.NotificationStore::open_postgres(database)
+    None => @notification_store.NotificationStore::open(notification_path)
+  }
   let api_key_issuer_secret = required_environment(
     "LUNANEXA_API_KEY_ISSUER_SECRET",
   )
@@ -239,6 +247,7 @@ async fn main {
     )
     .with_exclusive_lease_store(exclusive_lease_store)
     .with_portal_store(portal_store)
+    .with_notification_store(notification_store)
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )

@@ -88,6 +88,20 @@ pub(all) struct AuditRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct NotificationRow {
+  notification_id : String
+  code : String
+  severity : @notifications.NotificationSeverity
+  lifecycle : @notifications.NotificationLifecycle
+  topic : @notifications.NotificationTopic
+  created_unix_ms : Int64
+  generation : Int64
+  node_ref : String
+  assigned_to : String
+  silenced_until_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct UserAccessRow {
   user_id : String
   display_name : String
@@ -212,6 +226,7 @@ pub(all) struct ConsoleState {
   benchmark_evidence : Array[String]
   policies : PolicySummary
   audit : Array[AuditRow]
+  notifications : Array[NotificationRow]
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -261,6 +276,9 @@ pub(all) enum ConsoleMessage {
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
   RejectEnterpriseLease(String, Int64)
+  AcknowledgeAlert(String, Int64)
+  SilenceAlert(String, Int64)
+  ResolveAlert(String, Int64)
 } derive(Eq)
 
 ///|
@@ -305,6 +323,7 @@ pub fn default_state() -> ConsoleState {
       allowed_runtimes: [],
     },
     audit: [],
+    notifications: [],
     users: [],
     access_grants: [],
     compute_leases: [],
@@ -657,6 +676,7 @@ pub fn demo_state() -> ConsoleState {
         receipt: "demo:audit:01",
       },
     ],
+    notifications: [],
     users: [
       {
         user_id: "user-alice",
@@ -943,6 +963,7 @@ fn lease_resource_label(locale : @i18n.Locale, value : String) -> String {
 fn route_label(locale : @i18n.Locale, route : OperatorRoute) -> String {
   match route {
     Overview => localized(locale, "Overview", "概览")
+    Alerts => localized(locale, "Alerts", "告警")
     Users => localized(locale, "Users & access", "用户与访问权限")
     Leases => localized(locale, "Leases", "租约")
     CostCenters => localized(locale, "Cost centers", "成本中心")
@@ -966,6 +987,11 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
       localized(
         locale, "Live capacity, service posture, and recent control-plane activity.",
         "查看实时容量、服务状态与近期控制平面活动。",
+      )
+    Alerts =>
+      localized(
+        locale, "Durable cluster incidents with acknowledgement, ownership, silence, and resolution.",
+        "查看可确认、分派、静默和解决的持久化集群事件。",
       )
     Users =>
       localized(
@@ -1068,6 +1094,7 @@ fn navigation(
     [
       @html.p(class="nav-group-label", localized(locale, "Monitor", "监控")),
       nav_link(locale, Overview, current, emit),
+      nav_link(locale, Alerts, current, emit),
       nav_link(locale, Nodes, current, emit),
       nav_link(locale, Models, current, emit),
       nav_link(locale, Catalog, current, emit),
@@ -3198,6 +3225,194 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
+fn alert_code_label(locale : @i18n.Locale, code : String) -> String {
+  match code {
+    "NodeUnreachable" =>
+      localized(locale, "Node heartbeat is stale", "节点心跳已超时")
+    "DeliveryAttemptLimit" =>
+      localized(locale, "Notification delivery failed", "通知投递失败")
+    _ => code
+  }
+}
+
+///|
+fn alert_severity_label(
+  locale : @i18n.Locale,
+  severity : @notifications.NotificationSeverity,
+) -> String {
+  match severity {
+    Information => localized(locale, "Information", "提示")
+    Warning => localized(locale, "Warning", "警告")
+    Critical => localized(locale, "Critical", "严重")
+  }
+}
+
+///|
+fn alert_lifecycle_label(
+  locale : @i18n.Locale,
+  lifecycle : @notifications.NotificationLifecycle,
+) -> String {
+  match lifecycle {
+    Unread => localized(locale, "Open", "未处理")
+    Read => localized(locale, "Read", "已读")
+    Acknowledged => localized(locale, "Acknowledged", "已确认")
+    Resolved => localized(locale, "Resolved", "已解决")
+  }
+}
+
+///|
+fn alerts_view(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let open_count = state.notifications.count_if(row => row.lifecycle != Resolved)
+  @html.section(attrs=@html.Attrs::build().aria_labelledby("alerts-title"), [
+    @html.div(class="section-heading", [
+      @html.div([
+        @html.h2(
+          id="alerts-title",
+          localized(state.locale, "Operator alert center", "运维告警中心"),
+        ),
+        @html.p(
+          class="section-copy",
+          localized(
+            state.locale,
+            "Incidents are durable and deduplicated. Resolution preserves their audit history.",
+            "事件会持久化并去重；解决事件后仍保留其审计历史。",
+          ),
+        ),
+      ]),
+      @html.span(
+        class="resource-count",
+        localized(
+          state.locale,
+          "\{open_count} open",
+          "\{open_count} 个未解决",
+        ),
+      ),
+    ]),
+    if state.notifications.length() == 0 {
+      @html.p(
+        class="empty-state",
+        localized(
+          state.locale,
+          "No durable alerts are available.",
+          "暂无持久化告警。",
+        ),
+      )
+    } else {
+      @html.div(class="table-scroll", [
+        @html.table(class="resource-table", [
+          @html.caption(
+            class="sr-only",
+            localized(
+              state.locale,
+              "Durable operator alerts",
+              "持久化运维告警",
+            ),
+          ),
+          @html.thead(
+            @html.tr([
+              @html.th(scope=Col, localized(state.locale, "Incident", "事件")),
+              @html.th(scope=Col, localized(state.locale, "Severity", "级别")),
+              @html.th(scope=Col, localized(state.locale, "State", "状态")),
+              @html.th(
+                scope=Col,
+                localized(state.locale, "Created", "创建时间"),
+              ),
+              @html.th(scope=Col, localized(state.locale, "Owner", "负责人")),
+              @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
+            ]),
+          ),
+          @html.tbody(
+            [
+              for row in state.notifications => {
+                @html.tr([
+                  @html.td([
+                    @html.strong(alert_code_label(state.locale, row.code)),
+                    @html.span(
+                      class="mono secondary",
+                      if row.node_ref == "" {
+                        row.notification_id
+                      } else {
+                        "\{row.node_ref} · \{row.notification_id}"
+                      },
+                    ),
+                  ]),
+                  @html.td(
+                    status_badge(
+                      alert_severity_label(state.locale, row.severity),
+                      if row.severity == Critical {
+                        "danger"
+                      } else {
+                        "warning"
+                      },
+                    ),
+                  ),
+                  @html.td(
+                    status_badge(
+                      alert_lifecycle_label(state.locale, row.lifecycle),
+                      if row.lifecycle == Resolved {
+                        "ok"
+                      } else {
+                        "warning"
+                      },
+                    ),
+                  ),
+                  @html.td(
+                    class="mono secondary",
+                    row.created_unix_ms.to_string(),
+                  ),
+                  @html.td(
+                    if row.assigned_to == "" {
+                      "—"
+                    } else {
+                      row.assigned_to
+                    },
+                  ),
+                  @html.td(
+                    @html.div(class="table-actions", [
+                      @html.button(
+                        type_="button",
+                        disabled=row.lifecycle == Acknowledged ||
+                          row.lifecycle == Resolved,
+                        on_click=command(
+                          emit,
+                          AcknowledgeAlert(row.notification_id, row.generation),
+                        ),
+                        localized(state.locale, "Acknowledge", "确认"),
+                      ),
+                      @html.button(
+                        type_="button",
+                        disabled=row.lifecycle == Resolved,
+                        on_click=command(
+                          emit,
+                          SilenceAlert(row.notification_id, row.generation),
+                        ),
+                        localized(state.locale, "Silence 1h", "静默 1 小时"),
+                      ),
+                      @html.button(
+                        type_="button",
+                        disabled=row.lifecycle == Resolved,
+                        on_click=command(
+                          emit,
+                          ResolveAlert(row.notification_id, row.generation),
+                        ),
+                        localized(state.locale, "Resolve", "解决"),
+                      ),
+                    ]),
+                  ),
+                ])
+              }
+            ],
+          ),
+        ]),
+      ])
+    },
+  ])
+}
+
+///|
 fn benchmarks_view(state : ConsoleState) -> @rabbita.Html {
   @html.section(
     attrs=@html.Attrs::build().aria_labelledby("benchmarks-title"),
@@ -4869,6 +5084,7 @@ fn console_view(
 ) -> @rabbita.Html {
   let content = match state.route {
     Overview => overview_view(state, emit)
+    Alerts => alerts_view(state, emit)
     Users => users_view(state, emit)
     Leases => leases_view(state, emit)
     CostCenters => cost_centers_view(state)

@@ -563,6 +563,9 @@ async fn load_console(
   let exclusive_leases : Array[@nodelease.ExclusiveNodeLease] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/exclusive-node-leases", token)),
   )
+  let notification_records : Array[@notifications.NotificationRecord] = @json.from_json(
+    @json.parse(request("GET", endpoint, "/v1/notifications/operator", token)),
+  )
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -787,6 +790,22 @@ async fn load_console(
   while request_details.length() > 50 {
     ignore(request_details.remove(0))
   }
+  let notifications : Array[@ui.NotificationRow] = [
+    for record in notification_records => {
+      {
+        notification_id: record.event.notification_id,
+        code: record.event.code,
+        severity: record.event.severity,
+        lifecycle: record.lifecycle,
+        topic: record.event.topic,
+        created_unix_ms: record.event.created_unix_ms,
+        generation: record.generation,
+        node_ref: record.event.parameters.get("node_ref").unwrap_or(""),
+        assigned_to: record.assigned_to.unwrap_or(""),
+        silenced_until_unix_ms: record.silenced_until_unix_ms,
+      }
+    }
+  ]
   let cost_centers : Array[@ui.CostCenterRow] = match commercial_snapshot {
     Some(snapshot) =>
       [
@@ -899,7 +918,9 @@ async fn load_console(
       total_nodes: heartbeats.length(),
       active_models: models.count_if(model => model.state == Approved),
       queue_depth: scheduler.queued_count.unwrap_or(scheduler.active.length()),
-      alerts: nodes.count_if(node => node.state == Unreachable),
+      alerts: notifications.count_if(notification => {
+        notification.lifecycle != Resolved
+      }),
       recent_changes: audit.length().min(20),
     },
     nodes,
@@ -947,6 +968,7 @@ async fn load_console(
         }
       }
     ],
+    notifications,
     users,
     access_grants,
     compute_leases,
@@ -1543,6 +1565,120 @@ fn update_live(
         { ..model, console: { ..model.console, confirmation: None } },
         @rabbita.none,
       )
+    Console(AcknowledgeAlert(notification_id, generation)) => {
+      let body = { "expected_generation": generation.to_json() }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/notifications/operator/\{notification_id}:acknowledge",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The alert could not be acknowledged.",
+                "无法确认该告警。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Alert acknowledged.",
+                "告警已确认。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(SilenceAlert(notification_id, generation)) => {
+      let body = {
+          "expected_generation": generation.to_json(),
+          "silenced_until_unix_ms": (current_unix_ms() + 3600000L).to_json(),
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/notifications/operator/\{notification_id}:silence",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The alert could not be silenced.",
+                "无法静默该告警。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Alert silenced for one hour.",
+                "告警已静默一小时。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(ResolveAlert(notification_id, generation)) => {
+      let body = { "expected_generation": generation.to_json() }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/notifications/operator/\{notification_id}:resolve",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The alert could not be resolved.",
+                "无法解决该告警。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Alert resolved.",
+                "告警已解决。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
     Console(Refresh) => (model, load_command(model, emit))
     Console(OperationChanged(value)) =>
       (

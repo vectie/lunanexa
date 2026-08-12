@@ -1,0 +1,211 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/notifications"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn alert_event(AlertRule, AlertObservation, String) -> NotificationEvent? raise NotificationError
+
+pub fn alert_fires(AlertRule, AlertObservation) -> Bool
+
+pub let contract_version : String
+
+pub fn preference_allows(NotificationPreference, NotificationEvent, NotificationChannel) -> Bool
+
+pub let snapshot_schema_version : String
+
+pub fn validate_event(NotificationEvent) -> Unit raise NotificationError
+
+pub fn validate_preference(NotificationPreference) -> Unit raise NotificationError
+
+pub fn validate_rule(AlertRule) -> Unit raise NotificationError
+
+// Errors
+pub(all) suberror NotificationError {
+  InvalidInput(String)
+  NotFound(String)
+  AlreadyExists(String)
+  IdempotencyConflict(String)
+  Unauthorized
+  StaleGeneration
+  InvalidTransition(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) enum AlertComparator {
+  AtLeast
+  GreaterThan
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AlertObservation {
+  observation_id : String
+  dimension_ref : String
+  value : Int64
+  observed_unix_ms : Int64
+  source_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AlertRule {
+  rule_id : String
+  topic : NotificationTopic
+  code : String
+  severity : NotificationSeverity
+  comparator : AlertComparator
+  threshold : Int64
+  title_key : String
+  body_key : String
+  audience : NotificationAudience
+  enabled : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct DeliveryResult {
+  delivery_id : String
+  expected_attempt_count : Int
+  delivered : Bool
+  retryable : Bool
+  provider_receipt : String?
+  error_code : String?
+  next_attempt_unix_ms : Int64?
+  now_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum DeliveryState {
+  PendingDelivery
+  Delivering
+  Delivered
+  RetryScheduled
+  DeadLetter
+  DeliverySkipped
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationAction {
+  notification_id : String
+  expected_generation : Int64
+  actor_ref : String
+  now_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationAssignmentAction {
+  notification_id : String
+  expected_generation : Int64
+  actor_ref : String
+  assignee_ref : String?
+  now_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum NotificationAudience {
+  PlatformOperators
+  TenantUsers(tenant_ref~ : String)
+  Subject(tenant_ref~ : String, subject_ref~ : String)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum NotificationChannel {
+  InApp
+  Email
+  Sms
+  Webhook
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationDelivery {
+  delivery_id : String
+  notification_id : String
+  channel : NotificationChannel
+  state : DeliveryState
+  attempt_count : Int
+  next_attempt_unix_ms : Int64?
+  provider_receipt : String?
+  last_error_code : String?
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDelivery::record_result(Self, DeliveryResult, Int) -> Self raise NotificationError
+
+pub(all) struct NotificationEvent {
+  version : String
+  notification_id : String
+  deduplication_key : String
+  source_receipt : String
+  topic : NotificationTopic
+  code : String
+  severity : NotificationSeverity
+  audience : NotificationAudience
+  title_key : String
+  body_key : String
+  parameters : Map[String, String]
+  created_unix_ms : Int64
+  expires_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum NotificationLifecycle {
+  Unread
+  Read
+  Acknowledged
+  Resolved
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationPreference {
+  preference_id : String
+  tenant_ref : String
+  subject_ref : String
+  topic : NotificationTopic
+  channels : Array[NotificationChannel]
+  minimum_severity : NotificationSeverity
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationRecord {
+  event : NotificationEvent
+  lifecycle : NotificationLifecycle
+  generation : Int64
+  assigned_to : String?
+  acknowledged_by : String?
+  acknowledged_unix_ms : Int64?
+  silenced_until_unix_ms : Int64?
+  resolved_by : String?
+  resolved_unix_ms : Int64?
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationRecord::acknowledge(Self, NotificationAction) -> Self raise NotificationError
+pub fn NotificationRecord::assign(Self, NotificationAssignmentAction) -> Self raise NotificationError
+pub fn NotificationRecord::mark_read(Self, NotificationAction) -> Self raise NotificationError
+pub fn NotificationRecord::resolve(Self, NotificationAction) -> Self raise NotificationError
+pub fn NotificationRecord::silence(Self, NotificationSilenceAction) -> Self raise NotificationError
+
+pub(all) enum NotificationSeverity {
+  Information
+  Warning
+  Critical
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationSilenceAction {
+  notification_id : String
+  expected_generation : Int64
+  actor_ref : String
+  now_unix_ms : Int64
+  silenced_until_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationSnapshot {
+  schema_version : String
+  records : Array[NotificationRecord]
+  deliveries : Array[NotificationDelivery]
+  preferences : Array[NotificationPreference]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum NotificationTopic {
+  ClusterHealth
+  ArtifactHealth
+  WorkloadAdmission
+  CommercialAction
+  Reconciliation
+  LeaseLifecycle
+  AccessCredential
+  GuideDiagnostics
+  DeliveryHealth
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
