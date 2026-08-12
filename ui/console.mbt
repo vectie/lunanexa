@@ -535,6 +535,49 @@ pub fn demo_state() -> ConsoleState {
       signature: "demo-signed",
     },
   ]
+  let service_intent : @deployment.ModelServiceIntent = {
+    version: @contracts.contract_version,
+    idempotency_key: "demo:text-service:1",
+    deployment_id: "text-service",
+    template: { template_id: "text-small", version: "v1" },
+    replicas: 1,
+    data_class: Internal,
+    lease_duration_ms: 86400000L,
+    promote_when_ready: false,
+  }
+  let service_operation : @deployment.DeploymentOperation = {
+    operation_id: "operation-text-service-01",
+    deployment_id: "text-service",
+    generation: 3L,
+    state: Ready,
+    plan: {
+      plan_id: "plan:text-service:text-small:v1",
+      intent: service_intent,
+      template: Some(templates[0]),
+      replicas: [
+        {
+          replica_id: "text-service-r1",
+          node_id: "dgx-spark-03",
+          devices: ["gpu-0"],
+        },
+      ],
+      findings: [],
+      executable: true,
+      endpoint: Some({
+        canonical_path: "/v1/workloads",
+        model_selector: "text.default",
+      }),
+    },
+    assignment_ids: ["assignment-text-service-r1"],
+    endpoint: Some({
+      canonical_path: "/v1/workloads",
+      model_selector: "text.default",
+    }),
+    message: "Ready on one eligible DGX Spark node",
+    audit_receipt: "demo:deployment:text-service:3",
+    created_unix_ms: 1786500000000L,
+    updated_unix_ms: 1786500300000L,
+  }
   {
     ..default_state(),
     overview: {
@@ -547,8 +590,55 @@ pub fn demo_state() -> ConsoleState {
     },
     nodes,
     models,
+    deployments: [
+      {
+        assignment_id: "assignment-qwen-eval-r1",
+        deployment_id: "deployment-qwen-eval",
+        desired: Ready,
+        observed: Ready,
+        placement_reason: "warm model · 80 GiB free · policy compatible",
+      },
+      {
+        assignment_id: "assignment-vision-review-r1",
+        deployment_id: "deployment-vision-review",
+        desired: Ready,
+        observed: Degraded,
+        placement_reason: "vision runtime · tenant lease · retrying health probe",
+      },
+    ],
     catalog_templates: templates,
+    service_deployments: [service_operation],
     requests: { count: 1842, p95_ms: 142, throughput_per_second: 38, errors: 3 },
+    request_details: [
+      {
+        timestamp_unix_ms: 1786500320000L,
+        action: "workload.invoke",
+        model_selector: "text.default",
+        result: "accepted",
+        receipt: "demo:workload:1842",
+      },
+      {
+        timestamp_unix_ms: 1786500280000L,
+        action: "workload.stream",
+        model_selector: "code.assist",
+        result: "accepted",
+        receipt: "demo:workload:1841",
+      },
+    ],
+    stream_events: [
+      {
+        sequence: 1,
+        kind: "Chunk",
+        text: "A bounded demo output chunk.",
+        receipt: "",
+      },
+      {
+        sequence: 2,
+        kind: "Completed",
+        text: "",
+        receipt: "demo:workload:1841",
+      },
+    ],
     benchmark_evidence: [
       "demo-throughput · p95 142 ms · 38/s · failures 1‰ · demo-run-01",
     ],
@@ -565,6 +655,54 @@ pub fn demo_state() -> ConsoleState {
         evidence: "4-node demo fleet",
         result: "accepted",
         receipt: "demo:audit:01",
+      },
+    ],
+    users: [
+      {
+        user_id: "user-alice",
+        display_name: "Alice Chen",
+        email: "alice@example.test",
+        state: UserActive,
+        last_active: "2 minutes ago",
+        grant_count: 1,
+      },
+      {
+        user_id: "user-mina",
+        display_name: "Mina Rao",
+        email: "mina@example.test",
+        state: UserInvited,
+        last_active: "Never",
+        grant_count: 0,
+      },
+    ],
+    access_grants: [
+      {
+        grant_id: "grant-alice-research",
+        user_id: "user-alice",
+        role: Developer,
+        scope: "workspace/research-main",
+        expires_at: "2026-08-12 18:00 UTC",
+        state: GrantActive,
+      },
+    ],
+    compute_leases: [
+      {
+        lease_id: "workspace-lease-alice",
+        user_id: "user-alice",
+        workspace: "research-main",
+        resource: "Text generation · 2 concurrent",
+        started_at: "2026-08-12 10:00 UTC",
+        expires_at: "2026-08-12 18:00 UTC",
+        state: Active,
+      },
+      {
+        lease_id: "workspace-lease-mina",
+        user_id: "user-mina",
+        workspace: "research-pending",
+        resource: "Text generation · 1 concurrent",
+        started_at: "2026-08-13 08:00 UTC",
+        expires_at: "2026-08-13 12:00 UTC",
+        state: Requested,
       },
     ],
     exclusive_node_leases: [
@@ -731,6 +869,41 @@ fn stream_kind_label(locale : @i18n.Locale, value : String) -> String {
     }
   } else {
     value
+  }
+}
+
+///|
+fn agreement_type_label(locale : @i18n.Locale, value : String) -> String {
+  match value {
+    "Reserved capacity" => localized(locale, value, "预留容量")
+    "Data processing" => localized(locale, value, "数据处理")
+    _ => value
+  }
+}
+
+///|
+fn agreement_state_label(locale : @i18n.Locale, value : String) -> String {
+  match value {
+    "Executed" => localized(locale, value, "已执行")
+    "Awaiting signature" => localized(locale, value, "等待签署")
+    "Review required" => localized(locale, value, "待审阅")
+    "Declined" => localized(locale, value, "已拒绝")
+    "Superseded" => localized(locale, value, "已替代")
+    _ => value
+  }
+}
+
+///|
+fn enterprise_request_state_label(
+  locale : @i18n.Locale,
+  value : String,
+) -> String {
+  match value {
+    "Submitted" => localized(locale, value, "待运维审核")
+    "Approved" => localized(locale, value, "已批准")
+    "Rejected" => localized(locale, value, "已拒绝")
+    "Cancelled" => localized(locale, value, "已取消")
+    _ => value
   }
 }
 
@@ -3685,12 +3858,17 @@ fn agreements_view(
                 for agreement in state.agreements => {
                   @html.tr([
                     @html.td(class="mono", agreement.agreement_id),
-                    @html.td(agreement.agreement_type),
+                    @html.td(
+                      agreement_type_label(
+                        state.locale,
+                        agreement.agreement_type,
+                      ),
+                    ),
                     @html.td(class="mono", agreement.template_version),
                     @html.td(class="mono", agreement.organization_id),
                     @html.td(
                       status_badge(
-                        agreement.state,
+                        agreement_state_label(state.locale, agreement.state),
                         if agreement.state == "Executed" {
                           "ok"
                         } else {
@@ -3778,7 +3956,10 @@ fn agreements_view(
                     @html.td(request.requested_models),
                     @html.td(
                       status_badge(
-                        request.state,
+                        enterprise_request_state_label(
+                          state.locale,
+                          request.state,
+                        ),
                         if request.state == "Submitted" {
                           "pending"
                         } else {

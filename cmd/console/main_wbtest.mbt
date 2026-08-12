@@ -386,8 +386,38 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
   assert_true(confirmed.console.confirmation is None)
   assert_eq(
     confirmed.console.success_message,
-    Some("Demo is read-only; no exclusive lease was terminated."),
+    Some("Demo is read-only; the operation was previewed but not persisted."),
   )
+}
+
+///|
+test "demo mode previews every destructive node operation without mutation" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    console: { ..@ui.demo_state(), route: Nodes },
+    next_directive_generation: 1L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let node_id = model.console.nodes[0].node_id
+  let (prepared, _) = update(model, Console(BeginCordon(node_id)), emit)
+  assert_true(prepared.console.confirmation is Some(_))
+  let (confirmed, _) = update(
+    prepared,
+    Console(ConfirmAction(CordonNode(node_id))),
+    emit,
+  )
+  assert_true(confirmed.console.confirmation is None)
+  assert_eq(
+    confirmed.console.success_message,
+    Some("Demo is read-only; the operation was previewed but not persisted."),
+  )
+  assert_eq(confirmed.console.nodes, model.console.nodes)
 }
 
 ///|
@@ -417,5 +447,37 @@ test "demo mode exercises one-click preflight without controller mutation" {
       "Demo preflight passed for demo-service. No controller operation was created.",
     ),
   )
-  assert_eq(submitted.console.service_deployments.length(), 0)
+  assert_eq(
+    submitted.console.service_deployments,
+    model.console.service_deployments,
+  )
+}
+
+///|
+test "navigation clears stale operation notices and confirmation" {
+  let initial = @ui.demo_state()
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    console: {
+      ..initial,
+      success_message: Some("stale success"),
+      error_message: Some("stale error"),
+      confirmation: Some(
+        @ui.confirmation_receipt(CordonNode("dgx-spark-01"), "dgx-spark-01"),
+      ),
+    },
+    next_directive_generation: 1L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (next, _) = update(model, Console(Navigate(Catalog)), emit)
+  assert_eq(next.console.route, Catalog)
+  assert_true(next.console.success_message is None)
+  assert_true(next.console.error_message is None)
+  assert_true(next.console.confirmation is None)
 }

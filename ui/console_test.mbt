@@ -232,6 +232,20 @@ test "commercial and qualified-service routes expose bounded evidence" {
 }
 
 ///|
+test "Chinese agreement governance localizes known semantic codes" {
+  let html = @ui.render({
+    ..console_state(Agreements),
+    locale: ChineseSimplified,
+    confirmation: None,
+  })
+  assert_true(html.contains("数据处理"))
+  assert_true(html.contains("已执行"))
+  assert_true(html.contains("待运维审核"))
+  assert_false(html.contains(">Data processing<"))
+  assert_false(html.contains(">Submitted<"))
+}
+
+///|
 test "typed operation surface exposes commercial and technical commands" {
   let html = @ui.render({ ..console_state(Policies), confirmation: None })
   assert_true(html.contains("Create organization"))
@@ -326,6 +340,20 @@ test "catalog route exposes governed one-click deployment controls" {
   assert_true(html.contains("One service · one assigned machine"))
   assert_false(html.contains("quick-replicas"))
   assert_true(html.contains("Deploy model service"))
+}
+
+///|
+test "demo snapshot covers operational routes with representative records" {
+  let state = @ui.demo_state()
+  assert_eq(state.nodes.length(), 4)
+  assert_eq(state.models.length(), 9)
+  assert_true(state.deployments.length() > 0)
+  assert_true(state.service_deployments.length() > 0)
+  assert_true(state.request_details.length() > 0)
+  assert_true(state.stream_events.length() > 0)
+  assert_true(state.users.length() > 0)
+  assert_true(state.access_grants.length() > 0)
+  assert_true(state.compute_leases.length() > 0)
 }
 
 ///|

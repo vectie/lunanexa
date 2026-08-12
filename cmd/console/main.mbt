@@ -1226,7 +1226,19 @@ fn update_live(
       )
     Console(Navigate(route)) => {
       scroll_console_top()
-      ({ ..model, console: { ..model.console, route, } }, @rabbita.none)
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            route,
+            confirmation: None,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        @rabbita.none,
+      )
     }
     Console(BeginDrain(node_id)) =>
       (
@@ -2272,9 +2284,21 @@ fn update(
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
       | Console(PortalNodeChanged(_))
+      | Console(OperationChanged(_))
+      | Console(OperationBodyChanged(_))
+      | Console(BeginDrain(_))
+      | Console(BeginCordon(_))
+      | Console(BeginRollback(_))
+      | Console(BeginStopDeployment(_))
+      | Console(BeginRollbackServiceDeployment(_))
+      | Console(BeginDeleteServiceDeployment(_))
+      | Console(BeginSuspendUser(_))
+      | Console(BeginRevokeUser(_))
+      | Console(BeginRevokeAccessGrant(_))
+      | Console(BeginEndComputeLease(_))
       | Console(BeginTerminateExclusiveNodeLease(_, _))
       | Console(DismissConfirmation) => update_live(model, message, emit)
-      Console(ConfirmAction(TerminateExclusiveNodeLease(_, _))) =>
+      Console(ConfirmAction(_)) =>
         (
           {
             ..model,
@@ -2285,8 +2309,47 @@ fn update(
               success_message: Some(
                 console_copy(
                   model.console.locale,
-                  "Demo is read-only; no exclusive lease was terminated.",
-                  "演示为只读；未终止任何独占租约。",
+                  "Demo is read-only; the operation was previewed but not persisted.",
+                  "演示为只读；已预览该操作，但未持久化任何更改。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      Console(PromoteServiceDeployment(_))
+      | Console(ActivateUser(_))
+      | Console(ActivateComputeLease(_))
+      | Console(SubmitOperation) =>
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: None,
+              success_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Demo is read-only; no controller operation was sent or persisted.",
+                  "演示为只读；未向控制器发送或持久化任何操作。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      Console(Refresh) =>
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: None,
+              success_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Demo snapshot is already current.",
+                  "演示快照已是最新状态。",
                 ),
               ),
             },
