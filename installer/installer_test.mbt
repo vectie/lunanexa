@@ -2,6 +2,7 @@
 fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
   {
     version: @installer.request_version,
+    local_simulation: false,
     apply,
     confirmation: if apply {
       @installer.apply_confirmation
@@ -25,6 +26,25 @@ fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
     secret_directory: "/srv/lunanexa/secrets",
     cli_path: "/usr/local/bin/lunanexa",
   }
+}
+
+///|
+test "local simulation requires only its isolated kubeconfig and confirmation" {
+  let request = {
+    ..valid_request(apply=true),
+    local_simulation: true,
+    kubeconfig_path: "~/.kube/lunanexa-sim",
+    ssh_user: "",
+    ssh_key_path: "",
+    known_hosts_path: "",
+    management_node: "",
+    management_host: "",
+    compute_nodes: [],
+    rendered_directory: "",
+    secret_directory: "",
+    cli_path: "",
+  }
+  @installer.validate_request(request)
 }
 
 ///|

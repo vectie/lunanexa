@@ -70,6 +70,9 @@ fn process_arguments(
     arguments.push("--compute")
     arguments.push("\{target.node_name}=\{target.ssh_host}")
   }
+  if request.local_simulation {
+    arguments.push("--local-simulation")
+  }
   arguments
 }
 
@@ -112,6 +115,7 @@ async fn stream_install(
     defer reader.close()
     let environment : Map[String, String] = {
       "PATH": @env.get_env_var("PATH").unwrap_or("/usr/local/bin:/usr/bin:/bin"),
+      "HOME": @env.get_env_var("HOME").unwrap_or(""),
       "LC_ALL": "C",
       "LUNANEXA_ENDPOINT": @env.get_env_var("LUNANEXA_ENDPOINT").unwrap_or(""),
       "LUNANEXA_OPERATOR_TOKEN": @env.get_env_var("LUNANEXA_OPERATOR_TOKEN").unwrap_or(

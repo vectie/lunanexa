@@ -7,6 +7,7 @@ pub(all) struct ComputeTarget {
 ///|
 pub(all) struct InstallRequest {
   version : String
+  local_simulation : Bool
   apply : Bool
   confirmation : String
   ssh_user : String

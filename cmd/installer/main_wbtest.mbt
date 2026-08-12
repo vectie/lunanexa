@@ -14,6 +14,7 @@ test "terminal output redacts credential-shaped lines and bounds rows" {
 test "process arguments preserve values as separate argv entries" {
   let request : @install_contract.InstallRequest = {
     version: @install_contract.request_version,
+    local_simulation: false,
     apply: false,
     confirmation: "",
     ssh_user: "operator",

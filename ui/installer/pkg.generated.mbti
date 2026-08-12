@@ -25,6 +25,7 @@ pub fn update(InstallerState, InstallerMessage) -> InstallerState
 
 // Types and methods
 pub(all) struct DeploymentForm {
+  local_simulation : Bool
   companion_endpoint : String
   session_token : String
   ssh_user : String
@@ -43,6 +44,7 @@ pub(all) struct DeploymentForm {
 
 pub(all) enum InstallerMessage {
   LocaleChanged(@i18n.Locale)
+  DeploymentTargetChanged(String)
   CompanionEndpointChanged(String)
   SessionTokenChanged(String)
   SshUserChanged(String)

@@ -38,6 +38,19 @@ fn absolute_operator_path(value : String) -> Bool {
 }
 
 ///|
+fn local_operator_path(value : String) -> Bool {
+  absolute_operator_path(value) ||
+  (
+    value.has_prefix("~/") &&
+    value.length() <= 1024 &&
+    !value.contains("\n") &&
+    !value.contains("\r") &&
+    !value.contains("\u0000") &&
+    !value.split("/").any(segment => segment == "..")
+  )
+}
+
+///|
 fn require_field(
   valid : Bool,
   name : String,
@@ -52,6 +65,24 @@ pub fn validate_request(
   request : InstallRequest,
 ) -> Unit raise InstallValidationError {
   require_field(request.version == request_version, "version")
+  require_field(
+    simple_identifier(request.cluster_namespace),
+    "cluster_namespace",
+  )
+  require_field(
+    if request.local_simulation {
+      local_operator_path(request.kubeconfig_path)
+    } else {
+      absolute_operator_path(request.kubeconfig_path)
+    },
+    "kubeconfig_path",
+  )
+  if request.apply {
+    require_field(request.confirmation == apply_confirmation, "confirmation")
+  }
+  if request.local_simulation {
+    return
+  }
   require_field(simple_identifier(request.ssh_user), "ssh_user")
   require_field(absolute_operator_path(request.ssh_key_path), "ssh_key_path")
   require_field(
@@ -69,14 +100,6 @@ pub fn validate_request(
     seen[target.node_name] = true
   }
   require_field(
-    simple_identifier(request.cluster_namespace),
-    "cluster_namespace",
-  )
-  require_field(
-    absolute_operator_path(request.kubeconfig_path),
-    "kubeconfig_path",
-  )
-  require_field(
     absolute_operator_path(request.rendered_directory),
     "rendered_directory",
   )
@@ -85,9 +108,6 @@ pub fn validate_request(
     "secret_directory",
   )
   require_field(absolute_operator_path(request.cli_path), "cli_path")
-  if request.apply {
-    require_field(request.confirmation == apply_confirmation, "confirmation")
-  }
 }
 
 ///|
@@ -115,5 +135,13 @@ pub fn stage_names() -> Array[String] {
     "Validate local paths", "SSH host-key preflight", "Inspect management disk and Kubernetes",
     "Inspect four DGX GPU workers", "Label management and GPU nodes", "Apply rendered management manifests",
     "Install protected node material", "Issue one-use enrollment tokens", "Apply node agent and verify heartbeats",
+  ]
+}
+
+///|
+pub fn local_stage_names() -> Array[String] {
+  [
+    "Verify dedicated Colima profile", "Verify Docker and kind tooling", "Inspect or create five Kubernetes nodes",
+    "Apply simulation-only placement probes", "Verify one management and four compute placements",
   ]
 }

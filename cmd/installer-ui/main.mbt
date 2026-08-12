@@ -71,6 +71,14 @@ extern "js" fn stream_install_promise(
   #|   let terminal = null;
   #|   const lines = [];
   #|   let outputBytes = 0;
+  #|   let renderedLines = 0;
+  #|   const appendToLog = (line) => {
+  #|     const log = globalThis.document?.querySelector(".terminal");
+  #|     if (!log) return;
+  #|     log.textContent = renderedLines === 0 ? line : `${log.textContent || ""}\n${line}`;
+  #|     renderedLines += 1;
+  #|     log.scrollTop = log.scrollHeight;
+  #|   };
   #|   const appendLine = (text) => {
   #|     const line = String(text).slice(0, 4096);
   #|     outputBytes += new TextEncoder().encode(line).byteLength;
@@ -78,11 +86,7 @@ extern "js" fn stream_install_promise(
   #|       throw new Error("installer output limit exceeded");
   #|     }
   #|     lines.push(line);
-  #|     const log = globalThis.document?.querySelector(".terminal");
-  #|     if (log) {
-  #|       log.textContent = `${log.textContent || ""}\n${line}`;
-  #|       log.scrollTop = log.scrollHeight;
-  #|     }
+  #|     appendToLog(line);
   #|   };
   #|   while (true) {
   #|     const {value, done} = await reader.read();
@@ -96,7 +100,10 @@ extern "js" fn stream_install_promise(
   #|         if (!row.startsWith("data:")) continue;
   #|         const event = JSON.parse(row.slice(5).trim());
   #|         if (event.kind === "line" && typeof event.text === "string") appendLine(event.text);
-  #|         if (event.kind === "complete") terminal = event;
+  #|         if (event.kind === "complete") {
+  #|           terminal = event;
+  #|           appendToLog(event.ok ? "[complete] command exited successfully" : `[failed] exit code ${event.exit_code}`);
+  #|         }
   #|       }
   #|     }
   #|     if (done) break;
@@ -123,6 +130,7 @@ fn request_from_state(
 ) -> @install_contract.InstallRequest raise {
   {
     version: @install_contract.request_version,
+    local_simulation: state.form.local_simulation,
     apply,
     confirmation: state.form.confirmation,
     ssh_user: state.form.ssh_user.trim().to_owned(),

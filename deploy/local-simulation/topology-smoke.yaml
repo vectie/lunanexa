@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-management-sim
+  namespace: lunanexa
+  labels:
+    app.kubernetes.io/name: lunanexa-management-sim
+    lunanexa.io/simulation: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lunanexa-management-sim
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunanexa-management-sim
+        lunanexa.io/simulation: "true"
+    spec:
+      nodeSelector:
+        lunanexa.io/role: management
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: placement-probe
+          image: registry.k8s.io/pause:3.10.1
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 20m
+              memory: 16Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lunanexa-compute-sim
+  namespace: lunanexa
+  labels:
+    app.kubernetes.io/name: lunanexa-compute-sim
+    lunanexa.io/simulation: "true"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lunanexa-compute-sim
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunanexa-compute-sim
+        lunanexa.io/simulation: "true"
+    spec:
+      nodeSelector:
+        lunanexa.io/role: gpu
+      containers:
+        - name: placement-probe
+          image: registry.k8s.io/pause:3.10.1
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 20m
+              memory: 16Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

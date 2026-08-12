@@ -9,6 +9,8 @@ import {
 // Values
 pub let apply_confirmation : String
 
+pub fn local_stage_names() -> Array[String]
+
 pub fn parse_compute_targets(String) -> Array[ComputeTarget] raise InstallValidationError
 
 pub let request_version : String
@@ -30,6 +32,7 @@ pub(all) struct ComputeTarget {
 
 pub(all) struct InstallRequest {
   version : String
+  local_simulation : Bool
   apply : Bool
   confirmation : String
   ssh_user : String

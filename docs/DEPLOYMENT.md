@@ -175,6 +175,39 @@ selector in `node-daemonset.yaml`. The installer refuses unresolved template
 variables, `.invalid` endpoints, missing protected inputs, unknown SSH host
 keys, missing GPUs, interactive sudo, or an incomplete four-node inventory.
 
+### Minimal local Kubernetes simulation on macOS
+
+The local topology simulation uses a dedicated Colima profile and a `kind`
+cluster with one control-plane node plus four workers. It validates Kubernetes
+node labels, management placement and one compute pod per worker without
+pretending that the Mac provides NVIDIA devices or production host identity.
+
+With the `lunanexa` Colima profile running, start or reconcile the topology:
+
+```sh
+sh scripts/start-local-kubernetes-simulation.sh
+```
+
+The script uses only the dedicated `kind-lunanexa-sim` context in
+`~/.kube/lunanexa-sim`, creates the `lunanexa` and `lunanexa-runtimes`
+namespaces, and applies the tiny
+`registry.k8s.io/pause` placement probes in
+`deploy/local-simulation/topology-smoke.yaml`. It does not apply production
+manifests, issue credentials, open ingress, mount the repository into the VM or
+run SSH against any host.
+
+Remove only the `kind` cluster, leaving Colima available for another run:
+
+```sh
+sh scripts/stop-local-kubernetes-simulation.sh
+```
+
+To remove the cluster and stop the dedicated Colima profile:
+
+```sh
+sh scripts/stop-local-kubernetes-simulation.sh --stop-colima
+```
+
 ### Step 0 — Record the non-secret deployment inventory
 
 Choose the real values before rendering manifests. These examples are shell

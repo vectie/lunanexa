@@ -15,6 +15,7 @@ secret_directory=
 cli_path=
 compute_targets=
 confirmation=
+local_simulation=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -32,6 +33,7 @@ while [ "$#" -gt 0 ]; do
     --confirmation) confirmation=$2; shift 2 ;;
     --compute) compute_targets="${compute_targets}${compute_targets:+
 }$2"; shift 2 ;;
+    --local-simulation) local_simulation=1; shift ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 64 ;;
   esac
 done
@@ -51,6 +53,42 @@ absolute_path() {
 }
 
 case "$mode" in preview|apply) ;; *) printf '%s\n' 'mode must be preview or apply' >&2; exit 64 ;; esac
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+
+if [ "$local_simulation" -eq 1 ]; then
+  case "$kubeconfig" in
+    '~/'*) kubeconfig="$HOME/${kubeconfig#\~/}" ;;
+  esac
+  absolute_path "$kubeconfig"
+  for command_name in colima docker kind kubectl; do
+    command -v "$command_name" >/dev/null 2>&1
+  done
+  colima status lunanexa >/dev/null
+  export DOCKER_CONTEXT=colima-lunanexa
+  docker info >/dev/null
+  printf '%s\n' '[local 1/5] dedicated Colima profile is ready'
+  printf '%s\n' '[local 2/5] Docker and kind tooling are ready'
+  if kind get clusters 2>/dev/null | grep -qx lunanexa-sim; then
+    test -f "$kubeconfig"
+    management_count=$(KUBECONFIG="$kubeconfig" kubectl --context kind-lunanexa-sim get nodes -l lunanexa.io/role=management --no-headers | wc -l | tr -d ' ')
+    compute_count=$(KUBECONFIG="$kubeconfig" kubectl --context kind-lunanexa-sim get nodes -l lunanexa.io/role=gpu --no-headers | wc -l | tr -d ' ')
+    test "$management_count" -eq 1
+    test "$compute_count" -eq 4
+    printf '%s\n' '[local 3/5] five-node Kubernetes topology is ready'
+  else
+    printf '%s\n' '[local 3/5] five-node Kubernetes topology will be created during apply'
+  fi
+  if [ "$mode" = preview ]; then
+    printf '%s\n' '[preview] local Colima simulation is ready; no resources were changed'
+    exit 0
+  fi
+  test "$confirmation" = 'DEPLOY 4 NODES'
+  printf '%s\n' '[local 4/5] reconciling simulation-only placement probes'
+  LUNANEXA_SIM_KUBECONFIG="$kubeconfig" sh "$repo_root/scripts/start-local-kubernetes-simulation.sh"
+  printf '%s\n' '[local 5/5] one management and four compute placements verified'
+  exit 0
+fi
+
 for value in "$ssh_user" "$ssh_key" "$known_hosts" "$management_node" "$management_host" \
   "$cluster_namespace" "$kubeconfig" "$rendered_directory" "$secret_directory" "$cli_path"; do
   test -n "$value"
@@ -81,7 +119,6 @@ cleanup_lock() {
 }
 trap cleanup_lock EXIT HUP INT TERM
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 ssh_options="-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10"
 
 run_ssh() {

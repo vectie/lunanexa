@@ -30,3 +30,20 @@ test "terminal keeps a bounded tail and run state is explicit" {
   assert_false(state.preview_verified)
   assert_true(@installer.render(state).contains("Completed"))
 }
+
+///|
+test "local Colima mode needs only companion session and isolated kubeconfig" {
+  let mut state = @installer.default_state(locale=English)
+  state = @installer.update(
+    state,
+    SessionTokenChanged("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+  )
+  state = @installer.update(state, DeploymentTargetChanged("local-colima"))
+  assert_true(state.form.local_simulation)
+  assert_eq(state.form.kubeconfig_path, "~/.kube/lunanexa-sim")
+  assert_true(@installer.form_complete(state))
+  let html = @installer.render(state)
+  assert_true(html.contains("Local Colima simulation"))
+  assert_true(html.contains("Reconcile simulation"))
+  assert_true(html.contains("Verify dedicated Colima profile"))
+}
