@@ -25,7 +25,7 @@ LunaNexa's management-node plus four-DGX architecture. The labels mean:
 | OpenAI-compatible inference endpoint | **Adapt** | Useful at the serving edge where an approved adapter supports it. The LunaNexa management contract remains provider-neutral and must not become coupled to one consumer SDK. |
 | Object-storage acceleration and cache preheat | **Adapt** | Suanli mounts S3-compatible data through a cache filesystem. LunaNexa instead performs a signed, assignment-scoped HTTPS pull from the management node into node-local storage, then verifies and atomically activates it. Future S3 support belongs behind the artifact-source interface. |
 | Shared writable storage | **Adapt** | Appropriate for explicitly declared job outputs or operator-managed scratch data. It is not the model source of truth, a substitute for the node cache, or an implicit cross-tenant filesystem. |
-| Manual and automatic replica scaling | **Adapt** | A policy may change runtime replicas within eligible capacity. It cannot override an exclusive lease, place onto an unassigned node, or pretend a fixed four-node fleet can provision new hardware. |
+| Manual and automatic replica scaling | **Reject for this profile** | The four-node production profile uses explicit operator placement and one lease per machine. There is no autoscaler. |
 | Load-balancing policies | **Adapt** | Round-robin and least-in-flight are initially useful. Hashing policies require a declared affinity key and privacy review. Capacity limits and readiness always override the selected policy. |
 | Multi-container pods | **Adapt** | Permit only reviewed profiles such as runtime plus telemetry/log sidecar. Do not expose arbitrary Compose/Kubernetes objects, unrestricted commands, or user-selected privileged helpers. |
 | Container registry credentials | **Adapt** | Use short-lived, pull-only credentials scoped to a repository/digest and node identity. Never reuse a user's LunaNexa password or persist broad registry credentials in a deployment. |
@@ -38,7 +38,7 @@ LunaNexa's management-node plus four-DGX architecture. The labels mean:
 | SLA credits and disputes | **Adapt** | Define measured availability, exclusions, evidence windows, claim state, and append-only credit adjustments. Contract language and remedies require legal approval. |
 | Privacy and data-subject controls | **Adopt as requirements** | Maintain data inventory, purpose, retention, access, deletion/legal-hold, breach, subprocessor, and agreement-version evidence. Keep prompts and responses out of cost and audit logs. |
 | RSA-signed OpenAPI requests | **Adapt** | The production-authentication principle is sound, but LunaNexa should retain its enrolled node identities, mTLS/rotatable control credentials, timestamps, replay protection, and idempotency rules. Do not copy provider headers or RSA/PKCS#1 details by imitation. |
-| Batch jobs and task groups | **Adapt** | Useful for evaluations, conversions, and operator-approved batch inference. Keep them separate from online deployments and enforce per-tenant concurrency, deadlines, output destinations, and cancellation. |
+| Batch jobs and task groups | **Reject for this profile** | LunaNexa exposes bounded interactive inference and exclusive machine leases, not a batch or spot queue system. |
 | Cross-region failover | **Defer** | Four local DGX nodes are one administrative cluster. Add regions only with locality constraints, data-residency policy, cache behavior, measured transfer costs, and explicit user consent. |
 | Scale-to-zero | **Defer** | It saves resources but creates large model cold starts. Implement only after prewarm latency, queue deadlines, and minimum-ready policy are measurable. |
 | General cloud host, JupyterLab, VS Code, and SSH | **Reject for managed mode** | They violate the managed-node boundary. Equivalent access is allowed only during a governed exclusive-node lease, with separate credentials, fencing, audit, revocation, and sanitization before return. |
@@ -112,17 +112,15 @@ production-complete.
 3. **Cache lifecycle telemetry.** Report desired/received/verified bytes,
    transfer rate, cache hit, last access, reservations, high-water mark,
    eviction candidates, and cleanup outcome without leaking paths or tokens.
-4. **Metrics-driven autoscaling.** Add an optional policy with min/max replicas,
-   queue and latency thresholds, sustained windows, cooldown, maximum step,
-   capacity checks, and drain deadlines. Lease fencing remains authoritative.
-5. **Backpressure contract.** Standardize bounded queue behavior, retry-after,
-   cancellation, overload, deadline, and partial batch failure semantics.
-6. **Credential lifecycle.** Complete short-lived artifact grants, registry
+4. **Fixed-fleet backpressure.** Standardize bounded queue behavior,
+   retry-after, cancellation, overload and deadline semantics without an
+   autoscaler or partial-batch state machine.
+5. **Credential lifecycle.** Complete short-lived registry
    pull credentials, management API key scopes, expiry, rotation, replay
    protection, and emergency revocation evidence.
-7. **Controlled sidecar profiles.** If multi-container deployment is needed,
+6. **Controlled sidecar profiles.** If multi-container deployment is needed,
    expose named reviewed profiles rather than raw Kubernetes YAML.
-8. **Commercial controls if multi-tenant billing is introduced.** Add quotas,
+7. **Commercial controls if multi-tenant billing is introduced.** Add quotas,
    budget limits, metering reconciliation, evidence retention, and dispute-safe
    audit records. Do not inherit Suanli pricing or account roles.
 

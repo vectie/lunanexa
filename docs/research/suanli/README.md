@@ -12,7 +12,7 @@ authoritative source.
 
 ## Coverage and method
 
-The visible documentation sidebar exposed 59 links. The sitemap exposed 227
+The visible documentation sidebar exposed 59 links. The current sitemap exposed 226
 documentation URLs, including pages not mounted in the initial sidebar. The
 sitemap therefore formed the completeness boundary.
 
@@ -30,14 +30,15 @@ sitemap therefore formed the completeness boundary.
 | Docker tutorials | 12 |
 | Billing and expense center | 13 |
 | Release notes | 10 |
-| **Total** | **227** |
+| **Historical table total** | **227 before one route was withdrawn** |
 
-All 227 URLs returned HTTP 200 with non-empty documentation content during the
-snapshot. For each page the review captured its URL, title, headings, and enough
+The second-round comparison found 226 current documentation routes; the local
+catalog retains the withdrawn historical route for traceability. For each page
+the review captured its URL, title, headings, and enough
 page text to classify it. Navigation boilerplate was excluded from the
 assessment. The complete source list is in [CATALOG](CATALOG.md).
 The [page-by-page notes](PAGE_NOTES.md) provide a compact topic outline and
-initial applicability label for each of the 227 pages.
+initial applicability label for the captured pages.
 
 This is a point-in-time review. Suanli can change its sitemap or page contents;
 any implementation decision should re-check the linked source before treating a
@@ -52,9 +53,9 @@ Suanli validates several choices already present in LunaNexa:
 - use distinct startup, readiness, and liveness checks for slow-starting model
   servers;
 - drain unhealthy or terminating instances before routing traffic;
-- expose deterministic APIs for deployment, scaling, jobs, and status;
+- expose deterministic APIs for deployment and status;
 - meter CPU, memory, GPU utilization, GPU memory, power, and temperature;
-- bound queues, retries, concurrency, and scale activity with explicit limits;
+- bound queues, retries and concurrency with explicit limits;
 - keep model storage external to a container image and mount or materialize it
   read-only at runtime.
 

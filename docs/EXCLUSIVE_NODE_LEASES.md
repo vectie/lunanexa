@@ -63,11 +63,14 @@ The control plane applies these invariants:
 1. at most one non-terminal exclusive lease may name a node;
 2. reserving a node excludes it from managed placement immediately, even
    before the node observes its cordon directive;
-3. activation requires provisioning evidence from the selected node;
-4. expiry cannot reactivate managed scheduling directly;
-5. access is revoked before sanitization starts;
-6. only a successful sanitization receipt permits return to managed service;
-7. all transitions are generation-numbered, durable and audited.
+3. reservation never provisions access until desired assignments and observed
+   managed runtimes on the selected node are empty;
+4. activation requires provisioning evidence from the selected node;
+5. expiry cannot reactivate managed scheduling directly;
+6. access is revoked before sanitization starts;
+7. only a successful sanitization receipt permits return to managed service;
+8. direct operator lifecycle transitions are rejected; all accepted
+   transitions are generation-numbered, durable and audited.
 
 ## Identity and credentials
 
@@ -89,8 +92,8 @@ management node filesystem.
 
 ## Node daemon responsibilities
 
-The existing LunaNexa node agent remains installed as a protected system
-service outside the leased account. The exclusive-lease extension will:
+The LunaNexa node agent remains installed as a protected system service outside
+the leased account. The exclusive-lease guard now:
 
 - observe signed, generation-numbered lease directives;
 - create/disable the named account through a narrow host provisioner;
@@ -100,11 +103,23 @@ service outside the leased account. The exclusive-lease extension will:
   usage;
 - revoke access at expiry even if the management connection is temporarily
   unavailable;
-- stop tenant containers, remove ephemeral lease data and produce a
-  sanitization receipt before returning the node to managed service.
+- stops tenant sessions, processes and rootless containers; removes runtime
+  volumes, the dedicated account/home, staged access material and lease state;
+  and produces a generation-bound sanitization receipt before returning the
+  node to managed service.
 
 Arbitrary controller-supplied shell text is not part of this contract. Host
 operations are typed actions implemented and allowlisted by the node daemon.
+`cmd/lease-helper` is the root-owned reference implementation and
+`cmd/lease-helper-client` is its non-root fixed-protocol caller. A helper error,
+stale or forged receipt, remaining process/runtime object, or missing ownership
+marker quarantines the node.
+
+The leased account must not have write access outside its dedicated home and
+rootless runtime storage. Production hosts must enforce that with filesystem
+permissions and a reviewed per-user temporary-directory/mount namespace policy;
+the helper will not traverse or delete arbitrary host files. Physical
+acceptance must prove those writable boundaries before login access is enabled.
 
 ## Storage and failure domains
 
@@ -120,12 +135,17 @@ until the locally recorded expiry, but cannot obtain new credentials or
 artifacts. The node daemon must fail closed at expiry. If revocation or cleanup
 cannot be proven, the node becomes `Quarantined` rather than available.
 
-## Implementation slices
+## Implemented lifecycle slices
 
-1. Typed lease lifecycle, durable authority, management API/CLI and immediate
-   managed-scheduler exclusion.
-2. Signed node lease directives and observed-state reports.
-3. Narrow Linux account/SSH-certificate provisioner and local expiry watchdog.
-4. Scoped model and OCI pull grants backed by `/data/models` and the registry.
-5. Sanitization policy, quarantine recovery, console workflows and full
-   four-node failure tests.
+1. Typed durable lifecycle, automatic expiry, generation-fenced early
+   termination API/CLI and immediate managed-scheduler exclusion.
+2. Signed node directives, restart-safe local expiry and observed-state reports.
+3. Narrow Linux account/SSH access provisioner using locally staged access
+   material; raw credentials never cross the control-plane contract.
+4. Revoke-before-sanitize cleanup, generation-bound helper receipts and
+   fail-closed quarantine.
+5. Operator console confirmation plus deterministic normal, restart, forged
+   evidence, traversal, stuck-process and next-lease reuse tests.
+
+The repository test proves the policy and command boundary on a synthetic host.
+It does not replace the required destructive test on each physical DGX image.

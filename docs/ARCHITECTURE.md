@@ -24,7 +24,7 @@ flowchart TB
       REG["Model/runtime registry"]
       STORE["Metadata and audit store"]
       COM["Commercial control<br/>cost centers, ledger, agreements"]
-      TECH["Technical policy<br/>prewarm, probes, scaling"]
+      TECH["Technical policy<br/>prewarm, probes, cache"]
       QPORT["Qualified-service ports"]
       UI["Rabbita management console"]
       WB["Rabbita developer workbench"]
@@ -79,7 +79,7 @@ MoonSuite product to make a scheduling decision.
 ### Control plane
 
 The controller stores desired state and continuously reconciles observed state.
-Operations such as deploy, scale, drain, promote, roll back and delete are
+Operations such as deploy, drain, promote, roll back and delete are
 declarative state transitions rather than shell-command sequences.
 
 The scheduler filters by hard requirements first—runtime, architecture,
@@ -110,11 +110,10 @@ are normalized at the boundary; raw provider references are hashed in public
 snapshots.
 
 Commercial mutations are subject to the same authenticated operator boundary
-as deployment control. Production requires a transactional persistence adapter
-that commits the tenant snapshot, callback idempotency index and business
-transition together. The repository's current commercial store is an in-memory
-core and API integration, so it is suitable for contract and UI validation but
-not restart-durable production accounting.
+as deployment control. Production state is restored from PostgreSQL snapshots,
+and commercial plus integration callback state is committed together. Lease
+approval calls commercial admission directly, so organization verification,
+project ownership, quotas and hard budgets are not merely advisory UI checks.
 
 `LunaFide` is an isolated deterministic test double for this external boundary.
 Its callbacks are replay-, sequence-, tenant- and aggregate-checked, but its
@@ -123,13 +122,11 @@ production trust, payment or tax requirement.
 
 ### Technical decision plane
 
-Prewarm transitions, health-probe evaluation, safe cache telemetry,
-metrics-driven autoscaling, bounded admission, short-lived transfer grants and
-reviewed sidecar profiles are pure deterministic decisions. Controllers must
-persist prewarm state and consumed nonces transactionally, execute scale plans
-idempotently under the deployment generation fence, and resolve only approved
-digest-pinned sidecar image keys. A decision endpoint alone does not prove the
-corresponding runtime action occurred.
+Prewarm transitions, health-probe evaluation, safe cache telemetry, bounded
+admission, short-lived transfer grants and reviewed sidecar profiles are
+deterministic decisions. Prewarm state and transfer nonces are durable, while
+artifact bytes are served only after a live assignment and one-time grant pass.
+The production profile intentionally excludes autoscaling and batch jobs.
 
 ### Browser experience plane
 
@@ -226,7 +223,9 @@ Use durable standard infrastructure through narrow ports:
 - transactional metadata store for desired state, generations, leases and
   audit events;
 - OCI registry for runtime images;
-- S3-compatible storage for model artifacts and large evaluation fixtures;
+- the management-node `/data/models` disk and assignment-scoped artifact
+  gateway for model artifacts, with optional external storage only behind a
+  reviewed source adapter;
 - Prometheus-compatible metrics and an established log backend;
 - deployment-owned secret storage.
 
@@ -242,7 +241,7 @@ technical-policy stores retain their existing adapters and must be migrated
 before claiming a fully database-backed control plane.
 
 The artifact store is authoritative; node-local materializations are disposable
-assignment-scoped replicas. This keeps model transfer out of the management API
+assignment-scoped cache entries. This keeps model transfer out of the management API
 process while allowing a selected DGX to start without the serving container
 holding object-store credentials.
 
@@ -340,7 +339,7 @@ Per model/version/runtime/hardware profile, record:
 - time to first token or first output;
 - inter-token latency and generated tokens per second where applicable;
 - end-to-end p50, p95 and p99 latency;
-- queue time, batch efficiency and throughput;
+- queue time, admission backpressure and throughput;
 - model load time, warm-up time and time to readiness;
 - memory pressure, accelerator utilization and rejected admissions;
 - cancellation, runtime failure and retry rates;

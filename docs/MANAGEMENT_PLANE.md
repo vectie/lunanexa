@@ -39,12 +39,14 @@ preflight findings identify the missing approval, evidence, secret reference,
 or capacity. Re-submitting the same idempotency key returns the same operation.
 
 The catalog template carries separate immutable references for the runtime OCI
-image and the model blob. For v1, the model blob uses an S3-compatible `s3://`
-reference. Its detached signature either uses another S3 reference or the
-sibling `<model-object>.sig` convention for an existing opaque Cosign evidence
-reference. Only nodes selected in `DeploymentPlan` receive assignments and pull
-those objects. Runtime readiness cannot converge until the node has verified
-and atomically cached the exact model bytes.
+image and the model blob. For v1, the model blob retains a stable logical
+`s3://bucket/object` reference, resolved by the controller below the
+management-node `/data/models` root. Its detached signature either uses another
+logical reference or the sibling `<model-object>.sig` convention for an opaque
+Cosign evidence reference. Only nodes selected in `DeploymentPlan` receive
+assignments and can authenticate to those gateway objects. Runtime readiness
+cannot converge until the node has verified and atomically cached the exact
+model bytes.
 
 ## Public resources
 
@@ -52,7 +54,8 @@ and atomically cached the exact model bytes.
   runtime digests, resource/network/health/data policy, secret references, and
   rollout policy.
 - `ModelServiceIntent` is the compact northbound request: deployment identity,
-  template reference, replica count, data class, lease, and promotion choice.
+  template reference, the compatibility invariant `replicas = 1`, data class,
+  lease, and promotion choice.
 - `DeploymentPlan` records deterministic selected nodes and all preflight
   findings without exposing runtime endpoints or node credentials.
 - `DeploymentOperation` is restart-safe progress and evidence for a deployment.
@@ -73,7 +76,6 @@ POST   /v1/service-deployments
 GET    /v1/service-deployments/{deployment_id}
 POST   /v1/service-deployments/{deployment_id}/promote
 POST   /v1/service-deployments/{deployment_id}/rollback
-POST   /v1/service-deployments/{deployment_id}/scale
 DELETE /v1/service-deployments/{deployment_id}
 GET    /v1/operations/{operation_id}
 ```
@@ -90,8 +92,9 @@ reloads operations, and an operation remains `Reconciling` until every planned
 assignment is durable and every selected node reports the deployment ready.
 
 Rollback and deletion remove the operation's assignments through the existing
-audited controller path. Scaling creates a new operation generation and a new
-deterministic plan; scale-down removes assignments no longer in the plan.
+audited controller path. The production profile has no manual scale route, no
+autoscaler, and no batch scheduler. Each deployment owns exactly one assignment
+on the machine held by its exclusive lease.
 
 ## Installation boundary
 

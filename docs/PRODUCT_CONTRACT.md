@@ -34,7 +34,7 @@ The initial distribution may produce several binaries or services:
 | Registry | Models, artifacts, runtimes, licenses and evaluations | No |
 | Metering | Usage, quotas, timing and infrastructure audit | No |
 | Commercial control | Organizations, cost centers, rating, ledger, budgets, commitments and agreements | No |
-| Technical policy | Prewarm, probes, cache reconciliation, autoscaling, backpressure and transfer grants | No |
+| Technical policy | Prewarm, probes, cache reconciliation, backpressure and transfer grants | No |
 | Qualified-service ports | Normalized identity, signature, payment and invoice evidence | No |
 | Management console | Rabbita cluster operations, access and lease administration | No |
 | Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
@@ -159,12 +159,14 @@ images, failed evaluations, missing license acceptance, missing secret
 references, incompatible data classes, or insufficient capacity create typed
 preflight blockers rather than partially launching a runtime.
 
-The v1 one-click materialization contract accepts model references using
-`s3://bucket/object` URIs. A detached signature may have its own S3 reference;
-an existing opaque Cosign evidence reference resolves to the sibling
-`<model-object>.sig` object. OCI remains the digest-pinned runtime-image
-transport. Artifact transfer is pull-based from the selected node; the
-controller never opens an SSH, copy or arbitrary shell channel.
+The v1 one-click materialization contract keeps stable `s3://bucket/object`
+logical references, but the production profile resolves them inside the
+management-node artifact gateway rooted at `/data/models`. A detached
+signature may have its own reference; an opaque Cosign evidence reference
+resolves to the sibling `<model-object>.sig` object. OCI remains the
+digest-pinned runtime-image transport. Artifact transfer is pull-based by the
+selected node and bound to its live signed assignment; the controller never
+opens an SSH, copy or arbitrary shell channel.
 
 ## 7. Explicit non-goals for v1
 
@@ -176,6 +178,8 @@ controller never opens an SSH, copy or arbitrary shell channel.
 - MoonSuite-specific dashboards on cluster nodes.
 - Public multi-tenant hosting before the private cluster passes its operational
   and security gates.
+- Batch jobs, task groups, spot queues, and an autonomous autoscaler. Capacity
+  changes are explicit operator actions in the four-node fixed fleet.
 - Hosting source repositories, arbitrary development containers or IDE agent
   runtimes while a node is in managed-service mode. An exclusive lessee may run
   their own development workload inside the separately governed lease boundary.

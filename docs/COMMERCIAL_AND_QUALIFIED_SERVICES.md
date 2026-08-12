@@ -4,9 +4,9 @@
 
 LunaNexa now contains three deliberately separate layers:
 
-1. `technical/` is a pure deterministic policy package for prewarm state,
-   health probes, cache telemetry, autoscaling, bounded admission, short-lived
-   transfer grants and reviewed sidecar profiles.
+1. `technical/` is a deterministic policy package for prewarm state, health
+   probes, cache telemetry, bounded admission, short-lived transfer grants and
+   reviewed sidecar profiles. The production profile has no autoscaler.
 2. `commercial/` is a provider-neutral management core for organization,
    cost-center and project hierarchy, usage rating, ledger periods, budgets,
    quotas, capacity commitments, RBAC and digital agreements.
@@ -14,9 +14,11 @@ LunaNexa now contains three deliberately separate layers:
    qualified-signature evidence. `testsupport/lunafide/` is the isolated test
    double for that boundary.
 
-The operator API exposes these under `/v1/technical/*` and
-`/v1/commercial/*`. Every route requires the configured operator bearer
-authority. The Rabbita console adds **Cost centers**, **Agreements**, and
+The operator API exposes management operations under `/v1/technical/*` and
+`/v1/commercial/*`. Every management route requires the configured operator
+bearer authority. Provider state transitions use the separate signed
+`POST /v1/provider-callbacks/commercial` transport and cannot be asserted by an
+operator request body. The Rabbita console adds **Cost centers**, **Agreements**, and
 **Qualified services** routes using the existing typed state and navigation.
 In the console connection drawer, set the optional opaque commercial
 organization identifier before refreshing to load that tenant's cost centers,
@@ -45,11 +47,15 @@ the expected tenant, agreement and evidence.
 
 ## Qualified-service boundary
 
-Production providers remain outside LunaNexa. An adapter must validate its
-transport signature, timestamp, replay key and tenant/aggregate binding before
-setting normalized `signature_verified` evidence. Callback acceptance and the
-resulting commercial transition must commit atomically or through an explicitly
-recoverable transaction.
+Production providers remain outside LunaNexa. The callback listener validates
+an HMAC over provider, environment, event ID, event timestamp and the exact raw
+body, enforces a five-minute window, then binds those headers back to the
+normalized callback. Only this boundary sets `signature_verified=true`.
+Callback IDs replay idempotently, identity verification can activate only a
+pending organization, and a verified qualified-signature record linked as
+`portal-agreement:<agreement-id>` executes the matching portal agreement.
+Payment and tax-invoice records use the same evidence and transition rules;
+the external provider still owns funds and legal invoice issuance.
 
 LunaFide is named `Luna` + `Fide`. It reports:
 
@@ -74,27 +80,27 @@ tax platform, production authenticator or source of legal assurance.
 
 ## Technical execution boundary
 
-The `/v1/technical/*` endpoints return decisions; they do not directly mutate a
-node. The controller integration must:
+The technical boundary is deliberately split between policy and execution:
 
 - persist prewarm operations and reservations;
-- persist consumed transfer nonces atomically before allowing a transfer;
-- feed signed node probe and cache observations into the policy core;
-- translate scale decisions into idempotent deployment operations under the
-  current lease/deployment generation fence; and
+- persist consumed transfer nonces atomically before allowing an
+  assignment-scoped `/data/models` transfer;
+- feed node probe and cache observations into the policy core; and
 - resolve reviewed sidecar keys to deployment-owned, digest-pinned OCI images.
+
+Autoscaling and batch jobs are explicit non-goals. There is no autoscale route,
+decision core or operator action in the production surface.
 
 ## Production blockers
 
-The current commercial stores are intentionally in-memory. Restart durability,
-multi-controller concurrency and callback/business atomicity are therefore not
-yet production claims. Before production:
+Commercial, integration, enterprise portal and access state have PostgreSQL
+persistence and restart tests. Before production:
 
-- add a transactional persistent adapter and crash-recovery suite;
 - map trusted ingress identities to tenant-scoped commercial roles;
 - deploy approved external providers and keys, never LunaFide;
 - validate real tax, finance, privacy, retention and legal requirements;
-- connect technical decisions to durable reconciliation and live signed node
-  telemetry; and
+- validate callback key rotation and provider-specific retry behavior;
+- validate the allowlisted `nvidia-smi` sensor collector and artifact gateway
+  on each physical DGX; and
 - pass the physical four-DGX and named human acceptance gates in
   [the phased plan](PLAN.md).

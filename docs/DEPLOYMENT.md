@@ -17,10 +17,10 @@ flowchart TB
       C["LunaNexa controller"]
       UI["Console and workbench"]
       DB["Durable metadata PVC"]
-      MS["S3-compatible artifact service"]
+      MS["Assignment-scoped artifact gateway"]
       MD["/data/models · 8 TB"]
       OR["OCI registry"]
-      MD --> MS
+      MD -->|"read-only"| MS
       K --> C
       C --> DB
       UI --> C
@@ -57,22 +57,25 @@ verified and cached locally before its runtime container starts.
 | --- | --- | --- |
 | Controller, scheduler, registry, API and audit | Implemented | Deploy on the management node |
 | Rabbita operator console and enterprise portal/WebIDE | Implemented | Serve as two sites behind the trusted TLS ingress |
-| Durable enterprise signing and lease-request workflow | Implemented | Configure `LUNANEXA_PORTAL_PATH`; production execution still needs a real signature provider |
-| DGX heartbeat, telemetry and assignment reconciliation | Implemented | Deploy one protected agent per DGX |
-| Selected-node model pull and local verification | Implemented | Requires an external S3-compatible HTTPS artifact service |
+| Durable enterprise signing and lease-request workflow | Implemented | Configure an approved provider and signed callback secret; LunaFide remains test-only |
+| DGX heartbeat, sensor telemetry and assignment reconciliation | Implemented | Deploy one protected agent per DGX with allowlisted `nvidia-smi` |
+| Selected-node model pull and local verification | Implemented | Controller serves only the object bound to the live node assignment from `/data/models` |
+| Batch jobs and autoscaling | Intentionally absent | Capacity is a fixed four-node fleet; operator placement and backpressure are explicit |
 | Digest-pinned runtime supervision | Implemented | Requires Podman/Docker, an OCI registry and an approved runtime image |
 | Controller/node transport mTLS termination | External | Provide a trusted service-mesh or loopback proxy; do not expose controller HTTP directly |
 | Exclusive lease reservation and managed-placement fence | Implemented | Safe for control-plane testing |
 | Exclusive lease watchdog and helper protocol | Implemented | Persists signed generation, expires offline, reports provision/revoke/sanitize/quarantine evidence |
-| Privileged account/SSH/sanitization helper | External host component | Install a reviewed root-owned helper behind `/run/lunanexa/lease-helper.sock`; fail closed if absent |
+| Privileged account/SSH/sanitization helper | Reference implementation included | Install the root-owned helper and fixed client for host-systemd mode; physically validate the host policy before production leases |
 | OCI registry, CA, secret manager and metrics backend | External | Provision independently; they are not LunaNexa services |
 
 ## 2. Non-negotiable boundaries
 
 - `/data/models` remains on the management node. Do not NFS-mount it into DGX
   runtime containers or expose its host path through the public API.
-- Publish model objects through a protected S3-compatible HTTPS endpoint. The
-  node agent maps an approved `s3://bucket/object` reference to that endpoint.
+- Keep logical `s3://bucket/object` references in catalog records, but point the
+  node agent at the controller's protected `/v1/artifacts` gateway. The gateway
+  resolves the key below `/data/models` only after node, assignment, deployment,
+  digest, expiry, controller epoch, signature and one-time transfer checks pass.
 - Runtime images are immutable OCI images pinned by full SHA-256 digest.
 - Every DGX has a unique node credential. Bootstrap tokens are one-use and
   expire within 15 minutes.
@@ -91,12 +94,11 @@ verified and cached locally before its runtime container starts.
 - a supported Kubernetes control plane and persistent storage provisioner;
 - ingress-nginx or an equivalent identity-aware TLS ingress;
 - OCI build/publish tooling and Cosign;
-- a deployment-owned S3-compatible artifact service backed by `/data/models`;
 - an OCI registry reachable by every DGX;
 - a certificate authority, secret manager and backup target;
 - a service-mesh or node-local proxy able to establish mTLS from every DGX to
   the management plane;
-- DNS records for the LunaNexa API/UI, artifact service, registry and runtime
+- DNS records for the LunaNexa API/UI, registry and runtime
   endpoints.
 
 Creating or formatting the 8 TB filesystem is outside this repository. Verify
@@ -108,8 +110,8 @@ df -h /data/models
 sudo install -d -m 0750 -o ARTIFACT_USER -g ARTIFACT_GROUP /data/models
 ```
 
-Replace `ARTIFACT_USER` and `ARTIFACT_GROUP` with the identity used by the
-artifact service. Do not run a filesystem formatter as part of an automated
+Replace `ARTIFACT_USER` and `ARTIFACT_GROUP` with the controller's read-only
+runtime identity. Do not run a filesystem formatter as part of an automated
 LunaNexa install.
 
 ### DGX Spark nodes
@@ -121,9 +123,10 @@ Each DGX needs:
 - Podman or Docker at an allowlisted path;
 - a protected engine socket at `unix:///run/podman/podman.sock` or an approved
   equivalent below `/run`;
-- a root-owned exclusive-lease helper service listening only on
-  `/run/lunanexa/lease-helper.sock`, plus the unprivileged fixed-protocol client
-  at `/usr/libexec/lunanexa-lease-helper-client`;
+- the root-owned `/usr/libexec/lunanexa-lease-helper` and unprivileged fixed
+  client `/usr/libexec/lunanexa-lease-helper-client` for the recommended host
+  systemd deployment, or a separately reviewed socket adapter when the node
+  agent runs in Kubernetes;
 - a pre-created OCI network named `lunanexa-runtime`;
 - host directories `/etc/lunanexa` and `/var/lib/lunanexa`;
 - network access to the controller, artifact HTTPS endpoint, OCI registry and
@@ -134,13 +137,41 @@ Each DGX needs:
 The supplied DaemonSet uses host paths for configuration, state and the Podman
 socket. Confirm that its non-root process identity can read the configuration
 files, write `/var/lib/lunanexa`, and access only the intended engine socket.
-It also requires the lease-helper socket. The node agent never invokes a shell
+It also requires a deployment-owned lease-helper socket adapter; the bundled
+sudo client is for the host systemd layout and is not mounted into the
+DaemonSet. The node agent never invokes a shell
 or accepts controller-supplied commands: it calls only the fixed
 `provision|revoke|sanitize|quarantine` client actions with validated lease IDs,
 usernames, credential references and expiry. The privileged service must resolve
 credential references locally, lock access at expiry, remove lease-labelled
 containers and user state, and return a bounded receipt. Its absence or nonzero
 result quarantines the node.
+
+For the recommended exclusive-lease host layout, build the three native
+executables, install the deployment files with root ownership, validate the
+sudoers policy, and enable the explicit helper marker:
+
+```sh
+moon build cmd/node cmd/lease-helper cmd/lease-helper-client --target native
+sudo install -o root -g root -m 0755 _build/native/debug/build/cmd/node/node.exe /usr/libexec/lunanexa-node
+sudo install -o root -g root -m 0755 _build/native/debug/build/cmd/lease-helper/lease-helper.exe /usr/libexec/lunanexa-lease-helper
+sudo install -o root -g root -m 0755 _build/native/debug/build/cmd/lease-helper-client/lease-helper-client.exe /usr/libexec/lunanexa-lease-helper-client
+sudo install -o root -g root -m 0440 deploy/sudoers/lunanexa-lease-helper /etc/sudoers.d/lunanexa-lease-helper
+sudo visudo -cf /etc/sudoers.d/lunanexa-lease-helper
+sudo install -o root -g root -m 0644 deploy/tmpfiles.d/lunanexa-lease.conf /etc/tmpfiles.d/lunanexa-lease.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/lunanexa-lease.conf
+sudo install -o root -g root -m 0644 deploy/systemd/lunanexa-node.service /etc/systemd/system/lunanexa-node.service
+sudo install -o root -g root -m 0600 /dev/null /etc/lunanexa/lease-helper.enabled
+```
+
+Copy `deploy/lunanexa-node.env.example` to `/etc/lunanexa/node.env`, replace
+every example endpoint/identifier, and install the referenced host credentials
+separately. The credential issuer stages exactly one public SSH certificate/key
+line at `/run/lunanexa/lease-credentials/LEASE_ID.authorized_keys`; the helper
+consumes it without accepting a controller-provided path and removes it during
+sanitization. The dedicated lease user must have no writable path outside its
+home and rootless runtime storage. Configure and test per-user temporary/mount
+namespaces before enabling SSH.
 
 ### Node transport boundary
 
@@ -183,7 +214,7 @@ with a production value.
 
 ## 5. Prepare model and runtime distribution
 
-### Model storage
+### Model storage and scoped gateway
 
 Use a deterministic layout under `/data/models`; for example:
 
@@ -198,10 +229,12 @@ Use a deterministic layout under `/data/models`; for example:
   quarantine/
 ```
 
-The S3-compatible service should expose the model above as an object such as
-`s3://models/model.text/v1/model.blob`. Configure the service so the node's
-scoped artifact credential can read approved model objects and detached
-signatures but cannot write, list unrelated buckets or administer the service.
+Register the model above using the logical object
+`s3://models/model.text/v1/model.blob`. With
+`LUNANEXA_MODEL_STORE_ROOT=/data/models`, the controller resolves it as
+`/data/models/models/model.text/v1/model.blob`. The gateway has no list or write
+route. A DGX authenticates with its own Node credential and must send the
+assignment ID, deployment ID and model digest headers added by the node daemon.
 
 Before registration:
 
@@ -211,10 +244,12 @@ Before registration:
 4. verify the signature from a clean host;
 5. retain license, provenance and evaluation evidence outside the model blob.
 
-Set `ARTIFACT_ENDPOINT` to the HTTPS base URL that maps S3 object keys to these
-objects. The node agent constructs
-`$ARTIFACT_ENDPOINT/<bucket>/<object>`; the endpoint must support ordinary GET
-and byte ranges for resumable downloads.
+Set the node ConfigMap `artifact-endpoint` to the protected controller artifact
+base, for example `https://control.cluster.example/v1/artifacts`. The node agent
+constructs `<artifact-endpoint>/<bucket>/<object>`. The built-in gateway supports
+ordinary GET and strict `Range: bytes=N-` resume. It consumes a durable,
+short-lived transfer nonce before opening the file and returns no filesystem
+path or model-store credential.
 
 ### Runtime images and routes
 
@@ -267,7 +302,7 @@ Replace `MANAGEMENT_NODE` with the real Kubernetes node name. Add a reviewed
 deployment overlay with:
 
 - `nodeSelector: {lunanexa.io/role: management}` for the controller, console,
-  workbench and management-owned artifact components;
+  workbench and controller artifact gateway;
 - `nodeSelector: {lunanexa.io/role: gpu}` for the node-agent DaemonSet;
 - tolerations only for the taints deliberately assigned to those nodes.
 
@@ -282,11 +317,10 @@ kubectl create namespace lunanexa
 kubectl label namespace INGRESS_NAMESPACE lunanexa.io/ingress=trusted
 ```
 
-Label the namespaces containing external runtime and artifact services as
-required by `deploy/network-policy.yaml`:
+Label the namespace containing external runtime routes as required by the
+reviewed `deploy/network-policy.yaml` overlay:
 
 ```sh
-kubectl label namespace ARTIFACT_NAMESPACE lunanexa.io/service=artifact-store
 kubectl label namespace RUNTIME_NAMESPACE lunanexa.io/service=runtime
 ```
 
@@ -310,6 +344,8 @@ The `lunanexa-control-credentials` Secret must provide:
 - `assignment-signing-secret`;
 - `catalog-signing-secret`;
 - `exclusive-lease-signing-secret`;
+- `provider-callback-secret` (at least 32 random bytes, independent of every
+  other signing authority);
 - `api-key-issuer-secret` (at least 32 random bytes, independent of every other
   signing authority).
 
@@ -321,6 +357,36 @@ PostgreSQL to a GPU node or public ingress.
 Use independent random values. `assignment-signing-secret` is also provisioned
 to each node as the protected assignment verification key. Treat disclosure of
 that shared verifier as cluster-wide signing-authority compromise.
+
+Set `LUNANEXA_PROVIDER_CALLBACK_NAME` and
+`LUNANEXA_PROVIDER_CALLBACK_ENVIRONMENT` to the exact adapter identity used by
+the approved provider. The adapter signs the raw callback body and the provider,
+environment, event ID and millisecond timestamp headers with
+`provider-callback-secret`. Rotate this key through a reviewed dual-delivery
+window at the ingress; never reuse the test-only LunaFide MAC. Configure
+`LUNANEXA_EXCLUSIVE_LEASE_PRICE_PER_SECOND_MINOR`,
+`LUNANEXA_BILLING_CURRENCY`, and `LUNANEXA_BILLING_SCALE` before enabling hard
+budgets. A zero unit price is suitable only for an explicitly free/internal
+service profile.
+
+The provider callback request is:
+
+```text
+POST /v1/provider-callbacks/commercial
+X-LunaNexa-Provider: <configured provider>
+X-LunaNexa-Environment: <configured environment>
+X-LunaNexa-Event-Id: <stable provider event id>
+X-LunaNexa-Event-Timestamp: <Unix milliseconds>
+X-LunaNexa-Signature: <lowercase hex HMAC-SHA256>
+```
+
+The MAC input is the UTF-8 string
+`lunanexa.provider-callback.v1|provider|environment|event-id|timestamp|raw-body`.
+The listener allows at most five minutes of clock skew, binds the body fields
+back to the authenticated headers, and stores the callback ID for replay.
+Payment, tax-invoice, identity and qualified-signature adapters use the same
+transport. Do not send `signature_verified` to an operator endpoint; those
+routes fail with `VerifiedTransportRequired`.
 
 ### TLS and Cosign trust
 
@@ -345,7 +411,6 @@ local OS and container-engine policy. Each host must contain:
   node-token
   node-public-key
   assignment-verification-key
-  artifact-credential
   cosign.pub
   bootstrap-token-id       # temporary, one use
   bootstrap-token          # temporary, one use
@@ -380,15 +445,16 @@ Example inventory for `dgx-spark-01`:
     "lunanexa.warm-models": "",
     "lunanexa.data-classes": "Public,Internal,Confidential",
     "lunanexa.queue-depth": "0",
-    "lunanexa.reliability-per-mille": "1000",
-    "lunanexa.accelerator-utilization-per-mille": "0"
+    "lunanexa.reliability-per-mille": "1000"
   },
   "taints": []
 }
 ```
 
 Inventory must be generated from the real host. Do not copy memory or device
-values from this example without verifying them.
+values from this example without verifying them. Live utilization, used/total
+GPU memory, maximum temperature and aggregate power come from the fixed
+`nvidia-smi` sensor query; labels cannot override those measurements.
 
 ## 9. Render and apply the management plane
 
@@ -396,7 +462,7 @@ Render a private overlay that replaces:
 
 - all image digests and registry names;
 - controller epoch and runtime/model digests;
-- controller, artifact and strict runtime endpoints;
+- controller artifact base and strict runtime endpoints;
 - TLS hostname and namespace placeholders;
 - storage class and PVC requirements;
 - the management/GPU node selectors;
@@ -487,7 +553,7 @@ Use the operator sequence in `docs/OPERATIONS.md` to register the runtime,
 model, license, verification and evaluation evidence, then approve and promote
 an alias.
 
-Update the example catalog template and intent with real digests, S3 object
+Update the example catalog template and intent with real digests, logical object
 references, resources and policies. Then run:
 
 ```sh
@@ -507,8 +573,8 @@ management plane is reachable:
 3. on **Overview**, require all four **Deployment launchpad** checks to be
    green;
 4. select **Open one-click deployment**;
-5. choose the approved immutable template, enter a unique service name and the
-   replica count;
+5. choose the approved immutable template and enter a unique service name. The
+   console displays fixed one-machine capacity and provides no replica control;
 6. select **Deploy model service** once. The controller performs the
    authoritative preflight and creates one durable, idempotent operation;
 7. follow the operation in **Service operations** until it is ready, then
@@ -531,7 +597,8 @@ deployment is accepted, verify:
 - the cache entry matches the declared size, digest and signature;
 - the runtime receives a read-only mount at
   `/var/lib/lunanexa/model/model`;
-- no artifact credential or S3 URI appears in the runtime environment;
+- no node credential or logical object reference appears in the runtime
+  environment;
 - the node heartbeat reports the deployment only after runtime health succeeds;
 - inference routing reaches the endpoint mapped to that DGX.
 
@@ -540,25 +607,41 @@ unchanged until an assignment explicitly selects them.
 
 ## 12. Exclusive node leases
 
-The implemented management-plane lease API can reserve one DGX, generation-
+The implemented management-plane lease API reserves exactly one DGX, generation-
 fence its lifecycle and remove it immediately from managed placement:
 
 ```sh
 lunanexa lease-node deploy/exclusive-node-lease.example.json
 lunanexa exclusive-leases
-lunanexa transition-node-lease LEASE_ID TRANSITION_FILE.json
+lunanexa terminate-node-lease LEASE_ID GENERATION operator-request
 ```
 
-The lease body contains a validated username and an `ssh-cert:` or `secret:`
+Before submitting the example, replace its unique identifiers and both lease
+timestamps. The repository deliberately does not ship a moving or silently
+valid login window; `starts_unix_ms` must be current/future and
+`expires_unix_ms` must be later.
+
+Each non-terminal lease owns one machine and one subject; the lease authority
+rejects a second lease on that node. The lease body contains a validated
+username and an `ssh-cert:` or `secret:`
 reference. It never contains a password, private key or certificate value.
 
-The protected DGX node agent now persists the signed lease generation, enforces
-offline expiry, drives typed provision/revoke/sanitize/quarantine actions and
-reports lifecycle evidence. Production interactive access is not ready until
-the deployment's root-owned helper service implements those fixed actions for
-the chosen account, SSH and container engine policy and passes the physical
-adversarial gate. Until then, do not transition real leases to `Active` or give
-users DGX login access.
+Reservation fences and cordons the selected node but does not immediately
+create login access. The authenticated node poll advances to `Provisioning`
+only after desired assignments and heartbeat-observed runtimes are empty. The
+generic operator transition endpoint is fail-closed; `Active` and `Completed`
+require fresh node-helper evidence.
+
+Natural expiry is reconciled when the node polls. The termination command and
+the operator console's **Terminate & clean** action use the same generation
+fence. Both paths revoke access before sanitization. A node returns to managed
+service only after the controller validates a fresh, action/lease/generation-
+bound helper receipt. Any failure leaves it quarantined and unavailable.
+
+The bundled helper implements the reference Linux account, staged SSH access,
+rootless Podman and dedicated-home policy. Production interactive access is
+still blocked until that policy, writable-path isolation and the destructive
+expiry/early-termination cases pass on every physical DGX host image.
 
 ## 13. Acceptance checklist
 
@@ -572,6 +655,9 @@ Before production use, record evidence that:
 - digest/signature failure prevents runtime launch;
 - an unlicensed or failed-evaluation model is blocked before assignment;
 - draining one node prevents new placement there;
+- natural expiry and early termination kill tenant work, remove the dedicated
+  account/home/access material/runtime objects, reject forged evidence, and
+  keep an unclean node quarantined;
 - strict runtime routing cannot reach an unmapped node;
 - prompts, outputs, secrets, internal paths and node addresses do not appear in
   public responses or ordinary logs;
@@ -603,8 +689,8 @@ Back up all controller snapshots together:
 - exclusive-node lease authority.
 
 Back up `/data/models` separately by immutable digest, including detached
-signatures, license/provenance manifests and the artifact service's object
-metadata. Test restoration on a clean management node.
+signatures and license/provenance manifests. Test restoration on a clean
+management node.
 
 The current native `lunanexa.backup.v2` recovery bundle covers the five core
 controller, registry, enrollment, scheduler and telemetry snapshots. Until that
@@ -633,7 +719,7 @@ back controller still needs a newer epoch; never reuse an older fencing epoch.
 | Node enrollment rejected | Expired/reused bootstrap or weak node token | Token expiry, one-use status and unique host files |
 | Heartbeat rejected | Clock skew, wrong node ID/token or stale generation | NTP, inventory ID and node credentials |
 | No placement | Node cordoned, leased, unhealthy or incompatible | `lunanexa nodes`, lease list and dry-run findings |
-| Model download fails | HTTPS/S3 mapping, scoped credential, size or range handling | Artifact endpoint logs without exposing the credential |
+| Model download fails | Assignment binding, node credential, source path, size or range handling | Controller `artifact.transfer` audit plus node evidence without exposing credentials |
 | Model never reaches runtime | Digest or detached signature verification failed | Node agent evidence and quarantine path |
 | Runtime never becomes ready | Image digest, health check, engine socket or gateway mismatch | Podman inspection and strict route mapping |
 | Controller cannot invoke runtime | Missing/incorrect node endpoint or network policy | Runtime endpoint document, DNS and allowed egress |

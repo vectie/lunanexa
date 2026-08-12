@@ -16,8 +16,9 @@
   Audit and metrics endpoints accept only their read-only role token; deny
   permissions not explicitly granted by the deployment identity provider.
 - Require SHA-256 digest pinning and the fixed-command Cosign adapter with an
-  allowed public-key path for artifacts and runtime images. The S3 verifier
-  streams and hashes bytes with a configured maximum size. Never translate a
+  allowed public-key path for artifacts and runtime images. The management-node
+  gateway and node verifier stream and hash bytes with configured maximum
+  sizes. Never translate a
   hand-authored boolean into successful verification evidence; the API accepts
   verification inputs and mints the result only after the Cosign process exits
   successfully. Both runtime-image and model-artifact digests are checked at
@@ -27,7 +28,7 @@
   health check. Starting, missing-health-check, unhealthy, exited, or substituted
   containers are never advertised as running in node heartbeats.
 - Default runtime networking denies arbitrary ingress and limits egress to the
-  management channel and artifact service.
+  management channel; artifact access belongs only to the node agent.
 - Log only `RequestLog` metadata. Raw payloads and outputs are not fields of the
   log type.
 - Retain content only for `RetainUntil` or consented evaluation capture. Expiry

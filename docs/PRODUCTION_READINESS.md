@@ -13,9 +13,10 @@ evidence listed in this document.
 
 The managed model-service path is the path under test. Interactive exclusive
 node leasing remains non-production even though the node-local signed-generation
-guard, offline expiry and fixed helper protocol are implemented: the deployment
-must still supply and physically validate its privileged account/SSH/container
-sanitization helper.
+guard, automatic/offline expiry, early termination and a root-owned reference
+helper are implemented: each deployment must still review its writable-path,
+account/SSH/rootless-container policy and validate destructive cleanup on the
+physical DGX image.
 
 ## Security and failure model
 
@@ -51,8 +52,9 @@ S3-compatible service, registry or TLS proxy.
 - Native HTTP request bodies are streamed through a 1 MiB hard limit. The
   listener returns `413` without assembling an unbounded body and rejects
   invalid UTF-8 with `400`.
-- Deployment identifiers, idempotency keys, replica counts and lease durations
-  use the same checked contract at plan and mutation boundaries.
+- Deployment identifiers, idempotency keys, the fixed `replicas = 1` invariant,
+  and lease durations use the same checked contract at plan and mutation
+  boundaries.
 - Artifact references accept a constrained `s3://bucket/object` form and reject
   traversal, empty path segments, query fragments and percent-encoded escapes.
 - Templates require controller and artifact-store connectivity, reject arbitrary
@@ -63,12 +65,12 @@ S3-compatible service, registry or TLS proxy.
 ### Placement and reconciliation
 
 - Placement validates node and device identifiers, deduplicates node IDs and
-  refuses duplicate-device inventory. Duplicate reports cannot satisfy replica
-  capacity.
+  refuses duplicate-device inventory. Duplicate reports cannot satisfy the
+  exclusive one-machine assignment.
 - A deployment is ready only when its assignment is signed and unexpired and
   the node heartbeat is active, fresh, identity-consistent, on the controller's
   epoch, and has observed at least the assignment generation.
-- Scaling therefore remains `Reconciling` until a node reports the new
+- Reconciliation remains `Reconciling` until the assigned node reports the new
   generation; an old heartbeat can no longer make a new generation appear
   ready.
 
@@ -97,8 +99,8 @@ whitespace amplification and forged multiline audit/UI values.
 ### Operator console
 
 - The one-click action is disabled until the service identifier matches the
-  public contract, an approved template is selected, and replicas are an
-  integer from 1 through 64.
+  public contract and an approved template is selected. Capacity is displayed
+  as one service on one assigned machine and cannot be edited in the UI.
 - Inputs expose visible recovery text, `aria-describedby` and `aria-invalid`;
   all controls retain associated labels and a 44 px minimum height.
 - Dynamic template/operator strings remain escaped. The controller remains the
@@ -112,7 +114,7 @@ whitespace amplification and forged multiline audit/UI values.
 mutations on every run:
 
 - all deployment and idempotency-key lengths across and beyond their limits;
-- every replica value from -128 through 128;
+- every replica value from -128 through 128, proving that only `1` is accepted;
 - lease-duration minimum, maximum, zero, negative and integer-extreme values;
 - eleven forbidden character/Unicode mutations injected at every position of
   128- and 256-character identifier envelopes;
@@ -178,7 +180,8 @@ empty states. The following checks pass:
 - script-like service names are rendered as text, inject no script, receive
   `aria-invalid=true`, and disable deployment;
 - 129-character names are rejected and 128-character names are accepted;
-- replicas `0` and `65` are rejected and `1` is accepted;
+- the catalog has no replica input, displays the fixed-capacity policy, and the
+  API rejects every non-one replica value;
 - a valid submission produces a visible live success receipt and no fake
   controller operation in demo mode;
 - Simplified Chinese updates the document title, route heading and form labels;
@@ -290,14 +293,20 @@ immutable evidence reference:
    throughput, latency, GPU-memory headroom and failure recovery on each DGX.
 10. **Human approvals:** security, infrastructure, model-risk/license and
     operations owners sign the immutable image, model and runbook evidence.
+11. **Lease reset:** exercise both natural expiry and operator termination with
+    active SSH sessions, processes, rootless containers and volumes. Prove
+    access material/account/home/runtime state are absent, the next lease starts
+    clean, and any deliberately unkillable residue quarantines the node.
 
 ## Release blockers that must remain visible
 
-- The DGX lease watchdog and fixed helper protocol are implemented; the
-  privileged host-specific provisioning/sanitization service is not bundled
-  and remains a required physical deployment component.
-- LunaNexa relies on an external mTLS proxy/service mesh, artifact service, OCI
-  registry, certificate authority, secret manager and metrics backend.
+- The DGX lease watchdog, fixed protocol and reference root helper are bundled;
+  physical DGX validation and deployment-specific writable-path/SSH/container
+  isolation remain required.
+- LunaNexa relies on an external mTLS proxy/service mesh, OCI registry,
+  certificate authority, secret manager and metrics backend. The artifact
+  gateway itself is built in and still requires protected `/data/models`
+  storage and backup.
 - The base deployment templates contain placeholders and are not production
   overlays.
 - The node supervisor does not publish the production inference gateway; the

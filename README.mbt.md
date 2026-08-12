@@ -31,11 +31,11 @@ LunaNexa owns:
 - node inventory, health and capacity;
 - model artifact registration, licensing metadata and provenance;
 - deployment, placement, rollout, rollback and reconciliation;
-- inference queues, admission, batching, load balancing and failover;
+- bounded interactive inference admission, load balancing and failover;
 - runtime adapters for approved model servers;
 - evaluation, performance baselines, quotas, metering and audit events;
-- deterministic prewarm, probe, cache, autoscale, admission and transfer-grant
-  policy decisions;
+- deterministic prewarm, probe, cache, backpressure and transfer-grant policy
+  decisions for an operator-sized fixed fleet;
 - organizations, cost centers, projects, budgets, quotas, capacity commitments,
   rated usage, ledger evidence and versioned digital agreements;
 - one Rabbita operator console for models, deployments, nodes, commercial
@@ -76,8 +76,14 @@ default, and retained only when an explicit policy permits it.
   used by the API.
 - Runtime boundary: pinned OCI images for vLLM, SGLang, TensorRT-LLM,
   llama.cpp or media runtimes as separately approved adapters.
-- Persistent infrastructure: standard OCI registry, S3-compatible artifact
-  storage and Prometheus-compatible telemetry rather than new Luna products.
+- Persistent infrastructure: the management-node `/data/models` source disk,
+  standard OCI registry, PostgreSQL and Prometheus-compatible telemetry rather
+  than new Luna products.
+
+The production profile deliberately has no batch-job subsystem and no
+autoscaling. One exclusive lease names exactly one user and exactly one DGX;
+the management plane copies only the assigned model to that node through a
+short-lived, assignment-bound download and leaves the other DGX caches alone.
 
 ## Local validation
 
@@ -103,8 +109,9 @@ Run `sh scripts/production-fault-simulation.sh EVIDENCE_DIRECTORY` for the
 composed synthetic production-fault campaign. The resulting summary keeps real
 mTLS, container-engine, DGX, thermal and human-approval claims explicitly false.
 
-Native executables live in `cmd/control`, `cmd/node`, `cmd/cli`,
-`cmd/benchmark`, `cmd/evidence`, and `cmd/recovery`. The Rabbita operator site
+Native executables live in `cmd/control`, `cmd/node`, `cmd/lease-helper`,
+`cmd/lease-helper-client`, `cmd/cli`, `cmd/benchmark`, `cmd/evidence`, and
+`cmd/recovery`. The Rabbita operator site
 lives in `cmd/console`; the enterprise portal lives in `cmd/enterprise`, with
 the same-site WebIDE in `cmd/workbench`. Both sites consume one central API and
 shared provider-neutral contracts. See the
@@ -135,6 +142,7 @@ signature, payment or tax-invoice providers.
 - [Developer workspaces and integrations](docs/WORKSPACES.md)
 - [Management plane and one-click model services](docs/MANAGEMENT_PLANE.md)
 - [Exclusive DGX node leases](docs/EXCLUSIVE_NODE_LEASES.md)
+- [Exclusive lease production use-case matrix](docs/EXCLUSIVE_LEASE_USE_CASES.md)
 - [Management node and four-DGX deployment guide](docs/DEPLOYMENT.md)
 - [Production readiness and adversarial test record](docs/PRODUCTION_READINESS.md)
 - [Suanli documentation research and applicability review](docs/research/suanli/README.md)

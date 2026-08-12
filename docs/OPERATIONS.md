@@ -162,8 +162,7 @@ Every node has host-owned `/etc/lunanexa` material and a unique node token.
   "lunanexa.warm-models": "model.text@v1",
   "lunanexa.data-classes": "Public,Internal,Confidential",
   "lunanexa.queue-depth": "0",
-  "lunanexa.reliability-per-mille": "1000",
-  "lunanexa.accelerator-utilization-per-mille": "0"
+  "lunanexa.reliability-per-mille": "1000"
 }
 ```
 
@@ -183,17 +182,19 @@ Each node also requires these materialization values:
 | Variable | Meaning |
 | --- | --- |
 | `LUNANEXA_MODEL_CACHE_PATH` | Absolute host-backed cache root; defaults to `/var/lib/lunanexa/models` |
-| `LUNANEXA_ARTIFACT_ENDPOINT` | HTTPS base URL of the deployment-owned S3-compatible artifact service |
-| `LUNANEXA_ARTIFACT_CREDENTIAL_PATH` | Host-owned bearer credential file; its value is never passed to runtimes |
+| `LUNANEXA_ARTIFACT_ENDPOINT` | Protected controller base ending in `/v1/artifacts` |
+| `LUNANEXA_ARTIFACT_CREDENTIAL_PATH` | The node's own protected Node credential file; its value is never passed to runtimes |
 | `LUNANEXA_ARTIFACT_MAX_SIZE_BYTES` | Per-artifact safety ceiling; defaults to 1 TiB |
+| `LUNANEXA_NVIDIA_SMI_BINARY` | Allowlisted `/usr/bin/nvidia-smi` or `/usr/local/bin/nvidia-smi` sensor executable |
 | `LUNANEXA_COSIGN_BINARY` | Allowlisted Cosign path in the node-agent image |
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only node-local public key used for detached model signatures |
 
-The model reference in an approved template is an `s3://bucket/object` value.
-Its detached signature may be another S3 reference; an opaque Cosign evidence
-reference resolves to the sibling `<model-object>.sig` object. The selected
-node maps these beneath `LUNANEXA_ARTIFACT_ENDPOINT`, resumes an incomplete
-transfer when the service honors `Range`, verifies the declared size, SHA-256
+The model reference in an approved template is a logical
+`s3://bucket/object` value. Its detached signature may be another logical
+reference; an opaque Cosign evidence reference resolves to the sibling
+`<model-object>.sig` object. The selected node maps these beneath the controller
+gateway, which authorizes only its live assignment, resumes an incomplete
+transfer using strict `Range`, verifies the declared size, SHA-256
 digest and detached Cosign signature, and atomically publishes the model under
 the cache root. The runtime receives only `/var/lib/lunanexa/model/model` as a
 read-only bind mount. When no local desired assignment references the digest,
@@ -239,14 +240,21 @@ provisioning and cleanup workflow:
 ```sh
 lunanexa lease-node exclusive-lease.json
 lunanexa exclusive-leases
-lunanexa transition-node-lease lease-id provisioning-transition.json
+lunanexa terminate-node-lease lease-id current-generation operator-request
 ```
 
 The first request immediately removes the selected node from managed placement
-and publishes a cordon or drain directive. Do not transition to `Active` until
-managed assignments and observed deployments on that node are empty. See
-`docs/EXCLUSIVE_NODE_LEASES.md` for the required revocation and sanitization
-sequence.
+and publishes a cordon or drain directive. The controller automatically enters
+`Provisioning` only after desired assignments and observed deployments are
+empty. Direct operator lifecycle transitions are rejected; activation and
+cleanup require verified node-helper evidence. See
+`docs/EXCLUSIVE_NODE_LEASES.md` and `docs/EXCLUSIVE_LEASE_USE_CASES.md`.
+
+Expiry and early termination follow the same fail-closed sequence. The node is
+not schedulable after the termination request and becomes available only after
+a fresh generation-bound sanitization receipt proves the dedicated account,
+sessions/processes, rootless containers/volumes, home, access material and lease
+state are absent. A helper failure or forged/stale receipt quarantines the node.
 
 The controller fills the template approval receipt and signature. The example
 digests and artifact location are placeholders and must be replaced by the

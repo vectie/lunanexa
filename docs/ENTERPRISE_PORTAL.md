@@ -13,7 +13,7 @@ enterprise origin; they are not separate control planes.
 | --- | --- | --- |
 | Read own organization agreements and requests | Yes | Yes |
 | Request a signature ceremony | Legal signer only | No impersonation |
-| Mark an agreement executed | No | Verified callback/operator integration only |
+| Mark an agreement executed | No | Signed qualified-provider callback only |
 | Submit a capacity request | Lease requester only, after execution | No impersonation |
 | Choose a DGX node | No | Operator only |
 | Reserve an exclusive node lease | No | Operator approval workflow only |
@@ -65,8 +65,12 @@ Operator endpoints require the operator authority:
 - `GET /v1/portal/operator/snapshot`
 - `POST /v1/portal/operator/memberships`
 - `POST /v1/portal/operator/agreements`
-- `POST /v1/portal/operator/agreement-executions`
 - `POST /v1/portal/operator/lease-reviews`
+
+Provider adapters call `POST /v1/provider-callbacks/commercial` with the exact
+HMAC-bound routing headers described in the deployment guide. The legacy
+operator execution route fails closed with `VerifiedTransportRequired`; an
+operator bearer token is not signature evidence.
 
 The portal snapshot is stored atomically at `LUNANEXA_PORTAL_PATH`. Lease
 submissions are idempotent. Reviews are generation-fenced. Approval first

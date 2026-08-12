@@ -59,7 +59,7 @@ Deliver:
 - digest verification, provenance and compatible-hardware declarations;
 - evaluation suite and benchmark profile records;
 - versioned aliases, canary rollout, promotion, rollback and immutable receipts;
-- OCI image and S3-compatible artifact-store adapters;
+- OCI image adapters and the management-node `/data/models` artifact gateway;
 - explicit payload retention and evaluation-capture consent.
 
 Gate:
@@ -75,7 +75,7 @@ Deliver:
 - hard filters for health, architecture, memory, runtime, license and data class;
 - deterministic scoring for warm model, headroom, queue time and reliability;
 - admission control, tenant quotas, priorities, deadlines and cancellation;
-- streaming proxy, batching where supported, backpressure and bounded retry;
+- streaming proxy, backpressure and bounded retry;
 - node drain, failover, placement explanation and capacity forecast;
 - topology-aware multi-node adapter interface, disabled until explicitly
   validated for a model/runtime/network profile.
@@ -227,10 +227,10 @@ Deliver:
 - controller-signed, immutable model-service catalog templates;
 - compact idempotent deployment intents and deterministic dry-run plans;
 - restart-safe deployment operations with typed preflight findings;
-- intent-to-assignment reconciliation, readiness observation, scaling,
-  promotion, rollback and deletion;
+- intent-to-assignment reconciliation, readiness observation, fixed
+  single-machine capacity, promotion, rollback and deletion;
 - a Rabbita catalog and deployment workflow using the same public contracts;
-- CLI coverage for catalog, plan, deploy, operation, scale and rollback.
+- CLI coverage for catalog, plan, deploy, operation and rollback.
 
 Gate:
 
@@ -241,8 +241,8 @@ Gate:
 - repeated idempotency keys never create duplicate operations or assignments;
 - controller restart resumes a persisted operation and readiness converges from
   signed assignments plus live node heartbeats;
-- scale-down, rollback and deletion remove only assignments owned by the named
-  model service and emit immutable audit receipts;
+- rollback and deletion remove only the assignment owned by the named model
+  service and emit immutable audit receipts;
 - public plans, operations and endpoints contain no node credentials, runtime
   credentials, internal runtime URLs, filesystem paths or MoonSuite identity.
 
@@ -250,7 +250,7 @@ Gate:
 
 Deliver:
 
-- selected-node, pull-based S3 artifact and detached-signature download;
+- selected-node, pull-based management artifact and detached-signature download;
 - resumable partial files and atomic content-addressed cache publication;
 - node-local size, digest and Cosign verification before runtime launch;
 - a fixed read-only model mount with no artifact credential in the runtime;
@@ -301,7 +301,7 @@ Gate:
 
 Deliver:
 
-- deterministic prewarm, startup/readiness/liveness probe, cache, autoscale,
+- deterministic prewarm, startup/readiness/liveness probe, cache,
   admission/backpressure, transfer-grant and reviewed-sidecar policy cores;
 - operator-authenticated technical decision endpoints with lease-generation
   fencing and bounded transfer-grant validation;
@@ -327,8 +327,8 @@ Production gate still required:
 
 - crash-test the implemented transactional commercial/integration snapshot
   adapter against the selected production PostgreSQL failover system;
-- physically validate the implemented prewarm/nonce persistence and idempotent
-  generation-fenced autoscale execution against the four DGX nodes;
+- physically validate the implemented prewarm/nonce persistence and fixed-fleet
+  one-lease-one-machine behavior against the four DGX nodes;
 - connect node probe/cache telemetry and approved digest-pinned sidecar catalog;
 - replace LunaFide with approved production identity, signature, payment and
   invoice providers and validate their real webhook trust and retention rules;

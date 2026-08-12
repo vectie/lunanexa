@@ -11,7 +11,8 @@ The repository now implements the deployable LunaNexa baseline:
   normalization and truncated-stream rejection;
 - atomic durable state for controller, registry, enrollment, scheduler and
   telemetry snapshots, each with an explicit schema version;
-- model/license/evaluation/alias lifecycle enforcement, S3 digest streaming,
+- model/license/evaluation/alias lifecycle enforcement, management-node digest
+  streaming,
   fixed-command Cosign verification adapters and digest-pinned OCI supervision;
 - controller-signed model-service catalog templates, deterministic one-click
   deployment plans and restart-safe operations, plus selected-node resumable
@@ -33,8 +34,8 @@ The repository now implements the deployable LunaNexa baseline:
   benchmarks and audit, with confirmed cordon/drain/rollback controls and
   shared public read-contract DTOs used by both browser and automation clients;
 - deterministic technical policy cores and authenticated decision endpoints for
-  prewarm, probes, cache reconciliation, autoscaling, backpressure, transfer
-  grants and reviewed sidecars;
+  prewarm, probes, cache reconciliation, backpressure, transfer grants and
+  reviewed sidecars, with autoscaling omitted from the fixed-fleet surface;
 - a commercial contract core for organizations, cost centers,
   projects, rating, ledger finalization, budgets, quotas, commitments, RBAC and
   digital agreements, plus normalized external-provider evidence records,
@@ -56,7 +57,7 @@ The repository now implements the deployable LunaNexa baseline:
   review that reserves exactly one selected node without accepting a password;
 - durable hashed API credentials with tenant/subject/model scopes, expiry,
   revocation, bounded request counters, one-time secret disclosure, model
-  discovery and canonical/OpenAI-compatible non-streaming inference entry;
+  discovery and canonical/OpenAI-compatible unary and SSE inference entry;
 - a DGX-side exclusive-lease guard with local generation state, offline expiry,
   fixed helper actions, sanitization/quarantine fencing and authenticated
   lifecycle observations back to the controller;
@@ -125,7 +126,7 @@ systems:
 
 - enroll and exercise the four physical DGX Spark nodes;
 - choose and run a licensed model with a signed upstream serving image;
-- configure and verify production OCI, S3, metrics, CA/mTLS termination,
+- configure and verify production OCI, `/data/models` backup, metrics, CA/mTLS termination,
   identity, commercial database, qualified signature, payment, invoice,
   encrypted-retention and secret providers;
 - implement and test the consumer-side adapter in its owning repository;
@@ -156,7 +157,9 @@ integration points rather than bundled vendor runtimes.
 
 Exclusive-node leasing implements the management authority, placement fence,
 node-local offline-expiry watchdog, fixed provision/revoke/sanitize/quarantine
-protocol and observation receipts. The root-owned host helper remains a
-deployment component because account databases, SSH policy and container-engine
-isolation are host-specific. Until that reviewed helper and its physical-DGX
-tests exist, a lease must not be treated as production interactive access.
+protocol, early termination, strict observation receipts, operator workflow and
+a root-owned Linux reference helper. Account databases, writable-path policy,
+SSH configuration and container isolation remain host-specific. Until the
+reference policy is reviewed and its destructive cleanup cases pass on each
+physical DGX image, a lease must not be treated as production interactive
+access.
