@@ -60,7 +60,9 @@ async fn ApiService::observe_node_lease_action(
   if initial.intent.node_id != node_id ||
     initial.generation != observation.observed_generation ||
     observation.observed_unix_ms < initial.updated_unix_ms ||
-    observation.observed_unix_ms > @async.now() + 60000L ||
+    observation.observed_unix_ms >
+    @async.now() +
+    self.global_settings.control_timing.lease_observation_replay_window_ms ||
     !@contracts.valid_identifier(observation.receipt, maximum_length=512) {
     return api_error(
       409, "StaleGeneration", "lease agent observation is stale or misbound", false,
@@ -76,23 +78,23 @@ async fn ApiService::observe_node_lease_action(
         generation=initial.generation,
       )
     "revoke" =>
-      @nodelease.LeaseAgentAction::RevokeAccess(
+      RevokeAccess(
         lease_id=initial.intent.lease_id,
         username=initial.intent.unix_username,
         generation=initial.generation,
       )
     "sanitize" =>
-      @nodelease.LeaseAgentAction::SanitizeLease(
+      SanitizeLease(
         lease_id=initial.intent.lease_id,
         username=initial.intent.unix_username,
         generation=initial.generation,
       )
     "quarantine" =>
-      @nodelease.LeaseAgentAction::QuarantineNode(
+      QuarantineNode(
         lease_id=initial.intent.lease_id,
         generation=initial.generation,
       )
-    _ => @nodelease.LeaseAgentAction::NoAction
+    _ => NoAction
   }
   guard @nodelease.helper_receipt_timestamp(
       expected_action,
@@ -101,7 +103,8 @@ async fn ApiService::observe_node_lease_action(
     is Some(helper_timestamp) &&
     helper_timestamp >= initial.updated_unix_ms &&
     helper_timestamp <= observation.observed_unix_ms &&
-    observation.observed_unix_ms - helper_timestamp <= 60000L else {
+    observation.observed_unix_ms - helper_timestamp <=
+    self.global_settings.control_timing.lease_observation_replay_window_ms else {
     return api_error(
       409, "InvalidCleanupEvidence", "lease helper evidence is invalid or stale",
       false,

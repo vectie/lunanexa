@@ -12,6 +12,7 @@ import {
   "vectie/lunanexa/portal/store" @portal_store,
   "vectie/lunanexa/store",
   "vectie/lunanexa/scheduler",
+  "vectie/lunanexa/settings",
   "vectie/lunanexa/telemetry",
   "vectie/lunanexa/technical/store" @technical_store,
   "vectie/lunanexa/workspace/directory",

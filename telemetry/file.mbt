@@ -15,6 +15,9 @@ pub(all) suberror TelemetryError {
 ///|
 pub struct FileTelemetry {
   path : String
+  sample_history_limit : Int
+  benchmark_history_limit : Int
+  safety_limits : @settings.TelemetrySafetySettings
   samples : Array[@contracts.TelemetrySample]
   benchmark_runs : Array[BenchmarkRun]
   benchmark_summaries : Array[BenchmarkSummary]
@@ -45,13 +48,27 @@ async fn write_telemetry(path : String, snapshot : TelemetrySnapshot) -> Unit {
 }
 
 ///|
-pub async fn FileTelemetry::open(path : String) -> FileTelemetry {
+pub async fn FileTelemetry::open(
+  path : String,
+  sample_history_limit? : Int = 10000,
+  benchmark_history_limit? : Int = 256,
+  safety_limits? : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
+) -> FileTelemetry {
+  if sample_history_limit <= 0 ||
+    sample_history_limit > 1000000 ||
+    benchmark_history_limit <= 0 ||
+    benchmark_history_limit > 65536 {
+    raise InvalidTelemetryState("history limits must be positive and bounded")
+  }
   let telemetry : FileTelemetry = {
     path,
+    sample_history_limit,
+    benchmark_history_limit,
+    safety_limits,
     samples: [],
     benchmark_runs: [],
     benchmark_summaries: [],
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   if @fs.exists(path) {
     let snapshot : TelemetrySnapshot = @json.from_json(
@@ -65,6 +82,19 @@ pub async fn FileTelemetry::open(path : String) -> FileTelemetry {
     telemetry.samples.push_iter(snapshot.samples.iter())
     telemetry.benchmark_runs.push_iter(snapshot.benchmark_runs.iter())
     telemetry.benchmark_summaries.push_iter(snapshot.benchmark_summaries.iter())
+    let mut pruned = false
+    while telemetry.samples.length() > sample_history_limit {
+      ignore(telemetry.samples.remove(0))
+      pruned = true
+    }
+    while telemetry.benchmark_runs.length() > benchmark_history_limit {
+      ignore(telemetry.benchmark_runs.remove(0))
+      ignore(telemetry.benchmark_summaries.remove(0))
+      pruned = true
+    }
+    if pruned {
+      write_telemetry(path, telemetry.snapshot_unlocked())
+    }
   } else {
     write_telemetry(path, telemetry.snapshot_unlocked())
   }
@@ -81,12 +111,12 @@ pub async fn FileTelemetry::record_sample(
   self : FileTelemetry,
   sample : @contracts.TelemetrySample,
 ) -> Unit {
-  if !bounded_metric(sample) {
+  if !bounded_metric_with_settings(sample, self.safety_limits) {
     raise PayloadMetricRejected
   }
   self.mutex.acquire()
   self.samples.push(sample)
-  while self.samples.length() > 10000 {
+  while self.samples.length() > self.sample_history_limit {
     ignore(self.samples.remove(0))
   }
   try self.persist() catch {
@@ -108,7 +138,7 @@ pub async fn FileTelemetry::record_benchmark(
   self.mutex.acquire()
   self.benchmark_runs.push(run)
   self.benchmark_summaries.push(summary)
-  while self.benchmark_runs.length() > 256 {
+  while self.benchmark_runs.length() > self.benchmark_history_limit {
     ignore(self.benchmark_runs.remove(0))
     ignore(self.benchmark_summaries.remove(0))
   }

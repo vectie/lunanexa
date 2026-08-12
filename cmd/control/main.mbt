@@ -32,7 +32,35 @@ fn provider_callback_secrets() -> Map[String, String] raise {
 }
 
 ///|
+/// Global policy is an administrator-owned startup artifact. It is validated
+/// before any durable service or listener is opened, so a hostile or mistyped
+/// value fails closed. The two legacy environment overrides remain supported
+/// only when no settings document is supplied.
+async fn load_global_admin_settings() -> @settings.GlobalAdminSettings {
+  let configured = match @env.get_env_var("LUNANEXA_ADMIN_SETTINGS_PATH") {
+    Some(path) if path != "" =>
+      @settings.parse_global_admin_settings(@fs.read_file(path).text())
+    _ => {
+      let defaults = @settings.default_global_admin_settings()
+      let scheduler = {
+        ..defaults.scheduler,
+        admission_capacity: @string.parse_int64(
+          @env.get_env_var("LUNANEXA_ADMISSION_CAPACITY").unwrap_or("128"),
+        ).to_int(),
+        runtime_concurrency: @string.parse_int64(
+          @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("4"),
+        ).to_int(),
+      }
+      { ..defaults, scheduler, }
+    }
+  }
+  @settings.validate_global_admin_settings(configured)
+  configured
+}
+
+///|
 async fn main {
+  let global_settings = load_global_admin_settings()
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
     "127.0.0.1:8080",
   )
@@ -86,9 +114,6 @@ async fn main {
         "LUNANEXA_PERSISTENCE_BACKEND must be 'postgres' or 'file'",
       )
   }
-  let scheduler_capacity = @string.parse_int64(
-    @env.get_env_var("LUNANEXA_ADMISSION_CAPACITY").unwrap_or("128"),
-  ).to_int()
   let runtime_endpoint = required_environment("LUNANEXA_RUNTIME_ENDPOINT")
   let mut runtime = @runtimes.OpenAiTextRuntime::new(
     runtime_endpoint,
@@ -98,6 +123,9 @@ async fn main {
     required_environment("LUNANEXA_MODEL_ARTIFACT_DIGEST"),
     allow_http_loopback=@env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") ==
       Some("1"),
+  ).with_response_budgets(
+    global_settings.request_budgets.runtime_stream_event_bytes,
+    global_settings.request_budgets.runtime_stream_total_bytes,
   )
   if @env.get_env_var("LUNANEXA_RUNTIME_ENDPOINTS_PATH") is Some(path) &&
     path != "" {
@@ -110,9 +138,18 @@ async fn main {
   let registry = @registry.FileRegistry::open(registry_path)
   let enrollment = @node.FileEnrollmentService::open(enrollment_path)
   let scheduler = @scheduler.FileScheduler::open(
-    scheduler_path, scheduler_capacity,
+    scheduler_path,
+    global_settings.scheduler.admission_capacity,
+    decision_history_limit=global_settings.retention.scheduler_decision_entries,
+    background_capacity_percent=global_settings.scheduler.background_capacity_percent,
+    normal_capacity_percent=global_settings.scheduler.normal_capacity_percent,
   )
-  let telemetry = @telemetry.FileTelemetry::open(telemetry_path)
+  let telemetry = @telemetry.FileTelemetry::open(
+    telemetry_path,
+    sample_history_limit=global_settings.retention.telemetry_sample_entries,
+    benchmark_history_limit=global_settings.retention.benchmark_run_entries,
+    safety_limits=global_settings.telemetry_safety,
+  )
   let workspace_directory = match management_database {
     Some(database) => @directory.FileWorkspaceDirectory::open_postgres(database)
     None => @directory.FileWorkspaceDirectory::open(workspace_path)
@@ -227,11 +264,7 @@ async fn main {
       ),
     )
     .with_provider_callback_secrets(provider_callback_secrets())
-    .with_runtime_concurrency(
-      @string.parse_int64(
-        @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("4"),
-      ).to_int(),
-    )
+    .with_global_admin_settings(global_settings)
   let service = match management_database {
     Some(database) =>
       base_service.with_commercial_persistence(

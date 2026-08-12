@@ -64,6 +64,7 @@ test "runtime arguments mount only the verified local model" {
     "lunanexa-assignment-materialize-1",
     "registry.invalid/text-runtime@\{assignment.runtime.image_digest}",
     "lunanexa-runtime",
+    512,
   )
   assert_true(
     arguments.any(value => {
@@ -81,6 +82,7 @@ test "runtime arguments mount only the verified local model" {
   assert_false(arguments.any(value => value.contains("podman.sock")))
   assert_false(arguments.any(value => value == "--privileged"))
   assert_false(arguments.any(value => value == "host"))
+  assert_true(arguments.any(value => value == "--pids-limit=512"))
   for
     required in [
       "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pull=never",

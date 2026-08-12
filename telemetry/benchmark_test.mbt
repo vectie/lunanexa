@@ -124,4 +124,20 @@ test "metric-specific bounds reject skewing node telemetry" {
   assert_true(@telemetry.bounded_metric(sample))
   assert_false(@telemetry.bounded_metric({ ..sample, value: 1001.0 }))
   assert_false(@telemetry.bounded_metric({ ..sample, node_id: "node\nforged" }))
+  let limits = {
+    ..@settings.default_global_admin_settings().telemetry_safety,
+    maximum_power_watts: 500.0,
+  }
+  assert_true(
+    @telemetry.bounded_metric_with_settings(
+      { ..sample, metric: "accelerator_power_watts", value: 499.0 },
+      limits,
+    ),
+  )
+  assert_false(
+    @telemetry.bounded_metric_with_settings(
+      { ..sample, metric: "accelerator_power_watts", value: 501.0 },
+      limits,
+    ),
+  )
 }

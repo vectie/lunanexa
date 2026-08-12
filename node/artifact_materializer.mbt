@@ -96,6 +96,8 @@ pub struct ArtifactMaterializer {
   credential : String
   node_id : String
   maximum_artifact_size_bytes : Int64
+  io_chunk_bytes : Int
+  signature_maximum_bytes : Int64
   verified : Map[String, Bool]
 }
 
@@ -105,6 +107,13 @@ fn safe_absolute_path(value : String) -> Bool {
   !value.contains("..") &&
   !value.contains_char('\n') &&
   !value.contains_char('\r')
+}
+
+///|
+fn safe_transport_credential(value : String) -> Bool {
+  value.length() > 0 &&
+  value.length() <= 4096 &&
+  value.all(character => character >= '!' && character <= '~')
 }
 
 ///|
@@ -181,6 +190,8 @@ pub async fn ArtifactMaterializer::open(
   credential : String,
   node_id? : String = "",
   maximum_artifact_size_bytes? : Int64 = 1099511627776L,
+  io_chunk_bytes? : Int = 1048576,
+  signature_maximum_bytes? : Int64 = 1048576L,
   allow_http_loopback? : Bool = false,
 ) -> ArtifactMaterializer {
   let secure_endpoint = endpoint.has_prefix("https://")
@@ -198,8 +209,14 @@ pub async fn ArtifactMaterializer::open(
     endpoint.contains_char(' ') ||
     endpoint.contains_char('\n') ||
     endpoint.contains_char('\r') ||
+    (credential != "" && !safe_transport_credential(credential)) ||
+    (node_id != "" && credential == "") ||
     (node_id != "" && !@contracts.valid_identifier(node_id, maximum_length=128)) ||
-    maximum_artifact_size_bytes <= 0L {
+    maximum_artifact_size_bytes <= 0L ||
+    io_chunk_bytes < 65536 ||
+    io_chunk_bytes > 1048576 ||
+    signature_maximum_bytes <= 0L ||
+    signature_maximum_bytes > 16777216L {
     raise ArtifactMaterializationError::InvalidConfiguration
   }
   let content_root = "\{cache_root}/sha256"
@@ -212,6 +229,8 @@ pub async fn ArtifactMaterializer::open(
     credential,
     node_id,
     maximum_artifact_size_bytes,
+    io_chunk_bytes,
+    signature_maximum_bytes,
     verified: Map([]),
   }
 }
@@ -249,12 +268,12 @@ fn ArtifactMaterializer::ready_path(
 }
 
 ///|
-async fn digest_file(path : String) -> (String, Int64) {
+async fn digest_file(path : String, io_chunk_bytes : Int) -> (String, Int64) {
   let file = @fs.open(path, mode=ReadOnly)
   defer file.close()
   let digest = @crypto.SHA256::new()
   let mut size = 0L
-  while file.read_some(max_len=1048576) is Some(chunk) {
+  while file.read_some(max_len=io_chunk_bytes) is Some(chunk) {
     size += chunk.length().to_int64()
     digest.update(chunk)
   }
@@ -287,14 +306,17 @@ async fn ArtifactMaterializer::download(
   let mut offset = 0L
   let digest = @crypto.SHA256::new()
   if @fs.exists(partial_path) {
-    let (partial_digest, partial_size) = digest_file(partial_path)
+    let (partial_digest, partial_size) = digest_file(
+      partial_path,
+      self.io_chunk_bytes,
+    )
     ignore(partial_digest)
     if partial_size > 0L &&
       partial_size < maximum_size_bytes &&
       (expected_size_bytes <= 0L || partial_size < expected_size_bytes) {
       let existing = @fs.open(partial_path, mode=ReadOnly)
       defer existing.close()
-      while existing.read_some(max_len=1048576) is Some(chunk) {
+      while existing.read_some(max_len=self.io_chunk_bytes) is Some(chunk) {
         digest.update(chunk)
       }
       offset = partial_size
@@ -339,7 +361,7 @@ async fn ArtifactMaterializer::download(
   )
   defer file.close()
   let mut size = offset
-  while stream.read_some(max_len=1048576) is Some(chunk) {
+  while stream.read_some(max_len=self.io_chunk_bytes) is Some(chunk) {
     size += chunk.length().to_int64()
     if size > maximum_size_bytes ||
       (expected_size_bytes > 0L && size > expected_size_bytes) {
@@ -369,7 +391,10 @@ async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::verify_cached(
     !@fs.exists(ready_path) {
     raise ArtifactFetchFailed
   }
-  let (actual_digest, actual_size) = digest_file(artifact_path)
+  let (actual_digest, actual_size) = digest_file(
+    artifact_path,
+    self.io_chunk_bytes,
+  )
   if actual_size != artifact.size_bytes {
     raise ArtifactSizeMismatch
   }
@@ -447,7 +472,11 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   }
   ignore(
     self.download(
-      detached_signature_uri, signature_partial, 0L, 1048576L, assignment,
+      detached_signature_uri,
+      signature_partial,
+      0L,
+      self.signature_maximum_bytes,
+      assignment,
     ),
   )
   ArtifactSignatureVerifier::verify(

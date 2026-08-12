@@ -37,6 +37,9 @@ pub(all) suberror SchedulerStateError {
 pub struct FileScheduler {
   path : String
   mut capacity : Int
+  decision_history_limit : Int
+  background_capacity_percent : Int
+  normal_capacity_percent : Int
   quotas : Map[String, TenantQuota]
   active : Map[String, ActiveAdmission]
   usage : Map[String, TenantUsage]
@@ -82,15 +85,31 @@ async fn write_scheduler(path : String, snapshot : SchedulerSnapshot) -> Unit {
 pub async fn FileScheduler::open(
   path : String,
   capacity : Int,
+  decision_history_limit? : Int = 1024,
+  background_capacity_percent? : Int = 75,
+  normal_capacity_percent? : Int = 90,
 ) -> FileScheduler {
+  if decision_history_limit <= 0 || decision_history_limit > 65536 {
+    raise InvalidSchedulerState(
+      "decision history limit must be positive and bounded",
+    )
+  }
+  if background_capacity_percent <= 0 ||
+    background_capacity_percent > normal_capacity_percent ||
+    normal_capacity_percent > 100 {
+    raise InvalidSchedulerState("priority capacity percentages are invalid")
+  }
   let scheduler : FileScheduler = {
     path,
     capacity: capacity.max(1),
+    decision_history_limit,
+    background_capacity_percent,
+    normal_capacity_percent,
     quotas: Map([]),
     active: Map([]),
     usage: Map([]),
     decisions: [],
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   let mut pruned = false
   if @fs.exists(path) {
@@ -118,6 +137,10 @@ pub async fn FileScheduler::open(
       scheduler.usage[usage.tenant_ref] = usage
     }
     scheduler.decisions.push_iter(snapshot.decisions.iter())
+    while scheduler.decisions.length() > decision_history_limit {
+      ignore(scheduler.decisions.remove(0))
+      pruned = true
+    }
     if pruned {
       write_scheduler(path, scheduler.snapshot_unlocked())
     }
@@ -207,7 +230,12 @@ pub async fn FileScheduler::admit(
     return Rejected(reason=QuotaExceeded)
   }
   if self.active.length() >=
-    priority_capacity_limit(self.capacity, request.priority) {
+    priority_capacity_limit_with_policy(
+      self.capacity,
+      request.priority,
+      self.background_capacity_percent,
+      self.normal_capacity_percent,
+    ) {
     self.mutex.release()
     return Rejected(reason=AdmissionCapacityExceeded)
   }
@@ -324,7 +352,7 @@ pub async fn FileScheduler::place(
   let decision = place(nodes, requirements, policy)
   self.mutex.acquire()
   self.decisions.push(decision)
-  while self.decisions.length() > 1024 {
+  while self.decisions.length() > self.decision_history_limit {
     ignore(self.decisions.remove(0))
   }
   try self.persist() catch {

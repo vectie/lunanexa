@@ -72,9 +72,10 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_DATABASE_URL` | Secret-provided PostgreSQL URL; required when the backend is `postgres` |
 | `LUNANEXA_AVAILABLE_SECRET_REFS` | Comma-separated deployment-owned secret reference names available to preflight; never secret values |
 | `LUNANEXA_REQUIRE_WORKSPACE_LEASE` | `1` requires trusted subject, active grant and active lease before workload admission |
+| `LUNANEXA_ADMIN_SETTINGS_PATH` | Read-only validated global policy document shared by the controller and node agents; production default is `/etc/lunanexa/admin-policy/admin-settings.json` |
 | `LUNANEXA_CONTROLLER_EPOCH` | Positive fencing epoch, monotonically raised |
-| `LUNANEXA_ADMISSION_CAPACITY` | Maximum concurrent admitted workloads |
-| `LUNANEXA_RUNTIME_CONCURRENCY` | Maximum actively executing adapter calls; additional admitted work waits in the bounded queue |
+| `LUNANEXA_ADMISSION_CAPACITY` | Legacy migration override, used only when no administrator settings document is configured |
+| `LUNANEXA_RUNTIME_CONCURRENCY` | Legacy migration override, used only when no administrator settings document is configured |
 | `LUNANEXA_RECONCILIATION_ONLY` | `1` disables inference/operator writes during recovery |
 | `LUNANEXA_RUNTIME_ENDPOINT` | HTTPS serving-adapter endpoint |
 | `LUNANEXA_RUNTIME_ENDPOINTS_PATH` | Optional JSON array mapping scheduler node IDs to concrete HTTPS adapter endpoints; when present, routing is strict |

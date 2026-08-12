@@ -33,6 +33,20 @@ fn endpoint(base : String, path : String) -> String {
 }
 
 ///|
+/// Node-enforced policy is distributed by the administrator as the same
+/// validated document used by the management node. It is never supplied by a
+/// lease holder or workload request.
+async fn load_global_admin_settings() -> @settings.GlobalAdminSettings {
+  let configured = match @env.get_env_var("LUNANEXA_ADMIN_SETTINGS_PATH") {
+    Some(path) if path != "" =>
+      @settings.parse_global_admin_settings(@fs.read_file(path).text())
+    _ => @settings.default_global_admin_settings()
+  }
+  @settings.validate_global_admin_settings(configured)
+  configured
+}
+
+///|
 fn node_headers(node_id : String, token : String) -> Map[String, String] {
   {
     "Authorization": "Node \{token}",
@@ -240,6 +254,7 @@ async fn reconcile_exclusive_lease(
   helper : String,
   lease_guard : @nodelease.LeaseAgentGuard,
   state_path : String,
+  receipt_stale_after_ms : Int64,
 ) -> Unit {
   let now = @async.now()
   let mut control_available = true
@@ -282,7 +297,7 @@ async fn reconcile_exclusive_lease(
           pending_action,
           lease_guard.snapshot().last_receipt,
         )
-        .map(timestamp => now - timestamp >= 45000L)
+        .map(timestamp => now - timestamp >= receipt_stale_after_ms)
         .unwrap_or(false)
       if !stale {
         persist_lease_guard(state_path, lease_guard)
@@ -319,6 +334,7 @@ async fn ensure_certificate(
   node_token : String,
   certificate_path : String,
   public_key_ref : String,
+  renewal_lead_ms : Int64,
 ) -> Unit {
   if !@fs.exists(certificate_path) {
     let bootstrap_id = host_secret(
@@ -353,7 +369,7 @@ async fn ensure_certificate(
   if current.node_id != node_id {
     raise Failure::Failure("certificate belongs to a different node identity")
   }
-  if current.expires_unix_ms <= @async.now() + 300000L {
+  if current.expires_unix_ms <= @async.now() + renewal_lead_ms {
     let body : Json = { "node_id": node_id, "public_key_ref": public_key_ref }
     let (response, response_body) = @http.post(
       endpoint(base, "/v1/enrollment/rotate"),
@@ -412,6 +428,7 @@ async fn materialize_while_heartbeating(
   materializer : @node_agent.ArtifactMaterializer,
   artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
   assignment : @contracts.DesiredAssignment,
+  heartbeat_interval_ms : Int,
 ) -> @node_agent.MaterializedArtifact {
   @async.with_task_group <| group => {
     let task = group.spawn(() => {
@@ -421,7 +438,7 @@ async fn materialize_while_heartbeating(
       send_heartbeat(base, node_id, token, inventory, agent)
       match task.try_wait() {
         Some(artifact) => return artifact
-        None => @async.sleep(3000)
+        None => @async.sleep(heartbeat_interval_ms)
       }
     }
   }
@@ -442,9 +459,12 @@ async fn reconcile_once(
   lease_helper : String,
   lease_guard : @nodelease.LeaseAgentGuard,
   lease_state_path : String,
+  materialization_heartbeat_interval_ms : Int,
+  lease_receipt_stale_after_ms : Int64,
+  telemetry_limits : @settings.TelemetrySafetySettings,
 ) -> Unit {
   reconcile_exclusive_lease(
-    base, node_id, token, lease_helper, lease_guard, lease_state_path,
+    base, node_id, token, lease_helper, lease_guard, lease_state_path, lease_receipt_stale_after_ms,
   )
   let headers = node_headers(node_id, token)
   let (directive_response, directive_body) = @http.get(
@@ -488,7 +508,7 @@ async fn reconcile_once(
       try {
         let artifact = materialize_while_heartbeating(
           base, node_id, token, inventory, agent, materializer, artifact_verifier,
-          assignment,
+          assignment, materialization_heartbeat_interval_ms,
         )
         if assignment.lease_expires_unix_ms <= @async.now() {
           agent.observe_runtime(assignment.assignment_id, Failed)
@@ -517,7 +537,12 @@ async fn reconcile_once(
     "/usr/bin/nvidia-smi",
   )
   let mut sensors : @node_agent.AcceleratorSensorSnapshot? = None
-  try @node_agent.collect_accelerator_sensors(sensor_binary) catch {
+  try
+    @node_agent.collect_accelerator_sensors(
+      sensor_binary,
+      limits=telemetry_limits,
+    )
+  catch {
     _ => ()
   } noraise {
     sensor => sensors = Some(sensor)
@@ -628,6 +653,7 @@ async fn reconcile_once(
 
 ///|
 async fn main {
+  let global_settings = load_global_admin_settings()
   let base = environment("LUNANEXA_ENDPOINT")
   if !base.has_prefix("https://") &&
     !base.has_prefix("http://127.0.0.1:") &&
@@ -649,6 +675,7 @@ async fn main {
     token,
     certificate_path,
     environment("LUNANEXA_NODE_PUBLIC_KEY_REF"),
+    global_settings.control_timing.node_certificate_renewal_lead_ms,
   )
   let inventory : @contracts.NodeInventory = @json.from_json(
     @json.parse(
@@ -672,6 +699,7 @@ async fn main {
     environment("LUNANEXA_CONTAINER_ENGINE"),
     environment("LUNANEXA_RUNTIME_NETWORK"),
     environment("LUNANEXA_CONTAINER_ENGINE_ENDPOINT"),
+    pid_limit=global_settings.node_runtime.container_pid_limit,
   )
   let maximum_artifact_size_bytes = @env.get_env_var(
       "LUNANEXA_ARTIFACT_MAX_SIZE_BYTES",
@@ -688,6 +716,8 @@ async fn main {
     ),
     node_id~,
     maximum_artifact_size_bytes~,
+    io_chunk_bytes=global_settings.node_runtime.artifact_io_chunk_bytes,
+    signature_maximum_bytes=global_settings.node_runtime.signature_artifact_maximum_bytes,
     allow_http_loopback=@env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") ==
       Some("1"),
   )
@@ -704,11 +734,25 @@ async fn main {
   )
   while true {
     reconcile_once(
-      base, node_id, token, inventory, agent, verifier, supervisor, materializer,
-      artifact_verifier, state_path, lease_helper, lease_guard, lease_state_path,
+      base,
+      node_id,
+      token,
+      inventory,
+      agent,
+      verifier,
+      supervisor,
+      materializer,
+      artifact_verifier,
+      state_path,
+      lease_helper,
+      lease_guard,
+      lease_state_path,
+      global_settings.control_timing.materialization_heartbeat_interval_ms,
+      global_settings.control_timing.lease_receipt_stale_after_ms,
+      global_settings.telemetry_safety,
     ) catch {
       _ => println("LunaNexa node reconciliation failed; retrying")
     }
-    @async.sleep(5000)
+    @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)
   }
 }

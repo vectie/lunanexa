@@ -200,6 +200,14 @@ test "priority policy reserves bounded capacity for interactive work" {
   assert_eq(@scheduler.priority_capacity_limit(100, Normal), 90)
   assert_eq(@scheduler.priority_capacity_limit(100, Interactive), 100)
   assert_eq(@scheduler.priority_capacity_limit(100, Critical), 100)
+  assert_eq(
+    @scheduler.priority_capacity_limit_with_policy(100, Background, 60, 80),
+    60,
+  )
+  assert_eq(
+    @scheduler.priority_capacity_limit_with_policy(100, Normal, 60, 80),
+    80,
+  )
 }
 
 ///|

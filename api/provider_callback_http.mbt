@@ -31,6 +31,20 @@ fn valid_callback_identity(value : String) -> Bool {
   })
 }
 
+///|
+fn valid_provider_callback_secret_entry(key : String, secret : String) -> Bool {
+  let parts : Array[String] = []
+  for part in key.split("|") {
+    parts.push(part.to_owned())
+  }
+  parts.length() == 2 &&
+  valid_callback_identity(parts[0]) &&
+  valid_callback_identity(parts[1]) &&
+  secret.length() >= 32 &&
+  secret.length() <= 4096 &&
+  secret.all(character => character >= '!' && character <= '~')
+}
+
 ///| Provider adapters sign the exact raw request body and immutable routing
 
 ///|
@@ -88,10 +102,14 @@ async fn ApiService::handle_provider_callback(
   }
   let now_unix_ms = @async.now()
   if event_unix_ms <= 0L ||
-    event_unix_ms > now_unix_ms + 300000L ||
-    event_unix_ms < now_unix_ms - 300000L {
+    event_unix_ms >
+    now_unix_ms +
+    self.global_settings.control_timing.provider_callback_replay_window_ms ||
+    event_unix_ms <
+    now_unix_ms -
+    self.global_settings.control_timing.provider_callback_replay_window_ms {
     return api_error(
-      401, "CallbackExpired", "callback timestamp is outside the five-minute replay window",
+      401, "CallbackExpired", "callback timestamp is outside the configured replay window",
       false,
     )
   }

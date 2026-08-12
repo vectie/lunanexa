@@ -31,7 +31,7 @@ async test "controller transport failure cannot bypass offline lease expiry" {
   let state_path = "\{directory}/lease-agent.json"
   reconcile_exclusive_lease(
     "http://127.0.0.1:1", "dgx-offline-node", "node-token", "/usr/bin/false", lease_guard,
-    state_path,
+    state_path, 45000L,
   )
   assert_eq(lease_guard.snapshot().state, QuarantinedAgent)
   assert_true(@fs.exists(state_path))

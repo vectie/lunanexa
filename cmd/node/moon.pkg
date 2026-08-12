@@ -2,6 +2,7 @@ import {
   "vectie/lunanexa/node" @node_agent,
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/settings",
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/async/http",

@@ -1,5 +1,6 @@
 import {
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/settings",
   "vectie/lunanexa/workspace",
   "vectie/lunanexa/ui/i18n",
   "vectie/lunanexa/ui/workbench" @workbench_ui,

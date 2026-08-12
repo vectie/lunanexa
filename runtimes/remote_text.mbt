@@ -27,6 +27,8 @@ pub struct OpenAiTextRuntime {
   runtime_version : String
   image_digest : String
   artifact_digest : String
+  maximum_event_bytes : Int
+  maximum_response_bytes : Int
 }
 
 ///|
@@ -78,7 +80,24 @@ pub fn OpenAiTextRuntime::new(
     runtime_version,
     image_digest,
     artifact_digest,
+    maximum_event_bytes: 1048576,
+    maximum_response_bytes: 16777216,
   }
+}
+
+///|
+pub fn OpenAiTextRuntime::with_response_budgets(
+  self : OpenAiTextRuntime,
+  maximum_event_bytes : Int,
+  maximum_response_bytes : Int,
+) -> OpenAiTextRuntime raise RemoteRuntimeError {
+  if maximum_event_bytes < 65536 ||
+    maximum_event_bytes > 1048576 ||
+    maximum_response_bytes < maximum_event_bytes ||
+    maximum_response_bytes > 16777216 {
+    raise InvalidUpstreamResponse("runtime response budgets are invalid")
+  }
+  { ..self, maximum_event_bytes, maximum_response_bytes }
 }
 
 ///|
@@ -225,8 +244,10 @@ pub async fn OpenAiTextRuntime::invoke_at(
   let endpoint = self.endpoint_for(node_id)
   let (response, body) = @http.post(endpoint, upstream_request, headers~)
   let body_text = body.text()
-  if body_text.length() > 16777216 {
-    raise InvalidUpstreamResponse("upstream response exceeded the 16 MiB limit")
+  if body_text.length() > self.maximum_response_bytes {
+    raise InvalidUpstreamResponse(
+      "upstream response exceeded the configured limit",
+    )
   }
   if response.code < 200 || response.code >= 300 {
     raise UpstreamRejected(status=response.code, body=body_text)
@@ -306,9 +327,9 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       continue
     }
     let data = trimmed["data:".length():].trim()
-    if data.length() > 1048576 {
+    if data.length() > self.maximum_event_bytes {
       raise InvalidUpstreamResponse(
-        "upstream stream event exceeded the 1 MiB limit",
+        "upstream stream event exceeded the configured limit",
       )
     }
     if data == "[DONE]" {
@@ -331,9 +352,9 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     }
     if text is Some(value) {
       total_output_bytes += value.length()
-      if total_output_bytes > 16777216 {
+      if total_output_bytes > self.maximum_response_bytes {
         raise InvalidUpstreamResponse(
-          "upstream stream exceeded the 16 MiB limit",
+          "upstream stream exceeded the configured limit",
         )
       }
       sequence += 1

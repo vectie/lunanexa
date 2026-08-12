@@ -22,6 +22,7 @@ pub(all) struct CancellationReceipt {
 
 ///|
 pub struct ApiService {
+  global_settings : @settings.GlobalAdminSettings
   store : @store.FileStore
   access_store : @access.AccessStore?
   management_database : @database.PostgresDatabase?
@@ -69,6 +70,7 @@ pub fn ApiService::new(
   version : String,
 ) -> ApiService {
   {
+    global_settings: @settings.default_global_admin_settings(),
     store,
     access_store: None,
     management_database: None,
@@ -99,11 +101,11 @@ pub fn ApiService::new(
     node_token,
     version,
     active: Map([]),
-    active_mutex: @async.Mutex::Mutex(),
+    active_mutex: Mutex(),
     response_cache: Map([]),
     response_cache_order: [],
-    audit_mutex: @async.Mutex::Mutex(),
-    execution_slots: @async.Semaphore::Semaphore(128),
+    audit_mutex: Mutex(),
+    execution_slots: Semaphore(128),
   }
 }
 
@@ -118,6 +120,7 @@ pub fn ApiService::with_registry(
   version : String,
 ) -> ApiService {
   {
+    global_settings: @settings.default_global_admin_settings(),
     store,
     access_store: None,
     management_database: None,
@@ -148,11 +151,11 @@ pub fn ApiService::with_registry(
     node_token,
     version,
     active: Map([]),
-    active_mutex: @async.Mutex::Mutex(),
+    active_mutex: Mutex(),
     response_cache: Map([]),
     response_cache_order: [],
-    audit_mutex: @async.Mutex::Mutex(),
-    execution_slots: @async.Semaphore::Semaphore(128),
+    audit_mutex: Mutex(),
+    execution_slots: Semaphore(128),
   }
 }
 
@@ -168,6 +171,7 @@ pub fn ApiService::with_services(
   version : String,
 ) -> ApiService {
   {
+    global_settings: @settings.default_global_admin_settings(),
     store,
     access_store: None,
     management_database: None,
@@ -198,11 +202,11 @@ pub fn ApiService::with_services(
     node_token,
     version,
     active: Map([]),
-    active_mutex: @async.Mutex::Mutex(),
+    active_mutex: Mutex(),
     response_cache: Map([]),
     response_cache_order: [],
-    audit_mutex: @async.Mutex::Mutex(),
-    execution_slots: @async.Semaphore::Semaphore(128),
+    audit_mutex: Mutex(),
+    execution_slots: Semaphore(128),
   }
 }
 
@@ -220,6 +224,7 @@ pub fn ApiService::with_control_plane(
   version : String,
 ) -> ApiService {
   {
+    global_settings: @settings.default_global_admin_settings(),
     store,
     access_store: None,
     management_database: None,
@@ -250,11 +255,11 @@ pub fn ApiService::with_control_plane(
     node_token,
     version,
     active: Map([]),
-    active_mutex: @async.Mutex::Mutex(),
+    active_mutex: Mutex(),
     response_cache: Map([]),
     response_cache_order: [],
-    audit_mutex: @async.Mutex::Mutex(),
-    execution_slots: @async.Semaphore::Semaphore(128),
+    audit_mutex: Mutex(),
+    execution_slots: Semaphore(128),
   }
 }
 
@@ -410,11 +415,7 @@ pub fn ApiService::with_provider_callback_secrets(
   secrets : Map[String, String],
 ) -> ApiService raise {
   for key, secret in secrets {
-    if key.length() == 0 ||
-      key.length() > 256 ||
-      !key.contains_char('|') ||
-      secret.length() < 32 ||
-      secret.length() > 4096 {
+    if !valid_provider_callback_secret_entry(key, secret) {
       raise Failure::Failure("invalid provider callback secret configuration")
     }
   }
@@ -429,7 +430,30 @@ pub fn ApiService::with_runtime_concurrency(
   if concurrency <= 0 || concurrency > 4096 {
     raise Failure::Failure("runtime concurrency must be positive and bounded")
   }
-  { ..self, execution_slots: @async.Semaphore::Semaphore(concurrency) }
+  let scheduler = {
+    ..self.global_settings.scheduler,
+    runtime_concurrency: concurrency,
+  }
+  {
+    ..self,
+    global_settings: { ..self.global_settings, scheduler, },
+    execution_slots: Semaphore(concurrency),
+  }
+}
+
+///|
+/// Installs the management-node policy after validating every administrator
+/// value against LunaNexa's non-configurable safety ceilings.
+pub fn ApiService::with_global_admin_settings(
+  self : ApiService,
+  global_settings : @settings.GlobalAdminSettings,
+) -> ApiService raise {
+  @settings.validate_global_admin_settings(global_settings)
+  {
+    ..self,
+    execution_slots: Semaphore(global_settings.scheduler.runtime_concurrency),
+    global_settings,
+  }
 }
 
 ///|
@@ -473,7 +497,8 @@ async fn ApiService::cache_result(
     self.response_cache_order.push(idempotency_key)
   }
   self.response_cache[idempotency_key] = response
-  while self.response_cache_order.length() > 1024 {
+  while self.response_cache_order.length() >
+        self.global_settings.request_budgets.response_cache_entries {
     let oldest = self.response_cache_order.remove(0)
     ignore(self.response_cache.remove(oldest))
   }
@@ -740,6 +765,7 @@ fn data_classes(labels : Map[String, String]) -> Array[@contracts.DataClass] {
 fn scheduler_node(
   heartbeat : @contracts.NodeHeartbeat,
   now_unix_ms : Int64,
+  heartbeat_timeout_ms : Int64,
   ready_models? : Array[String]? = None,
 ) -> @scheduler.NodeSnapshot {
   let accelerators : Array[@contracts.AcceleratorInventory] = []
@@ -758,7 +784,7 @@ fn scheduler_node(
   )
   {
     node_id: heartbeat.node_id,
-    state: if now_unix_ms - heartbeat.timestamp_unix_ms > 15000L {
+    state: if now_unix_ms - heartbeat.timestamp_unix_ms > heartbeat_timeout_ms {
       Unreachable
     } else {
       heartbeat.state
@@ -801,7 +827,12 @@ async fn ApiService::managed_scheduler_node(
   now_unix_ms : Int64,
   ready_models? : Array[String]? = None,
 ) -> @scheduler.NodeSnapshot {
-  let snapshot = scheduler_node(heartbeat, now_unix_ms, ready_models~)
+  let snapshot = scheduler_node(
+    heartbeat,
+    now_unix_ms,
+    self.global_settings.control_timing.heartbeat_timeout_ms,
+    ready_models~,
+  )
   match self.exclusive_lease_store {
     Some(leases) if leases.node_blocks_managed_placement(heartbeat.node_id) =>
       { ..snapshot, state: Cordoned }
@@ -810,14 +841,16 @@ async fn ApiService::managed_scheduler_node(
 }
 
 ///|
-fn default_score_policy() -> @scheduler.ScorePolicy {
+fn score_policy(
+  settings : @settings.SchedulerPolicySettings,
+) -> @scheduler.ScorePolicy {
   {
     version: "placement-v1",
-    warm_model_weight: 10000,
-    headroom_weight: 1,
-    queue_weight: 2,
-    reliability_weight: 1,
-    utilization_weight: 1,
+    warm_model_weight: settings.warm_model_weight,
+    headroom_weight: settings.headroom_weight,
+    queue_weight: settings.queue_weight,
+    reliability_weight: settings.reliability_weight,
+    utilization_weight: settings.utilization_weight,
     validated_topology_profiles: [],
   }
 }
@@ -827,6 +860,24 @@ async fn ApiService::schedule_and_admit(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
 ) -> (HttpReply?, Array[String]) {
+  let now = @async.now()
+  let budgets = self.global_settings.request_budgets
+  if request.deadline_unix_ms > now + budgets.openai_max_deadline_ms ||
+    request.resource_ceiling.max_runtime_ms > budgets.openai_max_deadline_ms ||
+    request.resource_ceiling.max_input_units > budgets.openai_max_input_units ||
+    request.resource_ceiling.max_output_units > budgets.openai_max_output_units ||
+    request.resource_ceiling.max_accelerator_memory_mib >
+    budgets.openai_max_accelerator_memory_mib {
+    return (
+      Some(
+        api_error(
+          400, "RequestBudgetExceeded", "request exceeds the active administrator policy",
+          false,
+        ),
+      ),
+      [],
+    )
+  }
   guard self.scheduler is Some(scheduler) else { return (None, []) }
   guard self.registry is Some(registry) else {
     return (
@@ -873,7 +924,6 @@ async fn ApiService::schedule_and_admit(
       [],
     )
   }
-  let now = @async.now()
   let assignments = self.store.assignments()
   let nodes = [
     for heartbeat in self.store.heartbeats() => {
@@ -920,7 +970,7 @@ async fn ApiService::schedule_and_admit(
       multi_node: false,
       topology_profile: None,
     },
-    default_score_policy(),
+    score_policy(self.global_settings.scheduler),
   )
   guard decision.selected_node_id is Some(_) else {
     return (
@@ -995,7 +1045,12 @@ async fn ApiService::invoke_with_bounded_retry(
     error => {
       if @async.is_cancellation_error(error) ||
         !retryable_runtime_error(error) ||
-        !@scheduler.retry_allowed(request.idempotency_key, 1, 2, true) {
+        !@scheduler.retry_allowed(
+          request.idempotency_key,
+          1,
+          self.global_settings.scheduler.retry_attempts,
+          true,
+        ) {
         raise error
       }
       self.runtime.invoke_at(request, alternate)
@@ -1020,7 +1075,12 @@ async fn ApiService::invoke_stream_with_bounded_retry(
     error => {
       if @async.is_cancellation_error(error) ||
         !retryable_runtime_error(error) ||
-        !@scheduler.retry_allowed(request.idempotency_key, 1, 2, !emitted) {
+        !@scheduler.retry_allowed(
+          request.idempotency_key,
+          1,
+          self.global_settings.scheduler.retry_attempts,
+          !emitted,
+        ) {
         raise error
       }
       self.runtime.invoke_stream_at(request, alternate, output => {
@@ -1882,7 +1942,8 @@ async fn ApiService::handle_with_transport(
   body : String,
   allow_asserted_subject : Bool,
 ) -> HttpReply {
-  if body.length() > 1048576 {
+  if body.length() >
+    self.global_settings.request_budgets.maximum_request_body_bytes {
     return api_error(
       413, "PayloadTooLarge", "request body exceeds the public contract limit", false,
     )
@@ -1942,6 +2003,28 @@ async fn ApiService::handle_with_transport(
           "active"
         },
       })
+    (Get, "/v1/settings/effective") => {
+      if !bearer_authorized(headers, self.operator_token) &&
+        !bearer_authorized(headers, self.inference_token) &&
+        self.api_key_authorization(headers, Inference, false) is None {
+        return api_error(
+          401, "Unauthenticated", "valid enterprise or operator authority is required",
+          false,
+        )
+      }
+      json_reply(
+        200,
+        @settings.public_settings_view(self.global_settings).to_json(),
+      )
+    }
+    (Get, "/v1/settings/admin") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      json_reply(200, self.global_settings.to_json())
+    }
     (Get, "/metrics") => {
       if !bearer_authorized(headers, self.monitoring_token) {
         return api_error(
@@ -2336,7 +2419,7 @@ async fn ApiService::handle_with_transport(
         if @controller.node_unreachable(
             heartbeat.timestamp_unix_ms,
             now,
-            15000L,
+            self.global_settings.control_timing.heartbeat_timeout_ms,
           ) {
           actions.push(MarkNodeUnreachable(heartbeat.node_id))
         }
@@ -2490,9 +2573,11 @@ async fn ApiService::handle_with_transport(
       if issue.token_id == "" ||
         issue.secret.length() < 20 ||
         issue.expires_unix_ms <= now ||
-        issue.expires_unix_ms > now + 900000L {
+        issue.expires_unix_ms >
+        now +
+        self.global_settings.control_timing.bootstrap_token_max_lifetime_ms {
         return api_error(
-          400, "InvalidRequest", "bootstrap token must be strong and expire within 15 minutes",
+          400, "InvalidRequest", "bootstrap token must be strong and expire within the administrator limit",
           false,
         )
       }
@@ -2535,6 +2620,7 @@ async fn ApiService::handle_with_transport(
           request.node_auth_secret,
           request.public_key_ref,
           @async.now(),
+          certificate_lifetime_ms=self.global_settings.control_timing.node_certificate_lifetime_ms,
         )
       catch {
         _ =>
@@ -2568,7 +2654,12 @@ async fn ApiService::handle_with_transport(
         )
       }
       let certificate = try
-        enrollment.rotate(request.node_id, request.public_key_ref, @async.now())
+        enrollment.rotate(
+          request.node_id,
+          request.public_key_ref,
+          @async.now(),
+          certificate_lifetime_ms=self.global_settings.control_timing.node_certificate_lifetime_ms,
+        )
       catch {
         _ =>
           return api_error(
@@ -2599,8 +2690,10 @@ async fn ApiService::handle_with_transport(
         )
       }
       let now = @async.now()
-      if heartbeat.timestamp_unix_ms < now - 60000L ||
-        heartbeat.timestamp_unix_ms > now + 60000L {
+      if heartbeat.timestamp_unix_ms <
+        now - self.global_settings.control_timing.heartbeat_replay_window_ms ||
+        heartbeat.timestamp_unix_ms >
+        now + self.global_settings.control_timing.heartbeat_replay_window_ms {
         return api_error(
           409, "StaleGeneration", "heartbeat timestamp is outside the replay window",
           false,
@@ -3327,7 +3420,7 @@ pub async fn ApiService::handle(
 ///|
 fn api_method(request_method : @http.RequestMethod) -> ApiMethod? {
   match request_method {
-    @http.RequestMethod::Get => Some(Get)
+    Get => Some(Get)
     Post => Some(Post)
     Put => Some(Put)
     Delete => Some(Delete)
@@ -3428,7 +3521,11 @@ pub async fn ApiService::serve_on(
       return
     }
     if request.meth == Post && request.path == "/v1/chat/completions" {
-      let request_body = match read_bounded_request_body(reader, 1048576) {
+      let request_body = match
+        read_bounded_request_body(
+          reader,
+          self.global_settings.request_budgets.maximum_request_body_bytes,
+        ) {
         RequestBody(value) => value
         RequestBodyTooLarge => {
           send_listener_reply(
@@ -3453,7 +3550,8 @@ pub async fn ApiService::serve_on(
       guard decode_openai_chat(request_body) is Some(value) &&
         @contracts.valid_identifier(value.model) &&
         value.messages.length() > 0 &&
-        value.messages.length() <= 256 else {
+        value.messages.length() <= 256 &&
+        valid_openai_request_budget(value, self.global_settings.request_budgets) else {
         send_listener_reply(
           connection,
           api_error(
@@ -3540,6 +3638,7 @@ pub async fn ApiService::serve_on(
         request.headers,
         true,
         now,
+        self.global_settings.request_budgets,
       )
       try @contracts.validate_workload(workload) catch {
         _ => {
@@ -3623,7 +3722,11 @@ pub async fn ApiService::serve_on(
         connection.end_response()
         return
       }
-      let request_body = match read_bounded_request_body(reader, 1048576) {
+      let request_body = match
+        read_bounded_request_body(
+          reader,
+          self.global_settings.request_budgets.maximum_request_body_bytes,
+        ) {
         RequestBody(value) => value
         RequestBodyTooLarge => {
           let reply = api_error(
@@ -3651,7 +3754,8 @@ pub async fn ApiService::serve_on(
           return
         }
       }
-      if request_body.length() > 1048576 {
+      if request_body.length() >
+        self.global_settings.request_budgets.maximum_request_body_bytes {
         let reply = api_error(
           413, "PayloadTooLarge", "request body exceeds the public contract limit",
           false,
@@ -3719,7 +3823,11 @@ pub async fn ApiService::serve_on(
     }
     let body = match verb {
       Post | Put =>
-        match read_bounded_request_body(reader, 1048576) {
+        match
+          read_bounded_request_body(
+            reader,
+            self.global_settings.request_budgets.maximum_request_body_bytes,
+          ) {
           RequestBody(value) => value
           RequestBodyTooLarge => {
             let reply = api_error(

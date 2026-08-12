@@ -40,12 +40,23 @@ fn parse_sensor_value(value : String, maximum : Double) -> Double raise {
 ///|
 /// only node-level statistics; it never reports tenant inputs or process data.
 pub fn parse_nvidia_smi_csv(output : String) -> AcceleratorSensorSnapshot raise {
+  parse_nvidia_smi_csv_with_limits(
+    output,
+    @settings.default_global_admin_settings().telemetry_safety,
+  )
+}
+
+///|
+pub fn parse_nvidia_smi_csv_with_limits(
+  output : String,
+  limits : @settings.TelemetrySafetySettings,
+) -> AcceleratorSensorSnapshot raise {
   let rows = output
     .split("\n")
     .map(row => row.trim().to_owned())
     .filter(row => row != "")
     .collect()
-  if rows.length() == 0 || rows.length() > 1024 {
+  if rows.length() == 0 || rows.length() > limits.maximum_sensor_rows {
     raise TelemetryCollectorError::MalformedSample("accelerator row count")
   }
   let mut memory_used = 0.0
@@ -54,7 +65,8 @@ pub fn parse_nvidia_smi_csv(output : String) -> AcceleratorSensorSnapshot raise 
   let mut maximum_temperature = 0.0
   let mut power_watts = 0.0
   for row in rows {
-    if row.length() > 512 || row.contains("N/A") {
+    if row.length() > limits.maximum_sensor_row_characters ||
+      row.contains("N/A") {
       raise TelemetryCollectorError::MalformedSample(row)
     }
     let fields = row.split(",").map(field => field.trim().to_owned()).collect()
@@ -62,10 +74,13 @@ pub fn parse_nvidia_smi_csv(output : String) -> AcceleratorSensorSnapshot raise 
       raise TelemetryCollectorError::MalformedSample(row)
     }
     let utilization = parse_sensor_value(fields[0], 100.0)
-    let used = parse_sensor_value(fields[1], 1000000000.0)
-    let total = parse_sensor_value(fields[2], 1000000000.0)
-    let temperature = parse_sensor_value(fields[3], 200.0)
-    let power = parse_sensor_value(fields[4], 100000.0)
+    let used = parse_sensor_value(fields[1], limits.maximum_memory_mib)
+    let total = parse_sensor_value(fields[2], limits.maximum_memory_mib)
+    let temperature = parse_sensor_value(
+      fields[3],
+      limits.maximum_temperature_celsius,
+    )
+    let power = parse_sensor_value(fields[4], limits.maximum_power_watts)
     if total <= 0.0 || used > total {
       raise TelemetryCollectorError::MalformedSample(row)
     }
@@ -95,6 +110,7 @@ pub fn parse_nvidia_smi_csv(output : String) -> AcceleratorSensorSnapshot raise 
 /// environment, so inventory or control-plane data cannot become commands.
 pub async fn collect_accelerator_sensors(
   binary : String,
+  limits? : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
 ) -> AcceleratorSensorSnapshot {
   if binary != "/usr/bin/nvidia-smi" && binary != "/usr/local/bin/nvidia-smi" {
     raise TelemetryCollectorError::UnsupportedBinary(binary)
@@ -110,5 +126,5 @@ pub async fn collect_accelerator_sensors(
   if status != 0 {
     raise TelemetryCollectorError::CommandFailed(status)
   }
-  parse_nvidia_smi_csv(stdout.text())
+  parse_nvidia_smi_csv_with_limits(stdout.text(), limits)
 }

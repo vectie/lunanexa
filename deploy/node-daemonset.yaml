@@ -34,6 +34,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: LUNANEXA_ADMIN_SETTINGS_PATH
+              value: /etc/lunanexa/admin-policy/admin-settings.json
             - name: LUNANEXA_NODE_INVENTORY_PATH
               value: /etc/lunanexa/inventory.json
             - name: LUNANEXA_NODE_STATE_PATH
@@ -88,6 +90,9 @@ spec:
               readOnly: true
             - name: node-state
               mountPath: /var/lib/lunanexa
+            - name: admin-settings
+              mountPath: /etc/lunanexa/admin-policy
+              readOnly: true
             - name: podman-socket
               mountPath: /run/podman/podman.sock
             - name: lease-helper-socket
@@ -101,6 +106,9 @@ spec:
           hostPath:
             path: /var/lib/lunanexa
             type: DirectoryOrCreate
+        - name: admin-settings
+          configMap:
+            name: lunanexa-admin-settings
         - name: podman-socket
           hostPath:
             path: /run/podman/podman.sock

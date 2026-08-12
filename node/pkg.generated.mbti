@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/settings",
 }
 
 // Values
@@ -15,13 +16,15 @@ pub fn classify_materialized_runtime_inspection(String, String, String, String) 
 
 pub fn classify_runtime_inspection(String, String, String) -> @contracts.DeploymentState raise RuntimeSupervisorError
 
-pub async fn collect_accelerator_sensors(String) -> AcceleratorSensorSnapshot
+pub async fn collect_accelerator_sensors(String, limits? : @settings.TelemetrySafetySettings) -> AcceleratorSensorSnapshot
 
 pub fn health(String) -> @contracts.HealthResponse
 
 pub fn heartbeat_signature(@contracts.NodeHeartbeat, String) -> String
 
 pub fn parse_nvidia_smi_csv(String) -> AcceleratorSensorSnapshot raise
+
+pub fn parse_nvidia_smi_csv_with_limits(String, @settings.TelemetrySafetySettings) -> AcceleratorSensorSnapshot raise
 
 // Errors
 pub(all) suberror ArtifactMaterializationError {
@@ -42,6 +45,7 @@ pub(all) suberror NodeError {
   StaleControllerEpoch
   StaleGeneration
   LeaseExpired
+  InvalidCertificateLifetime
   InvalidStateSchema
 } derive(Eq, @debug.Debug)
 
@@ -73,10 +77,12 @@ pub struct ArtifactMaterializer {
   credential : String
   node_id : String
   maximum_artifact_size_bytes : Int64
+  io_chunk_bytes : Int
+  signature_maximum_bytes : Int64
   verified : Map[String, Bool]
 }
 pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(Self, @contracts.DesiredAssignment, V) -> MaterializedArtifact
-pub async fn ArtifactMaterializer::open(String, String, String, node_id? : String, maximum_artifact_size_bytes? : Int64, allow_http_loopback? : Bool) -> Self
+pub async fn ArtifactMaterializer::open(String, String, String, node_id? : String, maximum_artifact_size_bytes? : Int64, io_chunk_bytes? : Int, signature_maximum_bytes? : Int64, allow_http_loopback? : Bool) -> Self
 pub async fn ArtifactMaterializer::prune_unassigned(Self, Array[String]) -> Unit
 
 pub(all) struct BootstrapToken {
@@ -99,11 +105,11 @@ pub struct EnrollmentService {
   authorities : Map[String, NodeAuthority]
 }
 pub fn EnrollmentService::authorized(Self, String, String, Int64) -> Bool
-pub fn EnrollmentService::enroll(Self, String, String, String, String, String, Int64) -> NodeCertificate raise NodeError
+pub fn EnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate raise NodeError
 pub fn EnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
 pub fn EnrollmentService::new() -> Self
 pub fn EnrollmentService::restore(String) -> Self raise
-pub fn EnrollmentService::rotate(Self, String, String, Int64) -> NodeCertificate raise NodeError
+pub fn EnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate raise NodeError
 pub fn EnrollmentService::snapshot(Self) -> String
 
 pub(all) struct EnrollmentSnapshot {
@@ -119,10 +125,10 @@ pub struct FileEnrollmentService {
   mutex : @async.Mutex
 }
 pub async fn FileEnrollmentService::authorized(Self, String, String, Int64) -> Bool
-pub async fn FileEnrollmentService::enroll(Self, String, String, String, String, String, Int64) -> NodeCertificate
+pub async fn FileEnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
 pub async fn FileEnrollmentService::open(String) -> Self
-pub async fn FileEnrollmentService::rotate(Self, String, String, Int64) -> NodeCertificate
+pub async fn FileEnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 
 pub struct MaterializedArtifact {
   digest : String
@@ -188,9 +194,10 @@ pub struct OciRuntimeSupervisor {
   engine : String
   network : String
   engine_endpoint : String
+  pid_limit : Int
 }
 pub async fn OciRuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, MaterializedArtifact) -> RuntimeInstance
-pub fn OciRuntimeSupervisor::new(String, String, String) -> Self raise
+pub fn OciRuntimeSupervisor::new(String, String, String, pid_limit? : Int) -> Self raise
 pub async fn OciRuntimeSupervisor::stop(Self, String) -> Unit
 
 pub(all) struct RuntimeInstance {

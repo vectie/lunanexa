@@ -16,6 +16,7 @@ import {
   "vectie/lunanexa/registry",
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/scheduler",
+  "vectie/lunanexa/settings",
   "vectie/lunanexa/telemetry",
   "vectie/lunanexa/workspace/directory",
 }
@@ -40,6 +41,7 @@ pub(all) enum ApiMethod {
 } derive(Eq, @debug.Debug)
 
 pub struct ApiService {
+  global_settings : @settings.GlobalAdminSettings
   store : @vectie/lunanexa/store.FileStore
   access_store : @access.AccessStore?
   management_database : @database.PostgresDatabase?
@@ -88,6 +90,7 @@ pub fn ApiService::with_control_plane(@vectie/lunanexa/store.FileStore, @registr
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
+pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self

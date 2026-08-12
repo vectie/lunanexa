@@ -27,7 +27,7 @@ pub async fn FileEnrollmentService::open(
   } else {
     EnrollmentService::new()
   }
-  let durable = { path, service, mutex: @async.Mutex::Mutex() }
+  let durable = { path, service, mutex: Mutex() }
   if !@fs.exists(path) {
     write_enrollment(path, service.snapshot())
   }
@@ -56,11 +56,18 @@ pub async fn FileEnrollmentService::enroll(
   node_auth_secret : String,
   public_key_ref : String,
   now_unix_ms : Int64,
+  certificate_lifetime_ms? : Int64 = 3600000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
   try {
     let certificate = self.service.enroll(
-      node_id, token_id, secret, node_auth_secret, public_key_ref, now_unix_ms,
+      node_id,
+      token_id,
+      secret,
+      node_auth_secret,
+      public_key_ref,
+      now_unix_ms,
+      certificate_lifetime_ms~,
     )
     self.persist_and_release()
     certificate
@@ -91,10 +98,16 @@ pub async fn FileEnrollmentService::rotate(
   node_id : String,
   public_key_ref : String,
   now_unix_ms : Int64,
+  certificate_lifetime_ms? : Int64 = 3600000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
   try {
-    let certificate = self.service.rotate(node_id, public_key_ref, now_unix_ms)
+    let certificate = self.service.rotate(
+      node_id,
+      public_key_ref,
+      now_unix_ms,
+      certificate_lifetime_ms~,
+    )
     self.persist_and_release()
     certificate
   } catch {

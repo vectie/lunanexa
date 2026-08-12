@@ -1517,3 +1517,90 @@ async test "operator stop removes desired assignment with durable audit evidence
   assert_eq(restored.audit_events()[0].action, "assignment.stop")
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "settings views preserve admin and enterprise authority boundaries" {
+  let directory = @fs.tmpdir(prefix="lunanexa-settings-view-")
+  let store = @store.FileStore::open("\{directory}/control.json")
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let defaults = @settings.default_global_admin_settings()
+  let configured = { ..defaults, generation: 7L }
+  let service = @api.ApiService::new(
+    store, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+  ).with_global_admin_settings(configured)
+  let denied = service.handle(Get, "/v1/settings/effective", Map([]), "")
+  assert_eq(denied.status, 401)
+  let enterprise = service.handle(
+    Get,
+    "/v1/settings/effective",
+    { "Authorization": "Bearer inference-token" },
+    "",
+  )
+  assert_eq(enterprise.status, 200)
+  let public_view : @settings.PublicSettingsView = @json.from_json(
+    @json.parse(enterprise.body),
+  )
+  assert_eq(public_view.global_generation, 7L)
+  assert_false(enterprise.body.contains("telemetry_safety"))
+  let admin_denied = service.handle(
+    Get,
+    "/v1/settings/admin",
+    { "Authorization": "Bearer inference-token" },
+    "",
+  )
+  assert_eq(admin_denied.status, 401)
+  let admin = service.handle(
+    Get,
+    "/v1/settings/admin",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_eq(admin.status, 200)
+  assert_true(admin.body.contains("telemetry_safety"))
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "enterprise workload cannot override administrator request budget" {
+  let directory = @fs.tmpdir(prefix="lunanexa-settings-budget-")
+  let store = @store.FileStore::open("\{directory}/control.json")
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let defaults = @settings.default_global_admin_settings()
+  let configured = {
+    ..defaults,
+    request_budgets: {
+      ..defaults.request_budgets,
+      openai_default_output_units: 8,
+      openai_max_output_units: 8,
+    },
+  }
+  let service = @api.ApiService::new(
+    store, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+  ).with_global_admin_settings(configured)
+  let rejected = service.handle(
+    Post,
+    "/v1/workloads",
+    {
+      "Authorization": "Bearer inference-token",
+      "Content-Type": "application/json",
+    },
+    api_request().to_json().stringify(),
+  )
+  assert_eq(rejected.status, 400)
+  assert_true(rejected.body.contains("RequestBudgetExceeded"))
+  @fs.rmdir(directory, recursive=true)
+}

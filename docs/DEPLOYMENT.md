@@ -468,6 +468,14 @@ Render a private overlay that replaces:
 - the management/GPU node selectors;
 - any deployment-specific network-policy addresses.
 
+Review `deploy/admin-settings.example.json` as an operator-owned artifact,
+increment its `generation` for every approved policy change, and place it in
+the `lunanexa-admin-settings` ConfigMap. The same read-only document is mounted
+by the controller and all node agents. Enterprise users cannot mutate it; their
+request choices are bounded by it, while locale and editor presentation remain
+browser-local. See [settings authority](SETTINGS_AUTHORITY.md) for the complete
+ownership table and validation limits.
+
 Keep rendered manifests outside Git if they contain private inventory. Review
 them for unresolved placeholders before applying:
 

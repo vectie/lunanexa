@@ -10,6 +10,7 @@ import {
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/scheduler",
+  "vectie/lunanexa/settings",
   "vectie/lunanexa/telemetry",
   "vectie/lunanexa/technical",
   "vectie/lunanexa/technical/store" @technical_store,

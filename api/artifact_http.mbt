@@ -61,6 +61,10 @@ fn range_start(headers : Map[String, String], size : Int64) -> Int64? {
         return None
       }
       let raw = value["bytes=".length():value.length() - 1].to_owned()
+      if raw == "" ||
+        !raw.all(character => character >= '0' && character <= '9') {
+        return None
+      }
       let parsed = @string.parse_int64(raw) catch { _ => return None }
       if parsed < 0L || parsed >= size {
         None
@@ -68,6 +72,51 @@ fn range_start(headers : Map[String, String], size : Int64) -> Int64? {
         Some(parsed)
       }
     }
+  }
+}
+
+///|
+async fn resolved_artifact_path(root : String, key : String) -> String? {
+  let canonical_root = try @fs.realpath(root) catch {
+    _ => return None
+  } noraise {
+    value => value
+  }
+  if canonical_root == "/" {
+    return None
+  }
+  let candidate = try @fs.realpath("\{canonical_root}/\{key}") catch {
+    _ => return None
+  } noraise {
+    value => value
+  }
+  if !candidate.has_prefix("\{canonical_root}/") {
+    return None
+  }
+  let kind = try @fs.kind(candidate, follow_symlink=false) catch {
+    _ => return None
+  } noraise {
+    value => value
+  }
+  if kind == Regular {
+    Some(candidate)
+  } else {
+    None
+  }
+}
+
+///|
+fn artifact_size_allowed(
+  assignment : @contracts.DesiredAssignment,
+  key : String,
+  size : Int64,
+  signature_maximum_bytes : Int64,
+) -> Bool {
+  if artifact_key(assignment.artifact.uri) == Some(key) {
+    size == assignment.artifact.size_bytes
+  } else {
+    assignment_signature_key(assignment) == Some(key) &&
+    size <= signature_maximum_bytes
   }
 }
 
@@ -124,7 +173,8 @@ async fn ApiService::consume_artifact_grant(
     model_digest: assignment.artifact.digest,
     scope: ModelRead,
     issued_unix_ms: now_unix_ms,
-    expires_unix_ms: now_unix_ms + 300000L,
+    expires_unix_ms: now_unix_ms +
+    self.global_settings.control_timing.artifact_transfer_grant_lifetime_ms,
   }
   let requested : @technical.TransferGrantUse = {
     node_id: assignment.node_id,
@@ -138,7 +188,7 @@ async fn ApiService::consume_artifact_grant(
       requested,
       Verified,
       now_unix_ms,
-      300000L,
+      self.global_settings.control_timing.artifact_transfer_grant_lifetime_ms,
     ) {
     Accepted(_) => Some(grant.grant_id)
     Rejected(_) => None
@@ -187,15 +237,13 @@ async fn ApiService::serve_artifact(
     return true
   }
   let now = @async.now()
-  guard self.artifact_assignment(request.headers, key, now) is Some(assignment) &&
-    self.consume_artifact_grant(assignment, key, now) is Some(grant_id) else {
+  guard self.artifact_assignment(request.headers, key, now) is Some(assignment) else {
     send_artifact_error(
       connection, 401, "a live node-bound assignment and transfer grant are required",
     )
     return true
   }
-  let path = "\{root}/\{key}"
-  if !@fs.exists(path) {
+  guard resolved_artifact_path(root, key) is Some(path) else {
     send_artifact_error(connection, 404, "artifact was not found")
     return true
   }
@@ -216,8 +264,26 @@ async fn ApiService::serve_artifact(
   } noraise {
     value => value
   }
-  guard size > 0L && range_start(request.headers, size) is Some(start) else {
+  if size <= 0L ||
+    !artifact_size_allowed(
+      assignment,
+      key,
+      size,
+      self.global_settings.node_runtime.signature_artifact_maximum_bytes,
+    ) {
+    send_artifact_error(
+      connection, 409, "artifact metadata does not match its assignment",
+    )
+    return true
+  }
+  guard range_start(request.headers, size) is Some(start) else {
     send_artifact_error(connection, 416, "artifact range is invalid")
+    return true
+  }
+  guard self.consume_artifact_grant(assignment, key, now) is Some(grant_id) else {
+    send_artifact_error(
+      connection, 401, "a live node-bound assignment and transfer grant are required",
+    )
     return true
   }
   let remaining = size - start
@@ -234,7 +300,9 @@ async fn ApiService::serve_artifact(
   }
   connection.send_response(status, reason(status), extra_headers=headers)
   for position = start; position < size; {
-    let count = (size - position).min(1048576L).to_int()
+    let count = (size - position)
+      .min(self.global_settings.node_runtime.artifact_io_chunk_bytes.to_int64())
+      .to_int()
     let bytes = file.read_exactly_at(count, position~)
     connection.write(bytes)
     continue position + Int64::from_int(count)

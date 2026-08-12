@@ -26,6 +26,17 @@ fn decode_openai_chat(body : String) -> OpenAiChatRequest? {
 }
 
 ///|
+fn valid_openai_request_budget(
+  value : OpenAiChatRequest,
+  budgets : @settings.RequestBudgetSettings,
+) -> Bool {
+  match value.max_tokens {
+    None => true
+    Some(units) => units > 0 && units <= budgets.openai_max_output_units
+  }
+}
+
+///|
 fn decode_api_key_intent(body : String) -> @access.ApiKeyIssueIntent? {
   try @json.from_json(@json.parse(body)) catch {
     _ => None
@@ -41,7 +52,9 @@ fn bearer_secret(headers : Map[String, String]) -> String? {
     return None
   }
   let secret = value["Bearer ".length():].to_owned()
-  if secret == "" || secret.contains_char(' ') || secret.contains_char('\n') {
+  if secret == "" ||
+    secret.length() > 4096 ||
+    !secret.all(character => character >= '!' && character <= '~') {
     None
   } else {
     Some(secret)
@@ -215,7 +228,8 @@ async fn ApiService::handle_openai_compatibility(
       guard decode_openai_chat(body) is Some(value) &&
         @contracts.valid_identifier(value.model) &&
         value.messages.length() > 0 &&
-        value.messages.length() <= 256 else {
+        value.messages.length() <= 256 &&
+        valid_openai_request_budget(value, self.global_settings.request_budgets) else {
         return api_error(
           400, "InvalidRequest", "invalid OpenAI-compatible chat request", false,
         )
@@ -272,7 +286,12 @@ async fn ApiService::invoke_openai_chat(
 ) -> HttpReply {
   let now = @async.now()
   let (request, request_digest) = openai_workload(
-    value, authority, headers, false, now,
+    value,
+    authority,
+    headers,
+    false,
+    now,
+    self.global_settings.request_budgets,
   )
   @contracts.validate_workload(request) catch {
     _ =>
@@ -336,11 +355,12 @@ fn openai_workload(
   headers : Map[String, String],
   stream : Bool,
   now : Int64,
+  budgets : @settings.RequestBudgetSettings,
 ) -> (@contracts.WorkloadEnvelope, String) {
   let request_digest = digest_hex("\{body_identity(value)}|\{now}")
   let requested_output = value.max_tokens
-    .unwrap_or(1024)
-    .clamp(min=1, max=131072)
+    .unwrap_or(budgets.openai_default_output_units)
+    .clamp(min=1, max=budgets.openai_max_output_units)
   let idempotency = header(headers, "idempotency-key").unwrap_or(
     "openai-\{request_digest[:32]}",
   )
@@ -360,14 +380,14 @@ fn openai_workload(
       allow_cache: false,
       allow_training_reuse: false,
     },
-    deadline_unix_ms: now + 120000L,
+    deadline_unix_ms: now + budgets.openai_default_deadline_ms,
     priority: Interactive,
     latency_class: Realtime,
     resource_ceiling: {
-      max_input_units: 1048576,
+      max_input_units: budgets.openai_max_input_units,
       max_output_units: requested_output,
-      max_runtime_ms: 120000L,
-      max_accelerator_memory_mib: 1048576,
+      max_runtime_ms: budgets.openai_default_deadline_ms,
+      max_accelerator_memory_mib: budgets.openai_max_accelerator_memory_mib,
     },
     stream,
     output_format: "openai.chat.completion",

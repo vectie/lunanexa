@@ -38,7 +38,7 @@ fn workspace_capability(
   capability : @contracts.Capability,
 ) -> @workspace.WorkspaceCapability? {
   match capability {
-    @contracts.Capability::TextGenerate => Some(TextGenerate)
+    TextGenerate => Some(TextGenerate)
     EmbeddingCreate => Some(EmbeddingCreate)
     ImageGenerate => Some(ImageGenerate)
     VideoGenerate => Some(VideoGenerate)
@@ -192,7 +192,8 @@ async fn ApiService::workspace_admit(
       false,
     )
   }
-  let maximum_reservation_expiry = now + 86400000L
+  let maximum_reservation_expiry = now +
+    self.global_settings.control_timing.workspace_reservation_max_lifetime_ms
   let reservation_expiry = if request.deadline_unix_ms <
     maximum_reservation_expiry {
     request.deadline_unix_ms

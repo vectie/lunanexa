@@ -33,7 +33,10 @@ priv enum PublicFailureKind {
 
 ///|
 priv enum ClientOutcome {
-  WorkspaceLoaded(@workspace.WorkspaceSelfContract)
+  WorkspaceLoaded(
+    @workspace.WorkspaceSelfContract,
+    @settings.PublicSettingsView
+  )
   RequestCompleted(RequestResult)
   PublicFailure(PublicFailureKind, String, Bool)
   ClockAdvanced(Int64, Int64)
@@ -46,6 +49,8 @@ priv struct AppModel {
   subject_ref : String
   connecting : Bool
   clock_generation : Int64
+  global_policy_generation : Int64
+  global_max_output_units : Int
   workbench : @workbench_ui.WorkbenchState
 } derive(Eq)
 
@@ -95,6 +100,45 @@ extern "js" fn persist_locale(value : String) -> Unit =
   #|     globalThis.localStorage?.setItem("lunanexa.locale", value);
   #|   } catch (_) {}
   #| }
+
+///|
+extern "js" fn stored_local_preferences() -> String =
+  #| () => {
+  #|   try {
+  #|     const value = globalThis.localStorage?.getItem("lunanexa.userPreferences.v1");
+  #|     return typeof value === "string" && value.length <= 4096 ? value : "";
+  #|   } catch (_) { return ""; }
+  #| }
+
+///|
+extern "js" fn persist_local_preferences(value : String) -> Unit =
+  #| value => {
+  #|   try { globalThis.localStorage?.setItem("lunanexa.userPreferences.v1", value); }
+  #|   catch (_) {}
+  #| }
+
+///|
+fn load_local_preferences() -> @settings.UserLocalPreferences {
+  let fallback = @settings.default_user_local_preferences()
+  let raw = stored_local_preferences()
+  if raw == "" {
+    let legacy_locale = stored_locale()
+    return if legacy_locale == "" {
+      fallback
+    } else {
+      { ..fallback, locale: legacy_locale }
+    }
+  }
+  try {
+    let preferences : @settings.UserLocalPreferences = @json.from_json(
+      @json.parse(raw),
+    )
+    @settings.validate_user_local_preferences(preferences)
+    preferences
+  } catch {
+    _ => fallback
+  }
+}
 
 ///|
 extern "js" fn apply_document_locale(tag : String, title : String) -> Unit =
@@ -270,6 +314,18 @@ async fn load_workspace(
     @json.parse(self_text),
   )
   self_contract
+}
+
+///|
+async fn load_effective_settings(
+  endpoint : String,
+  token : String,
+  subject_ref : String,
+) -> @settings.PublicSettingsView {
+  let text = request(
+    "GET", endpoint, "/v1/settings/effective", token, subject_ref,
+  )
+  @json.from_json(@json.parse(text))
 }
 
 ///|
@@ -582,9 +638,19 @@ fn connect_command(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
-    try
-      load_workspace(model.endpoint, model.scoped_token, model.subject_ref)
-    catch {
+    try {
+      let contract = load_workspace(
+        model.endpoint,
+        model.scoped_token,
+        model.subject_ref,
+      )
+      let policy = load_effective_settings(
+        model.endpoint,
+        model.scoped_token,
+        model.subject_ref,
+      )
+      (contract, policy)
+    } catch {
       WorkbenchClientError::PublicRejected(
         code,
         message,
@@ -594,7 +660,7 @@ fn connect_command(
       ) => PublicFailure(PublicDetail(code, message, retryable), receipt, stale)
       _ => PublicFailure(WorkspaceLoadUnavailable, "", true)
     } noraise {
-      contract => WorkspaceLoaded(contract)
+      (contract, policy) => WorkspaceLoaded(contract, policy)
     }
   })
 }
@@ -770,8 +836,39 @@ fn update(
         (next, @rabbita.none)
       }
     }
+    Workbench(ModelChanged(value)) => {
+      persist_local_preferences(
+        {
+          ..@settings.default_user_local_preferences(),
+          locale: model.workbench.locale.storage_value(),
+          default_model_alias: value,
+        }
+        .to_json()
+        .stringify(),
+      )
+      (
+        {
+          ..model,
+          workbench: update_workbench_at(
+            model.workbench,
+            ModelChanged(value),
+            current_unix_ms(),
+          ),
+        },
+        @rabbita.none,
+      )
+    }
     Workbench(LocaleChanged(locale)) => {
       persist_locale(locale.storage_value())
+      persist_local_preferences(
+        {
+          ..@settings.default_user_local_preferences(),
+          locale: locale.storage_value(),
+          default_model_alias: model.workbench.model_selector,
+        }
+        .to_json()
+        .stringify(),
+      )
       sync_document_locale(locale)
       (
         {
@@ -797,11 +894,13 @@ fn update(
         },
         @rabbita.none,
       )
-    Outcome(WorkspaceLoaded(contract)) => {
+    Outcome(WorkspaceLoaded(contract, policy)) => {
       let next = {
         ..model,
         connecting: false,
         subject_ref: contract.subject_ref,
+        global_policy_generation: policy.global_generation,
+        global_max_output_units: policy.request_budgets.openai_max_output_units,
         workbench: state_from_workspace(model.workbench, contract),
       }
       (next, lease_clock_command(next.workbench, next.clock_generation, emit))
@@ -1049,6 +1148,18 @@ fn app_view(
               "令牌仅保留在此页面的浏览器内存中，绝不会以明文显示或写入日志，也绝不会发送到受管 GPU 节点。已验证的 mTLS 入口会自动派生不透明主体；只有回环验收客户端可以直接发送主体标头。",
             ),
           ),
+          if model.global_policy_generation > 0L {
+            @html.p(
+              class="connection-security",
+              app_copy(
+                locale,
+                "Global policy generation \{model.global_policy_generation}; administrator output ceiling \{model.global_max_output_units} units. Language, remembered model, and editor presentation remain local to this browser.",
+                "全局策略版本 \{model.global_policy_generation}；管理员输出上限为 \{model.global_max_output_units} 单位。语言、记住的模型和编辑器显示设置仅保留在此浏览器。",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
           if model.connecting {
             @html.p(
               class="connection-loading",
@@ -1075,7 +1186,8 @@ fn app_view(
 
 ///|
 fn main {
-  let locale = @i18n.parse_locale(stored_locale())
+  let local_preferences = load_local_preferences()
+  let locale = @i18n.parse_locale(local_preferences.locale)
   sync_document_locale(locale)
   @rabbita.elmish(
     model={
@@ -1084,9 +1196,14 @@ fn main {
       subject_ref: "",
       connecting: false,
       clock_generation: 0L,
-      workbench: @workbench_ui.default_state(current_unix_ms()).update(
-        LocaleChanged(locale),
-      ),
+      global_policy_generation: 0L,
+      global_max_output_units: 0,
+      workbench: {
+        ..@workbench_ui.default_state(current_unix_ms()).update(
+          LocaleChanged(locale),
+        ),
+        model_selector: local_preferences.default_model_alias,
+      },
     },
     view=app_view,
     update~,

@@ -6,10 +6,13 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/settings",
 }
 
 // Values
 pub fn bounded_metric(@contracts.TelemetrySample) -> Bool
+
+pub fn bounded_metric_with_settings(@contracts.TelemetrySample, @settings.TelemetrySafetySettings) -> Bool
 
 pub fn build_evidence_bundle(Array[BenchmarkSummary], EvidenceBundleInput) -> EvidenceBundle
 
@@ -111,12 +114,15 @@ pub(all) struct EvidenceBundleInput {
 
 pub struct FileTelemetry {
   path : String
+  sample_history_limit : Int
+  benchmark_history_limit : Int
+  safety_limits : @settings.TelemetrySafetySettings
   samples : Array[@contracts.TelemetrySample]
   benchmark_runs : Array[BenchmarkRun]
   benchmark_summaries : Array[BenchmarkSummary]
   mutex : @async.Mutex
 }
-pub async fn FileTelemetry::open(String) -> Self
+pub async fn FileTelemetry::open(String, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
 pub async fn FileTelemetry::record_benchmark(Self, BenchmarkRun) -> BenchmarkSummary
 pub async fn FileTelemetry::record_sample(Self, @contracts.TelemetrySample) -> Unit
 pub async fn FileTelemetry::snapshot(Self) -> TelemetrySnapshot

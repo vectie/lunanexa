@@ -55,6 +55,8 @@ pub struct OpenAiTextRuntime {
   runtime_version : String
   image_digest : String
   artifact_digest : String
+  maximum_event_bytes : Int
+  maximum_response_bytes : Int
 }
 pub fn OpenAiTextRuntime::artifact_digest(Self) -> String
 pub fn OpenAiTextRuntime::image_digest(Self) -> String
@@ -67,6 +69,7 @@ pub fn OpenAiTextRuntime::runtime_version(Self) -> String
 pub fn OpenAiTextRuntime::uses_direct_node_routing(Self) -> Bool
 pub fn OpenAiTextRuntime::with_node_endpoints(Self, Array[NodeRuntimeEndpoint]) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::with_node_endpoints_json(Self, String) -> Self raise
+pub fn OpenAiTextRuntime::with_response_budgets(Self, Int, Int) -> Self raise RemoteRuntimeError
 
 pub(all) struct RuntimeInvocationResult {
   output : Json

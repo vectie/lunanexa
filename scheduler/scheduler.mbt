@@ -224,6 +224,21 @@ pub fn priority_capacity_limit(
 }
 
 ///|
+pub fn priority_capacity_limit_with_policy(
+  capacity : Int,
+  priority : @contracts.Priority,
+  background_percent : Int,
+  normal_percent : Int,
+) -> Int {
+  let bounded = capacity.max(1)
+  match priority {
+    Background => (bounded * background_percent / 100).max(1)
+    Normal => (bounded * normal_percent / 100).max(1)
+    Interactive | Critical => bounded
+  }
+}
+
+///|
 pub struct AdmissionController {
   quotas : Map[String, TenantQuota]
   inflight : Map[String, Int]

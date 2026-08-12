@@ -19,6 +19,7 @@ pub struct OciRuntimeSupervisor {
   engine : String
   network : String
   engine_endpoint : String
+  pid_limit : Int
 }
 
 ///|
@@ -26,6 +27,7 @@ pub fn OciRuntimeSupervisor::new(
   engine : String,
   network : String,
   engine_endpoint : String,
+  pid_limit? : Int = 512,
 ) -> OciRuntimeSupervisor raise {
   if engine != "/usr/bin/podman" &&
     engine != "/usr/bin/docker" &&
@@ -40,7 +42,10 @@ pub fn OciRuntimeSupervisor::new(
     engine_endpoint.contains("..") {
     raise RuntimeSupervisorError::InvalidAssignmentIdentity(engine_endpoint)
   }
-  { engine, network, engine_endpoint }
+  if pid_limit <= 0 || pid_limit > 1048576 {
+    raise RuntimeSupervisorError::InvalidAssignmentIdentity("pid-limit")
+  }
+  { engine, network, engine_endpoint, pid_limit }
 }
 
 ///|
@@ -138,6 +143,7 @@ fn runtime_run_arguments(
   name : String,
   image_ref : String,
   network : String,
+  pid_limit : Int,
 ) -> Array[String] {
   let memory_bytes = assignment.resources.memory_mib.to_int64() * 1024L * 1024L
   [
@@ -152,7 +158,7 @@ fn runtime_run_arguments(
     "--read-only",
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges",
-    "--pids-limit=512",
+    "--pids-limit=\{pid_limit}",
     "--ipc=private",
     "--pull=never",
     "--memory=\{memory_bytes}",
@@ -256,6 +262,7 @@ pub async fn OciRuntimeSupervisor::ensure_started(
       name,
       image_ref,
       self.network,
+      self.pid_limit,
     )
     let (status, _, _) = @process.collect_output(
       self.engine,

@@ -111,6 +111,7 @@ fn registry_evidence(
 fn management_node(
   heartbeat : @contracts.NodeHeartbeat,
   now_unix_ms : Int64,
+  heartbeat_timeout_ms : Int64,
 ) -> @deployment.ManagementNode {
   let healthy = heartbeat.inventory.accelerators.filter(value => value.healthy)
   let memory_free_mib = healthy.fold(init=0, (total, accelerator) => {
@@ -118,7 +119,7 @@ fn management_node(
   })
   {
     node_id: heartbeat.node_id,
-    state: if now_unix_ms - heartbeat.timestamp_unix_ms > 15000L {
+    state: if now_unix_ms - heartbeat.timestamp_unix_ms > heartbeat_timeout_ms {
       Unreachable
     } else {
       heartbeat.state
@@ -149,7 +150,11 @@ async fn ApiService::deployment_planning_context(
     registry: registry_evidence(snapshot, now),
     nodes: [
       for heartbeat in self.store.heartbeats() => {
-        let node = management_node(heartbeat, now)
+        let node = management_node(
+          heartbeat,
+          now,
+          self.global_settings.control_timing.heartbeat_timeout_ms,
+        )
         match self.exclusive_lease_store {
           Some(leases) if leases.node_blocks_managed_placement(
               heartbeat.node_id,

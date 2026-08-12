@@ -80,10 +80,8 @@ spec:
               value: "runtime-token"
             - name: LUNANEXA_REQUIRE_WORKSPACE_LEASE
               value: "1"
-            - name: LUNANEXA_ADMISSION_CAPACITY
-              value: "128"
-            - name: LUNANEXA_RUNTIME_CONCURRENCY
-              value: "4"
+            - name: LUNANEXA_ADMIN_SETTINGS_PATH
+              value: /etc/lunanexa/admin-policy/admin-settings.json
             - name: LUNANEXA_RECONCILIATION_ONLY
               value: "0"
             - name: LUNANEXA_CONTROLLER_EPOCH
@@ -184,6 +182,9 @@ spec:
             - name: runtime-endpoints
               mountPath: /etc/lunanexa/runtime-routes
               readOnly: true
+            - name: admin-settings
+              mountPath: /etc/lunanexa/admin-policy
+              readOnly: true
             - name: model-store
               mountPath: /data/models
               readOnly: true
@@ -197,6 +198,9 @@ spec:
         - name: runtime-endpoints
           configMap:
             name: lunanexa-runtime-endpoints
+        - name: admin-settings
+          configMap:
+            name: lunanexa-admin-settings
         - name: model-store
           hostPath:
             path: /data/models

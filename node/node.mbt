@@ -11,6 +11,7 @@ pub(all) suberror NodeError {
   StaleControllerEpoch
   StaleGeneration
   LeaseExpired
+  InvalidCertificateLifetime
   InvalidStateSchema
 } derive(Debug, Eq)
 
@@ -88,7 +89,11 @@ pub fn EnrollmentService::enroll(
   node_auth_secret : String,
   public_key_ref : String,
   now_unix_ms : Int64,
+  certificate_lifetime_ms? : Int64 = 3600000L,
 ) -> NodeCertificate raise NodeError {
+  if certificate_lifetime_ms <= 0L || certificate_lifetime_ms > 86400000L {
+    raise InvalidCertificateLifetime
+  }
   guard self.tokens.get(token_id) is Some(token) else {
     raise InvalidBootstrapToken
   }
@@ -106,7 +111,7 @@ pub fn EnrollmentService::enroll(
     node_id,
     serial: 1L,
     issued_unix_ms: now_unix_ms,
-    expires_unix_ms: now_unix_ms + 3600000L,
+    expires_unix_ms: now_unix_ms + certificate_lifetime_ms,
     public_key_ref,
   }
   self.certificates[node_id] = certificate
@@ -172,7 +177,11 @@ pub fn EnrollmentService::rotate(
   node_id : String,
   public_key_ref : String,
   now_unix_ms : Int64,
+  certificate_lifetime_ms? : Int64 = 3600000L,
 ) -> NodeCertificate raise NodeError {
+  if certificate_lifetime_ms <= 0L || certificate_lifetime_ms > 86400000L {
+    raise InvalidCertificateLifetime
+  }
   guard self.certificates.get(node_id) is Some(current) else {
     raise InvalidBootstrapToken
   }
@@ -180,7 +189,7 @@ pub fn EnrollmentService::rotate(
     node_id,
     serial: current.serial + 1L,
     issued_unix_ms: now_unix_ms,
-    expires_unix_ms: now_unix_ms + 3600000L,
+    expires_unix_ms: now_unix_ms + certificate_lifetime_ms,
     public_key_ref,
   }
   self.certificates[node_id] = certificate

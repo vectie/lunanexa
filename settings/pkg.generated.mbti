@@ -1,0 +1,151 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/settings"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn default_global_admin_settings() -> GlobalAdminSettings
+
+pub fn default_user_local_preferences() -> UserLocalPreferences
+
+pub fn parse_global_admin_settings(String) -> GlobalAdminSettings raise SettingsError
+
+pub fn public_settings_view(GlobalAdminSettings) -> PublicSettingsView raise SettingsError
+
+pub fn resolve_user_request(GlobalAdminSettings, UserRequestPreferences) -> EffectiveUserRequest raise SettingsError
+
+pub fn setting_authority_catalog() -> Array[SettingDescriptor]
+
+pub fn validate_global_admin_settings(GlobalAdminSettings) -> Unit raise SettingsError
+
+pub fn validate_user_local_preferences(UserLocalPreferences) -> Unit raise SettingsError
+
+// Errors
+pub(all) suberror SettingsError {
+  InvalidGlobalSetting(String)
+  UserPreferenceExceedsGlobalPolicy(String)
+  InvalidLocalPreference(String)
+} derive(Eq, ToJson, @debug.Debug)
+
+// Types and methods
+pub(all) struct ControlTimingSettings {
+  heartbeat_timeout_ms : Int64
+  heartbeat_replay_window_ms : Int64
+  provider_callback_replay_window_ms : Int64
+  lease_observation_replay_window_ms : Int64
+  artifact_transfer_grant_lifetime_ms : Int64
+  bootstrap_token_max_lifetime_ms : Int64
+  node_certificate_lifetime_ms : Int64
+  node_certificate_renewal_lead_ms : Int64
+  node_reconcile_interval_ms : Int
+  materialization_heartbeat_interval_ms : Int
+  lease_receipt_stale_after_ms : Int64
+  workspace_reservation_max_lifetime_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EffectiveUserRequest {
+  model_alias : String
+  deadline_ms : Int64
+  max_output_units : Int
+  global_generation : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct GlobalAdminSettings {
+  schema_version : String
+  generation : Int64
+  control_timing : ControlTimingSettings
+  request_budgets : RequestBudgetSettings
+  scheduler : SchedulerPolicySettings
+  retention : RetentionSettings
+  node_runtime : NodeRuntimeSettings
+  telemetry_safety : TelemetrySafetySettings
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NodeRuntimeSettings {
+  container_pid_limit : Int
+  artifact_io_chunk_bytes : Int
+  signature_artifact_maximum_bytes : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct PublicSettingsView {
+  schema_version : String
+  global_generation : Int64
+  request_budgets : RequestBudgetSettings
+  control_timing : ControlTimingSettings
+  authorities : Array[SettingDescriptor]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RequestBudgetSettings {
+  maximum_request_body_bytes : Int
+  response_cache_entries : Int
+  openai_default_deadline_ms : Int64
+  openai_max_deadline_ms : Int64
+  openai_default_output_units : Int
+  openai_max_output_units : Int
+  openai_max_input_units : Int
+  openai_max_accelerator_memory_mib : Int
+  runtime_stream_event_bytes : Int
+  runtime_stream_total_bytes : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RetentionSettings {
+  scheduler_decision_entries : Int
+  telemetry_sample_entries : Int
+  benchmark_run_entries : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SchedulerPolicySettings {
+  admission_capacity : Int
+  runtime_concurrency : Int
+  retry_attempts : Int
+  background_capacity_percent : Int
+  normal_capacity_percent : Int
+  warm_model_weight : Int
+  headroom_weight : Int
+  queue_weight : Int
+  reliability_weight : Int
+  utilization_weight : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum SettingAuthority {
+  GlobalAdministrator
+  EnterpriseUser
+  LocalClient
+  FixedSafetyBoundary
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct SettingDescriptor {
+  key : String
+  authority : SettingAuthority
+  restart_required : Bool
+  description : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TelemetrySafetySettings {
+  maximum_sensor_rows : Int
+  maximum_sensor_row_characters : Int
+  maximum_memory_mib : Double
+  maximum_accelerator_count : Double
+  maximum_temperature_celsius : Double
+  maximum_power_watts : Double
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct UserLocalPreferences {
+  locale : String
+  default_model_alias : String
+  output_display_characters : Int
+  remember_last_model : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct UserRequestPreferences {
+  model_alias : String
+  deadline_ms : Int64
+  max_output_units : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

@@ -145,6 +145,7 @@ signature, payment or tax-invoice providers.
 - [Exclusive lease production use-case matrix](docs/EXCLUSIVE_LEASE_USE_CASES.md)
 - [Management node and four-DGX deployment guide](docs/DEPLOYMENT.md)
 - [Production readiness and adversarial test record](docs/PRODUCTION_READINESS.md)
+- [Administrator, enterprise, local and fixed settings authority](docs/SETTINGS_AUTHORITY.md)
 - [Suanli documentation research and applicability review](docs/research/suanli/README.md)
 - [Cost center, digital agreements, and commercial controls](docs/research/suanli/COMMERCIAL_CONTROL_PLANE.md)
 - [Commercial, technical, and qualified-service expansion](docs/COMMERCIAL_AND_QUALIFIED_SERVICES.md)
