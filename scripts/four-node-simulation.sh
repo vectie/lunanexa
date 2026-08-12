@@ -30,7 +30,32 @@ else
   exit 1
 fi
 
-base_port=$((24000 + ($$ % 12000)))
+choose_base_port() {
+  candidate=$((24000 + ($$ % 12000)))
+  attempts=0
+  while [ "$attempts" -lt 200 ]; do
+    range_busy=0
+    for offset in 0 1 2 3 4; do
+      if nc -z 127.0.0.1 "$((candidate + offset))" >/dev/null 2>&1; then
+        range_busy=1
+        break
+      fi
+    done
+    if [ "$range_busy" -eq 0 ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    candidate=$((candidate + 5))
+    if [ "$candidate" -gt 60000 ]; then
+      candidate=24000
+    fi
+    attempts=$((attempts + 1))
+  done
+  printf '%s\n' 'could not find five free loopback ports for simulation' >&2
+  return 1
+}
+
+base_port=$(choose_base_port)
 control_address="127.0.0.1:$base_port"
 base_url="http://$control_address"
 control_pid=''
@@ -121,7 +146,7 @@ start_controller() {
     LUNANEXA_COSIGN_BINARY='/usr/bin/cosign' \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$simulation_directory/cosign.pub" \
     LUNANEXA_RUNTIME_CONCURRENCY=1 \
-    "$control_binary" >"$simulation_directory/controller-epoch-$epoch.log" 2>&1 &
+    "$control_binary" >>"$simulation_directory/controller-epoch-$epoch.log" 2>&1 &
   control_pid=$!
 }
 
@@ -138,6 +163,26 @@ wait_controller() {
     attempts=$((attempts + 1))
     sleep 0.05
   done
+  return 1
+}
+
+start_controller_until_ready() {
+  epoch=$1
+  attempt=0
+  while [ "$attempt" -lt 40 ]; do
+    start_controller "$epoch"
+    if wait_controller; then
+      return 0
+    fi
+    if [ -n "$control_pid" ] && kill -0 "$control_pid" 2>/dev/null; then
+      kill "$control_pid" 2>/dev/null || true
+    fi
+    wait "$control_pid" 2>/dev/null || true
+    control_pid=''
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  printf '%s\n' "simulated controller failed to bind or become ready after $attempt attempts" >&2
   return 1
 }
 
@@ -239,8 +284,7 @@ invoke() {
   rg -q '"state":"Succeeded"' "$output"
 }
 
-start_controller 1
-wait_controller
+start_controller_until_ready 1
 
 now_ms=$(($(date +%s) * 1000))
 bootstrap_expiry=$((now_ms + 600000))
@@ -379,8 +423,7 @@ start_node 2
 kill -9 "$control_pid"
 wait "$control_pid" 2>/dev/null || true
 control_pid=''
-start_controller 2
-wait_controller
+start_controller_until_ready 2
 wait_for_pattern '/v1/nodes' 'deployment-sim-2'
 invoke 'after-restart' "$simulation_directory/workload-after-restart.json"
 
