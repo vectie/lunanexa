@@ -102,7 +102,7 @@ pub async fn FileExclusiveLeaseStore::open(
     path,
     signing_secret,
     leases: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   if @fs.exists(path) {
     let snapshot : @nodelease.ExclusiveLeaseSnapshot = @json.from_json(

@@ -1,7 +1,7 @@
 ///|
 fn expect_invalid_connection_url(value : String) -> Unit raise {
   try @postgres.connect(value) catch {
-    @postgres.PostgresError::InvalidParameter(_) => ()
+    InvalidParameter(_) => ()
     error => fail("unexpected connection error: \{Repr(error)}")
   } noraise {
     _ => fail("invalid PostgreSQL connection URL was accepted")
@@ -23,7 +23,7 @@ test "connection and statement boundary rejects controls and resource abuse" {
   let connection = @postgres.connect(url)
   for sql in ["", "  ", "SELECT\u0000 1", "x".repeat(1048577)] {
     try connection.execute(sql) catch {
-      @postgres.PostgresError::InvalidParameter(_) => ()
+      InvalidParameter(_) => ()
       error => fail("unexpected SQL boundary error: \{Repr(error)}")
     } noraise {
       _ => fail("invalid SQL statement was accepted")
@@ -31,7 +31,7 @@ test "connection and statement boundary rejects controls and resource abuse" {
   }
   let too_many : Array[String?] = [ for index in 0..<65 => Some("\{index}") ]
   try connection.execute("SELECT 1", parameters=too_many) catch {
-    @postgres.PostgresError::InvalidParameter(_) => ()
+    InvalidParameter(_) => ()
     error => fail("unexpected parameter-count error: \{Repr(error)}")
   } noraise {
     _ => fail("excessive SQL parameter count was accepted")
@@ -39,7 +39,7 @@ test "connection and statement boundary rejects controls and resource abuse" {
   try
     connection.execute("SELECT $1::text", parameters=[Some("a\u0000b")])
   catch {
-    @postgres.PostgresError::InvalidParameter(_) => ()
+    InvalidParameter(_) => ()
     error => fail("unexpected NUL parameter error: \{Repr(error)}")
   } noraise {
     _ => fail("NUL SQL parameter was accepted")

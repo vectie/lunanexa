@@ -311,6 +311,65 @@ async test "declared artifact size is enforced before transfer" {
 }
 
 ///|
+async test "artifact transport credential fuzz rejects header injection" {
+  let directory = @fs.tmpdir(prefix="lunanexa-artifact-credential-")
+  for
+    credential in [
+      "token\nX-Forged: yes",
+      "token\rX-Forged: yes",
+      "token\tvalue",
+      "token value",
+      "a".repeat(4097),
+    ] {
+    try
+      ignore(
+        @node.ArtifactMaterializer::open(
+          directory,
+          "http://127.0.0.1:1",
+          credential,
+          node_id="node-a",
+          maximum_artifact_size_bytes=1024L,
+          allow_http_loopback=true,
+        ),
+      )
+    catch {
+      @node.ArtifactMaterializationError::InvalidConfiguration => ()
+      error => fail("unexpected credential error: \{Repr(error)}")
+    } noraise {
+      _ => fail("unsafe artifact credential was accepted")
+    }
+  }
+  try
+    ignore(
+      @node.ArtifactMaterializer::open(
+        directory,
+        "http://127.0.0.1:1",
+        "",
+        node_id="node-a",
+        maximum_artifact_size_bytes=1024L,
+        allow_http_loopback=true,
+      ),
+    )
+  catch {
+    @node.ArtifactMaterializationError::InvalidConfiguration => ()
+    error => fail("unexpected missing-credential error: \{Repr(error)}")
+  } noraise {
+    _ => fail("node-bound artifact client accepted no credential")
+  }
+  ignore(
+    @node.ArtifactMaterializer::open(
+      directory,
+      "http://127.0.0.1:1",
+      "token._~-safe",
+      node_id="node-a",
+      maximum_artifact_size_bytes=1024L,
+      allow_http_loopback=true,
+    ),
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "assignment materializes on only the selected node cache" {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let request_count = Ref(0)

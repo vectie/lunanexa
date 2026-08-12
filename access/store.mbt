@@ -129,7 +129,7 @@ pub async fn AccessStore::open(
     persistence: AccessFile(path),
     issuer_secret,
     credentials: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   if @fs.exists(path) {
     let snapshot : AccessSnapshot = @json.from_json(
@@ -156,7 +156,7 @@ pub async fn AccessStore::open_postgres(
     persistence: AccessPostgres(database),
     issuer_secret,
     credentials: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   match database.load_snapshot("access_keys", snapshot_schema_version) {
     Some(payload) => {

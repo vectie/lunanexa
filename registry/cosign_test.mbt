@@ -3,7 +3,7 @@ async test "cosign adapter rejects executable injection and unsafe subjects befo
   try
     @registry.CosignVerifier::new("/tmp/cosign", "/etc/lunanexa/cosign.pub")
   catch {
-    @registry.SignatureVerificationError::InvalidVerifierConfiguration => ()
+    InvalidVerifierConfiguration => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("unapproved verifier executable was accepted")

@@ -12,13 +12,13 @@ sh scripts/evidence-export-test.sh
 if [ "${LUNANEXA_RUN_POSTGRES_TEST:-0}" = "1" ]; then
   sh scripts/postgres-integration-test.sh
 fi
-moon check --target js --deny-warn
-moon test ui --target js --deny-warn
-moon test ui/workbench --target js --deny-warn
-moon test ui/enterprise --target js --deny-warn
-moon test cmd/enterprise --target js --deny-warn
-moon test cmd/workbench --target js --deny-warn
-moon test workspace --target js --deny-warn
+moon check --target js --warn-list +73 --deny-warn
+moon test ui --target js --warn-list +73 --deny-warn
+moon test ui/workbench --target js --warn-list +73 --deny-warn
+moon test ui/enterprise --target js --warn-list +73 --deny-warn
+moon test cmd/enterprise --target js --warn-list +73 --deny-warn
+moon test cmd/workbench --target js --warn-list +73 --deny-warn
+moon test workspace --target js --warn-list +73 --deny-warn
 node --check extensions/vscode/extension.mjs
 node --check extensions/vscode/client-core.mjs
 node --test extensions/vscode/client-core.test.mjs

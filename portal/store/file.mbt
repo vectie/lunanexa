@@ -139,7 +139,7 @@ pub async fn FilePortalStore::open(path : String) -> FilePortalStore {
     memberships: Map([]),
     agreements: Map([]),
     lease_requests: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   if @fs.exists(path) {
     let snapshot : @portal.PortalSnapshot = @json.from_json(
@@ -166,7 +166,7 @@ pub async fn FilePortalStore::open_postgres(
     memberships: Map([]),
     agreements: Map([]),
     lease_requests: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   match
     database.load_snapshot("enterprise_portal", @portal.snapshot_schema_version) {

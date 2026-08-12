@@ -51,7 +51,7 @@ test "runtime routing configuration rejects ambiguous or credential-bearing endp
   ]
   for entries in cases {
     try runtime.with_node_endpoints(entries) catch {
-      @runtimes.RemoteRuntimeError::InvalidNodeRouting(_) => ()
+      InvalidNodeRouting(_) => ()
       error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("unsafe runtime routing configuration was accepted")

@@ -209,13 +209,13 @@ async fn ApiService::approve_portal_lease(
       value => value
     }
     match admission.kind {
-      @commercial.Allowed => ()
-      @commercial.ApprovalRequired =>
+      Allowed => ()
+      ApprovalRequired =>
         return api_error(
           409, "CommercialApprovalRequired", "budget policy requires commercial approval before lease start",
           false,
         )
-      @commercial.Blocked =>
+      Blocked =>
         return api_error(
           409,
           "CommercialAdmissionDenied",

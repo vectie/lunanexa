@@ -25,7 +25,7 @@ pub async fn FileRegistry::open(path : String) -> FileRegistry {
   } else {
     ModelRegistry::new()
   }
-  let durable = { path, registry, mutex: @async.Mutex::Mutex() }
+  let durable = { path, registry, mutex: Mutex() }
   if !@fs.exists(path) {
     write_registry(path, registry.snapshot())
   }

@@ -254,3 +254,85 @@ async test "provider callback rejects stale and cross-provider headers" {
   assert_eq(crossed.status, 401)
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "provider callback HTTP mutation fuzz rejects before reconciliation" {
+  let directory = @fs.tmpdir(prefix="lunanexa-provider-callback-fuzz-")
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let secret = "provider-callback-test-secret-32-bytes-minimum"
+  let service = @api.ApiService::new(
+    @store.FileStore::open("\{directory}/state.json"),
+    runtime,
+    "operator-token",
+    "inference-token",
+    "node-token",
+    "0.1.0",
+  ).with_provider_callback_secrets({ "provider-a|sandbox": secret })
+  let now = @async.now()
+  let body = "{}"
+  let signature = @api.provider_callback_signature(
+    "provider-a", "sandbox", "event-fuzz", now, body, secret,
+  )
+  let base_headers : Map[String, String] = {
+    "X-LunaNexa-Provider": "provider-a",
+    "X-LunaNexa-Environment": "sandbox",
+    "X-LunaNexa-Event-Id": "event-fuzz",
+    "X-LunaNexa-Event-Timestamp": now.to_string(),
+    "X-LunaNexa-Signature": signature,
+  }
+  for position in 0..<signature.length() {
+    let replacement = if signature[position] == '0' { "1" } else { "0" }
+    let mutated = signature[:position].to_owned() +
+      replacement +
+      signature[position + 1:].to_owned()
+    let headers = base_headers.copy()
+    headers["X-LunaNexa-Signature"] = mutated
+    let denied = service.handle(
+      Post,
+      "/v1/provider-callbacks/commercial",
+      headers,
+      body,
+    )
+    assert_eq(denied.status, 401)
+    assert_false(denied.body.contains(secret))
+  }
+  for timestamp in ["", "-1", "0", "+1", " 1", "1 ", "9223372036854775808"] {
+    let headers = base_headers.copy()
+    headers["X-LunaNexa-Event-Timestamp"] = timestamp
+    assert_eq(
+      service.handle(Post, "/v1/provider-callbacks/commercial", headers, body).status,
+      401,
+    )
+  }
+  let authenticated_but_malformed = service.handle(
+    Post,
+    "/v1/provider-callbacks/commercial",
+    base_headers,
+    body,
+  )
+  assert_eq(authenticated_but_malformed.status, 400)
+  assert_true(
+    authenticated_but_malformed.body.contains("CallbackBindingMismatch"),
+  )
+  assert_eq(
+    service.handle(Get, "/v1/provider-callbacks/commercial", base_headers, body).status,
+    404,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/provider-callbacks/commercial/extra",
+      base_headers,
+      body,
+    ).status,
+    404,
+  )
+  @fs.rmdir(directory, recursive=true)
+}

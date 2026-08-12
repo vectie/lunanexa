@@ -47,7 +47,10 @@ pub fn helper_receipt_timestamp(
     !timestamp.all(character => character >= '0' && character <= '9') {
     return None
   }
-  Some(@string.parse_int64(timestamp)) catch {
-    _ => None
+  let parsed = @string.parse_int64(timestamp) catch { _ => return None }
+  if parsed > 0L {
+    Some(parsed)
+  } else {
+    None
   }
 }

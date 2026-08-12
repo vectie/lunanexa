@@ -50,7 +50,7 @@ async test "PostgreSQL portal registration and agreement survive restart" {
   try
     database.projection_count("portal_agreements; DROP SCHEMA lunanexa")
   catch {
-    @database.DatabaseError::QueryFailed(_) => ()
+    QueryFailed(_) => ()
     error => fail("unexpected allowlist error: \{Repr(error)}")
   } noraise {
     _ => fail("projection table SQL injection was accepted")

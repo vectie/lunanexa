@@ -132,7 +132,7 @@ pub async fn FileDeploymentStore::open(
     signing_secret,
     templates: Map([]),
     operations: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   if @fs.exists(path) {
     let snapshot : @deployment.DeploymentSnapshot = @json.from_json(

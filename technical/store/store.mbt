@@ -87,7 +87,7 @@ pub async fn TechnicalStore::open(path : String) -> TechnicalStore {
     persistence: TechnicalFile(path),
     prewarm: Map([]),
     consumed_nonces: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   if @fs.exists(path) {
     let snapshot : TechnicalSnapshot = @json.from_json(
@@ -110,7 +110,7 @@ pub async fn TechnicalStore::open_postgres(
     persistence: TechnicalPostgres(database),
     prewarm: Map([]),
     consumed_nonces: Map([]),
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
   match
     database.load_snapshot("technical_operations", snapshot_schema_version) {

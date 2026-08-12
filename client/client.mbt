@@ -446,7 +446,7 @@ pub impl ProviderTransport for HttpTransport with fn discover(self, config) {
   [
     for capability in decoded.capabilities if capability == "TextGenerate" => {
       {
-        capability: @contracts.Capability::TextGenerate,
+        capability: TextGenerate,
         selectors: decoded.selectors,
         streaming: decoded.streaming,
         cancellation: decoded.cancellation,

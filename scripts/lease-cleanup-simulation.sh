@@ -93,6 +93,19 @@ if ! second_provision_receipt=$(run_helper provision --lease-id lease-2 --userna
   printf '%s\n' "$second_provision_receipt" >&2
   exit 1
 fi
+if run_helper revoke --lease-id lease-4 --username tenant2 --generation 2 >/dev/null 2>&1; then
+  printf '%s\n' 'cross-lease revocation unexpectedly succeeded' >&2
+  exit 1
+fi
+test -f "$fake_bin/.fake-state/account"
+printf '%s\n' 'lease-2:999' > "$home_root/tenant2/.lunanexa-lease"
+if run_helper sanitize --lease-id lease-2 --username tenant2 --generation 2 >/dev/null 2>&1; then
+  printf '%s\n' 'home-marker mutation unexpectedly authorized cleanup' >&2
+  exit 1
+fi
+test -f "$fake_bin/.fake-state/account"
+test -d "$home_root/tenant2"
+printf '%s\n' 'lease-2:1' > "$home_root/tenant2/.lunanexa-lease"
 touch "$fake_bin/.fake-state/process-inventory-failure"
 if run_helper revoke --lease-id lease-2 --username tenant2 --generation 2 >/dev/null 2>&1; then
   printf '%s\n' 'process inventory failure was mistaken for revocation' >&2

@@ -141,7 +141,7 @@ test "one-click catalog rejects container-managed artifact downloads" {
   try
     @deployment.validate_template(unsupported, require_signature=false)
   catch {
-    @deployment.DeploymentError::InvalidTemplate(_) => ()
+    InvalidTemplate(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("a non-materializable template was accepted")

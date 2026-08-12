@@ -26,7 +26,7 @@ test "request logs structurally exclude raw content" {
 test "retention is explicit and expiry emits deletion receipt" {
   let ledger = @policy.RetentionLedger::new()
   try ledger.retain("ephemeral", Ephemeral, "encrypted:1") catch {
-    @policy.RetentionError::RetentionNotPermitted => ()
+    RetentionNotPermitted => ()
     err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("ephemeral content must not be retained")
@@ -129,7 +129,7 @@ test "malicious model metadata is rejected before persistence" {
     state: Candidate,
   }
   try registry.register_model(malicious) catch {
-    @registry.RegistryError::InvalidMetadata(_) => ()
+    InvalidMetadata(_) => ()
     err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected malicious metadata rejection")

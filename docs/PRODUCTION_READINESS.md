@@ -1,6 +1,6 @@
 # Production readiness and adversarial test record
 
-Date: 2026-08-11
+Date: 2026-08-12
 Target topology: one management node, `/data/models`, and four DGX Spark nodes
 
 ## Decision
@@ -137,6 +137,26 @@ names outside an allowlist, proves cross-tenant retry independence, and proves
 that a duplicate active-identity constraint failure rolls back both snapshot
 and projections.
 
+The 2026-08-12 campaign adds more than 3,000 deterministic mutations around
+the newest production paths:
+
+- artifact object keys, byte-range grammar, symlink containment, declared
+  model size and detached-signature size;
+- provider, environment and event identities; every HMAC signature position;
+  signed-header/body rebinding; timestamp extremes; and malformed callback
+  secret configuration;
+- bearer and node artifact credentials containing whitespace, controls,
+  non-ASCII text and over-limit values;
+- exclusive-lease usernames, credential references, helper actions, runtime
+  object IDs, generation values and evidence timestamps;
+- destructive cleanup with a cross-lease request or a mutated home ownership
+  marker, both of which must fail before account, process or runtime mutation.
+
+This campaign exposed and fixed permissive signed-range parsing, artifact-root
+symlink escape, missing artifact size enforcement, control-character credential
+acceptance, zero-time helper evidence, ambiguous provider secret keys, and a
+lease-helper ordering flaw that could revoke before proving local ownership.
+
 ### API and native transport
 
 The API corpus verifies:
@@ -200,8 +220,8 @@ does not replace them.
 After hardening, a focused four-node run and `scripts/release-gate.sh` passed
 back-to-back. The consolidated result was:
 
-- 228/228 native MoonBit tests;
-- 51/51 MoonBit JavaScript tests across console, enterprise, workbench and workspace;
+- 266/266 native MoonBit tests;
+- 56/56 MoonBit JavaScript tests across console, enterprise, workbench and workspace;
 - 8/8 editor-client tests;
 - process recovery, four-node simulation, isolation, dependency, image,
   contract, secret, response and evidence-export checks.
@@ -230,6 +250,11 @@ moon test deployment/adversarial_test.mbt --target native --deny-warn
 moon test portal/adversarial_test.mbt --target native --deny-warn
 moon test deployment/store --target native --deny-warn
 moon test api/deployment_http_test.mbt --target native --deny-warn
+moon test api --target native --deny-warn
+moon test node --target native --deny-warn
+moon test nodelease --target native --deny-warn
+moon test leasehelper --target native --deny-warn
+sh scripts/lease-cleanup-simulation.sh
 sh scripts/postgres-integration-test.sh
 moon test ui cmd/console --target js --deny-warn
 sh scripts/four-node-simulation.sh /secure/evidence/lunanexa-simulation
@@ -252,7 +277,7 @@ The 2026-08-10 campaign passed with retained evidence at
 materialization across four independent cache roots, corrupt artifact
 quarantine, assigned-cache preservation, hardened OCI arguments, generic
 network rejection, control-plane attacks, restart fencing and four-node
-disruption. The final repository gate then passed 228/228 native tests.
+disruption. The final repository gate then passed 266/266 native tests.
 
 Run the process and four-node commands only on an isolated test host. The
 explicit simulation path retains credentials and state generated for the test;

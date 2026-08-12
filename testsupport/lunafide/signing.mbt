@@ -75,19 +75,19 @@ pub fn WebhookReceiver::accept(
     event.tenant_ref != expected_tenant_ref ||
     event.aggregate_ref != expected_aggregate_ref ||
     !webhook_signature_valid(event, test_secret) {
-    raise LunaFideError::ForgedWebhook(event.event_id)
+    raise ForgedWebhook(event.event_id)
   }
   if max_clock_skew_ms < 0L ||
     (now_unix_ms - event.occurred_unix_ms).abs() > max_clock_skew_ms {
-    raise LunaFideError::ExpiredWebhook(event.event_id)
+    raise ExpiredWebhook(event.event_id)
   }
   if self.seen_event_ids.contains(event.event_id) {
-    raise LunaFideError::ReplayWebhook(event.event_id)
+    raise ReplayWebhook(event.event_id)
   }
   let stream = callback_stream(event)
   match self.last_sequences.get(stream) {
     Some(previous) if event.sequence <= previous =>
-      raise LunaFideError::StaleWebhook(event.event_id)
+      raise StaleWebhook(event.event_id)
     _ => ()
   }
   self.seen_event_ids[event.event_id] = ()

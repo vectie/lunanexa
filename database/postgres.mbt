@@ -43,7 +43,7 @@ pub fn PostgresDatabase::open(
       raise MigrationFailed("\{Repr(error)}")
     }
   }
-  { connection, mutex: @async.Mutex::Mutex() }
+  { connection, mutex: Mutex() }
 }
 
 ///|

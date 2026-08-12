@@ -68,7 +68,7 @@ test "runtime inspection requires the assigned image label and healthy state" {
       "assignment-1",
     )
   catch {
-    @node.RuntimeSupervisorError::InvalidAssignmentIdentity(_) => ()
+    InvalidAssignmentIdentity(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("runtime image substitution was accepted")

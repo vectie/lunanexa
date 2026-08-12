@@ -19,7 +19,7 @@ pub struct LunaFide {
 ///|
 pub fn LunaFide::new(test_secret : String) -> LunaFide raise LunaFideError {
   if test_secret == "" {
-    raise LunaFideError::InvalidRequest("test webhook secret must not be empty")
+    raise InvalidRequest("test webhook secret must not be empty")
   }
   {
     test_secret,
@@ -72,12 +72,10 @@ fn validate_common(
   tenant_ref : String,
 ) -> Unit raise LunaFideError {
   if request_version != protocol_version {
-    raise LunaFideError::InvalidRequest("unsupported protocol version")
+    raise InvalidRequest("unsupported protocol version")
   }
   if !valid_ref(idempotency_key) || !valid_ref(tenant_ref) {
-    raise LunaFideError::InvalidRequest(
-      "invalid idempotency or tenant reference",
-    )
+    raise InvalidRequest("invalid idempotency or tenant reference")
   }
 }
 
@@ -90,7 +88,7 @@ fn LunaFide::idempotent_ref(
   match self.idempotency.get(scope) {
     None => None
     Some(entry) if entry.fingerprint == fingerprint => Some(entry.result_ref)
-    Some(_) => raise LunaFideError::IdempotencyConflict(scope)
+    Some(_) => raise IdempotencyConflict(scope)
   }
 }
 
@@ -163,7 +161,7 @@ pub fn LunaFide::request_verification(
     request.tenant_ref,
   )
   if !valid_ref(request.subject_ref) {
-    raise LunaFideError::InvalidRequest("invalid opaque subject reference")
+    raise InvalidRequest("invalid opaque subject reference")
   }
   let fingerprint = sha256_hex(request.to_json().stringify())
   let scope = "verification.request|\{request.tenant_ref}|\{request.idempotency_key}"
@@ -212,7 +210,7 @@ pub fn LunaFide::resolve_verification(
   if resolution.state != Verified &&
     resolution.state != Rejected &&
     resolution.state != Expired {
-    raise LunaFideError::InvalidRequest("resolution must be terminal")
+    raise InvalidRequest("resolution must be terminal")
   }
   let fingerprint = sha256_hex(resolution.to_json().stringify())
   let scope = "verification.resolve|\{resolution.tenant_ref}|\{resolution.idempotency_key}"
@@ -223,13 +221,13 @@ pub fn LunaFide::resolve_verification(
       .unwrap_or_else(() => abort("corrupt state"))
     None => {
       guard self.verifications.get(resolution.verification_ref) is Some(current) else {
-        raise LunaFideError::NotFound(resolution.verification_ref)
+        raise NotFound(resolution.verification_ref)
       }
       if current.tenant_ref != resolution.tenant_ref {
-        raise LunaFideError::NotFound(resolution.verification_ref)
+        raise NotFound(resolution.verification_ref)
       }
       if current.state != Pending {
-        raise LunaFideError::IllegalTransition(resolution.verification_ref)
+        raise IllegalTransition(resolution.verification_ref)
       }
       let record : VerificationRecord = {
         ..current,
@@ -266,11 +264,11 @@ pub fn LunaFide::create_envelope(
     !valid_ref(request.signer_ref) ||
     !valid_sha256(request.document_sha256) ||
     request.expires_unix_ms <= request.requested_unix_ms {
-    raise LunaFideError::InvalidRequest("invalid envelope request")
+    raise InvalidRequest("invalid envelope request")
   }
   match request.countersigner_ref {
     Some(value) if !valid_ref(value) =>
-      raise LunaFideError::InvalidRequest("invalid countersigner reference")
+      raise InvalidRequest("invalid countersigner reference")
     _ => ()
   }
   let fingerprint = sha256_hex(request.to_json().stringify())
@@ -327,34 +325,32 @@ pub fn LunaFide::record_signature(
       .unwrap_or_else(() => abort("corrupt state"))
     None => {
       guard self.envelopes.get(action.envelope_ref) is Some(current) else {
-        raise LunaFideError::NotFound(action.envelope_ref)
+        raise NotFound(action.envelope_ref)
       }
       if current.tenant_ref != action.tenant_ref {
-        raise LunaFideError::NotFound(action.envelope_ref)
+        raise NotFound(action.envelope_ref)
       }
       if action.acted_unix_ms > current.expires_unix_ms {
-        raise LunaFideError::ExpiredWebhook(action.envelope_ref)
+        raise ExpiredWebhook(action.envelope_ref)
       }
       let next_state = match (action.party, action.decision, current.state) {
-        (Signer, SignatureDecision::Declined, AwaitingSigner) =>
-          EnvelopeState::Declined
+        (Signer, Declined, AwaitingSigner) => EnvelopeState::Declined
         (Signer, Signed, AwaitingSigner) =>
           if current.countersigner_ref is Some(_) {
             AwaitingCountersignature
           } else {
             Executed
           }
-        (Countersigner, SignatureDecision::Declined, AwaitingCountersignature) =>
-          EnvelopeState::Declined
+        (Countersigner, Declined, AwaitingCountersignature) => Declined
         (Countersigner, Signed, AwaitingCountersignature) => Executed
-        _ => raise LunaFideError::IllegalTransition(action.envelope_ref)
+        _ => raise IllegalTransition(action.envelope_ref)
       }
       let expected_actor = match action.party {
         Signer => Some(current.signer_ref)
         Countersigner => current.countersigner_ref
       }
       if expected_actor != Some(action.actor_ref) {
-        raise LunaFideError::IllegalTransition("unexpected signer")
+        raise IllegalTransition("unexpected signer")
       }
       let record : EnvelopeRecord = {
         ..current,
@@ -394,7 +390,7 @@ pub fn LunaFide::request_payment(
     request.amount_minor <= 0L ||
     request.currency.length() != 3 ||
     request.currency != request.currency.to_upper() {
-    raise LunaFideError::InvalidRequest("invalid payment request")
+    raise InvalidRequest("invalid payment request")
   }
   let fingerprint = sha256_hex(request.to_json().stringify())
   let scope = "payment.request|\{request.tenant_ref}|\{request.idempotency_key}"
@@ -405,7 +401,7 @@ pub fn LunaFide::request_payment(
       let payment_ref = stable_ref("lfpay", fingerprint)
       let (state, reason_code) = match request.simulated_outcome {
         Succeed => (Settled, "simulated_settlement")
-        Decline => (PaymentState::Declined, "simulated_decline")
+        Decline => (Declined, "simulated_decline")
         RequireReview => (UnderReview, "simulated_review")
       }
       let record : PaymentRecord = {
@@ -457,7 +453,7 @@ fn validate_invoice_request(
     request.currency.length() != 3 ||
     request.currency != request.currency.to_upper() ||
     !valid_sha256(request.bill_content_sha256) {
-    raise LunaFideError::InvalidRequest("invalid invoice request")
+    raise InvalidRequest("invalid invoice request")
   }
 }
 
@@ -516,7 +512,7 @@ pub fn LunaFide::void_invoice(
     action.tenant_ref,
   )
   if !valid_ref(action.reason_code) {
-    raise LunaFideError::InvalidRequest("void reason is required")
+    raise InvalidRequest("void reason is required")
   }
   let fingerprint = sha256_hex(action.to_json().stringify())
   let scope = "invoice.void|\{action.tenant_ref}|\{action.idempotency_key}"
@@ -525,13 +521,13 @@ pub fn LunaFide::void_invoice(
       self.invoices.get(result_ref).unwrap_or_else(() => abort("corrupt state"))
     None => {
       guard self.invoices.get(action.invoice_ref) is Some(current) else {
-        raise LunaFideError::NotFound(action.invoice_ref)
+        raise NotFound(action.invoice_ref)
       }
       if current.tenant_ref != action.tenant_ref {
-        raise LunaFideError::NotFound(action.invoice_ref)
+        raise NotFound(action.invoice_ref)
       }
       if current.state != Issued {
-        raise LunaFideError::IllegalTransition(action.invoice_ref)
+        raise IllegalTransition(action.invoice_ref)
       }
       let record : InvoiceRecord = {
         ..current,
@@ -566,16 +562,14 @@ pub fn LunaFide::reissue_invoice(
   )
   validate_invoice_request(request)
   guard self.invoices.get(voided_invoice_ref) is Some(previous) else {
-    raise LunaFideError::NotFound(voided_invoice_ref)
+    raise NotFound(voided_invoice_ref)
   }
   if previous.tenant_ref != request.tenant_ref || previous.state != Voided {
-    raise LunaFideError::IllegalTransition(voided_invoice_ref)
+    raise IllegalTransition(voided_invoice_ref)
   }
   if request.bill_ref != previous.bill_ref ||
     request.currency != previous.currency {
-    raise LunaFideError::InvalidRequest(
-      "reissue must preserve bill and currency",
-    )
+    raise InvalidRequest("reissue must preserve bill and currency")
   }
   self.issue_invoice_record(request, Some(voided_invoice_ref), InvoiceReissued)
 }

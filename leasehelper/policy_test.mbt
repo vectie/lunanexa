@@ -67,3 +67,44 @@ test "cleanup identifier fuzz never escapes the dedicated root" {
     assert_eq(@leasehelper.scoped_host_path(root, hostile), None)
   }
 }
+
+///|
+test "helper action and runtime object mutation fuzz is deny by default" {
+  for
+    action in [
+      "", "Provision", "provision ", "revoke\n", "sanitize/host", "quarantine:all",
+      "delete", "shell",
+    ] {
+    assert_false(
+      @leasehelper.valid_helper_request(
+        action, "lease-1", "tenant_1", 1L, 2000L, 1000L,
+      ),
+    )
+  }
+  for generation in [-9223372036854775807L, -1L, 0L] {
+    assert_false(
+      @leasehelper.valid_helper_request(
+        "sanitize", "lease-1", "tenant_1", generation, 0L, 1000L,
+      ),
+    )
+  }
+  for length in 0..<=140 {
+    assert_eq(
+      @leasehelper.valid_runtime_object_id("a".repeat(length)),
+      length > 0 && length <= 128,
+    )
+  }
+  for position in 0..<=64 {
+    for mutation in ["/", "\\", " ", "\n", "\r", ":", "%", "服务"] {
+      let value = "a".repeat(position) + mutation + "b".repeat(64 - position)
+      assert_false(@leasehelper.valid_runtime_object_id(value))
+    }
+  }
+  for
+    root in [
+      "/", "relative/root", "/var/lib/lunanexa/", "/var//lib/lunanexa", "/var/lib/lunanexa/..",
+      "/var/lib/lunanexa/../root", "/var/lib/lunanexa\n/root", "/var/lib/lunanexa root",
+    ] {
+    assert_false(@leasehelper.valid_host_root(root))
+  }
+}

@@ -96,7 +96,7 @@ test "same idempotency key with different content is rejected" {
       subject_ref: "opaque-different-subject",
     })
   catch {
-    @lunafide.LunaFideError::IdempotencyConflict(_) => ()
+    IdempotencyConflict(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("expected idempotency conflict")
@@ -119,7 +119,7 @@ test "cross-tenant verification resolution is hidden and rejected" {
       resolved_unix_ms: 101L,
     })
   catch {
-    @lunafide.LunaFideError::NotFound(_) => ()
+    NotFound(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("expected tenant boundary rejection")
@@ -142,7 +142,7 @@ test "agreement execution requires signer then exact countersigner" {
       acted_unix_ms: 110L,
     })
   catch {
-    @lunafide.LunaFideError::IllegalTransition(_) => ()
+    IllegalTransition(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("countersignature must not precede signer")
@@ -197,8 +197,8 @@ test "expired envelopes and wrong actors cannot execute" {
         acted_unix_ms,
       })
     catch {
-      @lunafide.LunaFideError::IllegalTransition(_) => ()
-      @lunafide.LunaFideError::ExpiredWebhook(_) => ()
+      IllegalTransition(_) => ()
+      ExpiredWebhook(_) => ()
       _ => fail("unexpected error kind")
     } noraise {
       _ => fail("expected signature action rejection")
@@ -211,7 +211,7 @@ test "payment simulator exposes success decline and review without credentials" 
   let service = @lunafide.LunaFide::new("test-secret")
   let outcomes : Array[(@lunafide.PaymentOutcome, @lunafide.PaymentState)] = [
     (Succeed, Settled),
-    (Decline, @lunafide.PaymentState::Declined),
+    (Decline, Declined),
     (RequireReview, UnderReview),
   ]
   for index, pair in outcomes {
@@ -244,7 +244,7 @@ test "invalid commercial amounts currencies and references fail closed" {
       { ..invoice_request("overlong"), billing_profile_ref: "x".repeat(257) },
     ] {
     try service.issue_invoice(request) catch {
-      @lunafide.LunaFideError::InvalidRequest(_) => ()
+      InvalidRequest(_) => ()
       _ => fail("unexpected error kind")
     } noraise {
       _ => fail("expected invalid invoice request")
@@ -281,7 +281,7 @@ test "invoice void and reissue preserve lineage and forbid mutation" {
       currency: "USD",
     })
   catch {
-    @lunafide.LunaFideError::InvalidRequest(_) => ()
+    InvalidRequest(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("expected currency preservation failure")
@@ -292,7 +292,7 @@ test "invoice void and reissue preserve lineage and forbid mutation" {
       amount_minor: -1L,
     })
   catch {
-    @lunafide.LunaFideError::InvalidRequest(_) => ()
+    InvalidRequest(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("expected invalid reissue amount failure")
@@ -317,7 +317,7 @@ test "forged callback is rejected without poisoning valid event ID" {
       10L,
     )
   catch {
-    @lunafide.LunaFideError::ForgedWebhook(_) => ()
+    ForgedWebhook(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("forged callback was accepted")
@@ -365,7 +365,7 @@ test "valid MAC for another tenant or aggregate cannot cross binding" {
       10L,
     )
   catch {
-    @lunafide.LunaFideError::ForgedWebhook(_) => ()
+    ForgedWebhook(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("cross-tenant signed callback was accepted")
@@ -407,7 +407,7 @@ test "callback replay stale ordering and expiry are rejected" {
       10L,
     )
   catch {
-    @lunafide.LunaFideError::ReplayWebhook(_) => ()
+    ReplayWebhook(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("callback replay was accepted")
@@ -422,7 +422,7 @@ test "callback replay stale ordering and expiry are rejected" {
       10L,
     )
   catch {
-    @lunafide.LunaFideError::StaleWebhook(_) => ()
+    StaleWebhook(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("stale callback was accepted")
@@ -438,7 +438,7 @@ test "callback replay stale ordering and expiry are rejected" {
       10L,
     )
   catch {
-    @lunafide.LunaFideError::ExpiredWebhook(_) => ()
+    ExpiredWebhook(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("expired callback was accepted")
@@ -448,7 +448,7 @@ test "callback replay stale ordering and expiry are rejected" {
 ///|
 test "empty test secret is rejected and never degrades to unsigned callbacks" {
   try @lunafide.LunaFide::new("") catch {
-    @lunafide.LunaFideError::InvalidRequest(_) => ()
+    InvalidRequest(_) => ()
     _ => fail("unexpected error kind")
   } noraise {
     _ => fail("empty secret was accepted")

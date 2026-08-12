@@ -98,7 +98,7 @@ async test "published client covers discovery invocation usage cancellation and 
   assert_true(client.cancel("workload-1"))
   assert_eq(transport.cancelled_workload(), Some("workload-1"))
   try client.cancel("../audit") catch {
-    @client.ClientError::ClientError(code~, message=_, retryable~) => {
+    ClientError(code~, message=_, retryable~) => {
       assert_eq(code, Contract)
       assert_false(retryable)
     }
@@ -228,7 +228,7 @@ async test "HTTP client rejects a stream without a canonical terminal event" {
       @client.HttpTransport::new("inference-token"),
     )
     try provider.stream(request(), _ => ()) catch {
-      @client.ClientError::ClientError(code~, message~, retryable~) => {
+      ClientError(code~, message~, retryable~) => {
         assert_eq(code, Contract)
         assert_true(message.contains("terminal event"))
         assert_false(retryable)
@@ -245,7 +245,7 @@ test "HTTP transport rejects an unsafe asserted workspace subject" {
   try
     @client.HttpTransport::new("inference-token").with_subject_ref("../admin")
   catch {
-    @client.ClientError::ClientError(code~, message~, retryable~) => {
+    ClientError(code~, message~, retryable~) => {
       assert_eq(code, Contract)
       assert_true(message.contains("subject"))
       assert_false(retryable)

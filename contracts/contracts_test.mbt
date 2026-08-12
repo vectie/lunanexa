@@ -53,7 +53,7 @@ test "training reuse requires explicit evaluation consent" {
     data_policy: { ..request.data_policy, allow_training_reuse: true },
   }
   try @contracts.validate_workload(invalid) catch {
-    @contracts.ContractError::InvalidPolicy(_) => ()
+    InvalidPolicy(_) => ()
     err => fail("unexpected error: \{Repr(err)}")
   } noraise {
     _ => fail("expected validation failure")
@@ -79,7 +79,7 @@ test "resource ceilings and ephemeral cache policy are enforced at decode" {
       data_policy: { ..request.data_policy, allow_cache: true },
     })
   catch {
-    @contracts.ContractError::InvalidPolicy(_) => ()
+    InvalidPolicy(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("ephemeral cache was accepted")
@@ -96,8 +96,7 @@ test "public identifiers reject path and log injection characters" {
       { ..request, model_selector: "text/default" },
     ] {
     try @contracts.validate_workload(invalid) catch {
-      @contracts.ContractError::InvalidPolicy(message) =>
-        assert_true(message.contains("identifier"))
+      InvalidPolicy(message) => assert_true(message.contains("identifier"))
       error => fail("unexpected error: \{Repr(error)}")
     } noraise {
       _ => fail("unsafe public identifier was accepted")

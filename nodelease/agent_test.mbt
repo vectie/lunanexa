@@ -55,11 +55,7 @@ test "helper receipts are action lease and generation bound" {
   assert_true(@nodelease.valid_helper_receipt(revoke, receipt))
   assert_false(
     @nodelease.valid_helper_receipt(
-      @nodelease.LeaseAgentAction::RevokeAccess(
-        lease_id="lease-2",
-        username="tenant2",
-        generation=5L,
-      ),
+      RevokeAccess(lease_id="lease-2", username="tenant2", generation=5L),
       receipt,
     ),
   )
@@ -302,7 +298,7 @@ test "persisted lease guard rejects state without a lease" {
       @nodelease.LeaseAgentGuard::from_snapshot({ ..empty, state: AccessActive }),
     )
   catch {
-    @nodelease.ExclusiveLeaseError::InvalidIntent(_) => ()
+    InvalidIntent(_) => ()
     _ => fail("expected invalid persisted state")
   } noraise {
     _ => fail("missing lease was accepted")
@@ -336,7 +332,7 @@ test "persisted lease guard rejects state without a lease" {
       }),
     )
   catch {
-    @nodelease.ExclusiveLeaseError::InvalidIntent(_) => ()
+    InvalidIntent(_) => ()
     _ => fail("expected cross-node persisted state rejection")
   } noraise {
     _ => fail("cross-node lease state was accepted")

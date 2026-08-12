@@ -306,6 +306,50 @@ async fn marker_matches(path : String, expected : String) -> Bool {
 }
 
 ///|
+async fn lease_generation_marker(
+  config : HostConfig,
+  request : HelperRequest,
+) -> String? {
+  let lease_path = @leasehelper.scoped_host_path(
+    config.state_root,
+    request.lease_id,
+  ).unwrap()
+  let home_path = @leasehelper.scoped_host_path(
+    config.home_root,
+    request.username,
+    maximum_identifier_length=32,
+  ).unwrap()
+  let generation_marker = "\{lease_path}/generation"
+  let has_account = account_exists(config, request.username)
+  if !@fs.exists(generation_marker) {
+    if has_account || @fs.exists(home_path) || @fs.exists(lease_path) {
+      raise Failure::Failure(
+        "lease generation marker is missing for existing tenant state",
+      )
+    }
+    return None
+  }
+  let recorded = @fs.read_file(generation_marker).text().trim().to_owned()
+  let prefix = "\{request.lease_id}:"
+  if !recorded.has_prefix(prefix) || recorded.length() == prefix.length() {
+    raise Failure::Failure("lease generation marker is misbound")
+  }
+  let generation = @string.parse_int64(recorded[prefix.length():]) catch {
+    _ => raise Failure::Failure("lease generation marker is invalid")
+  }
+  if generation <= 0L {
+    raise Failure::Failure("lease generation marker is invalid")
+  }
+  if has_account || @fs.exists(home_path) {
+    if !@fs.exists(home_path) ||
+      !marker_matches("\{home_path}/.lunanexa-lease", recorded) {
+      raise Failure::Failure("tenant home is not owned by this exclusive lease")
+    }
+  }
+  Some(recorded)
+}
+
+///|
 async fn ensure_directory(
   path : String,
   permission : Int,
@@ -394,6 +438,9 @@ async fn provision(config : HostConfig, request : HelperRequest) -> Unit {
 
 ///|
 async fn revoke(config : HostConfig, request : HelperRequest) -> Unit {
+  if lease_generation_marker(config, request) is None {
+    return
+  }
   if account_exists(config, request.username) {
     run_required(config.usermod_program, ["--lock", request.username])
     let login_status = @process.run(
@@ -423,7 +470,6 @@ async fn revoke(config : HostConfig, request : HelperRequest) -> Unit {
 
 ///|
 async fn sanitize(config : HostConfig, request : HelperRequest) -> Unit {
-  revoke(config, request)
   let lease_path = @leasehelper.scoped_host_path(
     config.state_root,
     request.lease_id,
@@ -433,18 +479,12 @@ async fn sanitize(config : HostConfig, request : HelperRequest) -> Unit {
     request.username,
     maximum_identifier_length=32,
   ).unwrap()
-  let generation_marker = "\{lease_path}/generation"
   let credential_path = @leasehelper.scoped_host_path(
     config.credential_root,
     "\{request.lease_id}.authorized_keys",
     maximum_identifier_length=160,
   ).unwrap()
-  if !@fs.exists(generation_marker) {
-    if account_exists(config, request.username) ||
-      @fs.exists(home_path) ||
-      @fs.exists(lease_path) {
-      raise Failure::Failure("lease generation marker is missing")
-    }
+  guard lease_generation_marker(config, request) is Some(_) else {
     if @fs.exists(credential_path) {
       @fs.remove(credential_path)
     }
@@ -453,10 +493,7 @@ async fn sanitize(config : HostConfig, request : HelperRequest) -> Unit {
     }
     return
   }
-  let recorded = @fs.read_file(generation_marker).text().trim().to_owned()
-  if !recorded.has_prefix("\{request.lease_id}:") {
-    raise Failure::Failure("lease generation marker is misbound")
-  }
+  revoke(config, request)
   remove_tenant_runtime(config, request.username)
   let no_processes = processes_absent(config, request.username)
   let containers_absent = runtime_objects(config, request.username, "container").length() ==
@@ -478,11 +515,6 @@ async fn sanitize(config : HostConfig, request : HelperRequest) -> Unit {
     }
   }
   if @fs.exists(home_path) {
-    if !marker_matches("\{home_path}/.lunanexa-lease", recorded) {
-      raise Failure::Failure(
-        "tenant home ownership marker is missing or changed",
-      )
-    }
     @fs.rmdir(home_path, recursive=true)
   }
   if @fs.exists(credential_path) {

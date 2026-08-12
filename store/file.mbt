@@ -43,7 +43,7 @@ pub async fn FileStore::open(path : String) -> FileStore {
   let store : FileStore = {
     path,
     state,
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
     requires_epoch_advance: existed,
     controller_fenced: false,
   }

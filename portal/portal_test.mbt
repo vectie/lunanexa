@@ -18,7 +18,7 @@ test "tenant role and agreement gates are fail closed" {
   try
     @portal.validate_submission({ ..submission, unix_username: "root" })
   catch {
-    @portal.PortalError::InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected error")
   } noraise {
     _ => fail("reserved username accepted")
@@ -79,7 +79,7 @@ test "adversarial lease fields fail closed" {
   ]
   for username in hostile_usernames {
     try @portal.validate_submission({ ..base, unix_username: username }) catch {
-      @portal.PortalError::InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected username error")
     } noraise {
       _ => fail("unsafe username accepted")
@@ -90,7 +90,7 @@ test "adversarial lease fields fail closed" {
     try
       @portal.validate_submission({ ..base, requested_model_ids: [model] })
     catch {
-      @portal.PortalError::InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected model error")
     } noraise {
       _ => fail("unsafe model accepted")

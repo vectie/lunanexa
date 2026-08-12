@@ -79,9 +79,84 @@ test "generation exhaustion cannot wrap a lease back into a usable value" {
       ),
     )
   catch {
-    @nodelease.ExclusiveLeaseError::InvalidIntent(_) => ()
+    InvalidIntent(_) => ()
     _ => fail("expected exhausted generation rejection")
   } noraise {
     _ => fail("generation overflow was accepted")
+  }
+}
+
+///|
+fn nodelease_intent_is_valid(
+  candidate : @nodelease.ExclusiveNodeLeaseIntent,
+) -> Bool {
+  try @nodelease.validate_intent(candidate) catch {
+    _ => false
+  } noraise {
+    _ => true
+  }
+}
+
+///|
+test "exclusive lease username and credential mutation fuzz fails closed" {
+  let base = intent()
+  for length in 0..<=40 {
+    assert_eq(
+      nodelease_intent_is_valid({ ..base, unix_username: "a".repeat(length) }),
+      length > 0 && length <= 32,
+    )
+  }
+  for position in 0..<=31 {
+    for mutation in ["/", "\\", " ", "\n", "\r", ":", ".", "%", "服务"] {
+      let username = "a".repeat(position) + mutation + "b".repeat(31 - position)
+      assert_false(
+        nodelease_intent_is_valid({ ..base, unix_username: username }),
+      )
+    }
+  }
+  for length in 0..<=500 {
+    let reference = "ssh-cert:" + "a".repeat(length)
+    assert_eq(
+      nodelease_intent_is_valid({ ..base, access_credential_ref: reference }),
+      length > 0 && length <= 480,
+    )
+  }
+  for
+    reference in [
+      "ssh-cert:../root", "secret:lease/child", "SSH-CERT:lease", "password:lease",
+      "ssh-cert:lease\nforged", "ssh-cert:服务",
+    ] {
+    assert_false(
+      nodelease_intent_is_valid({ ..base, access_credential_ref: reference }),
+    )
+  }
+}
+
+///|
+test "helper receipt timestamp mutation fuzz rejects framing and zero time" {
+  let action = @nodelease.LeaseAgentAction::SanitizeLease(
+    lease_id="lease-1",
+    username="user_1",
+    generation=7L,
+  )
+  let prefix = "lunanexa-helper-v1:sanitize:lease-1:7:verified:"
+  assert_eq(@nodelease.helper_receipt_timestamp(action, "\{prefix}1"), Some(1L))
+  for
+    suffix in [
+      "",
+      "0",
+      "-1",
+      "+1",
+      " 1",
+      "1 ",
+      "1:forged",
+      "1\nforged",
+      "9223372036854775808",
+      "1".repeat(21),
+    ] {
+    assert_eq(
+      @nodelease.helper_receipt_timestamp(action, "\{prefix}\{suffix}"),
+      None,
+    )
   }
 }
