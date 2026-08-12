@@ -116,7 +116,9 @@ lives in `cmd/console`; the enterprise portal lives in `cmd/enterprise`, with
 the same-site WebIDE in `cmd/workbench`. Both sites consume one central API and
 shared provider-neutral contracts. See the
 [enterprise portal guide](docs/ENTERPRISE_PORTAL.md) and
-[workspace guide](docs/WORKSPACES.md).
+[workspace guide](docs/WORKSPACES.md). Lepusa packages the same centrally
+hosted interfaces as two downloadable macOS apps—Operator and Enterprise—using
+the release workflow in [the macOS desktop guide](docs/MACOS_DESKTOP.md).
 The initial scoped editor client lives in `extensions/vscode`.
 The controller requires deployment-provided secret
 values and immutable runtime/model digests.
