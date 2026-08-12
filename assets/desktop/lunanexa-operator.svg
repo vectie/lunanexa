@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="920" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#15263B"/>
+      <stop offset="1" stop-color="#071016"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="260" y1="210" x2="790" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A8F2D5"/>
+      <stop offset="1" stop-color="#35BD8D"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#000" flood-opacity=".38"/>
+    </filter>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="url(#bg)"/>
+  <path d="M192 290h640M192 512h640M192 734h640" stroke="#2B4654" stroke-width="18" stroke-linecap="round"/>
+  <path d="M290 192v640M512 192v640M734 192v640" stroke="#203844" stroke-width="18" stroke-linecap="round"/>
+  <g filter="url(#shadow)">
+    <circle cx="290" cy="290" r="70" fill="url(#mint)"/>
+    <circle cx="734" cy="290" r="70" fill="#7EE0BD"/>
+    <circle cx="290" cy="734" r="70" fill="#7EE0BD"/>
+    <circle cx="734" cy="734" r="70" fill="url(#mint)"/>
+    <circle cx="512" cy="512" r="126" fill="#0D1820" stroke="#7EE0BD" stroke-width="24"/>
+  </g>
+  <path d="M336 332l102 102M688 332L586 434M336 692l102-102M688 692L586 590" stroke="#7EE0BD" stroke-width="30" stroke-linecap="round"/>
+  <text x="512" y="552" text-anchor="middle" fill="#ECF5F2" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="112" font-weight="800">LN</text>
+</svg>

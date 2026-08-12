@@ -1,0 +1,27 @@
+{
+  "identifier": "dev.vectie.lunanexa.operator",
+  "productName": "LunaNexa Operator",
+  "version": "0.1.0",
+  "icon": "lunanexa-operator.icns",
+  "signing": {
+    "identity": "-"
+  },
+  "runtime": {
+    "backend": "system-webview",
+    "assetProtocol": "lepusa",
+    "devtools": false,
+    "platform": "macos"
+  },
+  "window": {
+    "label": "operator",
+    "title": "LunaNexa Operator",
+    "width": 1440,
+    "height": 920,
+    "resizable": true,
+    "source": {
+      "url": "https://management.example.invalid/console/"
+    }
+  },
+  "plugins": [],
+  "capabilities": []
+}

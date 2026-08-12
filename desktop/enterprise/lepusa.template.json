@@ -1,0 +1,27 @@
+{
+  "identifier": "dev.vectie.lunanexa.enterprise",
+  "productName": "LunaNexa Enterprise",
+  "version": "0.1.0",
+  "icon": "lunanexa-enterprise.icns",
+  "signing": {
+    "identity": "-"
+  },
+  "runtime": {
+    "backend": "system-webview",
+    "assetProtocol": "lepusa",
+    "devtools": false,
+    "platform": "macos"
+  },
+  "window": {
+    "label": "enterprise",
+    "title": "LunaNexa Enterprise",
+    "width": 1360,
+    "height": 900,
+    "resizable": true,
+    "source": {
+      "url": "https://management.example.invalid/enterprise/"
+    }
+  },
+  "plugins": [],
+  "capabilities": []
+}
