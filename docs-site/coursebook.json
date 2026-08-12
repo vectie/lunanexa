@@ -4,25 +4,26 @@
     "name": "LunaNexa",
     "short_name": "LN",
     "tagline": "Operate a private GPU fleet as a governed model provider.",
-    "description": "A source-grounded coursebook for LunaNexa features, architecture, data flow, deployment, operation, and debugging.",
+    "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting LunaNexa.",
     "language": "en",
     "revision": "db481df6104c5c93056eae6dc4e03b62ddbe096c + dirty deployment/runtime work",
     "freshness": "draft",
     "updated_at": "2026-08-12T10:35:14Z"
   },
   "navigation": [
-    {"id":"start","label":"Start here","page_ids":["welcome","readiness","boundaries"]},
-    {"id":"tour","label":"System tour","page_ids":["feature-map","architecture","state-ownership"]},
-    {"id":"flows","label":"Data flows","page_ids":["request-flow","deployment-flow","enrollment-flow","access-flow"]},
-    {"id":"use","label":"Use it","page_ids":["local-quickstart","operator-console","developer-workbench","client-api"]},
-    {"id":"operate","label":"Operate it","page_ids":["tomorrow-deployment","dgx-runtimes","observability-recovery"]},
-    {"id":"debug","label":"Debug it","page_ids":["debug-controller","debug-node-runtime","debug-access-database"]},
-    {"id":"reference","label":"Reference","page_ids":["configuration","error-reference","source-ledger"]}
+    {"id":"overview","label":"Overview","page_ids":["welcome","feature-map","boundaries"]},
+    {"id":"quickstart","label":"Quickstart","page_ids":["local-quickstart","operator-console","developer-workbench","client-api"]},
+    {"id":"concepts","label":"How it works","page_ids":["architecture","request-flow","deployment-flow","enrollment-flow","access-flow","state-ownership"]},
+    {"id":"deployment","label":"Deployment","page_ids":["tomorrow-deployment","dgx-runtimes"]},
+    {"id":"operations","label":"Operations","page_ids":["observability-recovery"]},
+    {"id":"troubleshooting","label":"Troubleshooting","page_ids":["debug-controller","debug-node-runtime","debug-access-database"]},
+    {"id":"reference","label":"Reference","page_ids":["configuration","error-reference"]},
+    {"id":"advanced","label":"Technical notes","visibility":"advanced","page_ids":["readiness","source-ledger"]}
   ],
   "pages": [
     {
       "id":"welcome",
-      "group_id":"start",
+      "group_id":"overview",
       "title":"What is LunaNexa?",
       "summary":"LunaNexa is the model-as-a-service and GPU-cluster control plane between authorized model consumers and a private hardware fleet. It governs models, nodes, placement, inference, access, evidence, and recovery without turning managed nodes into application servers.",
       "audience":"New platform operators, infrastructure engineers, and model-service clients",
@@ -46,13 +47,14 @@
           {"title":"Inference plane","text":"Admission, deterministic placement, bounded queues, routing, streaming, cancellation, and receipts.","href":"request-flow"},
           {"title":"Human access","text":"Operator administration, enterprise onboarding, workspace grants and leases, and exclusive-node leases.","href":"access-flow"}
         ]},
-        {"kind":"callout","tone":"warning","title":"Tomorrow's deployment is still an acceptance run","text":"The repository has a deployable baseline and extensive simulation evidence. It has not manufactured the missing physical-DGX, production identity, model-license, runtime-image, performance, and named-human acceptance evidence."},
+        {"kind":"callout","visibility":"advanced","tone":"warning","title":"Tomorrow's deployment is still an acceptance run","text":"The repository has a deployable baseline and extensive simulation evidence. It has not manufactured the missing physical-DGX, production identity, model-license, runtime-image, performance, and named-human acceptance evidence."},
         {"kind":"checkpoint","question":"What is the most important architectural boundary?","answer":"Application and product decisions stop above LunaNexa. Managed GPU nodes receive only LunaNexa infrastructure, approved runtime containers, signed model artifacts, and bounded telemetry.","revisit_after_days":2}
       ]
     },
     {
       "id":"readiness",
-      "group_id":"start",
+      "group_id":"advanced",
+      "visibility":"advanced",
       "title":"What works now—and what still needs proof?",
       "summary":"The software baseline is broad and tested, but production readiness remains conditional on the real four-node cluster and external trust infrastructure. Read this page before interpreting any green local test as a production guarantee.",
       "audience":"Release owner and deployment reviewer",
@@ -84,7 +86,7 @@
     },
     {
       "id":"boundaries",
-      "group_id":"start",
+      "group_id":"overview",
       "title":"Know the trust and product boundaries",
       "summary":"LunaNexa is deliberately narrow: it manages model capacity and hardware authority. It does not become an application platform, agent runtime, identity provider, secret manager, container registry, object store, or metrics database.",
       "audience":"Architects, security reviewers, and integration developers",
@@ -108,7 +110,7 @@
     },
     {
       "id":"feature-map",
-      "group_id":"tour",
+      "group_id":"overview",
       "title":"Tour the feature set",
       "summary":"LunaNexa is one product with multiple deployable components. The feature map follows operator and client outcomes rather than the source directory tree.",
       "audience":"Anyone orienting to the repository",
@@ -132,7 +134,7 @@
     },
     {
       "id":"architecture",
-      "group_id":"tour",
+      "group_id":"concepts",
       "title":"Understand the architecture",
       "summary":"The architecture separates consumer intent, management authority, node reconciliation, and inference traffic. The management node owns durable control state; each DGX is an independently schedulable execution node.",
       "audience":"Platform engineer or reviewer",
@@ -165,7 +167,7 @@
     },
     {
       "id":"state-ownership",
-      "group_id":"tour",
+      "group_id":"concepts",
       "title":"Follow state ownership and durability",
       "summary":"Not all state lives in PostgreSQL. Enterprise and workspace authority use transactional PostgreSQL projections; controller, registry, scheduler, enrollment, telemetry, deployment, and exclusive-lease stores still use signed file/PVC adapters and epoch fencing.",
       "audience":"Operator planning storage, backup, or recovery",
@@ -193,7 +195,7 @@
     },
     {
       "id":"request-flow",
-      "group_id":"flows",
+      "group_id":"concepts",
       "title":"Trace an inference request",
       "summary":"A workload crosses validation, identity, lease, policy, scheduler, runtime, and evidence boundaries. Each stage can reject safely before model execution, and terminal failures use the same canonical response shape.",
       "audience":"API client developer and on-call operator",
@@ -225,7 +227,7 @@
     },
     {
       "id":"deployment-flow",
-      "group_id":"flows",
+      "group_id":"concepts",
       "title":"Trace a model-service deployment",
       "summary":"One-click deployment is compact at the API but strict underneath: a signed catalog template expands into preflight, durable operation state, selected-node assignments, verified artifact materialization, runtime readiness, promotion, and audit evidence.",
       "audience":"Model service operator",
@@ -257,7 +259,7 @@
     },
     {
       "id":"enrollment-flow",
-      "group_id":"flows",
+      "group_id":"concepts",
       "title":"Trace node enrollment and reconciliation",
       "summary":"Kubernetes registration and LunaNexa enrollment are separate. The management node joins and receives a management label; each DGX joins as a worker, receives the GPU label, then enrolls with one-use bootstrap material and a unique persistent node credential.",
       "audience":"Cluster installer",
@@ -283,7 +285,7 @@
     },
     {
       "id":"access-flow",
-      "group_id":"flows",
+      "group_id":"concepts",
       "title":"Trace user, workspace, and exclusive access",
       "summary":"Human access is explicit and layered: external identity maps to an opaque subject, an operator activates the user and grant, a bounded lease authorizes model admission, and a separate exclusive-node contract governs any real DGX login.",
       "audience":"Access administrator and security reviewer",
@@ -314,7 +316,7 @@
     },
     {
       "id":"local-quickstart",
-      "group_id":"use",
+      "group_id":"quickstart",
       "title":"Run the local functional path",
       "summary":"Use the repository gate and dedicated simulations to validate behavior on a development machine. These commands prove software contracts and local orchestration—not DGX performance or production security.",
       "audience":"Developer or reviewer with the repository checkout",
@@ -331,12 +333,14 @@
         ]},
         {"kind":"code","language":"sh","label":"Repository and functional gates","code":"sh scripts/release-gate.sh\nsh scripts/four-node-simulation.sh\nsh scripts/production-fault-simulation.sh EVIDENCE_DIRECTORY"},
         {"kind":"code","language":"sh","label":"Minimal local Kubernetes topology","code":"sh scripts/start-local-kubernetes-simulation.sh\n# inspect the dedicated kind-lunanexa-sim context\nsh scripts/stop-local-kubernetes-simulation.sh"},
+        {"kind":"code","language":"sh","label":"Copy-paste macOS recipe (run from the repository root)","code":"colima start --profile lunanexa --cpus 4 --memory 8 --disk 30\nsh scripts/start-local-kubernetes-simulation.sh\nKUBECONFIG=\"$HOME/.kube/lunanexa-sim\" kubectl --context kind-lunanexa-sim get nodes -L lunanexa.io/role,lunanexa.io/simulation"},
+        {"kind":"callout","tone":"success","title":"Expected local result","text":"The command must show exactly one Ready management node and four Ready gpu-labelled workers. It was exercised on an Apple-silicon Mac with Colima; it remains a placement simulation with no NVIDIA device or production-identity claim."},
         {"kind":"callout","tone":"warning","title":"Read the evidence, not only the exit code","text":"The simulator deliberately records hardware_performance_validated: false. Do not remove or reinterpret that boundary."}
       ]
     },
     {
       "id":"operator-console",
-      "group_id":"use",
+      "group_id":"quickstart",
       "title":"Use the management console",
       "summary":"The Rabbita console is the operator surface for cluster posture, nodes, models, deployments, users, grants, leases, policies, requests, benchmarks, and audit evidence. It sends the same typed API mutations used by automation.",
       "audience":"LunaNexa operator",
@@ -352,6 +356,7 @@
           {"title":"Use confirmation boundaries","text":"Cordon, drain, rollback, revoke, suspend, and early lease termination show scope and require explicit confirmation."},
           {"title":"Verify convergence","text":"After a mutation, follow desired state through operation, assignment, node heartbeat, runtime readiness, and audit receipt."}
         ]},
+        {"kind":"image","src":"./images/console-overview.zh-CN.jpg","alt":"The live LunaNexa management console in Simplified Chinese, showing the overview dashboard before a controller is connected.","caption":"Real browser capture of the management console. This disconnected state is intentional: the UI does not invent node or model health before it receives controller data."},
         {"kind":"cards","items":[
           {"title":"Nodes","text":"Health, inventory, labels, workloads, cordon, drain, and lease mode."},
           {"title":"Models","text":"Artifact, license, evaluation, compatibility, aliases, and approval."},
@@ -365,7 +370,7 @@
     },
     {
       "id":"developer-workbench",
-      "group_id":"use",
+      "group_id":"quickstart",
       "title":"Use the developer workbench and editor clients",
       "summary":"The workbench is a browser-local editing and model-invocation surface. It displays identity, grant, lease, capability, expiry, and receipt state while keeping repository content and editor agents outside managed DGX nodes.",
       "audience":"Developer with an active workspace lease",
@@ -381,6 +386,7 @@
           {"title":"Invoke explicitly","text":"The client sends a canonical ephemeral request with bounded input/output and a unique workload/idempotency identity."},
           {"title":"Inspect result evidence","text":"Read normalized output, status, usage, timing, and receipt; server rejection remains authoritative if a lease expires mid-session."}
         ]},
+        {"kind":"image","src":"./images/developer-workbench.zh-CN.jpg","alt":"The live LunaNexa developer workbench in Simplified Chinese, showing its access gate and browser-local workspace shell.","caption":"Real browser capture of the developer workbench before a workspace token is provided. The access gate remains separate from the model editor."},
         {"kind":"heading","level":2,"id":"external-editors","text":"External editors"},
         {"kind":"table","columns":["Client","Current role","Credential boundary"],"rows":[
           ["VS Code extension","Working scoped client over explicitly selected text","Token in SecretStorage, bound to approved origin and machine-scoped settings"],
@@ -392,7 +398,7 @@
     },
     {
       "id":"client-api",
-      "group_id":"use",
+      "group_id":"quickstart",
       "title":"Integrate a provider-neutral client",
       "summary":"Clients use LunaNexa's canonical workload contract rather than sending application identity or provider-specific assumptions to the cluster. Compatibility APIs are adapters, not the source of truth.",
       "audience":"Provider-router or application-integration developer",
@@ -415,7 +421,7 @@
     },
     {
       "id":"tomorrow-deployment",
-      "group_id":"operate",
+      "group_id":"deployment",
       "title":"Deploy the management node and first DGX safely",
       "summary":"Tomorrow's safe order is management host, Kubernetes placement, management plane, health and ingress, then one DGX at a time. Do not enroll the management node and do not start with all four workers simultaneously.",
       "audience":"Named deployment operator",
@@ -436,13 +442,15 @@
         {"kind":"code","language":"sh","label":"Fail unresolved render before apply","code":"rg '\\$\\{[A-Z0-9_]+\\}|registry\\.invalid|lunanexa\\.invalid' RENDERED_DIRECTORY\n# This command must print nothing."},
         {"kind":"heading","level":2,"id":"apply-order","text":"Management resource apply order"},
         {"kind":"code","language":"sh","label":"Apply rendered resources","code":"kubectl -n lunanexa apply -f RENDERED_PREREQUISITES\nkubectl -n lunanexa apply -f RENDERED_POSTGRES\nkubectl -n lunanexa apply -f RENDERED_CONTROLLER\nkubectl -n lunanexa apply -f RENDERED_CONSOLE\nkubectl -n lunanexa apply -f RENDERED_ENTERPRISE\nkubectl -n lunanexa apply -f RENDERED_NETWORK_POLICIES\nkubectl -n lunanexa apply -f RENDERED_INGRESS"},
+        {"kind":"code","language":"sh","label":"Open the guarded deployment UI (two terminals)","code":"# Terminal 1: build and serve the browser UI\nsh scripts/build-browser-bundles.sh\npython3 -m http.server 4173 --bind 127.0.0.1 --directory _build/browser-dist\n\n# Terminal 2: start the loopback-only native companion\nsh scripts/start-deployment-ui.sh\n# Then open http://127.0.0.1:4173/installer/"},
+        {"kind":"code","language":"sh","label":"Copy-paste real-host preview (edit the non-secret values first)","code":"export SSH_USER=ubuntu\nexport MANAGEMENT_NODE=management-01\nexport MANAGEMENT_HOST=management.example\nexport KUBECONFIG_PATH=\"$HOME/.kube/config\"\nexport RENDERED_DIR=\"$PWD/private-rendered\"\nexport SECRET_DIR=\"$PWD/private-node-material\"\nexport CLI_PATH=\"$PWD/_build/native/release/build/cmd/cli/cli.exe\"\n\nsh scripts/deploy/run-cluster-install.sh --mode preview \\\n  --ssh-user \"$SSH_USER\" --ssh-key \"$HOME/.ssh/lunanexa_deploy\" \\\n  --known-hosts \"$HOME/.ssh/lunanexa_known_hosts\" \\\n  --management-node \"$MANAGEMENT_NODE\" --management-host \"$MANAGEMENT_HOST\" \\\n  --namespace lunanexa --kubeconfig \"$KUBECONFIG_PATH\" \\\n  --rendered-directory \"$RENDERED_DIR\" --secret-directory \"$SECRET_DIR\" \\\n  --cli-path \"$CLI_PATH\" \\\n  --compute dgx-spark-01=dgx1.example --compute dgx-spark-02=dgx2.example \\\n  --compute dgx-spark-03=dgx3.example --compute dgx-spark-04=dgx4.example"},
         {"kind":"callout","tone":"danger","title":"Private overlay is mandatory","text":"Base manifests contain placeholders and do not fully enforce management versus GPU placement. Do not apply them unchanged to a real cluster."},
         {"kind":"callout","tone":"warning","title":"Use the installer UI within its boundary","text":"The assisted UI begins with pinned-host SSH verification after hosts have already joined Kubernetes. It does not accept arbitrary shell commands, SSH keys, kubeadm join tokens, or browser-stored secrets."}
       ]
     },
     {
       "id":"dgx-runtimes",
-      "group_id":"operate",
+      "group_id":"deployment",
       "title":"Qualify vLLM or SGLang on DGX Spark",
       "summary":"The repository now has secret-free single-node qualification templates for vLLM and SGLang. They test a real ARM64 DGX and verified local model directory but are not a second production deployment path.",
       "audience":"Runtime qualification owner",
@@ -476,7 +484,7 @@
     },
     {
       "id":"observability-recovery",
-      "group_id":"operate",
+      "group_id":"operations",
       "title":"Observe, back up, and recover",
       "summary":"Operate LunaNexa through bounded metrics, audit events, benchmark evidence, durable snapshots, and a fenced recovery plan. Recovery begins read-only and advances authority only after state and external effects agree.",
       "audience":"On-call operator and disaster-recovery owner",
@@ -507,7 +515,7 @@
     },
     {
       "id":"debug-controller",
-      "group_id":"debug",
+      "group_id":"troubleshooting",
       "title":"Debug controller, ingress, and fencing failures",
       "summary":"Start from the public symptom and preserve the trust boundary. Most controller failures fall into process health, trusted ingress/authentication, configuration/rendering, network policy, or epoch fencing.",
       "audience":"On-call operator",
@@ -523,7 +531,7 @@
     },
     {
       "id":"debug-node-runtime",
-      "group_id":"debug",
+      "group_id":"troubleshooting",
       "title":"Debug missing nodes, blocked placement, and runtimes",
       "summary":"Separate node identity, scheduler eligibility, assignment validity, artifact materialization, OCI runtime identity, health, and routing. A node appearing in inventory does not prove a model is ready.",
       "audience":"DGX and model-runtime operator",
@@ -539,7 +547,7 @@
     },
     {
       "id":"debug-access-database",
-      "group_id":"debug",
+      "group_id":"troubleshooting",
       "title":"Debug workspace authority and PostgreSQL",
       "summary":"Access failures are usually correct fail-closed outcomes: subject mapping, lifecycle state, tenant scope, lease time/capability, request ownership, rate/concurrency, or database authority does not match.",
       "audience":"Access administrator and database operator",
@@ -607,7 +615,8 @@
     },
     {
       "id":"source-ledger",
-      "group_id":"reference",
+      "group_id":"advanced",
+      "visibility":"advanced",
       "title":"How this coursebook was produced",
       "summary":"This separate site is a MoonBook repository-coursebook projection generated from LunaNexa's current documents, source contracts, and tests. Its evidence file records the exact inspected revision, dirty state, source digests, claim status, and known gaps.",
       "audience":"Documentation reviewer and future maintainer",

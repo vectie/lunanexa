@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
 import {
+  advancedMaterialRequested,
   createCoursebookServer,
   publicBoundaryRefusal,
   publicEvidenceProjection,
@@ -18,12 +19,13 @@ import {
 const root = resolve(import.meta.dirname, "..");
 const siteRoot = resolve(root, "docs-site");
 const book = JSON.parse(await readFile(resolve(siteRoot, "coursebook.json"), "utf8"));
+const zhBook = JSON.parse(await readFile(resolve(siteRoot, "coursebook.zh-CN.json"), "utf8"));
 const evidence = JSON.parse(await readFile(resolve(siteRoot, "coursebook-evidence.json"), "utf8"));
 const pageById = new Map(book.pages.map((page) => [page.id, page]));
 const sourceById = new Map(evidence.sources.map((source) => [source.id, source]));
 const allowedBlocks = new Set([
   "heading", "paragraph", "bullets", "steps", "callout", "code", "table",
-  "flow", "cards", "troubleshooting", "checkpoint",
+  "flow", "cards", "troubleshooting", "checkpoint", "image",
 ]);
 
 function invokeWithoutListener(server, { method = "GET", url = "/", host = "127.0.0.1:4390", body = "" } = {}) {
@@ -70,6 +72,39 @@ test("coursebook has a complete unique navigation graph", () => {
   }
 });
 
+test("Simplified Chinese localization covers every page without rewriting code", () => {
+  assert.equal(zhBook.contract_version, "moonbook.repository-coursebook-locale.v1");
+  assert.equal(zhBook.locale, "zh-CN");
+  assert.deepEqual(Object.keys(zhBook.pages).sort(), book.pages.map((page) => page.id).sort());
+  for (const page of book.pages) {
+    const localized = zhBook.pages[page.id];
+    assert.match(localized.title, /\p{Script=Han}/u, `${page.id}: title is not Chinese`);
+    assert.match(localized.summary, /\p{Script=Han}/u, `${page.id}: summary is not Chinese`);
+    assert.match(localized.audience, /\p{Script=Han}/u, `${page.id}: audience is not Chinese`);
+    assert.equal(localized.blocks.length, page.blocks.length, `${page.id}: block count`);
+    localized.blocks.forEach((block, index) => {
+      assert.equal(block.kind, page.blocks[index].kind, `${page.id}: block ${index} kind`);
+      assert.equal(Object.hasOwn(block, "code"), false, `${page.id}: localized code must stay canonical`);
+      assert.match(JSON.stringify(block), /\p{Script=Han}/u, `${page.id}: block ${index} has no Chinese prose`);
+    });
+  }
+  assert.match(JSON.stringify(zhBook.ui), /简体中文|教程|搜索/u);
+});
+
+test("published screenshots are real local image assets with safe paths", async () => {
+  const images = book.pages.flatMap((page) => page.blocks.filter((block) => block.kind === "image"));
+  assert.ok(images.length >= 2);
+  for (const block of images) {
+    assert.match(block.src, /^\.\/images\/[A-Za-z0-9][A-Za-z0-9._/-]*\.(?:png|jpg)$/);
+    assert.doesNotMatch(block.src, /\.\.|\/\//);
+    assert.ok(block.alt.length >= 30);
+    const bytes = await readFile(resolve(siteRoot, block.src.replace(/^\.\//, "")));
+    assert.ok(bytes.length > 10_000, `${block.src}: screenshot is unexpectedly small`);
+    const signature = bytes.subarray(0, 8).toString("hex");
+    assert.ok(signature === "89504e470d0a1a0a" || signature.startsWith("ffd8ff"), `${block.src}: unsupported image format`);
+  }
+});
+
 test("every page source exists in the evidence ledger", () => {
   assert.equal(evidence.contract_version, "moonbook.repository-coursebook-evidence.v1");
   for (const page of book.pages) {
@@ -89,7 +124,7 @@ test("published source digests match the inspected repository bytes", async () =
 });
 
 test("public assets contain no unresolved template or secret material", async () => {
-  const files = ["index.html", "styles.css", "app.js", "server.mjs", "coursebook.json", "coursebook-evidence.json"];
+  const files = ["index.html", "styles.css", "app.js", "server.mjs", "coursebook.json", "coursebook.zh-CN.json", "coursebook-evidence.json"];
   const combined = (await Promise.all(files.map((file) => readFile(resolve(siteRoot, file), "utf8")))).join("\n");
   assert.doesNotMatch(combined, /\$\{[A-Z0-9_]+\}/);
   assert.doesNotMatch(combined, /-----BEGIN [A-Z ]+PRIVATE KEY-----/);
@@ -128,6 +163,22 @@ test("pet retrieval sends only bounded question-relevant public evidence", () =>
   assert.ok(context.evidence.sources.every((source) => context.pages.some((page) => page.source_ids.includes(source.id)) || context.evidence.claims.some((claim) => claim.source_ids.includes(source.id))));
 });
 
+test("pet retrieval keeps technical notes out of newcomer questions", () => {
+  assert.equal(advancedMaterialRequested("I am new. What should I learn first?", "welcome", book.pages), false);
+  const standard = publicEvidenceProjection({ book, evidence }, "I am new. What should I learn first?", "welcome");
+  assert.equal(standard.mode, "standard");
+  assert.ok(standard.pages.length > 0);
+  assert.ok(standard.pages.every((page) => page.visibility !== "advanced" && page.status === undefined && page.source_ids === undefined));
+  assert.ok(standard.page_index.every((page) => page.status === undefined && !["readiness", "source-ledger"].includes(page.id)));
+  assert.deepEqual(standard.evidence, { repository: null, sources: [], claims: [], open_gaps: [] });
+
+  assert.equal(advancedMaterialRequested("Is LunaNexa production ready?", "welcome", book.pages), true);
+  const advanced = publicEvidenceProjection({ book, evidence }, "Is LunaNexa production ready?", "welcome");
+  assert.equal(advanced.mode, "advanced");
+  assert.ok(advanced.page_index.some((page) => page.id === "readiness"));
+  assert.ok(advanced.evidence.claims.length > 0);
+});
+
 test("debugging and deployment reader jobs are represented", () => {
   const blocks = book.pages.flatMap((page) => page.blocks);
   assert.ok(blocks.filter((block) => block.kind === "flow").length >= 8);
@@ -135,6 +186,25 @@ test("debugging and deployment reader jobs are represented", () => {
   assert.ok(book.pages.some((page) => page.id === "tomorrow-deployment"));
   assert.ok(book.pages.some((page) => page.id === "error-reference"));
   assert.ok(book.pages.some((page) => page.id === "source-ledger"));
+});
+
+test("newcomer mode keeps repository process and readiness judgment opt-in", async () => {
+  const advancedGroups = book.navigation.filter((group) => group.visibility === "advanced");
+  const advancedPages = book.pages.filter((page) => page.visibility === "advanced");
+  assert.deepEqual(advancedGroups.map((group) => group.id), ["advanced"]);
+  assert.deepEqual(advancedPages.map((page) => page.id).sort(), ["readiness", "source-ledger"]);
+  assert.ok(book.navigation.find((group) => group.id === "overview")?.page_ids.includes("welcome"));
+  assert.ok(book.navigation.find((group) => group.id === "quickstart")?.page_ids.includes("local-quickstart"));
+  assert.ok(book.navigation.find((group) => group.id === "troubleshooting")?.page_ids.includes("debug-controller"));
+  assert.ok(pageById.get("welcome").blocks.some((block) => block.visibility === "advanced"));
+
+  const html = await readFile(resolve(siteRoot, "index.html"), "utf8");
+  const app = await readFile(resolve(siteRoot, "app.js"), "utf8");
+  assert.match(html, /data-advanced-meta hidden/);
+  assert.match(html, /data-source-disclosure hidden/);
+  assert.match(html, /data-toggle-advanced/);
+  assert.match(app, /state\.book\.pages\.filter\(pageIsVisible\)/);
+  assert.match(app, /array\(page\.blocks\)\.filter\(blockIsVisible\)/);
 });
 
 test("separate-site deployment remains digest-pinned and least privilege", async () => {

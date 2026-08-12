@@ -1,0 +1,376 @@
+{
+  "contract_version": "moonbook.repository-coursebook-locale.v1",
+  "locale": "zh-CN",
+  "project": {
+    "tagline": "将私有 GPU 集群作为受治理的模型服务平台来运营。",
+    "description": "面向新手的 LunaNexa 学习、使用、部署与故障排查教程。"
+  },
+  "ui": {
+    "coursebook": "教程",
+    "learning_guide": "学习指南",
+    "pet_name": "{project} 指南",
+    "language": "语言",
+    "search": "搜索",
+    "ask_guide": "问指南",
+    "menu": "目录",
+    "on_this_page": "本页内容",
+    "coursebook_search": "教程搜索",
+    "search_title": "查找功能、流程、命令或错误",
+    "close": "关闭",
+    "close_search": "关闭搜索",
+    "search_coursebook": "搜索教程",
+    "search_placeholder": "例如：节点注册、部署或错误码",
+    "sources_freshness": "来源与时效",
+    "pet_subtitle": "只读教程助手",
+    "close_assistant": "关闭助手",
+    "pet_boundary": "仅依据已发布教程回答 · 不会执行命令",
+    "pet_question_label": "询问功能、架构、使用方法或故障排查",
+    "pet_placeholder": "请求如何到达模型运行时？",
+    "ask": "提问",
+    "loading": "正在加载教程…",
+    "load_error": "教程加载失败。",
+    "hide_technical_notes": "隐藏技术说明",
+    "show_technical_notes": "显示技术说明",
+    "copy": "复制",
+    "copied": "已复制",
+    "copied_to_clipboard": "已复制到剪贴板",
+    "copy_unavailable": "此浏览器无法复制",
+    "likely_causes": "可能原因",
+    "safe_checks": "安全检查",
+    "resolution": "解决办法",
+    "escalate_when": "需要升级处理的情况",
+    "escalate_default": "按文档检查后仍无法定位故障。",
+    "symptom": "现象",
+    "reveal_answer": "查看答案",
+    "revisit_after": "{days} 天后复习。",
+    "no_sources": "本页没有公开来源。",
+    "inspected_repository": "已检查代码仓库",
+    "previous": "上一页",
+    "next": "下一页",
+    "status_implemented": "已实现",
+    "status_documented": "已记录",
+    "status_planned": "已规划",
+    "status_simulated": "已模拟",
+    "status_unknown": "未知",
+    "minutes": "分钟",
+    "for_audience": "适合：{audience}",
+    "search_empty": "没有匹配结果。请换一个功能、流程或错误码。",
+    "pet_welcome": "我只依据这份 {project} 教程回答。我可以解释功能、架构、使用流程和故障排查，但不会运行命令或更改系统。",
+    "pet_reading": "正在查阅教程…",
+    "pet_offline": "助手当前不可用，教程仍可正常阅读。",
+    "unavailable": "不可用",
+    "revision": "版本",
+    "revision_unavailable": "版本不可用",
+    "code": "代码",
+    "data_table": "数据表",
+    "evidence": "证据",
+    "confidence_supported": "有文档支持",
+    "confidence_mixed": "部分支持",
+    "confidence_unknown": "未知",
+    "skip_to_content": "跳到正文",
+    "coursebook_home": "教程首页",
+    "coursebook_sections": "教程栏目",
+    "coursebook_navigation": "教程导航",
+    "breadcrumb": "面包屑导航",
+    "previous_next": "上一页和下一页"
+  },
+  "navigation": {
+    "overview": "概览",
+    "quickstart": "快速开始",
+    "concepts": "工作原理",
+    "deployment": "部署",
+    "operations": "运维",
+    "troubleshooting": "故障排查",
+    "reference": "参考",
+    "advanced": "技术说明"
+  },
+  "pages": {
+    "welcome": {
+      "title": "LunaNexa 是什么？",
+      "summary": "LunaNexa 位于获得授权的模型使用方与私有硬件集群之间，是模型即服务与 GPU 集群控制平面。它治理模型、节点、调度、推理、访问、证据和恢复，同时避免把受管节点变成应用服务器。",
+      "audience": "初次接触平台的运维人员、基础设施工程师和模型服务客户端开发者",
+      "blocks": [
+        {"kind":"heading","text":"一句话心智模型"},
+        {"kind":"paragraph","text":"应用只需请求通用模型能力。LunaNexa 负责认证与准入、在合适节点上选择已就绪部署、调用获准的服务适配器，并返回规范化输出以及可审计的用量和耗时证据。"},
+        {"kind":"flow","title":"从需求到受治理推理","steps":[{"title":"使用方意图","text":"获得授权的客户端发送不绑定特定提供商的工作负载信封。"},{"title":"控制平面","text":"策略、配额、租约、模型和容量检查共同决定是否允许运行。"},{"title":"节点运行时","text":"被选中的 DGX 只运行经过批准且以摘要固定的模型服务器。"},{"title":"有界结果","text":"客户端收到规范化输出、用量、耗时、状态和回执。"}]},
+        {"kind":"heading","text":"LunaNexa 负责什么"},
+        {"kind":"cards","items":[{"title":"集群运维","text":"节点注册、健康、容量、封锁调度、排空、协调和恢复。"},{"title":"模型生命周期","text":"制品、许可证、评测、别名、部署、发布和回滚。"},{"title":"推理平面","text":"准入、确定性调度、有界队列、路由、流式传输、取消和回执。"},{"title":"人员访问","text":"管理员操作、企业接入、工作区授权与租约，以及独占节点租约。"}]},
+        {"kind":"callout","title":"明天的部署仍是一次验收运行","text":"仓库提供可部署的基线和丰富的模拟证据，但不能凭空替代实体 DGX、生产身份、模型许可证、运行时镜像、性能和具名人员验收证据。"},
+        {"kind":"checkpoint","question":"最重要的架构边界是什么？","answer":"应用和产品层决策止于 LunaNexa 之上。受管 GPU 节点只接收 LunaNexa 基础设施、获准的运行时容器、已签名模型制品和有界遥测。"}
+      ]
+    },
+    "readiness": {
+      "title": "现在能做什么，还需要证明什么？",
+      "summary": "软件基线已经广泛实现并经过测试，但生产就绪仍取决于真实四节点集群和外部信任基础设施。不要把本地绿灯测试当成生产保证。",
+      "audience": "发布负责人和部署审核人",
+      "blocks": [
+        {"kind":"heading","text":"仓库中已实现的基线"},
+        {"kind":"bullets","items":["类型化的工作负载、节点、分配、注册表、工作区、部署、遥测、审计和流式传输契约。","原生控制器、节点代理、调度器、客户端/CLI、持久状态、PostgreSQL 管理适配器和恢复工具。","Rabbita 管理控制台、企业门户、开发者工作台和限定范围的 VS Code 扩展。","已签名分配、摘要和 Cosign 检查、严格的逐节点运行时路由、有界准入、取消和带回执的失败。","四节点功能模拟、重启演练、隔离扫描、密钥扫描、响应泄漏检查和浏览器测试。"]},
+        {"kind":"heading","text":"外部验收关卡"},
+        {"kind":"table","columns":["关卡","现有证据","生产声明前必须完成"],"rows":[["四台 DGX Spark","仅功能模拟器","注册全部实体节点，并测试真实心跳、调度、排空、重启和故障转移。"],["模型服务","适配器和验证模板","选择获许可模型及已签名 ARM64 镜像，并在真实 DGX 上验证 vLLM 或 SGLang。"],["身份与传输","默认拒绝的应用边界","配置并验证 CA/mTLS、主体映射、限定凭据、轮换和网络隔离。"],["持久化","PostgreSQL 适配器及文件/PVC 存储","部署高可用或托管 PostgreSQL、加密备份、存储类和恢复演练。"],["性能","基准驱动器和证据结构","在硬件上测量冷启动、长流、并发、饱和、内存、温度、排空和故障。"],["发布授权","证据包关卡","由具名的运维、安全和模型许可证负责人检查实时证据并批准。"]]},
+        {"kind":"callout","title":"不能用替代实验作保证","text":"Colima/kind、本地四节点模拟器或摘要有效的 YAML，都不能证明 NVIDIA 设备发现、ARM64 镜像兼容性、生产网络、温度稳定性或真实服务目标。"},
+        {"kind":"checkpoint","question":"EvidenceBundle.release_ready() 何时可以为 true？","answer":"只有在基准证据、报告引用、场景与隔离成功结果，以及具名验收人全部存在时。"}
+      ]
+    },
+    "boundaries": {
+      "title":"理解信任边界和产品边界",
+      "summary":"LunaNexa 的职责刻意保持狭窄：管理模型容量和硬件权限。它不是应用平台、Agent 运行时、身份提供商、密钥管理器、容器注册表、对象存储或指标数据库。",
+      "audience":"架构师、安全审核人员和集成开发者",
+      "blocks":[
+        {"kind":"heading","text":"受管节点规则"},
+        {"kind":"callout","title":"受管 DGX 上允许存在的内容","text":"LunaNexa 节点代理、获准的模型运行时容器、分配明确指定的已签名模型制品、主机持有的信任材料，以及有界基础设施遥测。"},
+        {"kind":"callout","title":"受管 DGX 上禁止存在的内容","text":"MoonSuite 应用、代码仓库副本、领域结构、编辑器 Agent、应用凭据、控制器任意下发的 Shell 命令和产品专属工作流。"},
+        {"kind":"heading","text":"结构隔离不等于没有载荷"},
+        {"kind":"paragraph","text":"模型必须接收要处理的用户内容。因此 LunaNexa 对结构隔离采取绝对边界，同时对推理载荷实施最小化、传输加密、明确的数据分类、默认不记录和显式保留策略。"},
+        {"kind":"heading","text":"工作区租约与独占节点租约"},
+        {"kind":"table","columns":["契约","授予的权限","不授予"],"rows":[["WorkspaceLease","有时限的控制平面准入和通用模型能力上限","DGX 登录、Shell、代码仓库检出或节点文件系统访问"],["ExclusiveNodeLease","一个具名主体、一台具名 DGX，以及独立受保护生命周期内的限时主机访问","并行的受管推理调度或应用层工作流"]]},
+        {"kind":"checkpoint","question":"浏览器工作台可以在受管节点安装编辑器 Agent 吗？","answer":"不可以。编辑状态保留在浏览器/工作区域，模型调用通过不绑定特定提供商的工作负载契约完成。"}
+      ]
+    },
+    "feature-map": {
+      "title":"浏览功能全景",
+      "summary":"LunaNexa 是一个产品，由多个可独立部署的内部组件组成。功能地图按运维和客户端结果组织，而不是照搬源码目录。",
+      "audience":"希望快速了解仓库的所有读者",
+      "blocks":[
+        {"kind":"cards","items":[{"title":"集群","text":"清单、注册、证书轮换、心跳、健康、容量、污点、封锁调度、排空和恢复。"},{"title":"模型","text":"制品来源、许可证证据、评测、别名、兼容性、摘要验证和签名验证。"},{"title":"模型服务","text":"已签名目录模板、确定性预检、一键操作、就绪、发布、回滚和删除。"},{"title":"推理","text":"不绑定提供商的单次/流式请求、幂等、配额、队列、调度、重试、取消、用量和回执。"},{"title":"访问","text":"用户、授权、租约、限定范围的 API 密钥、企业协议和独占节点权限。"},{"title":"开发者体验","text":"浏览器本地 Web IDE、租约状态、模型调用、回执、VS Code 和类型化第三方交接。"},{"title":"商业治理","text":"组织、项目、成本中心、预算、配额、承诺、账本证据、协议和合格提供商端口。"},{"title":"证据","text":"指标、审计事件、基准测试、建议、恢复计划、模拟摘要和发布包。"}]},
+        {"kind":"callout","title":"固定集群是有意设计","text":"初始生产规格有四台可调度 DGX Spark，不自动扩缩容，也不含批处理子系统。容量和调度变化必须由管理员明确操作。"}
+      ]
+    },
+    "architecture": {
+      "title":"理解系统架构",
+      "summary":"架构将使用方意图、管理权限、节点协调和推理流量分开。管理节点持有持久控制状态；每台 DGX 都是可独立调度的执行节点。",
+      "audience":"平台工程师或审核人员",
+      "blocks":[
+        {"kind":"flow","title":"信任域概览","steps":[{"title":"使用方","text":"MoonGate 或其他已授权客户端发送通用 LunaNexa 契约。"},{"title":"管理域","text":"API、调度器、控制器、注册表、存储、PostgreSQL、控制台、企业门户和工作台共同治理意图。"},{"title":"节点域","text":"每台 DGX 上的一个受保护节点代理协调已签名分配并监管获准 OCI 运行时。"},{"title":"推理结果","text":"选中的已就绪适配器通过控制平面返回有界输出和证据。"}]},
+        {"kind":"heading","text":"管理组件"},
+        {"kind":"table","columns":["组件","主要职责","是否运行在 DGX"],"rows":[["API","认证、校验、准入、状态、取消和流式传输","否"],["Controller","期望状态、协调、部署操作和恢复隔离","否"],["Scheduler","资格过滤、确定性评分、配额、队列、容量和故障转移","否"],["Registry","模型、运行时、制品、许可证、评测和别名","否"],["PostgreSQL 与存储","持久权限、快照、投影、重放和审计","否"],["Rabbita 站点","基于同一类型化 API 的管理员、企业和开发者流程","否"],["Node agent","清单、制品物化、分配协调和运行时监管","是"],["Runtime adapter","获准模型服务器的生命周期与调用","是"]]},
+        {"kind":"heading","text":"初始四节点拓扑"},
+        {"kind":"paragraph","text":"把四台 Spark 当作四个独立节点。首个验收目标是单节点服务；在真实网络、运行时、模型和拓扑通过具名基准验收前，不启用多节点分片。"},
+        {"kind":"callout","title":"管理节点不是计算节点","text":"管理节点加入 Kubernetes 并获得管理放置标签，但绝不能注册到 LunaNexa 计算节点清单。"}
+      ]
+    },
+    "state-ownership": {
+      "title":"理解状态归属与持久性",
+      "summary":"并非所有状态都在 PostgreSQL。企业与工作区权限使用事务型 PostgreSQL 投影；控制器、注册表、调度器、注册、遥测、部署和独占租约仍使用已签名文件/PVC 适配器及 Epoch 隔离。",
+      "audience":"规划存储、备份或恢复的运维人员",
+      "blocks":[
+        {"kind":"table","columns":["状态","权威来源","恢复含义"],"rows":[["企业成员、协议、租约申请","PostgreSQL 规范化投影与规范快照","加密备份 PostgreSQL，并测试时间点恢复。"],["工作区用户、授权、租约、准入预留","生产使用 PostgreSQL；开发使用文件适配器","重启后保留准入所有权和滚动计数器。"],["注册表、调度器、分配、注册、遥测","已签名文件/PVC 快照","整体备份，并在更高控制器 Epoch 下恢复。"],["模型源文件","管理节点 /data/models 与分离签名","独立备份；节点本地物化只是可丢弃缓存。"],["运行时镜像","外部、以摘要固定的 OCI 注册表","保留已签名不可变镜像和扫描证据。"],["提示词和输出","默认不持久化","未经批准的外部提供商，不允许非临时保留。"]]},
+        {"kind":"flow","title":"可安全重启的权限链","steps":[{"title":"持久化意图","text":"发布副作用前，原子写入规范状态与投影。"},{"title":"提升 Epoch","text":"重启后的控制器取得严格更高的隔离 Epoch。"},{"title":"仅协调","text":"在不接受写入的情况下检查缺失分配、过期租约、孤儿和失联节点。"},{"title":"恢复权限","text":"只有在恢复计划和审计连续性得到审核后才接受变更。"}]},
+        {"kind":"callout","title":"参考 PostgreSQL 不是高可用部署","text":"deploy/postgres.yaml 是单实例参考。生产环境应使用经批准的托管服务或 Operator，提供复制、故障转移、TLS 验证、加密存储、WAL 归档和时间点恢复。"}
+      ]
+    },
+    "request-flow": {
+      "title":"跟踪一次推理请求",
+      "summary":"工作负载依次经过校验、身份、租约、策略、调度器、运行时和证据边界。每一层都可以在模型执行前安全拒绝，终态失败使用同一种规范响应结构。",
+      "audience":"API 客户端开发者和当班运维人员",
+      "blocks":[
+        {"kind":"flow","title":"规范请求路径","steps":[{"title":"校验信封","text":"检查契约版本、不透明 ID、模型选择器、数据策略、截止时间、资源上限和载荷结构。"},{"title":"解析权限","text":"执行凭据范围，以及启用时的已验证主体、有效授权、有效工作区租约、速率和已占并发检查。"},{"title":"准入与调度","text":"预留配额和容量；硬过滤移除不合格节点；确定性评分选择已就绪部署。"},{"title":"调用适配器","text":"通过严格的节点到 HTTPS 映射或可信节点感知网关到达摘要匹配的运行时。"},{"title":"规范化证据","text":"返回并审计输出、用量、排队时间、加速器耗时、运行时/模型身份、状态、可重试性和回执。"}]},
+        {"kind":"heading","text":"幂等与所有权"},
+        {"kind":"paragraph","text":"客户端为每个逻辑操作使用唯一的不透明工作负载 ID 和幂等键。工作负载排队或运行时，重复请求会以 WorkloadAlreadyActive 拒绝。启用工作区强制策略后，持久准入状态将查询和取消绑定到最初认证的主体和租户。"},
+        {"kind":"heading","text":"流式传输与失败语义"},
+        {"kind":"bullets","items":["流式传输有明确边界；截断的完成不会伪装成成功。","只有在首个输出送达前才能切换节点重试。","调用方取消会成为 CancelledByCaller。","队列或运行时超过截止时间会成为不可重试的 DeadlineExceeded。","适配器丢失会成为 RuntimeUnavailable，可重试性由失败类别决定。"]},
+        {"kind":"callout","title":"不能信任客户端声明的大小","text":"工作区准入会测量规范载荷 JSON 的 UTF-8 字节数，实际大小必须同时符合请求资源上限和租约限制。"},
+        {"kind":"checkpoint","question":"为什么只能在首个流式输出前重试？","answer":"一旦输出已送达调用方，换节点重试可能产生重复或矛盾结果。仅在输出前重试才能维持单一逻辑响应边界。"}
+      ]
+    },
+    "deployment-flow": {
+      "title":"跟踪模型服务部署",
+      "summary":"一键部署的 API 很简洁，底层却很严格：已签名目录模板依次展开为预检、持久操作状态、选定节点分配、制品验证与物化、运行时就绪、发布和审计证据。",
+      "audience":"模型服务运维人员",
+      "blocks":[
+        {"kind":"flow","title":"部署生命周期","steps":[{"title":"已签名模板","text":"固定模型制品、运行时镜像、策略、资源、健康配置、密钥引用和发布规则。"},{"title":"确定性计划","text":"检查批准、许可证、评测、签名、密钥引用、数据分类、容量和节点就绪状态。"},{"title":"持久操作","text":"发布分配前，持久化幂等意图和选定节点。"},{"title":"节点物化","text":"只有选中节点拉取分配绑定对象，验证大小、摘要和签名，并发布本地只读缓存条目。"},{"title":"运行时就绪","text":"以摘要固定的 OCI 运行时使用已验证本地制品启动，并通过节点代理报告健康。"},{"title":"发布或恢复","text":"管理员检查证据，通过可审计操作发布、回滚或删除。"}]},
+        {"kind":"heading","text":"Blocked 是持久结果"},
+        {"kind":"paragraph","text":"缺少前置条件时，LunaNexa 不会启动半成品。部署操作会以 Blocked 和类型化预检发现持久保存。重复使用同一幂等键会返回同一操作，而不会创建重复分配。"},
+        {"kind":"table","columns":["预检证据","防止的问题"],"rows":[["许可证接受与模型批准","部署未经批准或未获许可的模型字节"],["完整模型摘要和分离签名","启动被替换或损坏的制品"],["完整运行时镜像摘要和批准","运行可变或未经审核的镜像"],["评测与兼容性","把模型调度到不支持的架构"],["密钥引用名称","启动缺少部署依赖的运行时"],["容量和实时就绪分配","把静态清单标签误当成正在服务的运行时"]]},
+        {"kind":"callout","title":"控制器没有 SSH 或复制通道","text":"管理平面发布已签名分配。选定节点通过分配范围内的网关授权拉取准确对象；控制器不会打开任意 Shell 或文件复制路径。"}
+      ]
+    },
+    "enrollment-flow": {
+      "title":"跟踪节点注册与协调",
+      "summary":"Kubernetes 加入集群与 LunaNexa 注册是两件事。管理节点加入并获得管理标签；每台 DGX 作为工作节点加入、获得 GPU 标签，再使用一次性引导材料和独有的持久节点凭据完成注册。",
+      "audience":"集群安装人员",
+      "blocks":[
+        {"kind":"table","columns":["主机","Kubernetes 操作","LunaNexa 操作"],"rows":[["管理节点","加入控制平面；标记 lunanexa.io/role=management","不要注册为计算节点"],["DGX 计算节点","作为工作节点加入；标记 lunanexa.io/role=gpu","用一次性引导令牌注册；保留唯一节点凭据"]]},
+        {"kind":"flow","title":"DGX 身份生命周期","steps":[{"title":"准备主机","text":"确认稳定节点名、架构、GPU 清单、运行时引擎、信任文件和受保护状态路径。"},{"title":"签发引导材料","text":"创建短期、一次性的注册令牌，并绑定该节点的私有注册请求。"},{"title":"注册","text":"控制器只保存持久节点凭据的摘要，并签发有界证书证据。"},{"title":"心跳","text":"节点对具备重放防护的清单、运行时就绪、容量、遥测和租约观察结果签名。"},{"title":"协调","text":"节点只接受代次、Epoch、租约、制品和运行时身份完全匹配的当前已签名分配。"}]},
+        {"kind":"code","label":"注册前验证 Kubernetes 身份"},
+        {"kind":"callout","title":"各处身份必须一致","text":"Kubernetes 节点名、LUNANEXA_NODE_ID 和 inventory.json 的 node_id 必须指向同一台稳定 DGX。遇到别名或复制来的凭据时不要继续。"}
+      ]
+    },
+    "access-flow": {
+      "title":"跟踪用户、工作区与独占访问",
+      "summary":"人员访问采用显式分层：外部身份映射为不透明主体；管理员激活用户和授权；有界租约允许模型准入；真实 DGX 登录则由独立的独占节点契约管理。",
+      "audience":"访问管理员和安全审核人员",
+      "blocks":[
+        {"kind":"flow","title":"受管工作区访问","steps":[{"title":"外部认证","text":"可信入口验证人员身份，并派生或注入不透明 LunaNexa 主体。"},{"title":"登记用户","text":"管理员创建或邀请工作区用户，然后激活生命周期记录。"},{"title":"授予访问权","text":"租户范围的 Developer 或 Admin 授权定义角色和时间窗。"},{"title":"激活租约","text":"能力租约限制请求数、并发、输入/输出和到期时间。"},{"title":"调用","text":"工作台或客户端提交推理权限；服务器解析主体所有权，只接受匹配的有效授权和租约。"}]},
+        {"kind":"heading","text":"生产身份传输"},
+        {"kind":"paragraph","text":"使用 ingress-nginx 客户端证书时，只接受 ssl-client-verify: SUCCESS，并把可分辨名称缩减为不透明 SHA-256 主体引用。X-LunaNexa-Subject 只接受真实回环 TCP 对端；远程调用方不能自行声明。"},
+        {"kind":"heading","text":"独占节点生命周期"},
+        {"kind":"flow","steps":[{"title":"预留","text":"绑定一名用户和一台合格 DGX，并立即阻止受管调度。"},{"title":"配置","text":"固定的 root 所有辅助程序解析凭据引用，只执行白名单主机操作。"},{"title":"到期或结束","text":"受保护的节点看门狗即使断网也执行代次和时间限制。"},{"title":"撤销并清理","text":"移除访问权并清理，且必须生成当前回执。"},{"title":"归还或隔离","text":"只有已证明的清理才能让节点重返受管服务；失败则进入隔离。"}]},
+        {"kind":"callout","title":"身份目录不是 IdP","text":"LunaNexa 保存不透明主体引用和证据，不保存上游密码、身份证件、浏览器凭据或客户端私钥。"}
+      ]
+    },
+    "local-quickstart": {
+      "title":"运行本地功能路径",
+      "summary":"使用仓库门禁和专用模拟在开发机上验证行为。这些命令能证明软件契约和本地编排，但不能证明 DGX 性能或生产安全。",
+      "audience":"持有仓库副本的开发者或审核人员",
+      "blocks":[
+        {"kind":"steps","items":[{"title":"运行完整仓库门禁","text":"格式化、重新生成接口、构建并测试原生和 JS 目标，同时扫描边界、密钥，并运行组合功能与恢复检查。"},{"title":"直接运行四节点行为","text":"迭代注册、调度、排队、排空、故障转移或重启时使用功能模拟器。"},{"title":"运行 Kubernetes 调度冒烟测试","text":"用专用 Colima + kind 配置验证一个管理控制平面节点和四个工作节点的调度，不作 NVIDIA 声明。"},{"title":"检查证据标签","text":"确认每份结果都明确说明是否真实验证了硬件、性能、传输和人工验收。"}]},
+        {"kind":"code","label":"仓库与功能门禁"},
+        {"kind":"code","label":"最小本地 Kubernetes 拓扑"},
+        {"kind":"code","label":"可复制的 macOS 操作步骤（在仓库根目录运行）"},
+        {"kind":"callout","title":"预期本地结果","text":"命令必须显示恰好一个 Ready 管理节点和四个带 gpu 标签的 Ready 工作节点。该流程已在 Apple 芯片 Mac + Colima 上实际运行；它仍只是调度模拟，不代表 NVIDIA 设备或生产身份验证。"},
+        {"kind":"callout","title":"不仅要看退出码，还要阅读证据","text":"模拟器会刻意记录 hardware_performance_validated: false。不要删除或曲解这一边界。"}
+      ]
+    },
+    "operator-console": {
+      "title":"使用管理控制台",
+      "summary":"Rabbita 控制台是管理员查看集群状态、节点、模型、部署、用户、授权、租约、策略、请求、基准和审计证据的界面。它发送与自动化相同的类型化 API 变更。",
+      "audience":"LunaNexa 管理员",
+      "blocks":[
+        {"kind":"steps","items":[{"title":"通过可信入口连接","text":"使用管理员权限和已验证传输身份；不要直接暴露控制器 HTTP 监听器。"},{"title":"先看概览","text":"操作前确认集群状态、容量、队列、告警和近期变化。"},{"title":"检查状态背后的证据","text":"绿色标签不够；打开分配、模型、部署、请求或审计详情，确认当前回执与来源状态。"},{"title":"遵守确认边界","text":"封锁调度、排空、回滚、撤销、暂停和提前结束租约都会显示范围并要求明确确认。"},{"title":"验证最终收敛","text":"变更后沿操作、分配、节点心跳、运行时就绪和审计回执跟踪期望状态。"}]},
+        {"kind":"image","alt":"简体中文 LunaNexa 管理控制台的真实画面，显示尚未连接控制器时的概览仪表盘。","caption":"来自管理控制台的真实浏览器截图。断开状态是刻意保留的：在收到控制器数据前，界面不会虚构节点或模型健康状态。"},
+        {"kind":"cards","items":[{"title":"节点","text":"健康、清单、标签、工作负载、封锁调度、排空和租约模式。"},{"title":"模型","text":"制品、许可证、评测、兼容性、别名和批准。"},{"title":"目录与部署","text":"模板、预检、持久服务操作、发布、回滚和删除。"},{"title":"用户与租约","text":"激活、暂停、撤销、授权、工作区租约和确认。"},{"title":"请求","text":"聚合延迟、吞吐量、错误、排队和有界请求详情。"},{"title":"审计与证据","text":"操作者、策略、目标、前后状态、结果、关联、基准和导出。"}]},
+        {"kind":"callout","title":"语言支持","text":"控制台和工作台通过同一浏览器语言偏好支持英文与简体中文，同时保持协议 ID 和管理员输入的技术值不变。"}
+      ]
+    },
+    "developer-workbench": {
+      "title":"使用开发者工作台和编辑器客户端",
+      "summary":"工作台是在浏览器本地编辑并调用模型的界面。它展示身份、授权、租约、能力、到期时间和回执，同时把仓库内容与编辑器 Agent 留在受管 DGX 之外。",
+      "audience":"持有有效工作区租约的开发者",
+      "blocks":[
+        {"kind":"steps","items":[{"title":"连接身份","text":"浏览器通过可信入口读取 /v1/workspace/self，并显示映射主体的当前授权。"},{"title":"确认有效能力","text":"有效用户、租户授权、有效时间窗和 TextGenerate 租约必须一致，之后才会启用发送。"},{"title":"本地编辑","text":"项目草稿保留在浏览器本地；工作台不是远程 DGX 文件系统或 Shell。"},{"title":"显式调用","text":"客户端发送规范的临时请求，限制输入/输出，并使用唯一工作负载与幂等身份。"},{"title":"检查结果证据","text":"查看规范化输出、状态、用量、耗时和回执；如果租约在会话中到期，服务器拒绝仍是最终权威。"}]},
+        {"kind":"image","alt":"简体中文 LunaNexa 开发者工作台的真实画面，显示访问门禁和浏览器本地工作区外壳。","caption":"来自开发者工作台的真实浏览器截图，拍摄时尚未提供工作区令牌。访问门禁与模型编辑器保持分离。"},
+        {"kind":"heading","text":"外部编辑器"},
+        {"kind":"table","columns":["客户端","当前作用","凭据边界"],"rows":[["VS Code 扩展","针对明确选中文本的限定范围客户端","令牌保存在 SecretStorage，绑定已批准来源和机器级设置"],["CodeBuddy、WorkBuddy、Trae、Qoder","类型化集成与交接状态","厂商凭据和 Agent 运行时留在外部客户端"],["Web IDE","浏览器本地草稿和规范调用","Bearer 凭据只在当前会话的浏览器内存中"]]},
+        {"kind":"callout","title":"会话字段目前尚不用于推理强制策略","text":"max_active_sessions 和 max_session_duration_ms 是为未来服务器端 WorkspaceSession 服务验证的策略。当前推理强制策略使用每项能力的请求并发和速率限制。"}
+      ]
+    },
+    "client-api": {
+      "title":"集成不绑定特定提供商的客户端",
+      "summary":"客户端使用 LunaNexa 规范工作负载契约，而不是把应用身份或提供商专属假设发送到集群。兼容 API 是适配器，不是权威来源。",
+      "audience":"提供商路由或应用集成开发者",
+      "blocks":[
+        {"kind":"heading","text":"客户端职责"},
+        {"kind":"bullets","items":["在 LunaNexa 之外把应用权限和数据策略转换为通用 WorkloadEnvelope。","使用不泄露产品身份的不透明租户、工作负载、关联和幂等值。","选择已发布的模型别名或能力，不使用仓库路径或内部节点地址。","遵循类型化的可重试性、截止时间、取消和带回执终态结果。","将提供商回退和应用策略留在使用方仓库。"]},
+        {"kind":"code","label":"概念性的规范请求结构"},
+        {"kind":"callout","title":"绝不要把这些内容放进工作负载","text":"应用凭据、仓库路径、产品名、编辑器状态、内部运行时 URL、节点凭据或密钥提供商的值。"}
+      ]
+    },
+    "tomorrow-deployment": {
+      "title":"安全部署管理节点和第一台 DGX",
+      "summary":"安全顺序是：管理主机、Kubernetes 调度、管理平面、健康与入口，然后逐台接入 DGX。不要注册管理节点，也不要同时从四个工作节点开始。",
+      "audience":"具名部署操作员",
+      "blocks":[
+        {"kind":"flow","title":"首次安装顺序","steps":[{"title":"准备管理主机","text":"加入 Kubernetes、确认真实节点名、挂载 /data/models，并标记管理调度。"},{"title":"渲染管理平面","text":"构建不可变制品；在私有覆盖层中替换镜像、主机、存储、证书、路由和密钥引用。"},{"title":"迁移并启动","text":"应用前置资源、PostgreSQL、控制器、控制台、企业/工作台、网络策略和入口；以所有者权限执行数据库迁移。"},{"title":"验证边界","text":"要求控制器与站点就绪、可信 TLS 入口、直接控制器访问受阻、管理调度正确且 /metrics 受保护。"},{"title":"注册 DGX 1","text":"加入工作节点、标记 GPU 角色、检查 NVIDIA/运行时/信任材料、签发一次性引导材料、注册、移除引导材料并观察心跳。"},{"title":"谨慎重复","text":"只有 DGX 1 的状态真实且稳定后，才逐台注册 DGX 2–4。"}]},
+        {"kind":"code","label":"管理调度与模型磁盘"},
+        {"kind":"code","label":"应用前让未替换占位符使流程失败"},
+        {"kind":"heading","text":"管理资源应用顺序"},
+        {"kind":"code","label":"应用已渲染资源"},
+        {"kind":"code","label":"打开受保护的部署界面（两个终端）"},
+        {"kind":"code","label":"可复制的真实主机预检（先修改非密钥值）"},
+        {"kind":"callout","title":"必须使用私有覆盖层","text":"基础清单包含占位符，也没有完全强制管理节点与 GPU 节点分离。不要原样应用到真实集群。"},
+        {"kind":"callout","title":"在安装界面的边界内使用它","text":"辅助界面从主机加入 Kubernetes 后的固定主机 SSH 验证开始。它不接收任意 Shell 命令、SSH 密钥、kubeadm 加入令牌，也不在浏览器保存密钥。"}
+      ]
+    },
+    "dgx-runtimes": {
+      "title":"在 DGX Spark 上验证 vLLM 或 SGLang",
+      "summary":"仓库提供无密钥的 vLLM 与 SGLang 单节点验证模板，用于测试真实 ARM64 DGX 和已验证本地模型目录，但不是第二条生产部署路径。",
+      "audience":"运行时验证负责人",
+      "blocks":[
+        {"kind":"heading","text":"前置条件"},
+        {"kind":"bullets","items":["记录 DGX OS、内核、ARM64 架构、NVIDIA 驱动、CUDA 和容器运行时版本。","NVIDIA Kubernetes 设备插件暴露 nvidia.com/gpu，且存在 RuntimeClass/nvidia，或审核后的覆盖层使用集群默认值。","选中节点标记为 lunanexa.io/role=gpu，并以准确的 kubernetes.io/hostname 固定。","已验证的 Hugging Face 格式目录只存在于该 DGX 的 /var/lib/lunanexa/qualification-models/sha256/<digest>/model。","运行时镜像支持 ARM64、已签名、已扫描，并以完整 SHA-256 摘要固定。"]},
+        {"kind":"table","columns":["模板","端口","直接兼容目标","关键初始限制"],"rows":[["vLLM","8000","/v1/responses，以及健康和模型发现","1 GPU、TP=1、bfloat16、0.80 GPU 内存、8192 上下文"],["SGLang","30000","OpenAI 兼容聊天；Responses 兼容性需要证明或适配","1 GPU、TP=1、bfloat16、0.80 静态内存、8192 上下文"]]},
+        {"kind":"code","label":"验证顺序"},
+        {"kind":"callout","title":"当前打包缺口","text":"LunaNexa 物化器目前发布一个已验证制品文件，而 vLLM/SGLang 通常使用多文件 Hugging Face 目录。生产发布需要审核过的、绑定分配的打包/解包适配器，并在挂载前再次验证输出。"},
+        {"kind":"heading","text":"应保留的验证证据"},
+        {"kind":"bullets","items":["准确的运行时镜像、模型目录/归档和分离签名摘要。","冷启动与热启动、首 Token 时间、p50/p95/p99 延迟、每秒 Token 数和内存压力。","畸形输入、无效模型、取消、并发饱和、OOM 拒绝、进程重启和节点排空。","通过获准 HTTPS 边界成功完成 LunaNexa 路由并取得规范化流式回执。"]}
+      ]
+    },
+    "observability-recovery": {
+      "title":"观察、备份与恢复",
+      "summary":"通过有界指标、审计事件、基准证据、持久快照和隔离恢复计划运维 LunaNexa。恢复从只读开始，只有状态与外部效果一致后才提升权限。",
+      "audience":"当班运维人员和灾难恢复负责人",
+      "blocks":[
+        {"kind":"heading","text":"先观察，再变更"},
+        {"kind":"bullets","items":["通过可信管理边界访问控制器 /health 和 /version。","使用专用监控凭据访问仅限管理域的 /metrics。","检查节点心跳新鲜度、就绪部署 ID、加速器健康、队列深度和有界遥测。","检查部署操作发现、分配代次、运行时身份与健康，以及不可变审计回执。","检查工作区准入所有权、占用并发、滚动小时计数器和租约到期。"]},
+        {"kind":"heading","text":"备份完整权限集合"},
+        {"kind":"paragraph","text":"整体备份 PostgreSQL 与控制器注册表、调度器、分配、注册、遥测、部署、工作区准入和独占租约状态；单独备份 /data/models 及签名。备份必须加密并进行恢复测试；文件存在本身不是恢复证据。"},
+        {"kind":"flow","title":"控制器恢复","steps":[{"title":"隔离写入方","text":"停止或隔离旧控制器，把数据恢复到干净基础设施。"},{"title":"提高 Epoch","text":"使用严格更高的 LUNANEXA_CONTROLLER_EPOCH 启动控制器。"},{"title":"仅协调","text":"设置 LUNANEXA_RECONCILIATION_ONLY=1 并检查 /v1/recovery/plan。"},{"title":"对比现实","text":"解决缺失分配、过期租约、孤儿运行时、活跃工作负载回执和失联节点。"},{"title":"接受写入","text":"仅在审计连续性和幂等性得到证明后恢复正常权限。"}]},
+        {"kind":"callout","title":"不要盲目重放活跃工作负载","text":"清除配额或重建执行前，应协调持久工作负载回执和上游服务适配器的幂等性。"}
+      ]
+    },
+    "debug-controller": {
+      "title":"排查控制器、入口与隔离故障",
+      "summary":"从公开现象开始，并保持信任边界。大多数控制器故障属于进程健康、可信入口/认证、配置渲染、网络策略或 Epoch 隔离问题。",
+      "audience":"当班运维人员",
+      "blocks":[
+        {"kind":"troubleshooting","symptom":"控制台无法加载，控制器健康端点不可用。","likely_causes":["控制器 Pod 未就绪或反复崩溃。","已渲染环境、密钥引用、卷或 PostgreSQL URL 缺失。","Ingress 路由或 NetworkPolicy 无法到达控制器。","浏览器绕过了可信入口。"],"checks":["检查 Kubernetes Pod 状态、就绪事件和有界控制器日志。","确认全部必需占位符已替换且管理节点调度正确。","先从获准管理 Pod 探测 /health，再通过可信入口探测。","不打印数据库 URL 的前提下检查 PostgreSQL 就绪与控制器连接。"],"resolution":["修复具体渲染、存储、数据库或路由依赖，让 Kubernetes 正常重启。","继续阻止直接公开访问控制器；修正入口或策略，而不是放宽暴露。"],"escalate_when":["控制器持续损坏或拒绝持久状态。","恢复需要还原数据或更改 Epoch。"]},
+        {"kind":"troubleshooting","symptom":"变更返回 StaleControllerEpoch。","likely_causes":["更新的控制器已提升持久隔离 Epoch。","旧进程、旧分配或已恢复快照试图写入。"],"checks":["检查当前持久 Epoch 和活跃控制器身份。","确认旧控制器进程或 Pod 均不可达。","从新的仅协调控制器打开 /v1/recovery/plan。"],"resolution":["不要降低或复用 Epoch。隔离旧写入方，并从更新的持久 Epoch 继续恢复。"],"escalate_when":["两台在线控制器似乎同时持有权限。","持久存储与观察到的部署对当前 Epoch 意见不一致。"]},
+        {"kind":"troubleshooting","symptom":"浏览器或远程客户端请求返回 Unauthenticated。","likely_causes":["缺少正确的管理员、推理、审计或监控凭据，或范围不匹配。","入口未验证客户端证书或未注入已验证 auth-TLS 请求头。","远程客户端试图使用仅限回环的 X-LunaNexa-Subject。"],"checks":["确认 API 路由需要的权限，但不要回显密钥。","检查入口认证结果和请求头覆盖策略。","确认控制器看到预期的可信网络对端。"],"resolution":["通过可信身份边界签发或路由正确的限定范围凭据。绝不要为远程调用方放宽主体请求头规则。"],"escalate_when":["调用方可以伪造身份或访问其他权限范围。"]}
+      ]
+    },
+    "debug-node-runtime": {
+      "title":"排查节点缺失、调度阻塞与运行时故障",
+      "summary":"把节点身份、调度资格、分配有效性、制品物化、OCI 运行时身份、健康和路由分开检查。节点出现在清单中，不代表模型已经就绪。",
+      "audience":"DGX 与模型运行时运维人员",
+      "blocks":[
+        {"kind":"troubleshooting","symptom":"DGX 没有出现或变为 Unreachable。","likely_causes":["Kubernetes 节点名、LUNANEXA_NODE_ID 和 inventory node_id 不一致。","引导材料过期或被重放，或者持久节点凭据错误。","心跳传输、证书、时钟、代次或重放防护拒绝更新。","节点代理已停止或无法读取受保护主机材料。"],"checks":["验证 Kubernetes 名称和 GPU 标签。","检查节点代理服务/Pod 状态与有界日志。","检查证书到期、时钟、最后接受心跳和控制器审计拒绝码。","确认唯一凭据文件存在且所有权正确，但不要打印内容。"],"resolution":["修正身份或主机材料，按文档轮换证书/引导材料，并等待当前已认证心跳。"],"escalate_when":["怀疑凭据复用或伪造/过期心跳。","已租用节点的看门狗或辅助程序没有得到保护。"]},
+        {"kind":"troubleshooting","symptom":"部署为 Blocked 或没有合格节点。","likely_causes":["缺少许可证、评测、批准、签名、密钥引用或数据分类证据。","GPU 架构、内存、运行时、模型、租约或节点状态没有通过硬过滤。","节点被封锁调度、正在排空、失联、被独占租用，或没有准确的就绪部署心跳。"],"checks":["读取类型化预检发现与调度依据。","对比期望制品/运行时摘要、已批准别名和实时心跳。","检查加速器空闲内存、健康、标签、污点、租约模式和路由映射覆盖。"],"resolution":["补充缺失的审核证据，或恢复真实容量/就绪状态。不要修改标签来假装运行时已就绪。"],"escalate_when":["同一快照产生不一致调度，或硬过滤被绕过。"]},
+        {"kind":"troubleshooting","symptom":"调用以 RuntimeUnavailable 结束，或就绪状态一直不收敛。","likely_causes":["制品大小、摘要或签名验证失败。","摘要固定镜像缺失、架构错误、被替换、没有健康检查或退出。","严格节点端点缺失，或 TLS/网络策略阻止访问。","服务 API 与 LunaNexa 配置的适配器契约不匹配。"],"checks":["检查物化和隔离回执。","验证准确 OCI 身份与镜像健康定义，不暴露凭据。","从获准路径探测运行时，对比 /health 和兼容端点。","确认选中节点存在于严格 HTTPS 路由文档。"],"resolution":["修复或重新验证制品、镜像或路由，然后发布新的已审核模板或分配代次。不要使用可变标签或通用回退路由。"],"escalate_when":["注册表、分配、缓存和运行时的摘要身份不一致。","运行时在公开错误中泄漏内部路径或凭据。"]}
+      ]
+    },
+    "debug-access-database": {
+      "title":"排查工作区权限与 PostgreSQL",
+      "summary":"访问失败通常是正确的默认拒绝结果：主体映射、生命周期状态、租户范围、租约时间/能力、请求所有权、速率/并发或数据库权限并不匹配。",
+      "audience":"访问管理员和数据库运维人员",
+      "blocks":[
+        {"kind":"troubleshooting","symptom":"工作台报告 WorkspaceAccessDenied。","likely_causes":["声明主体未识别，或入口身份映射已变更。","用户仍为已邀请、已暂停或已撤销，而非已激活。","授权缺失、已撤销、已过期或属于其他租户。","租约待审批、已过期、已撤销、能力错误或不在时间窗内。","从读取自身状态到准入期间权限发生变化。"],"checks":["通过同一可信身份路径读取 /v1/workspace/self。","在控制台检查准确用户、授权、租户、租约状态、能力、开始与到期时间。","检查近期激活、暂停、撤销或结束对应的不可变前后状态审计事件。"],"resolution":["使用类型化管理员生命周期路由修正权威记录。不要伪造主体请求头或手工编辑状态文件。"],"escalate_when":["已撤销主体仍可调用，或一个租户能观察另一个租户的工作负载。"]},
+        {"kind":"troubleshooting","symptom":"调用返回 WorkspaceConcurrencyExceeded 或 WorkspaceRateExceeded。","likely_causes":["能力的请求并发已被占用。","一小时滚动请求上限已用尽。","之前的控制器崩溃保守地保留预留，直到有界截止时间。"],"checks":["检查活跃工作负载状态和取消所有权。","通过管理员工具检查 .admissions 状态或 PostgreSQL 快照，不要删除。","确认截止时间和已完成/已取消释放正在协调。"],"resolution":["等待有界释放、取消自己拥有的活跃工作负载，或签发经审核的租约变更。不要通过删除持久证据来清零计数。"],"escalate_when":["恢复后已完成工作负载始终不释放占用并发。"]},
+        {"kind":"troubleshooting","symptom":"控制器无法启动或修改 PostgreSQL 权限状态。","likely_causes":["数据库 URL、TLS 验证、网络策略、角色权限或结构版本错误。","迁移没有用所有者权限执行。","规范化投影约束拒绝了事务。"],"checks":["从控制器网络边界探测 PostgreSQL 就绪。","用密钥引用和所有者角色运行幂等迁移命令。","恢复后检查 schema_migrations 和投影行数。","查看有界数据库错误，但不要打印 URL 或密码。"],"resolution":["修正密钥提供商值、TLS 信任、网络规则、角色或迁移；结构有效后重新执行事务。"],"escalate_when":["快照与规范化投影分歧，或失败投影提交了部分状态。"]}
+      ]
+    },
+    "configuration": {
+      "title":"配置地图",
+      "summary":"配置由部署方明确拥有，并按权限分离。凭据来自密钥提供商；公开清单只包含引用和不可变摘要，绝不包含密钥值。",
+      "audience":"部署工程师",
+      "blocks":[
+        {"kind":"table","columns":["领域","关键设置","安全规则"],"rows":[["控制器状态","LUNANEXA_STATE_PATH, REGISTRY_PATH, ENROLLMENT_PATH, SCHEDULER_PATH, TELEMETRY_PATH, DEPLOYMENT_PATH","完整备份；使用受保护绝对路径和 Epoch 隔离。"],["数据库","LUNANEXA_PERSISTENCE_BACKEND, LUNANEXA_DATABASE_URL","生产使用 postgres；URL 由密钥提供商给出并验证 TLS。"],["身份","OPERATOR_TOKEN, INFERENCE_TOKEN, AUDIT_TOKEN, MONITORING_TOKEN, REQUIRE_WORKSPACE_LEASE","分离权限范围；令牌绝不进入仓库、URL、日志或浏览器存储。"],["签名","ASSIGNMENT_SIGNING_SECRET, CATALOG_SIGNING_SECRET, EXCLUSIVE_LEASE_SIGNING_SECRET","权限相互独立；节点只接收匹配的验证材料。"],["运行时路由","RUNTIME_ENDPOINTS_PATH or trusted RUNTIME_ENDPOINT","每个可调度节点都有严格 HTTPS 路由；没有隐式通用回退。"],["节点物化","MODEL_CACHE_PATH, ARTIFACT_ENDPOINT, ARTIFACT_CREDENTIAL_PATH, COSIGN_PUBLIC_KEY_PATH","节点只拉取已分配内容；运行时不接收制品凭据。"],["恢复","CONTROLLER_EPOCH, RECONCILIATION_ONLY","单调提升，并在写入前检查恢复计划。"]]},
+        {"kind":"callout","title":"管理员设置是权威来源","text":"配置已验证的管理员设置文档后，旧准入和运行时并发环境变量只是迁移回退，而不是相互竞争的权威来源。"},
+        {"kind":"callout","title":"绝不要发布真实集群的配置值","text":"公开教程只说明变量名和含义，不得包含真实主机、私有地址、数据库 URL、节点清单、令牌、密钥、证书或解析后的密钥引用。"}
+      ]
+    },
+    "error-reference": {
+      "title":"公开错误与状态参考",
+      "summary":"类型化代码说明哪个边界拒绝了工作。根据代码和可重试性进入对应诊断路径，不要从有界公开消息推断内部拓扑。",
+      "audience":"客户端开发者和当班运维人员",
+      "blocks":[
+        {"kind":"table","columns":["代码/状态","含义","通常处理"],"rows":[["Unauthenticated","缺少或无效的限定凭据/已验证主体","修正可信身份或凭据路径；不要盲目重试。"],["Unauthorized","已认证权限缺少请求范围","使用正确的限定凭据或申请明确授权。"],["WorkspaceAccessDenied","主体、用户、授权、租户、租约、能力或所有权不允许请求","检查 /v1/workspace/self 和权威生命周期记录。"],["WorkspaceConcurrencyExceeded","能力允许的并发请求已占用","等待、取消自己拥有的工作负载或审核租约容量。"],["WorkspaceRateExceeded","一小时滚动请求上限已用尽","等待窗口恢复或应用经审核的租约变更。"],["WorkloadAlreadyActive","相同活跃工作负载/幂等范围已存在","查询现有工作负载；不要重复启动。"],["DeadlineExceeded","队列或运行时截止时间已到","本次请求视为终态；新逻辑操作前重新评估截止时间/容量。"],["RuntimeUnavailable","选中的服务适配器失败或消失","检查制品、镜像、就绪、路由、TLS 和适配器兼容性。"],["StaleControllerEpoch","更新的持久控制器隔离了该写入方或分配","隔离旧进程并在更新 Epoch 下协调。"],["NodeUnavailable","节点缺失或已被不兼容权限绑定","检查注册、心跳、租约和当前节点模式。"],["Blocked deployment","缺少预检证据或容量","阅读类型化发现；补充审核证据后再试。"],["CancelledByCaller","已认证所有者取消工作负载","除非取消出乎预期，否则无需升级运行时故障。"]]},
+        {"kind":"callout","title":"公开错误有意保持有界","text":"其中不包含节点地址、文件系统路径、容器 ID、提供商凭据、堆栈跟踪或内部拓扑。管理员通过关联审计和受保护日志深入诊断。"}
+      ]
+    },
+    "source-ledger": {
+      "title":"本教程如何生成",
+      "summary":"这个独立站点是 MoonBook 根据 LunaNexa 当前文档、源码契约和测试生成的仓库教程投影。证据文件记录被检查的准确版本、工作树状态、来源摘要、声明状态和已知缺口。",
+      "audience":"文档审核人员和未来维护者",
+      "blocks":[
+        {"kind":"heading","text":"投影边界"},
+        {"kind":"paragraph","text":"代码仓库始终是权威来源。本站围绕读者问题组织证据，只渲染结构化文本块，不执行作者提供的 HTML、不嵌入生产状态，也不会宣称生成文档就测试了真实集群。"},
+        {"kind":"heading","text":"时效"},
+        {"kind":"callout","title":"当前状态：草稿","text":"源版本为 db481df6，工作树含未提交的部署与运行时改动。提交后应重新生成并审核；明天取得真实部署证据后还要再次执行。"},
+        {"kind":"heading","text":"只读文档小助手"},
+        {"kind":"paragraph","text":"“问指南”面板是可选功能。同源服务器把已发布教程和公开证据投影发送到 MoonClaw 现有只读 Cowork 端点。适配器验证严格答案结构和已知页面引用。它不能编辑 LunaNexa、运行命令、暴露网关细节或代替管理员权限。"},
+        {"kind":"heading","text":"从算力参考站点吸收的经验"},
+        {"kind":"bullets","items":["分组文档侧栏上方保持稳定的产品级导航。","每次聚焦一篇文章，并提供右侧页内大纲。","全局页眉突出搜索。","清晰提供产品概览、快速开始、使用说明、常见问题/故障排查、最佳实践和预构建运行时路线。","LunaNexa 增加明确证据状态、生产缺口、信任边界和来源账本，而不复制参考站点的品牌或声明。"]},
+        {"kind":"checkpoint","question":"LunaNexa 源码变化后应该怎么做？","answer":"重新扫描仓库证据，更新来源摘要和声明状态，重新生成 coursebook.json，测试站点和助手状态，并在发布前审核含义。"}
+      ]
+    }
+  },
+  "suggested_questions": [
+    "LunaNexa 负责什么？",
+    "推理请求如何到达 DGX 运行时？",
+    "第一次部署应该按什么顺序进行？",
+    "模型服务操作为什么会变成 Blocked？",
+    "如何排查节点未出现？",
+    "工作区租约和独占节点租约有什么区别？"
+  ]
+}

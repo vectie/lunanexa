@@ -6,6 +6,21 @@ It teaches LunaNexa's features, architecture, data flows, use, operation, and
 debugging. It is not the source of truth: the repository documents and typed
 contracts referenced by `coursebook-evidence.json` remain authoritative.
 
+The published default is newcomer-first: overview, quickstart, concepts,
+deployment, operations, troubleshooting, and public reference. Implementation
+status, readiness judgment, repository revision, source provenance, and the
+generation process appear only after the reader explicitly selects **Show
+technical notes** or follows a direct advanced-page link. This is progressive
+disclosure, not a security boundary.
+
+English is the canonical content in `coursebook.json`; the complete Simplified
+Chinese overlay lives in `coursebook.zh-CN.json`. The native language selector
+uses the same `lunanexa.locale` browser preference as the console and
+workbench. It translates explanations and labels while preserving commands,
+paths, protocol IDs, model names, and other copy-sensitive technical values.
+Real product screenshots live below `images/` and state exactly which live UI
+condition was captured.
+
 The current projection is marked `draft` because it records commit
 `db481df6104c5c93056eae6dc4e03b62ddbe096c` plus a dirty working tree. Refresh
 it after the deployment/runtime changes are committed and after tomorrow's
@@ -19,9 +34,10 @@ node --check docs-site/server.mjs
 node --test docs-site/coursebook.test.mjs
 ```
 
-The test verifies the coursebook and evidence contracts, navigation, supported
-block shapes, source existence and digests, secret/placeholder scans, pet
-request boundaries, and citation validation.
+The test verifies the coursebook, localization and evidence contracts,
+navigation, supported block shapes, real screenshot files, source existence
+and digests, secret/placeholder scans, pet request boundaries, and citation
+validation.
 
 ## Static preview
 
@@ -31,9 +47,10 @@ The documentation remains fully usable without MoonClaw:
 python3 -m http.server 4390 --bind 127.0.0.1 --directory docs-site
 ```
 
-Open `http://127.0.0.1:4390/`. Search, navigation, source disclosure, code copy,
-mobile layout, and print output work. The **Ask guide** panel reports an offline
-state because a plain static server has no same-origin agent adapter.
+Open `http://127.0.0.1:4390/`. Search, navigation, code copy, mobile layout, and
+print output work. Advanced mode additionally exposes source disclosure and
+technical notes. The **Ask guide** panel reports an offline state because a
+plain static server has no same-origin agent adapter.
 
 ## Preview with the MoonClaw guide
 
@@ -151,6 +168,6 @@ Use the MoonBook skill against the LunaNexa repository:
 3. revise claim status without upgrading simulated/documented evidence to
    implemented or production-ready;
 4. update `coursebook.json` and `coursebook-evidence.json`;
-5. run the test and inspect desktop plus 390 px layouts;
+5. run the test and inspect English/Chinese desktop plus 390 px layouts;
 6. review meaning, commands, warnings, and public information disclosure before
    publishing.

@@ -4,7 +4,8 @@ FROM ${NODE_BASE_IMAGE}
 WORKDIR /opt/lunanexa-coursebook
 
 COPY --chown=node:node index.html styles.css app.js server.mjs ./
-COPY --chown=node:node coursebook.json coursebook-evidence.json ./
+COPY --chown=node:node coursebook.json coursebook.zh-CN.json coursebook-evidence.json ./
+COPY --chown=node:node images ./images
 COPY --chown=node:node coursebook.json coursebook-evidence.json ./knowledge/
 
 ENV NODE_ENV=production \
