@@ -47,6 +47,7 @@ priv struct AppModel {
   endpoint : String
   scoped_token : String
   subject_ref : String
+  demo_mode : Bool
   connecting : Bool
   clock_generation : Int64
   global_policy_generation : Int64
@@ -161,6 +162,15 @@ extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
 ///|
+extern "js" fn demo_mode() -> Bool =
+  #| () => {
+  #|   try {
+  #|     const value = new URL(globalThis.location.href).searchParams.get("demo");
+  #|     return value === "1" || value === "true";
+  #|   } catch (_) { return false; }
+  #| }
+
+///|
 extern "js" fn endpoint_is_safe(value : String) -> Bool =
   #| value => {
   #|   try {
@@ -178,6 +188,25 @@ extern "js" fn endpoint_is_safe(value : String) -> Bool =
 fn optional_subject_is_valid(value : String) -> Bool {
   let subject_ref = value.trim().to_owned()
   subject_ref == "" || @workspace.valid_identifier(subject_ref)
+}
+
+///|
+fn demo_workbench_state(
+  now_unix_ms : Int64,
+  locale : @i18n.Locale,
+  model_selector : String,
+) -> @workbench_ui.WorkbenchState {
+  let seeded = @workbench_ui.demo_state().update(LocaleChanged(locale))
+  let lease = match seeded.lease {
+    Some(value) =>
+      Some({
+        ..value,
+        starts_unix_ms: now_unix_ms - 3600000L,
+        expires_unix_ms: now_unix_ms + 21600000L,
+      })
+    None => None
+  }
+  { ..seeded, now_unix_ms, lease, model_selector }
 }
 
 ///|
@@ -694,6 +723,49 @@ fn send_command(
 }
 
 ///|
+fn complete_request(
+  model : AppModel,
+  result : RequestResult,
+  now_unix_ms : Int64,
+) -> AppModel {
+  {
+    ..model,
+    connecting: false,
+    workbench: {
+      ..model.workbench,
+      now_unix_ms,
+      output_text: result.output_text.unwrap_or(
+        app_copy(
+          model.workbench.locale,
+          "Request completed without normalized output.",
+          "请求已完成，但没有规范化输出。",
+        ),
+      ),
+      receipt: result.receipt,
+      usage: {
+        requests_used: model.workbench.usage.requests_used + 1,
+        requests_limit: model.workbench.usage.requests_limit,
+        input_units: model.workbench.usage.input_units +
+        result.usage.input_units,
+        output_units: model.workbench.usage.output_units +
+        result.usage.output_units,
+        accelerator_ms: model.workbench.usage.accelerator_ms +
+        result.usage.accelerator_ms,
+      },
+      loading: false,
+      success_message: Some(
+        app_copy(
+          model.workbench.locale,
+          "Workload completed with a public receipt.",
+          "工作负载已完成，并生成公开回执。",
+        ),
+      ),
+      error_message: None,
+    },
+  }
+}
+
+///|
 fn update(
   model : AppModel,
   message : AppMessage,
@@ -810,7 +882,12 @@ fn update(
       (next, connect_command(next, emit))
     }
     Workbench(SendRequest) => {
-      let current = workbench_at(model.workbench, current_unix_ms())
+      let now = current_unix_ms()
+      let current = if model.demo_mode {
+        model.workbench
+      } else {
+        workbench_at(model.workbench, now)
+      }
       if model.connecting {
         return (
           {
@@ -831,7 +908,33 @@ fn update(
       }
       let next = { ..model, workbench: current.update(SendRequest) }
       if next.workbench.loading {
-        (next, send_command(next, emit))
+        if next.demo_mode {
+          (
+            complete_request(
+              next,
+              {
+                output_text: Some(
+                  app_copy(
+                    next.workbench.locale,
+                    "Demo result: the selected MoonBit draft is syntactically focused. Add a test that captures its expected output before connecting a real controller.",
+                    "演示结果：所选 MoonBit 草稿结构清晰。连接真实控制器前，请添加一个验证预期输出的测试。",
+                  ),
+                ),
+                receipt: "demo:workload:read-only",
+                usage: {
+                  input_units: 96,
+                  output_units: 34,
+                  accelerator_ms: 18L,
+                  queue_ms: 0L,
+                },
+              },
+              now,
+            ),
+            @rabbita.none,
+          )
+        } else {
+          (next, send_command(next, emit))
+        }
       } else {
         (next, @rabbita.none)
       }
@@ -906,44 +1009,7 @@ fn update(
       (next, lease_clock_command(next.workbench, next.clock_generation, emit))
     }
     Outcome(RequestCompleted(result)) =>
-      (
-        {
-          ..model,
-          connecting: false,
-          workbench: {
-            ..model.workbench,
-            now_unix_ms: current_unix_ms(),
-            output_text: result.output_text.unwrap_or(
-              app_copy(
-                model.workbench.locale,
-                "Request completed without normalized output.",
-                "请求已完成，但没有规范化输出。",
-              ),
-            ),
-            receipt: result.receipt,
-            usage: {
-              requests_used: model.workbench.usage.requests_used + 1,
-              requests_limit: model.workbench.usage.requests_limit,
-              input_units: model.workbench.usage.input_units +
-              result.usage.input_units,
-              output_units: model.workbench.usage.output_units +
-              result.usage.output_units,
-              accelerator_ms: model.workbench.usage.accelerator_ms +
-              result.usage.accelerator_ms,
-            },
-            loading: false,
-            success_message: Some(
-              app_copy(
-                model.workbench.locale,
-                "Workload completed with a public receipt.",
-                "工作负载已完成，并生成公开回执。",
-              ),
-            ),
-            error_message: None,
-          },
-        },
-        @rabbita.none,
-      )
+      (complete_request(model, result, current_unix_ms()), @rabbita.none)
     Outcome(PublicFailure(kind, receipt, authorization_stale)) =>
       (
         {
@@ -991,6 +1057,7 @@ fn app_view(
     @html.style_tag(
       (
         #|.workbench-app{position:relative;min-height:100vh;background:#070b11}
+        #|.demo-flag{position:fixed;z-index:40;right:1rem;bottom:1rem;padding:.48rem .7rem;border:1px solid rgba(117,230,182,.35);border-radius:999px;background:#0a1019;color:#75e6b6;font:800 .66rem/1 system-ui;box-shadow:0 12px 36px rgba(0,0,0,.3)}
         #|.connection-panel{color:var(--ink,#f4f7fb)}
         #|.connection-panel>summary{list-style:none}
         #|.connection-panel>summary::-webkit-details-marker{display:none}
@@ -1029,6 +1096,16 @@ fn app_view(
         #|@media(max-width:48rem){.connection-summary{align-items:flex-start;flex-direction:column;gap:.2rem}.summary-endpoint{max-width:100%}.advanced-grid,.connection-primary{grid-template-columns:1fr}.connection-primary button{width:100%}}
       ),
     ),
+    if model.demo_mode {
+      @html.div(
+        class="demo-flag",
+        app_copy(
+          locale, "DEMO · simulated inference", "演示 · 模拟推理",
+        ),
+      )
+    } else {
+      @html.nothing
+    },
     @html.details(
       class=if ready {
         "connection-panel is-connected"
@@ -1188,21 +1265,26 @@ fn app_view(
 fn main {
   let local_preferences = load_local_preferences()
   let locale = @i18n.parse_locale(local_preferences.locale)
+  let is_demo = demo_mode()
+  let now = current_unix_ms()
   sync_document_locale(locale)
   @rabbita.elmish(
     model={
       endpoint: configured_endpoint(),
       scoped_token: "",
       subject_ref: "",
+      demo_mode: is_demo,
       connecting: false,
       clock_generation: 0L,
       global_policy_generation: 0L,
       global_max_output_units: 0,
-      workbench: {
-        ..@workbench_ui.default_state(current_unix_ms()).update(
-          LocaleChanged(locale),
-        ),
-        model_selector: local_preferences.default_model_alias,
+      workbench: if is_demo {
+        demo_workbench_state(now, locale, local_preferences.default_model_alias)
+      } else {
+        {
+          ..@workbench_ui.default_state(now).update(LocaleChanged(locale)),
+          model_selector: local_preferences.default_model_alias,
+        }
       },
     },
     view=app_view,

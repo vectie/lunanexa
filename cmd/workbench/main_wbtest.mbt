@@ -28,6 +28,21 @@ test "workbench builds an ephemeral bounded canonical workload" {
 }
 
 ///|
+test "demo workbench uses a current bounded lease without changing contract data" {
+  let now = 1786464000000L
+  let state = demo_workbench_state(now, ChineseSimplified, "text.default")
+  assert_true(@workbench_ui.lease_ready(state))
+  assert_true(@workbench_ui.can_send(state))
+  assert_eq(state.now_unix_ms, now)
+  assert_eq(state.locale, ChineseSimplified)
+  assert_eq(state.model_selector, "text.default")
+  guard state.lease is Some(lease) else { fail("missing demo lease") }
+  assert_eq(lease.tenant_ref, "tenant-opaque-demo")
+  assert_true(lease.starts_unix_ms < now)
+  assert_true(lease.expires_unix_ms > now)
+}
+
+///|
 test "workbench declares canonical UTF-8 payload bytes including JSON overhead" {
   let base = @workbench_ui.demo_state()
   let unicode = base
