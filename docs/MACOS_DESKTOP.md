@@ -8,10 +8,13 @@ LunaNexa ships two Mac desktop shells built with Lepusa:
   `/workbench/`.
 
 The management node remains the only UI and API source of truth. The desktop
-apps do not embed a fork of the Rabbita interfaces, a controller, credentials,
-or customer data. A centrally deployed UI change therefore reaches browser and
-desktop users together. Lepusa owns only the native macOS window, application
-bundle, signing handoff, and DMG packaging.
+apps embed only a small connection/error shell, not a fork of the Rabbita
+interfaces, a controller, credentials, or customer data. The shell verifies
+that the configured management route responds before navigating, and otherwise
+keeps visible Retry and connection-diagnostics controls instead of exposing a
+blank WebView. A centrally deployed UI change therefore reaches browser and
+desktop users together. Lepusa owns only the native macOS window, startup
+shell, application bundle, signing handoff, and DMG packaging.
 
 ## Security boundary
 
@@ -23,6 +26,13 @@ filesystem, shell, dialog, or opener authority.
 
 The build argument is an origin only, such as `https://manage.example.com`; it
 must not include credentials, a path, query, or fragment.
+
+The current supported deployment floor is **macOS 13.0**. The build uses an
+isolated Lepusa target directory with `MACOSX_DEPLOYMENT_TARGET=13.0`, verifies
+the resulting Mach-O `minos`, and writes the same value to
+`LSMinimumSystemVersion`. Raising the floor is allowed for a controlled
+deployment; lowering it below 13.0 is rejected because that compatibility has
+not been validated. Each DMG contains the build host architecture only.
 
 Operator and enterprise credentials stay in WebView page memory, matching the
 browser behavior. They are not written into the application bundle, macOS
@@ -116,6 +126,8 @@ Supported environment variables:
 | `LUNANEXA_DESKTOP_VERSION` | release admin | application/DMG version |
 | `LUNANEXA_MACOS_SIGNING_IDENTITY` | release admin | Developer ID identity; defaults to ad-hoc `-` |
 | `LUNANEXA_MACOS_NOTARIZATION_PROFILE` | release admin | local notarytool keychain profile name |
+| `LUNANEXA_MACOS_MINIMUM_VERSION` | release admin | supported macOS deployment floor; defaults to and may not be lower than `13.0` |
+| `LUNANEXA_DESKTOP_PROBE_TIMEOUT_MS` | global admin | startup availability deadline from `1000` through `30000`; defaults to `7000` |
 | `LUNANEXA_DESKTOP_ALLOW_HTTP_LOOPBACK` | developer only | permits local `http://127.0.0.1` or `localhost` builds |
 
 No setting above is an enterprise-user preference. Management origin and trust
