@@ -118,3 +118,25 @@ async test "expiry keeps even a reserved lease fenced until sanitization" {
   assert_true(store.node_blocks_managed_placement(intent.node_id))
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "subject query stays isolated and survives restart" {
+  let directory = @fs.tmpdir(prefix="lunanexa-exclusive-subject-")
+  let path = "\{directory}/leases.json"
+  let store = @store.FileExclusiveLeaseStore::open(path, "lease-secret")
+  let first = lease_intent("lease-a", "node-a", "request-a")
+  ignore(store.issue(first, 1000L))
+  let second = {
+    ..lease_intent("lease-b", "node-b", "request-b"),
+    subject_ref: "subject-2",
+  }
+  ignore(store.issue(second, 1000L))
+  let subject_one = store.leases_for_subject("subject-1")
+  assert_eq(subject_one.length(), 1)
+  assert_eq(subject_one[0].intent.lease_id, "lease-a")
+  let reopened = @store.FileExclusiveLeaseStore::open(path, "lease-secret")
+  let subject_two = reopened.leases_for_subject("subject-2")
+  assert_eq(subject_two.length(), 1)
+  assert_eq(subject_two[0].intent.lease_id, "lease-b")
+  @fs.rmdir(directory, recursive=true)
+}

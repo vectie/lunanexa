@@ -11,6 +11,12 @@ pub let agent_snapshot_schema_version : String
 
 pub let contract_version : String
 
+pub fn customer_machine_view(ExclusiveNodeLease, Int64?, Int64, Int64) -> CustomerExclusiveMachineView raise ExclusiveLeaseError
+
+pub fn customer_termination_confirmation(String) -> String
+
+pub fn customer_termination_target(ExclusiveLeaseState) -> ExclusiveLeaseState?
+
 pub fn helper_receipt(LeaseAgentAction, Int64) -> String
 
 pub fn helper_receipt_timestamp(LeaseAgentAction, String) -> Int64?
@@ -38,6 +44,49 @@ pub(all) suberror ExclusiveLeaseError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct CustomerCredentialHandoff {
+  state : CustomerCredentialHandoffState
+  handoff_ref : String?
+  credential_kind : String
+  valid_until_unix_ms : Int64
+  raw_secret_included : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CustomerCredentialHandoffState {
+  Pending
+  Available
+  Closed
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CustomerExclusiveLeaseTerminationRequest {
+  expected_generation : Int64
+  confirmation : String
+  reason : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CustomerExclusiveMachineView {
+  version : String
+  lease_ref : String
+  machine_ref : String
+  state : ExclusiveLeaseState
+  generation : Int64
+  username : String
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  updated_unix_ms : Int64
+  reachability : CustomerMachineReachability
+  last_seen_unix_ms : Int64?
+  credential_handoff : CustomerCredentialHandoff
+  can_terminate : Bool
+  termination_confirmation : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CustomerMachineReachability {
+  Online
+  Delayed
+  Unknown
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ExclusiveLeaseSnapshot {
   schema_version : String
   leases : Array[ExclusiveNodeLease]

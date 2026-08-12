@@ -288,6 +288,27 @@ pub async fn FileExclusiveLeaseStore::leases(
 }
 
 ///|
+/// Returns only leases owned by the verified subject. Callers must still bind
+/// that subject to an active enterprise membership; this store method prevents
+/// accidental customer-side filtering after a full authority snapshot read.
+pub async fn FileExclusiveLeaseStore::leases_for_subject(
+  self : FileExclusiveLeaseStore,
+  subject_ref : String,
+) -> Array[@nodelease.ExclusiveNodeLease] {
+  if !@contracts.valid_identifier(subject_ref) {
+    raise ExclusiveLeaseStoreError::InvalidSnapshot(
+      "exclusive lease subject is invalid",
+    )
+  }
+  self.mutex.acquire()
+  let leases = sorted_leases(self.leases).filter(lease => {
+    lease.intent.subject_ref == subject_ref
+  })
+  self.mutex.release()
+  leases
+}
+
+///|
 pub async fn FileExclusiveLeaseStore::lease_for_node(
   self : FileExclusiveLeaseStore,
   node_id : String,

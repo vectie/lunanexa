@@ -1,8 +1,5 @@
 import {
-  "vectie/lunanexa/notifications",
   "vectie/lunanexa/nodelease",
-  "vectie/lunanexa/ui/machine_access",
-  "vectie/lunanexa/portal",
   "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",

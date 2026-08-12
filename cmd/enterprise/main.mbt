@@ -15,11 +15,13 @@ priv enum Outcome {
     Array[@enterprise_ui.EnterpriseCostCenterRow],
     String,
     Array[@portal.EnterpriseModelSummary],
-    Array[@notifications.NotificationRecord]
+    Array[@notifications.NotificationRecord],
+    Array[@nodelease.CustomerExclusiveMachineView]
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
   NotificationRead(@notifications.NotificationRecord)
+  MachineTerminated(@nodelease.CustomerExclusiveMachineView)
   Failed(@i18n.Locale, String)
 }
 
@@ -162,6 +164,7 @@ async fn load_self(
   String,
   Array[@portal.EnterpriseModelSummary],
   Array[@notifications.NotificationRecord],
+  Array[@nodelease.CustomerExclusiveMachineView],
 ) {
   let body = request(
     "GET",
@@ -224,6 +227,17 @@ async fn load_self(
   } noraise {
     value => value
   }
+  let machines : Array[@nodelease.CustomerExclusiveMachineView] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/machine-access/self",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
   let cost_centers : Array[@enterprise_ui.EnterpriseCostCenterRow] = match
     commercial {
     Some(snapshot) =>
@@ -269,7 +283,7 @@ async fn load_self(
     }
     _ => "—"
   }
-  (view, cost_centers, provisional_spend, models, notifications)
+  (view, cost_centers, provisional_spend, models, notifications, machines)
 }
 
 ///|
@@ -361,6 +375,31 @@ async fn mark_notification_read(
 }
 
 ///|
+async fn terminate_machine_access(
+  model : AppModel,
+  lease_ref : String,
+  generation : Int64,
+  confirmation : String,
+) -> @nodelease.CustomerExclusiveMachineView {
+  let body = @nodelease.CustomerExclusiveLeaseTerminationRequest::{
+      expected_generation: generation,
+      confirmation,
+      reason: "customer-requested",
+    }
+    .to_json()
+    .stringify()
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/machine-access/self/\{lease_ref}:terminate",
+    model.token,
+    model.subject_ref,
+    body~,
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
 fn load_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
@@ -377,8 +416,10 @@ fn load_command(
           ),
         )
     } noraise {
-      (view, cost_centers, provisional_spend, models, notifications) =>
-        Loaded(view, cost_centers, provisional_spend, models, notifications)
+      (view, cost_centers, provisional_spend, models, notifications, machines) =>
+        Loaded(
+          view, cost_centers, provisional_spend, models, notifications, machines,
+        )
     }
   })
 }
@@ -405,6 +446,49 @@ fn notification_read_command(
       value => NotificationRead(value)
     }
   })
+}
+
+///|
+fn machine_termination_command(
+  model : AppModel,
+  lease_ref : String,
+  generation : Int64,
+  confirmation : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try
+      terminate_machine_access(model, lease_ref, generation, confirmation)
+    catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to terminate machine access: \{Repr(error)}",
+            "无法终止机器访问：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => MachineTerminated(value)
+    }
+  })
+}
+
+///|
+fn replace_machine(
+  values : Array[@nodelease.CustomerExclusiveMachineView],
+  updated : @nodelease.CustomerExclusiveMachineView,
+) -> Array[@nodelease.CustomerExclusiveMachineView] {
+  [
+    for value in values => {
+      if value.lease_ref == updated.lease_ref {
+        updated
+      } else {
+        value
+      }
+    }
+  ]
 }
 
 ///|
@@ -612,10 +696,43 @@ fn update(
           notification_read_command(model, notification_id, generation, emit),
         )
       }
+    Portal(
+      MachineAccess(ConfirmTermination(lease_ref, generation, confirmation))
+    ) => {
+      let portal = model.portal.update(
+        MachineAccess(ConfirmTermination(lease_ref, generation, confirmation)),
+      )
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..portal,
+              machine_access: { ..portal.machine_access, loading: false },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (
+          { ..model, portal, },
+          machine_termination_command(
+            model, lease_ref, generation, confirmation, emit,
+          ),
+        )
+      }
+    }
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
     Outcome(
-      Loaded(view, cost_centers, provisional_spend, models, notifications)
+      Loaded(
+        view,
+        cost_centers,
+        provisional_spend,
+        models,
+        notifications,
+        machines
+      )
     ) =>
       (
         {
@@ -630,6 +747,11 @@ fn update(
             provisional_spend,
             model_catalog: models,
             notifications,
+            machine_access: {
+              ..model.portal.machine_access,
+              machines,
+              loading: false,
+            },
             loading: false,
             success_message: Some(
               portal_copy(
@@ -698,6 +820,34 @@ fn update(
                 model.portal.locale,
                 "Notification marked as read.",
                 "通知已标记为已读。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(MachineTerminated(machine)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            machine_access: {
+              ..model.portal.machine_access,
+              machines: replace_machine(
+                model.portal.machine_access.machines,
+                machine,
+              ),
+              confirmation_lease_ref: None,
+              confirmation_text: "",
+              loading: false,
+            },
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Machine access termination started.",
+                "机器访问终止流程已开始。",
               ),
             ),
             error_message: None,

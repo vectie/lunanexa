@@ -90,6 +90,34 @@ mediated through a narrow runtime policy. The lease does not grant access to
 the LunaNexa daemon identity, its node credential, other users' caches, or the
 management node filesystem.
 
+### Customer self-service projection
+
+An authenticated enterprise member reads only their own records through
+`GET /v1/machine-access/self`. Authorization combines the verified ingress
+subject, an active portal membership, and an exact exclusive-lease subject
+match. A record belonging to another subject returns `404` rather than exposing
+whether it exists.
+
+The response includes the lease-scoped machine label, lifecycle generation,
+username, bounded start/expiry, coarse reachability (`Online`, `Delayed`, or
+`Unknown`), and credential-handoff kind/status/expiry. It deliberately omits the
+physical node ID, inventory, address, labels, `access_credential_ref`, passwords,
+private keys, and SSH certificate material. When access is active, the response
+may carry a generation-bound, non-secret `lease-handoff:` reference which the
+deployment-owned credential authority redeems only after repeating identity
+and lease checks. The actual credential issuer remains an external production
+prerequisite.
+
+Customers may end their own access early with
+`POST /v1/machine-access/self/{lease_ref}:terminate`. The request must carry the
+current generation and exact `TERMINATE {lease_ref}` confirmation. Acceptance
+immediately closes the customer handoff, emits immutable subject-attributed
+audit evidence and an operator alert, and advances the same revoke-before-
+sanitize lifecycle used by operators. A stale generation returns `409`; a
+second termination cannot bypass cleanup. Natural expiry is reconciled before
+every customer read and remains fenced across controller restart until cleanup
+is verified.
+
 ## Node daemon responsibilities
 
 The LunaNexa node agent remains installed as a protected system service outside

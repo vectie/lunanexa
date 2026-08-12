@@ -13,6 +13,7 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
   "vectie/lunanexa/node",
+  "vectie/lunanexa/observability",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/scheduler",
@@ -52,6 +53,7 @@ pub struct ApiService {
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
   portal_store : @vectie/lunanexa/portal/store.FilePortalStore?
   notification_store : @vectie/lunanexa/notifications/store.NotificationStore?
+  observability_store : @observability.ObservabilityStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -93,6 +95,7 @@ pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/s
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
+pub fn ApiService::with_observability_store(Self, @observability.ObservabilityStore) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self

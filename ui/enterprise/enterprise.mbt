@@ -6,6 +6,7 @@ pub(all) enum EnterpriseRoute {
   Notifications
   Costs
   Models
+  MachineAccess
 } derive(Debug, Eq)
 
 ///|
@@ -25,6 +26,7 @@ pub(all) struct EnterpriseState {
   agreements : Array[@portal.PortalAgreement]
   lease_requests : Array[@portal.EnterpriseLeaseRequest]
   notifications : Array[@notifications.NotificationRecord]
+  machine_access : @machine_access.MachineAccessState
   cost_centers : Array[EnterpriseCostCenterRow]
   provisional_spend : String
   model_catalog : Array[@portal.EnterpriseModelSummary]
@@ -50,6 +52,7 @@ pub(all) enum EnterpriseMessage {
   SignAgreement(String)
   SubmitLease
   MarkNotificationRead(String, Int64)
+  MachineAccess(@machine_access.MachineAccessMessage)
   ClearNotice
 } derive(Eq)
 
@@ -71,6 +74,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     agreements: [],
     lease_requests: [],
     notifications: [],
+    machine_access: @machine_access.default_state(@i18n.default_locale()),
     cost_centers: [],
     provisional_spend: "—",
     model_catalog: [],
@@ -192,6 +196,33 @@ pub fn demo_state() -> EnterpriseState {
         updated_unix_ms: now - 1800000L,
       },
     ],
+    machine_access: {
+      ..@machine_access.default_state(@i18n.default_locale()),
+      machines: [
+        {
+          version: @nodelease.contract_version,
+          lease_ref: "exclusive-lease-demo",
+          machine_ref: "assigned-machine:exclusive-lease-demo",
+          state: Active,
+          generation: 5L,
+          username: "alice",
+          starts_unix_ms: now - 3600000L,
+          expires_unix_ms: now + 86400000L,
+          updated_unix_ms: now - 1800000L,
+          reachability: Online,
+          last_seen_unix_ms: Some(now - 5000L),
+          credential_handoff: {
+            state: Available,
+            handoff_ref: Some("lease-handoff:exclusive-lease-demo:5"),
+            credential_kind: "short-lived-ssh-certificate",
+            valid_until_unix_ms: now + 86400000L,
+            raw_secret_included: false,
+          },
+          can_terminate: true,
+          termination_confirmation: Some("TERMINATE exclusive-lease-demo"),
+        },
+      ],
+    },
     cost_centers: [
       {
         cost_center_id: "cc-research",
@@ -241,7 +272,13 @@ pub fn EnterpriseState::update(
     Navigate(route) =>
       { ..self, route, success_message: None, error_message: None }
     LocaleChanged(locale) =>
-      { ..self, locale, success_message: None, error_message: None }
+      {
+        ..self,
+        locale,
+        machine_access: { ..self.machine_access, locale, },
+        success_message: None,
+        error_message: None,
+      }
     ProjectChanged(value) => { ..self, project_id: value }
     UsernameChanged(value) => { ..self, unix_username: value }
     ModelsChanged(value) => { ..self, model_ids: value }
@@ -251,6 +288,8 @@ pub fn EnterpriseState::update(
     SubmitLease =>
       { ..self, loading: true, success_message: None, error_message: None }
     MarkNotificationRead(_, _) => self
+    MachineAccess(message) =>
+      { ..self, machine_access: self.machine_access.update(message) }
     ClearNotice => { ..self, success_message: None, error_message: None }
   }
 }
@@ -297,6 +336,7 @@ fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
     Notifications => copy(locale, "Notifications", "通知")
     Costs => copy(locale, "Usage & costs", "用量与成本")
     Models => copy(locale, "Model catalog", "模型目录")
+    MachineAccess => copy(locale, "My machine", "我的机器")
   }
 }
 
@@ -338,6 +378,7 @@ fn navigation(
         Overview,
         Agreements,
         LeaseRequests,
+        MachineAccess,
         Notifications,
         Costs,
         Models,
@@ -1216,6 +1257,15 @@ fn content(
     Notifications => notifications_view(state, emit)
     Costs => costs_view(state)
     Models => models_view(state)
+    MachineAccess =>
+      match emit {
+        Some(send) =>
+          @machine_access.interactive_view(
+            state.machine_access,
+            send.map(message => MachineAccess(message)),
+          )
+        None => @machine_access.view(state.machine_access)
+      }
   }
 }
 

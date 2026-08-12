@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/contracts",
   "vectie/lunanexa/nodelease",
   "moonbitlang/async",
   "moonbitlang/async/fs",

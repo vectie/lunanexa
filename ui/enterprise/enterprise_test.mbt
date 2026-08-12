@@ -54,6 +54,25 @@ test "customer notification inbox is bilingual and keeps opaque receipts" {
 }
 
 ///|
+test "enterprise machine route shows safe live access without topology" {
+  let state = @enterprise.demo_state()
+  let english = @enterprise.render({ ..state, route: MachineAccess })
+  assert_true(english.contains("My machine access"))
+  assert_true(english.contains("assigned-machine:exclusive-lease-demo"))
+  assert_true(english.contains("End access early"))
+  assert_false(english.contains("node_id"))
+  assert_false(english.contains("access_credential_ref"))
+  let chinese = @enterprise.render({
+    ..state,
+    route: MachineAccess,
+    locale: ChineseSimplified,
+    machine_access: { ..state.machine_access, locale: ChineseSimplified },
+  })
+  assert_true(chinese.contains("我的机器访问"))
+  assert_true(chinese.contains("提前结束访问"))
+}
+
+///|
 test "lease form requires every bounded field" {
   let state = @enterprise.demo_state()
   assert_true(@enterprise.lease_form_valid(state))

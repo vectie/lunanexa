@@ -2010,6 +2010,11 @@ async fn ApiService::dispatch_with_transport(
       verb, path, headers, body, allow_asserted_subject,
     )
   }
+  if customer_machine_access_path(path) {
+    return self.handle_customer_machine_access(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   if exclusive_lease_management_path(path) {
     return self.handle_exclusive_lease_management(verb, path, headers, body)
   }
