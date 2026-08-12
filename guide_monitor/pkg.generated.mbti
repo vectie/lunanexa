@@ -1,0 +1,84 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/guide_monitor"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/notifications",
+  "vectie/lunanexa/notifications/store",
+}
+
+// Values
+pub let contract_version : String
+
+pub fn observation_signature(GuideHealthObservation, String) -> String
+
+pub fn probe_due(GuideMonitorPolicy, Int64?, Int64) -> Bool raise GuideMonitorError
+
+pub async fn reconcile_observation(@store.NotificationStore, GuideMonitorPolicy, GuideHealthObservation, String, Int64) -> GuideMonitorResult
+
+pub async fn reconcile_planned_observation(@store.NotificationStore, GuideMonitorPolicy, GuideProbePlan, GuideHealthObservation, String, Int64) -> GuideMonitorResult
+
+pub fn scheduled_probe_plan(GuideMonitorPolicy, Int64, Int64) -> GuideProbePlan raise GuideMonitorError
+
+pub fn sign_observation(GuideHealthObservation, String) -> GuideHealthObservation
+
+pub fn validate_policy(GuideMonitorPolicy) -> Unit raise GuideMonitorError
+
+pub fn verify_observation(GuideMonitorPolicy, GuideHealthObservation, String, Int64) -> Unit raise GuideMonitorError
+
+pub fn verify_planned_observation(GuideMonitorPolicy, GuideProbePlan, GuideHealthObservation, String, Int64) -> Unit raise GuideMonitorError
+
+// Errors
+pub(all) suberror GuideMonitorError {
+  InvalidPolicy(String)
+  InvalidObservation(String)
+  InvalidSignature
+  StaleObservation
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct GuideHealthObservation {
+  version : String
+  observation_id : String
+  target_ref : String
+  correlation_receipt : String
+  scheduled_unix_ms : Int64
+  observed_unix_ms : Int64
+  coursebook_ok : Bool
+  admin_diagnostics_enabled : Bool
+  admin_diagnostics_ok : Bool
+  knowledge_revision : String
+  knowledge_stale : Bool
+  knowledge_age_ms : Int64
+  signature : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct GuideMonitorPolicy {
+  target_ref : String
+  probe_interval_ms : Int64
+  observation_max_age_ms : Int64
+  future_skew_ms : Int64
+  knowledge_max_age_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct GuideMonitorResult {
+  observation_id : String
+  adapter_alert_active : Bool
+  knowledge_alert_active : Bool
+  adapter_record : @notifications.NotificationRecord?
+  knowledge_record : @notifications.NotificationRecord?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct GuideProbePlan {
+  version : String
+  target_ref : String
+  correlation_receipt : String
+  scheduled_unix_ms : Int64
+  health_path : String
+  diagnostics_path : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

@@ -76,6 +76,22 @@ spec:
                   name: "${MOONCLAW_GATEWAY_SECRET}"
                   key: token
                   optional: true
+            - name: COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS
+              value: "1"
+            - name: COURSEBOOK_ALLOW_HTTPS_CONTROLLER
+              value: "1"
+            - name: LUNANEXA_CONTROLLER_URL
+              value: "${LUNANEXA_DIAGNOSTICS_URL}"
+            - name: COURSEBOOK_ADMIN_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: "${COURSEBOOK_ADMIN_AUTH_SECRET}"
+                  key: hmac-key
+            - name: LUNANEXA_CONTROLLER_OPERATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "${COURSEBOOK_CONTROLLER_AUTH_SECRET}"
+                  key: operator-token
           ports:
             - name: http
               containerPort: 4390
@@ -173,6 +189,16 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "${LUNANEXA_DIAGNOSTICS_NAMESPACE}"
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: lunanexa-diagnostics-gateway
+      ports:
+        - protocol: TCP
+          port: 443
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -186,6 +212,8 @@ metadata:
     nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
     nginx.ingress.kubernetes.io/auth-tls-verify-depth: "2"
     nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "false"
+    nginx.ingress.kubernetes.io/auth-url: "${COURSEBOOK_IDENTITY_AUTH_URL}"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-LunaNexa-Actor,X-LunaNexa-Role,X-LunaNexa-Auth-Timestamp,X-LunaNexa-Auth-Signature,X-LunaNexa-Correlation-Id"
     nginx.ingress.kubernetes.io/proxy-body-size: "32k"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "310"
 spec:

@@ -1,0 +1,44 @@
+{
+  "contract_version": "lunanexa.guide-skills.v1",
+  "skills": [
+    {
+      "id": "moonbook.repository-coursebook",
+      "name": "Repository coursebook",
+      "version": "2026.08.12",
+      "audience": ["public", "operator"],
+      "required_evidence": ["coursebook", "coursebook-evidence"],
+      "allowed_tools": [],
+      "allowed_data": ["published-coursebook", "public-evidence-projection"],
+      "runbook_page_id": "source-ledger"
+    },
+    {
+      "id": "moonbook.book-pet-query",
+      "name": "Read-only guide query",
+      "version": "2026.08.12",
+      "audience": ["public", "operator"],
+      "required_evidence": ["coursebook", "coursebook-evidence", "moonclaw-health"],
+      "allowed_tools": ["moonclaw-read-only-cowork"],
+      "allowed_data": ["question-relevant-public-pages", "public-evidence-projection"],
+      "runbook_page_id": "debug-controller"
+    },
+    {
+      "id": "lunanexa.admin-guide-diagnostics",
+      "name": "Administrator guide diagnostics",
+      "version": "1.0.0",
+      "audience": ["operator"],
+      "required_evidence": ["coursebook", "coursebook-evidence", "controller-health", "operator-alerts", "node-summary", "lease-summary", "reconciliation-plan"],
+      "allowed_tools": ["fixed-read-only-controller-adapter"],
+      "allowed_data": ["component-health", "aggregate-alert-codes", "aggregate-node-states", "aggregate-lease-states", "reconciliation-count", "knowledge-revision", "skill-health"],
+      "runbook_page_id": "debug-controller"
+    }
+  ],
+  "diagnostic_runbooks": {
+    "ControllerUnavailable": "debug-controller",
+    "DeliveryAttemptLimit": "debug-controller",
+    "GuideAdapterUnavailable": "debug-controller",
+    "KnowledgeRevisionStale": "source-ledger",
+    "NodeUnreachable": "debug-node-runtime",
+    "ReconciliationBacklog": "observability-recovery",
+    "UnknownDiagnostic": "error-reference"
+  }
+}

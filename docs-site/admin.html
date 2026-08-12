@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Role-protected, read-only LunaNexa guide diagnostics for administrators.">
+  <title>LunaNexa · Guide diagnostics</title>
+  <link rel="stylesheet" href="./admin.css?v=2">
+  <script src="./admin.js?v=1" defer></script>
+</head>
+<body>
+  <header class="admin-topbar">
+    <a href="./" class="admin-brand"><span>LN</span><strong>LunaNexa</strong></a>
+    <div class="admin-actions">
+      <label><span class="visually-hidden" data-language-label>Language</span><select data-locale><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
+      <a href="./" data-coursebook-link>Coursebook</a>
+    </div>
+  </header>
+  <main>
+    <header class="page-heading">
+      <div><small data-kicker>Administrator · Read only</small><h1 data-title>Guide diagnostics</h1><p data-summary>Live, bounded health and evidence for troubleshooting the documentation guide. No commands, prompts, logs, credentials, or tenant records are available here.</p></div>
+      <button type="button" data-refresh><span data-refresh-label>Refresh</span></button>
+    </header>
+    <section class="boundary" data-boundary>Authenticated operator view · Aggregate evidence only · Every request is audited</section>
+    <section class="loading" data-loading role="status">Loading role-protected diagnostics…</section>
+    <section class="error" data-error hidden role="alert"><strong data-error-title>Diagnostics are unavailable.</strong><p data-error-message>The operator identity, adapter, or controller evidence could not be verified.</p></section>
+    <div data-dashboard hidden>
+      <section class="hero-grid">
+        <article class="summary-card"><span data-overall-label>Adapter health</span><strong data-adapter-health>—</strong><small data-correlation>—</small></article>
+        <article class="summary-card"><span data-alerts-label>Active alerts</span><strong data-alert-count>—</strong><small data-critical-count>—</small></article>
+        <article class="summary-card"><span data-backlog-label>Reconciliation backlog</span><strong data-backlog-count>—</strong><small data-backlog-detail>—</small></article>
+        <article class="summary-card"><span data-revision-label>Knowledge revision</span><strong data-revision>—</strong><small data-index-build>—</small></article>
+      </section>
+      <section class="panel"><header><div><small data-components-kicker>Dependencies</small><h2 data-components-title>Component health</h2></div></header><div class="component-grid" data-components></div></section>
+      <section class="two-column">
+        <section class="panel"><header><div><small data-cluster-kicker>Aggregate state</small><h2 data-cluster-title>Cluster and leases</h2></div></header><div data-cluster></div></section>
+        <section class="panel"><header><div><small data-alert-kicker>Typed triggers</small><h2 data-alert-title>Alert codes</h2></div></header><div data-alert-codes></div></section>
+      </section>
+      <section class="panel"><header><div><small data-skills-kicker>Allowlisted capabilities</small><h2 data-skills-title>Guide skill inventory</h2></div></header><div class="skill-list" data-skills></div></section>
+      <section class="panel missing-panel"><header><div><small data-evidence-kicker>Troubleshooting inputs</small><h2 data-evidence-title>Missing evidence</h2></div></header><div data-missing-evidence></div></section>
+    </div>
+  </main>
+</body>
+</html>

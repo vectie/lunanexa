@@ -1,0 +1,74 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/guide_monitor/probe"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/guide_monitor",
+  "vectie/lunanexa/notifications/store",
+}
+
+// Values
+pub let scheduler_state_version : String
+
+pub fn validate_origin(String, Bool) -> Unit raise GuideProbeError
+
+// Errors
+pub(all) suberror GuideProbeError {
+  InvalidConfiguration(String)
+  InvalidSchedulerState
+  TransportUnavailable
+  RedirectRejected
+  ResponseTooLarge
+  MalformedResponse
+  UntrustedResponse
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct GuideProbeConfig {
+  origin : String
+  allow_https : Bool
+  actor_ref : String
+  role : String
+  maximum_response_bytes : Int
+  request_timeout_ms : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) struct GuideProbeRunResult {
+  was_due : Bool
+  probe_ok : Bool
+  failure_code : String?
+  monitor_result : @guide_monitor.GuideMonitorResult?
+} derive(ToJson, @debug.Debug)
+
+pub struct GuideProbeScheduler {
+  path : String
+  mut state : GuideProbeSchedulerState
+  mutex : @async.Mutex
+}
+pub async fn GuideProbeScheduler::open(String) -> Self
+pub async fn GuideProbeScheduler::reserve_due(Self, @guide_monitor.GuideMonitorPolicy, Int64) -> @guide_monitor.GuideProbePlan?
+pub async fn GuideProbeScheduler::snapshot(Self) -> GuideProbeSchedulerState
+
+pub(all) struct GuideProbeSchedulerState {
+  schema_version : String
+  sequence : Int64
+  last_scheduled_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct GuideProbeWorker {
+  config : GuideProbeConfig
+  policy : @guide_monitor.GuideMonitorPolicy
+  scheduler : GuideProbeScheduler
+  notifications : @store.NotificationStore
+  identity_secret : String
+  observation_secret : String
+}
+pub async fn GuideProbeWorker::open(GuideProbeConfig, @guide_monitor.GuideMonitorPolicy, String, @store.NotificationStore, String, String) -> Self
+pub async fn GuideProbeWorker::run_forever(Self) -> Unit
+pub async fn GuideProbeWorker::run_once(Self, Int64) -> GuideProbeRunResult
+
+// Type aliases
+
+// Traits

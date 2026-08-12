@@ -1,9 +1,17 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertGuideSkillManifest,
+  buildGuideDiagnostics,
+  collectControllerDiagnostics,
+  diagnosticCategory,
+  safeControllerUrl,
+  verifyAdminIdentity,
+} from "./guide-diagnostics.mjs";
 
 const moduleRoot = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(process.env.COURSEBOOK_SITE_ROOT || moduleRoot);
@@ -18,9 +26,26 @@ const maximumContextPages = 6;
 const maximumContextBytes = 48_000;
 let activeQuestions = 0;
 let bookPromise;
+let guideManifestPromise;
+const guideRequestCounters = new Map([
+  ["public_answered", 0],
+  ["public_refused", 0],
+  ["public_failed", 0],
+  ["admin_success", 0],
+  ["admin_denied", 0],
+  ["admin_failed", 0],
+]);
+const adminAdapterMetrics = { requests_total: 0, failures_total: 0, last_success_unix_ms: 0 };
 
 function petEnabled() {
   return process.env.COURSEBOOK_ENABLE_PET === "1";
+}
+
+function adminDiagnosticsEnabled() {
+  return process.env.COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS === "1" &&
+    safeControllerUrl(process.env.LUNANEXA_CONTROLLER_URL, process.env.COURSEBOOK_ALLOW_HTTPS_CONTROLLER === "1") &&
+    Buffer.byteLength(String(process.env.COURSEBOOK_ADMIN_AUTH_KEY || ""), "utf8") >= 32 &&
+    Boolean(String(process.env.LUNANEXA_CONTROLLER_OPERATOR_TOKEN || ""));
 }
 
 const contentTypes = new Map([
@@ -126,6 +151,23 @@ async function loadPublicBook() {
     });
   }
   return bookPromise;
+}
+
+async function loadGuideManifest(book) {
+  if (!guideManifestPromise) {
+    guideManifestPromise = readFile(resolve(siteRoot, "guide-skills.json"), "utf8")
+      .then((value) => assertGuideSkillManifest(JSON.parse(value), book));
+  }
+  return guideManifestPromise;
+}
+
+function countGuideRequest(outcome) {
+  guideRequestCounters.set(outcome, (guideRequestCounters.get(outcome) || 0) + 1);
+}
+
+function guideRequestOutcomeCounts() {
+  return [...guideRequestCounters.entries()].sort(([left], [right]) => left.localeCompare(right))
+    .map(([code, count]) => ({ code, count }));
 }
 
 function normalizedSearchTokens(value) {
@@ -357,7 +399,10 @@ async function answerQuestion(body) {
   if (!question) throw new Error("question is required");
   if (question.length > maximumQuestionLength) throw new Error("question is too long");
   const refusal = publicBoundaryRefusal(question);
-  if (refusal) return { answer: refusal, confidence: "supported", citations: [], next_step: "Open a relevant procedure page to review the documented steps safely." };
+  if (refusal) {
+    countGuideRequest("public_refused");
+    return { answer: refusal, confidence: "supported", citations: [], next_step: "Open a relevant procedure page to review the documented steps safely." };
+  }
   const book = await loadPublicBook();
   const pageId = book.pageById.has(String(body?.page_id || "")) ? String(body.page_id) : "";
   const session = validSessionId(body?.session_id) ? body.session_id : "browser";
@@ -368,9 +413,83 @@ async function answerQuestion(body) {
     cwd: knowledgeRoot,
     model: modelName(),
   });
-  return validatePetAnswer(extractAssistantReply(completed), {
+  const answer = validatePetAnswer(extractAssistantReply(completed), {
     pageById: new Map(publicContext.pages.map((page) => [String(page.id), page])),
   });
+  countGuideRequest("public_answered");
+  return answer;
+}
+
+function boundedCorrelationReceipt(value) {
+  const configured = String(value || "");
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(configured) ? configured : randomUUID();
+}
+
+function writeAdminDiagnosticAudit(value) {
+  process.stdout.write(`${JSON.stringify({
+    timestamp_unix_ms: Date.now(),
+    severity: value.outcome === "success" ? "Information" : "Warning",
+    component: "coursebook-guide",
+    event_code: "GuideAdminDiagnosticRequest",
+    actor_ref: value.actor_ref || "unverified",
+    role: value.role || "unverified",
+    query_category: value.query_category || "unknown",
+    knowledge_revision: value.knowledge_revision || "unavailable",
+    adapter_outcome: value.outcome,
+    latency_ms: Math.max(0, Number(value.latency_ms) || 0),
+    correlation_receipt: value.correlation_receipt,
+  })}\n`);
+}
+
+async function assistantHealthy() {
+  if (!petEnabled()) return false;
+  return fetch(`${gatewayUrl()}/health`, { signal: AbortSignal.timeout(1500), redirect: "error" })
+    .then((value) => value.ok).catch(() => false);
+}
+
+async function adminDiagnosticsHealthy() {
+  if (!adminDiagnosticsEnabled()) return false;
+  try {
+    const publicBook = await loadPublicBook();
+    await loadGuideManifest(publicBook.book);
+    const inspectedAt = Date.parse(String(publicBook.evidence?.repository?.inspected_at || ""));
+    const configuredAge = Number(process.env.COURSEBOOK_KNOWLEDGE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000);
+    const maximumAge = Number.isSafeInteger(configuredAge) && configuredAge > 0 ? configuredAge : 7 * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(inspectedAt) || Date.now() - inspectedAt > maximumAge) return false;
+    const origin = String(process.env.LUNANEXA_CONTROLLER_URL || "").trim().replace(/\/$/, "");
+    const response = await fetch(`${origin}/health`, { method: "GET", headers: { Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(1500) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function adminDiagnosticProjection() {
+  const publicBook = await loadPublicBook();
+  const manifest = await loadGuideManifest(publicBook.book);
+  const origin = String(process.env.LUNANEXA_CONTROLLER_URL || "").trim().replace(/\/$/, "");
+  const snapshots = await collectControllerDiagnostics({
+    origin,
+    operatorToken: String(process.env.LUNANEXA_CONTROLLER_OPERATOR_TOKEN || ""),
+    timeoutMs: Number(process.env.COURSEBOOK_ADMIN_ADAPTER_TIMEOUT_MS || 2500),
+  });
+  const now = Date.now();
+  const projection = buildGuideDiagnostics({
+    book: publicBook.book,
+    evidence: publicBook.evidence,
+    manifest,
+    snapshots,
+    petEnabled: petEnabled(),
+    adminEnabled: true,
+    assistantHealthy: await assistantHealthy(),
+    now,
+    knowledgeMaxAgeMs: Number(process.env.COURSEBOOK_KNOWLEDGE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000),
+    adapterMetrics: adminAdapterMetrics,
+  });
+  adminAdapterMetrics.last_success_unix_ms = now;
+  projection.adapter.last_success_unix_ms = now;
+  projection.adapter.guide_request_outcomes = guideRequestOutcomeCounts();
+  return projection;
 }
 
 function responseJson(response, status, value) {
@@ -406,7 +525,7 @@ async function serveStatic(pathname, response) {
   let decoded;
   try { decoded = decodeURIComponent(pathname); } catch { response.writeHead(400).end("Bad request"); return; }
   const relative = decoded === "/" ? "index.html" : decoded.replace(/^\/+/, "");
-  if (relative === "server.mjs" || relative.endsWith(".example.json") || relative === "README.md") {
+  if (relative === "server.mjs" || relative === "guide-diagnostics.mjs" || relative === "guide-skills.json" || relative.endsWith(".example.json") || relative === "README.md") {
     response.writeHead(404).end("Not found");
     return;
   }
@@ -442,8 +561,60 @@ export function createCoursebookServer(port = defaultPort) {
       const url = new URL(request.url || "/", `http://${request.headers.host}`);
       if (url.pathname === "/health" && request.method === "GET") {
         const book = await loadPublicBook().then(() => true).catch(() => false);
-        const assistant = petEnabled() ? await fetch(`${gatewayUrl()}/health`, { signal: AbortSignal.timeout(1500) }).then((value) => value.ok).catch(() => false) : false;
-        responseJson(response, book ? 200 : 503, { ok: book, service: "moonbook-coursebook", dependencies: { coursebook: { ok: book }, assistant: { ok: assistant, enabled: petEnabled(), optional: true } } });
+        const [assistant, adminDiagnostics] = await Promise.all([assistantHealthy(), adminDiagnosticsHealthy()]);
+        responseJson(response, book ? 200 : 503, { ok: book, service: "moonbook-coursebook", dependencies: { coursebook: { ok: book }, assistant: { ok: assistant, enabled: petEnabled(), optional: true }, admin_diagnostics: { ok: adminDiagnostics, enabled: adminDiagnosticsEnabled(), optional: true } } });
+        return;
+      }
+      if (url.pathname === "/api/coursebook/admin/diagnostics") {
+        const started = Date.now();
+        const correlationReceipt = boundedCorrelationReceipt(request.headers["x-lunanexa-correlation-id"]);
+        const category = diagnosticCategory(url.searchParams.get("category"));
+        const identity = adminDiagnosticsEnabled() && request.method === "GET" &&
+          [...url.searchParams.keys()].every((key) => key === "category") && category
+          ? verifyAdminIdentity({
+            headers: request.headers,
+            method: request.method,
+            pathname: url.pathname,
+            key: String(process.env.COURSEBOOK_ADMIN_AUTH_KEY || ""),
+            maximumSkewMs: Number(process.env.COURSEBOOK_ADMIN_AUTH_MAX_SKEW_MS || 60_000),
+          })
+          : null;
+        if (!identity) {
+          countGuideRequest("admin_denied");
+          writeAdminDiagnosticAudit({
+            query_category: category || "unknown",
+            outcome: "denied",
+            latency_ms: Date.now() - started,
+            correlation_receipt: correlationReceipt,
+          });
+          responseJson(response, adminDiagnosticsEnabled() ? 403 : 404, { ok: false, error: "administrator diagnostics are unavailable" });
+          return;
+        }
+        adminAdapterMetrics.requests_total += 1;
+        try {
+          const diagnostics = await adminDiagnosticProjection();
+          countGuideRequest("admin_success");
+          writeAdminDiagnosticAudit({
+            ...identity,
+            query_category: category,
+            knowledge_revision: diagnostics.knowledge.revision,
+            outcome: "success",
+            latency_ms: Date.now() - started,
+            correlation_receipt: correlationReceipt,
+          });
+          responseJson(response, 200, { ok: true, category, correlation_receipt: correlationReceipt, diagnostics });
+        } catch {
+          adminAdapterMetrics.failures_total += 1;
+          countGuideRequest("admin_failed");
+          writeAdminDiagnosticAudit({
+            ...identity,
+            query_category: category,
+            outcome: "failed",
+            latency_ms: Date.now() - started,
+            correlation_receipt: correlationReceipt,
+          });
+          responseJson(response, 503, { ok: false, error: "administrator diagnostics are temporarily unavailable", correlation_receipt: correlationReceipt });
+        }
         return;
       }
       if (url.pathname === "/api/coursebook/ask") {
@@ -454,6 +625,7 @@ export function createCoursebookServer(port = defaultPort) {
           const answer = await answerQuestion(await readJsonBody(request));
           responseJson(response, 200, { ok: true, ...answer });
         } catch (error) {
+          countGuideRequest("public_failed");
           const message = error instanceof Error ? error.message : "The guide is unavailable.";
           const status = /required|too long|too large|JSON/.test(message) ? 400 : /timed out/.test(message) ? 504 : 503;
           responseJson(response, status, { ok: false, error: sanitizePublicText(message, 500) });
