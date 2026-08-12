@@ -72,7 +72,10 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
           Some("opaque-tenant:inference:remote-idem-1"),
         )
         let received = @json.parse(body.read_all().text())
-        assert_true(received.stringify().contains("remote-workload-1"))
+        let encoded = received.stringify()
+        assert_true(encoded.contains("remote-workload-1"))
+        assert_true(encoded.contains("\"input\":\"hello\""))
+        assert_false(encoded.contains("\"input\":{\"prompt\""))
         connection.send_response(200, "OK", extra_headers={
           "Content-Type": "application/json",
         })
@@ -99,6 +102,26 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
     assert_eq(result.output_units, 2)
     assert_true(result.output.stringify().contains("ok"))
     server.close()
+  }
+}
+
+///|
+async test "text adapter rejects payloads that cannot map to Responses input" {
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-credential",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let unsupported = { ..remote_request(), payload: { "unexpected": "value" } }
+  try runtime.invoke(unsupported) catch {
+    @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(message) =>
+      assert_true(message.contains("input, prompt, or messages"))
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("unsupported text payload reached the network")
   }
 }
 
@@ -205,6 +228,44 @@ async test "approved text adapter normalizes an upstream SSE stream" {
     assert_eq(chunks.length(), 2)
     assert_eq(result.input_units, 1)
     assert_eq(result.output_units, 2)
+    server.close()
+  }
+}
+
+///|
+async test "Responses completion event terminates stream and reports nested usage" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever() <| ((_request, body, connection) => {
+        ignore(body.read_all())
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": "text/event-stream",
+        })
+        connection.write_string(
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n",
+        )
+        connection.write_string(
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":4,\"output_tokens\":1}}}\n\n",
+        )
+        connection.end_response()
+      })
+    }
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "http://\{server.addr}/v1/responses",
+      "runtime-credential",
+      "runtime-v1",
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      allow_http_loopback=true,
+    )
+    let chunks : Array[Json] = []
+    let result = runtime.invoke_stream(remote_request(), chunk => {
+      chunks.push(chunk)
+    })
+    assert_eq(chunks.length(), 1)
+    assert_eq(result.input_units, 4)
+    assert_eq(result.output_units, 1)
     server.close()
   }
 }

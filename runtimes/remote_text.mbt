@@ -56,6 +56,16 @@ priv struct UpstreamStreamEnvelope {
 } derive(FromJson)
 
 ///|
+priv struct UpstreamCompletedResponse {
+  usage : UpstreamUsage?
+} derive(FromJson)
+
+///|
+priv struct UpstreamCompletedEvent {
+  response : UpstreamCompletedResponse?
+} derive(FromJson)
+
+///|
 pub fn OpenAiTextRuntime::new(
   endpoint : String,
   credential_value : String,
@@ -134,6 +144,56 @@ fn valid_node_id(node_id : String) -> Bool {
     character == '_' ||
     character == '.'
   })
+}
+
+///|
+fn responses_input(payload : Json) -> Json raise RemoteRuntimeError {
+  let input = match payload {
+    String(_) | Array(_) => payload
+    Object(fields) =>
+      match fields.get("input") {
+        Some(value) => value
+        None =>
+          match fields.get("prompt") {
+            Some(value) => value
+            None =>
+              match fields.get("messages") {
+                Some(value) => value
+                None =>
+                  raise InvalidUpstreamResponse(
+                    "text payload must contain input, prompt, or messages",
+                  )
+              }
+          }
+      }
+    _ =>
+      raise InvalidUpstreamResponse(
+        "text payload must be a string, array, or supported object",
+      )
+  }
+  match input {
+    String(_) | Array(_) => input
+    _ =>
+      raise InvalidUpstreamResponse(
+        "text input must resolve to a string or message array",
+      )
+  }
+}
+
+///|
+fn responses_event_completed(event : Json) -> UpstreamUsage?? {
+  guard event is Object(fields) &&
+    fields.get("type") is Some(String("response.completed")) else {
+    return None
+  }
+  let completed : UpstreamCompletedEvent = @json.from_json(event) catch {
+    _ => { response: None }
+  }
+  let usage = match completed.response {
+    Some(response) => response.usage
+    None => None
+  }
+  Some(usage)
 }
 
 ///|
@@ -220,6 +280,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
   if request.capability != TextGenerate {
     raise UnsupportedCapability
   }
+  let input = responses_input(request.payload)
   let headers : Map[String, String] = {
     "Content-Type": "application/json",
     "Accept": "application/json",
@@ -233,7 +294,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
   }
   let upstream_request : Json = {
     "model": request.model_selector,
-    "input": request.payload,
+    "input": input,
     "stream": false,
     "max_output_tokens": request.resource_ceiling.max_output_units,
     "metadata": {
@@ -286,6 +347,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
   if request.capability != TextGenerate {
     raise UnsupportedCapability
   }
+  let input = responses_input(request.payload)
   let headers : Map[String, String] = {
     "Content-Type": "application/json",
     "Accept": "text/event-stream",
@@ -299,7 +361,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
   }
   let upstream_request : Json = {
     "model": request.model_selector,
-    "input": request.payload,
+    "input": input,
     "stream": true,
     "max_output_tokens": request.resource_ceiling.max_output_units,
     "metadata": {
@@ -338,6 +400,14 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     }
     let event_json = @json.parse(data) catch {
       error => raise InvalidUpstreamResponse("\{Repr(error)}")
+    }
+    if responses_event_completed(event_json) is Some(completed_usage) {
+      if completed_usage is Some(usage) {
+        input_units = usage.input_tokens
+        output_units = usage.output_tokens
+      }
+      saw_done = true
+      break
     }
     let event : UpstreamStreamEnvelope = @json.from_json(event_json) catch {
       _ => { delta: None, output_text: None, usage: None }
