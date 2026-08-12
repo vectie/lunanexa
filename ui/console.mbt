@@ -13,8 +13,16 @@ pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
   architecture : String
+  total_memory_mib : Int
   free_memory_mib : Int
+  used_memory_mib : Int
+  utilization_per_mille : Int
+  temperature_celsius : Int
+  power_watts : Int
   workloads : Int
+  lease_holder : String
+  active_assignment : String
+  last_seen : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -111,6 +119,17 @@ pub(all) struct ComputeLeaseRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct ExclusiveNodeLeaseRow {
+  lease_id : String
+  node_id : String
+  subject_ref : String
+  unix_username : String
+  expires_at : String
+  state : String
+  generation : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct CostCenterRow {
   cost_center_id : String
   organization_id : String
@@ -166,6 +185,7 @@ pub(all) enum DestructiveAction {
   RevokeUser(String)
   RevokeAccessGrant(String)
   EndComputeLease(String)
+  TerminateExclusiveNodeLease(String, Int64)
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -195,6 +215,7 @@ pub(all) struct ConsoleState {
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
+  exclusive_node_leases : Array[ExclusiveNodeLeaseRow]
   cost_centers : Array[CostCenterRow]
   agreements : Array[AgreementRow]
   enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
@@ -208,7 +229,6 @@ pub(all) struct ConsoleState {
   operation_body : String
   quick_deployment_id : String
   quick_template : String
-  quick_replicas : String
 } derive(Eq)
 
 ///|
@@ -228,6 +248,7 @@ pub(all) enum ConsoleMessage {
   BeginRevokeAccessGrant(String)
   ActivateComputeLease(String)
   BeginEndComputeLease(String)
+  BeginTerminateExclusiveNodeLease(String, Int64)
   DismissConfirmation
   ConfirmAction(DestructiveAction)
   Refresh
@@ -236,7 +257,6 @@ pub(all) enum ConsoleMessage {
   SubmitOperation
   QuickDeploymentIdChanged(String)
   QuickTemplateChanged(String)
-  QuickReplicasChanged(String)
   SubmitQuickDeployment
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
@@ -288,6 +308,7 @@ pub fn default_state() -> ConsoleState {
     users: [],
     access_grants: [],
     compute_leases: [],
+    exclusive_node_leases: [],
     cost_centers: [],
     agreements: [],
     enterprise_lease_requests: [],
@@ -301,7 +322,6 @@ pub fn default_state() -> ConsoleState {
     operation_body: "",
     quick_deployment_id: "",
     quick_template: "",
-    quick_replicas: "1",
   }
 }
 
@@ -315,29 +335,61 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-01",
       state: Active,
       architecture: "nvidia-gb10",
+      total_memory_mib: 122880,
       free_memory_mib: 81920,
-      workloads: 3,
+      used_memory_mib: 40960,
+      utilization_per_mille: 420,
+      temperature_celsius: 46,
+      power_watts: 76,
+      workloads: 1,
+      lease_holder: "org-northstar · alice",
+      active_assignment: "deployment-qwen-eval",
+      last_seen: "≤ 1 s",
     },
     {
       node_id: "dgx-spark-02",
       state: Active,
       architecture: "nvidia-gb10",
+      total_memory_mib: 122880,
       free_memory_mib: 79872,
-      workloads: 2,
+      used_memory_mib: 43008,
+      utilization_per_mille: 610,
+      temperature_celsius: 51,
+      power_watts: 89,
+      workloads: 1,
+      lease_holder: "org-acme · bob",
+      active_assignment: "deployment-vision-review",
+      last_seen: "≤ 1 s",
     },
     {
       node_id: "dgx-spark-03",
       state: Active,
       architecture: "nvidia-gb10",
+      total_memory_mib: 122880,
       free_memory_mib: 80896,
-      workloads: 4,
+      used_memory_mib: 41984,
+      utilization_per_mille: 80,
+      temperature_celsius: 38,
+      power_watts: 42,
+      workloads: 0,
+      lease_holder: "",
+      active_assignment: "",
+      last_seen: "3 s",
     },
     {
       node_id: "dgx-spark-04",
       state: Active,
       architecture: "nvidia-gb10",
+      total_memory_mib: 122880,
       free_memory_mib: 79872,
-      workloads: 2,
+      used_memory_mib: 43008,
+      utilization_per_mille: 30,
+      temperature_celsius: 36,
+      power_watts: 39,
+      workloads: 0,
+      lease_holder: "",
+      active_assignment: "",
+      last_seen: "5 s",
     },
   ]
   let models : Array[ModelRow] = [
@@ -444,7 +496,7 @@ pub fn demo_state() -> ConsoleState {
         version: "runtime-v1",
         architectures: ["nvidia-gb10"],
         capabilities: [TextGenerate],
-        supports_batching: true,
+        supports_batching: false,
         supports_multi_node: false,
       },
       capability: TextGenerate,
@@ -513,6 +565,17 @@ pub fn demo_state() -> ConsoleState {
         evidence: "4-node demo fleet",
         result: "accepted",
         receipt: "demo:audit:01",
+      },
+    ],
+    exclusive_node_leases: [
+      {
+        lease_id: "lease-northstar-alice",
+        node_id: "dgx-spark-01",
+        subject_ref: "subject-alice",
+        unix_username: "alice",
+        expires_at: "2026-08-12T18:00:00Z",
+        state: "Active",
+        generation: 4L,
       },
     ],
     cost_centers: [
@@ -737,7 +800,8 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
       )
     Leases =>
       localized(
-        locale, "Time-bounded workspace entitlements and inference capacity.", "管理有时限的工作区权益与推理容量。",
+        locale, "Time-bounded exclusive-node leases: one tenant, one user, one machine.",
+        "管理有时限的独占节点租约：一个租户、一个用户、一台机器。",
       )
     CostCenters =>
       localized(
@@ -1284,6 +1348,29 @@ fn lease_state_badge(
 }
 
 ///|
+fn exclusive_lease_state_badge(
+  locale : @i18n.Locale,
+  state : String,
+) -> @rabbita.Html {
+  let (label, tone) = match state {
+    "Active" => (localized(locale, "Active", "有效"), "ok")
+    "Completed" => (localized(locale, "Sanitized", "已清理"), "ok")
+    "Cancelled" => (localized(locale, "Cancelled", "已取消"), "neutral")
+    "Quarantined" => (localized(locale, "Quarantined", "已隔离"), "danger")
+    "Expiring" => (localized(locale, "Expiring", "正在到期"), "warning")
+    "Draining" => (localized(locale, "Draining", "正在排空"), "warning")
+    "RevokingAccess" =>
+      (localized(locale, "Revoking access", "正在撤销访问"), "warning")
+    "Sanitizing" => (localized(locale, "Sanitizing", "正在清理"), "warning")
+    "Provisioning" =>
+      (localized(locale, "Provisioning", "正在开通"), "pending")
+    "Reserved" => (localized(locale, "Reserved", "已预留"), "pending")
+    _ => (state, "neutral")
+  }
+  status_badge(label, tone)
+}
+
+///|
 fn node_state_badge(
   locale : @i18n.Locale,
   state : @contracts.NodeState,
@@ -1587,18 +1674,14 @@ fn leases_view(
       @html.div([
         @html.h2(
           id="leases-title",
-          localized(
-            state.locale,
-            "Compute & workspace leases",
-            "计算租约与工作区租约",
-          ),
+          localized(state.locale, "Lease operations", "租约运维"),
         ),
         @html.p(
           class="section-copy",
           localized(
             state.locale,
-            "Review who holds each entitlement, its workspace entry point, provider-neutral inference limits, and expiry before taking action.",
-            "操作前请检查权益持有者、工作区入口、不绑定特定提供商的推理限制及到期时间。",
+            "Exclusive machine access and workspace capacity are separate authorities. Ending machine access always revokes credentials, stops tenant work, sanitizes the node, and verifies a clean baseline before placement resumes.",
+            "独占机器访问与工作区容量属于不同权限。结束机器访问时，系统必须撤销凭据、停止租户工作、清理节点并验证干净基线，随后才能恢复调度。",
           ),
         ),
       ]),
@@ -1606,10 +1689,167 @@ fn leases_view(
         class="resource-count",
         localized(
           state.locale,
-          "\{state.compute_leases.count_if(lease => lease.state == Active)} active · \{state.compute_leases.length()} total",
-          "\{state.compute_leases.count_if(lease => lease.state == Active)} 项有效 · 共 \{state.compute_leases.length()} 项",
+          "\{state.exclusive_node_leases.count_if(lease => lease.state == "Active")} machines leased · \{state.compute_leases.count_if(lease => lease.state == Active)} workspace leases",
+          "\{state.exclusive_node_leases.count_if(lease => lease.state == "Active")} 台机器租用中 · \{state.compute_leases.count_if(lease => lease.state == Active)} 项工作区租约",
         ),
       ),
+    ]),
+    @html.div(class="lease-cleanup-policy", [
+      @html.strong(
+        localized(
+          state.locale,
+          "Fail-closed cleanup boundary",
+          "故障关闭式清理边界",
+        ),
+      ),
+      @html.p(
+        localized(
+          state.locale,
+          "Natural expiry and early termination use the same generation-fenced path: revoke → sanitize → verify → release. Any failed or stale evidence quarantines the DGX.",
+          "自然到期与提前终止使用同一条代际隔离路径：撤销 → 清理 → 验证 → 释放。任何失败或过期证据都会隔离该 DGX。",
+        ),
+      ),
+    ]),
+    @html.div(class="subsection-heading", [
+      @html.div([
+        @html.h3(
+          localized(
+            state.locale,
+            "Exclusive machine leases",
+            "独占机器租约",
+          ),
+        ),
+        @html.p(
+          class="section-copy",
+          localized(
+            state.locale,
+            "A node remains fenced until the cleanup helper returns generation-bound verification evidence.",
+            "节点会保持隔离，直到清理助手返回绑定到对应代际的验证证据。",
+          ),
+        ),
+      ]),
+    ]),
+    if state.exclusive_node_leases.length() == 0 {
+      @html.p(
+        class="empty-state",
+        localized(
+          state.locale,
+          "No exclusive machine leases are recorded.",
+          "暂无独占机器租约。",
+        ),
+      )
+    } else {
+      @html.div(class="table-scroll", [
+        @html.table(class="resource-table", [
+          @html.caption(
+            class="sr-only",
+            localized(
+              state.locale,
+              "Exclusive machine lease cleanup state",
+              "独占机器租约清理状态",
+            ),
+          ),
+          @html.thead(
+            @html.tr([
+              @html.th(
+                localized(state.locale, "Lease / user", "租约 / 用户"),
+              ),
+              @html.th(localized(state.locale, "Node", "节点")),
+              @html.th(localized(state.locale, "State", "状态")),
+              @html.th(localized(state.locale, "Expires", "到期时间")),
+              @html.th(localized(state.locale, "Generation", "代际")),
+              @html.th(localized(state.locale, "Action", "操作")),
+            ]),
+          ),
+          @html.tbody(
+            [
+              for lease in state.exclusive_node_leases => {
+                @html.tr([
+                  @html.td([
+                    @html.strong(lease.unix_username),
+                    @html.span(class="mono secondary", lease.lease_id),
+                    @html.span(class="mono secondary", lease.subject_ref),
+                  ]),
+                  @html.td(class="mono", lease.node_id),
+                  @html.td(
+                    exclusive_lease_state_badge(state.locale, lease.state),
+                  ),
+                  @html.td(generated_time_label(state.locale, lease.expires_at)),
+                  @html.td(class="mono", lease.generation.to_string()),
+                  @html.td(class="row-actions", [
+                    if lease.state == "Requested" ||
+                      lease.state == "Reserved" ||
+                      lease.state == "Provisioning" ||
+                      lease.state == "Active" ||
+                      lease.state == "Quarantined" {
+                      @html.button(
+                        type_="button",
+                        class="danger-secondary",
+                        disabled=state.loading,
+                        title=localized(
+                          state.locale,
+                          "Terminate exclusive lease \{lease.lease_id}",
+                          "终止独占租约 \{lease.lease_id}",
+                        ),
+                        on_click=command(
+                          emit,
+                          BeginTerminateExclusiveNodeLease(
+                            lease.lease_id,
+                            lease.generation,
+                          ),
+                        ),
+                        localized(
+                          state.locale,
+                          "Terminate & clean…",
+                          "终止并清理…",
+                        ),
+                      )
+                    } else {
+                      @html.span(
+                        class="secondary",
+                        localized(
+                          state.locale,
+                          if lease.state == "Completed" ||
+                            lease.state == "Cancelled" {
+                            "No actions"
+                          } else {
+                            "Cleanup in progress"
+                          },
+                          if lease.state == "Completed" ||
+                            lease.state == "Cancelled" {
+                            "无可用操作"
+                          } else {
+                            "清理进行中"
+                          },
+                        ),
+                      )
+                    },
+                  ]),
+                ])
+              }
+            ],
+          ),
+        ]),
+      ])
+    },
+    @html.div(class="subsection-heading", [
+      @html.div([
+        @html.h3(
+          localized(
+            state.locale,
+            "Workspace capacity leases",
+            "工作区容量租约",
+          ),
+        ),
+        @html.p(
+          class="section-copy",
+          localized(
+            state.locale,
+            "These grant control-plane capacity only and never grant direct DGX login access.",
+            "这些租约只授予控制平面容量，绝不会直接授予 DGX 登录权限。",
+          ),
+        ),
+      ]),
     ]),
     if state.compute_leases.length() == 0 {
       @html.p(
@@ -1767,51 +2007,34 @@ fn nodes_view(
       ),
     ]),
     if state.nodes.length() == 0 {
-      @html.p(
-        class="empty-state",
-        localized(
-          state.locale,
-          "No nodes enrolled. Create a short-lived enrollment token to begin.",
-          "尚未注册节点。请先创建短期有效的注册令牌。",
+      @html.div(class="empty-state empty-state-action", [
+        @html.strong(
+          localized(state.locale, "No nodes enrolled", "尚未注册节点"),
         ),
-      )
-    } else {
-      @html.div(class="table-scroll", [
-        @html.table(class="resource-table", [
-          @html.caption(
-            class="sr-only",
-            localized(
-              state.locale,
-              "Managed hardware nodes",
-              "受管硬件节点",
-            ),
+        @html.p(
+          localized(
+            state.locale,
+            "Create a short-lived enrollment token, start the node daemon, then refresh telemetry.",
+            "请创建短期有效的注册令牌、启动节点守护进程，然后刷新遥测。",
           ),
-          @html.thead(
-            @html.tr([
-              @html.th(scope=Col, localized(state.locale, "Node", "节点")),
-              @html.th(scope=Col, localized(state.locale, "Status", "状态")),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Architecture", "架构"),
-              ),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Free memory", "可用内存"),
-              ),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Workloads", "工作负载"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
-            ]),
+        ),
+        @html.button(
+          type_="button",
+          on_click=command(emit, Navigate(Policies)),
+          localized(
+            state.locale,
+            "Open enrollment policy",
+            "打开注册策略",
           ),
-          @html.tbody(
-            [
-              for node in state.nodes => node_item(state.locale, node, emit)
-            ],
-          ),
-        ]),
+        ),
       ])
+    } else {
+      @html.div(
+        class="node-list",
+        [
+          for node in state.nodes => node_item(state.locale, node, emit)
+        ],
+      )
     },
   ])
 }
@@ -1822,40 +2045,168 @@ fn node_item(
   node : NodeRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
-  @html.tr([
-    @html.td([
-      @html.strong(node.node_id),
+  let lease_holder = if node.lease_holder == "" {
+    localized(locale, "Unassigned", "未分配")
+  } else {
+    node.lease_holder
+  }
+  let active_assignment = if node.active_assignment == "" {
+    localized(locale, "Idle", "空闲")
+  } else {
+    node.active_assignment
+  }
+  let utilization_percent = (node.utilization_per_mille / 10).clamp(
+    min=0,
+    max=100,
+  )
+  let memory_percent = if node.total_memory_mib > 0 {
+    (node.used_memory_mib * 100 / node.total_memory_mib).clamp(min=0, max=100)
+  } else {
+    0
+  }
+  @html.details(class="node-record", [
+    @html.summary(class="node-summary", [
+      @html.div(class="node-identity", [
+        @html.strong(node.node_id),
+        @html.span(
+          class="mono secondary",
+          architecture_label(locale, node.architecture),
+        ),
+      ]),
+      @html.div(class="node-summary-cell", [
+        @html.span(localized(locale, "State", "状态")),
+        node_state_badge(locale, node.state),
+      ]),
+      @html.div(class="node-summary-cell node-memory-summary", [
+        @html.span(localized(locale, "GPU memory", "GPU 内存")),
+        @html.strong("\{node.free_memory_mib} MiB"),
+        @html.small(localized(locale, "free", "可用")),
+      ]),
+      @html.div(class="node-summary-cell", [
+        @html.span(localized(locale, "GPU utilization", "GPU 利用率")),
+        @html.strong("\{utilization_percent}%"),
+      ]),
+      @html.div(class="node-summary-cell node-lease-summary", [
+        @html.span(localized(locale, "Exclusive lease", "独占租约")),
+        @html.strong(lease_holder),
+      ]),
       @html.span(
-        class="secondary",
-        localized(locale, "Managed runtime host", "受管运行时主机"),
+        class="node-expand-cue",
+        localized(locale, "Inspect", "查看详情"),
       ),
     ]),
-    @html.td(node_state_badge(locale, node.state)),
-    @html.td(class="mono", architecture_label(locale, node.architecture)),
-    @html.td("\{node.free_memory_mib} MiB"),
-    @html.td(node.workloads.to_string()),
-    @html.td(class="row-actions", [
-      @html.button(
-        type_="button",
-        title=localized(
-          locale,
-          "Cordon \{node.node_id}",
-          "封锁调度 \{node.node_id}",
+    @html.div(class="node-detail", [
+      @html.div(class="node-detail-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            localized(locale, "Live node evidence", "节点实时证据"),
+          ),
+          @html.h3(localized(locale, "Resource telemetry", "资源遥测")),
+        ]),
+        @html.span(
+          class="secondary",
+          localized(
+            locale,
+            "Last heartbeat · \{node.last_seen}",
+            "最近心跳 · \{node.last_seen}",
+          ),
         ),
-        on_click=command(emit, BeginCordon(node.node_id)),
-        localized(locale, "Cordon…", "封锁调度…"),
-      ),
-      @html.button(
-        type_="button",
-        class="danger-secondary",
-        title=localized(
-          locale,
-          "Drain \{node.node_id}",
-          "排空 \{node.node_id}",
+      ]),
+      @html.div(class="node-metrics", [
+        @html.div(class="node-metric", [
+          @html.span(localized(locale, "GPU utilization", "GPU 利用率")),
+          @html.strong("\{utilization_percent}%"),
+          @html.progress(
+            value=utilization_percent,
+            max=100,
+            "\{utilization_percent}%",
+          ),
+        ]),
+        @html.div(class="node-metric", [
+          @html.span(localized(locale, "Memory used", "已用内存")),
+          @html.strong("\{node.used_memory_mib} MiB"),
+          @html.progress(value=memory_percent, max=100, "\{memory_percent}%"),
+          @html.small(
+            localized(
+              locale,
+              "\{node.total_memory_mib} MiB total",
+              "总计 \{node.total_memory_mib} MiB",
+            ),
+          ),
+        ]),
+        @html.div(class="node-metric", [
+          @html.span(localized(locale, "Temperature", "温度")),
+          @html.strong("\{node.temperature_celsius} °C"),
+          @html.small(
+            localized(
+              locale, "Maximum observed sensor", "已观测传感器最大值",
+            ),
+          ),
+        ]),
+        @html.div(class="node-metric", [
+          @html.span(localized(locale, "Power draw", "功耗")),
+          @html.strong("\{node.power_watts} W"),
+          @html.small(
+            localized(
+              locale, "Node-reported GPU aggregate", "节点上报 GPU 汇总",
+            ),
+          ),
+        ]),
+      ]),
+      @html.dl(class="node-facts", [
+        @html.div([
+          @html.dt(localized(locale, "Lease holder", "租约持有者")),
+          @html.dd(lease_holder),
+        ]),
+        @html.div([
+          @html.dt(localized(locale, "Assignment", "当前分配")),
+          @html.dd(class="mono", active_assignment),
+        ]),
+        @html.div([
+          @html.dt(localized(locale, "Running services", "运行服务")),
+          @html.dd(node.workloads.to_string()),
+        ]),
+        @html.div([
+          @html.dt(localized(locale, "Placement model", "放置模型")),
+          @html.dd(
+            localized(
+              locale, "One lease · one machine", "一个租约 · 一台机器",
+            ),
+          ),
+        ]),
+      ]),
+      @html.div(class="node-detail-actions", [
+        @html.p(
+          localized(
+            locale, "Maintenance changes are confirmation-gated and recorded with an audit receipt.",
+            "维护变更必须二次确认，并生成审计回执。",
+          ),
         ),
-        on_click=command(emit, BeginDrain(node.node_id)),
-        localized(locale, "Drain…", "排空…"),
-      ),
+        @html.div(class="row-actions", [
+          @html.button(
+            type_="button",
+            title=localized(
+              locale,
+              "Cordon \{node.node_id}",
+              "封锁调度 \{node.node_id}",
+            ),
+            on_click=command(emit, BeginCordon(node.node_id)),
+            localized(locale, "Cordon…", "封锁调度…"),
+          ),
+          @html.button(
+            type_="button",
+            class="danger-secondary",
+            title=localized(
+              locale,
+              "Drain \{node.node_id}",
+              "排空 \{node.node_id}",
+            ),
+            on_click=command(emit, BeginDrain(node.node_id)),
+            localized(locale, "Drain…", "排空…"),
+          ),
+        ]),
+      ]),
     ]),
   ])
 }
@@ -1995,12 +2346,6 @@ fn quick_service_name_valid(value : String) -> Bool {
 }
 
 ///|
-fn quick_replica_count_valid(value : String) -> Bool {
-  let replicas = @string.parse_int64(value.trim()) catch { _ => return false }
-  replicas >= 1L && replicas <= 64L
-}
-
-///|
 fn catalog_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -2024,8 +2369,6 @@ fn catalog_view(
   }
   let service_name_present = state.quick_deployment_id.trim() != ""
   let service_name_valid = quick_service_name_valid(state.quick_deployment_id)
-  let replicas_present = state.quick_replicas.trim() != ""
-  let replicas_valid = quick_replica_count_valid(state.quick_replicas)
   @html.section(attrs=@html.Attrs::build().aria_labelledby("catalog-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -2151,41 +2494,24 @@ fn catalog_view(
             template_options,
           ),
         ]),
-        @html.div(class="field-group", [
-          @html.label(
-            for_="quick-replicas",
-            localized(state.locale, "Replicas", "副本数"),
-          ),
-          @html.input(
-            input_type=Number,
-            id="quick-replicas",
-            min=1,
-            max=64,
-            attrs=@html.Attrs::build()
-              .aria_describedby("quick-replicas-help")
-              .aria_invalid(
-                if replicas_present && !replicas_valid {
-                  "true"
-                } else {
-                  "false"
-                },
+        @html.div(class="fixed-capacity", [
+          @html.div(class="fixed-capacity-mark", "1"),
+          @html.div([
+            @html.strong(
+              localized(
+                state.locale,
+                "One service · one assigned machine",
+                "一个服务 · 一台分配机器",
               ),
-            value=state.quick_replicas,
-            on_input=text_command(emit, value => QuickReplicasChanged(value)),
-          ),
-          @html.p(
-            id="quick-replicas-help",
-            class=if replicas_present && !replicas_valid {
-              "field-help field-error"
-            } else {
-              "field-help"
-            },
-            localized(
-              state.locale,
-              "Enter a whole number from 1 to 64.",
-              "输入 1 到 64 之间的整数。",
             ),
-          ),
+            @html.p(
+              localized(
+                state.locale,
+                "Capacity is fixed. LunaNexa selects one eligible DGX after preflight; replicas, batch scheduling, and autoscaling are unavailable.",
+                "容量固定。LunaNexa 在预检后选择一台符合条件的 DGX；不提供副本、批处理调度或自动扩缩容。",
+              ),
+            ),
+          ]),
         ]),
       ]),
       @html.div(class="operation-actions", [
@@ -2202,8 +2528,7 @@ fn catalog_view(
           class="primary-button",
           disabled=state.loading ||
             !service_name_valid ||
-            state.quick_template == "" ||
-            !replicas_valid,
+            state.quick_template == "",
           on_click=command(emit, SubmitQuickDeployment),
           localized(state.locale, "Deploy model service", "部署模型服务"),
         ),
@@ -2429,14 +2754,32 @@ fn deployments_view(
         ),
       ]),
       if state.deployments.length() == 0 {
-        @html.p(
-          class="empty-state",
-          localized(
-            state.locale,
-            "No deployments are currently assigned.",
-            "当前没有已分配的部署。",
+        @html.div(class="empty-state empty-state-action", [
+          @html.strong(
+            localized(
+              state.locale,
+              "No deployments are currently assigned",
+              "当前没有已分配的部署",
+            ),
           ),
-        )
+          @html.p(
+            localized(
+              state.locale,
+              "Choose an approved model-service template. Preflight will select exactly one eligible machine.",
+              "请选择已批准的模型服务模板。预检将只选择一台符合条件的机器。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            on_click=command(emit, Navigate(Catalog)),
+            localized(
+              state.locale,
+              "Open one-click deployment",
+              "打开一键部署",
+            ),
+          ),
+        ])
       } else {
         @html.div(class="table-scroll", [
           @html.table(class="resource-table", [
@@ -3030,30 +3373,12 @@ fn policies_view(
                 ),
               ),
               @html.option(
-                value="record-portal-execution",
-                selected=state.operation_name == "record-portal-execution",
-                localized(
-                  state.locale,
-                  "Record verified portal execution",
-                  "记录已验证的门户协议签署",
-                ),
-              ),
-              @html.option(
                 value="register-external-record",
                 selected=state.operation_name == "register-external-record",
                 localized(
                   state.locale,
                   "Register external evidence",
                   "登记外部证据",
-                ),
-              ),
-              @html.option(
-                value="decide-autoscale",
-                selected=state.operation_name == "decide-autoscale",
-                localized(
-                  state.locale,
-                  "Evaluate autoscaling",
-                  "评估自动扩缩容",
                 ),
               ),
               @html.option(
@@ -3734,6 +4059,11 @@ fn confirmation_copy(
         locale, "Ending this lease revokes its inference capacity and workspace access. Running work may be interrupted.",
         "结束此租约会撤销其推理容量和工作区访问权限，正在运行的工作可能中断。",
       )
+    TerminateExclusiveNodeLease(_, _) =>
+      localized(
+        locale, "This immediately revokes the leased user's access and interrupts all tenant processes. The DGX stays unavailable until container, account, credential, process, volume and lease-data checks pass; any failure quarantines it.",
+        "此操作会立即撤销租用用户的访问权限并中断全部租户进程。只有容器、账户、凭据、进程、卷和租约数据检查全部通过后，DGX 才会恢复可用；任何失败都会使其进入隔离状态。",
+      )
     CordonNode(_) =>
       localized(
         locale, "Cordoning prevents new assignments on this node.", "封锁调度会阻止此节点接收新的分配。",
@@ -4185,6 +4515,8 @@ fn console_styles() -> String {
     #|.resource-count { flex: none; margin-top: .15rem; color: var(--muted); font-size: .75rem; }
     #|.subsection-heading { align-items: center; margin: 1.6rem 0 .65rem; }
     #|.subsection-heading h3 { margin: 0; }
+    #|.lease-cleanup-policy { margin: .9rem 0 1.15rem; padding: .85rem 1rem; border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--line)); border-left: 4px solid var(--warning); border-radius: .55rem; background: color-mix(in srgb, var(--warning-soft) 68%, var(--surface)); }
+    #|.lease-cleanup-policy p { margin: .25rem 0 0; color: var(--muted); font-size: .78rem; }
     #|.table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
     #|.resource-table { width: 100%; min-width: 48rem; border-collapse: collapse; font-size: .8rem; }
     #|.resource-table th, .resource-table td { padding: .65rem .8rem; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
@@ -4211,6 +4543,41 @@ fn console_styles() -> String {
     #|.success-state { border-left-color: var(--success); background: var(--success-soft); }
     #|.empty-state { margin: 0; padding: 2.2rem; border: 1px dashed var(--line-strong); border-radius: .6rem; background: var(--surface-subtle); color: var(--muted); text-align: center; }
     #|.empty-state.compact { padding: 1rem; }
+    #|.empty-state-action { display: grid; justify-items: center; gap: .55rem; }
+    #|.empty-state-action strong { color: var(--ink); font-size: .95rem; }
+    #|.empty-state-action p { max-width: 36rem; margin: 0; }
+    #|.node-list { display: grid; gap: .65rem; }
+    #|.node-record { overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
+    #|.node-record[open] { border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
+    #|.node-summary { display: grid; grid-template-columns: minmax(11rem, 1.25fr) minmax(7rem, .65fr) minmax(8rem, .75fr) minmax(7rem, .65fr) minmax(11rem, 1fr) auto; align-items: center; gap: 1rem; min-height: 4.6rem; padding: .75rem 1rem; cursor: pointer; list-style: none; }
+    #|.node-summary::-webkit-details-marker { display: none; }
+    #|.node-summary:hover { background: var(--surface-hover); }
+    #|.node-identity, .node-summary-cell { display: grid; gap: .2rem; min-width: 0; }
+    #|.node-identity > strong { font-size: .86rem; }
+    #|.node-summary-cell > span { color: var(--muted); font-size: .67rem; font-weight: 680; }
+    #|.node-summary-cell > strong { overflow: hidden; color: var(--ink); font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+    #|.node-summary-cell > small { color: var(--muted); font-size: .66rem; }
+    #|.node-expand-cue { display: inline-flex; align-items: center; gap: .35rem; color: var(--accent); font-size: .72rem; font-weight: 750; }
+    #|.node-expand-cue::after { content: "⌄"; font-size: .9rem; transition: transform .16s ease; }
+    #|.node-record[open] .node-expand-cue::after { transform: rotate(180deg); }
+    #|.node-detail { padding: 1rem; border-top: 1px solid var(--line); background: var(--surface-subtle); }
+    #|.node-detail-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+    #|.node-detail-heading h3 { margin: 0; }
+    #|.node-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; }
+    #|.node-metric { display: grid; gap: .35rem; min-height: 7.2rem; padding: .8rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); }
+    #|.node-metric > span { color: var(--muted); font-size: .68rem; font-weight: 680; }
+    #|.node-metric > strong { font-size: 1.35rem; letter-spacing: -.035em; }
+    #|.node-metric > small { color: var(--muted); font-size: .66rem; }
+    #|.node-metric progress { width: 100%; height: .4rem; overflow: hidden; border: 0; border-radius: 999px; background: var(--line); accent-color: var(--accent); }
+    #|.node-metric progress::-webkit-progress-bar { border-radius: 999px; background: var(--line); }
+    #|.node-metric progress::-webkit-progress-value { border-radius: 999px; background: var(--accent); }
+    #|.node-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: .7rem 0 0; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); }
+    #|.node-facts > div { min-width: 0; padding: .7rem .8rem; border-right: 1px solid var(--line); }
+    #|.node-facts > div:last-child { border-right: 0; }
+    #|.node-facts dt { color: var(--muted); font-size: .66rem; font-weight: 680; }
+    #|.node-facts dd { margin: .2rem 0 0; overflow-wrap: anywhere; font-size: .76rem; font-weight: 680; }
+    #|.node-detail-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .7rem; }
+    #|.node-detail-actions p { max-width: 44rem; margin: 0; color: var(--muted); font-size: .7rem; }
     #|.privacy-note { margin: .8rem 0; padding: .55rem .75rem; border-left: .2rem solid var(--accent); background: var(--accent-soft); color: var(--muted-strong); font-size: .75rem; }
     #|.request-stats { margin-bottom: 1rem; }
     #|.stream-panel { padding: .7rem; }
@@ -4233,6 +4600,10 @@ fn console_styles() -> String {
     #|.operation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
     #|.operation-heading h3 { margin: 0; font-size: 1.05rem; }
     #|.operation-form { display: grid; grid-template-columns: minmax(13rem, .72fr) minmax(20rem, 1.6fr); gap: 1rem; margin-top: 1rem; }
+    #|.fixed-capacity { display: flex; align-items: center; gap: .75rem; grid-column: 1 / -1; min-height: 4.5rem; padding: .75rem .85rem; border: 1px solid color-mix(in srgb, var(--success) 28%, var(--line)); border-radius: .5rem; background: var(--success-soft); }
+    #|.fixed-capacity-mark { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex: none; border-radius: .5rem; background: var(--success); color: white; font-weight: 850; }
+    #|.fixed-capacity strong { display: block; color: var(--ink); font-size: .78rem; }
+    #|.fixed-capacity p { margin: .22rem 0 0; color: var(--muted-strong); font-size: .7rem; line-height: 1.45; }
     #|.deployment-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
     #|.deployment-steps li { display: flex; align-items: center; gap: .5rem; color: var(--muted-strong); font-size: .74rem; }
     #|.deployment-steps li > span { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; flex: none; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 800; }
@@ -4252,6 +4623,12 @@ fn console_styles() -> String {
     #|  .operation-form { grid-template-columns: 1fr; }
     #|  .policy-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #|  .readiness-panel { grid-template-columns: 1fr; }
+    #|  .node-summary { grid-template-columns: minmax(11rem, 1.3fr) repeat(3, minmax(7rem, .7fr)) auto; }
+    #|  .node-lease-summary { display: none; }
+    #|  .node-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #|  .node-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #|  .node-facts > div:nth-child(2) { border-right: 0; }
+    #|  .node-facts > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     #|  .policy-summary > div:nth-child(2) { border-right: 0; }
     #|  .policy-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     #|}
@@ -4271,6 +4648,8 @@ fn console_styles() -> String {
     #|  .overview-grid { grid-template-columns: 1fr; }
     #|  .connection-form { grid-template-columns: 1fr; margin-left: 0; }
     #|  .connection-actions { display: grid; }
+    #|  .node-summary { grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, .7fr) minmax(7rem, .7fr) auto; }
+    #|  .node-memory-summary { display: none; }
     #|}
     #|@media (max-width: 40rem) {
     #|  .connection-endpoint { display: none; }
@@ -4288,6 +4667,12 @@ fn console_styles() -> String {
     #|  .policy-summary > div:last-child { border-bottom: 0; }
     #|  .operation-actions { align-items: stretch; flex-direction: column; }
     #|  .operation-actions button { width: 100%; }
+    #|  .node-summary { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
+    #|  .node-summary-cell { display: none; }
+    #|  .node-detail-heading, .node-detail-actions { align-items: stretch; flex-direction: column; }
+    #|  .node-metrics, .node-facts { grid-template-columns: 1fr; }
+    #|  .node-facts > div { border-right: 0; border-bottom: 1px solid var(--line); }
+    #|  .node-facts > div:last-child { border-bottom: 0; }
     #|  .confirmation-panel { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
     #|}
     #|@media (prefers-reduced-motion: reduce) {

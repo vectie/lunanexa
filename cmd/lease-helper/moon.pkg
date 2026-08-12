@@ -1,0 +1,13 @@
+import {
+  "vectie/lunanexa/leasehelper",
+  "vectie/lunanexa/nodelease",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/process",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")

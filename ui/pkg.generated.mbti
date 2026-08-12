@@ -92,6 +92,7 @@ pub(all) enum ConsoleMessage {
   BeginRevokeAccessGrant(String)
   ActivateComputeLease(String)
   BeginEndComputeLease(String)
+  BeginTerminateExclusiveNodeLease(String, Int64)
   DismissConfirmation
   ConfirmAction(DestructiveAction)
   Refresh
@@ -100,7 +101,6 @@ pub(all) enum ConsoleMessage {
   SubmitOperation
   QuickDeploymentIdChanged(String)
   QuickTemplateChanged(String)
-  QuickReplicasChanged(String)
   SubmitQuickDeployment
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
@@ -125,6 +125,7 @@ pub(all) struct ConsoleState {
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
+  exclusive_node_leases : Array[ExclusiveNodeLeaseRow]
   cost_centers : Array[CostCenterRow]
   agreements : Array[AgreementRow]
   enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
@@ -138,7 +139,6 @@ pub(all) struct ConsoleState {
   operation_body : String
   quick_deployment_id : String
   quick_template : String
-  quick_replicas : String
 } derive(Eq)
 
 pub(all) struct CostCenterRow {
@@ -170,6 +170,7 @@ pub(all) enum DestructiveAction {
   RevokeUser(String)
   RevokeAccessGrant(String)
   EndComputeLease(String)
+  TerminateExclusiveNodeLease(String, Int64)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct EnterpriseLeaseRequestRow {
@@ -182,6 +183,16 @@ pub(all) struct EnterpriseLeaseRequestRow {
   state : String
   generation : Int64
   assigned_node_id : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ExclusiveNodeLeaseRow {
+  lease_id : String
+  node_id : String
+  subject_ref : String
+  unix_username : String
+  expires_at : String
+  state : String
+  generation : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelRow {
@@ -198,8 +209,16 @@ pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
   architecture : String
+  total_memory_mib : Int
   free_memory_mib : Int
+  used_memory_mib : Int
+  utilization_per_mille : Int
+  temperature_celsius : Int
+  power_watts : Int
   workloads : Int
+  lease_holder : String
+  active_assignment : String
+  last_seen : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum OperatorCommand {

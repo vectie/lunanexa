@@ -31,12 +31,6 @@ priv struct CacheEvaluationRequest {
 } derive(FromJson)
 
 ///|
-priv struct AutoscaleEvaluationRequest {
-  policy : @technical.AutoscalePolicy
-  snapshot : @technical.AutoscaleSnapshot
-} derive(FromJson)
-
-///|
 priv struct BackpressureEvaluationRequest {
   limits : @technical.AdmissionLimits
   snapshot : @technical.AdmissionSnapshot
@@ -87,15 +81,6 @@ fn decode_probe_evaluation(body : String) -> ProbeEvaluationRequest? {
 
 ///|
 fn decode_cache_evaluation(body : String) -> CacheEvaluationRequest? {
-  try @json.from_json(@json.parse(body)) catch {
-    _ => None
-  } noraise {
-    value => Some(value)
-  }
-}
-
-///|
-fn decode_autoscale_evaluation(body : String) -> AutoscaleEvaluationRequest? {
   try @json.from_json(@json.parse(body)) catch {
     _ => None
   } noraise {
@@ -215,41 +200,6 @@ async fn ApiService::handle_technical_management(
         "findings": findings.to_json(),
         "action": action.to_json(),
       })
-    }
-    (Post, "/v1/technical/autoscale:decide") => {
-      guard decode_autoscale_evaluation(body) is Some(value) else {
-        return api_error(
-          400, "InvalidRequest", "invalid autoscale input", false,
-        )
-      }
-      let decision = @technical.decide_autoscale(value.policy, value.snapshot)
-      if self.technical_store is Some(_) {
-        let target = match decision {
-          ScaleUp(target_replicas~, ..) | ScaleDown(target_replicas~, ..) =>
-            Some(target_replicas)
-          Hold(..) => None
-        }
-        if target is Some(replicas) {
-          let identity = digest_hex(
-            "autoscale|\{value.snapshot.deployment_id}|\{value.policy.policy_version}|\{value.snapshot.observed_lease_generation}|\{value.snapshot.newest_sample_unix_ms}|\{replicas}",
-          )
-          let execution = self.scale_service_deployment(
-            value.snapshot.deployment_id,
-            { replicas, idempotency_key: "autoscale-\{identity[:48]}" },
-          )
-          if execution.status < 200 || execution.status >= 300 {
-            return api_error(
-              409, "AutoscaleExecutionRejected", "autoscale decision could not pass the deployment generation and capacity fence",
-              true,
-            )
-          }
-          return json_reply(200, {
-            "decision": decision.to_json(),
-            "execution": @json.parse(execution.body),
-          })
-        }
-      }
-      json_reply(200, decision.to_json())
     }
     (Post, "/v1/technical/backpressure:decide") => {
       guard decode_backpressure_evaluation(body) is Some(value) else {

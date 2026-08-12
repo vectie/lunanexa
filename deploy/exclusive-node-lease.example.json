@@ -1,11 +1,11 @@
 {
   "version": "lunanexa.exclusive-node-lease.v1",
-  "idempotency_key": "lease-request-dgx-02-20260810",
-  "lease_id": "lease-dgx-02-20260810",
+  "idempotency_key": "lease-request-dgx-02-replace-unique",
+  "lease_id": "lease-dgx-02-replace-unique",
   "node_id": "dgx-spark-02",
   "subject_ref": "idp-subject-opaque-42",
   "unix_username": "user_42",
-  "access_credential_ref": "ssh-cert:lease-dgx-02-20260810",
-  "starts_unix_ms": "1786291200000",
-  "expires_unix_ms": "1786377600000"
+  "access_credential_ref": "ssh-cert:lease-dgx-02-replace-unique",
+  "starts_unix_ms": "REPLACE_WITH_FUTURE_UNIX_MILLISECONDS",
+  "expires_unix_ms": "REPLACE_WITH_LATER_UNIX_MILLISECONDS"
 }

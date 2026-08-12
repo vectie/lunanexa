@@ -82,23 +82,3 @@ pub fn StreamSession::cancel(self : StreamSession) -> Unit {
 pub fn StreamSession::is_cancelled(self : StreamSession) -> Bool {
   self.cancelled
 }
-
-///|
-pub(all) struct BatchKey {
-  model_selector : String
-  capability : @contracts.Capability
-  data_class : @contracts.DataClass
-  output_format : String
-} derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub fn batch_compatible(
-  left : @contracts.WorkloadEnvelope,
-  right : @contracts.WorkloadEnvelope,
-) -> Bool {
-  left.model_selector == right.model_selector &&
-  left.capability == right.capability &&
-  left.data_policy.classification == right.data_policy.classification &&
-  left.output_format == right.output_format &&
-  left.deadline_unix_ms == right.deadline_unix_ms
-}

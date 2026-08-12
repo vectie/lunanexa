@@ -16,8 +16,16 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         node_id: "node-1",
         state: Active,
         architecture: "nvidia-gb10",
+        total_memory_mib: 122880,
         free_memory_mib: 80000,
+        used_memory_mib: 42880,
+        utilization_per_mille: 420,
+        temperature_celsius: 47,
+        power_watts: 78,
         workloads: 1,
+        lease_holder: "org-1 · user-1",
+        active_assignment: "deployment-1",
+        last_seen: "Just now",
       },
     ],
     models: [
@@ -120,6 +128,17 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         state: Requested,
       },
     ],
+    exclusive_node_leases: [
+      {
+        lease_id: "exclusive-lease-1",
+        node_id: "node-1",
+        subject_ref: "subject-1",
+        unix_username: "alice",
+        expires_at: "2026-08-09 18:00 UTC",
+        state: "Active",
+        generation: 4L,
+      },
+    ],
     cost_centers: [
       {
         cost_center_id: "cc-1",
@@ -173,7 +192,6 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     operation_body: "{}",
     quick_deployment_id: "",
     quick_template: "",
-    quick_replicas: "1",
   }
 }
 
@@ -222,7 +240,7 @@ test "typed operation surface exposes commercial and technical commands" {
   assert_true(html.contains("Register external evidence"))
   assert_true(html.contains("Create enterprise membership"))
   assert_true(html.contains("Publish portal agreement"))
-  assert_true(html.contains("Evaluate autoscaling"))
+  assert_false(html.contains("Evaluate autoscaling"))
   assert_true(html.contains("Validate transfer grant"))
 }
 
@@ -266,6 +284,36 @@ test "demo snapshot presents the four-node nine-model fleet" {
 }
 
 ///|
+test "node management exposes expandable telemetry and exclusive lease evidence" {
+  let state = console_state(Nodes)
+  let html = @ui.render({ ..state, confirmation: None })
+  assert_true(html.contains("class=\"node-record\""))
+  assert_true(html.contains("Resource telemetry"))
+  assert_true(html.contains("GPU utilization"))
+  assert_true(html.contains("42%"))
+  assert_true(html.contains("org-1 · user-1"))
+  assert_true(html.contains("One lease · one machine"))
+  assert_true(html.contains("Last heartbeat · Just now"))
+  assert_true(html.contains("<progress"))
+}
+
+///|
+test "node detail escapes hostile lease and assignment evidence" {
+  let state = console_state(Nodes)
+  let hostile = "<img src=x onerror=alert(1)>"
+  let html = @ui.render({
+    ..state,
+    nodes: [
+      { ..state.nodes[0], lease_holder: hostile, active_assignment: hostile },
+    ],
+    confirmation: None,
+  })
+  assert_false(html.contains(hostile))
+  assert_false(html.contains("<img"))
+  assert_true(html.contains("&lt;img"))
+}
+
+///|
 test "catalog route exposes governed one-click deployment controls" {
   let html = @ui.render({ ..console_state(Catalog), confirmation: None })
   assert_true(html.contains("Model service catalog"))
@@ -275,7 +323,8 @@ test "catalog route exposes governed one-click deployment controls" {
   assert_true(html.contains("Preflight and deploy"))
   assert_true(html.contains("quick-deployment-id"))
   assert_true(html.contains("quick-template"))
-  assert_true(html.contains("quick-replicas"))
+  assert_true(html.contains("One service · one assigned machine"))
+  assert_false(html.contains("quick-replicas"))
   assert_true(html.contains("Deploy model service"))
 }
 
@@ -296,7 +345,7 @@ test "catalog escapes adversarial operator and template text" {
 }
 
 ///|
-test "one-click form exposes and blocks adversarial validation failures" {
+test "one-click form blocks hostile names and fixes capacity to one machine" {
   let demo = @ui.demo_state()
   let hostile_name = @ui.render({
     ..demo,
@@ -306,22 +355,14 @@ test "one-click form exposes and blocks adversarial validation failures" {
   assert_true(hostile_name.contains("aria-invalid=\"true\""))
   assert_true(hostile_name.contains("field-help field-error"))
   assert_true(hostile_name.contains("disabled"))
-  let invalid_replicas = @ui.render({
-    ..demo,
-    route: Catalog,
-    quick_deployment_id: "valid-service",
-    quick_replicas: "65",
-  })
-  assert_true(invalid_replicas.contains("aria-invalid=\"true\""))
-  assert_true(invalid_replicas.contains("Enter a whole number from 1 to 64."))
-  assert_true(invalid_replicas.contains("disabled"))
   let valid = @ui.render({
     ..demo,
     route: Catalog,
     quick_deployment_id: "valid-service",
-    quick_replicas: "64",
   })
   assert_true(valid.contains("aria-invalid=\"false\""))
+  assert_true(valid.contains("Capacity is fixed."))
+  assert_false(valid.contains("type=\"number\""))
 }
 
 ///|
@@ -702,6 +743,14 @@ test "empty and error states remain explicit" {
   assert_true(html.contains("No nodes enrolled"))
   assert_true(html.contains("Unable to complete the operation: offline"))
   assert_true(html.contains("@media (max-width: 40rem)"))
+  assert_true(html.contains("Open enrollment policy"))
+  let deployments = @ui.render({
+    ..console_state(Deployments),
+    deployments: [],
+    confirmation: None,
+  })
+  assert_true(deployments.contains("Open one-click deployment"))
+  assert_true(deployments.contains("exactly one eligible machine"))
 }
 
 ///|
@@ -759,7 +808,11 @@ test "leases route keeps owner, resource, status, expiry, and action together" {
       ),
     ),
   })
-  assert_true(html.contains("Compute &amp; workspace leases"))
+  assert_true(html.contains("Lease operations"))
+  assert_true(html.contains("Fail-closed cleanup boundary"))
+  assert_true(html.contains("Exclusive machine leases"))
+  assert_true(html.contains("exclusive-lease-1"))
+  assert_true(html.contains("Terminate &amp; clean…"))
   assert_true(html.contains("research-main"))
   assert_true(html.contains("Text generation · 2 concurrent"))
   assert_true(html.contains("Expires 2026-08-08 18:00 UTC"))
@@ -767,6 +820,42 @@ test "leases route keeps owner, resource, status, expiry, and action together" {
   assert_true(html.contains("Activate lease lease-2"))
   assert_true(html.contains("Running work may be interrupted"))
   assert_true(html.contains("overflow-x: auto"))
+}
+
+///|
+test "exclusive lease termination confirmation explains cleanup quarantine" {
+  let state = console_state(Leases)
+  let html = @ui.render({
+    ..state,
+    confirmation: Some(
+      @ui.confirmation_receipt(
+        TerminateExclusiveNodeLease("exclusive-lease-1", 4L),
+        "exclusive-lease-1 · node-1 · alice · generation 4",
+      ),
+    ),
+  })
+  assert_true(html.contains("immediately revokes"))
+  assert_true(html.contains("interrupts all tenant processes"))
+  assert_true(html.contains("any failure quarantines it"))
+  assert_true(html.contains("generation 4"))
+}
+
+///|
+test "exclusive lease table escapes hostile identity and node text" {
+  let base = console_state(Leases)
+  let hostile = "<img src=x onerror=alert(1)>"
+  let html = @ui.render({
+    ..base,
+    exclusive_node_leases: [
+      {
+        ..base.exclusive_node_leases[0],
+        subject_ref: hostile,
+        node_id: hostile,
+      },
+    ],
+  })
+  assert_false(html.contains(hostile))
+  assert_true(html.contains("&lt;img src=x onerror=alert(1)&gt;"))
 }
 
 ///|

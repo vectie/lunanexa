@@ -131,15 +131,21 @@ fn valid_helper_path(path : String) -> Bool {
 async fn execute_lease_action(
   helper : String,
   action : @nodelease.LeaseAgentAction,
-) -> Bool {
+) -> String? {
   if action is NoAction {
-    return true
+    return None
   }
   if !valid_helper_path(helper) {
-    return false
+    return None
   }
   let args = match action {
-    ProvisionAccess(lease_id~, username~, credential_ref~, expires_unix_ms~) =>
+    ProvisionAccess(
+      lease_id~,
+      username~,
+      credential_ref~,
+      expires_unix_ms~,
+      generation~
+    ) =>
       [
         "provision",
         "--lease-id",
@@ -150,25 +156,79 @@ async fn execute_lease_action(
         credential_ref,
         "--expires-unix-ms",
         expires_unix_ms.to_string(),
+        "--generation",
+        generation.to_string(),
       ]
-    RevokeAccess(lease_id~, username~) =>
-      ["revoke", "--lease-id", lease_id, "--username", username]
-    SanitizeLease(lease_id~, username~) =>
-      ["sanitize", "--lease-id", lease_id, "--username", username]
-    QuarantineNode(lease_id~) => ["quarantine", "--lease-id", lease_id]
+    RevokeAccess(lease_id~, username~, generation~) =>
+      [
+        "revoke",
+        "--lease-id",
+        lease_id,
+        "--username",
+        username,
+        "--generation",
+        generation.to_string(),
+      ]
+    SanitizeLease(lease_id~, username~, generation~) =>
+      [
+        "sanitize",
+        "--lease-id",
+        lease_id,
+        "--username",
+        username,
+        "--generation",
+        generation.to_string(),
+      ]
+    QuarantineNode(lease_id~, generation~) =>
+      [
+        "quarantine",
+        "--lease-id",
+        lease_id,
+        "--generation",
+        generation.to_string(),
+      ]
     NoAction => []
   }
-  @process.run(helper, args, inherit_env=false) == 0
+  let (status, stdout) = @process.collect_stdout(
+    helper,
+    args,
+    inherit_env=false,
+  )
+  if status != 0 {
+    return None
+  }
+  let receipt = stdout.text().trim().to_owned()
+  if @nodelease.valid_helper_receipt(action, receipt) {
+    Some(receipt)
+  } else {
+    None
+  }
 }
 
 ///|
-fn lease_action_name(action : @nodelease.LeaseAgentAction) -> String {
-  match action {
-    ProvisionAccess(..) => "provision"
-    RevokeAccess(..) => "revoke"
-    SanitizeLease(..) => "sanitize"
-    QuarantineNode(..) => "quarantine"
-    NoAction => "none"
+async fn flush_lease_observation(
+  base : String,
+  node_id : String,
+  token : String,
+  lease_guard : @nodelease.LeaseAgentGuard,
+) -> (Bool, Bool) {
+  guard lease_guard.pending_observation(@async.now()) is Some(observation) else {
+    return (false, false)
+  }
+  try {
+    let (response, _) = @http.post(
+      endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease:observe"),
+      observation.to_json(),
+      headers=node_headers(node_id, token),
+    )
+    if response.code >= 200 && response.code < 300 {
+      lease_guard.acknowledge_observation(observation.receipt)
+      (true, true)
+    } else {
+      (true, false)
+    }
+  } catch {
+    _ => (true, false)
   }
 }
 
@@ -181,56 +241,73 @@ async fn reconcile_exclusive_lease(
   lease_guard : @nodelease.LeaseAgentGuard,
   state_path : String,
 ) -> Unit {
-  let (response, body) = @http.get(
-    endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease"),
-    headers=node_headers(node_id, token),
-  )
-  let action = if response.code == 200 {
-    let lease : @nodelease.ExclusiveNodeLease = @json.from_json(
-      @json.parse(body.text()),
+  let now = @async.now()
+  let mut control_available = true
+  let mut action = try {
+    let (response, body) = @http.get(
+      endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease"),
+      headers=node_headers(node_id, token),
     )
-    lease_guard.observe_remote(Some(lease), @async.now())
-  } else if response.code == 404 {
-    lease_guard.observe_remote(None, @async.now())
-  } else {
-    // The local tick is the offline expiry fence. A management outage cannot
-    // extend access beyond the last signed lease expiry.
-    lease_guard.tick(@async.now())
+    if response.code == 200 {
+      let lease : @nodelease.ExclusiveNodeLease = @json.from_json(
+        @json.parse(body.text()),
+      )
+      lease_guard.observe_remote(Some(lease), now)
+    } else if response.code == 404 {
+      lease_guard.observe_remote(None, now)
+    } else {
+      control_available = false
+      lease_guard.tick(now)
+    }
+  } catch {
+    _ => {
+      // A transport or decoding failure must not bypass the local expiry fence.
+      control_available = false
+      lease_guard.tick(now)
+    }
+  } noraise {
+    value => value
+  }
+  if control_available {
+    let (had_pending, accepted) = flush_lease_observation(
+      base, node_id, token, lease_guard,
+    )
+    if had_pending {
+      if accepted {
+        persist_lease_guard(state_path, lease_guard)
+        return
+      }
+      let pending_action = lease_guard.pending_helper_action()
+      let stale = @nodelease.helper_receipt_timestamp(
+          pending_action,
+          lease_guard.snapshot().last_receipt,
+        )
+        .map(timestamp => now - timestamp >= 45000L)
+        .unwrap_or(false)
+      if !stale {
+        persist_lease_guard(state_path, lease_guard)
+        return
+      }
+      action = pending_action
+    }
   }
   if action is NoAction {
     persist_lease_guard(state_path, lease_guard)
     return
   }
-  if execute_lease_action(helper, action) {
-    let receipt = "helper:accepted:\{@async.now()}"
-    let before = lease_guard.snapshot()
+  if execute_lease_action(helper, action) is Some(receipt) {
     lease_guard.record_success(action, receipt)
-    if before.lease is Some(lease) {
-      let observation : @nodelease.LeaseAgentObservation = {
-        lease_id: lease.intent.lease_id,
-        observed_generation: before.observed_generation,
-        action: lease_action_name(action),
-        receipt,
-        observed_unix_ms: @async.now(),
-      }
-      try {
-        let (observe_response, _) = @http.post(
-          endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease:observe"),
-          observation.to_json(),
-          headers=node_headers(node_id, token),
-        )
-        if observe_response.code < 200 || observe_response.code >= 300 {
-          raise Failure::Failure("lease observation was rejected")
-        }
-      } catch {
-        // Local access safety has already converged. The signed observation is
-        // retried after the next controller reconciliation; expiry is never extended.
-        _ => ()
-      }
+    if control_available {
+      ignore(flush_lease_observation(base, node_id, token, lease_guard))
     }
   } else {
     let quarantine = lease_guard.record_failure(action)
-    ignore(execute_lease_action(helper, quarantine))
+    if execute_lease_action(helper, quarantine) is Some(receipt) {
+      lease_guard.record_success(quarantine, receipt)
+      if control_available {
+        ignore(flush_lease_observation(base, node_id, token, lease_guard))
+      }
+    }
   }
   persist_lease_guard(state_path, lease_guard)
 }
@@ -434,49 +511,102 @@ async fn reconcile_once(
   )
   persist_agent(state_path, agent)
   send_heartbeat(base, node_id, token, inventory, agent)
-  let mut total_memory = 0
-  let mut free_memory = 0
-  let mut healthy_accelerators = 0
-  for accelerator in inventory.accelerators {
-    total_memory += accelerator.memory_total_mib
-    free_memory += accelerator.memory_free_mib
-    if accelerator.healthy {
-      healthy_accelerators += 1
-    }
+  let timestamp_unix_ms = @async.now()
+  let samples : Array[@contracts.TelemetrySample] = []
+  let sensor_binary = @env.get_env_var("LUNANEXA_NVIDIA_SMI_BINARY").unwrap_or(
+    "/usr/bin/nvidia-smi",
+  )
+  let mut sensors : @node_agent.AcceleratorSensorSnapshot? = None
+  try @node_agent.collect_accelerator_sensors(sensor_binary) catch {
+    _ => ()
+  } noraise {
+    sensor => sensors = Some(sensor)
   }
-  let samples : Array[@contracts.TelemetrySample] = [
-    {
-      node_id,
-      deployment_id: "",
-      metric: "accelerator_memory_total_mib",
-      value: total_memory.to_double(),
-      timestamp_unix_ms: @async.now(),
-    },
-    {
-      node_id,
-      deployment_id: "",
-      metric: "accelerator_memory_free_mib",
-      value: free_memory.to_double(),
-      timestamp_unix_ms: @async.now(),
-    },
-    {
-      node_id,
-      deployment_id: "",
-      metric: "accelerator_healthy_count",
-      value: healthy_accelerators.to_double(),
-      timestamp_unix_ms: @async.now(),
-    },
-  ]
-  if inventory.labels.get("lunanexa.accelerator-utilization-per-mille")
-    is Some(value) {
-    let utilization = @string.parse_int64(value).to_double() catch { _ => -1.0 }
-    if utilization >= 0.0 && utilization <= 1000.0 {
+  match sensors {
+    Some(sensor) => {
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_memory_total_mib",
+        value: sensor.memory_total_mib,
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_memory_used_mib",
+        value: sensor.memory_used_mib,
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_memory_free_mib",
+        value: sensor.memory_total_mib - sensor.memory_used_mib,
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_healthy_count",
+        value: sensor.accelerator_count.to_double(),
+        timestamp_unix_ms,
+      })
       samples.push({
         node_id,
         deployment_id: "",
         metric: "accelerator_utilization_per_mille",
-        value: utilization,
-        timestamp_unix_ms: @async.now(),
+        value: sensor.utilization_per_mille,
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_temperature_celsius",
+        value: sensor.maximum_temperature_celsius,
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_power_watts",
+        value: sensor.power_watts,
+        timestamp_unix_ms,
+      })
+    }
+    None => {
+      // Inventory values remain a conservative fallback when the host sensor
+      // executable is unavailable. Utilization is never accepted from labels.
+      let mut total_memory = 0
+      let mut free_memory = 0
+      let mut healthy_accelerators = 0
+      for accelerator in inventory.accelerators {
+        total_memory += accelerator.memory_total_mib
+        free_memory += accelerator.memory_free_mib
+        if accelerator.healthy {
+          healthy_accelerators += 1
+        }
+      }
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_memory_total_mib",
+        value: total_memory.to_double(),
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_memory_free_mib",
+        value: free_memory.to_double(),
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "accelerator_healthy_count",
+        value: healthy_accelerators.to_double(),
+        timestamp_unix_ms,
       })
     }
   }
@@ -556,6 +686,7 @@ async fn main {
     host_secret(
       "LUNANEXA_ARTIFACT_CREDENTIAL", "LUNANEXA_ARTIFACT_CREDENTIAL_PATH", "/etc/lunanexa/artifact-credential",
     ),
+    node_id~,
     maximum_artifact_size_bytes~,
     allow_http_loopback=@env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") ==
       Some("1"),

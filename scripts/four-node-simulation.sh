@@ -284,7 +284,7 @@ curl --fail --silent --max-time 2 \
   --header "Authorization: Bearer $operator_token" \
   "$base_url/v1/assignments" >"$simulation_directory/one-click-assignments-replay.json"
 test "$(rg -o 'deployment-one-click-r1' "$simulation_directory/one-click-assignments-replay.json" | wc -l | tr -d ' ')" -eq 1
-conflicting_intent=$(printf '%s' "$deployment_intent" | sed 's/"replicas":1/"replicas":2/')
+conflicting_intent=$(printf '%s' "$deployment_intent" | sed 's/"lease_duration_ms":"600000"/"lease_duration_ms":"610000"/')
 status=$(curl --silent --output "$simulation_directory/deployment-one-click-conflict.json" \
   --write-out '%{http_code}' --request POST \
   --header "Authorization: Bearer $operator_token" \

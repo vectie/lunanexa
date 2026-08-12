@@ -624,21 +624,11 @@ async fn ApiService::handle_commercial_management(
       }
       json_reply(201, result.to_json())
     }
-    (Post, "/v1/commercial/external-callbacks") => {
-      guard decode_external_callback(body) is Some(value) else {
-        return api_error(
-          400, "InvalidRequest", "invalid external callback", false,
-        )
-      }
-      let (record, result) = try
-        self.commercial_integrations.reconcile_callback(value)
-      catch {
-        _ => return commercial_rejected("external callback was rejected")
-      } noraise {
-        accepted => accepted
-      }
-      json_reply(200, { "record": record.to_json(), "result": result.to_json() })
-    }
+    (Post, "/v1/commercial/external-callbacks") =>
+      api_error(
+        409, "VerifiedTransportRequired", "external state transitions are accepted only through the signed provider callback endpoint",
+        false,
+      )
     (Post, "/v1/commercial/exports") => {
       guard decode_export_request(body) is Some(value) else {
         return api_error(400, "InvalidRequest", "invalid export request", false)

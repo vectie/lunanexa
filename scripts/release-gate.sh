@@ -6,6 +6,7 @@ cd "$repo_root"
 
 sh scripts/phase-gate.sh
 sh scripts/process-recovery-test.sh
+sh scripts/lease-cleanup-simulation.sh
 sh scripts/four-node-simulation.sh
 sh scripts/evidence-export-test.sh
 if [ "${LUNANEXA_RUN_POSTGRES_TEST:-0}" = "1" ]; then

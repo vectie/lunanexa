@@ -21,9 +21,9 @@ import {
 }
 
 // Values
-pub fn batch_compatible(@contracts.WorkloadEnvelope, @contracts.WorkloadEnvelope) -> Bool
-
 pub fn health(String) -> @contracts.HealthResponse
+
+pub fn provider_callback_signature(String, String, String, Int64, String, String) -> String
 
 // Errors
 pub(all) suberror StreamError {
@@ -64,6 +64,9 @@ pub struct ApiService {
   audit_token : String
   monitoring_token : String
   assignment_signing_secret : String
+  artifact_root : String?
+  exclusive_lease_unit_price : @commercial.FixedMoney
+  provider_callback_secrets : Map[String, String]
   node_token : String
   version : String
   active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
@@ -78,12 +81,15 @@ pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRun
 pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
 pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
+pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_control_plane(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @scheduler.FileScheduler, @telemetry.FileTelemetry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
+pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
+pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self
@@ -92,13 +98,6 @@ pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.Fil
 pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
 pub fn ApiService::with_technical_store(Self, @vectie/lunanexa/technical/store.TechnicalStore) -> Self
 pub fn ApiService::with_workspace_directory(Self, @directory.FileWorkspaceDirectory, Bool) -> Self
-
-pub(all) struct BatchKey {
-  model_selector : String
-  capability : @contracts.Capability
-  data_class : @contracts.DataClass
-  output_format : String
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct CancellationReceipt {
   workload_id : String

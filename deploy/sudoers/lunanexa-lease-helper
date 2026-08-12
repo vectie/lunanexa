@@ -1,0 +1,5 @@
+# Validate with visudo -cf before installation. The unprivileged client and the
+# root helper both independently reject unknown actions and unsafe arguments.
+Defaults:lunanexa secure_path=/usr/sbin:/usr/bin:/sbin:/bin
+Defaults:lunanexa !setenv
+lunanexa ALL=(root) NOPASSWD: /usr/libexec/lunanexa-lease-helper *

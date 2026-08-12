@@ -52,7 +52,9 @@ spec:
                   name: lunanexa-node-config
                   key: artifact-endpoint
             - name: LUNANEXA_ARTIFACT_CREDENTIAL_PATH
-              value: /etc/lunanexa/artifact-credential
+              value: /etc/lunanexa/node-token
+            - name: LUNANEXA_NVIDIA_SMI_BINARY
+              value: /usr/bin/nvidia-smi
             - name: LUNANEXA_ARTIFACT_MAX_SIZE_BYTES
               value: "1099511627776"
             - name: LUNANEXA_COSIGN_BINARY

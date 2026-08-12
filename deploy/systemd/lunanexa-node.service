@@ -1,0 +1,25 @@
+[Unit]
+Description=LunaNexa DGX node agent
+After=network-online.target podman.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lunanexa
+Group=lunanexa
+EnvironmentFile=/etc/lunanexa/node.env
+ExecStart=/usr/libexec/lunanexa-node
+Restart=always
+RestartSec=5s
+# The only permitted privilege transition is the separately reviewed sudoers
+# entry for the fixed lease-helper binary. The leased account is never a member
+# of the lunanexa service group.
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

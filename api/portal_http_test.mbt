@@ -128,22 +128,17 @@ async test "enterprise user signs, requests, and operator assigns exactly one no
   let requested_agreement : @portal.PortalAgreement = @json.from_json(
     @json.parse(signature.body),
   )
-  assert_eq(
-    service.handle(
-      Post,
-      "/v1/portal/operator/agreement-executions",
-      operator,
-      @portal.AgreementExecution::{
+  ignore(
+    portal_store.record_execution(
+      {
         agreement_id: "agreement-a",
         expected_generation: requested_agreement.generation,
         signer_subject_ref: "subject-a",
         executed_artifact_hash: "sha256:executed",
-        evidence_receipt: "provider:verified:a",
-      }
-      .to_json()
-      .stringify(),
-    ).status,
-    200,
+        evidence_receipt: "test-fixture:verified:a",
+      },
+      @async.now(),
+    ),
   )
   let submitted = service.handle(
     Post,

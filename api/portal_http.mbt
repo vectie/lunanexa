@@ -25,13 +25,6 @@ fn decode_signature_request(body : String) -> @portal.SignatureRequest? {
 }
 
 ///|
-fn decode_agreement_execution(body : String) -> @portal.AgreementExecution? {
-  Some(@json.from_json(@json.parse(body))) catch {
-    _ => None
-  }
-}
-
-///|
 fn decode_lease_submission(body : String) -> @portal.LeaseRequestSubmission? {
   try {
     let value = @json.parse(body)
@@ -178,6 +171,59 @@ async fn ApiService::approve_portal_lease(
       409, "NodeUnavailable", "assigned node is not enrolled", false,
     )
   }
+  if self.management_database is Some(_) {
+    let duration_milliseconds = request.submission.expires_unix_ms -
+      request.submission.starts_unix_ms
+    let expected_seconds = (duration_milliseconds + 999L) / 1000L
+    let expected_cost = try
+      @commercial.estimate_cost(
+        expected_seconds,
+        self.exclusive_lease_unit_price,
+      )
+    catch {
+      _ =>
+        return api_error(
+          409, "CommercialAdmissionDenied", "lease price estimate is invalid", false,
+        )
+    } noraise {
+      value => value
+    }
+    let admission = try
+      self.commercial_store.admit({
+        organization_id: request.submission.organization_id,
+        project_id: request.submission.project_id,
+        meter: "exclusive-node-second",
+        expected_quantity: expected_seconds,
+        expected_cost,
+        required_capacity_units: 0L,
+        required_agreement_types: [],
+        now_unix_ms,
+      })
+    catch {
+      _ =>
+        return api_error(
+          409, "CommercialAdmissionDenied", "organization, project, or commercial policy is not eligible",
+          false,
+        )
+    } noraise {
+      value => value
+    }
+    match admission.kind {
+      @commercial.Allowed => ()
+      @commercial.ApprovalRequired =>
+        return api_error(
+          409, "CommercialApprovalRequired", "budget policy requires commercial approval before lease start",
+          false,
+        )
+      @commercial.Blocked =>
+        return api_error(
+          409,
+          "CommercialAdmissionDenied",
+          admission.reasons.join("; "),
+          false,
+        )
+    }
+  }
   let exclusive_lease_id = "exclusive-\{review.request_id}"
   let intent : @nodelease.ExclusiveNodeLeaseIntent = {
     version: @nodelease.contract_version,
@@ -282,26 +328,11 @@ async fn ApiService::handle_enterprise_portal(
         )
         return json_reply(201, persisted.to_json())
       }
-      (Post, "/v1/portal/operator/agreement-executions") => {
-        guard decode_agreement_execution(body) is Some(execution) else {
-          return api_error(
-            400, "InvalidRequest", "invalid agreement execution", false,
-          )
-        }
-        let persisted = try
-          portal.record_execution(execution, @async.now())
-        catch {
-          error => return portal_error_reply(error)
-        } noraise {
-          value => value
-        }
-        self.operator_audit(
-          "portal.agreement.execute",
-          persisted.agreement_id,
-          execution.evidence_receipt,
+      (Post, "/v1/portal/operator/agreement-executions") =>
+        return api_error(
+          409, "VerifiedTransportRequired", "portal agreements execute only through the signed qualified-signature callback boundary",
+          false,
         )
-        return json_reply(200, persisted.to_json())
-      }
       (Post, "/v1/portal/operator/lease-reviews") => {
         guard decode_lease_review(body) is Some(review) else {
           return api_error(400, "InvalidRequest", "invalid lease review", false)

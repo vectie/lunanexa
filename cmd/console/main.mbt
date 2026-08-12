@@ -7,6 +7,12 @@ priv struct BrowserStreamEvent {
 } derive(FromJson)
 
 ///|
+priv struct ConsoleTelemetrySnapshot {
+  samples : Array[@contracts.TelemetrySample]
+  benchmark_summaries : Array[@contracts.BenchmarkReadSummary]
+} derive(FromJson)
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -281,6 +287,78 @@ fn free_memory(heartbeat : @contracts.NodeHeartbeat) -> Int {
 }
 
 ///|
+fn total_memory(heartbeat : @contracts.NodeHeartbeat) -> Int {
+  let mut total = 0
+  for device in heartbeat.inventory.accelerators {
+    total += device.memory_total_mib
+  }
+  total
+}
+
+///|
+fn latest_node_metric(
+  samples : Array[@contracts.TelemetrySample],
+  node_id : String,
+  metric : String,
+) -> Int {
+  let mut latest_timestamp = 0L
+  let mut value = 0
+  for sample in samples {
+    if sample.node_id == node_id &&
+      sample.metric == metric &&
+      sample.timestamp_unix_ms >= latest_timestamp {
+      latest_timestamp = sample.timestamp_unix_ms
+      value = sample.value.to_int()
+    }
+  }
+  value
+}
+
+///|
+fn heartbeat_age_label(locale : @i18n.Locale, age_ms : Int64) -> String {
+  if age_ms < 15000L {
+    if locale.is_chinese() {
+      "刚刚"
+    } else {
+      "Just now"
+    }
+  } else if age_ms < 60000L {
+    if locale.is_chinese() {
+      "\{age_ms / 1000L} 秒前"
+    } else {
+      "\{age_ms / 1000L} seconds ago"
+    }
+  } else if locale.is_chinese() {
+    "\{age_ms / 60000L} 分钟前"
+  } else {
+    "\{age_ms / 60000L} minutes ago"
+  }
+}
+
+///|
+fn portal_lease_holder(
+  locale : @i18n.Locale,
+  snapshot : @portal.PortalSnapshot?,
+  node_id : String,
+) -> String {
+  match snapshot {
+    Some(value) =>
+      for request in value.lease_requests {
+        if request.state == Approved &&
+          request.assigned_node_id == Some(node_id) {
+          return "\{request.submission.organization_id} · \{request.submission.unix_username}"
+        }
+      }
+    None => ()
+  }
+  if locale.is_chinese() {
+    "未分配"
+  } else {
+    "Unassigned"
+  }
+}
+
+///|
 fn license_status(
   registry : @contracts.RegistryReadContract,
   license_id : String,
@@ -369,12 +447,7 @@ fn quick_deployment_intent(
   _now_unix_ms : Int64,
 ) -> @deployment.ModelServiceIntent? {
   let deployment_id = state.quick_deployment_id.trim().to_owned()
-  let replicas = @string.parse_int64(state.quick_replicas.trim()).to_int() catch {
-    _ => return None
-  }
   guard @contracts.valid_identifier(deployment_id, maximum_length=128) &&
-    replicas > 0 &&
-    replicas <= 64 &&
     state.catalog_templates
     .iter()
     .find_first(template => {
@@ -388,7 +461,7 @@ fn quick_deployment_intent(
     idempotency_key: "console:\{deployment_id}",
     deployment_id,
     template: { template_id: template.template_id, version: template.version },
-    replicas,
+    replicas: 1,
     data_class: template.data_policy.classification,
     lease_duration_ms: 86400000L,
     promote_when_ready: false,
@@ -475,7 +548,7 @@ async fn load_console(
   let scheduler : @contracts.SchedulerReadContract = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/scheduler", token)),
   )
-  let telemetry : @contracts.TelemetryReadContract = @json.from_json(
+  let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/telemetry", token)),
   )
   let workspace : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
@@ -486,6 +559,9 @@ async fn load_console(
   )
   let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/service-deployments", token)),
+  )
+  let exclusive_leases : Array[@nodelease.ExclusiveNodeLease] = @json.from_json(
+    @json.parse(request("GET", endpoint, "/v1/exclusive-node-leases", token)),
   )
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
@@ -537,6 +613,17 @@ async fn load_console(
   let now = current_unix_ms()
   let nodes : Array[@ui.NodeRow] = [
     for heartbeat in heartbeats => {
+      let reported_total = latest_node_metric(
+        telemetry.samples,
+        heartbeat.node_id,
+        "accelerator_memory_total_mib",
+      )
+      let reported_used = latest_node_metric(
+        telemetry.samples,
+        heartbeat.node_id,
+        "accelerator_memory_used_mib",
+      )
+      let assignments = heartbeat.running_deployments.join(", ")
       {
         node_id: heartbeat.node_id,
         state: if now - heartbeat.timestamp_unix_ms > 15000L {
@@ -545,8 +632,51 @@ async fn load_console(
           heartbeat.state
         },
         architecture: architecture(heartbeat),
+        total_memory_mib: if reported_total > 0 {
+          reported_total
+        } else {
+          total_memory(heartbeat)
+        },
         free_memory_mib: free_memory(heartbeat),
+        used_memory_mib: if reported_used > 0 {
+          reported_used
+        } else {
+          (total_memory(heartbeat) - free_memory(heartbeat)).max(0)
+        },
+        utilization_per_mille: latest_node_metric(
+          telemetry.samples,
+          heartbeat.node_id,
+          "accelerator_utilization_per_mille",
+        ),
+        temperature_celsius: latest_node_metric(
+          telemetry.samples,
+          heartbeat.node_id,
+          "accelerator_temperature_celsius",
+        ),
+        power_watts: latest_node_metric(
+          telemetry.samples,
+          heartbeat.node_id,
+          "accelerator_power_watts",
+        ),
         workloads: heartbeat.running_deployments.length(),
+        lease_holder: portal_lease_holder(
+          locale,
+          portal_snapshot,
+          heartbeat.node_id,
+        ),
+        active_assignment: if assignments == "" {
+          if locale.is_chinese() {
+            "空闲"
+          } else {
+            "Idle"
+          }
+        } else {
+          assignments
+        },
+        last_seen: heartbeat_age_label(
+          locale,
+          (now - heartbeat.timestamp_unix_ms).max(0L),
+        ),
       }
     }
   ]
@@ -626,6 +756,19 @@ async fn load_console(
         started_at: format_unix_ms(lease.starts_unix_ms, "Unavailable"),
         expires_at: format_unix_ms(lease.expires_unix_ms, "Unavailable"),
         state: lease.state,
+      }
+    }
+  ]
+  let exclusive_node_leases : Array[@ui.ExclusiveNodeLeaseRow] = [
+    for lease in exclusive_leases => {
+      {
+        lease_id: lease.intent.lease_id,
+        node_id: lease.intent.node_id,
+        subject_ref: lease.intent.subject_ref,
+        unix_username: lease.intent.unix_username,
+        expires_at: format_unix_ms(lease.intent.expires_unix_ms, "Unavailable"),
+        state: "\{Repr(lease.state)}",
+        generation: lease.generation,
       }
     }
   ]
@@ -807,6 +950,7 @@ async fn load_console(
     users,
     access_grants,
     compute_leases,
+    exclusive_node_leases,
     cost_centers,
     agreements,
     enterprise_lease_requests,
@@ -823,7 +967,6 @@ async fn load_console(
     .get(0)
     .map(catalog_template_key)
     .unwrap_or(""),
-    quick_replicas: "1",
   }
 }
 
@@ -878,7 +1021,6 @@ fn merge_loaded_console(
     } else {
       current.quick_template
     },
-    quick_replicas: current.quick_replicas,
     portal_node_id: current.portal_node_id,
     success_message: current.success_message,
   }
@@ -1362,6 +1504,28 @@ fn update_live(
         },
         @rabbita.none,
       )
+    Console(BeginTerminateExclusiveNodeLease(lease_id, generation)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            confirmation: Some(
+              @ui.confirmation_receipt(
+                TerminateExclusiveNodeLease(lease_id, generation),
+                model.console.exclusive_node_leases
+                .iter()
+                .find_first(lease => lease.lease_id == lease_id)
+                .map(lease => {
+                  "\{lease.lease_id} · \{lease.node_id} · \{lease.unix_username} · generation \{lease.generation}"
+                })
+                .unwrap_or(lease_id),
+              ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
     Console(DismissConfirmation) =>
       (
         { ..model, console: { ..model.console, confirmation: None } },
@@ -1386,11 +1550,6 @@ fn update_live(
     Console(QuickTemplateChanged(value)) =>
       (
         { ..model, console: { ..model.console, quick_template: value } },
-        @rabbita.none,
-      )
-    Console(QuickReplicasChanged(value)) =>
-      (
-        { ..model, console: { ..model.console, quick_replicas: value } },
         @rabbita.none,
       )
     Console(PortalNodeChanged(value)) =>
@@ -1515,8 +1674,8 @@ fn update_live(
               error_message: Some(
                 console_copy(
                   model.console.locale,
-                  "Choose an approved template, a valid service name, and 1–64 replicas.",
-                  "请选择已批准模板、有效服务名称以及 1–64 个副本。",
+                  "Choose an approved template and a valid service name.",
+                  "请选择已批准模板和有效服务名称。",
                 ),
               ),
             },
@@ -1586,11 +1745,8 @@ fn update_live(
           ("POST", "/v1/portal/operator/memberships", false)
         "publish-portal-agreement" =>
           ("POST", "/v1/portal/operator/agreements", false)
-        "record-portal-execution" =>
-          ("POST", "/v1/portal/operator/agreement-executions", false)
         "register-external-record" =>
           ("POST", "/v1/commercial/external-records", false)
-        "decide-autoscale" => ("POST", "/v1/technical/autoscale:decide", false)
         "decide-backpressure" =>
           ("POST", "/v1/technical/backpressure:decide", false)
         "validate-transfer-grant" =>
@@ -2057,6 +2213,46 @@ fn update_live(
       })
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
+    Console(ConfirmAction(TerminateExclusiveNodeLease(lease_id, generation))) => {
+      let body = @nodelease.ExclusiveLeaseTerminationRequest::{
+          expected_generation: generation,
+          reason: "operator-requested",
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/exclusive-node-leases/\{lease_id}:terminate",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Exclusive lease termination was rejected or stale. Refresh before retrying.",
+                "独占租约终止请求被拒绝或已过期。请刷新后重试。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Exclusive lease \{lease_id} entered fail-closed cleanup. The node remains unavailable until sanitization is verified.",
+                "独占租约 \{lease_id} 已进入故障关闭式清理。节点将在清理验证完成前保持不可用。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
   }
 }
 
@@ -2075,8 +2271,28 @@ fn update(
       | Console(Navigate(_))
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
-      | Console(QuickReplicasChanged(_))
-      | Console(PortalNodeChanged(_)) => update_live(model, message, emit)
+      | Console(PortalNodeChanged(_))
+      | Console(BeginTerminateExclusiveNodeLease(_, _))
+      | Console(DismissConfirmation) => update_live(model, message, emit)
+      Console(ConfirmAction(TerminateExclusiveNodeLease(_, _))) =>
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              confirmation: None,
+              error_message: None,
+              success_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Demo is read-only; no exclusive lease was terminated.",
+                  "演示为只读；未终止任何独占租约。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
       Console(ApproveEnterpriseLease(_, _))
       | Console(RejectEnterpriseLease(_, _)) =>
         (
@@ -2107,8 +2323,8 @@ fn update(
                 error_message: Some(
                   console_copy(
                     model.console.locale,
-                    "Choose an approved template, a valid service name, and 1–64 replicas.",
-                    "请选择已批准模板、有效服务名称以及 1–64 个副本。",
+                    "Choose an approved template and a valid service name.",
+                    "请选择已批准模板和有效服务名称。",
                   ),
                 ),
               },

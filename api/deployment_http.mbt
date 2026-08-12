@@ -26,15 +26,6 @@ fn decode_deployment_intent(body : String) -> @deployment.ModelServiceIntent? {
 }
 
 ///|
-fn decode_scale_request(body : String) -> @deployment.ScaleRequest? {
-  try @json.from_json(@json.parse(body)) catch {
-    _ => None
-  } noraise {
-    value => Some(value)
-  }
-}
-
-///|
 fn accepted_license(
   snapshot : @registry.RegistrySnapshot,
   model : @contracts.ModelRecord,
@@ -577,29 +568,6 @@ async fn ApiService::promote_service_deployment(
 }
 
 ///|
-async fn ApiService::scale_service_deployment(
-  self : ApiService,
-  deployment_id : String,
-  request : @deployment.ScaleRequest,
-) -> HttpReply {
-  guard self.deployment_store is Some(deployments) &&
-    deployments.deployment(deployment_id) is Some(current) else {
-    return api_error(404, "NotFound", "service deployment was not found", false)
-  }
-  if request.replicas <= 0 ||
-    request.replicas > 64 ||
-    !@contracts.valid_identifier(request.idempotency_key, maximum_length=256) {
-    return api_error(400, "InvalidRequest", "scale request is invalid", false)
-  }
-  let intent = {
-    ..current.plan.intent,
-    idempotency_key: request.idempotency_key,
-    replicas: request.replicas,
-  }
-  self.create_service_deployment(intent)
-}
-
-///|
 async fn ApiService::handle_deployment_management(
   self : ApiService,
   verb : ApiMethod,
@@ -697,18 +665,6 @@ async fn ApiService::handle_deployment_management(
       self.stop_service_deployment(
         path[prefix:path.length() - suffix].to_owned(),
         false,
-      )
-    }
-    (Post, _) if path.has_prefix("/v1/service-deployments/") &&
-      path.has_suffix("/scale") => {
-      let prefix = "/v1/service-deployments/".length()
-      let suffix = "/scale".length()
-      guard decode_scale_request(body) is Some(request) else {
-        return api_error(400, "InvalidRequest", "invalid scale request", false)
-      }
-      self.scale_service_deployment(
-        path[prefix:path.length() - suffix].to_owned(),
-        request,
       )
     }
     (Post, _) if path.has_prefix("/v1/service-deployments/") &&

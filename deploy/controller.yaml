@@ -52,6 +52,23 @@ spec:
               value: /var/lib/lunanexa/access.json
             - name: LUNANEXA_TECHNICAL_PATH
               value: /var/lib/lunanexa/technical.json
+            - name: LUNANEXA_MODEL_STORE_ROOT
+              value: /data/models
+            - name: LUNANEXA_EXCLUSIVE_LEASE_PRICE_PER_SECOND_MINOR
+              value: "0"
+            - name: LUNANEXA_BILLING_CURRENCY
+              value: CNY
+            - name: LUNANEXA_BILLING_SCALE
+              value: "2"
+            - name: LUNANEXA_PROVIDER_CALLBACK_NAME
+              value: qualified-provider
+            - name: LUNANEXA_PROVIDER_CALLBACK_ENVIRONMENT
+              value: production
+            - name: LUNANEXA_PROVIDER_CALLBACK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: provider-callback-secret
             - name: LUNANEXA_PERSISTENCE_BACKEND
               value: postgres
             - name: LUNANEXA_DATABASE_URL
@@ -167,6 +184,9 @@ spec:
             - name: runtime-endpoints
               mountPath: /etc/lunanexa/runtime-routes
               readOnly: true
+            - name: model-store
+              mountPath: /data/models
+              readOnly: true
       volumes:
         - name: state
           persistentVolumeClaim:
@@ -177,6 +197,10 @@ spec:
         - name: runtime-endpoints
           configMap:
             name: lunanexa-runtime-endpoints
+        - name: model-store
+          hostPath:
+            path: /data/models
+            type: Directory
 ---
 apiVersion: v1
 kind: Service

@@ -22,6 +22,7 @@ import {
   "vectie/lunanexa/workspace",
   "vectie/lunanexa/workspace/directory",
   "moonbitlang/async",
+  "moonbitlang/async/fs",
   "moonbitlang/async/http",
   "moonbitlang/async/io",
   "moonbitlang/async/socket",
@@ -33,10 +34,6 @@ import {
 }
 
 supported_targets = "native"
-
-import {
-  "moonbitlang/async/fs",
-} for "test"
 
 options(
   link: {

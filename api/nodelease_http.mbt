@@ -16,9 +16,9 @@ fn decode_exclusive_lease_intent(
 }
 
 ///|
-fn decode_exclusive_lease_transition(
+fn decode_exclusive_lease_termination(
   body : String,
-) -> @nodelease.ExclusiveLeaseTransitionRequest? {
+) -> @nodelease.ExclusiveLeaseTerminationRequest? {
   try @json.from_json(@json.parse(body)) catch {
     _ => None
   } noraise {
@@ -66,6 +66,47 @@ async fn ApiService::observe_node_lease_action(
       409, "StaleGeneration", "lease agent observation is stale or misbound", false,
     )
   }
+  let expected_action = match observation.action {
+    "provision" =>
+      @nodelease.LeaseAgentAction::ProvisionAccess(
+        lease_id=initial.intent.lease_id,
+        username=initial.intent.unix_username,
+        credential_ref=initial.intent.access_credential_ref,
+        expires_unix_ms=initial.intent.expires_unix_ms,
+        generation=initial.generation,
+      )
+    "revoke" =>
+      @nodelease.LeaseAgentAction::RevokeAccess(
+        lease_id=initial.intent.lease_id,
+        username=initial.intent.unix_username,
+        generation=initial.generation,
+      )
+    "sanitize" =>
+      @nodelease.LeaseAgentAction::SanitizeLease(
+        lease_id=initial.intent.lease_id,
+        username=initial.intent.unix_username,
+        generation=initial.generation,
+      )
+    "quarantine" =>
+      @nodelease.LeaseAgentAction::QuarantineNode(
+        lease_id=initial.intent.lease_id,
+        generation=initial.generation,
+      )
+    _ => @nodelease.LeaseAgentAction::NoAction
+  }
+  guard @nodelease.helper_receipt_timestamp(
+      expected_action,
+      observation.receipt,
+    )
+    is Some(helper_timestamp) &&
+    helper_timestamp >= initial.updated_unix_ms &&
+    helper_timestamp <= observation.observed_unix_ms &&
+    observation.observed_unix_ms - helper_timestamp <= 60000L else {
+    return api_error(
+      409, "InvalidCleanupEvidence", "lease helper evidence is invalid or stale",
+      false,
+    )
+  }
   let advance = (
     current : @nodelease.ExclusiveNodeLease,
     state : @nodelease.ExclusiveLeaseState,
@@ -83,17 +124,22 @@ async fn ApiService::observe_node_lease_action(
   let transitioned = try {
     match observation.action {
       "provision" => {
-        let provisioning = advance(initial, Provisioning)
-        advance(provisioning, Active)
-      }
-      "revoke" => {
-        let draining = match initial.state {
-          Active | Expiring => advance(initial, Draining)
-          Draining => initial
-          _ => raise Failure::Failure("lease is not ready for revocation")
+        if initial.state != Provisioning {
+          raise Failure::Failure("lease is not ready for provisioning evidence")
         }
-        advance(draining, RevokingAccess)
+        advance(initial, Active)
       }
+      "revoke" =>
+        if initial.state == RevokingAccess {
+          initial
+        } else {
+          let draining = match initial.state {
+            Active | Expiring => advance(initial, Draining)
+            Draining => initial
+            _ => raise Failure::Failure("lease is not ready for revocation")
+          }
+          advance(draining, RevokingAccess)
+        }
       "sanitize" => {
         let sanitizing = if initial.state == RevokingAccess {
           advance(initial, Sanitizing)
@@ -102,7 +148,12 @@ async fn ApiService::observe_node_lease_action(
         }
         advance(sanitizing, Completed)
       }
-      "quarantine" => advance(initial, Quarantined)
+      "quarantine" =>
+        if initial.state == Quarantined {
+          initial
+        } else {
+          advance(initial, Quarantined)
+        }
       _ => raise Failure::Failure("unsupported lease agent action")
     }
   } catch {
@@ -128,6 +179,85 @@ async fn ApiService::observe_node_lease_action(
 ///|
 async fn ApiService::node_exists(self : ApiService, node_id : String) -> Bool {
   self.store.heartbeats().any(heartbeat => heartbeat.node_id == node_id)
+}
+
+///|
+async fn ApiService::reconcile_expired_exclusive_leases(
+  self : ApiService,
+) -> Unit {
+  guard self.exclusive_lease_store is Some(leases) else { return }
+  let before = leases.leases()
+  let now = @async.now()
+  if !leases.reconcile_expired(now) {
+    return
+  }
+  for lease in leases.leases() {
+    let changed = before
+      .iter()
+      .find_first(previous => previous.intent.lease_id == lease.intent.lease_id)
+      .map(previous => previous.generation != lease.generation)
+      .unwrap_or(false)
+    if changed {
+      self.publish_exclusive_lease_directive(
+        lease,
+        directive_state_for_exclusive_lease(lease.state),
+      )
+      self.operator_audit(
+        "exclusive-lease.expire",
+        lease.intent.lease_id,
+        lease.authority_receipt,
+      )
+    }
+  }
+}
+
+///|
+async fn ApiService::begin_exclusive_provisioning_if_drained(
+  self : ApiService,
+  lease : @nodelease.ExclusiveNodeLease,
+) -> @nodelease.ExclusiveNodeLease {
+  guard lease.state == Reserved && self.exclusive_lease_store is Some(leases) else {
+    return lease
+  }
+  let now = @async.now()
+  if now < lease.intent.starts_unix_ms ||
+    now >= lease.intent.expires_unix_ms ||
+    self.store
+    .assignments()
+    .any(assignment => {
+      assignment.node_id == lease.intent.node_id &&
+      assignment.lease_expires_unix_ms > now
+    }) ||
+    self.store
+    .heartbeats()
+    .any(heartbeat => {
+      heartbeat.node_id == lease.intent.node_id &&
+      heartbeat.running_deployments.length() > 0
+    }) {
+    return lease
+  }
+  let provisioning = try
+    leases.transition(
+      lease.intent.lease_id,
+      {
+        expected_generation: lease.generation,
+        state: Provisioning,
+        evidence_receipt: "controller:node-drained",
+      },
+      now,
+    )
+  catch {
+    _ => return leases.lease(lease.intent.lease_id).unwrap_or(lease)
+  } noraise {
+    value => value
+  }
+  self.publish_exclusive_lease_directive(provisioning, Cordoned)
+  self.operator_audit(
+    "exclusive-lease.begin-provisioning",
+    provisioning.intent.lease_id,
+    provisioning.authority_receipt,
+  )
+  provisioning
 }
 
 ///|
@@ -207,6 +337,7 @@ async fn ApiService::handle_exclusive_lease_management(
       true,
     )
   }
+  self.reconcile_expired_exclusive_leases()
   match (verb, path) {
     (Get, "/v1/exclusive-node-leases") =>
       json_reply(200, leases.leases().to_json())
@@ -268,7 +399,9 @@ async fn ApiService::handle_exclusive_lease_management(
     }
     (Get, _) => {
       let lease_id = path["/v1/exclusive-node-leases/".length():].to_owned()
-      if lease_id == "" || lease_id.has_suffix(":transition") {
+      if lease_id == "" ||
+        lease_id.has_suffix(":transition") ||
+        lease_id.has_suffix(":terminate") {
         return api_error(404, "NotFound", "route was not found", false)
       }
       match leases.lease(lease_id) {
@@ -279,13 +412,14 @@ async fn ApiService::handle_exclusive_lease_management(
           )
       }
     }
-    (Post, _) if path.has_suffix(":transition") => {
+    (Post, _) if path.has_suffix(":terminate") => {
       let prefix = "/v1/exclusive-node-leases/".length()
-      let suffix = ":transition".length()
+      let suffix = ":terminate".length()
       let lease_id = path[prefix:path.length() - suffix].to_owned()
-      guard decode_exclusive_lease_transition(body) is Some(request) else {
+      guard decode_exclusive_lease_termination(body) is Some(request) &&
+        @contracts.valid_identifier(request.reason, maximum_length=256) else {
         return api_error(
-          400, "InvalidRequest", "invalid exclusive-node lease transition", false,
+          400, "InvalidRequest", "invalid exclusive-node termination request", false,
         )
       }
       guard leases.lease(lease_id) is Some(current) else {
@@ -293,53 +427,65 @@ async fn ApiService::handle_exclusive_lease_management(
           404, "NotFound", "exclusive-node lease was not found", false,
         )
       }
-      let now = @async.now()
-      if request.state == Active &&
-        (
-          now < current.intent.starts_unix_ms ||
-          now >= current.intent.expires_unix_ms ||
-          self.store
-          .assignments()
-          .any(assignment => {
-            assignment.node_id == current.intent.node_id &&
-            assignment.lease_expires_unix_ms > now
-          }) ||
-          self.store
-          .heartbeats()
-          .any(heartbeat => {
-            heartbeat.node_id == current.intent.node_id &&
-            heartbeat.running_deployments.length() > 0
-          })
-        ) {
+      if request.expected_generation != current.generation {
         return api_error(
-          409, "NodeNotDrained", "exclusive lease cannot activate before managed workloads are drained",
-          true,
+          409, "StaleGeneration", "exclusive lease generation is stale", false,
         )
       }
-      let transitioned = try leases.transition(lease_id, request, now) catch {
-        @nodelease.ExclusiveLeaseError::StaleGeneration =>
-          return api_error(
-            409, "StaleGeneration", "exclusive lease generation is stale", false,
-          )
-        _ =>
-          return api_error(
-            409, "InvalidTransition", "exclusive lease transition was rejected",
-            false,
-          )
-      } noraise {
-        value => value
+      let target = match current.state {
+        Requested => Some(@nodelease.ExclusiveLeaseState::Cancelled)
+        Reserved | Provisioning | Active => Some(Expiring)
+        Quarantined => Some(RevokingAccess)
+        Expiring
+        | Draining
+        | RevokingAccess
+        | Sanitizing
+        | Completed
+        | Cancelled => None
+      }
+      let terminated = match target {
+        None => current
+        Some(state) =>
+          try
+            leases.transition(
+              lease_id,
+              {
+                expected_generation: current.generation,
+                state,
+                evidence_receipt: "operator:terminate:\{request.reason}",
+              },
+              @async.now(),
+            )
+          catch {
+            @nodelease.ExclusiveLeaseError::StaleGeneration =>
+              return api_error(
+                409, "StaleGeneration", "exclusive lease generation is stale", false,
+              )
+            _ =>
+              return api_error(
+                409, "InvalidTransition", "exclusive lease termination was rejected",
+                false,
+              )
+          } noraise {
+            value => value
+          }
       }
       self.publish_exclusive_lease_directive(
-        transitioned,
-        directive_state_for_exclusive_lease(transitioned.state),
+        terminated,
+        directive_state_for_exclusive_lease(terminated.state),
       )
       self.operator_audit(
-        "exclusive-lease.transition",
+        "exclusive-lease.terminate",
         lease_id,
-        transitioned.authority_receipt,
+        terminated.authority_receipt,
       )
-      json_reply(200, transitioned.to_json())
+      json_reply(202, terminated.to_json())
     }
+    (Post, _) if path.has_suffix(":transition") =>
+      api_error(
+        409, "NodeEvidenceRequired", "exclusive lease transitions are reconciled from verified node evidence",
+        false,
+      )
     _ => api_error(404, "NotFound", "route was not found", false)
   }
 }

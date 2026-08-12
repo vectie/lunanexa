@@ -72,6 +72,94 @@ async test "operator-issued API key authorizes model discovery and revocation is
 }
 
 ///|
+async test "scoped API key receives OpenAI-compatible SSE without platform batching" {
+  let directory = @fs.tmpdir(prefix="lunanexa-openai-stream-")
+  let runtime_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  let api_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      runtime_server.run_forever(allow_failure=true) <| ((_, body, connection) => {
+        assert_true(body.read_all().text().contains("\"stream\":true"))
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": "text/event-stream",
+        })
+        connection.write_string("data: {\"delta\":\"hello\"}\n\n")
+        connection.write_string(
+          "data: {\"delta\":\" world\",\"usage\":{\"input_tokens\":2,\"output_tokens\":2}}\n\n",
+        )
+        connection.write_string("data: [DONE]\n\n")
+        connection.end_response()
+      })
+    }
+    let durable = @store.FileStore::open("\{directory}/state.json")
+    durable.fence_controller(1L)
+    let access = @access.AccessStore::open(
+      "\{directory}/access.json",
+      "0123456789abcdef0123456789abcdef",
+    )
+    let issued = access.issue(
+      {
+        key_id: "key-stream",
+        tenant_ref: "tenant-stream",
+        subject_ref: "subject-stream",
+        display_name: "Stream key",
+        scopes: [Inference],
+        allowed_models: ["model-stream"],
+        expires_unix_ms: @async.now() + 60000L,
+        maximum_requests: 10L,
+      },
+      @async.now(),
+    )
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "http://\{runtime_server.addr}/v1/responses",
+      "upstream-secret",
+      "runtime-v1",
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      allow_http_loopback=true,
+    )
+    let service = @api.ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    ).with_access_store(access)
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      service.serve_on(api_server)
+    }
+    let client = @http.post_stream(
+      "http://\{api_server.addr}/v1/chat/completions",
+      headers={
+        "Authorization": "Bearer \{issued.secret}",
+        "Content-Type": "application/json",
+      },
+    )
+    defer client.close()
+    let chat : Json = {
+      "model": "model-stream",
+      "messages": [{ "role": "user", "content": "hello" }],
+      "stream": true,
+    }
+    client.write(chat)
+    let response = client.end_request()
+    assert_eq(response.code, 200)
+    assert_true(
+      response.headers
+      .get("content-type")
+      .unwrap_or("")
+      .contains("text/event-stream"),
+    )
+    let stream = client.read_all().text()
+    assert_true(stream.contains("chat.completion.chunk"))
+    assert_true(stream.contains("hello"))
+    assert_true(stream.contains(" world"))
+    assert_true(stream.contains("lunanexa_receipt"))
+    assert_true(stream.contains("data: [DONE]"))
+    assert_false(stream.contains("WorkloadStreamEvent"))
+    api_server.close()
+    runtime_server.close()
+  }
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "commercial API exposes tenant-scoped cost ledger vertical slice" {
   let directory = @fs.tmpdir(prefix="lunanexa-commercial-api-")
   let service = expansion_service("\{directory}/state.json")
@@ -187,53 +275,17 @@ async test "commercial API exposes tenant-scoped cost ledger vertical slice" {
 }
 
 ///|
-async test "technical decision API fails closed and returns fenced autoscale decision" {
+async test "technical API has no autoscaling surface under fixed fleet policy" {
   let directory = @fs.tmpdir(prefix="lunanexa-technical-api-")
   let service = expansion_service("\{directory}/state.json")
   let headers = { "Authorization": "Bearer operator-token" }
-  let policy : @technical.AutoscalePolicy = {
-    policy_version: "policy-v1",
-    min_replicas: 1,
-    max_replicas: 4,
-    scale_up_step: 1,
-    scale_down_step: 1,
-    sample_window_ms: 30000L,
-    cooldown_ms: 10000L,
-    target_p95_latency_ms: 500L,
-    target_queue_depth: 2,
-    required_lease_generation: 7L,
-  }
-  let snapshot : @technical.AutoscaleSnapshot = {
-    deployment_id: "deployment-one",
-    desired_replicas: 1,
-    ready_replicas: 1,
-    available_replica_capacity: 2,
-    p95_latency_ms: 900L,
-    queue_depth: 5,
-    oldest_sample_unix_ms: 10000L,
-    newest_sample_unix_ms: 40000L,
-    last_scale_unix_ms: None,
-    observed_lease_generation: 7L,
-    lease_expires_unix_ms: 100000L,
-    now_unix_ms: 50000L,
-  }
   let reply = service.handle(
     Post,
     "/v1/technical/autoscale:decide",
     headers,
-    ({ "policy": policy.to_json(), "snapshot": snapshot.to_json() } : Json).stringify(),
+    "{}",
   )
-  assert_eq(reply.status, 200)
-  assert_true(reply.body.contains("ScaleUp"))
-  let stale = { ..snapshot, observed_lease_generation: 6L }
-  let fenced = service.handle(
-    Post,
-    "/v1/technical/autoscale:decide",
-    headers,
-    ({ "policy": policy.to_json(), "snapshot": stale.to_json() } : Json).stringify(),
-  )
-  assert_eq(fenced.status, 200)
-  assert_true(fenced.body.contains("LeaseFenceMismatch"))
+  assert_eq(reply.status, 404)
   let unauthorized = service.handle(
     Post,
     "/v1/technical/autoscale:decide",

@@ -46,6 +46,9 @@ pub struct ApiService {
   audit_token : String
   monitoring_token : String
   assignment_signing_secret : String
+  artifact_root : String?
+  exclusive_lease_unit_price : @commercial.FixedMoney
+  provider_callback_secrets : Map[String, String]
   node_token : String
   version : String
   active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
@@ -90,6 +93,9 @@ pub fn ApiService::new(
     audit_token: operator_token,
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
+    artifact_root: None,
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    provider_callback_secrets: Map([]),
     node_token,
     version,
     active: Map([]),
@@ -136,6 +142,9 @@ pub fn ApiService::with_registry(
     audit_token: operator_token,
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
+    artifact_root: None,
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    provider_callback_secrets: Map([]),
     node_token,
     version,
     active: Map([]),
@@ -183,6 +192,9 @@ pub fn ApiService::with_services(
     audit_token: operator_token,
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
+    artifact_root: None,
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    provider_callback_secrets: Map([]),
     node_token,
     version,
     active: Map([]),
@@ -232,6 +244,9 @@ pub fn ApiService::with_control_plane(
     audit_token: operator_token,
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
+    artifact_root: None,
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    provider_callback_secrets: Map([]),
     node_token,
     version,
     active: Map([]),
@@ -351,6 +366,59 @@ pub fn ApiService::with_assignment_signing_secret(
   secret : String,
 ) -> ApiService {
   { ..self, assignment_signing_secret: secret }
+}
+
+///|
+/// Enables the management-node artifact gateway. The root is deployment owned
+/// and every network read is additionally bound to a live signed assignment.
+pub fn ApiService::with_artifact_root(
+  self : ApiService,
+  artifact_root : String,
+) -> ApiService {
+  { ..self, artifact_root: Some(artifact_root) }
+}
+
+///| Configures the fixed price per exclusive machine-second used for the
+
+///| budget estimate at lease admission. The ledger remains the billing source
+
+///|
+/// of truth after observed usage is rated.
+pub fn ApiService::with_exclusive_lease_unit_price(
+  self : ApiService,
+  unit_price : @commercial.FixedMoney,
+) -> ApiService raise {
+  if unit_price.minor_units < 0L {
+    raise Failure::Failure("exclusive lease unit price cannot be negative")
+  }
+  ignore(
+    @commercial.money(
+      unit_price.minor_units,
+      unit_price.currency,
+      unit_price.scale,
+    ),
+  )
+  { ..self, exclusive_lease_unit_price: unit_price }
+}
+
+///| Installs transport-authentication secrets keyed by `provider|environment`.
+
+///|
+/// Secrets remain deployment references and are never included in snapshots.
+pub fn ApiService::with_provider_callback_secrets(
+  self : ApiService,
+  secrets : Map[String, String],
+) -> ApiService raise {
+  for key, secret in secrets {
+    if key.length() == 0 ||
+      key.length() > 256 ||
+      !key.contains_char('|') ||
+      secret.length() < 32 ||
+      secret.length() > 4096 {
+      raise Failure::Failure("invalid provider callback secret configuration")
+    }
+  }
+  { ..self, provider_callback_secrets: secrets }
 }
 
 ///|
@@ -1416,10 +1484,114 @@ async fn send_stream_event(
 }
 
 ///|
+priv struct OpenAiStreamContext {
+  id : String
+  model : String
+  created_unix_seconds : Int64
+}
+
+///|
+fn streamed_text(output : Json) -> String {
+  match output {
+    String(value) => value
+    value => value.stringify()
+  }
+}
+
+///|
+async fn send_compatible_stream_event(
+  connection : @http.ServerConnection,
+  event : @contracts.WorkloadStreamEvent,
+  openai : OpenAiStreamContext?,
+) -> Unit {
+  guard openai is Some(context) else {
+    send_stream_event(connection, event)
+    return
+  }
+  match event.kind {
+    Chunk => {
+      let content = event.output.map(streamed_text).unwrap_or("")
+      let payload : Json = {
+        "id": context.id,
+        "object": "chat.completion.chunk",
+        "created": context.created_unix_seconds.to_json(),
+        "model": context.model,
+        "choices": [
+          {
+            "index": 0,
+            "delta": { "content": content },
+            "finish_reason": (None : String?).to_json(),
+          },
+        ],
+      }
+      connection.write_string("data: \{payload.stringify()}\n\n")
+    }
+    Completed => {
+      if event.response is Some(response) && response.output is Some(output) {
+        let replay_payload : Json = {
+          "id": context.id,
+          "object": "chat.completion.chunk",
+          "created": context.created_unix_seconds.to_json(),
+          "model": context.model,
+          "choices": [
+            {
+              "index": 0,
+              "delta": { "content": streamed_text(output) },
+              "finish_reason": (None : String?).to_json(),
+            },
+          ],
+        }
+        connection.write_string("data: \{replay_payload.stringify()}\n\n")
+      }
+      let receipt = event.response
+        .map(response => response.audit_receipt)
+        .unwrap_or("")
+      let completed_payload : Json = {
+        "id": context.id,
+        "object": "chat.completion.chunk",
+        "created": context.created_unix_seconds.to_json(),
+        "model": context.model,
+        "choices": [
+          { "index": 0, "delta": ({} : Json), "finish_reason": "stop" },
+        ],
+        "lunanexa_receipt": receipt,
+      }
+      connection.write_string("data: \{completed_payload.stringify()}\n\n")
+      connection.write_string("data: [DONE]\n\n")
+    }
+    Failed | Cancelled => {
+      let error : Json = match event.response {
+        Some(response) =>
+          match response.error {
+            Some(value) => value.to_json()
+            None =>
+              {
+                "code": "RuntimeUnavailable",
+                "message": "stream failed",
+                "retryable": false,
+              }
+          }
+        None =>
+          {
+            "code": "RuntimeUnavailable",
+            "message": "stream failed",
+            "retryable": false,
+          }
+      }
+      let error_payload : Json = { "error": error }
+      connection.write_string("data: \{error_payload.stringify()}\n\n")
+      connection.write_string("data: [DONE]\n\n")
+    }
+  }
+  connection.flush()
+}
+
+///|
 async fn ApiService::stream_workload(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
   connection : @http.ServerConnection,
+  openai? : OpenAiStreamContext? = None,
 ) -> Unit {
   let idempotency_key = idempotency_scope(request)
   let replay = match self.cached_result(idempotency_key) {
@@ -1432,13 +1604,17 @@ async fn ApiService::stream_workload(
       "Cache-Control": "no-store",
       "X-Accel-Buffering": "no",
     })
-    send_stream_event(connection, {
-      workload_id: request.workload_id,
-      sequence: 1,
-      kind: Completed,
-      output: None,
-      response: Some(response),
-    })
+    send_compatible_stream_event(
+      connection,
+      {
+        workload_id: request.workload_id,
+        sequence: 1,
+        kind: Completed,
+        output: None,
+        response: Some(response),
+      },
+      openai,
+    )
     connection.end_response()
     return
   }
@@ -1487,13 +1663,17 @@ async fn ApiService::stream_workload(
                 if first_output == 0L {
                   first_output = @async.now()
                 }
-                send_stream_event(connection, {
-                  workload_id: request.workload_id,
-                  sequence,
-                  kind: Chunk,
-                  output: Some(output),
-                  response: None,
-                })
+                send_compatible_stream_event(
+                  connection,
+                  {
+                    workload_id: request.workload_id,
+                    sequence,
+                    kind: Chunk,
+                    output: Some(output),
+                    response: None,
+                  },
+                  openai,
+                )
               })
             },
           )
@@ -1608,17 +1788,21 @@ async fn ApiService::stream_workload(
         completed - effective_started,
       )
       sequence += 1
-      send_stream_event(connection, {
-        workload_id: request.workload_id,
-        sequence,
-        kind: if cancelled {
-          Cancelled
-        } else {
-          Failed
+      send_compatible_stream_event(
+        connection,
+        {
+          workload_id: request.workload_id,
+          sequence,
+          kind: if cancelled {
+            Cancelled
+          } else {
+            Failed
+          },
+          output: None,
+          response: Some(response),
         },
-        output: None,
-        response: Some(response),
-      }) catch {
+        openai,
+      ) catch {
         _ => ()
       }
       connection.end_response() catch {
@@ -1675,13 +1859,17 @@ async fn ApiService::stream_workload(
   })
   self.complete_admission(request.workload_id, completed - effective_started)
   sequence += 1
-  send_stream_event(connection, {
-    workload_id: request.workload_id,
-    sequence,
-    kind: Completed,
-    output: None,
-    response: Some({ ..response, output: None }),
-  })
+  send_compatible_stream_event(
+    connection,
+    {
+      workload_id: request.workload_id,
+      sequence,
+      kind: Completed,
+      output: None,
+      response: Some({ ..response, output: None }),
+    },
+    openai,
+  )
   connection.end_response()
 }
 
@@ -1733,6 +1921,9 @@ async fn ApiService::handle_with_transport(
   }
   if commercial_management_path(path) {
     return self.handle_commercial_management(verb, path, headers, body)
+  }
+  if provider_callback_path(path) {
+    return self.handle_provider_callback(verb, path, headers, body)
   }
   if technical_management_path(path) {
     return self.handle_technical_management(verb, path, headers, body)
@@ -2515,8 +2706,12 @@ async fn ApiService::handle_with_transport(
           true,
         )
       }
+      self.reconcile_expired_exclusive_leases()
       match leases.lease_for_node(node_id) {
-        Some(lease) => json_reply(200, lease.to_json())
+        Some(lease) => {
+          let reconciled = self.begin_exclusive_provisioning_if_drained(lease)
+          json_reply(200, reconciled.to_json())
+        }
         None => api_error(404, "NotFound", "node has no exclusive lease", false)
       }
     }
@@ -3184,16 +3379,33 @@ fn reason(status : Int) -> String {
     200 => "OK"
     201 => "Created"
     202 => "Accepted"
+    206 => "Partial Content"
     400 => "Bad Request"
     401 => "Unauthorized"
     403 => "Forbidden"
     404 => "Not Found"
+    405 => "Method Not Allowed"
     409 => "Conflict"
     413 => "Payload Too Large"
+    416 => "Range Not Satisfiable"
     429 => "Too Many Requests"
+    502 => "Bad Gateway"
     503 => "Service Unavailable"
     _ => "Response"
   }
+}
+
+///|
+async fn send_listener_reply(
+  connection : @http.ServerConnection,
+  reply : HttpReply,
+) -> Unit {
+  connection.send_response(reply.status, reason(reply.status), extra_headers={
+    "Content-Type": reply.content_type,
+    "Cache-Control": "no-store",
+  })
+  connection.write_string(reply.body)
+  connection.end_response()
 }
 
 ///|
@@ -3212,6 +3424,166 @@ pub async fn ApiService::serve_on(
   self.refresh_deployment_operations()
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
     let allow_asserted_subject = loopback_client(connection.client_addr())
+    if self.serve_artifact(request, connection) {
+      return
+    }
+    if request.meth == Post && request.path == "/v1/chat/completions" {
+      let request_body = match read_bounded_request_body(reader, 1048576) {
+        RequestBody(value) => value
+        RequestBodyTooLarge => {
+          send_listener_reply(
+            connection,
+            api_error(
+              413, "PayloadTooLarge", "request body exceeds the public contract limit",
+              false,
+            ),
+          )
+          return
+        }
+        RequestBodyInvalidUtf8 => {
+          send_listener_reply(
+            connection,
+            api_error(
+              400, "InvalidRequest", "request body is not valid UTF-8", false,
+            ),
+          )
+          return
+        }
+      }
+      guard decode_openai_chat(request_body) is Some(value) &&
+        @contracts.valid_identifier(value.model) &&
+        value.messages.length() > 0 &&
+        value.messages.length() <= 256 else {
+        send_listener_reply(
+          connection,
+          api_error(
+            400, "InvalidRequest", "invalid OpenAI-compatible chat request", false,
+          ),
+        )
+        return
+      }
+      if !value.stream.unwrap_or(false) {
+        send_listener_reply(
+          connection,
+          self.handle_with_transport(
+            Post,
+            request.path,
+            request.headers,
+            request_body,
+            allow_asserted_subject,
+          ),
+        )
+        return
+      }
+      if !self.store.current_epoch_is_durable() {
+        send_listener_reply(
+          connection,
+          api_error(
+            409, "StaleControllerEpoch", "controller was fenced by a newer durable epoch",
+            true,
+          ),
+        )
+        return
+      }
+      if self.reconciliation_only {
+        send_listener_reply(
+          connection,
+          api_error(
+            503, "ReconciliationOnly", "controller mutations are disabled until recovery reconciliation is accepted",
+            true,
+          ),
+        )
+        return
+      }
+      let key_check = self.api_key_check(
+        request.headers,
+        Inference,
+        None,
+        Some(value.model),
+        true,
+      )
+      let authority : @access.ApiAuthorization = match key_check {
+        KeyAuthorized(authority) => authority
+        KeyQuotaExceeded => {
+          send_listener_reply(
+            connection,
+            api_error(
+              429, "QuotaExceeded", "API key request quota is exhausted", false,
+            ),
+          )
+          return
+        }
+        KeyDenied => {
+          if !bearer_authorized(request.headers, self.inference_token) {
+            send_listener_reply(
+              connection,
+              api_error(
+                401, "Unauthenticated", "valid scoped inference API key is required",
+                false,
+              ),
+            )
+            return
+          }
+          {
+            key_id: "static-inference-authority",
+            tenant_ref: header(request.headers, "x-lunanexa-tenant").unwrap_or(
+              "default-tenant",
+            ),
+            subject_ref: "static-inference-subject",
+          }
+        }
+      }
+      let now = @async.now()
+      let (workload, request_digest) = openai_workload(
+        value,
+        authority,
+        request.headers,
+        true,
+        now,
+      )
+      try @contracts.validate_workload(workload) catch {
+        _ => {
+          send_listener_reply(
+            connection,
+            api_error(
+              400, "InvalidRequest", "chat request violates the canonical workload contract",
+              false,
+            ),
+          )
+          return
+        }
+      } noraise {
+        _ => ()
+      }
+      let workspace_headers = request.headers.copy()
+      workspace_headers["X-LunaNexa-Subject"] = authority.subject_ref
+      let (workspace_error, reserved) = self.workspace_admit(
+        workspace_headers, workload, true,
+      )
+      if workspace_error is Some(reply) {
+        send_listener_reply(connection, reply)
+        return
+      }
+      try
+        self.stream_workload(
+          workload,
+          connection,
+          openai=Some({
+            id: "chatcmpl-\{request_digest[:32]}",
+            model: value.model,
+            created_unix_seconds: now / 1000L,
+          }),
+        )
+      catch {
+        error => {
+          self.release_workspace_admission(workload, reserved)
+          raise error
+        }
+      } noraise {
+        _ => self.release_workspace_admission(workload, reserved)
+      }
+      return
+    }
     if request.meth == Post && request.path == "/v1/workloads:stream" {
       if !self.store.current_epoch_is_durable() {
         let reply = api_error(

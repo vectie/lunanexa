@@ -271,42 +271,9 @@ async fn ApiService::invoke_openai_chat(
   headers : Map[String, String],
 ) -> HttpReply {
   let now = @async.now()
-  let request_digest = digest_hex("\{body_identity(value)}|\{now}")
-  let requested_output = value.max_tokens
-    .unwrap_or(1024)
-    .clamp(min=1, max=131072)
-  let idempotency = header(headers, "idempotency-key").unwrap_or(
-    "openai-\{request_digest[:32]}",
+  let (request, request_digest) = openai_workload(
+    value, authority, headers, false, now,
   )
-  let workload_id = "openai-\{request_digest[32:64]}"
-  let request : @contracts.WorkloadEnvelope = {
-    version: @contracts.contract_version,
-    idempotency_key: idempotency,
-    workload_id,
-    tenant_ref: authority.tenant_ref,
-    credential_scope: "api-key:\{authority.key_id}",
-    capability: TextGenerate,
-    model_selector: value.model,
-    payload: { "messages": value.messages.to_json() },
-    data_policy: {
-      classification: Confidential,
-      retention: Ephemeral,
-      allow_cache: false,
-      allow_training_reuse: false,
-    },
-    deadline_unix_ms: now + 120000L,
-    priority: Interactive,
-    latency_class: Realtime,
-    resource_ceiling: {
-      max_input_units: 1048576,
-      max_output_units: requested_output,
-      max_runtime_ms: 120000L,
-      max_accelerator_memory_mib: 1048576,
-    },
-    stream: false,
-    output_format: "openai.chat.completion",
-    trace_token: "trace-\{request_digest[:32]}",
-  }
   @contracts.validate_workload(request) catch {
     _ =>
       return api_error(
@@ -314,7 +281,16 @@ async fn ApiService::invoke_openai_chat(
         false,
       )
   }
+  let workspace_headers = headers.copy()
+  workspace_headers["X-LunaNexa-Subject"] = authority.subject_ref
+  let (workspace_error, reserved) = self.workspace_admit(
+    workspace_headers, request, true,
+  )
+  if workspace_error is Some(reply) {
+    return reply
+  }
   let canonical = self.invoke_workload(request)
+  self.release_workspace_admission(request, reserved)
   if canonical.status < 200 || canonical.status >= 300 {
     return canonical
   }
@@ -351,6 +327,53 @@ async fn ApiService::invoke_openai_chat(
     },
     "lunanexa_receipt": response.audit_receipt,
   })
+}
+
+///|
+fn openai_workload(
+  value : OpenAiChatRequest,
+  authority : @access.ApiAuthorization,
+  headers : Map[String, String],
+  stream : Bool,
+  now : Int64,
+) -> (@contracts.WorkloadEnvelope, String) {
+  let request_digest = digest_hex("\{body_identity(value)}|\{now}")
+  let requested_output = value.max_tokens
+    .unwrap_or(1024)
+    .clamp(min=1, max=131072)
+  let idempotency = header(headers, "idempotency-key").unwrap_or(
+    "openai-\{request_digest[:32]}",
+  )
+  let workload_id = "openai-\{request_digest[32:64]}"
+  let request : @contracts.WorkloadEnvelope = {
+    version: @contracts.contract_version,
+    idempotency_key: idempotency,
+    workload_id,
+    tenant_ref: authority.tenant_ref,
+    credential_scope: "api-key:\{authority.key_id}",
+    capability: TextGenerate,
+    model_selector: value.model,
+    payload: { "messages": value.messages.to_json() },
+    data_policy: {
+      classification: Confidential,
+      retention: Ephemeral,
+      allow_cache: false,
+      allow_training_reuse: false,
+    },
+    deadline_unix_ms: now + 120000L,
+    priority: Interactive,
+    latency_class: Realtime,
+    resource_ceiling: {
+      max_input_units: 1048576,
+      max_output_units: requested_output,
+      max_runtime_ms: 120000L,
+      max_accelerator_memory_mib: 1048576,
+    },
+    stream,
+    output_format: "openai.chat.completion",
+    trace_token: "trace-\{request_digest[:32]}",
+  }
+  (request, request_digest)
 }
 
 ///|

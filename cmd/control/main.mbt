@@ -17,6 +17,21 @@ fn secret_references() -> Array[String] {
 }
 
 ///|
+fn provider_callback_secrets() -> Map[String, String] raise {
+  guard @env.get_env_var("LUNANEXA_PROVIDER_CALLBACK_SECRET") is Some(secret) &&
+    secret != "" else {
+    return Map([])
+  }
+  let provider = required_environment("LUNANEXA_PROVIDER_CALLBACK_NAME")
+  let environment = required_environment(
+    "LUNANEXA_PROVIDER_CALLBACK_ENVIRONMENT",
+  )
+  let secrets : Map[String, String] = Map([])
+  secrets["\{provider}|\{environment}"] = secret
+  secrets
+}
+
+///|
 async fn main {
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
     "127.0.0.1:8080",
@@ -195,6 +210,23 @@ async fn main {
       required_environment("LUNANEXA_MONITORING_TOKEN"),
     )
     .with_assignment_signing_secret(assignment_signing_secret)
+    .with_artifact_root(
+      @env.get_env_var("LUNANEXA_MODEL_STORE_ROOT").unwrap_or("/data/models"),
+    )
+    .with_exclusive_lease_unit_price(
+      @commercial.money(
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_EXCLUSIVE_LEASE_PRICE_PER_SECOND_MINOR").unwrap_or(
+            "0",
+          ),
+        ),
+        @env.get_env_var("LUNANEXA_BILLING_CURRENCY").unwrap_or("CNY"),
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_BILLING_SCALE").unwrap_or("2"),
+        ).to_int(),
+      ),
+    )
+    .with_provider_callback_secrets(provider_callback_secrets())
     .with_runtime_concurrency(
       @string.parse_int64(
         @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("4"),

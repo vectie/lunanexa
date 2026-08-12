@@ -56,7 +56,6 @@ test "console service deployment action routes stay canonical" {
         ..@ui.default_state(),
         quick_deployment_id: "service-1",
         quick_template: "missing@v1",
-        quick_replicas: "1",
       },
       1000L,
     )
@@ -65,7 +64,6 @@ test "console service deployment action routes stay canonical" {
   let ready : @ui.ConsoleState = {
     ..@ui.demo_state(),
     quick_deployment_id: "service-1",
-    quick_replicas: "1",
   }
   guard quick_deployment_intent(ready, 1000L) is Some(first) else {
     fail("expected a valid quick deployment intent")
@@ -97,24 +95,14 @@ test "console quick-deployment fuzz matches the public intent boundary" {
       is None,
     )
   }
-  for replicas in ["", "0", "-1", "65", "1e2", "1.5", "NaN", "∞"] {
-    assert_true(
-      quick_deployment_intent(
-        { ..base, quick_deployment_id: "service-1", quick_replicas: replicas },
-        1L,
-      )
-      is None,
+  guard quick_deployment_intent(
+      { ..base, quick_deployment_id: "service-1" },
+      1L,
     )
+    is Some(intent) else {
+    fail("fixed-capacity intent should be valid")
   }
-  for replicas in ["1", "2", "64"] {
-    assert_true(
-      quick_deployment_intent(
-        { ..base, quick_deployment_id: "service-1", quick_replicas: replicas },
-        1L,
-      )
-      is Some(_),
-    )
-  }
+  assert_eq(intent.replicas, 1)
 }
 
 ///|
@@ -144,6 +132,53 @@ test "console confirmation scope binds the selected identity" {
   }
   assert_eq(confirmation.action, SuspendUser("user-1"))
   assert_eq(confirmation.scope, "user-1 · Ari Chen · ari@example.test")
+}
+
+///|
+test "exclusive machine termination confirmation binds node user and generation" {
+  let state : @ui.ConsoleState = {
+    ..@ui.default_state(),
+    route: Leases,
+    exclusive_node_leases: [
+      {
+        lease_id: "exclusive-lease-1",
+        node_id: "dgx-spark-02",
+        subject_ref: "subject-2",
+        unix_username: "tenant2",
+        expires_at: "2026-08-12 18:00 UTC",
+        state: "Active",
+        generation: 7L,
+      },
+    ],
+  }
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "operator-secret",
+    audit_credential: "audit-secret",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: state,
+    next_directive_generation: 1L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (prepared, _) = update_live(
+    model,
+    Console(BeginTerminateExclusiveNodeLease("exclusive-lease-1", 7L)),
+    emit,
+  )
+  guard prepared.console.confirmation is Some(confirmation) else {
+    fail("expected an exclusive lease cleanup confirmation")
+  }
+  assert_eq(
+    confirmation.action,
+    TerminateExclusiveNodeLease("exclusive-lease-1", 7L),
+  )
+  assert_eq(
+    confirmation.scope,
+    "exclusive-lease-1 · dgx-spark-02 · tenant2 · generation 7",
+  )
 }
 
 ///|
@@ -205,7 +240,6 @@ test "loaded controller state keeps the selected route and locale" {
     operation_body: "{\"tenant_ref\":\"team-a\"}",
     quick_deployment_id: "service-1",
     quick_template: "text-small@v1",
-    quick_replicas: "2",
     success_message: Some("配置已提交。"),
   }
   let loaded : @ui.ConsoleState = {
@@ -221,7 +255,6 @@ test "loaded controller state keeps the selected route and locale" {
   assert_eq(merged.operation_body, "{\"tenant_ref\":\"team-a\"}")
   assert_eq(merged.quick_deployment_id, "service-1")
   assert_eq(merged.quick_template, "text-small@v1")
-  assert_eq(merged.quick_replicas, "2")
   assert_eq(merged.success_message, Some("配置已提交。"))
   assert_eq(merged.overview.total_nodes, 2)
 }
@@ -318,6 +351,43 @@ test "demo mode presents a read-only cluster snapshot" {
   })
   assert_true(html.contains("Read-only demo snapshot"))
   assert_true(html.contains("4/4 machines running"))
+}
+
+///|
+test "demo mode previews exclusive cleanup confirmation without mutation" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    console: { ..@ui.demo_state(), route: Leases },
+    next_directive_generation: 1L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let lease = model.console.exclusive_node_leases[0]
+  let (prepared, _) = update(
+    model,
+    Console(BeginTerminateExclusiveNodeLease(lease.lease_id, lease.generation)),
+    emit,
+  )
+  assert_true(prepared.console.confirmation is Some(_))
+  let (confirmed, _) = update(
+    prepared,
+    Console(
+      ConfirmAction(
+        TerminateExclusiveNodeLease(lease.lease_id, lease.generation),
+      ),
+    ),
+    emit,
+  )
+  assert_true(confirmed.console.confirmation is None)
+  assert_eq(
+    confirmed.console.success_message,
+    Some("Demo is read-only; no exclusive lease was terminated."),
+  )
 }
 
 ///|

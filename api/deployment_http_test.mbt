@@ -20,7 +20,7 @@ fn management_template() -> @deployment.ModelServiceTemplate {
       version: "runtime-v1",
       architectures: ["nvidia-gb10"],
       capabilities: [TextGenerate],
-      supports_batching: true,
+      supports_batching: false,
       supports_multi_node: false,
     },
     capability: TextGenerate,
@@ -260,36 +260,13 @@ async test "one request creates durable assignments and converges to ready" {
   )
   assert_eq(repeated.status, 202)
   assert_eq(durable.assignments().length(), 1)
-  let scaled = service.handle(
+  let scale_absent = service.handle(
     Post,
     "/v1/service-deployments/\{intent.deployment_id}/scale",
     headers,
-    (
-      { replicas: 1, idempotency_key: "scale-text-small" } :
-      @deployment.ScaleRequest)
-    .to_json()
-    .stringify(),
+    "{}",
   )
-  assert_eq(scaled.status, 202)
-  let scaled_operation : @deployment.DeploymentOperation = @json.from_json(
-    @json.parse(scaled.body),
-  )
-  assert_eq(scaled_operation.generation, 2L)
-  assert_eq(scaled_operation.state, Reconciling)
-  assert_eq(durable.assignments()[0].generation, 2L)
-  durable.put_heartbeat(
-    management_heartbeat([intent.deployment_id], observed_generation=2L),
-  )
-  let scaled_ready = service.handle(
-    Get,
-    "/v1/operations/\{scaled_operation.operation_id}",
-    headers,
-    "",
-  )
-  let scaled_ready_operation : @deployment.DeploymentOperation = @json.from_json(
-    @json.parse(scaled_ready.body),
-  )
-  assert_eq(scaled_ready_operation.state, Ready)
+  assert_eq(scale_absent.status, 404)
   let rolled_back = service.handle(
     Post,
     "/v1/service-deployments/\{intent.deployment_id}/rollback",
@@ -461,11 +438,21 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
   assert_eq(replay_operation.operation_id, first_operation.operation_id)
   assert_eq(deployments.operations().length(), 1)
   assert_eq(durable.assignments().length(), 1)
-  let conflict = service.handle(
+  let invalid_capacity = service.handle(
     Post,
     "/v1/service-deployments",
     headers,
     { ..intent, replicas: 2 }.to_json().stringify(),
+  )
+  assert_eq(invalid_capacity.status, 409)
+  assert_true(invalid_capacity.body.contains("DeploymentRejected"))
+  assert_eq(deployments.operations().length(), 1)
+  assert_eq(durable.assignments().length(), 1)
+  let conflict = service.handle(
+    Post,
+    "/v1/service-deployments",
+    headers,
+    { ..intent, lease_duration_ms: 120000L }.to_json().stringify(),
   )
   assert_eq(conflict.status, 409)
   assert_true(conflict.body.contains("IdempotencyConflict"))

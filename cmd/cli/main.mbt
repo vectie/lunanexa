@@ -115,9 +115,30 @@ async fn print_post_empty(base : String, path : String, token : String) -> Unit 
 }
 
 ///|
+async fn print_post_text(
+  base : String,
+  path : String,
+  token : String,
+  body : String,
+) -> Unit {
+  let (response, response_body) = @http.post(
+    endpoint(base, path),
+    body,
+    headers=bearer(token),
+  )
+  let output = response_body.text()
+  if response.code < 200 || response.code >= 300 {
+    raise Failure::Failure(
+      "request failed with status \{response.code}: \{output}",
+    )
+  }
+  println(output)
+}
+
+///|
 fn usage() -> String {
   (
-    #|usage: lunanexa <health|capabilities|invoke FILE|status ID|cancel ID|nodes|node-state ID active|cordoned|draining GENERATION|exclusive-leases|exclusive-lease ID|lease-node FILE|transition-node-lease ID FILE|assignments|assign FILE|stop-assignment ID|registry|scheduler|recovery-plan|telemetry|set-quota FILE|capacity FILE|record-benchmark FILE|register-model FILE|register-runtime FILE|record-license FILE|record-verification FILE|record-evaluation FILE|approve FILE|promote FILE|rollback FILE|issue-enrollment-token FILE|audit|catalog|register-template FILE|plan-deployment FILE|deploy FILE|deployments|deployment ID|operation ID|promote-deployment ID|rollback-deployment ID|scale-deployment ID FILE|delete-deployment ID>
+    #|usage: lunanexa <health|capabilities|invoke FILE|status ID|cancel ID|nodes|node-state ID active|cordoned|draining GENERATION|exclusive-leases|exclusive-lease ID|lease-node FILE|terminate-node-lease ID GENERATION REASON|assignments|assign FILE|stop-assignment ID|registry|scheduler|recovery-plan|telemetry|set-quota FILE|capacity FILE|record-benchmark FILE|register-model FILE|register-runtime FILE|record-license FILE|record-verification FILE|record-evaluation FILE|approve FILE|promote FILE|rollback FILE|issue-enrollment-token FILE|audit|catalog|register-template FILE|plan-deployment FILE|deploy FILE|deployments|deployment ID|operation ID|promote-deployment ID|rollback-deployment ID|scale-deployment ID FILE|delete-deployment ID>
   )
 }
 
@@ -183,13 +204,24 @@ async fn main {
         args[2],
       )
     }
-    "transition-node-lease" => {
-      guard args.length() == 4 else { raise Failure::Failure(usage()) }
-      print_post_file(
+    "terminate-node-lease" => {
+      guard args.length() == 5 else { raise Failure::Failure(usage()) }
+      let expected_generation = @string.parse_int64(args[3])
+      guard expected_generation > 0L &&
+        @contracts.valid_identifier(args[4], maximum_length=256) else {
+        raise Failure::Failure(
+          "lease generation and termination reason are invalid",
+        )
+      }
+      let request : Json = {
+        "expected_generation": expected_generation,
+        "reason": args[4],
+      }
+      print_post_text(
         base,
-        "/v1/exclusive-node-leases/\{args[2]}:transition",
+        "/v1/exclusive-node-leases/\{args[2]}:terminate",
         environment("LUNANEXA_OPERATOR_TOKEN"),
-        args[3],
+        request.stringify(),
       )
     }
     "node-state" => {
