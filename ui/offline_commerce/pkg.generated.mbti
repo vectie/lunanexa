@@ -1,0 +1,102 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/offline_commerce"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/commercial/offline",
+  "vectie/lunanexa/ui/i18n",
+}
+
+// Values
+pub fn default_state(@i18n.Locale, OfflineCommerceAudience) -> OfflineCommerceState
+
+pub fn demo_state(@i18n.Locale, OfflineCommerceAudience) -> OfflineCommerceState
+
+pub fn interactive_view(OfflineCommerceState, @cmd.Emit[OfflineCommerceMessage]) -> @html.Html
+
+pub fn render(OfflineCommerceState) -> String
+
+pub fn view(OfflineCommerceState) -> @html.Html
+
+// Errors
+
+// Types and methods
+pub(all) struct OfflineArtifactSummary {
+  artifact_id : String
+  order_id : String
+  kind : @offline.DocumentArtifactKind
+  revision : Int
+  media_type : String
+  byte_count : Int64
+  sha256 : String
+  scan_state : @offline.ArtifactScanState
+  review_state : @offline.ArtifactReviewState
+  submitted_by : String
+  created_unix_ms : Int64
+} derive(Eq, @debug.Debug)
+
+pub(all) enum OfflineCommerceAudience {
+  CustomerCommerce
+  OperatorCommerce
+} derive(Eq, @debug.Debug)
+
+pub(all) struct OfflineCommerceConfirmation {
+  action : OfflineCommerceConsequentialAction
+  title : String
+  evidence : String
+} derive(Eq, @debug.Debug)
+
+pub(all) enum OfflineCommerceConsequentialAction {
+  QuoteOrder(String, String, String, String)
+  BeginOrder(String, Int64)
+  ReleaseVerifiedPacket(String, Int64)
+  AcceptEvidence(String, String)
+  RejectEvidence(String, String)
+  FulfillVerifiedOrder(String, Int64)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum OfflineCommerceMessage {
+  SelectOrder(String)
+  CreateOrder
+  RequestEvidenceUpload(String, @offline.DocumentArtifactKind)
+  RequestGeneration(String, @offline.DocumentArtifactKind)
+  BeginConfirmation(OfflineCommerceConsequentialAction)
+  DismissConfirmation
+  ConfirmAction(OfflineCommerceConsequentialAction)
+  ProjectChanged(String)
+  ServiceChanged(String)
+  SlaChanged(String)
+  OperatorActorChanged(String)
+  QuoteMinorUnitsChanged(String)
+  TermsDigestChanged(String)
+  EntitlementChanged(String)
+  Refresh
+  ClearNotice
+} derive(Eq)
+
+pub(all) struct OfflineCommerceState {
+  locale : @i18n.Locale
+  audience : OfflineCommerceAudience
+  orders : Array[@offline.CommercialOrder]
+  artifacts : Array[OfflineArtifactSummary]
+  templates : Array[@offline.DocumentTemplate]
+  selected_order_id : String?
+  project_id : String
+  service_code : String
+  sla_code : String
+  operator_actor_ref : String
+  quote_minor_units : String
+  terms_digest : String
+  entitlement_ref : String
+  confirmation : OfflineCommerceConfirmation?
+  loading : Bool
+  success_message : String?
+  error_message : String?
+} derive(Eq)
+pub fn OfflineCommerceState::update(Self, OfflineCommerceMessage) -> Self
+
+// Type aliases
+
+// Traits

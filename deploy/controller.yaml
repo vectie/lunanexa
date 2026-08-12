@@ -50,6 +50,42 @@ spec:
               value: /var/lib/lunanexa/enterprise-portal.json
             - name: LUNANEXA_NOTIFICATION_PATH
               value: /var/lib/lunanexa/notifications.json
+            - name: LUNANEXA_OFFLINE_COMMERCE_PATH
+              value: /var/lib/lunanexa/offline-commerce.json
+            - name: LUNANEXA_ARTIFACT_WORKER_CALLBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: artifact-worker-callback-token
+            - name: LUNANEXA_ARTIFACT_SCANNER_CALLBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: artifact-scanner-callback-token
+            - name: LUNANEXA_ENABLE_GUIDE_MONITOR
+              value: "1"
+            - name: LUNANEXA_GUIDE_ORIGIN
+              value: "${COURSEBOOK_MONITOR_ORIGIN}"
+            - name: LUNANEXA_GUIDE_ALLOW_HTTPS
+              value: "1"
+            - name: LUNANEXA_GUIDE_ACTOR_REF
+              value: service:guide-monitor
+            - name: LUNANEXA_GUIDE_TARGET_REF
+              value: coursebook-primary
+            - name: LUNANEXA_GUIDE_SCHEDULER_PATH
+              value: /var/lib/lunanexa/guide-probe.json
+            - name: LUNANEXA_GUIDE_PROBE_INTERVAL_MS
+              value: "60000"
+            - name: LUNANEXA_GUIDE_IDENTITY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: guide-admin-auth-key
+            - name: LUNANEXA_GUIDE_OBSERVATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: guide-observation-secret
             - name: LUNANEXA_OBSERVABILITY_PATH
               value: /var/lib/lunanexa/observability.json
             - name: LUNANEXA_ACCESS_PATH

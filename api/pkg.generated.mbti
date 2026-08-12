@@ -10,6 +10,7 @@ import {
   "vectie/lunanexa/access",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations",
+  "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
   "vectie/lunanexa/node",
@@ -49,6 +50,7 @@ pub struct ApiService {
   technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @integrations.IntegrationStore
+  offline_commerce_store : @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore?
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
   portal_store : @vectie/lunanexa/portal/store.FilePortalStore?
@@ -72,6 +74,8 @@ pub struct ApiService {
   artifact_root : String?
   exclusive_lease_unit_price : @commercial.FixedMoney
   provider_callback_secrets : Map[String, String]
+  artifact_worker_callback_token : String?
+  artifact_scanner_callback_token : String?
   node_token : String
   version : String
   active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
@@ -96,6 +100,8 @@ pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney)
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
 pub fn ApiService::with_observability_store(Self, @observability.ObservabilityStore) -> Self
+pub fn ApiService::with_offline_artifact_callback_tokens(Self, String, String) -> Self
+pub fn ApiService::with_offline_commerce_store(Self, @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
@@ -118,6 +124,21 @@ pub(all) struct HttpReply {
   body : String
   content_type : String
 } derive(Eq, @debug.Debug)
+
+pub(all) struct OfflineArtifactView {
+  artifact_id : String
+  order_id : String
+  kind : @offline.DocumentArtifactKind
+  revision : Int
+  locale : String
+  media_type : String
+  byte_count : Int64
+  sha256 : String
+  generation_state : @offline.ArtifactGenerationState
+  scan_state : @offline.ArtifactScanState
+  review_state : @offline.ArtifactReviewState
+  created_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum StreamEvent {
   Opened

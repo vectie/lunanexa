@@ -6,16 +6,16 @@
     "tagline": "Operate a private GPU fleet as a governed model provider.",
     "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting LunaNexa.",
     "language": "en",
-    "revision": "db481df6104c5c93056eae6dc4e03b62ddbe096c + dirty deployment/runtime work",
+    "revision": "bd06831ac6da086252abcf8b61e3b55a6af0a249 + reviewed operations work",
     "freshness": "draft",
-    "updated_at": "2026-08-12T10:35:14Z"
+    "updated_at": "2026-08-12T15:07:06Z"
   },
   "navigation": [
     {"id":"overview","label":"Overview","page_ids":["welcome","feature-map","boundaries"]},
     {"id":"quickstart","label":"Quickstart","page_ids":["local-quickstart","operator-console","developer-workbench","client-api"]},
     {"id":"concepts","label":"How it works","page_ids":["architecture","request-flow","deployment-flow","enrollment-flow","access-flow","state-ownership"]},
     {"id":"deployment","label":"Deployment","page_ids":["tomorrow-deployment","dgx-runtimes"]},
-    {"id":"operations","label":"Operations","page_ids":["observability-recovery"]},
+    {"id":"operations","label":"Operations","page_ids":["daily-operations","observability-recovery"]},
     {"id":"troubleshooting","label":"Troubleshooting","page_ids":["debug-controller","debug-node-runtime","debug-access-database"]},
     {"id":"reference","label":"Reference","page_ids":["configuration","error-reference"]},
     {"id":"advanced","label":"Technical notes","visibility":"advanced","page_ids":["readiness","source-ledger"]}
@@ -483,6 +483,84 @@
       ]
     },
     {
+      "id":"daily-operations",
+      "group_id":"operations",
+      "title":"Run alerts, offline orders, machine access, and guide diagnostics",
+      "summary":"This newcomer-first runbook connects the operator console and customer portal: respond to durable alerts, correlate bounded operational evidence, reconcile offline commercial documents, follow exclusive-machine access through expiry, and use the role-safe guide diagnostics page.",
+      "audience":"New on-call operators, customer administrators, finance coordinators, and exclusive-machine users",
+      "estimated_minutes":18,
+      "status":"implemented",
+      "tags":["notifications","alerts","logs","metrics","offline commerce","machine access","guide diagnostics"],
+      "source_ids":["operations-commerce-guide","operations","security"],
+      "blocks":[
+        {"kind":"heading","level":2,"id":"first-shift","text":"Start with the right surface"},
+        {"kind":"table","columns":["Need","Operator sees","Customer sees"],"rows":[
+          ["Alerts and notifications","Alert center with severity, acknowledgement, assignment, silence window, resolution, source receipt, and delivery status","Tenant inbox with read/unread state and agreement, payment, document, lease, access, expiry, or termination updates"],
+          ["Operational evidence","Bounded event stream, low-cardinality metrics, immutable audit receipts, and typed alert codes","Only the status and correlation receipt needed for the customer's own request"],
+          ["Offline order","Quote, approval, artifact generation, exact-digest review, correction, and fulfillment controls","Order timeline, print packet readiness, upload-grant request, evidence status, and correction request"],
+          ["Exclusive machine","Lease state, forced-revocation policy, node reachability, sanitization, and quarantine","Own machine display name, username, access-handoff status/reference, coarse reachability, expiry, termination action, and sanitization status"],
+          ["Guide diagnostics","Authenticated aggregate health, active alert codes, state counts, recovery backlog, skill names/versions, and runbook links","Public coursebook and read-only Ask guide, without live cluster state"]
+        ]},
+        {"kind":"callout","tone":"info","title":"One event, two audiences","text":"A durable source event can appear as an actionable operator alert and as a tenant-scoped customer notification. Reading or dismissing a message does not erase the source receipt, and a delivery retry does not create another business event."},
+        {"kind":"heading","level":2,"id":"notification-recipe","text":"Recipe 1: triage an alert and confirm the customer message"},
+        {"kind":"steps","items":[
+          "Operator: open Alert center, sort Critical and High first, open one alert, and copy its correlation or source receipt before changing anything.",
+          "Operator: inspect the current evidence, then acknowledge ownership. Assign it to a named responder; use a bounded silence only when a maintenance window explains the signal.",
+          "Operator: resolve only after the typed condition has recovered. Resolution closes the alert lifecycle but preserves its evidence.",
+          "Customer: open Notifications in the enterprise portal, confirm the message belongs to the expected order or lease, follow its safe action, and mark it read.",
+          "If email, SMS, or webhook delivery fails, continue with the in-app record and investigate the operator DeliveryDeadLetter alert."
+        ]},
+        {"kind":"code","language":"sh","label":"Operator read-only triage (credentials come from the secret provider)","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_MONITORING_TOKEN:?load monitoring authority without printing it}\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/notifications/operator\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/observability/events\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/metrics\""},
+        {"kind":"heading","level":2,"id":"trigger-model","text":"Recipe 2: correlate events, metrics, alerts, and audit"},
+        {"kind":"flow","title":"The trigger model","steps":[
+          {"title":"Operational event","text":"The component emits bounded JSON with a stable event code, outcome, component, time, and correlation receipt."},
+          {"title":"Metric update","text":"A counter, gauge, or latency series changes using low-cardinality labels; tenant, user, lease, and request identifiers never become metric labels."},
+          {"title":"Typed rule","text":"A state or metric rule detects the condition. Rules do not parse human log prose."},
+          {"title":"Durable alert","text":"The notification authority deduplicates the condition and opens or updates the operator record."},
+          {"title":"Audit correlation","text":"For a consequential mutation, the immutable audit receipt explains actor class, prior state, next state, decision, and result."}
+        ]},
+        {"kind":"callout","tone":"warning","title":"Logs explain; they do not grant authority","text":"Use the correlation receipt to join the alert, operational event, adapter call, and audit record. Never paste raw logs, tokens, document bytes, prompts, model output, SSH material, or callback bodies into a ticket or the guide."},
+        {"kind":"heading","level":2,"id":"offline-recipe","text":"Recipe 3: complete the hybrid offline workflow"},
+        {"kind":"flow","title":"From order to entitlement","steps":[
+          {"title":"Configure online","text":"The customer selects the service, SLA, project, and requested expiry; the server derives tenant and purchaser identity."},
+          {"title":"Prepare packet","text":"The operator applies the immutable quote and approved policy, obtains internal approval, and releases only renderer-verified print artifacts."},
+          {"title":"Execute offline","text":"The customer prints the PDF and follows the existing physical seal, treasury collection, and invoice process."},
+          {"title":"Upload evidence","text":"The customer requests a short-lived upload grant. The object store and scanner report the verified digest and safety result; the browser does not choose the object reference."},
+          {"title":"Reconcile","text":"A reviewer who did not submit the evidence accepts or rejects the exact digest. Rejection keeps history and requests a replacement revision."},
+          {"title":"Fulfill","text":"The operator creates the opaque entitlement only after every policy-required agreement, payment, invoice, identity, and approval item is accepted."}
+        ]},
+        {"kind":"code","language":"sh","label":"Customer and operator read-only order checks","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_INFERENCE_TOKEN:?load customer API authority without printing it}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_CLIENT_CERT_PATH:?set the verified client certificate path}\"\n: \"${LUNANEXA_CLIENT_KEY_PATH:?set the protected client key path}\"\n\ncurl --fail-with-body --silent --show-error \\\n  --cert \"$LUNANEXA_CLIENT_CERT_PATH\" --key \"$LUNANEXA_CLIENT_KEY_PATH\" \\\n  -H \"Authorization: Bearer $LUNANEXA_INFERENCE_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/offline-commerce/self/orders\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/offline-commerce/operator/snapshot\""},
+        {"kind":"callout","tone":"danger","title":"A generated file is not a legal or financial outcome","text":"The PDF is the print copy and the DOCX is an editable source. An upload is not an e-signature, a receipt is not bank settlement, and generated metadata is not a tax invoice. Keep the order paused until the organization's authorized legal and finance reviewers accept the required evidence."},
+        {"kind":"heading","level":2,"id":"machine-recipe","text":"Recipe 4: use and end an exclusive-machine lease safely"},
+        {"kind":"steps","items":[
+          "Customer: open Machine access and verify lease state, machine display name, username, coarse reachability, handoff state, start time, and expiry before connecting. The portal intentionally does not reveal the physical node ID or a raw credential.",
+          "Customer: follow the opaque handoff reference to the approved credential broker or SSH certificate redirect. That separate trusted surface supplies the authorized host alias, port, certificate, and host-key fingerprint; compare the fingerprint before the first login.",
+          "Customer: before manual termination, save work and stop personal processes. Review the current lease generation, type the exact confirmation shown by the portal, and submit once.",
+          "Operator: watch Draining, RevokingAccess, and Sanitizing. Do not restore managed scheduling merely because the account disappeared.",
+          "Operator: return the node to managed service only after the current sanitization receipt is verified; quarantine and alert on any cleanup failure."
+        ]},
+        {"kind":"code","language":"sh","label":"Customer read-only access and notification checks","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_INFERENCE_TOKEN:?load customer API authority without printing it}\"\n: \"${LUNANEXA_CLIENT_CERT_PATH:?set the verified client certificate path}\"\n: \"${LUNANEXA_CLIENT_KEY_PATH:?set the protected client key path}\"\n\nfor path in /v1/machine-access/self /v1/notifications/self; do\n  curl --fail-with-body --silent --show-error \\\n    --cert \"$LUNANEXA_CLIENT_CERT_PATH\" --key \"$LUNANEXA_CLIENT_KEY_PATH\" \\\n    -H \"Authorization: Bearer $LUNANEXA_INFERENCE_TOKEN\" \\\n    \"$LUNANEXA_ENDPOINT$path\"\ndone"},
+        {"kind":"callout","tone":"warning","title":"Exclusive does not mean root","text":"The initial offering is an exclusive non-root account with a documented filesystem boundary and rootless containers. It does not grant sudo, management-node access, LunaNexa daemon credentials, another tenant's data, or permission to disable the node-local expiry guard."},
+        {"kind":"heading","level":2,"id":"guide-recipe","text":"Recipe 5: use the guide without crossing roles"},
+        {"kind":"table","columns":["Surface","Allowed information","Never available"],"rows":[
+          ["Public Ask guide","Published coursebook explanations and citations","Live cluster state, private evidence, raw logs, credentials, or operator actions"],
+          ["Administrator diagnostics","Aggregate component health, active alert codes/counts, node and lease state counts, recovery backlog, knowledge revision, enabled skill names/versions, missing evidence, and runbook links","Node, user, or lease identifiers; alert bodies; prompts; model answers; raw logs; secrets; hidden reasoning; mutations"],
+          ["Skill inventory","Skill ID, version, audience, required evidence, allowed tools/data, enablement state, and bilingual runbook route","Tool credentials, unrestricted controller routes, private source paths, or an execution channel"]
+        ]},
+        {"kind":"code","language":"sh","label":"Check coursebook health, then open authenticated admin diagnostics on macOS","code":"set -eu\n: \"${LUNANEXA_COURSEBOOK_ORIGIN:?set the approved coursebook origin}\"\n\ncurl --fail-with-body --silent --show-error \\\n  \"$LUNANEXA_COURSEBOOK_ORIGIN/health\"\nopen \"$LUNANEXA_COURSEBOOK_ORIGIN/admin.html\""},
+        {"kind":"callout","tone":"info","title":"Do not manufacture administrator headers","text":"Open administrator diagnostics only through the trusted signed identity proxy. If that proxy, the internal HTTPS diagnostics gateway, or its secret references are missing, keep admin diagnostics disabled; the public coursebook and read-only guide remain usable."},
+        {"kind":"heading","level":2,"id":"external-prerequisites","text":"External prerequisites to finish before production"},
+        {"kind":"table","columns":["Area","Deployment must provide","If it is missing"],"rows":[
+          ["Notification delivery","Approved email, SMS, or webhook workers, secret references, retry policy, and dead-letter ownership","Use the durable in-app inbox and alert center; do not claim external delivery"],
+          ["Observability destinations","Prometheus-compatible collector, OpenTelemetry/log collector, protected retention, dashboards, and paging integration","Local metrics, bounded events, audit, and operator alerts still work; external history and paging do not"],
+          ["Offline commerce","Approved bilingual legal templates, object storage, short-lived upload exchange, malware/active-content scanner, deterministic DOCX/PDF renderer, XLSX formula/render checks, callback identity, and legal/finance policy owners","Demonstrate the workflow only; do not claim execution, settlement, invoicing, or entitlement readiness"],
+          ["Exclusive machine","Production IdP, trusted ingress, credential broker or SSH CA, DNS/host alias, protected provisioner and watchdog, session revocation, and tested sanitization/quarantine","Do not expose customer login or machine access"],
+          ["Guide diagnostics","Trusted identity proxy, matching HMAC key, internal HTTPS read-only diagnostics gateway, secret-backed controller authority, network policy, and freshness monitor","Keep administrator diagnostics off; public documentation remains available"]
+        ]},
+        {"kind":"checkpoint","question":"What should you correlate before resolving an operator alert?","answer":"Confirm the typed condition has recovered, then correlate the alert's source or correlation receipt with the bounded operational event, relevant metric, and immutable audit record. Customer read state or a successful delivery alone is not recovery evidence.","revisit_after_days":2}
+      ]
+    },
+    {
       "id":"observability-recovery",
       "group_id":"operations",
       "title":"Observe, back up, and recover",
@@ -522,11 +600,12 @@
       "estimated_minutes":12,
       "status":"documented",
       "tags":["debugging","controller","ingress","stale epoch","health"],
-      "source_ids":["operations","recovery","security","api-server","deployment"],
+      "source_ids":["operations","recovery","security","api-server","deployment","operations-commerce-guide"],
       "blocks":[
         {"kind":"troubleshooting","symptom":"The console cannot load and the controller health endpoint is unavailable.","likely_causes":["Controller pod is not ready or crash-looping.","Rendered environment, secret reference, volume, or PostgreSQL URL is missing.","Ingress route or NetworkPolicy does not reach the controller.","The browser is bypassing the trusted ingress path."],"checks":["Inspect Kubernetes pod status, readiness events, and bounded controller logs.","Confirm every required placeholder was resolved and management node placement is correct.","Probe /health from an allowed management pod, then through trusted ingress.","Check PostgreSQL readiness and controller connection without printing the database URL."],"resolution":["Fix the specific render, storage, database, or routing dependency and let Kubernetes restart normally.","Keep direct public controller access blocked; correct ingress or policy instead of widening exposure."],"escalate_when":["The controller repeatedly corrupts or rejects durable state.","Recovery requires a restore or epoch change."]},
         {"kind":"troubleshooting","symptom":"A mutation returns StaleControllerEpoch.","likely_causes":["A newer controller already advanced the durable fencing epoch.","An old process, assignment, or restored snapshot is attempting to write."],"checks":["Inspect the current durable epoch and active controller identity.","Confirm no old controller process or pod remains reachable.","Open /v1/recovery/plan from the newer reconciliation-only controller."],"resolution":["Do not lower or reuse the epoch. Fence the stale writer and continue recovery from the newer durable epoch."],"escalate_when":["Two live controllers appear to hold authority.","The durable store and observed deployment disagree about the current epoch."]},
-        {"kind":"troubleshooting","symptom":"Requests return Unauthenticated through a browser or remote client.","likely_causes":["The correct operator, inference, audit, or monitoring credential is missing or uses the wrong scope.","Ingress did not validate the client certificate or did not inject verified auth-TLS headers.","A remote client attempted to use X-LunaNexa-Subject, which is loopback-only."],"checks":["Confirm the API route's required authority without echoing the secret.","Inspect ingress authentication result and header overwrite policy.","Verify the controller sees the intended trusted network peer."],"resolution":["Issue or route the correct scoped credential through the trusted identity boundary. Never relax the subject-header rule for remote callers."],"escalate_when":["A caller can spoof identity or access another authority scope."]}
+        {"kind":"troubleshooting","symptom":"Requests return Unauthenticated through a browser or remote client.","likely_causes":["The correct operator, inference, audit, or monitoring credential is missing or uses the wrong scope.","Ingress did not validate the client certificate or did not inject verified auth-TLS headers.","A remote client attempted to use X-LunaNexa-Subject, which is loopback-only."],"checks":["Confirm the API route's required authority without echoing the secret.","Inspect ingress authentication result and header overwrite policy.","Verify the controller sees the intended trusted network peer."],"resolution":["Issue or route the correct scoped credential through the trusted identity boundary. Never relax the subject-header rule for remote callers."],"escalate_when":["A caller can spoof identity or access another authority scope."]},
+        {"kind":"troubleshooting","symptom":"The administrator guide diagnostics page is unavailable, stale, or missing evidence.","likely_causes":["The trusted identity proxy did not replace and freshly sign the operator headers.","The server-only skill manifest or coursebook evidence index is invalid or older than its freshness threshold.","The internal HTTPS diagnostics route, controller health, operator alert, node, lease, or reconciliation endpoint is unavailable.","A required docs-namespace HMAC or controller credential reference is absent."],"checks":["Open /health and inspect only the optional admin_diagnostics category boolean.","Use the correlation receipt from admin.html to find the bounded GuideAdminDiagnosticRequest audit event.","Confirm the identity proxy signs the documented method/path/actor/role/timestamp payload without printing its HMAC key.","Confirm the internal route permits only the five fixed read endpoints and that every skill names its version, required evidence, allowed data, and runbook."],"resolution":["Repair the identity, secret reference, HTTPS route, coursebook index, or controller dependency that is explicitly marked missing; then refresh admin.html.","Keep the feature disabled if the trusted proxy or HTTPS diagnostics gateway is not available. The public coursebook and read-only pet remain independent."],"escalate_when":["The public pet can see live cluster state, an administrator response contains a node/user/lease identifier, or any request exposes prompts, logs, credentials, or reasoning traces."]}
       ]
     },
     {

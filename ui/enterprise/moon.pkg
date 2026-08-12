@@ -1,6 +1,7 @@
 import {
   "vectie/lunanexa/notifications",
   "vectie/lunanexa/nodelease",
+  "vectie/lunanexa/ui/offline_commerce",
   "vectie/lunanexa/ui/machine_access",
   "vectie/lunanexa/portal",
   "vectie/lunanexa/ui/i18n",

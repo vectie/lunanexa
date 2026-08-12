@@ -31,6 +31,51 @@ fn provider_callback_secrets() -> Map[String, String] raise {
   secrets
 }
 
+///| Both machine callback identities are optional as one fail-closed feature,
+
+///|
+/// but partial, weak, or reused configuration is a startup error.
+fn offline_callback_tokens(
+  worker : String?,
+  scanner : String?,
+  operator : String,
+  inference : String,
+) -> (String, String)? raise {
+  match (worker, scanner) {
+    (None, None) => None
+    (Some(worker), Some(scanner)) => {
+      if worker.length() < 32 ||
+        scanner.length() < 32 ||
+        worker == scanner ||
+        worker == operator ||
+        worker == inference ||
+        scanner == operator ||
+        scanner == inference {
+        raise Failure::Failure(
+          "offline artifact callback identities are weak or reused",
+        )
+      }
+      Some((worker, scanner))
+    }
+    _ =>
+      raise Failure::Failure(
+        "offline artifact callback identities must be configured together",
+      )
+  }
+}
+
+///|
+fn guide_monitor_enabled(value : String?) -> Bool raise {
+  match value {
+    None | Some("") | Some("0") => false
+    Some("1") => true
+    Some(_) =>
+      raise Failure::Failure(
+        "LUNANEXA_ENABLE_GUIDE_MONITOR must be absent, '0', or '1'",
+      )
+  }
+}
+
 ///|
 /// Global policy is an administrator-owned startup artifact. It is validated
 /// before any durable service or listener is opened, so a hostile or mistyped
@@ -97,11 +142,17 @@ async fn main {
   let observability_path = @env.get_env_var("LUNANEXA_OBSERVABILITY_PATH").unwrap_or(
     "lunanexa-observability.json",
   )
+  let offline_commerce_path = @env.get_env_var("LUNANEXA_OFFLINE_COMMERCE_PATH").unwrap_or(
+    "lunanexa-offline-commerce.json",
+  )
   let access_path = @env.get_env_var("LUNANEXA_ACCESS_PATH").unwrap_or(
     "lunanexa-access.json",
   )
   let technical_path = @env.get_env_var("LUNANEXA_TECHNICAL_PATH").unwrap_or(
     "lunanexa-technical.json",
+  )
+  let guide_monitor_enabled = guide_monitor_enabled(
+    @env.get_env_var("LUNANEXA_ENABLE_GUIDE_MONITOR"),
   )
   let persistence_backend = @env.get_env_var("LUNANEXA_PERSISTENCE_BACKEND").unwrap_or(
     "file",
@@ -180,6 +231,62 @@ async fn main {
       @notification_store.NotificationStore::open_postgres(database)
     None => @notification_store.NotificationStore::open(notification_path)
   }
+  let guide_probe_worker = if guide_monitor_enabled {
+    Some(
+      @guide_probe.GuideProbeWorker::open(
+        {
+          origin: required_environment("LUNANEXA_GUIDE_ORIGIN"),
+          allow_https: @env.get_env_var("LUNANEXA_GUIDE_ALLOW_HTTPS") ==
+          Some("1"),
+          actor_ref: @env.get_env_var("LUNANEXA_GUIDE_ACTOR_REF").unwrap_or(
+            "service:guide-monitor",
+          ),
+          role: "operator",
+          maximum_response_bytes: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_GUIDE_MAX_RESPONSE_BYTES").unwrap_or(
+              "65536",
+            ),
+          ).to_int(),
+          request_timeout_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_GUIDE_REQUEST_TIMEOUT_MS").unwrap_or(
+              "2500",
+            ),
+          ).to_int(),
+        },
+        {
+          target_ref: @env.get_env_var("LUNANEXA_GUIDE_TARGET_REF").unwrap_or(
+            "coursebook-primary",
+          ),
+          probe_interval_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_GUIDE_PROBE_INTERVAL_MS").unwrap_or(
+              "60000",
+            ),
+          ),
+          observation_max_age_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_GUIDE_OBSERVATION_MAX_AGE_MS").unwrap_or(
+              "120000",
+            ),
+          ),
+          future_skew_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_GUIDE_FUTURE_SKEW_MS").unwrap_or("5000"),
+          ),
+          knowledge_max_age_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_GUIDE_KNOWLEDGE_MAX_AGE_MS").unwrap_or(
+              "604800000",
+            ),
+          ),
+        },
+        @env.get_env_var("LUNANEXA_GUIDE_SCHEDULER_PATH").unwrap_or(
+          "lunanexa-guide-probe.json",
+        ),
+        notification_store,
+        required_environment("LUNANEXA_GUIDE_IDENTITY_SECRET"),
+        required_environment("LUNANEXA_GUIDE_OBSERVATION_SECRET"),
+      ),
+    )
+  } else {
+    None
+  }
   let observability_store = match management_database {
     Some(database) =>
       @observability.ObservabilityStore::open_postgres(
@@ -191,6 +298,11 @@ async fn main {
         observability_path,
         emit_json_lines=true,
       )
+  }
+  let offline_commerce_store = match management_database {
+    Some(database) =>
+      @offline_store.OfflineCommerceStore::open_postgres(database)
+    None => @offline_store.OfflineCommerceStore::open(offline_commerce_path)
   }
   let api_key_issuer_secret = required_environment(
     "LUNANEXA_API_KEY_ISSUER_SECRET",
@@ -232,17 +344,17 @@ async fn main {
       }
     None => @commercial_integrations.IntegrationStore::new()
   }
-  let base_service = @api.ApiService::with_control_plane(
-      durable,
-      registry,
-      enrollment,
-      scheduler,
-      telemetry,
-      runtime,
-      required_environment("LUNANEXA_OPERATOR_TOKEN"),
-      required_environment("LUNANEXA_INFERENCE_TOKEN"),
-      "",
-      "0.1.0",
+  let operator_token = required_environment("LUNANEXA_OPERATOR_TOKEN")
+  let inference_token = required_environment("LUNANEXA_INFERENCE_TOKEN")
+  let callback_tokens = offline_callback_tokens(
+    @env.get_env_var("LUNANEXA_ARTIFACT_WORKER_CALLBACK_TOKEN"),
+    @env.get_env_var("LUNANEXA_ARTIFACT_SCANNER_CALLBACK_TOKEN"),
+    operator_token,
+    inference_token,
+  )
+  let configured_service = @api.ApiService::with_control_plane(
+      durable, registry, enrollment, scheduler, telemetry, runtime, operator_token,
+      inference_token, "", "0.1.0",
     )
     .with_signature_verifier(
       @registry.CosignVerifier::new(
@@ -264,6 +376,7 @@ async fn main {
     .with_portal_store(portal_store)
     .with_notification_store(notification_store)
     .with_observability_store(observability_store)
+    .with_offline_commerce_store(offline_commerce_store)
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
@@ -290,6 +403,14 @@ async fn main {
     )
     .with_provider_callback_secrets(provider_callback_secrets())
     .with_global_admin_settings(global_settings)
+  let base_service = match callback_tokens {
+    Some(tokens) =>
+      configured_service.with_offline_artifact_callback_tokens(
+        tokens.0,
+        tokens.1,
+      )
+    None => configured_service
+  }
   let service = match management_database {
     Some(database) =>
       base_service.with_commercial_persistence(
@@ -297,5 +418,14 @@ async fn main {
       )
     None => base_service
   }
-  service.serve(address)
+  match guide_probe_worker {
+    None => service.serve(address)
+    Some(worker) => {
+      let server = @http.Server(@socket.Addr::parse(address))
+      @async.with_task_group <| group => {
+        group.spawn_bg(allow_failure=false) <| () => { worker.run_forever() }
+        service.serve_on(server)
+      }
+    }
+  }
 }

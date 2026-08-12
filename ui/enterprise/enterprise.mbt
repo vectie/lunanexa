@@ -7,6 +7,7 @@ pub(all) enum EnterpriseRoute {
   Costs
   Models
   MachineAccess
+  OfflineCommerce
 } derive(Debug, Eq)
 
 ///|
@@ -27,6 +28,7 @@ pub(all) struct EnterpriseState {
   lease_requests : Array[@portal.EnterpriseLeaseRequest]
   notifications : Array[@notifications.NotificationRecord]
   machine_access : @machine_access.MachineAccessState
+  offline_commerce : @offline_commerce.OfflineCommerceState
   cost_centers : Array[EnterpriseCostCenterRow]
   provisional_spend : String
   model_catalog : Array[@portal.EnterpriseModelSummary]
@@ -53,6 +55,7 @@ pub(all) enum EnterpriseMessage {
   SubmitLease
   MarkNotificationRead(String, Int64)
   MachineAccess(@machine_access.MachineAccessMessage)
+  OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
   ClearNotice
 } derive(Eq)
 
@@ -75,6 +78,10 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     lease_requests: [],
     notifications: [],
     machine_access: @machine_access.default_state(@i18n.default_locale()),
+    offline_commerce: @offline_commerce.default_state(
+      @i18n.default_locale(),
+      CustomerCommerce,
+    ),
     cost_centers: [],
     provisional_spend: "—",
     model_catalog: [],
@@ -223,6 +230,10 @@ pub fn demo_state() -> EnterpriseState {
         },
       ],
     },
+    offline_commerce: {
+      ..@offline_commerce.demo_state(@i18n.default_locale(), CustomerCommerce),
+      project_id: "project-vision-lab",
+    },
     cost_centers: [
       {
         cost_center_id: "cc-research",
@@ -276,6 +287,7 @@ pub fn EnterpriseState::update(
         ..self,
         locale,
         machine_access: { ..self.machine_access, locale, },
+        offline_commerce: { ..self.offline_commerce, locale, },
         success_message: None,
         error_message: None,
       }
@@ -290,6 +302,8 @@ pub fn EnterpriseState::update(
     MarkNotificationRead(_, _) => self
     MachineAccess(message) =>
       { ..self, machine_access: self.machine_access.update(message) }
+    OfflineCommerce(message) =>
+      { ..self, offline_commerce: self.offline_commerce.update(message) }
     ClearNotice => { ..self, success_message: None, error_message: None }
   }
 }
@@ -337,6 +351,7 @@ fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
     Costs => copy(locale, "Usage & costs", "用量与成本")
     Models => copy(locale, "Model catalog", "模型目录")
     MachineAccess => copy(locale, "My machine", "我的机器")
+    OfflineCommerce => copy(locale, "Orders & documents", "订单与材料")
   }
 }
 
@@ -379,6 +394,7 @@ fn navigation(
         Agreements,
         LeaseRequests,
         MachineAccess,
+        OfflineCommerce,
         Notifications,
         Costs,
         Models,
@@ -1257,15 +1273,28 @@ fn content(
     Notifications => notifications_view(state, emit)
     Costs => costs_view(state)
     Models => models_view(state)
-    MachineAccess =>
+    MachineAccess => {
+      let machine = { ..state.machine_access, locale: state.locale }
       match emit {
         Some(send) =>
           @machine_access.interactive_view(
-            state.machine_access,
+            machine,
             send.map(message => MachineAccess(message)),
           )
-        None => @machine_access.view(state.machine_access)
+        None => @machine_access.view(machine)
       }
+    }
+    OfflineCommerce => {
+      let commerce = { ..state.offline_commerce, locale: state.locale }
+      match emit {
+        Some(send) =>
+          @offline_commerce.interactive_view(
+            commerce,
+            send.map(message => OfflineCommerce(message)),
+          )
+        None => @offline_commerce.view(commerce)
+      }
+    }
   }
 }
 

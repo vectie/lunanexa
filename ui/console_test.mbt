@@ -198,6 +198,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         production_ready: false,
       },
     ],
+    offline_commerce: @offline_commerce.default_state(English, OperatorCommerce),
     confirmation: Some(@ui.confirmation_receipt(DrainNode("node-1"), "node-1")),
     error_message: None,
     success_message: None,
@@ -220,6 +221,22 @@ test "all operator routes render from the shared typed state" {
     assert_true(html.contains("Confirm destructive operation"))
     assert_true(html.contains("aria-label=\"Primary\""))
   }
+}
+
+///|
+test "operator offline commerce route is actionable and bilingual" {
+  let demo = @ui.demo_state()
+  let english = @ui.render({ ..demo, route: OfflineCommerce })
+  assert_true(english.contains("Offline reconciliation desk"))
+  assert_true(english.contains("Accept exact digest"))
+  let chinese = @ui.render({
+    ..demo,
+    route: OfflineCommerce,
+    locale: ChineseSimplified,
+  })
+  assert_eq(demo.offline_commerce.locale, English)
+  assert_true(chinese.contains("线下材料核验台"))
+  assert_true(chinese.contains("接受此文件摘要"))
 }
 
 ///|

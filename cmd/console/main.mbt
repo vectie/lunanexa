@@ -13,6 +13,46 @@ priv struct ConsoleTelemetrySnapshot {
 } derive(FromJson)
 
 ///|
+priv struct OfflineQuoteAction {
+  order_id : String
+  quote : @offline.ImmutableQuote
+  actor_ref : String
+  now_unix_ms : Int64
+} derive(ToJson)
+
+///|
+extend OfflineQuoteAction with ToJson::{to_json}
+
+///|
+priv struct OfflineOrderAction {
+  order_id : String
+  expected_generation : Int64
+  now_unix_ms : Int64
+} derive(ToJson)
+
+///|
+extend OfflineOrderAction with ToJson::{to_json}
+
+///|
+priv struct OfflineFulfillmentAction {
+  order_id : String
+  expected_generation : Int64
+  entitlement_ref : String
+  now_unix_ms : Int64
+} derive(ToJson)
+
+///|
+extend OfflineFulfillmentAction with ToJson::{to_json}
+
+///|
+priv struct OfflineActionRequest {
+  path : String
+  body : String
+  english_success : String
+  chinese_success : String
+}
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -29,6 +69,10 @@ extern "js" fn demo_mode() -> Bool =
 
 ///|
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
+
+///|
+extern "js" fn random_identifier(prefix : String) -> String =
+  #| prefix => `${prefix}-${crypto.randomUUID()}`
 
 ///|
 extern "js" fn scroll_console_top() -> Unit =
@@ -566,6 +610,13 @@ async fn load_console(
   let notification_records : Array[@notifications.NotificationRecord] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/notifications/operator", token)),
   )
+  // This snapshot carries release and fulfillment authority. Loading failures
+  // must be visible and must never masquerade as an empty commerce queue.
+  let offline_snapshot : @offline.OfflineCommerceSnapshot = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
+    ),
+  )
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -978,6 +1029,33 @@ async fn load_console(
     enterprise_lease_requests,
     portal_node_id: "",
     qualified_services,
+    offline_commerce: {
+      ..@offline_commerce.default_state(locale, OperatorCommerce),
+      orders: offline_snapshot.orders,
+      artifacts: [
+        for value in offline_snapshot.artifacts => {
+          {
+            artifact_id: value.artifact_id,
+            order_id: value.order_id,
+            kind: value.kind,
+            revision: value.revision,
+            media_type: value.media_type,
+            byte_count: value.byte_count,
+            sha256: value.sha256,
+            scan_state: value.scan_state,
+            review_state: value.review_state,
+            submitted_by: value.submitted_by,
+            created_unix_ms: value.created_unix_ms,
+          }
+        }
+      ],
+      templates: offline_snapshot.templates,
+      selected_order_id: if offline_snapshot.orders.length() > 0 {
+        Some(offline_snapshot.orders[0].order_id)
+      } else {
+        None
+      },
+    },
     confirmation: None,
     error_message: None,
     success_message: None,
@@ -1044,6 +1122,14 @@ fn merge_loaded_console(
       current.quick_template
     },
     portal_node_id: current.portal_node_id,
+    offline_commerce: {
+      ..loaded.offline_commerce,
+      locale: current.locale,
+      operator_actor_ref: current.offline_commerce.operator_actor_ref,
+      quote_minor_units: current.offline_commerce.quote_minor_units,
+      terms_digest: current.offline_commerce.terms_digest,
+      entitlement_ref: current.offline_commerce.entitlement_ref,
+    },
     success_message: current.success_message,
   }
 }
@@ -1056,6 +1142,7 @@ fn switch_console_locale(
   {
     ..state,
     locale,
+    offline_commerce: { ..state.offline_commerce, locale, },
     // Notices are UI-owned, ephemeral copy. Clear them rather than retaining a
     // message rendered in the previous language; operational state is kept.
     error_message: None,
@@ -1081,6 +1168,80 @@ fn locale_fenced_notice(
   } else {
     console_copy(current, generic_english, generic_chinese)
   }
+}
+
+///|
+fn selected_offline_order(
+  state : @offline_commerce.OfflineCommerceState,
+  order_id : String,
+) -> @offline.CommercialOrder? {
+  for order in state.orders {
+    if order.order_id == order_id {
+      return Some(order)
+    }
+  }
+  None
+}
+
+///|
+fn selected_offline_artifact(
+  state : @offline_commerce.OfflineCommerceState,
+  artifact_id : String,
+) -> @offline_commerce.OfflineArtifactSummary? {
+  for artifact in state.artifacts {
+    if artifact.artifact_id == artifact_id {
+      return Some(artifact)
+    }
+  }
+  None
+}
+
+///|
+fn offline_action_command(
+  model : AppModel,
+  path : String,
+  body : String,
+  english_success : String,
+  chinese_success : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try request("POST", model.endpoint, path, model.credential, body~) catch {
+      error =>
+        ActionFailed(
+          model.console.locale,
+          console_copy(
+            model.console.locale,
+            "Offline commercial action failed: \{Repr(error)}",
+            "线下商务操作失败：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      _ =>
+        ActionComplete(
+          model.console.locale,
+          console_copy(model.console.locale, english_success, chinese_success),
+        )
+    }
+  })
+}
+
+///|
+fn generation_template(
+  state : @offline_commerce.OfflineCommerceState,
+  kind : @offline.DocumentArtifactKind,
+) -> @offline.DocumentTemplate? {
+  let wanted = match kind {
+    QuoteScheduleXlsx => @offline.DocumentTemplateKind::QuoteScheduleTemplate
+    EditableContractDocx | PrintReadyContractPdf => ContractTemplate
+    _ => return None
+  }
+  for template in state.templates {
+    if template.kind == wanted && template.superseded_unix_ms is None {
+      return Some(template)
+    }
+  }
+  None
 }
 
 ///|
@@ -2401,6 +2562,274 @@ fn update_live(
       })
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
+    Console(OfflineCommerce(Refresh)) => (model, load_command(model, emit))
+    Console(OfflineCommerce(RequestGeneration(order_id, kind))) => {
+      guard selected_offline_order(model.console.offline_commerce, order_id)
+        is Some(order) else {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "A current order, quote, and active matching template are required.",
+                  "必须存在当前订单、有效报价及匹配的启用模板。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      guard order.quote is Some(quote) else { return (model, @rabbita.none) }
+      guard generation_template(model.console.offline_commerce, kind)
+        is Some(template) else {
+        return (model, @rabbita.none)
+      }
+      let artifact_id = random_identifier("offline-artifact")
+      let action : @offline.ArtifactGenerationRequest = {
+        request_id: random_identifier("offline-generation"),
+        order_id,
+        organization_id: order.organization_id,
+        artifact_id,
+        kind,
+        template_id: template.template_id,
+        template_version: template.version,
+        locale: if model.console.locale.is_chinese() {
+          "zh-CN"
+        } else {
+          "en-US"
+        },
+        expected_object_ref: "object://offline-generated/\{order.organization_id}/\{order_id}/\{artifact_id}",
+        input_snapshot_sha256: quote.terms_digest,
+        requested_by: model.console.offline_commerce.operator_actor_ref,
+        requested_unix_ms: current_unix_ms(),
+      }
+      let cmd = offline_action_command(
+        model,
+        "/v1/offline-commerce/operator/generation-requests",
+        action.to_json().stringify(),
+        "Verified document generation was requested.",
+        "已请求生成并验证文档。",
+        emit,
+      )
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(OfflineCommerce(ConfirmAction(action))) => {
+      let now = current_unix_ms()
+      let actor = model.console.offline_commerce.operator_actor_ref
+        .trim()
+        .to_owned()
+      let request_spec : OfflineActionRequest = match action {
+        QuoteOrder(order_id, terms_digest, price_text, confirmed_actor) => {
+          guard selected_offline_order(model.console.offline_commerce, order_id)
+            is Some(order) else {
+            return (model, @rabbita.none)
+          }
+          let minor_units = try @string.parse_int64(price_text) catch {
+            _ =>
+              return (
+                {
+                  ..model,
+                  console: {
+                    ..model.console,
+                    error_message: Some(
+                      console_copy(
+                        model.console.locale,
+                        "Price must be a non-negative integer in minor units.",
+                        "价格必须是以最小货币单位表示的非负整数。",
+                      ),
+                    ),
+                  },
+                },
+                @rabbita.none,
+              )
+          } noraise {
+            value => value
+          }
+          if minor_units < 0L {
+            return (model, @rabbita.none)
+          }
+          let proposed = now + 604800000L
+          let valid_until = if proposed < order.expires_unix_ms {
+            proposed
+          } else {
+            order.expires_unix_ms
+          }
+          let money : @commercial.FixedMoney = {
+            minor_units,
+            currency: "CNY",
+            scale: 2,
+          }
+          let quote : @offline.ImmutableQuote = {
+            quote_id: random_identifier("offline-quote"),
+            version: "v1",
+            service_code: order.selected_service_code,
+            sla_code: order.selected_sla_code,
+            currency: "CNY",
+            lines: [
+              {
+                line_id: "service-capacity",
+                description: "Exclusive machine capacity",
+                quantity: 1L,
+                unit: "lease",
+                unit_price: money,
+                line_total: money,
+              },
+            ],
+            subtotal: money,
+            tax: { minor_units: 0L, currency: "CNY", scale: 2 },
+            total: money,
+            valid_until_unix_ms: valid_until,
+            terms_digest,
+            created_unix_ms: now,
+          }
+          let value : OfflineQuoteAction = {
+            order_id,
+            quote,
+            actor_ref: confirmed_actor,
+            now_unix_ms: now,
+          }
+          {
+            path: "/v1/offline-commerce/operator/quotes",
+            body: value.to_json().stringify(),
+            english_success: "The immutable quote was created.",
+            chinese_success: "不可变报价已创建。",
+          }
+        }
+        BeginOrder(order_id, generation) => {
+          let value : OfflineOrderAction = {
+            order_id,
+            expected_generation: generation,
+            now_unix_ms: now,
+          }
+          {
+            path: "/v1/offline-commerce/operator/begin",
+            body: value.to_json().stringify(),
+            english_success: "The offline workflow started.",
+            chinese_success: "线下办理流程已启动。",
+          }
+        }
+        ReleaseVerifiedPacket(order_id, generation) => {
+          let value : OfflineOrderAction = {
+            order_id,
+            expected_generation: generation,
+            now_unix_ms: now,
+          }
+          {
+            path: "/v1/offline-commerce/operator/release-packets",
+            body: value.to_json().stringify(),
+            english_success: "The verified print packet was released.",
+            chinese_success: "已发布验证通过的打印材料。",
+          }
+        }
+        AcceptEvidence(artifact_id, digest) => {
+          guard selected_offline_artifact(
+              model.console.offline_commerce,
+              artifact_id,
+            )
+            is Some(artifact) else {
+            return (model, @rabbita.none)
+          }
+          let review : @offline.EvidenceReview = {
+            review_id: random_identifier("offline-review"),
+            order_id: artifact.order_id,
+            artifact_id,
+            expected_artifact_sha256: digest,
+            reviewer_ref: actor,
+            accepted: true,
+            reason_code: "evidence-accepted",
+            audit_receipt: random_identifier("offline-review-receipt"),
+            reviewed_unix_ms: now,
+          }
+          {
+            path: "/v1/offline-commerce/operator/reviews",
+            body: review.to_json().stringify(),
+            english_success: "The exact evidence digest was accepted.",
+            chinese_success: "已接受该凭证的精确摘要。",
+          }
+        }
+        RejectEvidence(artifact_id, digest) => {
+          guard selected_offline_artifact(
+              model.console.offline_commerce,
+              artifact_id,
+            )
+            is Some(artifact) else {
+            return (model, @rabbita.none)
+          }
+          let review : @offline.EvidenceReview = {
+            review_id: random_identifier("offline-review"),
+            order_id: artifact.order_id,
+            artifact_id,
+            expected_artifact_sha256: digest,
+            reviewer_ref: actor,
+            accepted: false,
+            reason_code: "correction-required",
+            audit_receipt: random_identifier("offline-review-receipt"),
+            reviewed_unix_ms: now,
+          }
+          {
+            path: "/v1/offline-commerce/operator/reviews",
+            body: review.to_json().stringify(),
+            english_success: "A corrected evidence revision was requested.",
+            chinese_success: "已要求提交补正后的凭证版本。",
+          }
+        }
+        FulfillVerifiedOrder(order_id, generation) => {
+          let value : OfflineFulfillmentAction = {
+            order_id,
+            expected_generation: generation,
+            entitlement_ref: model.console.offline_commerce.entitlement_ref
+            .trim()
+            .to_owned(),
+            now_unix_ms: now,
+          }
+          {
+            path: "/v1/offline-commerce/operator/fulfillments",
+            body: value.to_json().stringify(),
+            english_success: "All policy evidence passed and the entitlement was created.",
+            chinese_success: "全部策略凭证已通过，权益已创建。",
+          }
+        }
+      }
+      let cmd = offline_action_command(
+        model,
+        request_spec.path,
+        request_spec.body,
+        request_spec.english_success,
+        request_spec.chinese_success,
+        emit,
+      )
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            offline_commerce: {
+              ..model.console.offline_commerce,
+              confirmation: None,
+              loading: true,
+            },
+          },
+        },
+        cmd,
+      )
+    }
+    Console(OfflineCommerce(offline_message)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            offline_commerce: model.console.offline_commerce.update(
+              offline_message,
+            ),
+          },
+        },
+        @rabbita.none,
+      )
   }
 }
 
@@ -2434,6 +2863,32 @@ fn update(
       | Console(BeginEndComputeLease(_))
       | Console(BeginTerminateExclusiveNodeLease(_, _))
       | Console(DismissConfirmation) => update_live(model, message, emit)
+      Console(OfflineCommerce(RequestGeneration(_, _)))
+      | Console(OfflineCommerce(ConfirmAction(_)))
+      | Console(OfflineCommerce(Refresh)) =>
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              offline_commerce: {
+                ..model.console.offline_commerce,
+                confirmation: None,
+                loading: false,
+                error_message: None,
+                success_message: Some(
+                  console_copy(
+                    model.console.locale,
+                    "Demo is read-only; the commercial action was previewed but not sent.",
+                    "演示为只读；已预览商务操作，但未发送请求。",
+                  ),
+                ),
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      Console(OfflineCommerce(_)) => update_live(model, message, emit)
       Console(ConfirmAction(_)) =>
         (
           {
@@ -2734,9 +3189,17 @@ fn main {
       commercial_organization: "",
       demo_mode: is_demo,
       console: if is_demo {
-        { ..@ui.demo_state(), locale, }
+        {
+          ..@ui.demo_state(),
+          locale,
+          offline_commerce: { ..@ui.demo_state().offline_commerce, locale, },
+        }
       } else {
-        { ..@ui.default_state(), locale, }
+        {
+          ..@ui.default_state(),
+          locale,
+          offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
+        }
       },
       next_directive_generation: 1L,
     },

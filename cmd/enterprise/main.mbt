@@ -9,6 +9,51 @@ priv struct AppModel {
 } derive(Eq)
 
 ///|
+priv struct OfflineOrderIntent {
+  order_id : String
+  idempotency_key : String
+  project_id : String
+  selected_service_code : String
+  selected_sla_code : String
+  expires_unix_ms : Int64
+} derive(ToJson)
+
+///|
+extend OfflineOrderIntent with ToJson::{to_json}
+
+///|
+priv struct SelfUploadIntent {
+  grant_id : String
+  idempotency_key : String
+  order_id : String
+  artifact_id : String
+  kind : @offline.DocumentArtifactKind
+  revision : Int
+  allowed_media_types : Array[String]
+  maximum_byte_count : Int64
+  expires_unix_ms : Int64
+} derive(ToJson)
+
+///|
+extend SelfUploadIntent with ToJson::{to_json}
+
+///|
+priv struct OfflineArtifactView {
+  artifact_id : String
+  order_id : String
+  kind : @offline.DocumentArtifactKind
+  revision : Int
+  locale : String
+  media_type : String
+  byte_count : Int64
+  sha256 : String
+  generation_state : @offline.ArtifactGenerationState
+  scan_state : @offline.ArtifactScanState
+  review_state : @offline.ArtifactReviewState
+  created_unix_ms : Int64
+} derive(FromJson)
+
+///|
 priv enum Outcome {
   Loaded(
     @portal.EnterpriseSelfView,
@@ -16,12 +61,16 @@ priv enum Outcome {
     String,
     Array[@portal.EnterpriseModelSummary],
     Array[@notifications.NotificationRecord],
-    Array[@nodelease.CustomerExclusiveMachineView]
+    Array[@nodelease.CustomerExclusiveMachineView],
+    Array[@offline.CommercialOrder],
+    Array[@offline_commerce.OfflineArtifactSummary]
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
   NotificationRead(@notifications.NotificationRecord)
   MachineTerminated(@nodelease.CustomerExclusiveMachineView)
+  OfflineOrderCreated(@offline.CommercialOrder)
+  UploadGrantCreated
   Failed(@i18n.Locale, String)
 }
 
@@ -165,6 +214,8 @@ async fn load_self(
   Array[@portal.EnterpriseModelSummary],
   Array[@notifications.NotificationRecord],
   Array[@nodelease.CustomerExclusiveMachineView],
+  Array[@offline.CommercialOrder],
+  Array[@offline_commerce.OfflineArtifactSummary],
 ) {
   let body = request(
     "GET",
@@ -238,6 +289,50 @@ async fn load_self(
       ),
     ),
   )
+  // Orders and referenced evidence are authority-bearing. A partial response
+  // must remain an error instead of looking like an empty commercial record.
+  let orders : Array[@offline.CommercialOrder] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/offline-commerce/self/orders",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  let artifacts : Array[@offline_commerce.OfflineArtifactSummary] = []
+  for order in orders {
+    for artifact_id in order.artifact_ids {
+      let value : OfflineArtifactView = @json.from_json(
+        @json.parse(
+          request(
+            "GET",
+            model.endpoint,
+            "/v1/offline-commerce/self/artifacts/\{artifact_id}",
+            model.token,
+            model.subject_ref,
+          ),
+        ),
+      )
+      ignore(value.locale)
+      ignore(value.generation_state)
+      artifacts.push({
+        artifact_id: value.artifact_id,
+        order_id: value.order_id,
+        kind: value.kind,
+        revision: value.revision,
+        media_type: value.media_type,
+        byte_count: value.byte_count,
+        sha256: value.sha256,
+        scan_state: value.scan_state,
+        review_state: value.review_state,
+        submitted_by: "customer-evidence",
+        created_unix_ms: value.created_unix_ms,
+      })
+    }
+  }
   let cost_centers : Array[@enterprise_ui.EnterpriseCostCenterRow] = match
     commercial {
     Some(snapshot) =>
@@ -283,7 +378,10 @@ async fn load_self(
     }
     _ => "—"
   }
-  (view, cost_centers, provisional_spend, models, notifications, machines)
+  (
+    view, cost_centers, provisional_spend, models, notifications, machines, orders,
+    artifacts,
+  )
 }
 
 ///|
@@ -400,6 +498,78 @@ async fn terminate_machine_access(
 }
 
 ///|
+async fn create_offline_order(model : AppModel) -> @offline.CommercialOrder {
+  let commerce = model.portal.offline_commerce
+  let intent : OfflineOrderIntent = {
+    order_id: random_identifier("offline-order"),
+    idempotency_key: random_identifier("offline-order-create"),
+    project_id: commerce.project_id.trim().to_owned(),
+    selected_service_code: commerce.service_code.trim().to_owned(),
+    selected_sla_code: commerce.sla_code.trim().to_owned(),
+    expires_unix_ms: current_unix_ms() + 2592000000L,
+  }
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/offline-commerce/self/orders",
+    model.token,
+    model.subject_ref,
+    body=intent.to_json().stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+fn next_artifact_revision(
+  state : @offline_commerce.OfflineCommerceState,
+  order_id : String,
+  kind : @offline.DocumentArtifactKind,
+) -> Int {
+  let mut revision = 1
+  for artifact in state.artifacts {
+    if artifact.order_id == order_id &&
+      artifact.kind == kind &&
+      artifact.revision >= revision {
+      revision = artifact.revision + 1
+    }
+  }
+  revision
+}
+
+///|
+async fn request_offline_upload_grant(
+  model : AppModel,
+  order_id : String,
+  kind : @offline.DocumentArtifactKind,
+) -> @offline.OfflineUploadGrantView {
+  let artifact_id = random_identifier("offline-artifact")
+  let intent : SelfUploadIntent = {
+    grant_id: random_identifier("offline-upload-grant"),
+    idempotency_key: random_identifier("offline-upload"),
+    order_id,
+    artifact_id,
+    kind,
+    revision: next_artifact_revision(
+      model.portal.offline_commerce,
+      order_id,
+      kind,
+    ),
+    allowed_media_types: @offline.expected_media_type(kind),
+    maximum_byte_count: 26214400L,
+    expires_unix_ms: current_unix_ms() + 3600000L,
+  }
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/offline-commerce/self/upload-grants",
+    model.token,
+    model.subject_ref,
+    body=intent.to_json().stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
 fn load_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
@@ -416,10 +586,66 @@ fn load_command(
           ),
         )
     } noraise {
-      (view, cost_centers, provisional_spend, models, notifications, machines) =>
+      (
+        view,
+        cost_centers,
+        provisional_spend,
+        models,
+        notifications,
+        machines,
+        orders,
+        artifacts,
+      ) =>
         Loaded(
           view, cost_centers, provisional_spend, models, notifications, machines,
+          orders, artifacts,
         )
+    }
+  })
+}
+
+///|
+fn offline_order_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try create_offline_order(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to create the offline order: \{Repr(error)}",
+            "无法创建线上线下协同订单：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => OfflineOrderCreated(value)
+    }
+  })
+}
+
+///|
+fn offline_upload_grant_command(
+  model : AppModel,
+  order_id : String,
+  kind : @offline.DocumentArtifactKind,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try request_offline_upload_grant(model, order_id, kind) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to create the evidence upload grant: \{Repr(error)}",
+            "无法创建凭证上传授权：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      _ => UploadGrantCreated
     }
   })
 }
@@ -722,6 +948,104 @@ fn update(
         )
       }
     }
+    Portal(OfflineCommerce(CreateOrder)) => {
+      let next = model.portal.update(OfflineCommerce(CreateOrder))
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              offline_commerce: {
+                ..next.offline_commerce,
+                loading: false,
+                success_message: Some(
+                  portal_copy(
+                    next.locale,
+                    "Draft order preview created. Connect to submit it.",
+                    "已创建订单草稿预览。连接控制平面后即可提交。",
+                  ),
+                ),
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        ({ ..model, portal: next }, offline_order_command(model, emit))
+      }
+    }
+    Portal(OfflineCommerce(RequestEvidenceUpload(order_id, kind))) => {
+      let next = model.portal.update(
+        OfflineCommerce(RequestEvidenceUpload(order_id, kind)),
+      )
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              offline_commerce: {
+                ..next.offline_commerce,
+                loading: false,
+                success_message: Some(
+                  portal_copy(
+                    next.locale,
+                    "Upload authorization preview created; no file was transferred.",
+                    "已创建上传授权预览；尚未传输任何文件。",
+                  ),
+                ),
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (
+          { ..model, portal: next },
+          offline_upload_grant_command(model, order_id, kind, emit),
+        )
+      }
+    }
+    Portal(OfflineCommerce(Refresh)) =>
+      if model.demo_mode {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              offline_commerce: {
+                ..model.portal.offline_commerce,
+                loading: true,
+              },
+            },
+          },
+          load_command(model, emit),
+        )
+      }
+    Portal(OfflineCommerce(ConfirmAction(_))) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              loading: false,
+              error_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Operator-only commercial action is unavailable in the customer portal.",
+                  "客户门户不可执行仅限运营人员的商务操作。",
+                ),
+              ),
+            },
+          },
+        },
+        @rabbita.none,
+      )
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
     Outcome(
@@ -731,7 +1055,9 @@ fn update(
         provisional_spend,
         models,
         notifications,
-        machines
+        machines,
+        orders,
+        artifacts
       )
     ) =>
       (
@@ -752,6 +1078,23 @@ fn update(
               machines,
               loading: false,
             },
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              orders,
+              artifacts,
+              selected_order_id: match
+                model.portal.offline_commerce.selected_order_id {
+                Some(value) => Some(value)
+                None =>
+                  if orders.length() > 0 {
+                    Some(orders[0].order_id)
+                  } else {
+                    None
+                  }
+              },
+              loading: false,
+              error_message: None,
+            },
             loading: false,
             success_message: Some(
               portal_copy(
@@ -761,6 +1104,52 @@ fn update(
               ),
             ),
             error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(OfflineOrderCreated(order)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              orders: [order, ..model.portal.offline_commerce.orders],
+              selected_order_id: Some(order.order_id),
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Draft order created. Pricing and offline controls remain pending.",
+                  "订单草稿已创建。报价及线下控制仍待办理。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(UploadGrantCreated) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Upload authorization created for one hour. Transfer the file through the configured uploader; this step did not upload a file.",
+                  "已创建一小时有效的上传授权。请通过已配置的上传器传输文件；本步骤尚未上传文件。",
+                ),
+              ),
+              error_message: None,
+            },
           },
         },
         @rabbita.none,
@@ -862,6 +1251,22 @@ fn update(
           connecting: false,
           portal: {
             ..model.portal,
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              loading: false,
+              success_message: None,
+              error_message: Some(
+                if dispatched_locale == model.portal.locale {
+                  message
+                } else {
+                  portal_copy(
+                    model.portal.locale,
+                    "The commercial operation failed. Retry after refreshing.",
+                    "商务操作失败。请刷新后重试。",
+                  )
+                },
+              ),
+            },
             loading: false,
             success_message: None,
             error_message: Some(
@@ -1001,11 +1406,30 @@ fn main {
       connecting: false,
       demo_mode: is_demo,
       portal: if is_demo {
-        { ..@enterprise_ui.demo_state(), locale: initial_locale }
+        {
+          ..@enterprise_ui.demo_state(),
+          locale: initial_locale,
+          machine_access: {
+            ..@enterprise_ui.demo_state().machine_access,
+            locale: initial_locale,
+          },
+          offline_commerce: {
+            ..@enterprise_ui.demo_state().offline_commerce,
+            locale: initial_locale,
+          },
+        }
       } else {
         {
           ..@enterprise_ui.default_state(current_unix_ms()),
           locale: initial_locale,
+          machine_access: {
+            ..@enterprise_ui.default_state(current_unix_ms()).machine_access,
+            locale: initial_locale,
+          },
+          offline_commerce: {
+            ..@enterprise_ui.default_state(current_unix_ms()).offline_commerce,
+            locale: initial_locale,
+          },
         }
       },
     },

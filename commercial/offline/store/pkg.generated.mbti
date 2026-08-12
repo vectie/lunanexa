@@ -1,0 +1,50 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/commercial/offline/store"
+
+import {
+  "moonbitlang/async",
+  "vectie/lunanexa/commercial/offline",
+  "vectie/lunanexa/database",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct OfflineCommerceStore {
+  persistence : OfflinePersistence
+  mut templates : Map[String, @offline.DocumentTemplate]
+  mut orders : Map[String, @offline.CommercialOrder]
+  mut order_keys : Map[String, String]
+  mut artifacts : Map[String, @offline.DocumentArtifact]
+  mut generation_requests : Map[String, @offline.ArtifactGenerationRequest]
+  mut upload_grants : Map[String, @offline.EvidenceUploadGrant]
+  mut upload_keys : Map[String, String]
+  mut upload_callbacks : Map[String, @offline.EvidenceUploadCallback]
+  mut reviews : Map[String, @offline.EvidenceReview]
+  mutex : @async.Mutex
+}
+pub async fn OfflineCommerceStore::artifact(Self, String, String) -> @offline.DocumentArtifact
+pub async fn OfflineCommerceStore::begin_offline_execution(Self, String, Int64, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::complete_generation(Self, @offline.ArtifactGenerationResult) -> @offline.DocumentArtifact
+pub async fn OfflineCommerceStore::complete_upload(Self, @offline.EvidenceUploadCallback) -> @offline.DocumentArtifact
+pub async fn OfflineCommerceStore::create_order(Self, @offline.CommercialOrder) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::fulfill(Self, String, Int64, String, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::grant_upload(Self, @offline.EvidenceUploadGrant) -> @offline.EvidenceUploadGrant
+pub async fn OfflineCommerceStore::open(String) -> Self
+pub async fn OfflineCommerceStore::open_postgres(@database.PostgresDatabase) -> Self
+pub async fn OfflineCommerceStore::order(Self, String, String) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::orders_for_organization(Self, String) -> Array[@offline.CommercialOrder]
+pub async fn OfflineCommerceStore::quote_order(Self, String, @offline.ImmutableQuote, String, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::register_template(Self, @offline.DocumentTemplate) -> @offline.DocumentTemplate
+pub async fn OfflineCommerceStore::release_offline_packet(Self, String, Int64, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::request_generation(Self, @offline.ArtifactGenerationRequest) -> @offline.ArtifactGenerationRequest
+pub async fn OfflineCommerceStore::review_evidence(Self, @offline.EvidenceReview) -> @offline.DocumentArtifact
+pub async fn OfflineCommerceStore::snapshot(Self) -> @offline.OfflineCommerceSnapshot
+
+type OfflinePersistence
+
+// Type aliases
+
+// Traits

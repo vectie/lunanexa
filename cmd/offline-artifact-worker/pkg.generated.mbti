@@ -1,0 +1,46 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/cmd/offline-artifact-worker"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/commercial/offline",
+  "vectie/lunanexa/commercial/offline/worker",
+}
+
+// Values
+pub fn ooxml_package_part_count(FixedArray[Byte]) -> Int raise
+
+// Errors
+
+// Types and methods
+pub(all) struct OfflineArtifactJob {
+  schema_version : Int
+  request : @offline.ArtifactGenerationRequest
+  template_filename : String
+  prepared_filename : String
+  output_filename : String
+  result_filename : String
+  render_manifest_filename : String
+  render_manifest_sha256 : String
+  docx_replacements : Array[@worker.TextReplacement]
+  xlsx_replacements : Array[@worker.CellReplacement]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RenderEvidenceManifest {
+  schema_version : Int
+  request_id : String
+  artifact_sha256 : String
+  kind : @offline.DocumentArtifactKind
+  page_or_sheet_count : Int
+  passed : Bool
+  renderer_receipt : String
+  rendered_unix_ms : Int64
+  visual_evidence_filename : String
+  visual_evidence_sha256 : String
+  signature : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

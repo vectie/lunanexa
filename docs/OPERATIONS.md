@@ -69,6 +69,20 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_EXCLUSIVE_LEASE_PATH` | Durable exclusive-node lease snapshot |
 | `LUNANEXA_PORTAL_PATH` | Durable enterprise memberships, agreement projections and lease requests |
 | `LUNANEXA_NOTIFICATION_PATH` | Durable notification, alert, delivery-outbox and preference snapshot |
+| `LUNANEXA_ENABLE_GUIDE_MONITOR` | Exact `1` enables the in-process coursebook probe; absent, empty, or `0` disables it; any other value fails startup |
+| `LUNANEXA_GUIDE_ORIGIN` | Origin only, with no path/query/credentials: exact loopback HTTP for local simulation or HTTPS when explicitly enabled |
+| `LUNANEXA_GUIDE_ALLOW_HTTPS` | Exact `1` permits an HTTPS guide origin; plain non-loopback HTTP is always rejected |
+| `LUNANEXA_GUIDE_ACTOR_REF` | Signed service identity sent to the administrator diagnostics route; defaults to `service:guide-monitor` |
+| `LUNANEXA_GUIDE_TARGET_REF` | Stable monitor target identifier; defaults to `coursebook-primary` |
+| `LUNANEXA_GUIDE_SCHEDULER_PATH` | Durable mode-`0600` probe sequence/time state; production example `/var/lib/lunanexa/guide-probe.json` |
+| `LUNANEXA_GUIDE_PROBE_INTERVAL_MS` | Probe cadence; bounded from 10 seconds to 24 hours; defaults to 60 seconds |
+| `LUNANEXA_GUIDE_OBSERVATION_MAX_AGE_MS` | Maximum accepted signed observation age; defaults to 120 seconds |
+| `LUNANEXA_GUIDE_FUTURE_SKEW_MS` | Maximum accepted clock lead; defaults to 5 seconds |
+| `LUNANEXA_GUIDE_KNOWLEDGE_MAX_AGE_MS` | Maximum accepted knowledge-index age; defaults to 7 days |
+| `LUNANEXA_GUIDE_MAX_RESPONSE_BYTES` | Per-response streaming limit, 1 KiB through 256 KiB; defaults to 64 KiB |
+| `LUNANEXA_GUIDE_REQUEST_TIMEOUT_MS` | Per-request deadline, 250 ms through 10 seconds; defaults to 2.5 seconds |
+| `LUNANEXA_GUIDE_IDENTITY_SECRET` | Secret-provided HMAC key matching the coursebook `COURSEBOOK_ADMIN_AUTH_KEY`; required only when the monitor is enabled |
+| `LUNANEXA_GUIDE_OBSERVATION_SECRET` | Separate secret-provided key for plan-bound in-process observations; required only when the monitor is enabled |
 | `LUNANEXA_OBSERVABILITY_PATH` | Bounded structured operational event history and aggregate counters |
 | `LUNANEXA_PERSISTENCE_BACKEND` | `postgres` in production; `file` is an explicit development fallback |
 | `LUNANEXA_DATABASE_URL` | Secret-provided PostgreSQL URL; required when the backend is `postgres` |
@@ -94,6 +108,18 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET` | Independent controller HMAC authority for exclusive-node lease generations |
 | `LUNANEXA_COSIGN_BINARY` | Allowlisted absolute Cosign binary path |
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only mounted public trust key |
+
+`COURSEBOOK_MONITOR_ORIGIN` in the controller manifest must resolve to the
+internal HTTPS coursebook diagnostics gateway, not the public coursebook
+ingress. The public ingress requires an interactive/client-certificate identity
+flow and is not a service-to-service monitor endpoint. The internal gateway must
+forward only `/health` and
+`/api/coursebook/admin/diagnostics?category=overview`, preserve the signed
+`X-LunaNexa-*` headers, and use the same administrator HMAC key configured as
+`COURSEBOOK_ADMIN_AUTH_KEY`. Its namespace carries
+`lunanexa.io/service: coursebook` so the controller egress policy permits only
+TCP 443. Do not point the monitor at the deployment's plain HTTP ClusterIP;
+non-loopback HTTP is rejected by design.
 
 PostgreSQL stores enterprise registrations, portal agreements and lease
 requests, workspace users, grants, leases, admission snapshots and the durable

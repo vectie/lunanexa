@@ -1,0 +1,15 @@
+import {
+  "vectie/moonleaf",
+  "vectie/moonleaf/opc",
+  "vectie/moonleaf/xml",
+  "vectie/moonleaf/xlsx",
+  "vectie/lunanexa/commercial/offline",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/core/encoding/utf8",
+  "vectie/moonleaf/opc",
+} for "test"

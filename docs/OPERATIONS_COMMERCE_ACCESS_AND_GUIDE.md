@@ -1,6 +1,6 @@
 # Operations, offline commerce, machine access and guide diagnostics
 
-Status: implementation contract; notification and observability phases implemented
+Status: repository implementation complete; production adapters and physical acceptance gated
 Last reviewed: 2026-08-12
 
 This document closes the five product gaps found during the pre-deployment
@@ -238,6 +238,39 @@ Acceptance requires role denial, public/admin response separation, prompt
 injection and secret-exfiltration attacks, stale-index warning, adapter outage,
 bounded output, audit/metric evidence, and verified links from every diagnostic
 code to a bilingual runbook.
+
+Implemented in the separate coursebook service: a server-only versioned skill
+manifest, signed operator identity verification with replay bounds, a fixed
+read-only controller adapter, aggregate component/alert/node/lease/recovery
+projection, stale-index and missing-evidence states, bounded JSON audit events,
+guide outcome counters, and a bilingual `admin.html` troubleshooting surface.
+The public pet remains on its existing coursebook-only route and cannot reach
+the live adapter. Production activation remains gated on the approved identity
+proxy, shared HMAC secret, internal HTTPS diagnostics gateway and secret-backed
+controller authority described in `docs-site/README.md` and
+`deploy/docs-site.yaml`.
+
+The management-side monitor contract lives in `guide_monitor/`. Its native
+`guide_monitor/probe` worker creates a bounded periodic plan containing only
+`/health` and the fixed administrator diagnostics route, verifies a plan-bound
+HMAC-SHA-256 observation with freshness and target checks, and reconciles two
+durable `PlatformOperators` alerts:
+`GuideAdapterUnavailable` links to `debug-controller`, while
+`KnowledgeRevisionStale` links to `source-ledger`. A later healthy signed
+observation resolves the same deduplicated records. The native worker persists
+the last issued sequence/time atomically at mode `0600`, constructs a plan only
+when `probe_due` returns true, sends signed administrator identity headers,
+streams both fixed responses through a byte bound, decodes only the allowlisted
+health/knowledge projection, and passes the exact plan plus signed observation
+to `reconcile_planned_observation`. HTTP is accepted only for exact loopback
+origins; production origins require explicit HTTPS enablement. Redirects,
+oversize or malformed JSON, stale timestamps, and wrong correlation receipts
+fail closed without preserving response bodies. Transport failure proves guide
+availability is unknown and therefore raises only `GuideAdapterUnavailable`;
+`KnowledgeRevisionStale` is raised only from authenticated fresh diagnostics
+that explicitly report stale or over-age knowledge. The worker never puts
+response bodies, questions, credentials, node identities or raw logs in an
+observation or notification.
 
 ## Delivery phases
 

@@ -66,10 +66,13 @@ test "enterprise machine route shows safe live access without topology" {
     ..state,
     route: MachineAccess,
     locale: ChineseSimplified,
-    machine_access: { ..state.machine_access, locale: ChineseSimplified },
   })
+  assert_eq(state.machine_access.locale, English)
   assert_true(chinese.contains("我的机器访问"))
+  assert_true(chinese.contains("已就绪"))
   assert_true(chinese.contains("提前结束访问"))
+  assert_false(chinese.contains("My machine access"))
+  assert_false(chinese.contains(">Ready<"))
 }
 
 ///|
@@ -79,6 +82,22 @@ test "lease form requires every bounded field" {
   assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "" }))
   assert_false(@enterprise.lease_form_valid({ ..state, model_ids: "" }))
   assert_false(@enterprise.lease_form_valid({ ..state, loading: true }))
+}
+
+///|
+test "customer offline order route explains evidence upload in both languages" {
+  let state = @enterprise.demo_state()
+  let english = @enterprise.render({ ..state, route: OfflineCommerce })
+  assert_true(english.contains("Orders and offline documents"))
+  assert_true(english.contains("Upload Executed contract scan"))
+  let chinese = @enterprise.render({
+    ..state,
+    route: OfflineCommerce,
+    locale: ChineseSimplified,
+  })
+  assert_eq(state.offline_commerce.locale, English)
+  assert_true(chinese.contains("订单与线下材料"))
+  assert_true(chinese.contains("上传已盖章合同扫描件"))
 }
 
 ///|

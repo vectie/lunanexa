@@ -13,6 +13,15 @@ generation process appear only after the reader explicitly selects **Show
 technical notes** or follows a direct advanced-page link. This is progressive
 disclosure, not a security boundary.
 
+The normal **Operations** navigation begins with one bilingual daily runbook
+for both sides of the platform. It explains durable operator alerts and tenant
+notifications, the event/metric/typed-trigger model, hybrid offline commercial
+reconciliation, exclusive-machine access through termination and sanitization,
+and the role-safe public/admin guide boundary. Its copyable recipes are
+read-only by default, and its prerequisite table keeps external identity,
+delivery, observability, document, finance, SSH, and diagnostics dependencies
+explicit without exposing implementation process or release judgment.
+
 English is the canonical content in `coursebook.json`; the complete Simplified
 Chinese overlay lives in `coursebook.zh-CN.json`. The native language selector
 uses the same `lunanexa.locale` browser preference as the console and
@@ -78,6 +87,65 @@ then asks the existing read-only Cowork agent for one typed answer, validates
 citations against that selected public context, and removes internal metadata.
 It cannot mutate LunaNexa or run an operator command.
 
+## Administrator guide diagnostics
+
+`admin.html` is a separate, role-protected troubleshooting surface. It is not
+an expanded pet prompt and it does not give MoonClaw live-cluster access. The
+same-origin server makes five fixed `GET` requests through an approved internal
+HTTPS controller route: health, operator alerts, node summaries, exclusive
+lease summaries, and the recovery plan. It then discards the upstream payloads
+and returns only allowlisted aggregate state counts, active alert codes,
+reconciliation count, component health, coursebook knowledge revision, index
+age, and the enabled guide skill names and versions.
+
+The skill inventory is versioned in the server-only `guide-skills.json`. Every
+entry declares audience, required evidence, allowed tools, allowed data, and a
+published bilingual runbook page. A missing dependency is shown as missing or
+degraded; it is never reconstructed from stale coursebook text. Node IDs,
+subjects, lease IDs, credentials, alert parameters, raw logs, prompts, model
+answers, source paths, and chain-of-thought are not fields in the administrator
+response contract.
+
+The endpoint is `GET /api/coursebook/admin/diagnostics?category=overview` and
+is disabled unless all of these are configured:
+
+| Variable | Purpose |
+| --- | --- |
+| `COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS=1` | Explicitly enables the read-only adapter |
+| `LUNANEXA_CONTROLLER_URL` | Exact internal HTTPS origin; paths and queries are rejected |
+| `COURSEBOOK_ALLOW_HTTPS_CONTROLLER=1` | Explicit production HTTPS opt-in |
+| `LUNANEXA_CONTROLLER_OPERATOR_TOKEN` | Server-side controller credential from the secret provider |
+| `COURSEBOOK_ADMIN_AUTH_KEY` | At least 32-byte HMAC key shared only with the trusted identity proxy |
+| `COURSEBOOK_ADMIN_AUTH_MAX_SKEW_MS` | Optional signed-header replay window; default 60 seconds |
+| `COURSEBOOK_KNOWLEDGE_MAX_AGE_MS` | Optional stale-index threshold; default seven days |
+
+The trusted identity proxy removes caller-supplied identity headers and signs
+`METHOD + "\\n" + PATH + "\\n" + ACTOR + "\\n" + ROLE + "\\n" + TIMESTAMP`
+with HMAC-SHA-256. It forwards `X-LunaNexa-Actor`, `X-LunaNexa-Role`,
+`X-LunaNexa-Auth-Timestamp`, `X-LunaNexa-Auth-Signature`, and an optional
+bounded correlation receipt. Only `operator` and `administrator` roles pass.
+The browser never receives either HMAC key or controller token.
+
+Every allowed, denied, or failed administrator request writes one bounded JSON
+audit event to stdout. It contains a hashed actor reference, role, typed query
+category, knowledge revision when available, outcome, latency and correlation
+receipt. It never logs the user's question because the diagnostics endpoint
+does not accept one. In-memory outcome counters are returned only inside the
+authenticated aggregate projection; deployment log/metric collectors remain
+the durable evidence destination.
+
+The public `/health` contract exposes only the optional category-level boolean
+`dependencies.admin_diagnostics`. It becomes unhealthy when the signed adapter
+is misconfigured, its skill manifest is invalid, the knowledge index is stale,
+or the fixed controller health route is unavailable. It never exposes the
+controller origin, failure body, skill details, alert data, or credentials.
+
+For local contract testing, keep the controller on loopback. A real deployment
+requires the identity proxy, internal HTTPS diagnostics route, secret
+references, and network policy shown in `deploy/docs-site.yaml`. If any of
+those prerequisites is absent, keep administrator diagnostics disabled; the
+public coursebook and bounded public pet continue to work.
+
 ## Production shape
 
 For a separate production docs origin:
@@ -135,6 +203,11 @@ values are:
 | `MOONCLAW_GATEWAY_URL` | Internal HTTPS gateway origin with no path or query |
 | `MOONCLAW_MODEL` | Approved bounded documentation model route |
 | `MOONCLAW_GATEWAY_SECRET` | Optional secret containing key `token` |
+| `COURSEBOOK_IDENTITY_AUTH_URL` | Trusted ingress auth endpoint that returns freshly signed operator headers |
+| `COURSEBOOK_ADMIN_AUTH_SECRET` | Docs-namespace secret containing key `hmac-key`, shared with the identity proxy |
+| `COURSEBOOK_CONTROLLER_AUTH_SECRET` | Docs-namespace secret containing only the controller `operator-token` key |
+| `LUNANEXA_DIAGNOSTICS_NAMESPACE` | Namespace of the approved HTTPS diagnostics gateway |
+| `LUNANEXA_DIAGNOSTICS_URL` | Exact internal HTTPS origin for that gateway, with no path or query |
 
 The manifest pins the pod to a management-labelled node, runs non-root with a
 read-only filesystem, denies privilege escalation, uses default-deny networking,
@@ -142,6 +215,12 @@ accepts traffic only from the ingress namespace, and allows egress only to DNS
 and the HTTPS MoonClaw Gateway. Ingress requires TLS plus a verified client
 certificate. If MoonClaw is unavailable, `/health` remains ready as long as the
 coursebook itself is valid; the page shows the guide as offline.
+
+The identity auth service must remove browser-supplied `X-LunaNexa-*` headers
+before returning its signed values. The HMAC secret at that service must match
+the docs-namespace `COURSEBOOK_ADMIN_AUTH_SECRET`. The diagnostics gateway may
+expose only the five fixed read endpoints used by this adapter; it must reject
+redirects, mutations, arbitrary paths and caller-supplied controller headers.
 
 After rendering, this must print nothing:
 

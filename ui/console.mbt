@@ -236,6 +236,7 @@ pub(all) struct ConsoleState {
   enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
   portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
+  offline_commerce : @offline_commerce.OfflineCommerceState
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
@@ -279,6 +280,7 @@ pub(all) enum ConsoleMessage {
   AcknowledgeAlert(String, Int64)
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
+  OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
 } derive(Eq)
 
 ///|
@@ -333,6 +335,10 @@ pub fn default_state() -> ConsoleState {
     enterprise_lease_requests: [],
     portal_node_id: "",
     qualified_services: [],
+    offline_commerce: @offline_commerce.default_state(
+      @i18n.default_locale(),
+      OperatorCommerce,
+    ),
     confirmation: None,
     error_message: None,
     success_message: None,
@@ -798,6 +804,10 @@ pub fn demo_state() -> ConsoleState {
         production_ready: false,
       },
     ],
+    offline_commerce: @offline_commerce.demo_state(
+      @i18n.default_locale(),
+      OperatorCommerce,
+    ),
     quick_template: "text-small@v1",
   }
 }
@@ -968,6 +978,7 @@ fn route_label(locale : @i18n.Locale, route : OperatorRoute) -> String {
     Leases => localized(locale, "Leases", "租约")
     CostCenters => localized(locale, "Cost centers", "成本中心")
     Agreements => localized(locale, "Agreements", "数字协议")
+    OfflineCommerce => localized(locale, "Offline commerce", "线下商务")
     QualifiedServices => localized(locale, "Qualified services", "资质服务")
     Nodes => localized(locale, "Nodes", "节点")
     Models => localized(locale, "Models", "模型")
@@ -1011,6 +1022,11 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
       localized(
         locale, "Versioned clickwrap and e-signature lifecycles with immutable evidence receipts.",
         "管理带不可变证据回执的版本化点击接受与电子签名生命周期。",
+      )
+    OfflineCommerce =>
+      localized(
+        locale, "Quote, generate, release, review, and fulfill hybrid offline orders with auditable evidence.",
+        "通过可审计凭证完成线上线下协同订单的报价、生成、发布、审核与履约。",
       )
     QualifiedServices =>
       localized(
@@ -1105,6 +1121,7 @@ fn navigation(
       nav_link(locale, Leases, current, emit),
       nav_link(locale, CostCenters, current, emit),
       nav_link(locale, Agreements, current, emit),
+      nav_link(locale, OfflineCommerce, current, emit),
       nav_link(locale, Policies, current, emit),
       @html.p(class="nav-group-label", localized(locale, "Evidence", "证据")),
       nav_link(locale, QualifiedServices, current, emit),
@@ -3231,6 +3248,14 @@ fn alert_code_label(locale : @i18n.Locale, code : String) -> String {
       localized(locale, "Node heartbeat is stale", "节点心跳已超时")
     "DeliveryAttemptLimit" =>
       localized(locale, "Notification delivery failed", "通知投递失败")
+    "GuideAdapterUnavailable" =>
+      localized(
+        locale, "Guide diagnostics are unavailable", "指南诊断不可用",
+      )
+    "KnowledgeRevisionStale" =>
+      localized(
+        locale, "Guide knowledge is stale", "指南知识版本已过期",
+      )
     _ => code
   }
 }
@@ -5089,6 +5114,17 @@ fn console_view(
     Leases => leases_view(state, emit)
     CostCenters => cost_centers_view(state)
     Agreements => agreements_view(state, emit)
+    OfflineCommerce => {
+      let commerce = { ..state.offline_commerce, locale: state.locale }
+      match emit {
+        Some(send) =>
+          @offline_commerce.interactive_view(
+            commerce,
+            send.map(message => OfflineCommerce(message)),
+          )
+        None => @offline_commerce.view(commerce)
+      }
+    }
     QualifiedServices => qualified_services_view(state)
     Nodes => nodes_view(state, emit)
     Models => models_view(state, emit)

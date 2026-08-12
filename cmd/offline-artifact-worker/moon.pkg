@@ -1,0 +1,15 @@
+import {
+  "vectie/lunanexa/commercial/offline",
+  "vectie/lunanexa/commercial/offline/worker",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x/crypto",
+  "vectie/moonleaf/opc",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")

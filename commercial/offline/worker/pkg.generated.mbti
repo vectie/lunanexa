@@ -1,0 +1,54 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/commercial/offline/worker"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/commercial/offline",
+}
+
+// Values
+pub fn customize_docx_template(FixedArray[Byte], Array[TextReplacement]) -> CustomizedOoxml raise WorkerVerificationError
+
+pub fn customize_xlsx_template(FixedArray[Byte], Array[CellReplacement]) -> CustomizedOoxml raise WorkerVerificationError
+
+pub fn verify_ooxml(String, @offline.DocumentArtifactKind, FixedArray[Byte]) -> OoxmlVerification raise WorkerVerificationError
+
+// Errors
+pub(all) suberror WorkerVerificationError {
+  InvalidInput(String)
+  UnsupportedKind(@offline.DocumentArtifactKind)
+  MoonLeafRejected(String)
+  FormulaErrors(Int)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct CellReplacement {
+  sheet_name : String
+  row : Int
+  column : Int
+  value : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct CustomizedOoxml {
+  bytes : FixedArray[Byte]
+  replacement_count : Int
+  verification : OoxmlVerification
+} derive(Eq, @debug.Debug)
+
+pub(all) struct OoxmlVerification {
+  moonleaf_verified : Bool
+  diagnostic_codes : Array[String]
+  formula_error_count : Int
+  active_content_detected : Bool
+  reopened_byte_count : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TextReplacement {
+  placeholder : String
+  value : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

@@ -1,0 +1,41 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/machine_access"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "vectie/lunanexa/nodelease",
+  "vectie/lunanexa/ui/i18n",
+}
+
+// Values
+pub fn default_state(@i18n.Locale) -> MachineAccessState
+
+pub fn interactive_view(MachineAccessState, @cmd.Emit[MachineAccessMessage]) -> @html.Html
+
+pub fn render(MachineAccessState) -> String
+
+pub fn view(MachineAccessState) -> @html.Html
+
+// Errors
+
+// Types and methods
+pub(all) enum MachineAccessMessage {
+  BeginTermination(String)
+  ConfirmationChanged(String)
+  CancelTermination
+  ConfirmTermination(String, Int64, String)
+} derive(Eq)
+
+pub(all) struct MachineAccessState {
+  locale : @i18n.Locale
+  machines : Array[@nodelease.CustomerExclusiveMachineView]
+  confirmation_lease_ref : String?
+  confirmation_text : String
+  loading : Bool
+} derive(Eq)
+pub fn MachineAccessState::update(Self, MachineAccessMessage) -> Self
+
+// Type aliases
+
+// Traits

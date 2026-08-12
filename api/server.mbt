@@ -29,6 +29,7 @@ pub struct ApiService {
   technical_store : @technical_store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @commercial_integrations.IntegrationStore
+  offline_commerce_store : @offline_store.OfflineCommerceStore?
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   portal_store : @portal_store.FilePortalStore?
@@ -52,6 +53,8 @@ pub struct ApiService {
   artifact_root : String?
   exclusive_lease_unit_price : @commercial.FixedMoney
   provider_callback_secrets : Map[String, String]
+  artifact_worker_callback_token : String?
+  artifact_scanner_callback_token : String?
   node_token : String
   version : String
   active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
@@ -79,6 +82,7 @@ pub fn ApiService::new(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
@@ -102,6 +106,8 @@ pub fn ApiService::new(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    artifact_worker_callback_token: None,
+    artifact_scanner_callback_token: None,
     node_token,
     version,
     active: Map([]),
@@ -131,6 +137,7 @@ pub fn ApiService::with_registry(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
@@ -154,6 +161,8 @@ pub fn ApiService::with_registry(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    artifact_worker_callback_token: None,
+    artifact_scanner_callback_token: None,
     node_token,
     version,
     active: Map([]),
@@ -184,6 +193,7 @@ pub fn ApiService::with_services(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
@@ -207,6 +217,8 @@ pub fn ApiService::with_services(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    artifact_worker_callback_token: None,
+    artifact_scanner_callback_token: None,
     node_token,
     version,
     active: Map([]),
@@ -239,6 +251,7 @@ pub fn ApiService::with_control_plane(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
     portal_store: None,
@@ -262,6 +275,8 @@ pub fn ApiService::with_control_plane(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    artifact_worker_callback_token: None,
+    artifact_scanner_callback_token: None,
     node_token,
     version,
     active: Map([]),
@@ -309,6 +324,41 @@ pub fn ApiService::with_commercial_persistence(
     commercial_store,
     commercial_integrations,
     management_database: Some(management_database),
+  }
+}
+
+///|
+/// Enables the durable hybrid digital-to-offline order and evidence authority.
+pub fn ApiService::with_offline_commerce_store(
+  self : ApiService,
+  offline_commerce_store : @offline_store.OfflineCommerceStore,
+) -> ApiService {
+  { ..self, offline_commerce_store: Some(offline_commerce_store) }
+}
+
+///|
+/// Installs distinct machine identities for artifact-worker completion and
+/// object-store/scanner callbacks. Human operator and customer tokens are never
+/// accepted on those callback routes.
+pub fn ApiService::with_offline_artifact_callback_tokens(
+  self : ApiService,
+  artifact_worker_callback_token : String,
+  artifact_scanner_callback_token : String,
+) -> ApiService {
+  if artifact_worker_callback_token.length() < 32 ||
+    artifact_scanner_callback_token.length() < 32 ||
+    artifact_worker_callback_token == artifact_scanner_callback_token ||
+    artifact_worker_callback_token == self.operator_token ||
+    artifact_worker_callback_token == self.inference_token ||
+    artifact_scanner_callback_token == self.operator_token ||
+    artifact_scanner_callback_token == self.inference_token {
+    self
+  } else {
+    {
+      ..self,
+      artifact_worker_callback_token: Some(artifact_worker_callback_token),
+      artifact_scanner_callback_token: Some(artifact_scanner_callback_token),
+    }
   }
 }
 
@@ -2018,6 +2068,11 @@ async fn ApiService::dispatch_with_transport(
   if exclusive_lease_management_path(path) {
     return self.handle_exclusive_lease_management(verb, path, headers, body)
   }
+  if offline_commerce_path(path) {
+    return self.handle_offline_commerce(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   if commercial_management_path(path) {
     return self.handle_commercial_management(verb, path, headers, body)
   }
@@ -3524,6 +3579,8 @@ fn operational_target_type(path : String) -> String {
     "enterprise_portal"
   } else if path.has_prefix("/v1/exclusive-node-leases") {
     "exclusive_lease"
+  } else if path.has_prefix("/v1/offline-commerce") {
+    "commercial"
   } else if path.has_prefix("/v1/commercial") {
     "commercial"
   } else if path.has_prefix("/v1/workspace") {

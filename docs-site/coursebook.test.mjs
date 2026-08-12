@@ -15,6 +15,7 @@ import {
   validatePetAnswer,
   validSessionId,
 } from "./server.mjs";
+import { signAdminIdentity } from "./guide-diagnostics.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const siteRoot = resolve(root, "docs-site");
@@ -28,12 +29,12 @@ const allowedBlocks = new Set([
   "flow", "cards", "troubleshooting", "checkpoint", "image",
 ]);
 
-function invokeWithoutListener(server, { method = "GET", url = "/", host = "127.0.0.1:4390", body = "" } = {}) {
+function invokeWithoutListener(server, { method = "GET", url = "/", host = "127.0.0.1:4390", body = "", headers: requestHeaders = {} } = {}) {
   return new Promise((resolveResponse, reject) => {
     const request = Readable.from(body ? [Buffer.from(body)] : []);
     request.method = method;
     request.url = url;
-    request.headers = { host };
+    request.headers = { host, ...requestHeaders };
     let status = 200;
     let headers = {};
     const response = {
@@ -70,6 +71,29 @@ test("coursebook has a complete unique navigation graph", () => {
     assert.ok(["implemented", "documented", "planned", "simulated", "unknown"].includes(page.status));
     for (const block of page.blocks) assert.ok(allowedBlocks.has(block.kind), `${page.id}: unsupported ${block.kind}`);
   }
+});
+
+test("newcomer operations runbook connects both roles without exposing internals", () => {
+  const page = pageById.get("daily-operations");
+  assert.ok(page);
+  assert.equal(page.group_id, "operations");
+  assert.equal(book.navigation.find((group) => group.id === "operations")?.page_ids[0], page.id);
+  const published = JSON.stringify(page);
+  for (const route of [
+    "/v1/notifications/operator",
+    "/v1/notifications/self",
+    "/v1/observability/events",
+    "/v1/offline-commerce/self/orders",
+    "/v1/offline-commerce/operator/snapshot",
+    "/v1/machine-access/self",
+    "/admin.html",
+  ]) assert.match(published, new RegExp(route.replaceAll("/", "\\/")), route);
+  for (const prerequisite of [
+    "mail", "Prometheus", "object storage", "malware", "SSH CA", "identity proxy",
+  ]) assert.match(published, new RegExp(prerequisite, "i"), prerequisite);
+  assert.doesNotMatch(published, /commercial\/offline|guide_monitor|api\/server|source judgment|chain-of-thought/i);
+  assert.doesNotMatch(published, /X-LunaNexa-Subject/);
+  assert.match(JSON.stringify(zhBook.pages[page.id]), /告警|线下|独占机器|指南诊断/u);
 });
 
 test("Simplified Chinese localization covers every page without rewriting code", () => {
@@ -124,7 +148,7 @@ test("published source digests match the inspected repository bytes", async () =
 });
 
 test("public assets contain no unresolved template or secret material", async () => {
-  const files = ["index.html", "styles.css", "app.js", "server.mjs", "coursebook.json", "coursebook.zh-CN.json", "coursebook-evidence.json"];
+  const files = ["index.html", "styles.css", "app.js", "server.mjs", "guide-diagnostics.mjs", "guide-skills.json", "admin.html", "admin.js", "admin.css", "coursebook.json", "coursebook.zh-CN.json", "coursebook-evidence.json"];
   const combined = (await Promise.all(files.map((file) => readFile(resolve(siteRoot, file), "utf8")))).join("\n");
   assert.doesNotMatch(combined, /\$\{[A-Z0-9_]+\}/);
   assert.doesNotMatch(combined, /-----BEGIN [A-Z ]+PRIVATE KEY-----/);
@@ -151,6 +175,85 @@ test("pet gateway, session, refusal, and citation boundaries fail closed", () =>
     next_step: "Read the architecture page.",
   }, { pageById });
   assert.deepEqual(result.citations, [{ page_id: "architecture", section_id: "management-components" }]);
+});
+
+test("administrator diagnostics deny public callers and return only bounded aggregates to a signed operator", async () => {
+  const previous = {
+    enabled: process.env.COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS,
+    controller: process.env.LUNANEXA_CONTROLLER_URL,
+    https: process.env.COURSEBOOK_ALLOW_HTTPS_CONTROLLER,
+    auth: process.env.COURSEBOOK_ADMIN_AUTH_KEY,
+    token: process.env.LUNANEXA_CONTROLLER_OPERATOR_TOKEN,
+  };
+  const originalFetch = globalThis.fetch;
+  const originalWrite = process.stdout.write;
+  const auditLines = [];
+  const key = "coursebook-admin-test-key-longer-than-32-bytes";
+  try {
+    process.env.COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS = "1";
+    process.env.LUNANEXA_CONTROLLER_URL = "http://127.0.0.1:18443";
+    process.env.COURSEBOOK_ADMIN_AUTH_KEY = key;
+    process.env.LUNANEXA_CONTROLLER_OPERATOR_TOKEN = "controller-operator-test-value";
+    delete process.env.COURSEBOOK_ALLOW_HTTPS_CONTROLLER;
+    globalThis.fetch = async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      const values = {
+        "/health": { status: "ok", internal_path: "/private/controller" },
+        "/v1/notifications/operator": [{ lifecycle: "Unread", event: { code: "NodeUnreachable", severity: "Critical", parameters: { node_ref: "node-private-a" } } }],
+        "/v1/nodes": [{ node_id: "node-private-a", state: "Active", signature: "private-signature" }],
+        "/v1/exclusive-node-leases": [{ state: "Expiring", intent: { subject_ref: "private-subject", access_credential_ref: "private-credential" } }],
+        "/v1/recovery/plan": { actions: [{ StartMissing: "private-assignment" }] },
+      };
+      assert.equal(options.method, "GET");
+      if (path !== "/health") assert.equal(options.headers.Authorization, "Bearer controller-operator-test-value");
+      return { ok: true, status: 200, text: async () => JSON.stringify(values[path]) };
+    };
+    process.stdout.write = ((value, ...rest) => { auditLines.push(String(value)); return true; });
+    const server = createCoursebookServer(4390);
+    const publicReply = await invokeWithoutListener(server, { url: "/api/coursebook/admin/diagnostics?category=overview" });
+    assert.equal(publicReply.status, 403);
+    const timestamp = Date.now();
+    const identity = { method: "GET", pathname: "/api/coursebook/admin/diagnostics", actor: "oidc:operator-7", role: "operator", timestamp };
+    const response = await invokeWithoutListener(server, {
+      url: "/api/coursebook/admin/diagnostics?category=overview",
+      headers: {
+        "x-lunanexa-actor": identity.actor,
+        "x-lunanexa-role": identity.role,
+        "x-lunanexa-auth-timestamp": String(timestamp),
+        "x-lunanexa-auth-signature": signAdminIdentity(identity, key),
+        "x-lunanexa-correlation-id": "support-receipt-7",
+      },
+    });
+    assert.equal(response.status, 200);
+    const payload = JSON.parse(response.body);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.correlation_receipt, "support-receipt-7");
+    assert.equal(payload.diagnostics.nodes.total, 1);
+    assert.equal(payload.diagnostics.exclusive_leases.total, 1);
+    assert.equal(payload.diagnostics.active_alerts.by_code[0].code, "NodeUnreachable");
+    assert.ok(payload.diagnostics.skills.some((skill) => skill.id === "lunanexa.admin-guide-diagnostics" && skill.enabled));
+    assert.doesNotMatch(response.body, /node-private|private-subject|private-credential|private-assignment|private-signature|private\/controller/);
+    const audits = auditLines.filter((line) => line.trim().startsWith("{")).map((line) => JSON.parse(line));
+    assert.ok(audits.some((event) => event.adapter_outcome === "denied"));
+    const successful = audits.find((event) => event.adapter_outcome === "success");
+    assert.equal(successful.query_category, "overview");
+    assert.equal(successful.correlation_receipt, "support-receipt-7");
+    assert.equal(Object.hasOwn(successful, "question"), false);
+    server.close();
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.stdout.write = originalWrite;
+    for (const [keyName, value] of Object.entries({
+      COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS: previous.enabled,
+      LUNANEXA_CONTROLLER_URL: previous.controller,
+      COURSEBOOK_ALLOW_HTTPS_CONTROLLER: previous.https,
+      COURSEBOOK_ADMIN_AUTH_KEY: previous.auth,
+      LUNANEXA_CONTROLLER_OPERATOR_TOKEN: previous.token,
+    })) {
+      if (value === undefined) delete process.env[keyName];
+      else process.env[keyName] = value;
+    }
+  }
 });
 
 test("pet retrieval sends only bounded question-relevant public evidence", () => {
@@ -207,6 +310,22 @@ test("newcomer mode keeps repository process and readiness judgment opt-in", asy
   assert.match(app, /array\(page\.blocks\)\.filter\(blockIsVisible\)/);
 });
 
+test("administrator guide surface is bilingual, text-only, and absent from the public pet bundle", async () => {
+  const [html, script, publicApp] = await Promise.all([
+    readFile(resolve(siteRoot, "admin.html"), "utf8"),
+    readFile(resolve(siteRoot, "admin.js"), "utf8"),
+    readFile(resolve(siteRoot, "app.js"), "utf8"),
+  ]);
+  assert.match(html, /data-dashboard hidden/);
+  assert.match(html, /Administrator · Read only/);
+  assert.match(script, /指南诊断/);
+  assert.match(script, /aggregate-alert-codes|Allowed data/);
+  assert.match(script, /textContent/);
+  assert.doesNotMatch(script, /innerHTML|insertAdjacentHTML|eval\s*\(|new Function/);
+  assert.doesNotMatch(script, /Authorization|operator-token|auth-signature|COURSEBOOK_ADMIN_AUTH_KEY/);
+  assert.doesNotMatch(publicApp, /admin\/diagnostics|guide-skills/);
+});
+
 test("separate-site deployment remains digest-pinned and least privilege", async () => {
   const containerfile = await readFile(resolve(siteRoot, "Containerfile"), "utf8");
   const deployment = await readFile(resolve(root, "deploy/docs-site.yaml"), "utf8");
@@ -223,7 +342,15 @@ test("separate-site deployment remains digest-pinned and least privilege", async
   assert.match(deployment, /auth-tls-verify-client: "on"/);
   assert.match(deployment, /COURSEBOOK_ALLOW_HTTPS_GATEWAY/);
   assert.match(deployment, /COURSEBOOK_ENABLE_PET/);
+  assert.match(deployment, /COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS/);
+  assert.match(deployment, /COURSEBOOK_ADMIN_AUTH_KEY/);
+  assert.match(deployment, /LUNANEXA_CONTROLLER_OPERATOR_TOKEN/);
+  assert.match(deployment, /COURSEBOOK_IDENTITY_AUTH_URL/);
+  assert.match(deployment, /auth-response-headers: "X-LunaNexa-Actor,X-LunaNexa-Role,X-LunaNexa-Auth-Timestamp,X-LunaNexa-Auth-Signature,X-LunaNexa-Correlation-Id"/);
+  assert.match(deployment, /app\.kubernetes\.io\/name: lunanexa-diagnostics-gateway/);
   assert.match(containerfile, /COURSEBOOK_KNOWLEDGE_ROOT=\/opt\/lunanexa-coursebook\/knowledge/);
+  assert.match(containerfile, /guide-diagnostics\.mjs guide-skills\.json/);
+  assert.match(containerfile, /admin\.html admin\.js admin\.css/);
   assert.match(deployment, /optional: true/);
   assert.doesNotMatch(deployment, /(?:password|token):\s*["'][^$][^"']{7,}["']/i);
 });
@@ -235,6 +362,7 @@ test("HTTP contract stays healthy without the optional pet and fails closed on h
   const healthBody = JSON.parse(health.body);
   assert.equal(healthBody.ok, true);
   assert.deepEqual(healthBody.dependencies.assistant, { ok: false, enabled: false, optional: true });
+  assert.deepEqual(healthBody.dependencies.admin_diagnostics, { ok: false, enabled: false, optional: true });
 
   const denied = await invokeWithoutListener(server, { url: "/health", host: "attacker.invalid" });
   assert.equal(denied.status, 403);
@@ -246,6 +374,10 @@ test("HTTP contract stays healthy without the optional pet and fails closed on h
   });
   assert.equal(ask.status, 503);
   assert.match(JSON.parse(ask.body).error, /not enabled/i);
+  const privateManifest = await invokeWithoutListener(server, { url: "/guide-skills.json" });
+  assert.equal(privateManifest.status, 404);
+  const disabledAdmin = await invokeWithoutListener(server, { url: "/api/coursebook/admin/diagnostics?category=overview" });
+  assert.equal(disabledAdmin.status, 404);
   server.close();
 });
 

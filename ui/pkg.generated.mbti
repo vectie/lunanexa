@@ -10,6 +10,7 @@ import {
   "vectie/lunanexa/deployment",
   "vectie/lunanexa/notifications",
   "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/ui/offline_commerce",
   "vectie/lunanexa/workspace",
 }
 
@@ -109,6 +110,7 @@ pub(all) enum ConsoleMessage {
   AcknowledgeAlert(String, Int64)
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
+  OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
 } derive(Eq)
 
 pub(all) struct ConsoleState {
@@ -136,6 +138,7 @@ pub(all) struct ConsoleState {
   enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
   portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
+  offline_commerce : @offline_commerce.OfflineCommerceState
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
@@ -261,6 +264,7 @@ pub(all) enum OperatorRoute {
   Leases
   CostCenters
   Agreements
+  OfflineCommerce
   QualifiedServices
   Nodes
   Models

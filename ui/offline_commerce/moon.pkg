@@ -1,5 +1,5 @@
 import {
-  "vectie/lunanexa/nodelease",
+  "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",

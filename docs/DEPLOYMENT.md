@@ -287,9 +287,18 @@ image construction and signing belong to your reviewed OCI pipeline:
 
 ```sh
 sh scripts/release-gate.sh
-moon build cmd/control cmd/node cmd/cli cmd/database --target native --release
+moon build cmd/control cmd/node cmd/cli cmd/database cmd/offline-artifact-worker --target native --release
 sh scripts/build-browser-bundles.sh
 ```
+
+If offline commerce is enabled, the immutable management image referenced by
+`deploy/offline-artifact-worker-job.yaml` must package the separately built
+`cmd/offline-artifact-worker` executable at
+`/usr/local/bin/lunanexa-offline-artifact-worker`. The repository does not
+silently add that binary to an OCI image. The same reviewed overlay must create
+the staging PVC, renderer-evidence secret, worker/scanner callback secrets, and
+an independent renderer/scanner path described in
+[OFFLINE_COMMERCE.md](OFFLINE_COMMERCE.md).
 
 Create the PostgreSQL, controller and ingress secrets through the secret
 provider described in section 7. Render a private overlay that replaces every
@@ -597,7 +606,7 @@ From the repository root:
 
 ```sh
 sh scripts/release-gate.sh
-moon build cmd/control cmd/node cmd/cli --target native --release
+moon build cmd/control cmd/node cmd/cli cmd/offline-artifact-worker --target native --release
 sh scripts/build-browser-bundles.sh
 ```
 

@@ -16,6 +16,8 @@ moon check --target js --warn-list +73 --deny-warn
 moon test ui --target js --warn-list +73 --deny-warn
 moon test ui/workbench --target js --warn-list +73 --deny-warn
 moon test ui/enterprise --target js --warn-list +73 --deny-warn
+moon test ui/machine_access --target js --warn-list +73 --deny-warn
+moon test ui/offline_commerce --target js --warn-list +73 --deny-warn
 moon test installer --target js --warn-list +73 --deny-warn
 moon test ui/installer --target js --warn-list +73 --deny-warn
 moon test cmd/enterprise --target js --warn-list +73 --deny-warn
@@ -25,6 +27,7 @@ node --check extensions/vscode/extension.mjs
 node --check extensions/vscode/client-core.mjs
 node --test extensions/vscode/client-core.test.mjs
 node -e 'const fs=require("fs"); JSON.parse(fs.readFileSync("extensions/vscode/package.json", "utf8"));'
+node --test docs-site/coursebook.test.mjs docs-site/guide-diagnostics.test.mjs
 sh -n scripts/start-deployment-ui.sh scripts/start-local-kubernetes-simulation.sh scripts/stop-local-kubernetes-simulation.sh scripts/deploy/preflight-host.sh scripts/deploy/install-node-material.sh scripts/deploy/remove-bootstrap-material.sh scripts/deploy/run-cluster-install.sh
 sh scripts/build-browser-bundles.sh
 

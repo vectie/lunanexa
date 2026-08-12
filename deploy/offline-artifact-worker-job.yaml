@@ -1,0 +1,51 @@
+# Renderers use a deliberate two-pass protocol: first render the deterministic
+# MoonLeaf-customized artifact and sign render-manifest.json; then this worker
+# repeats the deterministic customization and releases output only when the
+# signed manifest binds to the exact in-memory artifact digest.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lunanexa-offline-artifact-worker-${JOB_ID}
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: management
+        lunanexa.io/component: offline-artifact-worker
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: registry.invalid/lunanexa/control@${CONTROLLER_IMAGE_DIGEST}
+          command: ["/usr/local/bin/lunanexa-offline-artifact-worker"]
+          env:
+            - name: LUNANEXA_OFFLINE_ARTIFACT_STAGING_ROOT
+              value: /var/lib/lunanexa/offline-artifacts
+            - name: LUNANEXA_OFFLINE_ARTIFACT_JOB_FILENAME
+              value: ${JOB_FILENAME}
+            - name: LUNANEXA_OFFLINE_ARTIFACT_MODE
+              value: ${ARTIFACT_MODE}
+            - name: LUNANEXA_RENDER_EVIDENCE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-offline-artifact-worker
+                  key: render-evidence-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: staging
+              mountPath: /var/lib/lunanexa/offline-artifacts
+      volumes:
+        - name: staging
+          persistentVolumeClaim:
+            claimName: lunanexa-offline-artifact-staging
