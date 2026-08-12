@@ -1,0 +1,86 @@
+# Requires the Prometheus Operator and OpenTelemetry Operator. Replace every
+# placeholder and pin the collector image through the operator policy before
+# applying in production.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lunanexa-control
+  labels:
+    app.kubernetes.io/part-of: lunanexa
+spec:
+  selector:
+    matchLabels:
+      app: lunanexa-control
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      authorization:
+        credentials:
+          name: lunanexa-control-credentials
+          key: monitoring-token
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: lunanexa-starter-alerts
+  labels:
+    app.kubernetes.io/part-of: lunanexa
+spec:
+  groups:
+    - name: lunanexa.control
+      rules:
+        - alert: LunaNexaControllerUnavailable
+          expr: up{job=~".*lunanexa-control.*"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: LunaNexa controller is unavailable
+        - alert: LunaNexaNotificationDeadLetter
+          expr: lunanexa_notification_deliveries_dead_letter > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: LunaNexa has undelivered notification records
+        - alert: LunaNexaAdmissionRejectionBurst
+          expr: increase(lunanexa_operational_events_total{event_code="ApiRequestCompleted",target_type="workload",outcome="rejected"}[5m]) >= 5
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: LunaNexa workload admission rejections are elevated
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: lunanexa-management
+spec:
+  mode: daemonset
+  config:
+    receivers:
+      filelog:
+        include:
+          - /var/log/pods/*lunanexa-control*/*/*.log
+        start_at: end
+        operators:
+          - type: container
+          - type: json_parser
+            parse_from: body
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 256
+      batch: {}
+    exporters:
+      otlp:
+        endpoint: ${OTLP_ENDPOINT}
+        tls:
+          ca_file: /etc/lunanexa/otel/ca.crt
+    service:
+      pipelines:
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, batch]
+          exporters: [otlp]

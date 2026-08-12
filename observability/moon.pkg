@@ -1,0 +1,19 @@
+import {
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/async/fs",
+} for "test"
+
+options(
+  link: {
+    "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq" },
+  },
+)

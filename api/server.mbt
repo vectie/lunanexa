@@ -33,6 +33,7 @@ pub struct ApiService {
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   portal_store : @portal_store.FilePortalStore?
   notification_store : @notification_store.NotificationStore?
+  observability_store : @observability.ObservabilityStore?
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -82,6 +83,7 @@ pub fn ApiService::new(
     exclusive_lease_store: None,
     portal_store: None,
     notification_store: None,
+    observability_store: None,
     available_secret_refs: [],
     registry: None,
     enrollment: None,
@@ -133,6 +135,7 @@ pub fn ApiService::with_registry(
     exclusive_lease_store: None,
     portal_store: None,
     notification_store: None,
+    observability_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: None,
@@ -185,6 +188,7 @@ pub fn ApiService::with_services(
     exclusive_lease_store: None,
     portal_store: None,
     notification_store: None,
+    observability_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -239,6 +243,7 @@ pub fn ApiService::with_control_plane(
     exclusive_lease_store: None,
     portal_store: None,
     notification_store: None,
+    observability_store: None,
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -352,6 +357,15 @@ pub fn ApiService::with_notification_store(
   notification_store : @notification_store.NotificationStore,
 ) -> ApiService {
   { ..self, notification_store: Some(notification_store) }
+}
+
+///|
+/// Enables bounded structured operational events and aggregate metrics.
+pub fn ApiService::with_observability_store(
+  self : ApiService,
+  observability_store : @observability.ObservabilityStore,
+) -> ApiService {
+  { ..self, observability_store: Some(observability_store) }
 }
 
 ///|
@@ -1948,7 +1962,7 @@ async fn ApiService::stream_workload(
 }
 
 ///|
-async fn ApiService::handle_with_transport(
+async fn ApiService::dispatch_with_transport(
   self : ApiService,
   verb : ApiMethod,
   path : String,
@@ -2061,6 +2075,38 @@ async fn ApiService::handle_with_transport(
         Some(scheduler) => scheduler.snapshot().active.length()
         None => 0
       }
+      let observability = match self.observability_store {
+        Some(store) => store.snapshot()
+        None =>
+          {
+            schema_version: @observability.snapshot_schema_version,
+            events: [],
+            counters: [],
+          }
+      }
+      let notification_snapshot = match self.notification_store {
+        Some(store) => store.snapshot()
+        None =>
+          {
+            schema_version: @notifications.snapshot_schema_version,
+            records: [],
+            deliveries: [],
+            preferences: [],
+          }
+      }
+      let pending_deliveries = notification_snapshot.deliveries.count_if(delivery => {
+        delivery.state == PendingDelivery ||
+        delivery.state == RetryScheduled ||
+        delivery.state == Delivering
+      })
+      let dead_letter_deliveries = notification_snapshot.deliveries.count_if(delivery => {
+        delivery.state == DeadLetter
+      })
+      let mut operational_counters = ""
+      for counter in observability.counters {
+        operational_counters = operational_counters +
+          "lunanexa_operational_events_total{event_code=\"\{counter.event_code}\",target_type=\"\{counter.target_type}\",outcome=\"\{counter.outcome}\",status_class=\"\{counter.status_class}\"} \{counter.value}\n"
+      }
       {
         status: 200,
         content_type: "text/plain; version=0.0.4",
@@ -2073,8 +2119,30 @@ async fn ApiService::handle_with_transport(
         "# TYPE lunanexa_active_admissions gauge\n" +
         "lunanexa_active_admissions \{active_admissions}\n" +
         "# TYPE lunanexa_telemetry_samples gauge\n" +
-        "lunanexa_telemetry_samples \{telemetry_samples}\n",
+        "lunanexa_telemetry_samples \{telemetry_samples}\n" +
+        "# TYPE lunanexa_notification_deliveries_pending gauge\n" +
+        "lunanexa_notification_deliveries_pending \{pending_deliveries}\n" +
+        "# TYPE lunanexa_notification_deliveries_dead_letter gauge\n" +
+        "lunanexa_notification_deliveries_dead_letter \{dead_letter_deliveries}\n" +
+        "# TYPE lunanexa_operational_event_history gauge\n" +
+        "lunanexa_operational_event_history \{observability.events.length()}\n" +
+        "# TYPE lunanexa_operational_events_total counter\n" +
+        operational_counters,
       }
+    }
+    (Get, "/v1/observability/events") => {
+      if !bearer_authorized(headers, self.monitoring_token) &&
+        !bearer_authorized(headers, self.audit_token) {
+        return api_error(
+          401, "Unauthenticated", "valid monitoring or audit authority is required",
+          false,
+        )
+      }
+      let events = match self.observability_store {
+        Some(store) => store.snapshot().events
+        None => []
+      }
+      json_reply(200, events.to_json())
     }
     (Get, "/v1/capabilities") => {
       if !bearer_authorized(headers, self.inference_token) &&
@@ -3421,6 +3489,191 @@ async fn ApiService::handle_with_transport(
     }
     _ => api_error(404, "NotFound", "route was not found", false)
   }
+}
+
+///|
+fn api_method_label(verb : ApiMethod) -> String {
+  match verb {
+    Get => "get"
+    Post => "post"
+    Put => "put"
+    Delete => "delete"
+  }
+}
+
+///|
+fn operational_target_type(path : String) -> String {
+  if path == "/health" || path == "/version" {
+    "health"
+  } else if path == "/metrics" {
+    "metrics"
+  } else if path.has_prefix("/v1/workloads") ||
+    path == "/v1/chat/completions" ||
+    path == "/v1/responses" {
+    "workload"
+  } else if path.has_prefix("/v1/nodes") {
+    "node"
+  } else if path.has_prefix("/v1/notifications") {
+    "notification"
+  } else if path.has_prefix("/v1/portal") {
+    "enterprise_portal"
+  } else if path.has_prefix("/v1/exclusive-node-leases") {
+    "exclusive_lease"
+  } else if path.has_prefix("/v1/commercial") {
+    "commercial"
+  } else if path.has_prefix("/v1/workspace") {
+    "workspace"
+  } else if path.has_prefix("/v1/catalog") ||
+    path.has_prefix("/v1/service-deployments") {
+    "deployment"
+  } else if path.has_prefix("/v1/telemetry") {
+    "telemetry"
+  } else {
+    "api"
+  }
+}
+
+///|
+async fn ApiService::operational_actor_class(
+  self : ApiService,
+  headers : Map[String, String],
+  path : String,
+) -> @observability.OperationalActorClass {
+  if bearer_authorized(headers, self.operator_token) ||
+    bearer_authorized(headers, self.audit_token) ||
+    bearer_authorized(headers, self.monitoring_token) {
+    Operator
+  } else if node_credential(headers) is Some(_) {
+    NodeAgent
+  } else if path.has_prefix("/v1/provider-callbacks") {
+    Provider
+  } else if bearer_authorized(headers, self.inference_token) ||
+    self.api_key_authorization(headers, Inference, false) is Some(_) {
+    Customer
+  } else {
+    Anonymous
+  }
+}
+
+///|
+async fn ApiService::record_operational_request(
+  self : ApiService,
+  verb : ApiMethod,
+  path : String,
+  headers : Map[String, String],
+  reply : HttpReply,
+  started_unix_ms : Int64,
+) -> Unit {
+  guard self.observability_store is Some(store) else { return }
+  let completed = @async.now()
+  let generated = "request-\{digest_hex("\{api_method_label(verb)}|\{path}|\{started_unix_ms}")[:32]}"
+  let correlation_id = match header(headers, "X-Request-Id") {
+    Some(value) if @contracts.valid_identifier(value) => value
+    _ => generated
+  }
+  let tenant_hash = match header(headers, "X-LunaNexa-Tenant") {
+    Some(value) if @contracts.valid_identifier(value) =>
+      Some("sha256:\{digest_hex(value)}")
+    _ => None
+  }
+  let outcome = if reply.status >= 500 {
+    "error"
+  } else if reply.status >= 400 {
+    "rejected"
+  } else {
+    "accepted"
+  }
+  ignore(
+    store.record({
+      version: @observability.contract_version,
+      event_id: "event-\{digest_hex("\{correlation_id}|\{completed}|\{reply.status}")[:40]}",
+      timestamp_unix_ms: completed,
+      severity: if reply.status >= 500 {
+        Error
+      } else if reply.status >= 400 {
+        Warning
+      } else {
+        Information
+      },
+      component: "controller",
+      event_code: "ApiRequestCompleted",
+      correlation_id,
+      actor_class: self.operational_actor_class(headers, path),
+      tenant_hash,
+      target_type: operational_target_type(path),
+      outcome,
+      status_code: reply.status,
+      duration_ms: (completed - started_unix_ms).max(0L),
+    }),
+  )
+  guard self.notification_store is Some(notifications) else { return }
+  let recent_rate_rejections = store.snapshot().events.count_if(event => {
+    event.target_type == "workload" &&
+    event.actor_class == Customer &&
+    (event.status_code == 409 || event.status_code == 429) &&
+    event.timestamp_unix_ms >= completed - 300000L
+  })
+  let deduplication_key = "workload-admission-rejections"
+  let existing = notifications.record_by_deduplication_key(
+    deduplication_key,
+    PlatformOperators,
+  )
+  if recent_rate_rejections >= 5 {
+    match existing {
+      Some(record) if record.lifecycle != Resolved => ()
+      _ =>
+        ignore(
+          notifications.enqueue({
+            version: @notifications.contract_version,
+            notification_id: "alert-workload-admission-\{completed}",
+            deduplication_key,
+            source_receipt: "observability:workload-429:\{completed}",
+            topic: WorkloadAdmission,
+            code: "WorkloadAdmissionRejected",
+            severity: Warning,
+            audience: PlatformOperators,
+            title_key: "alerts.workload_admission.title",
+            body_key: "alerts.workload_admission.body",
+            parameters: {
+              "window": "5m",
+              "count": recent_rate_rejections.to_string(),
+            },
+            created_unix_ms: completed,
+            expires_unix_ms: None,
+          }),
+        )
+    }
+  } else {
+    match existing {
+      Some(record) if record.lifecycle != Resolved =>
+        ignore(
+          notifications.resolve_operator({
+            notification_id: record.event.notification_id,
+            expected_generation: record.generation,
+            actor_ref: "controller-reconciler",
+            now_unix_ms: completed,
+          }),
+        )
+      _ => ()
+    }
+  }
+}
+
+///|
+async fn ApiService::handle_with_transport(
+  self : ApiService,
+  verb : ApiMethod,
+  path : String,
+  headers : Map[String, String],
+  body : String,
+  allow_asserted_subject : Bool,
+) -> HttpReply {
+  let started = @async.now()
+  let reply = self.dispatch_with_transport(
+    verb, path, headers, body, allow_asserted_subject,
+  )
+  self.record_operational_request(verb, path, headers, reply, started)
+  reply
 }
 
 ///|

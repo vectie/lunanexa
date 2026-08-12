@@ -1,0 +1,90 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/observability"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/database",
+}
+
+// Values
+pub let contract_version : String
+
+pub let snapshot_schema_version : String
+
+pub fn validate_event(OperationalEvent) -> Unit raise ObservabilityError
+
+// Errors
+pub(all) suberror ObservabilityError {
+  InvalidEvent(String)
+  InvalidSnapshot(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+type ObservabilityPersistence
+
+pub(all) struct ObservabilitySnapshot {
+  schema_version : String
+  events : Array[OperationalEvent]
+  counters : Array[OperationalCounter]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct ObservabilityStore {
+  persistence : ObservabilityPersistence
+  event_history_limit : Int
+  emit_json_lines : Bool
+  mut events : Array[OperationalEvent]
+  mut counters : Map[String, OperationalCounter]
+  mutex : @async.Mutex
+}
+pub async fn ObservabilityStore::open(String, event_history_limit? : Int, emit_json_lines? : Bool) -> Self
+pub async fn ObservabilityStore::open_postgres(@database.PostgresDatabase, event_history_limit? : Int, emit_json_lines? : Bool) -> Self
+pub async fn ObservabilityStore::recent_count(Self, String, String, Int64) -> Int
+pub async fn ObservabilityStore::record(Self, OperationalEvent) -> Unit
+pub async fn ObservabilityStore::snapshot(Self) -> ObservabilitySnapshot
+
+pub(all) enum OperationalActorClass {
+  Anonymous
+  Operator
+  Customer
+  NodeAgent
+  Provider
+  Controller
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OperationalCounter {
+  event_code : String
+  target_type : String
+  outcome : String
+  status_class : String
+  value : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OperationalEvent {
+  version : String
+  event_id : String
+  timestamp_unix_ms : Int64
+  severity : OperationalSeverity
+  component : String
+  event_code : String
+  correlation_id : String
+  actor_class : OperationalActorClass
+  tenant_hash : String?
+  target_type : String
+  outcome : String
+  status_code : Int
+  duration_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OperationalSeverity {
+  Debug
+  Information
+  Warning
+  Error
+  Critical
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

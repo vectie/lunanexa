@@ -69,6 +69,7 @@ must come from the secret provider, not a committed file:
 | `LUNANEXA_EXCLUSIVE_LEASE_PATH` | Durable exclusive-node lease snapshot |
 | `LUNANEXA_PORTAL_PATH` | Durable enterprise memberships, agreement projections and lease requests |
 | `LUNANEXA_NOTIFICATION_PATH` | Durable notification, alert, delivery-outbox and preference snapshot |
+| `LUNANEXA_OBSERVABILITY_PATH` | Bounded structured operational event history and aggregate counters |
 | `LUNANEXA_PERSISTENCE_BACKEND` | `postgres` in production; `file` is an explicit development fallback |
 | `LUNANEXA_DATABASE_URL` | Secret-provided PostgreSQL URL; required when the backend is `postgres` |
 | `LUNANEXA_AVAILABLE_SECRET_REFS` | Comma-separated deployment-owned secret reference names available to preflight; never secret values |
@@ -116,6 +117,23 @@ refresh and controller restart do not duplicate a notice. In-app delivery is
 always available. Email, SMS and webhook deliveries remain pending until an
 explicit deployment adapter claims them; retry exhaustion is retained as a
 dead-letter record rather than silently discarded.
+
+With the controller configuration, each ordinary API completion emits one JSON
+line to stdout and updates the durable bounded event history. A record contains
+only timestamp, severity, component, stable event code, correlation ID, actor
+class, optional tenant hash, bounded target type, outcome, status and duration.
+It never contains authorization headers, raw identities, request bodies,
+prompts, outputs, callback bodies, document bytes, credential references or
+server paths. `X-Request-Id` is preserved only when it is a valid bounded opaque
+identifier; otherwise the controller generates one.
+
+`GET /v1/observability/events` requires the monitoring or audit role token.
+`GET /metrics` adds low-cardinality operational counters plus notification
+outbox/dead-letter gauges. Five authenticated workload admission rejections in
+five minutes create one durable operator alert; delivery dead letters likewise
+create an alert and resolve after recovery. Apply `deploy/observability.yaml`
+only after installing and configuring the Prometheus and OpenTelemetry
+operators and replacing the OTLP/trust placeholders.
 
 Expose the operator console and enterprise portal/WebIDE as separate sites as
 shown in `deploy/ingress.yaml`; both proxy the same `/v1` API. Keep `/metrics`

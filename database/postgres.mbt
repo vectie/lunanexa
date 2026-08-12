@@ -90,6 +90,7 @@ fn allowed_domain(domain : String) -> Bool {
   domain == "commercial" ||
   domain == "commercial_integrations" ||
   domain == "notifications" ||
+  domain == "observability" ||
   domain == "technical_operations"
 }
 

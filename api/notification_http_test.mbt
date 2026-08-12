@@ -262,7 +262,9 @@ async test "subject inbox reconciles access-ready and expiry notices from durabl
   assert_eq(inbox.status, 200)
   assert_true(inbox.body.contains("LeaseAccessReady"))
   assert_true(inbox.body.contains("LeaseExpiring"))
-  assert_true(inbox.body.contains("ssh-cert:exclusive-subject-lease"))
+  assert_true(inbox.body.contains("managed-reference-available"))
+  assert_false(inbox.body.contains("ssh-cert:exclusive-subject-lease"))
+  assert_false(inbox.body.contains("node-subject-lease"))
   let repeated = service.handle(Get, "/v1/notifications/self", headers, "")
   let records : Array[@notifications.NotificationRecord] = @json.from_json(
     @json.parse(repeated.body),

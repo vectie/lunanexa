@@ -36,6 +36,9 @@ The `notifications` snapshot row retains subject/platform-scoped events,
 lifecycle generations, channel preferences and retry/dead-letter delivery
 records. It stores bounded localization parameters and evidence receipts, not
 message-provider credentials or raw email/SMS content.
+The `observability` row holds only a bounded recent operational event window
+and monotonic low-cardinality counters. It supports restart continuity and
+local alerting, but does not replace the deployment log backend.
 
 Every mutation writes the canonical snapshot and its normalized projections in
 one transaction. A failed projection constraint rolls back the snapshot too.
@@ -71,7 +74,8 @@ export LUNANEXA_PERSISTENCE_BACKEND=file
 In PostgreSQL mode, `LUNANEXA_PORTAL_PATH`, `LUNANEXA_WORKSPACE_PATH`,
 `LUNANEXA_ACCESS_PATH`, and `LUNANEXA_TECHNICAL_PATH` are not authoritative.
 `LUNANEXA_NOTIFICATION_PATH` is likewise a development/recovery fixture rather
-than the production authority.
+than the production authority. The same applies to
+`LUNANEXA_OBSERVABILITY_PATH`.
 Controller registry, scheduler, assignment, enrollment, telemetry, deployment
 operation and exclusive-lease stores retain their signed file/PVC adapters;
 they are included in the controller backup set and fenced by controller epoch.

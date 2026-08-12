@@ -48,6 +48,10 @@ spec:
               value: /var/lib/lunanexa/exclusive-leases.json
             - name: LUNANEXA_PORTAL_PATH
               value: /var/lib/lunanexa/enterprise-portal.json
+            - name: LUNANEXA_NOTIFICATION_PATH
+              value: /var/lib/lunanexa/notifications.json
+            - name: LUNANEXA_OBSERVABILITY_PATH
+              value: /var/lib/lunanexa/observability.json
             - name: LUNANEXA_ACCESS_PATH
               value: /var/lib/lunanexa/access.json
             - name: LUNANEXA_TECHNICAL_PATH

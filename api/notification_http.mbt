@@ -142,6 +142,68 @@ async fn ApiService::refresh_node_health_notifications(
 }
 
 ///|
+async fn ApiService::refresh_delivery_health_notifications(
+  self : ApiService,
+  now_unix_ms : Int64,
+) -> Unit {
+  guard self.notification_store is Some(store) else { return }
+  let dead_letters = store.snapshot().deliveries.count_if(delivery => {
+    delivery.state == DeadLetter
+  })
+  let deduplication_key = "notification-delivery-dead-letter"
+  match
+    store.record_by_deduplication_key(deduplication_key, PlatformOperators) {
+    Some(record) if dead_letters == 0 && record.lifecycle != Resolved =>
+      ignore(
+        store.resolve_operator({
+          notification_id: record.event.notification_id,
+          expected_generation: record.generation,
+          actor_ref: "controller-reconciler",
+          now_unix_ms,
+        }),
+      )
+    Some(record) if dead_letters > 0 && record.lifecycle == Resolved =>
+      ignore(
+        store.enqueue({
+          version: @notifications.contract_version,
+          notification_id: "alert-delivery-dead-letter-\{now_unix_ms}",
+          deduplication_key,
+          source_receipt: "notification-delivery:dead-letter:\{now_unix_ms}",
+          topic: DeliveryHealth,
+          code: "DeliveryAttemptLimit",
+          severity: Critical,
+          audience: PlatformOperators,
+          title_key: "alerts.delivery_failed.title",
+          body_key: "alerts.delivery_failed.body",
+          parameters: { "count": dead_letters.to_string() },
+          created_unix_ms: now_unix_ms,
+          expires_unix_ms: None,
+        }),
+      )
+    Some(_) => ()
+    None if dead_letters > 0 =>
+      ignore(
+        store.enqueue({
+          version: @notifications.contract_version,
+          notification_id: "alert-delivery-dead-letter-\{now_unix_ms}",
+          deduplication_key,
+          source_receipt: "notification-delivery:dead-letter:\{now_unix_ms}",
+          topic: DeliveryHealth,
+          code: "DeliveryAttemptLimit",
+          severity: Critical,
+          audience: PlatformOperators,
+          title_key: "alerts.delivery_failed.title",
+          body_key: "alerts.delivery_failed.body",
+          parameters: { "count": dead_letters.to_string() },
+          created_unix_ms: now_unix_ms,
+          expires_unix_ms: None,
+        }),
+      )
+    None => ()
+  }
+}
+
+///|
 async fn ApiService::enqueue_subject_notification(
   self : ApiService,
   tenant_ref : String,
@@ -217,8 +279,7 @@ async fn ApiService::refresh_subject_notifications(
     let lease_ref = lease.intent.lease_id
     let parameters = Map([
       ("lease_ref", lease_ref),
-      ("node_ref", lease.intent.node_id),
-      ("credential_ref", lease.intent.access_credential_ref),
+      ("handoff_status", "managed-reference-available"),
       ("expires_unix_ms", lease.intent.expires_unix_ms.to_string()),
     ])
     match lease.state {
@@ -376,6 +437,7 @@ async fn ApiService::handle_notifications(
       )
     }
     self.refresh_node_health_notifications(now)
+    self.refresh_delivery_health_notifications(now)
     return json_reply(200, store.records_for_operators(now).to_json())
   }
   if path == "/v1/notifications/self" {

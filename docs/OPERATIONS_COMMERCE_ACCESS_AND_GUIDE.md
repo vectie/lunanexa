@@ -1,6 +1,6 @@
 # Operations, offline commerce, machine access and guide diagnostics
 
-Status: implementation contract; notification phase implemented
+Status: implementation contract; notification and observability phases implemented
 Last reviewed: 2026-08-12
 
 This document closes the five product gaps found during the pre-deployment
@@ -98,6 +98,13 @@ code. Trace/correlation IDs propagate from ingress to audit and adapter calls.
 The deployment must provide an OpenTelemetry-compatible collector path plus
 Prometheus scrape and starter alert rules. External destinations are optional;
 the local operator alert center remains functional when they are absent.
+
+Implemented in the current phase: bounded restart-durable operational events,
+JSON-lines stdout emission, correlation preservation, tenant hashing,
+monitoring/audit-protected event export, low-cardinality Prometheus counters,
+outbox gauges, rejection-burst and dead-letter trigger integration, and starter
+Prometheus/OpenTelemetry deployment resources. Production collector/Prometheus
+operators and the external OTLP/log destination remain deployment prerequisites.
 
 ## 3. Hybrid digital-to-offline commerce
 
