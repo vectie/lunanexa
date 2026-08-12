@@ -1,0 +1,87 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/installer"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/ui/i18n",
+}
+
+// Values
+pub fn default_state(locale~ : @i18n.Locale) -> InstallerState
+
+pub fn form_complete(InstallerState) -> Bool
+
+pub fn interactive_view(InstallerState, @cmd.Emit[InstallerMessage]) -> @html.Html
+
+pub fn is_running(InstallerState) -> Bool
+
+pub fn render(InstallerState) -> String
+
+pub fn update(InstallerState, InstallerMessage) -> InstallerState
+
+// Errors
+
+// Types and methods
+pub(all) struct DeploymentForm {
+  companion_endpoint : String
+  session_token : String
+  ssh_user : String
+  ssh_key_path : String
+  known_hosts_path : String
+  management_node : String
+  management_host : String
+  compute_targets : String
+  cluster_namespace : String
+  kubeconfig_path : String
+  rendered_directory : String
+  secret_directory : String
+  cli_path : String
+  confirmation : String
+} derive(Eq, @debug.Debug)
+
+pub(all) enum InstallerMessage {
+  LocaleChanged(@i18n.Locale)
+  CompanionEndpointChanged(String)
+  SessionTokenChanged(String)
+  SshUserChanged(String)
+  SshKeyPathChanged(String)
+  KnownHostsPathChanged(String)
+  ManagementNodeChanged(String)
+  ManagementHostChanged(String)
+  ComputeTargetsChanged(String)
+  ClusterNamespaceChanged(String)
+  KubeconfigPathChanged(String)
+  RenderedDirectoryChanged(String)
+  SecretDirectoryChanged(String)
+  CliPathChanged(String)
+  ConfirmationChanged(String)
+  PreviewRequested
+  ApplyRequested
+  TerminalLine(String)
+  RunFinished(Bool, Int)
+  RunRejected(String)
+  ClearTerminal
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InstallerState {
+  locale : @i18n.Locale
+  form : DeploymentForm
+  run_state : RunState
+  preview_verified : Bool
+  terminal_lines : Array[String]
+  error_message : String?
+} derive(Eq, @debug.Debug)
+
+pub(all) enum RunState {
+  Idle
+  RunningPreview
+  RunningApply
+  Succeeded
+  Failed
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

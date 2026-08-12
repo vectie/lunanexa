@@ -1,0 +1,9 @@
+import {
+  "vectie/lunanexa/installer" @install_contract,
+  "vectie/lunanexa/ui/i18n",
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+}
+
+supported_targets = "js+native"

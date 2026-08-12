@@ -5,6 +5,11 @@ This guide deploys LunaNexa on one management node with an 8 TB model disk at
 implemented managed model-service path and the management-plane portion of
 exclusive node leasing.
 
+If this is your first installation, follow **First installation: exact order**
+below before using the detailed reference sections. The most important
+distinction is that the management node is selected through Kubernetes
+placement; only DGX compute nodes perform LunaNexa enrollment.
+
 ## 1. Supported deployment shape
 
 The repository templates assume one Kubernetes cluster containing the
@@ -67,6 +72,367 @@ verified and cached locally before its runtime container starts.
 | Exclusive lease watchdog and helper protocol | Implemented | Persists signed generation, expires offline, reports provision/revoke/sanitize/quarantine evidence |
 | Privileged account/SSH/sanitization helper | Reference implementation included | Install the root-owned helper and fixed client for host-systemd mode; physically validate the host policy before production leases |
 | OCI registry, CA, secret manager and metrics backend | External | Provision independently; they are not LunaNexa services |
+
+## First installation: exact order
+
+There are two different meanings of “register a node” in this deployment:
+
+| Host | Kubernetes registration | LunaNexa enrollment |
+| --- | --- | --- |
+| Management node | Join it to the Kubernetes cluster and label it `lunanexa.io/role=management` | **Do not enroll it.** It must not appear in the LunaNexa compute-node list |
+| DGX compute node | Join it as a Kubernetes worker and label it `lunanexa.io/role=gpu` | Enroll it with a one-use bootstrap token and a unique persistent node secret |
+
+The safe first-install sequence is:
+
+```text
+management host ready
+→ management node labelled
+→ management plane rendered and started
+→ health and ingress verified
+→ first DGX joined and prepared
+→ first DGX enrolled and heartbeating
+→ remaining three DGX nodes enrolled one at a time
+→ runtime/model evidence registered
+→ first model service planned and deployed
+```
+
+### Assisted deployment UI
+
+The repository includes a guarded installer page and a loopback-only native
+companion for this sequence. It starts at SSH verification; management and DGX
+hosts must already have joined the Kubernetes cluster through the procedure
+owned by your distribution. It does not accept a `kubeadm join` token or an
+arbitrary shell command.
+
+Build the browser bundles, serve `_build/browser-dist` on loopback, and start
+the companion from the same trusted operator machine:
+
+```sh
+sh scripts/build-browser-bundles.sh
+python3 -m http.server 4173 --bind 127.0.0.1 --directory _build/browser-dist
+sh scripts/start-deployment-ui.sh
+```
+
+Open `http://127.0.0.1:4173/installer/`. Paste only the session token printed by
+the start script, then enter local paths and host inventory. Never paste an SSH
+private key, Kubernetes credential, node token or bootstrap secret into the
+page. The page stores none of these form fields in browser storage.
+
+The UI always offers **Preview and verify** first. Preview performs pinned-host
+SSH checks, management-disk inspection, GPU/runtime inspection, Kubernetes
+node lookup, local secret-file presence checks and rendered-placeholder scans;
+it does not mutate hosts or Kubernetes. Apply remains disabled until the exact
+phrase `DEPLOY 4 NODES` is entered. Apply runs only the versioned stages in
+`scripts/deploy/`; there is no interactive terminal input or free-form command
+endpoint.
+
+Prepare the protected local node-material directory in this shape before
+previewing:
+
+```text
+SECRETS/
+  dgx-spark-01/
+    node-token
+    assignment-verification-key
+    cosign.pub
+    inventory.json
+    bootstrap-token-id
+    bootstrap-token
+    bootstrap.json
+  dgx-spark-02/ ...
+  dgx-spark-03/ ...
+  dgx-spark-04/ ...
+```
+
+Each `bootstrap.json` is the private operator input for
+`lunanexa issue-enrollment-token`; its ID and secret must match that node's two
+temporary bootstrap files. The companion inherits `LUNANEXA_ENDPOINT` and
+`LUNANEXA_OPERATOR_TOKEN` from its own protected environment for an apply run.
+The start script never prints either value.
+
+The companion binds only to `127.0.0.1` by default, requires a fresh 256-bit
+session token, permits only the configured loopback browser origin, validates
+all identifiers/hosts/absolute paths, runs one installation at a time, merges
+and bounds subprocess output, and streams read-only terminal events. SSH always
+uses `BatchMode=yes`, `IdentitiesOnly=yes` and `StrictHostKeyChecking=yes` with
+the selected pinned `known_hosts` file.
+
+The rendered directory must use these reviewed filenames:
+
+```text
+prerequisites.yaml
+postgres.yaml
+controller.yaml
+console.yaml
+enterprise.yaml
+network-policy.yaml
+ingress.yaml
+node-daemonset.yaml
+```
+
+The private overlay must include management placement selectors and a GPU
+selector in `node-daemonset.yaml`. The installer refuses unresolved template
+variables, `.invalid` endpoints, missing protected inputs, unknown SSH host
+keys, missing GPUs, interactive sudo, or an incomplete four-node inventory.
+
+### Step 0 — Record the non-secret deployment inventory
+
+Choose the real values before rendering manifests. These examples are shell
+variables for readability; they must not contain credentials:
+
+```sh
+export LUNANEXA_NAMESPACE=lunanexa
+export MANAGEMENT_NODE=management-01
+export INGRESS_NAMESPACE=ingress-nginx
+export RUNTIME_NAMESPACE=lunanexa-runtimes
+export LUNANEXA_HOST=control.cluster.example
+export ENTERPRISE_HOST=enterprise.cluster.example
+```
+
+Also record these four stable Kubernetes node names in the private deployment
+inventory:
+
+```text
+dgx-spark-01
+dgx-spark-02
+dgx-spark-03
+dgx-spark-04
+```
+
+Do not put node secrets, bootstrap secrets, database passwords, private keys or
+private runtime addresses in that inventory file. Keep those in the deployment
+secret provider.
+
+### Step 1 — Register the management node with Kubernetes
+
+Join the management host to the Kubernetes cluster using the procedure owned by
+your Kubernetes distribution. LunaNexa deliberately does not generate a
+`kubeadm join` command or cluster credential. Confirm the real node name, then
+label it:
+
+```sh
+kubectl get nodes -o wide
+kubectl label node "$MANAGEMENT_NODE" lunanexa.io/role=management --overwrite
+kubectl get node "$MANAGEMENT_NODE" -L lunanexa.io/role
+```
+
+Prepare and verify the management-node model disk before any controller pod can
+mount it:
+
+```sh
+findmnt /data/models
+df -h /data/models
+sudo test -d /data/models
+```
+
+Create the LunaNexa and runtime namespaces idempotently, then label the trusted
+ingress and runtime namespaces. The ingress namespace must already belong to
+the installed ingress controller; do not create a lookalike namespace just to
+satisfy this command:
+
+```sh
+kubectl create namespace "$LUNANEXA_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace "$RUNTIME_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl get namespace "$INGRESS_NAMESPACE"
+kubectl label namespace "$INGRESS_NAMESPACE" lunanexa.io/ingress=trusted --overwrite
+kubectl label namespace "$RUNTIME_NAMESPACE" lunanexa.io/service=runtime --overwrite
+```
+
+The production overlay must add
+`nodeSelector: {lunanexa.io/role: management}` to the controller, PostgreSQL,
+console and enterprise/workbench workloads before they are applied. The base
+manifests do not supply this selector. If the Kubernetes distribution taints
+its control-plane node with `NoSchedule`, add only the narrow toleration needed
+by these management workloads; do not make GPU workloads tolerate that taint.
+
+### Step 2 — Install the management plane
+
+Run the repository release gate, build immutable native/browser artifacts, and
+publish deployment-owned controller, console, enterprise/workbench and node
+images. This repository does not contain a turnkey image-building pipeline, so
+image construction and signing belong to your reviewed OCI pipeline:
+
+```sh
+sh scripts/release-gate.sh
+moon build cmd/control cmd/node cmd/cli cmd/database --target native --release
+sh scripts/build-browser-bundles.sh
+```
+
+Create the PostgreSQL, controller and ingress secrets through the secret
+provider described in section 7. Render a private overlay that replaces every
+image digest, hostname, storage class, route, certificate reference and
+placeholder. Prove the render is complete:
+
+```sh
+rg '\$\{[A-Z0-9_]+\}|registry\.invalid|lunanexa\.invalid' RENDERED_DIRECTORY
+```
+
+That command must print nothing. Apply the rendered management resources in
+this order, always to the LunaNexa namespace:
+
+```sh
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_PREREQUISITES
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_POSTGRES
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_CONTROLLER
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_CONSOLE
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_ENTERPRISE
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_NETWORK_POLICIES
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_INGRESS
+```
+
+Run the database migration with a database-owner identity before relying on the
+long-running controller. See [DATABASE.md](DATABASE.md) for the exact migration
+and role split. Then require the controller and browser deployments to become
+ready:
+
+```sh
+kubectl -n "$LUNANEXA_NAMESPACE" rollout status deployment/lunanexa-control
+kubectl -n "$LUNANEXA_NAMESPACE" rollout status deployment/lunanexa-console
+kubectl -n "$LUNANEXA_NAMESPACE" rollout status deployment/lunanexa-enterprise
+kubectl -n "$LUNANEXA_NAMESPACE" get pods,svc,ingress,pvc -o wide
+```
+
+Verify `/health` through the trusted TLS ingress with an approved operator
+client certificate. Do not proceed while testing only the controller pod IP or
+an unauthenticated public route.
+
+### Step 3 — Register the first DGX as a Kubernetes compute worker
+
+Join `dgx-spark-01` to the same Kubernetes cluster using the distribution-owned
+worker-join procedure. Confirm its real hardware and name before labelling it:
+
+```sh
+kubectl get node dgx-spark-01 -o wide
+kubectl label node dgx-spark-01 lunanexa.io/role=gpu --overwrite
+kubectl get node dgx-spark-01 -L lunanexa.io/role
+```
+
+At this point it is a Kubernetes worker, but it is not yet a LunaNexa compute
+node. Do not label the other three DGX nodes yet; keeping only one eligible GPU
+worker makes the first enrollment and acceptance slice easier to audit.
+
+### Step 4 — Prepare the first DGX host identity
+
+Follow sections 3, 6 and 8 to install the NVIDIA stack, approved container
+engine, `lunanexa-runtime` network, node agent, Cosign trust and protected host
+directories. Generate `inventory.json` from the actual host. Install these
+deployment-owned values with protected permissions:
+
+```text
+/etc/lunanexa/node-token                    unique to dgx-spark-01
+/etc/lunanexa/assignment-verification-key   cluster assignment verifier
+/etc/lunanexa/cosign.pub                    artifact verification public key
+/etc/lunanexa/inventory.json                truthful dgx-spark-01 inventory
+```
+
+For the built-in controller artifact gateway,
+`LUNANEXA_ARTIFACT_CREDENTIAL_PATH` must resolve to the same unique node secret
+as `LUNANEXA_NODE_TOKEN_PATH`; the reviewed examples point both at
+`/etc/lunanexa/node-token`. The secret is authenticated again against the live
+assignment and one-time transfer grant, so it is not a general model-store
+credential.
+
+Confirm the node ID agrees in all three places before starting the agent:
+
+```text
+Kubernetes node name       dgx-spark-01
+LUNANEXA_NODE_ID           dgx-spark-01
+inventory.json node_id     dgx-spark-01
+```
+
+### Step 5 — Enroll the first DGX into LunaNexa
+
+Build or install the `lunanexa` CLI on a trusted operator host. The native CLI
+does not load a client X.509 key, while the production ingress requires mTLS.
+Use the reviewed operator-side proxy/mesh to present the operator certificate
+upstream and expose only a local HTTP listener, for example
+`http://127.0.0.1:18443`. Then inject the loopback endpoint and operator token
+from the approved identity/secret system:
+
+```sh
+export LUNANEXA_ENDPOINT=http://127.0.0.1:18443
+export LUNANEXA_OPERATOR_TOKEN=FROM_SECRET_PROVIDER
+lunanexa health
+```
+
+Never bind that local listener to a non-loopback address. Direct `curl` checks
+may instead present the operator certificate and key to the HTTPS ingress as
+shown in section 9.
+
+Create a fresh private bootstrap JSON document as described in section 10. Its
+secret must be unique, at least 20 characters, one-use and valid for no more
+than 15 minutes. Issue it:
+
+```sh
+lunanexa issue-enrollment-token bootstrap-dgx-spark-01.json
+```
+
+Deliver the matching token ID and secret to these temporary protected files on
+`dgx-spark-01`:
+
+```text
+/etc/lunanexa/bootstrap-token-id
+/etc/lunanexa/bootstrap-token
+```
+
+Now apply the rendered node DaemonSet, which must have
+`nodeSelector: {lunanexa.io/role: gpu}` and the reviewed node-to-management mTLS
+proxy/mesh configuration:
+
+```sh
+kubectl -n "$LUNANEXA_NAMESPACE" apply -f RENDERED_NODE_DAEMONSET
+kubectl -n "$LUNANEXA_NAMESPACE" get pods -l app=lunanexa-node -o wide
+kubectl -n "$LUNANEXA_NAMESPACE" logs daemonset/lunanexa-node --tail=100
+```
+
+The agent exchanges the one-use token, persists its certificate under
+`/var/lib/lunanexa`, then starts authenticated heartbeats. From the trusted
+operator host, verify:
+
+```sh
+lunanexa nodes
+```
+
+Do not proceed until the result contains exactly `dgx-spark-01`, its state is
+active, its inventory is truthful, and its heartbeat stays fresh for several
+reconcile intervals. The management node should not appear in this list. After
+successful enrollment, remove the two bootstrap files through the approved
+secret-removal procedure; keep the unique node secret and persisted certificate.
+
+### Step 6 — Enroll DGX 2–4 one at a time
+
+For each remaining DGX:
+
+1. join it to Kubernetes;
+2. prepare its host directories, runtime and truthful inventory;
+3. create a new persistent node secret and a new one-use bootstrap token;
+4. label only that host `lunanexa.io/role=gpu`;
+5. wait for its node-agent pod, certificate and fresh heartbeat;
+6. confirm the previously enrolled nodes remain healthy;
+7. remove its consumed bootstrap material.
+
+After the fourth enrollment, `lunanexa nodes` must report four distinct active
+node IDs and four distinct node authorities. A shared node token is a failed
+deployment, even if all four heartbeats appear healthy.
+
+### Step 7 — Register and deploy the first model
+
+Enrollment proves node identity and telemetry; it does not make a model
+deployable. Complete the runtime, model, license, verification, evaluation,
+approval and alias sequence, then use the immutable catalog/intent path in
+section 11:
+
+```sh
+lunanexa register-template deploy/model-service-template.example.json
+lunanexa plan-deployment deploy/model-service-intent.example.json
+lunanexa deploy deploy/model-service-intent.example.json
+lunanexa deployments
+```
+
+Stop if the plan is blocked. A first successful deployment must select one DGX,
+pull the model only to that node, verify its digest and signature, start the
+digest-pinned runtime, report readiness, and route inference through that
+node's strict HTTPS runtime mapping.
 
 ## 2. Non-negotiable boundaries
 
@@ -511,12 +877,22 @@ without putting private-key material in shell history.
 
 ## 10. Enroll the DGX nodes
 
-Configure the CLI on a trusted operator host:
+Configure the CLI on a trusted operator host. Because the production ingress
+requires a client certificate and the native CLI does not load an X.509 client
+key, use a reviewed loopback-only proxy or service-mesh listener that presents
+the operator certificate upstream:
 
 ```sh
-export LUNANEXA_ENDPOINT=https://LUNANEXA_HOST
+export LUNANEXA_ENDPOINT=http://127.0.0.1:18443
 export LUNANEXA_OPERATOR_TOKEN=FROM_SECRET_PROVIDER
+lunanexa health
 ```
+
+The example port is deployment-owned. The listener must accept connections
+only from loopback, validate the upstream server identity, and establish mTLS
+to `https://LUNANEXA_HOST`. Do not point the CLI at an unauthenticated
+controller Service or weaken the ingress. Direct HTTPS diagnostics may use
+`curl --cert ... --key ...` as shown in section 9.
 
 For each DGX, generate a distinct bootstrap secret of at least 20 characters
 and an expiry no more than 15 minutes in the future. Create a private JSON file:

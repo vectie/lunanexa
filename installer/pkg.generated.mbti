@@ -1,0 +1,50 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/installer"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub let apply_confirmation : String
+
+pub fn parse_compute_targets(String) -> Array[ComputeTarget] raise InstallValidationError
+
+pub let request_version : String
+
+pub fn stage_names() -> Array[String]
+
+pub fn validate_request(InstallRequest) -> Unit raise InstallValidationError
+
+// Errors
+pub(all) suberror InstallValidationError {
+  InvalidField(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct ComputeTarget {
+  node_name : String
+  ssh_host : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct InstallRequest {
+  version : String
+  apply : Bool
+  confirmation : String
+  ssh_user : String
+  ssh_key_path : String
+  known_hosts_path : String
+  management_node : String
+  management_host : String
+  compute_nodes : Array[ComputeTarget]
+  cluster_namespace : String
+  kubeconfig_path : String
+  rendered_directory : String
+  secret_directory : String
+  cli_path : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits
