@@ -1,0 +1,11 @@
+import {
+  "vectie/lunanexa/contractdoc",
+  "vectie/lunanexa/contractdoc/preview",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")

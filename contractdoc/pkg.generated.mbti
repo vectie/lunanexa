@@ -11,6 +11,8 @@ pub fn completion_summary(ContractTemplateManifest, ContractPacket) -> ContractC
 
 pub let contract_version : String
 
+pub fn materialize_preview_template(ContractPreviewTemplate, ContractTemplateManifest, ContractPacket, ContractFieldOwner, ContractFormKind, Array[ContractFieldValue]) -> ContractPreviewDocument raise ContractDocumentError
+
 pub fn missing_required_fields(ContractTemplateManifest, ContractPacket) -> Array[String]
 
 pub fn new_packet(ContractTemplateManifest, String, String, String, String, String, String, Array[ContractFormKind], Int64) -> ContractPacket raise ContractDocumentError
@@ -230,6 +232,11 @@ pub(all) struct ContractPreviewDocument {
   margin_left_twips : Int?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct ContractPreviewMarker {
+  marker : String
+  value : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ContractPreviewRun {
   text : String
   bold : Bool
@@ -240,6 +247,14 @@ pub(all) struct ContractPreviewRun {
   font_ascii : String?
   font_east_asia : String?
   font_complex_script : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractPreviewTemplate {
+  template_id : String
+  template_version : String
+  template_sha256 : String
+  scene : ContractPreviewDocument
+  marker_defaults : Array[ContractPreviewMarker]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractTemplateManifest {

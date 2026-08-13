@@ -9,6 +9,8 @@ import {
 // Values
 pub fn render(FixedArray[Byte], @contractdoc.ContractTemplateManifest, @contractdoc.ContractPacket, @contractdoc.ContractFieldOwner, @contractdoc.ContractFormKind, Array[@contractdoc.ContractFieldValue]) -> @contractdoc.ContractPreviewDocument raise ContractPreviewError
 
+pub fn template(FixedArray[Byte], @contractdoc.ContractTemplateManifest) -> @contractdoc.ContractPreviewTemplate raise ContractPreviewError
+
 // Errors
 pub(all) suberror ContractPreviewError {
   InvalidDraft(String)

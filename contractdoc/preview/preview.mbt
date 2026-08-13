@@ -136,6 +136,7 @@ pub fn render(
             row.map(cell => cell.width_twips)
           }),
         })
+      FlowPageBreak => blocks.push(empty_block("page-break", []))
       FlowSection(value) => section = Some(value)
     }
   }
@@ -171,5 +172,106 @@ pub fn render(
     margin_right_twips,
     margin_bottom_twips,
     margin_left_twips,
+  }
+}
+
+///|
+/// Build a marker-preserving MoonLeaf scene for the read-only browser demo.
+/// It contains no customer or operator values and is never used for release.
+pub fn template(
+  source : FixedArray[Byte],
+  manifest : @contractdoc.ContractTemplateManifest,
+) -> @contractdoc.ContractPreviewTemplate raise ContractPreviewError {
+  let markers = @worker.exact_docx_markers(source) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
+  let marker_defaults = markers.map(marker => @contractdoc.ContractPreviewMarker::{
+    marker,
+    value: if marker.has_suffix(".mark}}") {
+      "□"
+    } else {
+      ""
+    },
+  })
+  let archive = @opc.open(source) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
+  let rich = @docx.preview_document(archive) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
+  let blocks : Array[@contractdoc.ContractPreviewBlock] = []
+  let mut section : @docx.SectionInfo? = None
+  for block in rich.blocks {
+    match block {
+      FlowParagraph(paragraph) =>
+        blocks.push({
+          ..empty_block(
+            "paragraph",
+            paragraph.runs.map(run => {
+              text: run.text,
+              bold: run.bold,
+              italic: run.italic,
+              underline: run.underline,
+              font_size_half_points: run.font_size_half_points,
+              color: run.color,
+              font_ascii: run.font_ascii,
+              font_east_asia: run.font_east_asia,
+              font_complex_script: run.font_complex_script,
+            }),
+          ),
+          level: paragraph.outline_level.unwrap_or(0),
+          alignment: paragraph.metadata.alignment,
+          spacing_before_twips: paragraph.metadata.spacing_before_twips,
+          spacing_after_twips: paragraph.metadata.spacing_after_twips,
+          line_twips: paragraph.metadata.line_twips,
+          left_indent_twips: paragraph.metadata.left_indent_twips,
+          right_indent_twips: paragraph.metadata.right_indent_twips,
+          first_line_twips: paragraph.metadata.first_line_twips,
+          hanging_twips: paragraph.metadata.hanging_twips,
+        })
+      FlowTable(table) =>
+        blocks.push({
+          ..empty_block("table", []),
+          rows: table.rows.map(row => row.map(cell => cell.text)),
+          grid_widths_twips: table.grid_widths_twips,
+          cell_widths_twips: table.rows.map(row => {
+            row.map(cell => cell.width_twips)
+          }),
+        })
+      FlowPageBreak => blocks.push(empty_block("page-break", []))
+      FlowSection(value) => section = Some(value)
+    }
+  }
+  let (width, height, top, right, bottom, left) = match section {
+    Some(value) =>
+      (
+        value.page_width_twips,
+        value.page_height_twips,
+        value.margin_top_twips,
+        value.margin_right_twips,
+        value.margin_bottom_twips,
+        value.margin_left_twips,
+      )
+    None => (None, None, None, None, None, None)
+  }
+  {
+    template_id: manifest.template_id,
+    template_version: manifest.template_version,
+    template_sha256: manifest.fillable_sha256,
+    scene: {
+      engine: "moonleaf",
+      packet_id: "demo-template",
+      packet_revision: 0L,
+      form: MasterLease,
+      blocks,
+      diagnostic_codes: rich.warnings.map(warning => warning.code),
+      page_width_twips: width,
+      page_height_twips: height,
+      margin_top_twips: top,
+      margin_right_twips: right,
+      margin_bottom_twips: bottom,
+      margin_left_twips: left,
+    },
+    marker_defaults,
   }
 }

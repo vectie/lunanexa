@@ -164,6 +164,24 @@ pub(all) struct ContractPreviewDocument {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// A source marker and its field-free value in a MoonLeaf preview scene.
+pub(all) struct ContractPreviewMarker {
+  marker : String
+  value : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// A build-time MoonLeaf scene used only when the browser runs in demo mode.
+/// The scene is generated from the same authoritative DOCX as live previews.
+pub(all) struct ContractPreviewTemplate {
+  template_id : String
+  template_version : String
+  template_sha256 : String
+  scene : ContractPreviewDocument
+  marker_defaults : Array[ContractPreviewMarker]
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct ContractFieldAssignment {
   field_id : String
   value : String
