@@ -103,8 +103,8 @@ Before a DOCX/PDF pair is released:
 2. verify the internal marker-copy digest, replace every marker, reject any
    remaining marker, and preserve all package parts above byte-for-byte;
 3. reopen the result with MoonLeaf and reject active content or structural loss;
-4. render the DOCX to PDF and all 18 page images with the approved production
-   Chinese font set;
+4. use MoonLeaf to render the DOCX to PDF and all 18 page images with the
+   approved production Chinese font set;
 5. compare reference/final page geometry and inspect every final page at 100%;
 6. reject missing glyphs, unexpected page-count change, clipping, overflow,
    moved tables, modified recurring furniture, or unexplained pixel changes;
@@ -115,6 +115,8 @@ The browser preview is a MoonLeaf neutral scene and uses the browser's CJK font
 stack for legible Chinese. It is not a pagination oracle and is not permission
 to release substituted fonts: the production DOCX/PDF worker must still use the
 approved exact font set and pass the retained page-image fidelity gate.
+The typed renderer evidence must identify MoonLeaf; another office engine is
+not an allowed compatibility fallback.
 
 For controller-free demos, LunaNexa checks in a field-free MoonLeaf scene built
 from the marker copy. `scripts/contract-preview-scene-test.sh` regenerates that

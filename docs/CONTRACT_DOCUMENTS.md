@@ -20,7 +20,7 @@ flowchart LR
   V --> H["Human digest confirmation"]
   H --> J["Durable generation request"]
   J --> D["DOCX in-place OOXML patch"]
-  D --> R["Approved-font PDF renderer"]
+  D --> R["MoonLeaf approved-font PDF renderer"]
   R --> Q["18-page visual + structural fidelity gate"]
   Q --> A["Immutable DOCX/PDF artifacts and evidence"]
 ```
@@ -73,8 +73,8 @@ customer/messenger-owned inputs; the operator sees only manager/operator-owned
 inputs. Neither browser renders the other party's controls, even as disabled
 fields. Preview requests apply only the current role's draft to a verified copy
 of the fillable DOCX, reopen it with MoonLeaf, and return MoonLeaf's bounded
-neutral text/table scene for Rabbita rendering. No raster screenshot, alternate
-HTML contract, or LibreOffice process is used. Demo mode serves a field-free
+neutral text/table scene for Rabbita rendering. No raster screenshot or
+alternate HTML contract is used. Demo mode serves a field-free
 MoonLeaf scene generated from that same DOCX at build time. The release gate
 regenerates it and requires byte-for-byte equality, so it cannot become a
 second editable contract template.
@@ -117,6 +117,9 @@ DOCX/PDF render gate, not a browser approximation.
   `方正小标宋简体` must be licensed and installed in the renderer image;
 - an approved DOCX/PDF rendering image must produce and retain page-level
   fidelity evidence;
+- the rendering image must be MoonLeaf and emit a typed
+  `moonleaf.render-evidence.v1` receipt; LibreOffice, Word, and other office
+  engines are not substitutes;
 - legal/finance owners must approve the exact source digest and slot manifest;
 - real contract values must be supplied and confirmed. Test/demo values are
   prohibited for released contracts.

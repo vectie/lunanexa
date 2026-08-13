@@ -317,7 +317,7 @@ configure an external dispatcher that polls the protected pending-generation
 API, creates one PVC per job, stages inputs, uploads outputs, posts terminal
 callbacks, and deletes the PVC after acknowledgement. It must also create the
 renderer-evidence secret, distinct worker/scanner/entitlement callback tokens,
-and an independent renderer/scanner path described in
+and a MoonLeaf renderer plus independent scanner path described in
 [OFFLINE_COMMERCE.md](OFFLINE_COMMERCE.md).
 
 Offline artifact readiness is derived from durable runtime proof, not a
@@ -1186,9 +1186,10 @@ sh scripts/release-gate.sh
 
 Mount the immutable fillable source at `LUNANEXA_CONTRACT_TEMPLATE_PATH` in the
 controller. Live browser previews are produced by MoonLeaf from that DOCX and
-returned as a bounded semantic scene; there are no preview image assets or
-LibreOffice dependency. Exact document release still depends on the separate
-DOCX/PDF worker, licensed CJK fonts, and retained render evidence.
+returned as a bounded semantic scene. Exact document release requires the
+MoonLeaf DOCX/PDF renderer, licensed CJK fonts, and retained typed MoonLeaf
+render evidence. LibreOffice, Word, and other office engines are rejected as
+substitutes.
 
 The adversarial corpus, exact commands, evidence interpretation and remaining
 blockers are recorded in `docs/PRODUCTION_READINESS.md`. This gate does not

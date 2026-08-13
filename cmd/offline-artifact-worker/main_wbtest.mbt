@@ -84,8 +84,9 @@ fn signed_manifest(
   visual_evidence_filename? : String = "render.png",
   source_sha256? : String = artifact_sha256,
 ) -> RenderEvidenceManifest {
+  let digest = "sha256:" + "a".repeat(64)
   let unsigned : RenderEvidenceManifest = {
-    schema_version: 2,
+    schema_version: 3,
     request_id: request.request_id,
     artifact_sha256,
     source_sha256,
@@ -94,6 +95,17 @@ fn signed_manifest(
     passed: true,
     renderer_receipt: "renderer-receipt-1",
     rendered_unix_ms,
+    moonleaf: {
+      contract_version: @render.contract_version(),
+      engine: @render.engine_id(),
+      engine_version: "0.1.3",
+      source_sha256,
+      artifact_sha256,
+      font_bundle_sha256: digest,
+      layout_profile_sha256: digest,
+      page_count: page_or_sheet_count,
+      rendered_unix_ms,
+    },
     visual_evidence: [
       {
         page_or_sheet_index: 1,
@@ -315,6 +327,19 @@ async test "worker rejects unbound, tampered, stale, or malformed render evidenc
   // A signed manifest becomes invalid if any field is tampered afterward.
   let signed = signed_manifest(request, artifact_sha256, sha256(evidence), now)
   write_manifest_and_job(root, request, { ..signed, passed: false })
+  expect_job_failure(root, now)
+
+  // Another rendering engine cannot satisfy the MoonLeaf artifact boundary,
+  // even when the outer manifest is signed by the deployment adapter.
+  let foreign = {
+    ..signed,
+    moonleaf: { ..signed.moonleaf, engine: "libreoffice" },
+    signature: "",
+  }
+  write_manifest_and_job(root, request, {
+    ..foreign,
+    signature: render_evidence_signature(foreign, TestRenderSecret),
+  })
   expect_job_failure(root, now)
 
   write_manifest_and_job(

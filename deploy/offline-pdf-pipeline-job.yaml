@@ -1,15 +1,16 @@
 # Three sequential trust boundaries in one management-plane Job:
 # 1. LunaNexa/MoonLeaf prepares and verifies an exact DOCX source.
-# 2. A pinned, independently operated renderer writes the PDF, page-image
-#    evidence, and signed render manifest bound to that source.
+# 2. The pinned MoonLeaf renderer writes the PDF, page-image evidence, and
+#    signed typed MoonLeaf render manifest bound to that source.
 # 3. LunaNexa verifies every digest/signature and emits callback metadata.
 # 4. The external dispatcher uploads the verified output, posts the terminal
 #    callback, and deletes the per-job PVC. It polls the protected pending-work
 #    API using the artifact-worker callback identity.
 #
 # This is a deployment template, not readiness evidence. Keep PdfRenderer and
-# CjkFonts pending until OFFLINE_RENDERER_IMAGE_DIGEST, bilingual fonts, visual
-# baselines, and retained renderer receipts have been approved and rehearsed.
+# CjkFonts pending until MOONLEAF_RENDERER_IMAGE_DIGEST, bilingual fonts,
+# visual baselines, and retained MoonLeaf receipts have been approved and
+# rehearsed. Another office engine is not an allowed substitute.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -45,11 +46,12 @@ spec:
             readOnlyRootFilesystem: true
           volumeMounts: &work
             - { name: staging, mountPath: /work }
-        - name: render-and-attest
-          # Must implement the lunanexa.render-evidence.v2 adapter contract,
-          # including one signed visual-evidence record per page/sheet.
+        - name: moonleaf-render-and-attest
+          # Must emit lunanexa.render-evidence.v3 containing a valid typed
+          # moonleaf.render-evidence.v1 receipt, plus one signed visual record
+          # per page. LunaNexa rejects every other engine identifier.
           # Never replace this digest placeholder with a floating tag.
-          image: registry.invalid/lunanexa/offline-renderer@${OFFLINE_RENDERER_IMAGE_DIGEST}
+          image: registry.invalid/moonleaf/renderer@${MOONLEAF_RENDERER_IMAGE_DIGEST}
           args: ["render-and-attest", "/work/${JOB_FILENAME}"]
           env:
             - name: LUNANEXA_RENDER_EVIDENCE_SECRET

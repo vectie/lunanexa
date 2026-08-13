@@ -8,6 +8,7 @@ import {
   "moonbitlang/core/json",
   "moonbitlang/x/crypto",
   "vectie/moonleaf/opc",
+  "vectie/moonleaf/render",
 }
 
 supported_targets = "native"

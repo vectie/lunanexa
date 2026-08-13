@@ -35,6 +35,7 @@ pub(all) struct RenderEvidenceManifest {
   passed : Bool
   renderer_receipt : String
   rendered_unix_ms : Int64
+  moonleaf : @render.Evidence
   visual_evidence : Array[RenderVisualEvidence]
   signature : String
 } derive(Debug, Eq, FromJson, ToJson)
@@ -144,7 +145,7 @@ fn render_evidence_material(manifest : RenderEvidenceManifest) -> String {
   let evidence = manifest.visual_evidence
     .map(item => "\{item.page_or_sheet_index}:\{item.filename}:\{item.sha256}")
     .join(",")
-  "lunanexa.render-evidence.v2|\{manifest.request_id}|\{manifest.artifact_sha256}|\{manifest.source_sha256}|\{artifact_kind_label(manifest.kind)}|\{manifest.page_or_sheet_count}|\{manifest.passed}|\{manifest.renderer_receipt}|\{manifest.rendered_unix_ms}|\{evidence}"
+  "lunanexa.render-evidence.v3|\{manifest.request_id}|\{manifest.artifact_sha256}|\{manifest.source_sha256}|\{artifact_kind_label(manifest.kind)}|\{manifest.page_or_sheet_count}|\{manifest.passed}|\{manifest.renderer_receipt}|\{manifest.rendered_unix_ms}|\{manifest.moonleaf.to_json().stringify()}|\{evidence}"
 }
 
 ///|
@@ -435,7 +436,7 @@ async fn verify_render_evidence(
     !constant_time_equal(manifest.signature, expected_signature) {
     raise Failure("render-evidence signature verification failed")
   }
-  if manifest.schema_version != 2 ||
+  if manifest.schema_version != 3 ||
     manifest.request_id != job.request.request_id ||
     manifest.artifact_sha256 != artifact_sha256 ||
     !@offline.valid_sha256(manifest.source_sha256) ||
@@ -449,6 +450,13 @@ async fn verify_render_evidence(
     manifest.rendered_unix_ms > now_unix_ms + 300000L ||
     now_unix_ms - manifest.rendered_unix_ms > 900000L {
     raise Failure("render-evidence semantic verification failed")
+  }
+  if !manifest.moonleaf.valid() ||
+    manifest.moonleaf.source_sha256 != manifest.source_sha256 ||
+    manifest.moonleaf.artifact_sha256 != manifest.artifact_sha256 ||
+    manifest.moonleaf.page_count != manifest.page_or_sheet_count ||
+    manifest.moonleaf.rendered_unix_ms != manifest.rendered_unix_ms {
+    raise Failure("render evidence was not produced and bound by MoonLeaf")
   }
   let seen_visual_filenames : Map[String, Bool] = Map([])
   let mut total_visual_bytes = 0

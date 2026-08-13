@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/commercial/offline/worker",
+  "vectie/moonleaf/render",
 }
 
 // Values
@@ -36,6 +37,7 @@ pub(all) struct RenderEvidenceManifest {
   passed : Bool
   renderer_receipt : String
   rendered_unix_ms : Int64
+  moonleaf : @render.Evidence
   visual_evidence : Array[RenderVisualEvidence]
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)

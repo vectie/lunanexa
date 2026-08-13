@@ -11,7 +11,7 @@
     {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:a8037295bd49f8a95cec0065b76f234482916d65b9a9e866b53170717c079af3","kind":"product-contract","public":true},
     {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:87d85dd135c55b92f0b7088c23dfc14a8ae79ce8eac6aaa9bfb3742f03b34ac8","kind":"architecture","public":true},
     {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:d504e8d22b6a8bf689772aaac75cdb6bfd3cf8bf976021ac8138e54157d5fdcc","kind":"readiness","public":true},
-    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:bd858df995d98bfe484cc22f1725fa2420abe5c2cacbcd3b14b9cc7ac20cd1c3","kind":"deployment","public":true},
+    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:223538bc1de54ac4f58f7e557f9aa042cbfbea9fae3c6602285124b5c658fd8f","kind":"deployment","public":true},
     {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:68ae69ed0b2be5ec9a7257146e3e7320f4f6881b4caa807bc557e7d90f40aa76","kind":"operations","public":true},
     {"id":"operations-commerce-guide","path":"docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md","digest":"sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6","kind":"operations-and-guide-contract","public":true},
     {"id":"recovery","path":"docs/RECOVERY_RUNBOOK.md","digest":"sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361","kind":"recovery","public":true},

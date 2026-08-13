@@ -5,7 +5,7 @@ fn capability_blocker(capability : OfflineCommerceCapability) -> String {
     ObjectStorage => "ObjectStoragePending"
     MalwareScanner => "MalwareScannerPending"
     OoxmlWorker => "OoxmlWorkerPending"
-    PdfRenderer => "PdfRendererPending"
+    PdfRenderer => "MoonLeafPdfRendererPending"
     SpreadsheetFormulaEngine => "SpreadsheetFormulaEnginePending"
     CjkFonts => "CjkFontsPending"
     MachineCallbackIdentity => "MachineCallbackIdentityPending"

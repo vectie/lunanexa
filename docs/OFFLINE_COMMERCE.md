@@ -102,8 +102,8 @@ adapter. It directly consumes `vectie/moonleaf` and provides:
 - XLSX cached formula-error rejection.
 
 MoonLeaf is deliberately not treated as a full Word/Excel/PDF engine. The
-deployment-owned artifact worker may use an approved document renderer and
-spreadsheet formula engine, but it must return the typed
+deployment-owned artifact worker may use the approved MoonLeaf document
+renderer and spreadsheet formula engine, but it must return the typed
 `ArtifactGenerationResult`. The controller accepts DOCX/XLSX only when
 `moonleaf_verified=true`, accepts XLSX only when `formula_error_count=0`, and
 accepts all generated artifacts only when `render_verified=true` and a digest
@@ -112,13 +112,14 @@ storage.
 
 The executable `cmd/offline-artifact-worker` implements an explicit two-pass
 protocol under a configured staging root. `LUNANEXA_OFFLINE_ARTIFACT_MODE=prepare`
-writes mode-0600 prepared DOCX/XLSX bytes for an independent renderer. That
-renderer inspects every page or sheet and writes an HMAC-SHA256 signed v2
-manifest with exactly one indexed visual record per page/sheet. `mode=finalize`
+writes mode-0600 prepared DOCX/XLSX bytes for MoonLeaf's renderer. MoonLeaf
+inspects every page or sheet and writes an HMAC-SHA256 signed v3 manifest with
+a typed `moonleaf.render-evidence.v1` receipt and exactly one indexed visual
+record per page/sheet. `mode=finalize`
 repeats customization in memory and releases output only when the manifest
 binds the exact artifact digest, kind, count, fresh renderer receipt, and every
 verified PNG/PDF evidence digest. Its digest is not predeclared in the input
-job; the independent renderer creates and signs it after `prepare`.
+job; MoonLeaf creates and signs it after `prepare`.
 `LUNANEXA_RENDER_EVIDENCE_SECRET` is distinct, at least 32 bytes, and never
 accepted in job JSON, arguments, or logs.
 
@@ -130,15 +131,12 @@ every sheet, and reject clipped or unreadable output. PDF is the sole
 print/offline-execution copy; DOCX remains clearly labeled editable source.
 
 The 2026-08-12 local artifact rehearsal exercised a realistic bilingual,
-three-page contract and two-sheet quote through `prepare`, independent render
-evidence, and `finalize`. Exact artifact digests matched across both passes;
-MoonLeaf reopen, active-content checks, signed render evidence, and the XLSX
-formula scan passed. The rehearsal also found and fixed missing DOCX
-header/footer placeholder replacement. The bundled LibreOffice environment did
-not contain a usable CJK font, so Chinese contract text rendered as tofu boxes.
-This is a truthful production blocker for the renderer image, not an acceptable
-visual result: install and pin approved CJK fonts, rerun all page renders, and
-obtain a named visual reviewer before releasing a bilingual contract template.
+three-page contract and two-sheet quote through `prepare`, external render
+evidence, and `finalize`. That rehearsal is historical parser/evidence data,
+not MoonLeaf PDF qualification. LunaNexa now rejects non-MoonLeaf PDF evidence.
+The PDF path remains fail-closed until the MoonLeaf renderer implements and
+qualifies deterministic pagination, approved CJK font shaping, PDF output, and
+one retained visual artifact per page.
 
 ## HTTP surface
 
@@ -272,23 +270,24 @@ Before enabling this workflow on the real management node, configure and prove:
 - malware/active-content scanning with signed callbacks and ZIP-bomb limits;
 - a management-plane document worker with pinned image digest and a read-only
   template mount;
-- deterministic DOCX→PDF rendering with page-image visual regression;
+- deterministic MoonLeaf DOCX→PDF rendering with page-image visual regression;
 - XLSX formula recalculation, error scan, and rendered-sheet inspection;
 - mTLS or signed callback identities separate from human operator authority.
 
 `deploy/offline-pdf-pipeline-job.yaml` defines the required sequential
-MoonLeaf-prepare → pinned renderer/attestor → LunaNexa-finalize boundary. The
+MoonLeaf-prepare → MoonLeaf-render/attest → LunaNexa-finalize boundary. The
 finalizer accepts binary PDFs without UTF-8 decoding, checks the PDF header,
 cross-reference/startxref and EOF structure, verifies the exact PDF digest,
-requires a signed renderer receipt and page-image evidence, and binds both to
-the exact prepared DOCX digest. An external dispatcher must poll the protected
+requires a signed `moonleaf.render-evidence.v1` receipt and page-image evidence,
+and binds both to the exact prepared DOCX digest. An external dispatcher must poll the protected
 work route, provision one PVC per job, stage inputs, upload verified outputs,
 post the terminal callback, and delete the PVC after acknowledgement; Job TTL
 does not delete PVCs. Its renderer image is deliberately a deployment
-placeholder: this repository does not include an approved renderer image,
+placeholder: MoonLeaf does not yet include a qualified renderer image,
 bilingual production fonts, or a retained real legal-template visual baseline.
 Therefore `PdfRenderer` and `CjkFonts` must remain pending until deployment
-owners supply and retain those external proofs.
+owners supply and retain those MoonLeaf proofs. Another office engine is not
+accepted as equivalent evidence.
 
 Both artifact Job templates are selected by a dedicated default-deny
 NetworkPolicy with empty ingress and egress. They consume only their per-job

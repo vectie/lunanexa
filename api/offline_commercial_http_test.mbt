@@ -798,7 +798,7 @@ async test "configured readiness is evaluated rather than inferred" {
   )
   assert_eq(response.status, 200)
   assert_true(response.body.contains("OfflineCommerceReady"))
-  assert_false(response.body.contains("PdfRendererPending"))
+  assert_false(response.body.contains("MoonLeafPdfRendererPending"))
   let expired_service = base.with_offline_commerce_capabilities(
     offline_ready_capabilities(),
     @async.now() - 1L,
@@ -907,7 +907,7 @@ async test "offline readiness stays pending and purchaser cancellation is fenced
   )
   assert_eq(readiness.status, 200)
   assert_true(readiness.body.contains("OfflineCommerceAdaptersPending"))
-  assert_true(readiness.body.contains("PdfRendererPending"))
+  assert_true(readiness.body.contains("MoonLeafPdfRendererPending"))
   let now = @async.now()
   let subject = {
     "Authorization": "Bearer inference-token",
