@@ -60,6 +60,56 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
 }
 
 ///|
+async test "MoonLeaf audits the 18-page marker copy against the authoritative DOCX" {
+  let reference_bytes = @fs.read_file(
+      "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.docx",
+    )
+    .binary()
+    .to_fixedarray()
+  let candidate_bytes = @fs.read_file(
+      "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
+    )
+    .binary()
+    .to_fixedarray()
+  let reference = @opc.open(reference_bytes)
+  let candidate = @opc.open(candidate_bytes)
+  let audit = @docx.audit_layout_equivalence(reference, candidate)
+  assert_eq(audit.reference_cached_page_count, Some(18))
+  assert_eq(audit.candidate_cached_page_count, Some(18))
+  assert_eq(audit.reference_paragraph_count, 152)
+  assert_eq(audit.candidate_paragraph_count, 152)
+  assert_eq(audit.reference_table_count, 10)
+  assert_eq(audit.candidate_table_count, 10)
+  assert_eq(audit.reference_explicit_page_break_count, 6)
+  assert_eq(audit.candidate_explicit_page_break_count, 6)
+  assert_true(audit.non_document_parts_equal)
+  assert_true(audit.paragraph_layout_equal)
+  assert_true(audit.table_layout_equal)
+  assert_true(audit.section_layout_equal)
+  assert_true(audit.explicit_page_breaks_equal)
+  assert_true(audit.run_style_layout_equal)
+  assert_true(audit.main_structure_equal)
+  assert_true(audit.equivalent)
+  let markers = @worker.exact_docx_markers(candidate_bytes)
+  let generated_bytes = @worker.customize_exact_docx_template(
+    candidate_bytes,
+    markers.map(marker => { placeholder: marker, value: "" }),
+  )
+  let generated = @opc.open(generated_bytes.bytes)
+  let generated_audit = @docx.audit_layout_equivalence(reference, generated)
+  assert_eq(generated_audit.reference_cached_page_count, Some(18))
+  assert_eq(generated_audit.candidate_cached_page_count, Some(18))
+  assert_true(generated_audit.non_document_parts_equal)
+  assert_true(generated_audit.paragraph_layout_equal)
+  assert_true(generated_audit.run_style_layout_equal)
+  assert_true(generated_audit.table_layout_equal)
+  assert_true(generated_audit.section_layout_equal)
+  assert_true(generated_audit.explicit_page_breaks_equal)
+  assert_true(generated_audit.main_structure_equal)
+  assert_true(generated_audit.equivalent)
+}
+
+///|
 async test "generated demo scene materializes only the authorized role draft" {
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let source = @fs.read_file(

@@ -100,6 +100,51 @@ test "physical choice markers use source glyphs and missing optional slots stay 
 }
 
 ///|
+test "generation rejects a MoonLeaf receipt with the wrong physical page count" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let requested = @contractdoc.new_packet(
+    manifest,
+    "packet-page-count",
+    "packet-page-count-key",
+    "tenant-page-count",
+    "organization-page-count",
+    "subject-page-count",
+    "order-page-count",
+    [MasterLease],
+    1000L,
+  )
+  let requested = { ..requested, state: GenerationRequested }
+  let evidence = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  let docx : @contractdoc.ContractGeneratedArtifact = {
+    artifact_id: "contract-docx-wrong-pages",
+    media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sha256: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    byte_count: 1000L,
+    page_count: 17,
+    render_evidence_sha256: evidence,
+    generated_unix_ms: 2000L,
+  }
+  let pdf : @contractdoc.ContractGeneratedArtifact = {
+    artifact_id: "contract-pdf-wrong-pages",
+    media_type: "application/pdf",
+    sha256: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    byte_count: 1000L,
+    page_count: 17,
+    render_evidence_sha256: evidence,
+    generated_unix_ms: 2000L,
+  }
+  try
+    requested.complete_generation(requested.revision, docx, pdf, 2000L)
+  catch {
+    InvalidInput("contract generation evidence is invalid") => ()
+    error => fail("unexpected page-count rejection: \{Repr(error)}")
+  } noraise {
+    _ =>
+      fail("17-page MoonLeaf evidence must not complete the 18-page contract")
+  }
+}
+
+///|
 test "field ownership prevents cross-party edits and records provenance" {
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let packet = @contractdoc.new_packet(

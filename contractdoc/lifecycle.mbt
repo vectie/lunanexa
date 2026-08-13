@@ -224,6 +224,13 @@ pub fn ContractPacket::complete_generation(
   pdf : ContractGeneratedArtifact,
   now_unix_ms : Int64,
 ) -> ContractPacket raise ContractDocumentError {
+  let youthpolicy = youthpolicy_remote_lease_manifest()
+  let expected_page_count = if self.template_id == youthpolicy.template_id &&
+    self.template_version == youthpolicy.template_version {
+    Some(youthpolicy.page_count)
+  } else {
+    None
+  }
   if self.revision != expected_revision {
     raise StaleRevision
   }
@@ -238,6 +245,10 @@ pub fn ContractPacket::complete_generation(
     docx.byte_count <= 0L ||
     pdf.byte_count <= 0L ||
     docx.page_count <= 0 ||
+    (match expected_page_count {
+      Some(count) => docx.page_count != count
+      None => false
+    }) ||
     docx.page_count != pdf.page_count {
     raise InvalidInput("contract generation evidence is invalid")
   }

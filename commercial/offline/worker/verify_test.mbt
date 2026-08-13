@@ -174,6 +174,23 @@ test "MoonLeaf performs bounded DOCX placeholder and XLSX cell edits" {
 }
 
 ///|
+test "MoonLeaf preserves unrelated DOCX parts byte-for-byte" {
+  let bytes = docx_fixture()
+  let original = @opc.open(bytes)
+  let unrelated = original.replace_text(
+    "word/footer1.xml", "<w:ftr xmlns:w=\"urn:w\"><w:p><w:r><w:t>固定页脚</w:t></w:r></w:p></w:ftr>",
+  )
+  let customized = @worker.customize_docx_template(@opc.save(unrelated), [
+    { placeholder: "{{ORDER_ID}}", value: "order-2026-001" },
+  ])
+  let reopened = @opc.open(customized.bytes)
+  assert_eq(
+    reopened.part("word/footer1.xml").unwrap().content,
+    unrelated.part("word/footer1.xml").unwrap().content,
+  )
+}
+
+///|
 test "exact DOCX customization rejects incomplete and unknown marker sets" {
   let bytes = docx_fixture()
   try @worker.customize_exact_docx_template(bytes, []) catch {

@@ -172,6 +172,11 @@ fn replace_docx_headers_and_footers(
       let source = archive.text(part.name) catch {
         error => raise MoonLeafRejected("\{Repr(error)}")
       }
+      if !replacements.any(replacement => {
+          source.contains(replacement.placeholder)
+        }) {
+        continue
+      }
       let mut root = @xml.parse(source) catch {
         error => raise MoonLeafRejected("\{Repr(error)}")
       }
