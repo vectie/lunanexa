@@ -43,8 +43,8 @@ deduplication key and bounded localization parameters. Delivery channels are
 in-app, email, SMS and webhook. Only in-app is intrinsic; other channels are
 deployment adapters with retryable delivery records.
 
-Alerts support acknowledgement, assignment, bounded silence windows and
-resolution. Notifications support read/unread state. Neither user dismissal nor
+Alerts support acknowledgement, assignment, bounded silence windows, resolution
+and generation-fenced audited dead-letter redrive. Notifications support read/unread state. Neither user dismissal nor
 channel delivery deletes the immutable source event. The outbox is idempotent by
 `source_receipt + topic + audience`; retries cannot produce duplicate inbox
 items.
@@ -69,10 +69,16 @@ rendering and both console and enterprise-portal UI-to-UI scenarios.
 
 Implemented in the current phase: the typed notification contract, file and
 PostgreSQL-backed snapshot authority, in-app plus retry/dead-letter delivery
-records, preferences, operator alert actions, stale-heartbeat reconciliation,
-exclusive-lease access/expiry/termination reconciliation, operator alert UI and
-bilingual tenant inbox. External mail/SMS/webhook provider workers remain a
-deployment integration prerequisite and cannot be advertised until configured.
+records, opaque subject preferences, operator alert assignment/actions,
+autonomous stale-heartbeat/controller/database/artifact/offline-commerce and
+exclusive-lease reconciliation, a bounded provider-neutral delivery worker,
+operator alert UI and bilingual tenant inbox/preferences. Critical platform
+incidents escalate through the opaque operator webhook audience; customer
+email/SMS/webhook preferences remain subject-scoped. Stale, resolved, expired
+and silenced deliveries are skipped. The external
+mail/SMS/webhook account/destination adapter remains a deployment prerequisite;
+the protected readiness contract reports `AdaptersPending` until it is
+explicitly configured and has completed a recent real exchange.
 
 ## 2. Logs, metrics and triggers
 
@@ -83,7 +89,7 @@ code, request/correlation ID, actor class, tenant hash when applicable, target
 type and outcome. It must not include bearer tokens, subject DNs, raw prompts,
 model output, callback bodies, document bytes, SSH material or provider secrets.
 
-Metrics expose counts, gauges and latency histograms with bounded labels. Raw
+Metrics expose lifetime counts and recent-window latency gauges with bounded labels. Raw
 tenant, user, request, lease and workload IDs are never metric labels. Alert
 rules consume typed state/metrics and enqueue notification events; they do not
 parse human prose logs.
@@ -101,10 +107,19 @@ the local operator alert center remains functional when they are absent.
 
 Implemented in the current phase: bounded restart-durable operational events,
 JSON-lines stdout emission, correlation preservation, tenant hashing,
-monitoring/audit-protected event export, low-cardinality Prometheus counters,
-outbox gauges, rejection-burst and dead-letter trigger integration, and starter
-Prometheus/OpenTelemetry deployment resources. Production collector/Prometheus
-operators and the external OTLP/log destination remain deployment prerequisites.
+monitoring/audit-protected event export, low-cardinality Prometheus counters and
+recent-window latency gauges, outbox gauges, typed notification/controller/node/
+lease/delivery lifecycle events, rejection-burst and dead-letter trigger
+integration, and starter Prometheus/OpenTelemetry deployment resources.
+Production collector/Prometheus operators and the external OTLP/log destination
+remain deployment prerequisites. Central readiness remains blocked until a
+fresh authenticated sink-export proof is durable; configuration flags are not
+treated as proof.
+The proof endpoint uses a single-purpose deployment secret distinct from
+monitoring, audit, operator and adapter authorities.
+Artifact storage-capacity alerting remains blocked until a bounded storage
+capacity telemetry source exists; the implementation does not infer capacity
+from artifact count.
 
 ## 3. Hybrid digital-to-offline commerce
 
@@ -155,9 +170,10 @@ evidence. Review records expected artifact digest, prior/next state, reviewer,
 bounded reason code and audit receipt. Rejected evidence never silently replaces
 the prior file; a new revision is uploaded and linked.
 
-Fulfillment creates the commitment/lease only after the configured policy is
-satisfied in one controller transaction with the durable business snapshot and
-notification outbox. Revocation, refund, void or contract expiry triggers the
+Fulfillment requests the commitment/lease only after the configured policy is
+satisfied in the durable business snapshot. Customer notifications are then
+reconstructed idempotently from that authority state. Revocation, refund, void
+or contract expiry triggers the
 configured access action and alerts; provider evidence alone cannot directly
 activate or terminate a node account.
 
@@ -189,6 +205,12 @@ The API never returns a private key or stored password. A credential broker
 returns a single-use envelope or redirects to an approved SSH CA. The broker
 binds subject, lease, node, username, expiry and retrieval count. Access material
 expires no later than the lease and can be revoked independently.
+Response-loss recovery returns the same generation-bound redirect capability
+and durable redemption receipt; it does not allocate another broker record or
+credential request.
+The signed readiness document authorizes only its exact issuer origin. A
+handoff whose redirect changes scheme, host or port is rejected; current health
+evidence for one SSH CA never makes another HTTPS service an approved issuer.
 
 “Full machine” initially means an exclusive non-root Linux account with the
 documented filesystem boundary and rootless container runtime. It does not mean
@@ -207,6 +229,14 @@ the node and raises a critical alert.
 Agreement cancellation, failed payment or policy revocation requests termination
 through the same generation-fenced authority. They do not bypass drain, revoke
 or sanitize stages.
+
+The customer portal exposes “Cancel order” before fulfillment and “End access
+and cancel” afterward. The latter creates a tracked reversal and never claims
+that access ended before the entitlement authority confirms it. Operators can
+initiate policy revocation from the reconciliation desk. If that authority
+reports failure, the desk requires a confirmation-bound recovery: retry with a
+new request, confirm independently verified revocation, or confirm that access
+is still active. Every outcome keeps the failed receipt and generation history.
 
 Acceptance requires credential replay denial, wrong-subject/wrong-node denial,
 host-key display, restart-safe one-time retrieval, local expiry during controller

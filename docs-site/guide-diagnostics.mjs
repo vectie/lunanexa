@@ -181,15 +181,17 @@ export function buildGuideDiagnostics({
     .update(JSON.stringify(evidence || null))
     .digest("hex")
     .slice(0, 20);
+  const aggregate = snapshots?.aggregate?.ok ? snapshots.aggregate.value : null;
+  const aggregateAvailable = aggregate?.contract_version === "lunanexa.guide-controller-aggregate.v1";
   const evidenceMap = {
     coursebook: book?.contract_version === "moonbook.repository-coursebook.v1" ? "available" : "missing",
     "coursebook-evidence": evidence?.contract_version === "moonbook.repository-coursebook-evidence.v1" ? "available" : "missing",
     "moonclaw-health": petEnabled && assistantHealthy ? "available" : "missing",
     "controller-health": evidenceStatus(snapshots?.health),
-    "operator-alerts": evidenceStatus(snapshots?.alerts),
-    "node-summary": evidenceStatus(snapshots?.nodes),
-    "lease-summary": evidenceStatus(snapshots?.leases),
-    "reconciliation-plan": evidenceStatus(snapshots?.recovery),
+    "operator-alerts": aggregateAvailable ? "available" : evidenceStatus(snapshots?.alerts),
+    "node-summary": aggregateAvailable ? "available" : evidenceStatus(snapshots?.nodes),
+    "lease-summary": aggregateAvailable ? "available" : evidenceStatus(snapshots?.leases),
+    "reconciliation-plan": aggregateAvailable ? "available" : evidenceStatus(snapshots?.recovery),
   };
   const enabled = new Set(["moonbook.repository-coursebook"]);
   if (petEnabled) enabled.add("moonbook.book-pet-query");
@@ -198,7 +200,15 @@ export function buildGuideDiagnostics({
   const nodeValues = snapshots?.nodes?.ok && Array.isArray(snapshots.nodes.value) ? snapshots.nodes.value : [];
   const leaseValues = snapshots?.leases?.ok && Array.isArray(snapshots.leases.value) ? snapshots.leases.value : [];
   const recoveryActions = snapshots?.recovery?.ok && Array.isArray(snapshots.recovery.value?.actions) ? snapshots.recovery.value.actions : [];
-  const alerts = alertSummary(snapshots?.alerts?.ok ? snapshots.alerts.value : [], manifest.diagnostic_runbooks);
+  const alerts = aggregateAvailable ? {
+    total: safeInteger(aggregate.alerts?.total),
+    critical: safeInteger(aggregate.alerts?.critical),
+    by_code: (Array.isArray(aggregate.alerts?.by_code) ? aggregate.alerts.by_code : []).slice(0, 128).map((entry) => ({
+      code: /^[A-Za-z0-9._:-]{1,80}$/.test(String(entry?.code || "")) ? String(entry.code) : "Unknown",
+      count: safeInteger(entry?.count),
+      runbook_page_id: manifest.diagnostic_runbooks[entry?.code] || manifest.diagnostic_runbooks.UnknownDiagnostic,
+    })),
+  } : alertSummary(snapshots?.alerts?.ok ? snapshots.alerts.value : [], manifest.diagnostic_runbooks);
   const missingEvidence = Object.entries(evidenceMap).filter(([key, status]) => enabledEvidence.has(key) && status !== "available").map(([key]) => key).sort();
   const adminSkill = manifest.skills.find((skill) => skill.id === "lunanexa.admin-guide-diagnostics");
   const adminMissing = adminSkill ? adminSkill.required_evidence.filter((key) => evidenceMap[key] !== "available") : ["skill-manifest"];
@@ -222,11 +232,11 @@ export function buildGuideDiagnostics({
     components,
     active_alerts: alerts,
     reconciliation: {
-      pending_actions: recoveryActions.length,
-      runbook_page_id: recoveryActions.length ? manifest.diagnostic_runbooks.ReconciliationBacklog : "observability-recovery",
+      pending_actions: aggregateAvailable ? safeInteger(aggregate.reconciliation_pending_actions) : recoveryActions.length,
+      runbook_page_id: (aggregateAvailable ? safeInteger(aggregate.reconciliation_pending_actions) : recoveryActions.length) ? manifest.diagnostic_runbooks.ReconciliationBacklog : "observability-recovery",
     },
-    nodes: { total: Math.min(nodeValues.length, 10_000), truncated: nodeValues.length > 10_000, by_state: countBy(nodeValues, (node) => enumName(node?.state)) },
-    exclusive_leases: { total: Math.min(leaseValues.length, 10_000), truncated: leaseValues.length > 10_000, by_state: countBy(leaseValues, (lease) => enumName(lease?.state)) },
+    nodes: aggregateAvailable ? aggregate.nodes : { total: Math.min(nodeValues.length, 10_000), truncated: nodeValues.length > 10_000, by_state: countBy(nodeValues, (node) => enumName(node?.state)) },
+    exclusive_leases: aggregateAvailable ? aggregate.exclusive_leases : { total: Math.min(leaseValues.length, 10_000), truncated: leaseValues.length > 10_000, by_state: countBy(leaseValues, (lease) => enumName(lease?.state)) },
     skills: skillSummary(manifest, evidenceMap, enabled),
     missing_evidence: missingEvidence,
     adapter: {
@@ -253,8 +263,33 @@ async function fixedJsonRequest(fetcher, origin, path, token, timeoutMs) {
     return { ok: false, error_code: "Unavailable" };
   }
   if (!response?.ok) return { ok: false, error_code: response?.status === 401 || response?.status === 403 ? "Unauthorized" : "Unavailable" };
-  const text = await response.text();
-  if (Buffer.byteLength(text, "utf8") > maximumUpstreamBytes) return { ok: false, error_code: "ResponseTooLarge" };
+  let text = "";
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let byteCount = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        byteCount += value.byteLength;
+        if (byteCount > maximumUpstreamBytes) {
+          await reader.cancel("response exceeds diagnostic input budget");
+          return { ok: false, error_code: "ResponseTooLarge" };
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    } catch {
+      await reader.cancel("malformed or unavailable diagnostic response").catch(() => {});
+      return { ok: false, error_code: "MalformedResponse" };
+    }
+  } else {
+    // Compatibility for small unit-test adapters; production fetch responses
+    // always use the streaming branch and stop reading at the byte budget.
+    text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maximumUpstreamBytes) return { ok: false, error_code: "ResponseTooLarge" };
+  }
   try {
     return { ok: true, value: JSON.parse(text) };
   } catch {
@@ -266,12 +301,9 @@ export async function collectControllerDiagnostics({ fetcher = fetch, origin, op
   const boundedTimeout = Number.isInteger(timeoutMs) && timeoutMs >= 500 && timeoutMs <= 10_000 ? timeoutMs : 2500;
   const entries = await Promise.all([
     fixedJsonRequest(fetcher, origin, "/health", "", boundedTimeout),
-    fixedJsonRequest(fetcher, origin, "/v1/notifications/operator", operatorToken, boundedTimeout),
-    fixedJsonRequest(fetcher, origin, "/v1/nodes", operatorToken, boundedTimeout),
-    fixedJsonRequest(fetcher, origin, "/v1/exclusive-node-leases", operatorToken, boundedTimeout),
-    fixedJsonRequest(fetcher, origin, "/v1/recovery/plan", operatorToken, boundedTimeout),
+    fixedJsonRequest(fetcher, origin, "/v1/guide-diagnostics/aggregate", operatorToken, boundedTimeout),
   ]);
-  return { health: entries[0], alerts: entries[1], nodes: entries[2], leases: entries[3], recovery: entries[4] };
+  return { health: entries[0], aggregate: entries[1] };
 }
 
 export const guideDiagnosticsLimits = Object.freeze({ maximumUpstreamBytes, maximumDiagnosticBytes });

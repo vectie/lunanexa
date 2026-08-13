@@ -1,13 +1,14 @@
-# Renderers use a deliberate two-pass protocol: first render the deterministic
-# MoonLeaf-customized artifact and sign render-manifest.json; then this worker
-# repeats the deterministic customization and releases output only when the
-# signed manifest binds to the exact in-memory artifact digest.
+# Single-stage template for non-PDF OOXML generation. PDF work uses
+# offline-pdf-pipeline-job.yaml. The external dispatcher owns staging, output
+# upload, terminal callback acknowledgement, and per-job PVC deletion.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: lunanexa-offline-artifact-worker-${JOB_ID}
 spec:
-  backoffLimit: 2
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
@@ -27,7 +28,7 @@ spec:
           command: ["/usr/local/bin/lunanexa-offline-artifact-worker"]
           env:
             - name: LUNANEXA_OFFLINE_ARTIFACT_STAGING_ROOT
-              value: /var/lib/lunanexa/offline-artifacts
+              value: /work
             - name: LUNANEXA_OFFLINE_ARTIFACT_JOB_FILENAME
               value: ${JOB_FILENAME}
             - name: LUNANEXA_OFFLINE_ARTIFACT_MODE
@@ -44,8 +45,8 @@ spec:
             readOnlyRootFilesystem: true
           volumeMounts:
             - name: staging
-              mountPath: /var/lib/lunanexa/offline-artifacts
+              mountPath: /work
       volumes:
         - name: staging
           persistentVolumeClaim:
-            claimName: lunanexa-offline-artifact-staging
+            claimName: lunanexa-offline-artifact-${JOB_ID}

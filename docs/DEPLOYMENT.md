@@ -73,6 +73,16 @@ verified and cached locally before its runtime container starts.
 | Privileged account/SSH/sanitization helper | Reference implementation included | Install the root-owned helper and fixed client for host-systemd mode; physically validate the host policy before production leases |
 | OCI registry, CA, secret manager and metrics backend | External | Provision independently; they are not LunaNexa services |
 
+The Kubernetes readiness probe calls the disclosure-safe `/ready` local
+component gate while its liveness probe calls `/health`. Before admitting
+production users, call the operator-protected
+`GET /v1/readiness`. Unlike `/health`, it is a fail-closed aggregate deployment
+gate and returns stable blocker codes for notification delivery, observability,
+offline-commerce evidence, exclusive-machine credentials/helper verification,
+artifact verification and guide diagnostics. Do not make the Kubernetes
+liveness probe depend on external providers; use this endpoint from the release
+check after all provider credentials and signed evidence are installed.
+
 ## First installation: exact order
 
 There are two different meanings of “register a node” in this deployment:
@@ -292,13 +302,24 @@ sh scripts/build-browser-bundles.sh
 ```
 
 If offline commerce is enabled, the immutable management image referenced by
-`deploy/offline-artifact-worker-job.yaml` must package the separately built
+`deploy/offline-pdf-pipeline-job.yaml` must package the separately built
 `cmd/offline-artifact-worker` executable at
 `/usr/local/bin/lunanexa-offline-artifact-worker`. The repository does not
-silently add that binary to an OCI image. The same reviewed overlay must create
-the staging PVC, renderer-evidence secret, worker/scanner callback secrets, and
-an independent renderer/scanner path described in
+silently add that binary to an OCI image. The same reviewed overlay must
+configure an external dispatcher that polls the protected pending-generation
+API, creates one PVC per job, stages inputs, uploads outputs, posts terminal
+callbacks, and deletes the PVC after acknowledgement. It must also create the
+renderer-evidence secret, distinct worker/scanner/entitlement callback tokens,
+and an independent renderer/scanner path described in
 [OFFLINE_COMMERCE.md](OFFLINE_COMMERCE.md).
+
+Offline artifact readiness is derived from durable runtime proof, not a
+configuration switch. The dispatcher must poll the authenticated claim route;
+the controller requires a recent heartbeat and a recent accepted terminal
+result. A stopped or never-proven dispatcher therefore leaves management
+readiness degraded. Configure `LUNANEXA_OFFLINE_TRANSFER_ADAPTER_ENDPOINT`,
+`_TOKEN`, and `_SESSION_SECRET` together or omit all three. Partial transfer
+configuration fails startup.
 
 Create the PostgreSQL, controller and ingress secrets through the secret
 provider described in section 7. Render a private overlay that replaces every
@@ -545,15 +566,29 @@ Each DGX needs:
 The supplied DaemonSet uses host paths for configuration, state and the Podman
 socket. Confirm that its non-root process identity can read the configuration
 files, write `/var/lib/lunanexa`, and access only the intended engine socket.
-It also requires a deployment-owned lease-helper socket adapter; the bundled
-sudo client is for the host systemd layout and is not mounted into the
-DaemonSet. The node agent never invokes a shell
+Exclusive-machine actions are explicitly disabled in this DaemonSet with
+`LUNANEXA_EXCLUSIVE_LEASES_ENABLED=0`: the bundled sudo client is for the host
+systemd layout and is not runnable from a non-root pod. Do not change that flag
+until a deployment-owned privileged adapter has passed the provision, revoke,
+sanitize and quarantine drill and its signed, expiring evidence is installed
+on the controller. The node agent never invokes a shell
 or accepts controller-supplied commands: it calls only the fixed
 `provision|revoke|sanitize|quarantine` client actions with validated lease IDs,
 usernames, credential references and expiry. The privileged service must resolve
 credential references locally, lock access at expiry, remove lease-labelled
 containers and user state, and return a bounded receipt. Its absence or nonzero
 result quarantines the node.
+
+The operator-protected `/v1/readiness` remains blocked by
+`MachineHelperAdapterUnverified` and `CredentialBrokerUnavailable` unless both
+external boundaries have current signed evidence. An installed binary, mounted
+socket, URL or local metadata store is not readiness evidence. Provide the
+optional `lunanexa-machine-readiness` Secret only after verification. Its data
+keys are `credential-issuer-readiness-path`,
+`credential-issuer-readiness-secret`, `machine-helper-readiness-path`, and
+`machine-helper-readiness-secret`; the referenced canonical JSON documents are
+mounted below `/etc/lunanexa/machine-readiness`. Evidence expires after at most
+24 hours and must be regenerated by the deployment's health/drill automation.
 
 For the recommended exclusive-lease host layout, build the three native
 executables, install the deployment files with root ownership, validate the
@@ -570,7 +605,43 @@ sudo install -o root -g root -m 0644 deploy/tmpfiles.d/lunanexa-lease.conf /etc/
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/lunanexa-lease.conf
 sudo install -o root -g root -m 0644 deploy/systemd/lunanexa-node.service /etc/systemd/system/lunanexa-node.service
 sudo install -o root -g root -m 0600 /dev/null /etc/lunanexa/lease-helper.enabled
+sudo install -d -o root -g root -m 0700 /etc/lunanexa-root
+sudo install -o root -g root -m 0600 /path/to/generated-helper-receipt-key /etc/lunanexa-root/lease-helper-receipt-key
 ```
+
+Generate the helper receipt key with at least 32 random bytes and provision the
+same value into the controller-only `lease-helper-receipt-secret` Secret key.
+It must be distinct from operator, inference, node-auth, assignment, exclusive
+lease, credential-issuer, guide, audit, monitoring and callback secrets. The
+root helper reads `/etc/lunanexa-root/lease-helper-receipt-key`; this directory
+is deliberately outside the `/etc/lunanexa` hostPath mounted into the non-root
+node-agent pod. Never add the helper key to `lunanexa-node-config`, node env, or
+the DaemonSet. The controller verifies helper evidence but cannot invoke the
+root helper; the node agent can forward a receipt but cannot forge its MAC.
+Set `LUNANEXA_MACHINE_HELPER_NODE_SCOPE` (manifest substitution
+`${MACHINE_HELPER_NODE_SCOPE}`) to the exact fleet identifier signed into the
+retained evidence. Evidence for another fleet is rejected even when its key,
+validity window and node list are otherwise valid. The evidence must also cover
+exactly every active enrolled node with a fresh heartbeat before central
+readiness can become green.
+The same root-only key authenticates every privileged input action. Each node
+lease response carries bounded controller-issued MACs for the exact provision,
+revoke, sanitize and quarantine actions of that lease generation. The fixed
+client passes one through `--authorization`; the root helper verifies the
+complete typed action and rejects expired, mutated or higher/lower-generation
+arguments before touching host state. Wildcard sudo argv without this valid
+action capability is not authority.
+
+The management controller also requires independent Secret keys
+`credential-handoff-issuer-secret` and `guide-diagnostics-token`, each at least
+32 bytes and distinct from every authority above. The former derives opaque,
+single-use, subject-bound handoff references; the latter authorizes only the
+aggregate guide route and is not an operator bearer.
+
+Credential issuer readiness names the exact checked issuer origin. Every
+handoff redirect must use that same scheme, host and port; an operator-provided
+redirect for another HTTPS origin is rejected even while the issuer health
+evidence is current.
 
 Copy `deploy/lunanexa-node.env.example` to `/etc/lunanexa/node.env`, replace
 every example endpoint/identifier, and install the referenced host credentials

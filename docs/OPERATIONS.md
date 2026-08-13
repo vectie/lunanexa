@@ -133,16 +133,35 @@ The notification surface is intentionally split by authority:
 - operator actions append `:acknowledge`, `:silence`, `:assign`, or `:resolve`;
 - `GET /v1/notifications/self` lists only the authenticated subject's tenant
   inbox; `POST /v1/notifications/self/{id}:read` marks a subject-addressed item
-  read with an expected generation.
+  read with an expected generation;
+- `GET`/`PUT /v1/notifications/self/preferences` reads or updates only that
+  subject's opaque preferences. In-app delivery cannot be disabled;
+- `GET /v1/notifications/operator/readiness` exposes adapter/outbox readiness
+  without returning adapter credentials.
+- `POST /v1/notifications/operator/deliveries/{id}:redrive` generation-fences
+  and durably audits recovery of one inspected dead-letter record.
 
 The controller reconciles stale-node alerts and customer exclusive-lease
 notices from durable authority. An active lease produces access-ready and the
 current 72/24/1-hour expiry-window notice; draining, revocation, sanitization,
 completion and quarantine produce corresponding lifecycle notices. Repeated
-refresh and controller restart do not duplicate a notice. In-app delivery is
-always available. Email, SMS and webhook deliveries remain pending until an
-explicit deployment adapter claims them; retry exhaustion is retained as a
-dead-letter record rather than silently discarded.
+refresh and controller restart do not duplicate a notice. A bounded controller
+scheduler runs reconciliation without requiring either UI to be open. In-app
+delivery is always available. Email, SMS and webhook deliveries remain pending
+until an explicit deployment adapter claims them; retry exhaustion is retained
+as a dead-letter record rather than silently discarded. Configure the HTTPS
+adapter endpoint and bearer token together or leave both absent; partial
+configuration is a startup error. The adapter resolves the opaque audience to
+the provider destination and returns only a bounded provider receipt.
+The shipped NetworkPolicy permits that connection only to a namespace labeled
+`lunanexa.io/service=notification-adapter` on TCP 443; an Internet provider must
+remain behind that in-cluster adapter boundary.
+Critical platform incidents also create an operator webhook delivery.
+Resolved, expired or actively silenced records are skipped before claim and
+immediately before transport. Readiness requires a recent durable worker
+heartbeat, a real successful adapter exchange, no failure streak, no dead
+letters, and available bounded history capacity; configuration alone is not
+readiness evidence.
 
 With the controller configuration, each ordinary API completion emits one JSON
 line to stdout and updates the durable bounded event history. A record contains
@@ -150,16 +169,41 @@ only timestamp, severity, component, stable event code, correlation ID, actor
 class, optional tenant hash, bounded target type, outcome, status and duration.
 It never contains authorization headers, raw identities, request bodies,
 prompts, outputs, callback bodies, document bytes, credential references or
-server paths. `X-Request-Id` is preserved only when it is a valid bounded opaque
-identifier; otherwise the controller generates one.
+server paths. Caller request IDs are hashed into a bounded internal receipt
+before persistence; invalid values receive a generated receipt.
 
 `GET /v1/observability/events` requires the monitoring or audit role token.
-`GET /metrics` adds low-cardinality operational counters plus notification
-outbox/dead-letter gauges. Five authenticated workload admission rejections in
+`GET /metrics` adds low-cardinality operational counters, explicitly named
+recent latency-window gauges (`+Inf`, sum and count included), plus notification
+outbox/dead-letter/worker-heartbeat gauges. Five authenticated workload admission rejections in
 five minutes create one durable operator alert; delivery dead letters likewise
 create an alert and resolve after recovery. Apply `deploy/observability.yaml`
 only after installing and configuring the Prometheus and OpenTelemetry
 operators and replacing the OTLP/trust placeholders.
+
+`GET /health` is process liveness only. Kubernetes uses unauthenticated
+`GET /ready`, which returns only a boolean for local durable controller
+authorities and does not disclose provider configuration. An operator-authorized
+`GET /v1/readiness`
+returns HTTP 200 only when notification delivery, the external observability
+collector, signed offline-commerce capability evidence, the credential broker,
+exclusive-machine authority/helper verifier, artifact signature verifier and
+guide diagnostics are all configured. Offline readiness additionally verifies
+the actual callback identities and transfer-adapter triple plus durable recent
+artifact/entitlement dispatcher heartbeat and success evidence and a completed
+reconciler pass; signed capability evidence alone is insufficient. It returns
+HTTP 503 plus stable blocker
+codes otherwise. Set
+`LUNANEXA_EXTERNAL_OBSERVABILITY_COLLECTOR_CONFIGURED=1` only after configuring
+the collector. Central readiness additionally requires a recent authenticated
+collector-to-external-sink proof; the boolean alone is insufficient. Any value
+other than exact `0` or `1` fails startup.
+When the flag is `1`, configure a globally distinct, 32-byte-or-longer
+`LUNANEXA_EXTERNAL_EXPORT_PROOF_TOKEN`. Only the sink-verification integration
+receives it; monitoring and audit readers cannot submit readiness proof.
+Run that verifier in a namespace labeled
+`lunanexa.io/service=observability-proof`; the shipped NetworkPolicy grants only
+that namespace the proof-submission path to the controller.
 
 Expose the operator console and enterprise portal/WebIDE as separate sites as
 shown in `deploy/ingress.yaml`; both proxy the same `/v1` API. Keep `/metrics`
@@ -319,6 +363,16 @@ not schedulable after the termination request and becomes available only after
 a fresh generation-bound sanitization receipt proves the dedicated account,
 sessions/processes, rootless containers/volumes, home, access material and lease
 state are absent. A helper failure or forged/stale receipt quarantines the node.
+The root helper additionally requires a controller-issued full-action MAC and
+an exact on-disk lease generation. Direct sudo invocation, an altered username,
+credential reference, expiry or generation, and an expired capability all fail
+before any privileged host action.
+
+When the guide monitor is enabled, its identity key, observation key and
+read-only diagnostics token participate in the same startup-wide distinctness
+check as operator/inference/audit/monitoring, assignment/catalog/lease/issuer,
+external-export, provider callback and offline pipeline authorities. Any weak
+or reused value fails startup.
 
 The controller fills the template approval receipt and signature. The example
 digests and artifact location are placeholders and must be replaced by the

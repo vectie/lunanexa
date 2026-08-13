@@ -78,6 +78,8 @@ spec:
                   optional: true
             - name: COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS
               value: "1"
+            - name: COURSEBOOK_ADMIN_AUDIT_PATH
+              value: /var/lib/lunanexa-coursebook/admin-diagnostics.ndjson
             - name: COURSEBOOK_ALLOW_HTTPS_CONTROLLER
               value: "1"
             - name: LUNANEXA_CONTROLLER_URL
@@ -87,11 +89,11 @@ spec:
                 secretKeyRef:
                   name: "${COURSEBOOK_ADMIN_AUTH_SECRET}"
                   key: hmac-key
-            - name: LUNANEXA_CONTROLLER_OPERATOR_TOKEN
+            - name: LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: "${COURSEBOOK_CONTROLLER_AUTH_SECRET}"
-                  key: operator-token
+                  key: guide-diagnostics-token
           ports:
             - name: http
               containerPort: 4390
@@ -109,7 +111,7 @@ spec:
               drop: ["ALL"]
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
               httpHeaders:
                 - name: Host
@@ -130,10 +132,26 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: audit-state
+              mountPath: /var/lib/lunanexa-coursebook
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 32Mi
+        - name: audit-state
+          persistentVolumeClaim:
+            claimName: lunanexa-coursebook-audit
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lunanexa-coursebook-audit
+  namespace: "${DOCS_NAMESPACE}"
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
@@ -166,6 +184,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: "${INGRESS_NAMESPACE}"
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "${LUNANEXA_DIAGNOSTICS_NAMESPACE}"
       ports:
         - protocol: TCP
           port: 4390

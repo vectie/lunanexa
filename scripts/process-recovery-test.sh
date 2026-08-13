@@ -13,6 +13,7 @@ address="127.0.0.1:$port"
 base_url="http://$address"
 control_pid=""
 node_pid=""
+current_control_log=""
 
 cleanup() {
   if [ -n "$node_pid" ] && kill -0 "$node_pid" 2>/dev/null; then
@@ -57,6 +58,7 @@ start_controller() {
   epoch=$1
   reconciliation_only=$2
   log_path=$3
+  current_control_log=$log_path
   env \
     LUNANEXA_LISTEN_ADDRESS="$address" \
     LUNANEXA_STATE_PATH="$test_directory/control.json" \
@@ -64,6 +66,13 @@ start_controller() {
     LUNANEXA_ENROLLMENT_PATH="$test_directory/enrollment.json" \
     LUNANEXA_SCHEDULER_PATH="$test_directory/scheduler.json" \
     LUNANEXA_TELEMETRY_PATH="$test_directory/telemetry.json" \
+    LUNANEXA_PORTAL_PATH="$test_directory/portal.json" \
+    LUNANEXA_NOTIFICATION_PATH="$test_directory/notifications.json" \
+    LUNANEXA_OBSERVABILITY_PATH="$test_directory/observability.json" \
+    LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
+    LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
+    LUNANEXA_CREDENTIAL_HANDOFF_PATH="$test_directory/credential-handoffs.json" \
+    LUNANEXA_TECHNICAL_PATH="$test_directory/technical.json" \
     LUNANEXA_WORKSPACE_PATH="$test_directory/workspace.json" \
     LUNANEXA_DEPLOYMENT_PATH="$test_directory/deployments.json" \
     LUNANEXA_EXCLUSIVE_LEASE_PATH="$test_directory/exclusive-leases.json" \
@@ -75,14 +84,16 @@ start_controller() {
     LUNANEXA_ALLOW_HTTP_LOOPBACK=1 \
     LUNANEXA_CONTROLLER_EPOCH="$epoch" \
     LUNANEXA_RECONCILIATION_ONLY="$reconciliation_only" \
-    LUNANEXA_OPERATOR_TOKEN="process-test-operator-authority" \
+    LUNANEXA_OPERATOR_TOKEN="process-test-operator-authority-01" \
     LUNANEXA_INFERENCE_TOKEN="process-test-inference-authority" \
-    LUNANEXA_AUDIT_TOKEN="process-test-audit-authority" \
+    LUNANEXA_AUDIT_TOKEN="process-test-audit-authority-012345" \
     LUNANEXA_MONITORING_TOKEN="process-test-monitoring-authority" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
-    LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority" \
+    LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority-01" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
+    LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="process-test-credential-handoff-authority" \
+    LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="process-test-helper-receipt-authority" \
     LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
     "$control_binary" >"$log_path" 2>&1 &
@@ -96,6 +107,8 @@ wait_ready() {
       return 0
     fi
     if ! kill -0 "$control_pid" 2>/dev/null; then
+      printf '%s\n' '[blocked] controller exited before readiness' >&2
+      sed -n '1,120p' "$current_control_log" >&2
       return 1
     fi
     attempts=$((attempts + 1))
@@ -113,7 +126,7 @@ bootstrap_body="{\"token_id\":\"process-test-bootstrap\",\"secret\":\"process-te
 status=$(curl --silent --output "$test_directory/bootstrap-response.json" \
   --write-out '%{http_code}' \
   --request POST \
-  --header 'Authorization: Bearer process-test-operator-authority' \
+  --header 'Authorization: Bearer process-test-operator-authority-01' \
   --header 'Content-Type: application/json' \
   --data "$bootstrap_body" \
   "$base_url/v1/enrollment/tokens")
@@ -123,7 +136,7 @@ start_node "$test_directory/node-first.log"
 attempts=0
 while [ "$attempts" -lt 100 ]; do
   curl --fail --silent --max-time 1 \
-    --header 'Authorization: Bearer process-test-operator-authority' \
+    --header 'Authorization: Bearer process-test-operator-authority-01' \
     "$base_url/v1/nodes" >"$test_directory/nodes-first.json" || true
   if rg -q 'node-process-test' "$test_directory/nodes-first.json"; then
     break
@@ -146,7 +159,7 @@ attempts=0
 while [ "$attempts" -lt 100 ]; do
   if kill -0 "$node_pid" 2>/dev/null; then
     curl --fail --silent --max-time 1 \
-      --header 'Authorization: Bearer process-test-operator-authority' \
+      --header 'Authorization: Bearer process-test-operator-authority-01' \
       "$base_url/v1/nodes" >"$test_directory/nodes-restarted.json" || true
     if ! cmp -s "$test_directory/nodes-first.json" "$test_directory/nodes-restarted.json"; then
       break
@@ -163,7 +176,7 @@ directive='{"node_id":"node-a","desired_state":"Cordoned","generation":"1","issu
 status=$(curl --silent --output "$test_directory/directive-response.json" \
   --write-out '%{http_code}' \
   --request PUT \
-  --header 'Authorization: Bearer process-test-operator-authority' \
+  --header 'Authorization: Bearer process-test-operator-authority-01' \
   --header 'Content-Type: application/json' \
   --data "$directive" \
   "$base_url/v1/nodes/directive")
@@ -177,12 +190,12 @@ start_controller 2 1 "$test_directory/epoch-2.log"
 wait_ready
 
 curl --fail --silent --max-time 2 \
-  --header 'Authorization: Bearer process-test-audit-authority' \
+  --header 'Authorization: Bearer process-test-audit-authority-012345' \
   "$base_url/v1/audit" >"$test_directory/audit.json"
 rg -q 'process-restart-receipt' "$test_directory/audit.json"
 
 curl --fail --silent --max-time 2 \
-  --header 'Authorization: Bearer process-test-operator-authority' \
+  --header 'Authorization: Bearer process-test-operator-authority-01' \
   "$base_url/v1/recovery/plan" >"$test_directory/recovery-plan.json"
 rg -q '"actions"' "$test_directory/recovery-plan.json"
 
@@ -194,6 +207,13 @@ env \
   LUNANEXA_ENROLLMENT_PATH="$test_directory/enrollment.json" \
   LUNANEXA_SCHEDULER_PATH="$test_directory/scheduler.json" \
   LUNANEXA_TELEMETRY_PATH="$test_directory/telemetry.json" \
+  LUNANEXA_PORTAL_PATH="$test_directory/portal.json" \
+  LUNANEXA_NOTIFICATION_PATH="$test_directory/notifications.json" \
+  LUNANEXA_OBSERVABILITY_PATH="$test_directory/observability.json" \
+  LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
+  LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
+  LUNANEXA_CREDENTIAL_HANDOFF_PATH="$test_directory/credential-handoffs.json" \
+  LUNANEXA_TECHNICAL_PATH="$test_directory/technical.json" \
   LUNANEXA_WORKSPACE_PATH="$test_directory/workspace.json" \
   LUNANEXA_DEPLOYMENT_PATH="$test_directory/deployments.json" \
   LUNANEXA_EXCLUSIVE_LEASE_PATH="$test_directory/exclusive-leases.json" \
@@ -205,14 +225,16 @@ env \
   LUNANEXA_ALLOW_HTTP_LOOPBACK=1 \
   LUNANEXA_CONTROLLER_EPOCH=2 \
   LUNANEXA_RECONCILIATION_ONLY=1 \
-  LUNANEXA_OPERATOR_TOKEN="process-test-operator-authority" \
+  LUNANEXA_OPERATOR_TOKEN="process-test-operator-authority-01" \
   LUNANEXA_INFERENCE_TOKEN="process-test-inference-authority" \
-  LUNANEXA_AUDIT_TOKEN="process-test-audit-authority" \
+  LUNANEXA_AUDIT_TOKEN="process-test-audit-authority-012345" \
   LUNANEXA_MONITORING_TOKEN="process-test-monitoring-authority" \
   LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
-  LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority" \
+  LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority-01" \
   LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
   LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
+  LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="process-test-credential-handoff-authority" \
+  LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="process-test-helper-receipt-authority" \
   LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
   LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
   "$control_binary" >"$stale_log" 2>&1 && {

@@ -1,0 +1,83 @@
+# Three sequential trust boundaries in one management-plane Job:
+# 1. LunaNexa/MoonLeaf prepares and verifies an exact DOCX source.
+# 2. A pinned, independently operated renderer writes the PDF, page-image
+#    evidence, and signed render manifest bound to that source.
+# 3. LunaNexa verifies every digest/signature and emits callback metadata.
+# 4. The external dispatcher uploads the verified output, posts the terminal
+#    callback, and deletes the per-job PVC. It polls the protected pending-work
+#    API using the artifact-worker callback identity.
+#
+# This is a deployment template, not readiness evidence. Keep PdfRenderer and
+# CjkFonts pending until OFFLINE_RENDERER_IMAGE_DIGEST, bilingual fonts, visual
+# baselines, and retained renderer receipts have been approved and rehearsed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lunanexa-offline-pdf-${JOB_ID}
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/component: offline-pdf-pipeline
+        lunanexa.io/plane: management
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: prepare-moonleaf-source
+          image: registry.invalid/lunanexa/control@${CONTROLLER_IMAGE_DIGEST}
+          command: ["/usr/local/bin/lunanexa-offline-artifact-worker"]
+          env:
+            - { name: LUNANEXA_OFFLINE_ARTIFACT_STAGING_ROOT, value: /work }
+            - { name: LUNANEXA_OFFLINE_ARTIFACT_JOB_FILENAME, value: "${JOB_FILENAME}" }
+            - { name: LUNANEXA_OFFLINE_ARTIFACT_MODE, value: prepare }
+          securityContext: &locked
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts: &work
+            - { name: staging, mountPath: /work }
+        - name: render-and-attest
+          # Must implement the lunanexa.render-evidence.v2 adapter contract,
+          # including one signed visual-evidence record per page/sheet.
+          # Never replace this digest placeholder with a floating tag.
+          image: registry.invalid/lunanexa/offline-renderer@${OFFLINE_RENDERER_IMAGE_DIGEST}
+          args: ["render-and-attest", "/work/${JOB_FILENAME}"]
+          env:
+            - name: LUNANEXA_RENDER_EVIDENCE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-offline-artifact-worker
+                  key: render-evidence-secret
+            - { name: LANG, value: zh_CN.UTF-8 }
+          securityContext: *locked
+          volumeMounts: *work
+      containers:
+        - name: finalize-and-verify
+          image: registry.invalid/lunanexa/control@${CONTROLLER_IMAGE_DIGEST}
+          command: ["/usr/local/bin/lunanexa-offline-artifact-worker"]
+          env:
+            - { name: LUNANEXA_OFFLINE_ARTIFACT_STAGING_ROOT, value: /work }
+            - { name: LUNANEXA_OFFLINE_ARTIFACT_JOB_FILENAME, value: "${JOB_FILENAME}" }
+            - { name: LUNANEXA_OFFLINE_ARTIFACT_MODE, value: finalize }
+            - name: LUNANEXA_RENDER_EVIDENCE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-offline-artifact-worker
+                  key: render-evidence-secret
+          securityContext: *locked
+          volumeMounts: *work
+      volumes:
+        - name: staging
+          persistentVolumeClaim:
+            # The dispatcher provisions this claim for exactly one job and
+            # deletes it only after the terminal callback is acknowledged.
+            claimName: lunanexa-offline-artifact-${JOB_ID}

@@ -36,6 +36,8 @@ LUNANEXA_DATABASE_URL="$database_url" moon run cmd/database --target native
 test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "2"
 LUNANEXA_TEST_DATABASE_URL="$database_url" \
   moon test internal/postgres database portal/store workspace/directory \
+    notifications/store observability commercial/offline/store \
+    nodelease/store nodelease/credential/store \
     --target native --deny-warn
 
 printf '%s\n' 'PostgreSQL injection, migration, projection, rollback, and restart tests passed'

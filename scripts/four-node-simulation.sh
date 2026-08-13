@@ -6,12 +6,12 @@ cd "$repo_root"
 
 artifact_digest='sha256:3333333333333333333333333333333333333333333333333333333333333333'
 image_digest='sha256:4444444444444444444444444444444444444444444444444444444444444444'
-operator_token='simulation-operator-authority'
-inference_token='simulation-inference-authority'
-audit_token='simulation-audit-authority'
-monitoring_token='simulation-monitoring-authority'
+operator_token='simulation-operator-authority-012345'
+inference_token='simulation-inference-authority-012345'
+audit_token='simulation-audit-authority-0123456789'
+monitoring_token='simulation-monitoring-authority-012345'
 runtime_token='simulation-runtime-authority'
-assignment_secret='simulation-assignment-authority'
+assignment_secret='simulation-assignment-authority-012345'
 workspace_subject='subject-simulated-user'
 
 keep_artifacts=0
@@ -122,6 +122,13 @@ start_controller() {
     LUNANEXA_ENROLLMENT_PATH="$simulation_directory/enrollment.json" \
     LUNANEXA_SCHEDULER_PATH="$simulation_directory/scheduler.json" \
     LUNANEXA_TELEMETRY_PATH="$simulation_directory/telemetry.json" \
+    LUNANEXA_PORTAL_PATH="$simulation_directory/portal.json" \
+    LUNANEXA_NOTIFICATION_PATH="$simulation_directory/notifications.json" \
+    LUNANEXA_OBSERVABILITY_PATH="$simulation_directory/observability.json" \
+    LUNANEXA_OFFLINE_COMMERCE_PATH="$simulation_directory/offline-commerce.json" \
+    LUNANEXA_ACCESS_PATH="$simulation_directory/access.json" \
+    LUNANEXA_CREDENTIAL_HANDOFF_PATH="$simulation_directory/credential-handoffs.json" \
+    LUNANEXA_TECHNICAL_PATH="$simulation_directory/technical.json" \
     LUNANEXA_WORKSPACE_PATH="$simulation_directory/workspace.json" \
     LUNANEXA_DEPLOYMENT_PATH="$simulation_directory/deployments.json" \
     LUNANEXA_EXCLUSIVE_LEASE_PATH="$simulation_directory/exclusive-leases.json" \
@@ -140,9 +147,11 @@ start_controller() {
     LUNANEXA_AUDIT_TOKEN="$audit_token" \
     LUNANEXA_MONITORING_TOKEN="$monitoring_token" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="$assignment_secret" \
-    LUNANEXA_CATALOG_SIGNING_SECRET="simulation-catalog-authority" \
+    LUNANEXA_CATALOG_SIGNING_SECRET="simulation-catalog-authority-012345" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="simulation-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="simulation-api-key-authority-0123456789" \
+    LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="simulation-credential-handoff-authority" \
+    LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="simulation-helper-receipt-authority" \
     LUNANEXA_COSIGN_BINARY='/usr/bin/cosign' \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$simulation_directory/cosign.pub" \
     LUNANEXA_RUNTIME_CONCURRENCY=1 \
@@ -244,7 +253,9 @@ wait_for_pattern() {
   attempts=0
   # Process scheduling under the complete release gate can be materially slower
   # than a focused run. Keep the wait bounded, but allow 30 seconds for the
-  # controller -> node -> heartbeat reconciliation loop to complete.
+  # controller -> node -> heartbeat reconciliation loop to complete. Poll at a
+  # production-like cadence so each read's durable observability event does not
+  # create lock pressure that starves the node agents under the complete gate.
   while [ "$attempts" -lt 600 ]; do
     curl --fail --silent --max-time 1 \
       --header "Authorization: Bearer $operator_token" \
@@ -253,7 +264,7 @@ wait_for_pattern() {
       return 0
     fi
     attempts=$((attempts + 1))
-    sleep 0.05
+    sleep 0.1
   done
   printf '%s\n' "timed out waiting for $pattern at $path" >&2
   tail -n 30 "$simulation_directory"/controller-epoch-*.log >&2 || true

@@ -103,10 +103,25 @@ username, bounded start/expiry, coarse reachability (`Online`, `Delayed`, or
 `Unknown`), and credential-handoff kind/status/expiry. It deliberately omits the
 physical node ID, inventory, address, labels, `access_credential_ref`, passwords,
 private keys, and SSH certificate material. When access is active, the response
-may carry a generation-bound, non-secret `lease-handoff:` reference which the
+never carries a broker reference. The subject-authorized credential endpoint
+returns the opaque, single-use, generation-bound handoff reference which the
 deployment-owned credential authority redeems only after repeating identity
 and lease checks. The actual credential issuer remains an external production
 prerequisite.
+
+The broker persists the first redemption time and derives a bounded redemption
+receipt from the subject, lease and generation. If the browser loses the first
+response or reloads, the same subject may recover the identical safe host,
+fingerprint, command and approved issuer URL. This recovery never creates a
+second handoff or changes the issuer capability; cross-subject, stale-generation,
+revoked and expired recovery attempts remain rejected.
+
+The customer list reports credential handoff as `Pending` until a live broker
+record exists for the exact lease generation, `Available` before first
+redemption, and `Recoverable` afterward while the lease remains valid. An `Active`
+lease alone never produces a false “ready to redeem” state. Production
+readiness also requires current signed health evidence from the external
+issuer; the controller's handoff store and issuer URL do not satisfy that gate.
 
 Customers may end their own access early with
 `POST /v1/machine-access/self/{lease_ref}:terminate`. The request must carry the
@@ -142,6 +157,14 @@ operations are typed actions implemented and allowlisted by the node daemon.
 `cmd/lease-helper-client` is its non-root fixed-protocol caller. A helper error,
 stale or forged receipt, remaining process/runtime object, or missing ownership
 marker quarantines the node.
+
+Helper receipts MAC the complete typed action, including username and, for
+provisioning, credential reference and expiry. Receipts cannot be substituted
+between otherwise identical lease IDs and generations. The Kubernetes
+DaemonSet intentionally disables this workflow because the host sudo client is
+not runnable inside its least-privileged pod; use the documented host-systemd
+layout or supply and physically verify a separate privileged adapter before
+enabling exclusive leases.
 
 The leased account must not have write access outside its dedicated home and
 rootless runtime storage. Production hosts must enforce that with filesystem

@@ -127,15 +127,39 @@ test("controller adapter uses only fixed read-only endpoints and never returns r
   const result = await collectControllerDiagnostics({ fetcher, origin: "http://127.0.0.1:18443", operatorToken: "operator-test-value" });
   assert.ok(Object.values(result).every((entry) => entry.ok));
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
-    "/health", "/v1/notifications/operator", "/v1/nodes", "/v1/exclusive-node-leases", "/v1/recovery/plan",
+    "/health", "/v1/guide-diagnostics/aggregate",
   ]);
   assert.ok(calls.every((call) => call.options.method === "GET" && call.options.redirect === "error"));
   assert.equal(calls[0].options.headers.Authorization, undefined);
-  assert.ok(calls.slice(1).every((call) => call.options.headers.Authorization === "Bearer operator-test-value"));
+  assert.equal(calls[1].options.headers.Authorization, "Bearer operator-test-value");
   assert.equal(safeControllerUrl("http://127.0.0.1:18443"), true);
   assert.equal(safeControllerUrl("http://example.com:18443"), false);
   assert.equal(safeControllerUrl("https://control.internal", true), true);
   assert.equal(safeControllerUrl("https://user:pass@control.internal", true), false);
+});
+
+test("controller adapter cancels an oversized upstream before buffering the body", async () => {
+  let cancelled = 0;
+  let reads = 0;
+  const fetcher = async () => ({
+    ok: true,
+    status: 200,
+    body: new ReadableStream({
+      pull(controller) {
+        reads += 1;
+        controller.enqueue(new Uint8Array(300_000));
+      },
+      cancel() { cancelled += 1; },
+    }),
+  });
+  const result = await collectControllerDiagnostics({
+    fetcher,
+    origin: "http://127.0.0.1:18443",
+    operatorToken: "operator-test-value",
+  });
+  assert.ok(Object.values(result).every((entry) => entry.error_code === "ResponseTooLarge"));
+  assert.equal(cancelled, 2);
+  assert.ok(reads <= 4);
 });
 
 test("adversarial upstream cardinality stays bounded and unknown fields collapse to allowlisted codes", () => {

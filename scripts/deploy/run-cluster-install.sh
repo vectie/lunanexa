@@ -115,6 +115,7 @@ if ! mkdir -m 0700 -- "$lock_directory" 2>/dev/null; then
   exit 1
 fi
 cleanup_lock() {
+  rm -f "$lock_directory/nodes.json" "$lock_directory/expected-node-ids"
   rmdir "$lock_directory" 2>/dev/null || true
 }
 trap cleanup_lock EXIT HUP INT TERM
@@ -130,7 +131,62 @@ run_ssh() {
     "$ssh_user@$host" sh -s -- "$role" "$node_name" < "$repo_root/scripts/deploy/preflight-host.sh"
 }
 
+verify_compute_heartbeats() {
+  expected_node_ids=$1
+  nodes_output=$lock_directory/nodes.json
+  heartbeat_max_age_ms=15000
+  heartbeat_future_skew_ms=5000
+  maximum_nodes_output_bytes=1048576
+  maximum_attempts=30
+  attempt=1
+
+  while [ "$attempt" -le "$maximum_attempts" ]; do
+    # Limit a malformed or compromised management response before parsing it.
+    if (ulimit -f 2048; "$cli_path" nodes > "$nodes_output") 2>/dev/null; then
+      nodes_output_bytes=$(wc -c < "$nodes_output" | tr -d ' ')
+      now_unix_ms=$(($(date +%s) * 1000))
+      if [ "$nodes_output_bytes" -le "$maximum_nodes_output_bytes" ] &&
+        jq -e \
+          --rawfile expected_node_ids "$expected_node_ids" \
+          --argjson now_unix_ms "$now_unix_ms" \
+          --argjson heartbeat_max_age_ms "$heartbeat_max_age_ms" \
+          --argjson heartbeat_future_skew_ms "$heartbeat_future_skew_ms" '
+            ($expected_node_ids | split("\n") | map(select(length > 0))) as $expected
+            | ($expected | length) == 4
+            and ($expected | unique | length) == 4
+            and type == "array"
+            and length == 4
+            and ([.[].node_id] | sort) == ($expected | sort)
+            and all(.[];
+              type == "object"
+              and (.node_id | type) == "string"
+              and .state == "Active"
+              and (.timestamp_unix_ms | type) == "string"
+              and (.timestamp_unix_ms | test("^[0-9]+$"))
+              and ((.timestamp_unix_ms | tonumber) as $timestamp
+                | $timestamp >= ($now_unix_ms - $heartbeat_max_age_ms)
+                and $timestamp <= ($now_unix_ms + $heartbeat_future_skew_ms))
+            )
+          ' "$nodes_output" >/dev/null 2>&1; then
+        printf '%s\n' '[ok] exactly four expected compute nodes are Active with fresh heartbeats'
+        return 0
+      fi
+    fi
+    if [ "$attempt" -lt "$maximum_attempts" ]; then
+      sleep 2
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  printf '%s\n' '[blocked] expected four distinct Active compute nodes with heartbeats no older than 15 seconds' >&2
+  return 1
+}
+
 printf '%s\n' '[stage 1/9] validate local paths'
+if ! command -v jq >/dev/null 2>&1; then
+  printf '%s\n' '[blocked] jq is required to validate node heartbeat evidence' >&2
+  exit 1
+fi
 test -f "$ssh_key"
 test -f "$known_hosts"
 test -f "$kubeconfig"
@@ -155,12 +211,14 @@ old_ifs=$IFS
 IFS='
 '
 compute_count=0
+: > "$lock_directory/expected-node-ids"
 for target in $compute_targets; do
   node_name=${target%%=*}
   host=${target#*=}
   safe_identifier "$node_name"
   safe_host "$host"
   compute_count=$((compute_count + 1))
+  printf '%s\n' "$node_name" >> "$lock_directory/expected-node-ids"
   run_ssh "$host" compute "$node_name"
   KUBECONFIG="$kubeconfig" kubectl get node "$node_name" -o wide
   for name in node-token assignment-verification-key cosign.pub inventory.json bootstrap-token-id bootstrap-token bootstrap.json; do
@@ -233,7 +291,7 @@ test -f "$rendered_directory/node-daemonset.yaml"
 rg -q 'lunanexa.io/role:[[:space:]]*gpu' "$rendered_directory/node-daemonset.yaml"
 KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" apply -f "$rendered_directory/node-daemonset.yaml"
 KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" rollout status daemonset/lunanexa-node --timeout=10m
-"$cli_path" nodes
+verify_compute_heartbeats "$lock_directory/expected-node-ids"
 
 IFS='
 '

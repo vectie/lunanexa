@@ -5,8 +5,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/part-of: lunanexa
-      lunanexa.io/plane: management
+      app: lunanexa-control
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -17,6 +16,18 @@ spec:
         - namespaceSelector:
             matchLabels:
               lunanexa.io/ingress: trusted
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: observability-proof
+        # Metrics are reachable only from Prometheus pods in a namespace that
+        # the cluster operator explicitly labels for this purpose. Both
+        # selectors must match; merely running in-cluster is insufficient.
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: prometheus
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
       ports:
         - protocol: TCP
           port: 8080
@@ -54,6 +65,69 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 4390
+    # The outbound notification adapter must run only in an explicitly labeled
+    # namespace. Arbitrary Internet egress remains denied.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: notification-adapter
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: offline-transfer-adapter
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-offline-artifact-jobs
+spec:
+  podSelector:
+    matchExpressions:
+      - key: lunanexa.io/component
+        operator: In
+        values: [offline-artifact-worker, offline-pdf-pipeline]
+  policyTypes: [Ingress, Egress]
+  # Jobs consume only their per-job PVC. The external dispatcher owns API,
+  # object-store and callback traffic; generated documents never need cluster
+  # credentials or arbitrary egress.
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-observability-collector
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: lunanexa-management
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: telemetry-sink
+      ports:
+        - protocol: TCP
+          port: 4317
     - to:
         - namespaceSelector:
             matchLabels:

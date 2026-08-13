@@ -1,5 +1,7 @@
 # Validate with visudo -cf before installation. The unprivileged client and the
 # root helper both independently reject unknown actions and unsafe arguments.
+# Every invocation also carries a controller-issued, full-action MAC checked by
+# the root helper; wildcard argv alone never authorizes a privileged action.
 Defaults:lunanexa secure_path=/usr/sbin:/usr/bin:/sbin:/bin
 Defaults:lunanexa !setenv
-lunanexa ALL=(root) NOPASSWD: /usr/libexec/lunanexa-lease-helper *
+lunanexa ALL=(root) NOPASSWD: /usr/libexec/lunanexa-lease-helper * --authorization lunanexa-helper-action-v1\:*

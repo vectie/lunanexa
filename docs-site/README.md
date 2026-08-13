@@ -115,7 +115,7 @@ is disabled unless all of these are configured:
 | `COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS=1` | Explicitly enables the read-only adapter |
 | `LUNANEXA_CONTROLLER_URL` | Exact internal HTTPS origin; paths and queries are rejected |
 | `COURSEBOOK_ALLOW_HTTPS_CONTROLLER=1` | Explicit production HTTPS opt-in |
-| `LUNANEXA_CONTROLLER_OPERATOR_TOKEN` | Server-side controller credential from the secret provider |
+| `LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN` | Server-side read-only credential scoped to `/v1/guide-diagnostics/aggregate`; never use an operator bearer |
 | `COURSEBOOK_ADMIN_AUTH_KEY` | At least 32-byte HMAC key shared only with the trusted identity proxy |
 | `COURSEBOOK_ADMIN_AUTH_MAX_SKEW_MS` | Optional signed-header replay window; default 60 seconds |
 | `COURSEBOOK_KNOWLEDGE_MAX_AGE_MS` | Optional stale-index threshold; default seven days |
@@ -206,7 +206,7 @@ values are:
 | `MOONCLAW_GATEWAY_SECRET` | Optional secret containing key `token` |
 | `COURSEBOOK_IDENTITY_AUTH_URL` | Trusted ingress auth endpoint that returns freshly signed operator headers |
 | `COURSEBOOK_ADMIN_AUTH_SECRET` | Docs-namespace secret containing key `hmac-key`, shared with the identity proxy |
-| `COURSEBOOK_CONTROLLER_AUTH_SECRET` | Docs-namespace secret containing only the controller `operator-token` key |
+| `COURSEBOOK_CONTROLLER_AUTH_SECRET` | Docs-namespace secret containing only the least-privilege `guide-diagnostics-token` key; never mount the controller operator token |
 | `LUNANEXA_DIAGNOSTICS_NAMESPACE` | Namespace of the approved HTTPS diagnostics gateway |
 | `LUNANEXA_DIAGNOSTICS_URL` | Exact internal HTTPS origin for that gateway, with no path or query |
 
@@ -220,7 +220,8 @@ coursebook itself is valid; the page shows the guide as offline.
 The identity auth service must remove browser-supplied `X-LunaNexa-*` headers
 before returning its signed values. The HMAC secret at that service must match
 the docs-namespace `COURSEBOOK_ADMIN_AUTH_SECRET`. The diagnostics gateway may
-expose only the five fixed read endpoints used by this adapter; it must reject
+expose only controller `/health` and the fixed aggregate diagnostics endpoint
+used by this adapter; it must reject
 redirects, mutations, arbitrary paths and caller-supplied controller headers.
 
 After rendering, this must print nothing:
@@ -237,6 +238,11 @@ kubectl -n DOCS_NAMESPACE rollout status deployment/lunanexa-coursebook --timeou
 kubectl -n DOCS_NAMESPACE get deployment,pod,service,ingress,networkpolicy
 kubectl -n DOCS_NAMESPACE logs deployment/lunanexa-coursebook --tail=100
 ```
+
+Kubernetes readiness uses `/ready`. When administrator diagnostics are enabled,
+that endpoint requires both controller `/health` and a successful authenticated
+aggregate response with `health: "healthy"`. `/health` remains a liveness and
+coursebook availability signal and does not claim the protected adapter works.
 
 ## Refresh workflow
 

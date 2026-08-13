@@ -46,10 +46,76 @@ spec:
               value: /var/lib/lunanexa/deployments.json
             - name: LUNANEXA_EXCLUSIVE_LEASE_PATH
               value: /var/lib/lunanexa/exclusive-leases.json
+            - name: LUNANEXA_EXCLUSIVE_LEASE_RECONCILE_INTERVAL_MS
+              value: "30000"
+            - name: LUNANEXA_CREDENTIAL_HANDOFF_PATH
+              value: /var/lib/lunanexa/credential-handoffs.json
+            # Optional signed deployment evidence. When absent, external SSH
+            # credential issuance stays explicitly pending in /v1/readiness.
+            - name: LUNANEXA_CREDENTIAL_ISSUER_READINESS_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-machine-readiness
+                  key: credential-issuer-readiness-path
+                  optional: true
+            - name: LUNANEXA_CREDENTIAL_ISSUER_READINESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-machine-readiness
+                  key: credential-issuer-readiness-secret
+                  optional: true
+            - name: LUNANEXA_MACHINE_HELPER_READINESS_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-machine-readiness
+                  key: machine-helper-readiness-path
+                  optional: true
+            - name: LUNANEXA_MACHINE_HELPER_READINESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-machine-readiness
+                  key: machine-helper-readiness-secret
+                  optional: true
+            - name: LUNANEXA_MACHINE_HELPER_NODE_SCOPE
+              value: "${MACHINE_HELPER_NODE_SCOPE}"
             - name: LUNANEXA_PORTAL_PATH
               value: /var/lib/lunanexa/enterprise-portal.json
             - name: LUNANEXA_NOTIFICATION_PATH
               value: /var/lib/lunanexa/notifications.json
+            - name: LUNANEXA_NOTIFICATION_RECONCILE_INTERVAL_MS
+              value: "30000"
+            # Optional. When absent, `/v1/notifications/operator/readiness`
+            # reports AdaptersPending and intrinsic in-app delivery remains
+            # available. Do not set a fake provider endpoint in production.
+            - name: LUNANEXA_NOTIFICATION_DELIVERY_ADAPTER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: notification-delivery-adapter-endpoint
+                  optional: true
+            - name: LUNANEXA_NOTIFICATION_DELIVERY_ADAPTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: notification-delivery-adapter-token
+                  optional: true
+            - name: LUNANEXA_NOTIFICATION_DELIVERY_INTERVAL_MS
+              value: "30000"
+            - name: LUNANEXA_NOTIFICATION_DELIVERY_TIMEOUT_MS
+              value: "5000"
+            # This is an explicit deployment attestation, not endpoint
+            # inference. Set to 0 until the collector/export path is verified.
+            - name: LUNANEXA_EXTERNAL_OBSERVABILITY_COLLECTOR_CONFIGURED
+              value: "0"
+            # Required and globally distinct when the collector flag is 1. This
+            # authority can only submit downstream export receipts; it is not a
+            # metrics or audit reader token.
+            - name: LUNANEXA_EXTERNAL_EXPORT_PROOF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: external-export-proof-token
+                  optional: true
             - name: LUNANEXA_OFFLINE_COMMERCE_PATH
               value: /var/lib/lunanexa/offline-commerce.json
             - name: LUNANEXA_ARTIFACT_WORKER_CALLBACK_TOKEN
@@ -62,6 +128,39 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: artifact-scanner-callback-token
+            - name: LUNANEXA_ENTITLEMENT_AUTHORITY_CALLBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: entitlement-authority-callback-token
+            - name: LUNANEXA_OFFLINE_TRANSFER_ADAPTER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: offline-transfer-adapter-endpoint
+                  optional: true
+            - name: LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: offline-transfer-adapter-token
+                  optional: true
+            - name: LUNANEXA_OFFLINE_TRANSFER_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: offline-transfer-session-secret
+                  optional: true
+            # Remove both readiness variables to run intentionally pending.
+            # A configured document is signed deployment evidence, not a set of
+            # operator-entered booleans.
+            - name: LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH
+              value: /etc/lunanexa/offline-readiness/readiness.json
+            - name: LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: offline-commerce-readiness-secret
             - name: LUNANEXA_ENABLE_GUIDE_MONITOR
               value: "1"
             - name: LUNANEXA_GUIDE_ORIGIN
@@ -191,6 +290,21 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: exclusive-lease-signing-secret
+            - name: LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: credential-handoff-issuer-secret
+            - name: LUNANEXA_LEASE_HELPER_RECEIPT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: lease-helper-receipt-secret
+            - name: LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: guide-diagnostics-token
             - name: LUNANEXA_API_KEY_ISSUER_SECRET
               valueFrom:
                 secretKeyRef:
@@ -202,7 +316,7 @@ spec:
               value: /etc/lunanexa/trust/cosign.pub
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
           livenessProbe:
             httpGet:
@@ -225,6 +339,12 @@ spec:
             - name: admin-settings
               mountPath: /etc/lunanexa/admin-policy
               readOnly: true
+            - name: offline-readiness
+              mountPath: /etc/lunanexa/offline-readiness
+              readOnly: true
+            - name: machine-readiness
+              mountPath: /etc/lunanexa/machine-readiness
+              readOnly: true
             - name: model-store
               mountPath: /data/models
               readOnly: true
@@ -241,6 +361,15 @@ spec:
         - name: admin-settings
           configMap:
             name: lunanexa-admin-settings
+        - name: offline-readiness
+          secret:
+            secretName: lunanexa-offline-commerce-readiness
+            defaultMode: 0400
+        - name: machine-readiness
+          secret:
+            secretName: lunanexa-machine-readiness
+            optional: true
+            defaultMode: 0400
         - name: model-store
           hostPath:
             path: /data/models

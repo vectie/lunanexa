@@ -44,8 +44,12 @@ spec:
               value: /var/lib/lunanexa/node-certificate.json
             - name: LUNANEXA_LEASE_STATE_PATH
               value: /var/lib/lunanexa/exclusive-lease-agent.json
-            - name: LUNANEXA_LEASE_HELPER
-              value: /usr/libexec/lunanexa-lease-helper-client
+            # Kubernetes exclusive leases remain fail-closed until a
+            # deployment-owned, exercised privileged adapter is installed.
+            # The bundled sudo client is supported only by the host-systemd
+            # layout and is deliberately not claimed runnable in this pod.
+            - name: LUNANEXA_EXCLUSIVE_LEASES_ENABLED
+              value: "0"
             - name: LUNANEXA_MODEL_CACHE_PATH
               value: /var/lib/lunanexa/models
             - name: LUNANEXA_ARTIFACT_ENDPOINT
@@ -95,8 +99,6 @@ spec:
               readOnly: true
             - name: podman-socket
               mountPath: /run/podman/podman.sock
-            - name: lease-helper-socket
-              mountPath: /run/lunanexa/lease-helper.sock
       volumes:
         - name: node-config
           hostPath:
@@ -112,8 +114,4 @@ spec:
         - name: podman-socket
           hostPath:
             path: /run/podman/podman.sock
-            type: Socket
-        - name: lease-helper-socket
-          hostPath:
-            path: /run/lunanexa/lease-helper.sock
             type: Socket

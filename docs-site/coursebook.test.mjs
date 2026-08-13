@@ -183,33 +183,58 @@ test("administrator diagnostics deny public callers and return only bounded aggr
     controller: process.env.LUNANEXA_CONTROLLER_URL,
     https: process.env.COURSEBOOK_ALLOW_HTTPS_CONTROLLER,
     auth: process.env.COURSEBOOK_ADMIN_AUTH_KEY,
-    token: process.env.LUNANEXA_CONTROLLER_OPERATOR_TOKEN,
+    token: process.env.LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN,
+    audit: process.env.COURSEBOOK_ADMIN_AUDIT_PATH,
   };
   const originalFetch = globalThis.fetch;
   const originalWrite = process.stdout.write;
   const auditLines = [];
   const key = "coursebook-admin-test-key-longer-than-32-bytes";
+  const auditRoot = await mkdtemp(join(tmpdir(), "lunanexa-guide-audit-"));
+  const auditPath = join(auditRoot, "admin.ndjson");
   try {
     process.env.COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS = "1";
     process.env.LUNANEXA_CONTROLLER_URL = "http://127.0.0.1:18443";
     process.env.COURSEBOOK_ADMIN_AUTH_KEY = key;
-    process.env.LUNANEXA_CONTROLLER_OPERATOR_TOKEN = "controller-operator-test-value";
+    process.env.LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN = "guide-readonly-test-value-more-than-32-bytes";
+    process.env.COURSEBOOK_ADMIN_AUDIT_PATH = auditPath;
     delete process.env.COURSEBOOK_ALLOW_HTTPS_CONTROLLER;
     globalThis.fetch = async (url, options = {}) => {
       const path = new URL(url).pathname;
       const values = {
         "/health": { status: "ok", internal_path: "/private/controller" },
-        "/v1/notifications/operator": [{ lifecycle: "Unread", event: { code: "NodeUnreachable", severity: "Critical", parameters: { node_ref: "node-private-a" } } }],
-        "/v1/nodes": [{ node_id: "node-private-a", state: "Active", signature: "private-signature" }],
-        "/v1/exclusive-node-leases": [{ state: "Expiring", intent: { subject_ref: "private-subject", access_credential_ref: "private-credential" } }],
-        "/v1/recovery/plan": { actions: [{ StartMissing: "private-assignment" }] },
+        "/v1/guide-diagnostics/aggregate": {
+          contract_version: "lunanexa.guide-controller-aggregate.v1",
+          health: "healthy",
+          alerts: { total: 1, critical: 1, by_code: [{ code: "NodeUnreachable", count: 1 }] },
+          nodes: { total: 1, truncated: false, by_state: [{ code: "Active", count: 1 }] },
+          exclusive_leases: { total: 1, truncated: false, by_state: [{ code: "Expiring", count: 1 }] },
+          reconciliation_pending_actions: 1,
+        },
       };
       assert.equal(options.method, "GET");
-      if (path !== "/health") assert.equal(options.headers.Authorization, "Bearer controller-operator-test-value");
+      if (path !== "/health") assert.equal(options.headers.Authorization, "Bearer guide-readonly-test-value-more-than-32-bytes");
       return { ok: true, status: 200, text: async () => JSON.stringify(values[path]) };
     };
     process.stdout.write = ((value, ...rest) => { auditLines.push(String(value)); return true; });
     const server = createCoursebookServer(4390);
+    const ready = await invokeWithoutListener(server, { url: "/ready" });
+    assert.equal(ready.status, 200);
+    const healthyFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const path = new URL(url).pathname;
+      if (path === "/health") return { ok: true, status: 200, text: async () => '{"status":"ok"}' };
+      return { ok: false, status: 401, text: async () => '{"error":"wrong guide token"}' };
+    };
+    const wrongTokenReady = await invokeWithoutListener(server, { url: "/ready" });
+    assert.equal(wrongTokenReady.status, 503);
+    assert.equal(JSON.parse(wrongTokenReady.body).dependencies.admin_diagnostics.ok, false);
+    globalThis.fetch = healthyFetch;
+    delete process.env.LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN;
+    const missingTokenReady = await invokeWithoutListener(server, { url: "/ready" });
+    assert.equal(missingTokenReady.status, 503);
+    assert.equal(JSON.parse(missingTokenReady.body).dependencies.admin_diagnostics.configured, false);
+    process.env.LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN = "guide-readonly-test-value-more-than-32-bytes";
     const publicReply = await invokeWithoutListener(server, { url: "/api/coursebook/admin/diagnostics?category=overview" });
     assert.equal(publicReply.status, 403);
     const timestamp = Date.now();
@@ -239,6 +264,32 @@ test("administrator diagnostics deny public callers and return only bounded aggr
     assert.equal(successful.query_category, "overview");
     assert.equal(successful.correlation_receipt, "support-receipt-7");
     assert.equal(Object.hasOwn(successful, "question"), false);
+    const durableAudits = (await readFile(auditPath, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(durableAudits.some((event) =>
+      event.adapter_outcome === "success" &&
+      event.correlation_receipt === "support-receipt-7"));
+
+    process.env.COURSEBOOK_ADMIN_AUDIT_PATH = auditRoot;
+    const failedAudit = await invokeWithoutListener(server, {
+      url: "/api/coursebook/admin/diagnostics?category=overview",
+      headers: {
+        "x-lunanexa-actor": identity.actor,
+        "x-lunanexa-role": identity.role,
+        "x-lunanexa-auth-timestamp": String(timestamp),
+        "x-lunanexa-auth-signature": signAdminIdentity(identity, key),
+      },
+    });
+    assert.equal(failedAudit.status, 503);
+    const auditDegraded = await invokeWithoutListener(server, { url: "/ready" });
+    assert.equal(auditDegraded.status, 503);
+    assert.equal(JSON.parse(auditDegraded.body).dependencies.admin_diagnostics.ok, false);
+
+    process.env.COURSEBOOK_ADMIN_AUDIT_PATH = auditPath;
+    const auditRecovered = await invokeWithoutListener(server, { url: "/ready" });
+    assert.equal(auditRecovered.status, 200);
     server.close();
   } finally {
     globalThis.fetch = originalFetch;
@@ -248,11 +299,13 @@ test("administrator diagnostics deny public callers and return only bounded aggr
       LUNANEXA_CONTROLLER_URL: previous.controller,
       COURSEBOOK_ALLOW_HTTPS_CONTROLLER: previous.https,
       COURSEBOOK_ADMIN_AUTH_KEY: previous.auth,
-      LUNANEXA_CONTROLLER_OPERATOR_TOKEN: previous.token,
+      LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN: previous.token,
+      COURSEBOOK_ADMIN_AUDIT_PATH: previous.audit,
     })) {
       if (value === undefined) delete process.env[keyName];
       else process.env[keyName] = value;
     }
+    await rm(auditRoot, { recursive: true, force: true });
   }
 });
 
@@ -344,7 +397,8 @@ test("separate-site deployment remains digest-pinned and least privilege", async
   assert.match(deployment, /COURSEBOOK_ENABLE_PET/);
   assert.match(deployment, /COURSEBOOK_ENABLE_ADMIN_DIAGNOSTICS/);
   assert.match(deployment, /COURSEBOOK_ADMIN_AUTH_KEY/);
-  assert.match(deployment, /LUNANEXA_CONTROLLER_OPERATOR_TOKEN/);
+  assert.match(deployment, /LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN/);
+  assert.doesNotMatch(deployment, /LUNANEXA_CONTROLLER_OPERATOR_TOKEN/);
   assert.match(deployment, /COURSEBOOK_IDENTITY_AUTH_URL/);
   assert.match(deployment, /auth-response-headers: "X-LunaNexa-Actor,X-LunaNexa-Role,X-LunaNexa-Auth-Timestamp,X-LunaNexa-Auth-Signature,X-LunaNexa-Correlation-Id"/);
   assert.match(deployment, /app\.kubernetes\.io\/name: lunanexa-diagnostics-gateway/);
@@ -355,6 +409,24 @@ test("separate-site deployment remains digest-pinned and least privilege", async
   assert.doesNotMatch(deployment, /(?:password|token):\s*["'][^$][^"']{7,}["']/i);
 });
 
+test("machine credential and cleanup evidence secrets stay out of node-agent scope", async () => {
+  const [controller, node, deployment] = await Promise.all([
+    readFile(resolve(root, "deploy/controller.yaml"), "utf8"),
+    readFile(resolve(root, "deploy/node-daemonset.yaml"), "utf8"),
+    readFile(resolve(root, "docs/DEPLOYMENT.md"), "utf8"),
+  ]);
+  assert.match(controller, /LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET/);
+  assert.match(controller, /LUNANEXA_LEASE_HELPER_RECEIPT_SECRET/);
+  assert.match(controller, /LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN/);
+  assert.doesNotMatch(node, /LEASE_HELPER_RECEIPT_SECRET|lease-helper-receipt-key|CREDENTIAL_HANDOFF_ISSUER_SECRET/);
+  assert.match(node, /LUNANEXA_EXCLUSIVE_LEASES_ENABLED[\s\S]{0,80}value: "0"/);
+  assert.doesNotMatch(node, /lease-helper\.sock|lunanexa-lease-helper-client/);
+  assert.match(controller, /LUNANEXA_CREDENTIAL_ISSUER_READINESS_PATH/);
+  assert.match(controller, /LUNANEXA_MACHINE_HELPER_READINESS_PATH/);
+  assert.match(deployment, /\/etc\/lunanexa-root\/lease-helper-receipt-key/);
+  assert.match(deployment, /Never add the helper key/);
+});
+
 test("HTTP contract stays healthy without the optional pet and fails closed on host", async () => {
   const server = createCoursebookServer(4390);
   const health = await invokeWithoutListener(server, { url: "/health" });
@@ -363,6 +435,8 @@ test("HTTP contract stays healthy without the optional pet and fails closed on h
   assert.equal(healthBody.ok, true);
   assert.deepEqual(healthBody.dependencies.assistant, { ok: false, enabled: false, optional: true });
   assert.deepEqual(healthBody.dependencies.admin_diagnostics, { ok: false, enabled: false, optional: true });
+  const ready = await invokeWithoutListener(server, { url: "/ready" });
+  assert.equal(ready.status, 200);
 
   const denied = await invokeWithoutListener(server, { url: "/health", host: "attacker.invalid" });
   assert.equal(denied.status, 403);

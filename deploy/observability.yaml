@@ -1,6 +1,16 @@
 # Requires the Prometheus Operator and OpenTelemetry Operator. Replace every
-# placeholder and pin the collector image through the operator policy before
-# applying in production.
+# placeholder and replace the digest placeholder before applying in production.
+# The external sink integration must post a bounded proof to
+# POST /v1/observability/export-proof with the single-purpose
+# LUNANEXA_EXTERNAL_EXPORT_PROOF_TOKEN only after it confirms receipt.
+# Monitoring/audit-reader authority is intentionally insufficient. The
+# collector-configured flag alone never satisfies central readiness because
+# generic OTLP has no portable delivery-receipt callback.
+#
+# The Prometheus namespace and scraper pods must carry the exact labels used by
+# deploy/network-policy.yaml: lunanexa.io/service=prometheus on the namespace
+# and app.kubernetes.io/name=prometheus on the pod. Scraping uses the separate
+# read-only monitoring token below and never the export-proof token.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -51,6 +61,42 @@ spec:
             severity: warning
           annotations:
             summary: LunaNexa workload admission rejections are elevated
+        - alert: LunaNexaNotificationWorkerStale
+          expr: lunanexa_notification_worker_last_heartbeat_age_seconds > 300
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: LunaNexa notification delivery worker is stale
+        - alert: LunaNexaNodeHealthDegraded
+          expr: increase(lunanexa_operational_events_total{event_code="NodeHealthReconciled",outcome="degraded"}[5m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: LunaNexa reports degraded cluster node health
+        - alert: LunaNexaExclusiveLeaseHealthDegraded
+          expr: increase(lunanexa_operational_events_total{event_code="ExclusiveLeaseHealthReconciled",outcome="degraded"}[5m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: LunaNexa reports degraded exclusive-machine cleanup health
+        - alert: LunaNexaGuideDiagnosticsDegraded
+          expr: increase(lunanexa_operational_events_total{event_code="GuideDiagnosticsProbeCompleted",outcome="degraded"}[5m]) > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: LunaNexa guide diagnostics probe is degraded
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-observability
+  labels:
+    app.kubernetes.io/part-of: lunanexa
+automountServiceAccountToken: false
 ---
 apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
@@ -58,6 +104,32 @@ metadata:
   name: lunanexa-management
 spec:
   mode: daemonset
+  image: otel/opentelemetry-collector-contrib@${OTEL_COLLECTOR_IMAGE_DIGEST}
+  serviceAccount: lunanexa-observability
+  podMetadata:
+    labels:
+      app.kubernetes.io/part-of: lunanexa
+      app.kubernetes.io/instance: lunanexa-management
+      lunanexa.io/plane: observability
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
   config:
     receivers:
       filelog:
@@ -78,9 +150,43 @@ spec:
         endpoint: ${OTLP_ENDPOINT}
         tls:
           ca_file: /etc/lunanexa/otel/ca.crt
+        sending_queue:
+          enabled: true
+          queue_size: 2048
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 300s
     service:
       pipelines:
         logs:
           receivers: [filelog]
           processors: [memory_limiter, batch]
           exporters: [otlp]
+  env:
+    - name: OTLP_ENDPOINT
+      valueFrom:
+        secretKeyRef:
+          name: lunanexa-observability
+          key: otlp-endpoint
+  volumeMounts:
+    - name: temporary
+      mountPath: /tmp
+    - name: pod-logs
+      mountPath: /var/log/pods
+      readOnly: true
+    - name: otel-trust
+      mountPath: /etc/lunanexa/otel
+      readOnly: true
+  volumes:
+    - name: temporary
+      emptyDir:
+        sizeLimit: 64Mi
+    - name: pod-logs
+      hostPath:
+        path: /var/log/pods
+        type: Directory
+    - name: otel-trust
+      secret:
+        secretName: lunanexa-observability
