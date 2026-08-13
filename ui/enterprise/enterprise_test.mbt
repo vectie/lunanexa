@@ -41,6 +41,9 @@ test "customer notification inbox is bilingual and keeps opaque receipts" {
   assert_true(english.contains("Notification inbox"))
   assert_true(english.contains("Machine access is ready"))
   assert_true(english.contains("Mark as read"))
+  assert_true(english.contains("Delivery preferences"))
+  assert_true(english.contains("Disable email"))
+  assert_true(english.contains("In-app delivery always remains enabled"))
   assert_true(english.contains("exclusive-lease:demo:5"))
   let chinese = @enterprise.render({
     ..state,
@@ -50,6 +53,8 @@ test "customer notification inbox is bilingual and keeps opaque receipts" {
   assert_true(chinese.contains("通知收件箱"))
   assert_true(chinese.contains("机器访问已就绪"))
   assert_true(chinese.contains("标记为已读"))
+  assert_true(chinese.contains("投递偏好"))
+  assert_true(chinese.contains("关闭邮件"))
   assert_true(chinese.contains("exclusive-lease:demo:5"))
 }
 

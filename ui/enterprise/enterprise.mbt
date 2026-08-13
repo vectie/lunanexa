@@ -27,6 +27,7 @@ pub(all) struct EnterpriseState {
   agreements : Array[@portal.PortalAgreement]
   lease_requests : Array[@portal.EnterpriseLeaseRequest]
   notifications : Array[@notifications.NotificationRecord]
+  notification_preferences : Array[@notifications.NotificationPreferenceView]
   machine_access : @machine_access.MachineAccessState
   offline_commerce : @offline_commerce.OfflineCommerceState
   cost_centers : Array[EnterpriseCostCenterRow]
@@ -54,6 +55,7 @@ pub(all) enum EnterpriseMessage {
   SignAgreement(String)
   SubmitLease
   MarkNotificationRead(String, Int64)
+  SetNotificationEmail(@notifications.NotificationTopic, Bool)
   MachineAccess(@machine_access.MachineAccessMessage)
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
   ClearNotice
@@ -77,6 +79,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     agreements: [],
     lease_requests: [],
     notifications: [],
+    notification_preferences: [],
     machine_access: @machine_access.default_state(@i18n.default_locale()),
     offline_commerce: @offline_commerce.default_state(
       @i18n.default_locale(),
@@ -203,6 +206,14 @@ pub fn demo_state() -> EnterpriseState {
         updated_unix_ms: now - 1800000L,
       },
     ],
+    notification_preferences: [
+      {
+        topic: LeaseLifecycle,
+        channels: [InApp, Email],
+        minimum_severity: Information,
+        updated_unix_ms: now - 1800000L,
+      },
+    ],
     machine_access: {
       ..@machine_access.default_state(@i18n.default_locale()),
       machines: [
@@ -220,7 +231,7 @@ pub fn demo_state() -> EnterpriseState {
           last_seen_unix_ms: Some(now - 5000L),
           credential_handoff: {
             state: Available,
-            handoff_ref: Some("lease-handoff:exclusive-lease-demo:5"),
+            handoff_ref: None,
             credential_kind: "short-lived-ssh-certificate",
             valid_until_unix_ms: now + 86400000L,
             raw_secret_included: false,
@@ -300,6 +311,8 @@ pub fn EnterpriseState::update(
     SubmitLease =>
       { ..self, loading: true, success_message: None, error_message: None }
     MarkNotificationRead(_, _) => self
+    SetNotificationEmail(_, _) =>
+      { ..self, loading: true, success_message: None, error_message: None }
     MachineAccess(message) =>
       { ..self, machine_access: self.machine_access.update(message) }
     OfflineCommerce(message) =>
@@ -1074,6 +1087,19 @@ fn notification_code_label(locale : @i18n.Locale, code : String) -> String {
       copy(locale, "Agreement action required", "协议需要处理")
     "OfflineDocumentsRequired" =>
       copy(locale, "Offline documents required", "需要线下文件")
+    "QuoteReady" => copy(locale, "Quote is ready", "报价已生成")
+    "OfflinePacketReady" =>
+      copy(
+        locale, "Offline contract packet is ready", "线下合同文件包已生成",
+      )
+    "EvidenceReviewStarted" =>
+      copy(locale, "Evidence review started", "凭证审核已开始")
+    "EvidenceCorrectionRequired" =>
+      copy(locale, "Evidence needs correction", "凭证需要修正")
+    "FulfillmentReady" =>
+      copy(locale, "Resource fulfillment is ready", "资源交付已就绪")
+    "CommercialReversalStarted" =>
+      copy(locale, "Commercial reversal started", "商务撤销已开始")
     _ => code
   }
 }
@@ -1160,6 +1186,67 @@ fn notification_detail(
 }
 
 ///|
+fn notification_email_enabled(
+  state : EnterpriseState,
+  topic : @notifications.NotificationTopic,
+) -> Bool {
+  state.notification_preferences.any(preference => {
+    preference.topic == topic && preference.channels.contains(Email)
+  })
+}
+
+///|
+fn notification_preference_row(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+  topic : @notifications.NotificationTopic,
+  english : String,
+  chinese : String,
+) -> @rabbita.Html {
+  let enabled = notification_email_enabled(state, topic)
+  @html.li(class="record-card", [
+    @html.div(class="record-main", [
+      @html.h3(copy(state.locale, english, chinese)),
+      @html.p(
+        copy(
+          state.locale,
+          if enabled {
+            "Email delivery is on."
+          } else {
+            "In-app only."
+          },
+          if enabled {
+            "电子邮件投递已开启。"
+          } else {
+            "仅站内通知。"
+          },
+        ),
+      ),
+    ]),
+    @html.div(class="record-actions", [
+      @html.button(
+        type_="button",
+        disabled=state.loading,
+        on_click=command(emit, SetNotificationEmail(topic, !enabled)),
+        copy(
+          state.locale,
+          if enabled {
+            "Disable email"
+          } else {
+            "Enable email"
+          },
+          if enabled {
+            "关闭邮件"
+          } else {
+            "开启邮件"
+          },
+        ),
+      ),
+    ]),
+  ])
+}
+
+///|
 fn notifications_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
@@ -1182,6 +1269,40 @@ fn notifications_view(
         copy(state.locale, "\{unread} unread", "\{unread} 条未读"),
       ),
     ]),
+    @html.section(
+      attrs=@html.Attrs::build().aria_labelledby(
+        "notification-preferences-title",
+      ),
+      [
+        @html.h2(
+          id="notification-preferences-title",
+          copy(state.locale, "Delivery preferences", "投递偏好"),
+        ),
+        @html.p(
+          copy(
+            state.locale,
+            "In-app delivery always remains enabled. External delivery starts only when the platform adapter is configured.",
+            "站内通知始终开启。仅在平台配置外部投递适配器后，外部投递才会生效。",
+          ),
+        ),
+        @html.ul(class="record-list", [
+          notification_preference_row(
+            state,
+            emit,
+            LeaseLifecycle,
+            "Machine and lease lifecycle",
+            "机器与租约生命周期",
+          ),
+          notification_preference_row(
+            state,
+            emit,
+            CommercialAction,
+            "Contracts and commercial actions",
+            "合同与商务操作",
+          ),
+        ]),
+      ],
+    ),
     if state.notifications.length() == 0 {
       @html.p(
         class="empty",

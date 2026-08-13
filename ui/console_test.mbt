@@ -94,6 +94,17 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         silenced_until_unix_ms: None,
       },
     ],
+    notification_deliveries: [
+      {
+        delivery_id: "delivery-alert-node-1-email",
+        notification_id: "alert-node-1",
+        channel: Email,
+        state: DeadLetter,
+        attempt_count: 5,
+        updated_unix_ms: 1786200300000L,
+        last_error_code: "ProviderUnavailable",
+      },
+    ],
     users: [
       {
         user_id: "user-1",
@@ -199,6 +210,12 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       },
     ],
     offline_commerce: @offline_commerce.default_state(English, OperatorCommerce),
+    production_readiness: {
+      ready: false,
+      loading: false,
+      blocker_codes: ["ExternalObservabilityNotReady"],
+      error: None,
+    },
     confirmation: Some(@ui.confirmation_receipt(DrainNode("node-1"), "node-1")),
     error_message: None,
     success_message: None,
@@ -271,10 +288,42 @@ test "alerts route localizes durable incident state and actions" {
   assert_true(english.contains("Acknowledge"))
   assert_true(english.contains("Silence 1h"))
   assert_true(english.contains("Resolve"))
+  assert_true(english.contains("Delivery outbox"))
+  assert_true(english.contains("delivery-alert-node-1-email"))
+  assert_true(english.contains("Dead letter"))
+  assert_true(english.contains("Redrive"))
+  assert_false(english.contains("recipient"))
   let chinese = @ui.render({ ..state, locale: ChineseSimplified })
   assert_true(chinese.contains("运维告警中心"))
   assert_true(chinese.contains("节点心跳已超时"))
   assert_true(chinese.contains("静默 1 小时"))
+  assert_true(chinese.contains("通知投递队列"))
+  assert_true(chinese.contains("死信"))
+  assert_true(chinese.contains("重新投递"))
+  assert_true(chinese.contains("投递供应商不可用"))
+}
+
+///|
+test "dead-letter redrive confirmation carries the delivery generation" {
+  let state = console_state(Alerts)
+  let confirmation = @ui.confirmation_receipt(
+    RedriveNotificationDelivery(
+      "delivery-alert-node-1-email", 5, 1786200300000L,
+    ),
+    "delivery-alert-node-1-email · attempt 5 · generation 1786200300000",
+  )
+  let english = @ui.render({ ..state, confirmation: Some(confirmation) })
+  assert_true(english.contains("Confirm delivery redrive"))
+  assert_true(english.contains("attempt count 5"))
+  assert_true(english.contains("1786200300000"))
+  assert_true(english.contains("Confirm redrive"))
+  let chinese = @ui.render({
+    ..state,
+    locale: ChineseSimplified,
+    confirmation: Some(confirmation),
+  })
+  assert_true(chinese.contains("确认重新投递"))
+  assert_true(chinese.contains("尝试次数仍为 5"))
 }
 
 ///|
@@ -843,6 +892,38 @@ test "overview distinguishes healthy, attention, and awaiting telemetry states" 
   assert_true(awaiting.contains("Awaiting cluster telemetry"))
   assert_true(awaiting.contains("Connect the controller and enroll a node"))
   assert_true(awaiting.contains("Telemetry unavailable"))
+}
+
+///|
+test "authoritative readiness blockers disable launch and render bilingually" {
+  let base = @ui.demo_state()
+  let blocked = @ui.render({
+    ..base,
+    production_readiness: {
+      ready: false,
+      loading: false,
+      blocker_codes: [
+        "GuideDiagnosticsUnavailable", "ExclusiveLeaseExpiryReconcilerUnavailable",
+      ],
+      error: None,
+    },
+  })
+  assert_true(blocked.contains("Deployment prerequisites remain"))
+  assert_true(blocked.contains("Guide diagnostics"))
+  assert_true(blocked.contains("Lease expiry controller"))
+  assert_true(blocked.contains("disabled"))
+  let chinese = @ui.render({
+    ..base,
+    locale: ChineseSimplified,
+    production_readiness: {
+      ready: false,
+      loading: false,
+      blocker_codes: ["ExternalObservabilityNotReady"],
+      error: None,
+    },
+  })
+  assert_true(chinese.contains("外部可观测性导出"))
+  assert_true(chinese.contains("仍有部署前提未满足"))
 }
 
 ///|

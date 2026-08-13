@@ -71,6 +71,37 @@ test "customer workflow is clear bilingual and hides internal object authority" 
 }
 
 ///|
+test "customer cancellation and fulfilled access termination require confirmation" {
+  let pending = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, CustomerCommerce),
+    orders: [offline_order(PendingEvidenceUpload)],
+  })
+  assert_true(pending.contains("Cancel order"))
+  let fulfilled = {
+    ..offline_order(Fulfilled),
+    entitlement_ref: Some("lease-order-2026-001"),
+  }
+  let state = {
+    ..@offline_commerce.default_state(ChineseSimplified, CustomerCommerce),
+    orders: [fulfilled],
+  }
+  assert_true(@offline_commerce.render(state).contains("结束访问并取消"))
+  let action = @offline_commerce.OfflineCommerceConsequentialAction::CancelOrder(
+    fulfilled.order_id,
+    fulfilled.generation,
+  )
+  let confirming = @offline_commerce.render(
+    state.update(BeginConfirmation(action)),
+  )
+  assert_true(
+    confirming.contains("确认取消此订单或结束其有效访问？"),
+  )
+  assert_true(
+    confirming.contains("只有授权方确认后访问权限才会结束"),
+  )
+}
+
+///|
 test "operator desk exposes review and generation-fenced workflow actions" {
   let review = @offline_commerce.render({
     ..@offline_commerce.default_state(English, OperatorCommerce),
@@ -81,12 +112,65 @@ test "operator desk exposes review and generation-fenced workflow actions" {
   assert_true(review.contains("Accept exact digest"))
   assert_true(review.contains("Request correction"))
   assert_true(review.contains("Fulfill after all checks"))
+  let fulfilled = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    orders: [
+      {
+        ..offline_order(Fulfilled),
+        entitlement_ref: Some("lease-order-2026-001"),
+      },
+    ],
+  })
+  assert_true(fulfilled.contains("Revoke entitlement"))
   let release = @offline_commerce.render({
     ..@offline_commerce.default_state(ChineseSimplified, OperatorCommerce),
     orders: [offline_order(PendingOfflineExecution)],
   })
   assert_true(release.contains("线下材料核验台"))
   assert_true(release.contains("发布已验证 PDF"))
+}
+
+///|
+test "operator can recover a failed entitlement reversal with explicit evidence" {
+  let order = {
+    ..offline_order(ReversalManualIntervention),
+    entitlement_ref: Some("lease-order-2026-001"),
+  }
+  let reversal : @offline.CommercialReversal = {
+    reversal_id: "reversal-failed-001",
+    idempotency_key: "reversal-failed-001",
+    order_id: order.order_id,
+    organization_id: order.organization_id,
+    entitlement_ref: "lease-order-2026-001",
+    reason: CustomerCancellation,
+    expected_order_generation: order.generation - 1L,
+    state: ReversalFailed,
+    authority_receipt: Some("authority-failure-receipt"),
+    reason_code: Some("authority-unavailable"),
+    requested_by: "operator-a",
+    requested_unix_ms: 4500L,
+    completed_unix_ms: Some(5000L),
+  }
+  let state = {
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    orders: [order],
+    reversals: [reversal],
+  }
+  let html = @offline_commerce.render(state)
+  assert_true(html.contains("Retry revocation"))
+  assert_true(html.contains("Confirm access revoked"))
+  assert_true(html.contains("Confirm access still active"))
+  let action = @offline_commerce.OfflineCommerceConsequentialAction::RecoverFailedReversal(
+    order.order_id,
+    reversal.reversal_id,
+    order.generation,
+    ConfirmRevoked,
+  )
+  let confirming = @offline_commerce.render(
+    state.update(BeginConfirmation(action)),
+  )
+  assert_true(confirming.contains("Confirm external access is revoked?"))
+  assert_true(confirming.contains("reversal-failed-001"))
 }
 
 ///|

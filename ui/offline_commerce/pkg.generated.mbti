@@ -55,12 +55,16 @@ pub(all) enum OfflineCommerceConsequentialAction {
   AcceptEvidence(String, String)
   RejectEvidence(String, String)
   FulfillVerifiedOrder(String, Int64)
+  CancelOrder(String, Int64)
+  RequestEntitlementReversal(String, Int64)
+  RecoverFailedReversal(String, String, Int64, @offline.ReversalRecoveryDecision)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum OfflineCommerceMessage {
   SelectOrder(String)
   CreateOrder
   RequestEvidenceUpload(String, @offline.DocumentArtifactKind)
+  RequestArtifactDownload(String)
   RequestGeneration(String, @offline.DocumentArtifactKind)
   BeginConfirmation(OfflineCommerceConsequentialAction)
   DismissConfirmation
@@ -80,6 +84,7 @@ pub(all) struct OfflineCommerceState {
   locale : @i18n.Locale
   audience : OfflineCommerceAudience
   orders : Array[@offline.CommercialOrder]
+  reversals : Array[@offline.CommercialReversal]
   artifacts : Array[OfflineArtifactSummary]
   templates : Array[@offline.DocumentTemplate]
   selected_order_id : String?

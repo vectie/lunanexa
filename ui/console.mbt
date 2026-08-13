@@ -102,6 +102,17 @@ pub(all) struct NotificationRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct NotificationDeliveryRow {
+  delivery_id : String
+  notification_id : String
+  channel : @notifications.NotificationChannel
+  state : @notifications.DeliveryState
+  attempt_count : Int
+  updated_unix_ms : Int64
+  last_error_code : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct UserAccessRow {
   user_id : String
   display_name : String
@@ -200,6 +211,7 @@ pub(all) enum DestructiveAction {
   RevokeAccessGrant(String)
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
+  RedriveNotificationDelivery(String, Int, Int64)
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -208,6 +220,15 @@ pub(all) struct Confirmation {
   scope : String
   receipt : String
   confirmed : Bool
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Authoritative production-acceptance projection from `/v1/readiness`.
+pub(all) struct ProductionReadinessState {
+  ready : Bool
+  loading : Bool
+  blocker_codes : Array[String]
+  error : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -227,6 +248,7 @@ pub(all) struct ConsoleState {
   policies : PolicySummary
   audit : Array[AuditRow]
   notifications : Array[NotificationRow]
+  notification_deliveries : Array[NotificationDeliveryRow]
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -237,6 +259,7 @@ pub(all) struct ConsoleState {
   portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
   offline_commerce : @offline_commerce.OfflineCommerceState
+  production_readiness : ProductionReadinessState
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
@@ -278,8 +301,10 @@ pub(all) enum ConsoleMessage {
   ApproveEnterpriseLease(String, Int64)
   RejectEnterpriseLease(String, Int64)
   AcknowledgeAlert(String, Int64)
+  AssignAlertToSelf(String, Int64)
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
+  BeginRedriveNotificationDelivery(String, Int, Int64)
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
 } derive(Eq)
 
@@ -326,6 +351,7 @@ pub fn default_state() -> ConsoleState {
     },
     audit: [],
     notifications: [],
+    notification_deliveries: [],
     users: [],
     access_grants: [],
     compute_leases: [],
@@ -339,6 +365,12 @@ pub fn default_state() -> ConsoleState {
       @i18n.default_locale(),
       OperatorCommerce,
     ),
+    production_readiness: {
+      ready: false,
+      loading: true,
+      blocker_codes: [],
+      error: None,
+    },
     confirmation: None,
     error_message: None,
     success_message: None,
@@ -683,6 +715,7 @@ pub fn demo_state() -> ConsoleState {
       },
     ],
     notifications: [],
+    notification_deliveries: [],
     users: [
       {
         user_id: "user-alice",
@@ -808,6 +841,12 @@ pub fn demo_state() -> ConsoleState {
       @i18n.default_locale(),
       OperatorCommerce,
     ),
+    production_readiness: {
+      ready: true,
+      loading: false,
+      blocker_codes: [],
+      error: None,
+    },
     quick_template: "text-small@v1",
   }
 }
@@ -1205,11 +1244,41 @@ fn readiness_item(
 
 ///|
 fn deployment_ready(state : ConsoleState) -> Bool {
+  state.production_readiness.ready &&
+  state.production_readiness.blocker_codes.length() == 0 &&
+  state.production_readiness.error is None &&
   state.overview.total_nodes == 4 &&
   state.overview.active_nodes == 4 &&
   state.overview.alerts == 0 &&
   state.overview.active_models > 0 &&
   state.catalog_templates.length() > 0
+}
+
+///|
+fn readiness_blocker_label(locale : @i18n.Locale, code : String) -> String {
+  match code {
+    "NotificationDeliveryNotReady" =>
+      localized(locale, "Notification delivery", "通知投递")
+    "ExternalObservabilityNotReady" =>
+      localized(
+        locale, "External observability export", "外部可观测性导出",
+      )
+    "OfflineCommerceNotReady" =>
+      localized(locale, "Offline commerce pipeline", "线下商务流水线")
+    "CredentialBrokerUnavailable" =>
+      localized(locale, "Credential broker", "凭据代理")
+    "MachineHelperAdapterUnverified" =>
+      localized(locale, "Machine cleanup helper", "机器清理助手")
+    "ExclusiveMachineAuthorityUnavailable" =>
+      localized(locale, "Exclusive-machine authority", "独占机器权限")
+    "ArtifactSignatureVerifierUnavailable" =>
+      localized(locale, "Artifact signature verifier", "制品签名验证器")
+    "GuideDiagnosticsUnavailable" =>
+      localized(locale, "Guide diagnostics", "指南诊断")
+    "ExclusiveLeaseExpiryReconcilerUnavailable" =>
+      localized(locale, "Lease expiry controller", "租约到期控制器")
+    _ => localized(locale, "Blocked: \{code}", "阻塞：\{code}")
+  }
 }
 
 ///|
@@ -1443,6 +1512,42 @@ fn overview_view(
           ),
         ]),
         @html.ul(class="readiness-list", [
+          readiness_item(
+            state.locale,
+            state.production_readiness.ready &&
+            state.production_readiness.blocker_codes.length() == 0,
+            localized(
+              state.locale,
+              "Production acceptance gate",
+              "生产验收门禁",
+            ),
+            if state.production_readiness.loading {
+              localized(
+                state.locale,
+                "Loading controller readiness…",
+                "正在加载控制器就绪状态…",
+              )
+            } else {
+              match state.production_readiness.error {
+                Some(_) =>
+                  localized(
+                    state.locale,
+                    "Readiness check unavailable",
+                    "就绪检查不可用",
+                  )
+                None if state.production_readiness.blocker_codes.length() > 0 =>
+                  state.production_readiness.blocker_codes
+                  .map(code => readiness_blocker_label(state.locale, code))
+                  .join(" · ")
+                None =>
+                  localized(
+                    state.locale,
+                    "All central blockers cleared",
+                    "所有中央阻塞项均已清除",
+                  )
+              }
+            },
+          ),
           readiness_item(
             state.locale,
             state.overview.total_nodes == 4,
@@ -3248,6 +3353,32 @@ fn alert_code_label(locale : @i18n.Locale, code : String) -> String {
       localized(locale, "Node heartbeat is stale", "节点心跳已超时")
     "DeliveryAttemptLimit" =>
       localized(locale, "Notification delivery failed", "通知投递失败")
+    "LeaseSanitizationFailed" =>
+      localized(locale, "Machine sanitization failed", "机器清理失败")
+    "ControllerRecoveryIncomplete" =>
+      localized(
+        locale, "Controller recovery is incomplete", "控制器恢复未完成",
+      )
+    "PostgresUnavailable" =>
+      localized(
+        locale, "Management database is unavailable", "管理数据库不可用",
+      )
+    "ArtifactVerificationFailed" =>
+      localized(locale, "Artifact verification failed", "制品验证失败")
+    "OfflineReviewOverdue" =>
+      localized(locale, "Offline review is overdue", "线下审核已逾期")
+    "OfflineReconciliationNeedsCorrection" =>
+      localized(
+        locale, "Offline reconciliation needs correction", "线下核对需要修正",
+      )
+    "PaymentInvoiceReconciliationFailed" =>
+      localized(
+        locale, "Payment or invoice reconciliation failed", "付款或发票核对失败",
+      )
+    "WorkloadAdmissionRejected" =>
+      localized(
+        locale, "Workload admission is repeatedly rejected", "工作负载准入被连续拒绝",
+      )
     "GuideAdapterUnavailable" =>
       localized(
         locale, "Guide diagnostics are unavailable", "指南诊断不可用",
@@ -3282,6 +3413,49 @@ fn alert_lifecycle_label(
     Read => localized(locale, "Read", "已读")
     Acknowledged => localized(locale, "Acknowledged", "已确认")
     Resolved => localized(locale, "Resolved", "已解决")
+  }
+}
+
+///|
+fn notification_channel_label(
+  locale : @i18n.Locale,
+  channel : @notifications.NotificationChannel,
+) -> String {
+  match channel {
+    InApp => localized(locale, "In-app", "站内")
+    Email => localized(locale, "Email", "电子邮件")
+    Sms => localized(locale, "SMS", "短信")
+    Webhook => localized(locale, "Webhook", "Webhook")
+  }
+}
+
+///|
+fn notification_delivery_state_label(
+  locale : @i18n.Locale,
+  delivery_state : @notifications.DeliveryState,
+) -> String {
+  match delivery_state {
+    PendingDelivery => localized(locale, "Pending", "等待投递")
+    Delivering => localized(locale, "Delivering", "投递中")
+    Delivered => localized(locale, "Delivered", "已投递")
+    RetryScheduled => localized(locale, "Retry scheduled", "已安排重试")
+    DeadLetter => localized(locale, "Dead letter", "死信")
+    DeliverySkipped => localized(locale, "Skipped", "已跳过")
+  }
+}
+
+///|
+fn notification_delivery_error_label(
+  locale : @i18n.Locale,
+  error_code : String,
+) -> String {
+  match error_code {
+    "" => "—"
+    "DeliveryAttemptLimit" =>
+      localized(locale, "Attempt limit reached", "已达到尝试次数上限")
+    "ProviderUnavailable" =>
+      localized(locale, "Provider unavailable", "投递供应商不可用")
+    _ => error_code
   }
 }
 
@@ -3409,6 +3583,16 @@ fn alerts_view(
                       ),
                       @html.button(
                         type_="button",
+                        disabled=row.lifecycle == Resolved ||
+                          row.assigned_to == "platform-operator",
+                        on_click=command(
+                          emit,
+                          AssignAlertToSelf(row.notification_id, row.generation),
+                        ),
+                        localized(state.locale, "Assign to me", "分配给我"),
+                      ),
+                      @html.button(
+                        type_="button",
                         disabled=row.lifecycle == Resolved,
                         on_click=command(
                           emit,
@@ -3426,6 +3610,121 @@ fn alerts_view(
                         localized(state.locale, "Resolve", "解决"),
                       ),
                     ]),
+                  ),
+                ])
+              }
+            ],
+          ),
+        ]),
+      ])
+    },
+    @html.div(class="subsection-heading", [
+      @html.div([
+        @html.h3(
+          localized(state.locale, "Delivery outbox", "通知投递队列"),
+        ),
+        @html.p(
+          class="section-copy",
+          localized(
+            state.locale,
+            "Provider-neutral delivery records expose bounded state only. A dead letter must be confirmed against its current generation before redrive.",
+            "投递记录仅显示受限的供应商中立状态。死信必须按当前代次确认后才能重新投递。",
+          ),
+        ),
+      ]),
+      @html.span(
+        class="resource-count",
+        localized(
+          state.locale,
+          "\{state.notification_deliveries.count_if(row => row.state == DeadLetter)} dead letters",
+          "\{state.notification_deliveries.count_if(row => row.state == DeadLetter)} 个死信",
+        ),
+      ),
+    ]),
+    if state.notification_deliveries.length() == 0 {
+      @html.p(
+        class="empty-state compact",
+        localized(
+          state.locale,
+          "No outbound delivery records are available.",
+          "暂无出站投递记录。",
+        ),
+      )
+    } else {
+      @html.div(class="table-scroll", [
+        @html.table(class="resource-table", [
+          @html.caption(
+            class="sr-only",
+            localized(
+              state.locale,
+              "Outbound notification delivery records",
+              "出站通知投递记录",
+            ),
+          ),
+          @html.thead(
+            @html.tr([
+              @html.th(scope=Col, localized(state.locale, "Delivery", "投递")),
+              @html.th(scope=Col, localized(state.locale, "Channel", "渠道")),
+              @html.th(scope=Col, localized(state.locale, "State", "状态")),
+              @html.th(
+                scope=Col,
+                localized(state.locale, "Attempts", "尝试次数"),
+              ),
+              @html.th(
+                scope=Col,
+                localized(state.locale, "Last error", "最近错误"),
+              ),
+              @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
+            ]),
+          ),
+          @html.tbody(
+            [
+              for row in state.notification_deliveries => {
+                @html.tr([
+                  @html.td([
+                    @html.strong(class="mono", row.delivery_id),
+                    @html.span(class="mono secondary", row.notification_id),
+                  ]),
+                  @html.td(
+                    notification_channel_label(state.locale, row.channel),
+                  ),
+                  @html.td(
+                    status_badge(
+                      notification_delivery_state_label(state.locale, row.state),
+                      if row.state == DeadLetter {
+                        "danger"
+                      } else if row.state == Delivered {
+                        "ok"
+                      } else {
+                        "warning"
+                      },
+                    ),
+                  ),
+                  @html.td(row.attempt_count.to_string()),
+                  @html.td(
+                    class="mono secondary",
+                    notification_delivery_error_label(
+                      state.locale,
+                      row.last_error_code,
+                    ),
+                  ),
+                  @html.td(
+                    if row.state == DeadLetter {
+                      @html.button(
+                        type_="button",
+                        on_click=command(
+                          emit,
+                          BeginRedriveNotificationDelivery(
+                            row.delivery_id,
+                            row.attempt_count,
+                            row.updated_unix_ms,
+                          ),
+                        ),
+                        localized(state.locale, "Redrive", "重新投递"),
+                      )
+                    } else {
+                      @html.span(class="secondary", "—")
+                    },
                   ),
                 ])
               }
@@ -4485,6 +4784,12 @@ fn confirmation_copy(
         locale, "This immediately revokes the leased user's access and interrupts all tenant processes. The DGX stays unavailable until container, account, credential, process, volume and lease-data checks pass; any failure quarantines it.",
         "此操作会立即撤销租用用户的访问权限并中断全部租户进程。只有容器、账户、凭据、进程、卷和租约数据检查全部通过后，DGX 才会恢复可用；任何失败都会使其进入隔离状态。",
       )
+    RedriveNotificationDelivery(_, attempt_count, updated_unix_ms) =>
+      localized(
+        locale,
+        "Redrive requeues this dead letter only if it still has attempt count \{attempt_count} and update generation \{updated_unix_ms}. A newer delivery state is rejected; refresh before retrying.",
+        "仅当此死信的尝试次数仍为 \{attempt_count} 且更新代次仍为 \{updated_unix_ms} 时才会重新入队。若投递状态已更新，请求将被拒绝；请刷新后重试。",
+      )
     CordonNode(_) =>
       localized(
         locale, "Cordoning prevents new assignments on this node.", "封锁调度会阻止此节点接收新的分配。",
@@ -4524,7 +4829,8 @@ fn confirmation_view(
 ) -> @rabbita.Html {
   match confirmation {
     None => @html.nothing
-    Some(value) =>
+    Some(value) => {
+      let recovery = value.action is RedriveNotificationDelivery(_, _, _)
       @html.aside(
         class="confirmation-panel",
         attrs=@html.Attrs::build()
@@ -4534,13 +4840,23 @@ fn confirmation_view(
         [
           @html.p(
             class="eyebrow danger-copy",
-            localized(locale, "Destructive operation", "破坏性操作"),
+            if recovery {
+              localized(locale, "Recovery operation", "恢复操作")
+            } else {
+              localized(locale, "Destructive operation", "破坏性操作")
+            },
           ),
           @html.h2(
             id="confirmation-title",
-            localized(
-              locale, "Confirm destructive operation", "确认破坏性操作",
-            ),
+            if recovery {
+              localized(
+                locale, "Confirm delivery redrive", "确认重新投递",
+              )
+            } else {
+              localized(
+                locale, "Confirm destructive operation", "确认破坏性操作",
+              )
+            },
           ),
           @html.p(
             id="confirmation-description",
@@ -4569,11 +4885,16 @@ fn confirmation_view(
               class="danger-button",
               disabled=value.confirmed,
               on_click=command(emit, ConfirmAction(value.action)),
-              localized(locale, "Confirm operation", "确认操作"),
+              if recovery {
+                localized(locale, "Confirm redrive", "确认重新投递")
+              } else {
+                localized(locale, "Confirm operation", "确认操作")
+              },
             ),
           ]),
         ],
       )
+    }
   }
 }
 

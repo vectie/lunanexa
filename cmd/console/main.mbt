@@ -16,8 +16,6 @@ priv struct ConsoleTelemetrySnapshot {
 priv struct OfflineQuoteAction {
   order_id : String
   quote : @offline.ImmutableQuote
-  actor_ref : String
-  now_unix_ms : Int64
 } derive(ToJson)
 
 ///|
@@ -27,22 +25,51 @@ extend OfflineQuoteAction with ToJson::{to_json}
 priv struct OfflineOrderAction {
   order_id : String
   expected_generation : Int64
-  now_unix_ms : Int64
 } derive(ToJson)
 
 ///|
 extend OfflineOrderAction with ToJson::{to_json}
 
 ///|
+priv struct OfflineReversalAction {
+  reversal_id : String
+  idempotency_key : String
+  order_id : String
+  expected_generation : Int64
+  reason : @offline.CommercialReversalReason
+} derive(ToJson)
+
+///|
+extend OfflineReversalAction with ToJson::{to_json}
+
+///|
 priv struct OfflineFulfillmentAction {
   order_id : String
   expected_generation : Int64
-  entitlement_ref : String
-  now_unix_ms : Int64
+  activation_id : String
+  idempotency_key : String
+  entitlement_kind : @offline.EntitlementKind
+  authority_target_ref : String
 } derive(ToJson)
 
 ///|
 extend OfflineFulfillmentAction with ToJson::{to_json}
+
+///|
+priv struct OfflineReversalRecoveryAction {
+  recovery_id : String
+  idempotency_key : String
+  order_id : String
+  failed_reversal_id : String
+  expected_generation : Int64
+  decision : @offline.ReversalRecoveryDecision
+  replacement_reversal_id : String?
+  authority_receipt : String
+  reason_code : String
+} derive(ToJson)
+
+///|
+extend OfflineReversalRecoveryAction with ToJson::{to_json}
 
 ///|
 priv struct OfflineActionRequest {
@@ -197,6 +224,63 @@ extern "js" fn request_promise(
   #|   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   #|   return text;
   #| }
+
+///|
+/// Readiness uses 503 as a typed not-ready response, so preserve its JSON body.
+extern "js" fn readiness_request_promise(
+  url : String,
+  token : String,
+) -> @js.Promise =
+  #| async (url, token) => {
+  #|   const response = await fetch(url, {
+  #|     method: "GET",
+  #|     headers: { "Accept": "application/json", "Authorization": `Bearer ${token}` },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error"
+  #|   });
+  #|   const text = await response.text();
+  #|   if (response.status !== 200 && response.status !== 503) throw new Error(`HTTP ${response.status}`);
+  #|   return text;
+  #| }
+
+///|
+priv struct CentralReadinessResponse {
+  ready : Bool
+  blocker_codes : Array[String]
+} derive(FromJson)
+
+///|
+async fn load_production_readiness(
+  endpoint : String,
+  token : String,
+) -> @ui.ProductionReadinessState {
+  let base = if endpoint.has_suffix("/") {
+    endpoint[:-1].to_owned()
+  } else {
+    endpoint
+  }
+  try {
+    let text : String = readiness_request_promise("\{base}/v1/readiness", token)
+      .wait()
+      .cast()
+    let value : CentralReadinessResponse = @json.from_json(@json.parse(text))
+    {
+      ready: value.ready && value.blocker_codes.length() == 0,
+      loading: false,
+      blocker_codes: value.blocker_codes,
+      error: None,
+    }
+  } catch {
+    error =>
+      {
+        ready: false,
+        loading: false,
+        blocker_codes: [],
+        error: Some("\{Repr(error)}"),
+      }
+  }
+}
 
 ///|
 extern "js" fn stream_request_promise(
@@ -577,6 +661,7 @@ async fn load_console(
   route : @ui.OperatorRoute,
   locale : @i18n.Locale,
 ) -> @ui.ConsoleState {
+  let production_readiness = load_production_readiness(endpoint, token)
   let heartbeats : Array[@contracts.NodeHeartbeat] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/nodes", token)),
   )
@@ -609,6 +694,11 @@ async fn load_console(
   )
   let notification_records : Array[@notifications.NotificationRecord] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/notifications/operator", token)),
+  )
+  let notification_delivery_records : Array[@notifications.NotificationDelivery] = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/notifications/operator/deliveries", token),
+    ),
   )
   // This snapshot carries release and fulfillment authority. Loading failures
   // must be visible and must never masquerade as an empty commerce queue.
@@ -857,6 +947,19 @@ async fn load_console(
       }
     }
   ]
+  let notification_deliveries : Array[@ui.NotificationDeliveryRow] = [
+    for delivery in notification_delivery_records => {
+      {
+        delivery_id: delivery.delivery_id,
+        notification_id: delivery.notification_id,
+        channel: delivery.channel,
+        state: delivery.state,
+        attempt_count: delivery.attempt_count,
+        updated_unix_ms: delivery.updated_unix_ms,
+        last_error_code: delivery.last_error_code.unwrap_or(""),
+      }
+    }
+  ]
   let cost_centers : Array[@ui.CostCenterRow] = match commercial_snapshot {
     Some(snapshot) =>
       [
@@ -1020,6 +1123,7 @@ async fn load_console(
       }
     ],
     notifications,
+    notification_deliveries,
     users,
     access_grants,
     compute_leases,
@@ -1032,6 +1136,7 @@ async fn load_console(
     offline_commerce: {
       ..@offline_commerce.default_state(locale, OperatorCommerce),
       orders: offline_snapshot.orders,
+      reversals: offline_snapshot.reversals,
       artifacts: [
         for value in offline_snapshot.artifacts => {
           {
@@ -1056,6 +1161,7 @@ async fn load_console(
         None
       },
     },
+    production_readiness,
     confirmation: None,
     error_message: None,
     success_message: None,
@@ -1721,6 +1827,30 @@ fn update_live(
         },
         @rabbita.none,
       )
+    Console(
+      BeginRedriveNotificationDelivery(
+        delivery_id,
+        expected_attempt_count,
+        expected_updated_unix_ms
+      )
+    ) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            confirmation: Some(
+              @ui.confirmation_receipt(
+                RedriveNotificationDelivery(
+                  delivery_id, expected_attempt_count, expected_updated_unix_ms,
+                ),
+                "\{delivery_id} · attempt \{expected_attempt_count} · generation \{expected_updated_unix_ms}",
+              ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
     Console(DismissConfirmation) =>
       (
         { ..model, console: { ..model.console, confirmation: None } },
@@ -1757,6 +1887,46 @@ fn update_live(
                 model.console.locale,
                 "Alert acknowledged.",
                 "告警已确认。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(AssignAlertToSelf(notification_id, generation)) => {
+      let body = {
+          "expected_generation": generation.to_json(),
+          "assignee_ref": "platform-operator".to_json(),
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/notifications/operator/\{notification_id}:assign",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The alert could not be assigned.",
+                "无法分配该告警。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Alert assigned to you.",
+                "告警已分配给您。",
               ),
             )
         }
@@ -2562,6 +2732,54 @@ fn update_live(
       })
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
+    Console(
+      ConfirmAction(
+        RedriveNotificationDelivery(
+          delivery_id,
+          expected_attempt_count,
+          expected_updated_unix_ms
+        )
+      )
+    ) => {
+      let body = {
+          "expected_attempt_count": expected_attempt_count.to_json(),
+          "expected_updated_unix_ms": expected_updated_unix_ms.to_json(),
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/notifications/operator/deliveries/\{delivery_id}:redrive",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Delivery redrive was rejected or stale. Refresh the delivery record before retrying.",
+                "重新投递请求被拒绝或已过期。请刷新投递记录后重试。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Delivery \{delivery_id} was accepted for redrive.",
+                "投递 \{delivery_id} 已接受重新投递。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
     Console(OfflineCommerce(Refresh)) => (model, load_command(model, emit))
     Console(OfflineCommerce(RequestGeneration(order_id, kind))) => {
       guard selected_offline_order(model.console.offline_commerce, order_id)
@@ -2686,12 +2904,8 @@ fn update_live(
             terms_digest,
             created_unix_ms: now,
           }
-          let value : OfflineQuoteAction = {
-            order_id,
-            quote,
-            actor_ref: confirmed_actor,
-            now_unix_ms: now,
-          }
+          let value : OfflineQuoteAction = { order_id, quote }
+          ignore(confirmed_actor)
           {
             path: "/v1/offline-commerce/operator/quotes",
             body: value.to_json().stringify(),
@@ -2703,7 +2917,6 @@ fn update_live(
           let value : OfflineOrderAction = {
             order_id,
             expected_generation: generation,
-            now_unix_ms: now,
           }
           {
             path: "/v1/offline-commerce/operator/begin",
@@ -2716,7 +2929,6 @@ fn update_live(
           let value : OfflineOrderAction = {
             order_id,
             expected_generation: generation,
-            now_unix_ms: now,
           }
           {
             path: "/v1/offline-commerce/operator/release-packets",
@@ -2781,16 +2993,75 @@ fn update_live(
           let value : OfflineFulfillmentAction = {
             order_id,
             expected_generation: generation,
-            entitlement_ref: model.console.offline_commerce.entitlement_ref
+            activation_id: random_identifier("offline-activation"),
+            idempotency_key: random_identifier("offline-activate"),
+            entitlement_kind: ExclusiveMachineLease,
+            authority_target_ref: model.console.offline_commerce.entitlement_ref
             .trim()
             .to_owned(),
-            now_unix_ms: now,
           }
           {
             path: "/v1/offline-commerce/operator/fulfillments",
             body: value.to_json().stringify(),
-            english_success: "All policy evidence passed and the entitlement was created.",
-            chinese_success: "全部策略凭证已通过，权益已创建。",
+            english_success: "All policy evidence passed; entitlement activation is pending authority confirmation.",
+            chinese_success: "全部策略凭证已通过；权益激活正在等待授权方确认。",
+          }
+        }
+        CancelOrder(order_id, generation) => {
+          let value : OfflineOrderAction = {
+            order_id,
+            expected_generation: generation,
+          }
+          {
+            path: "/v1/offline-commerce/operator/cancellations",
+            body: value.to_json().stringify(),
+            english_success: "The order was cancelled with generation-fenced authority.",
+            chinese_success: "已使用受状态版本保护的权限取消订单。",
+          }
+        }
+        RequestEntitlementReversal(order_id, generation) => {
+          let reversal_id = random_identifier("offline-reversal")
+          let value : OfflineReversalAction = {
+            reversal_id,
+            idempotency_key: reversal_id,
+            order_id,
+            expected_generation: generation,
+            reason: PolicyRevoked,
+          }
+          {
+            path: "/v1/offline-commerce/operator/reversals",
+            body: value.to_json().stringify(),
+            english_success: "Entitlement revocation is pending external authority confirmation.",
+            chinese_success: "权益撤销正在等待外部授权方确认。",
+          }
+        }
+        RecoverFailedReversal(
+          order_id,
+          failed_reversal_id,
+          generation,
+          decision
+        ) => {
+          let recovery_id = random_identifier("offline-reversal-recovery")
+          let value : OfflineReversalRecoveryAction = {
+            recovery_id,
+            idempotency_key: recovery_id,
+            order_id,
+            failed_reversal_id,
+            expected_generation: generation,
+            decision,
+            replacement_reversal_id: if decision == RetryReversal {
+              Some(random_identifier("offline-reversal-retry"))
+            } else {
+              None
+            },
+            authority_receipt: "operator-reconciled-authority-state",
+            reason_code: "manual-entitlement-reconciliation",
+          }
+          {
+            path: "/v1/offline-commerce/operator/reversal-recoveries",
+            body: value.to_json().stringify(),
+            english_success: "The failed entitlement reversal was reconciled with generation-fenced evidence.",
+            chinese_success: "已使用受状态版本保护的凭证完成失败权益撤销的核对处理。",
           }
         }
       }
@@ -2862,6 +3133,7 @@ fn update(
       | Console(BeginRevokeAccessGrant(_))
       | Console(BeginEndComputeLease(_))
       | Console(BeginTerminateExclusiveNodeLease(_, _))
+      | Console(BeginRedriveNotificationDelivery(_, _, _))
       | Console(DismissConfirmation) => update_live(model, message, emit)
       Console(OfflineCommerce(RequestGeneration(_, _)))
       | Console(OfflineCommerce(ConfirmAction(_)))

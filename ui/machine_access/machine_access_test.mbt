@@ -17,11 +17,7 @@ fn machine_view(
     last_seen_unix_ms: Some(4900L),
     credential_handoff: {
       state: handoff,
-      handoff_ref: if handoff == Available {
-        Some("lease-handoff:lease-visible-1:4")
-      } else {
-        None
-      },
+      handoff_ref: None,
       credential_kind: "short-lived-ssh-certificate",
       valid_until_unix_ms: 10000L,
       raw_secret_included: false,
@@ -45,10 +41,57 @@ test "machine access view explains safe handoff and live lifecycle" {
   assert_true(html.contains("My machine access"))
   assert_true(html.contains("Online"))
   assert_true(html.contains("Ready to redeem"))
-  assert_true(html.contains("lease-handoff:lease-visible-1:4"))
-  assert_true(html.contains("No password or private key is displayed"))
+  assert_true(html.contains("Redeem SSH access"))
+  assert_false(html.contains("lease-handoff:lease-visible-1:4"))
   assert_false(html.contains("node_id"))
   assert_false(html.contains("access_credential_ref"))
+}
+
+///|
+test "redeemed access shows safe connection metadata without raw secret" {
+  let state = {
+    ..@machine_access.default_state(English),
+    now_unix_ms: 5000L,
+    machines: [machine_view(Active, Available)],
+    redeemed_credentials: [
+      {
+        version: @credential.contract_version,
+        handoff_ref: "lnxh_safe",
+        lease_ref: "lease-visible-1",
+        generation: 4L,
+        issuer_redirect_url: "https://ssh-ca.example/redeem/safe",
+        host_alias: "machine.example",
+        ssh_port: 2222,
+        host_key_fingerprint: "SHA256:safehostkey",
+        connection_command: "ssh -p 2222 alice@machine.example",
+        valid_until_unix_ms: 10000L,
+        redemption_receipt: "lnxr_safe",
+        one_time: true,
+        raw_secret_included: false,
+      },
+    ],
+  }
+  let html = @machine_access.render(state)
+  assert_true(html.contains("machine.example"))
+  assert_true(html.contains("SHA256:safehostkey"))
+  assert_true(html.contains("ssh -p 2222 alice@machine.example"))
+  assert_true(html.contains("href=\"https://ssh-ca.example/redeem/safe\""))
+  assert_true(html.contains("Continue to credential issuer"))
+  assert_false(html.contains("node_id"))
+  assert_false(html.contains("private_key"))
+}
+
+///|
+test "recoverable access offers the same post-reload retrieval action" {
+  let state = {
+    ..@machine_access.default_state(English),
+    now_unix_ms: 5000L,
+    machines: [machine_view(Active, Recoverable)],
+  }
+  let html = @machine_access.render(state)
+  assert_true(html.contains("Access details recoverable"))
+  assert_true(html.contains("Recover access details"))
+  assert_true(html.contains("does not issue another credential"))
 }
 
 ///|

@@ -108,8 +108,10 @@ pub(all) enum ConsoleMessage {
   ApproveEnterpriseLease(String, Int64)
   RejectEnterpriseLease(String, Int64)
   AcknowledgeAlert(String, Int64)
+  AssignAlertToSelf(String, Int64)
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
+  BeginRedriveNotificationDelivery(String, Int, Int64)
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
 } derive(Eq)
 
@@ -129,6 +131,7 @@ pub(all) struct ConsoleState {
   policies : PolicySummary
   audit : Array[AuditRow]
   notifications : Array[NotificationRow]
+  notification_deliveries : Array[NotificationDeliveryRow]
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -139,6 +142,7 @@ pub(all) struct ConsoleState {
   portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
   offline_commerce : @offline_commerce.OfflineCommerceState
+  production_readiness : ProductionReadinessState
   confirmation : Confirmation?
   error_message : String?
   success_message : String?
@@ -179,6 +183,7 @@ pub(all) enum DestructiveAction {
   RevokeAccessGrant(String)
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
+  RedriveNotificationDelivery(String, Int, Int64)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct EnterpriseLeaseRequestRow {
@@ -227,6 +232,16 @@ pub(all) struct NodeRow {
   lease_holder : String
   active_assignment : String
   last_seen : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationDeliveryRow {
+  delivery_id : String
+  notification_id : String
+  channel : @notifications.NotificationChannel
+  state : @notifications.DeliveryState
+  attempt_count : Int
+  updated_unix_ms : Int64
+  last_error_code : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct NotificationRow {
@@ -301,6 +316,13 @@ pub(all) struct PolicySummary {
   data_class_count : Int
   default_retention : @contracts.RetentionPolicy
   allowed_runtimes : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ProductionReadinessState {
+  ready : Bool
+  loading : Bool
+  blocker_codes : Array[String]
+  error : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct QualifiedServiceRow {

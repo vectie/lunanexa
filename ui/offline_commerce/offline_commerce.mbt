@@ -9,6 +9,7 @@ pub(all) struct OfflineCommerceState {
   locale : @i18n.Locale
   audience : OfflineCommerceAudience
   orders : Array[@offline.CommercialOrder]
+  reversals : Array[@offline.CommercialReversal]
   artifacts : Array[OfflineArtifactSummary]
   templates : Array[@offline.DocumentTemplate]
   selected_order_id : String?
@@ -33,6 +34,14 @@ pub(all) enum OfflineCommerceConsequentialAction {
   AcceptEvidence(String, String)
   RejectEvidence(String, String)
   FulfillVerifiedOrder(String, Int64)
+  CancelOrder(String, Int64)
+  RequestEntitlementReversal(String, Int64)
+  RecoverFailedReversal(
+    String,
+    String,
+    Int64,
+    @offline.ReversalRecoveryDecision
+  )
 } derive(Debug, Eq)
 
 ///|
@@ -62,6 +71,7 @@ pub(all) enum OfflineCommerceMessage {
   SelectOrder(String)
   CreateOrder
   RequestEvidenceUpload(String, @offline.DocumentArtifactKind)
+  RequestArtifactDownload(String)
   RequestGeneration(String, @offline.DocumentArtifactKind)
   BeginConfirmation(OfflineCommerceConsequentialAction)
   DismissConfirmation
@@ -86,6 +96,7 @@ pub fn default_state(
     locale,
     audience,
     orders: [],
+    reversals: [],
     artifacts: [],
     templates: [],
     selected_order_id: None,
@@ -110,7 +121,7 @@ pub fn demo_state(
   audience : OfflineCommerceAudience,
 ) -> OfflineCommerceState {
   let operator = audience == OperatorCommerce
-  let order : @offline.CommercialOrder = {
+  let base_order : @offline.CommercialOrder = {
     order_id: "order-capacity-2026-08",
     idempotency_key: "demo-order-capacity",
     tenant_ref: "tenant-northstar",
@@ -162,9 +173,41 @@ pub fn demo_state(
     updated_unix_ms: 1786400000000L,
     expires_unix_ms: 1789000000000L,
   }
+  let order = if operator {
+    {
+      ..base_order,
+      state: ReversalManualIntervention,
+      entitlement_ref: Some("exclusive-lease-demo"),
+      generation: 8L,
+    }
+  } else {
+    base_order
+  }
+  let reversals : Array[@offline.CommercialReversal] = if operator {
+    [
+      {
+        reversal_id: "reversal-demo-failed",
+        idempotency_key: "reversal-demo-failed",
+        order_id: order.order_id,
+        organization_id: order.organization_id,
+        entitlement_ref: "exclusive-lease-demo",
+        reason: PolicyRevoked,
+        expected_order_generation: 7L,
+        state: ReversalFailed,
+        authority_receipt: Some("authority-failure-demo"),
+        reason_code: Some("authority-unavailable"),
+        requested_by: "platform-operator",
+        requested_unix_ms: 1786400000000L,
+        completed_unix_ms: Some(1786400010000L),
+      },
+    ]
+  } else {
+    []
+  }
   {
     ..default_state(locale, audience),
     orders: [order],
+    reversals,
     artifacts: [
       {
         artifact_id: "artifact-contract-executed",
@@ -263,6 +306,24 @@ fn confirmation_for_action(
         title: "Create entitlement",
         evidence: "\{order_id} · generation \{generation}",
       }
+    CancelOrder(order_id, generation) =>
+      {
+        action,
+        title: "Cancel order or end access",
+        evidence: "\{order_id} · generation \{generation}",
+      }
+    RequestEntitlementReversal(order_id, generation) =>
+      {
+        action,
+        title: "Revoke entitlement",
+        evidence: "\{order_id} · generation \{generation}",
+      }
+    RecoverFailedReversal(order_id, failed_reversal_id, generation, decision) =>
+      {
+        action,
+        title: "Resolve failed entitlement reversal",
+        evidence: "\{order_id} · \{failed_reversal_id} · generation \{generation} · \{Repr(decision)}",
+      }
   }
 }
 
@@ -313,7 +374,16 @@ fn order_state_label(
       copy(locale, "Upload offline evidence", "上传线下凭证")
     UnderReconciliation =>
       copy(locale, "Evidence under review", "凭证审核中")
+    FulfillmentPending =>
+      copy(locale, "Entitlement activation pending", "权益激活中")
     Fulfilled => copy(locale, "Fulfilled", "已履约")
+    ReversalPending =>
+      copy(locale, "Access revocation pending", "访问权限撤销中")
+    ReversalManualIntervention =>
+      copy(
+        locale, "Revocation needs operator action", "撤销失败，需运营人员处理",
+      )
+    Revoked => copy(locale, "Access revoked", "访问权限已撤销")
     NeedsCorrection => copy(locale, "Correction required", "需要补正")
     Rejected => copy(locale, "Rejected", "已拒绝")
     Cancelled => copy(locale, "Cancelled", "已取消")
@@ -420,7 +490,8 @@ fn steps(
     PendingOfflineExecution => 2
     PendingEvidenceUpload | NeedsCorrection => 3
     UnderReconciliation => 4
-    Fulfilled => 5
+    FulfillmentPending | Fulfilled => 5
+    ReversalPending | ReversalManualIntervention | Revoked => 5
     Rejected | Cancelled | Expired => 0
   }
   @html.ol(
@@ -475,6 +546,30 @@ fn customer_actions(
         ),
       )
     }
+  }
+  if order.state != FulfillmentPending &&
+    order.state != ReversalPending &&
+    order.state != ReversalManualIntervention &&
+    order.state != Revoked &&
+    order.state != Rejected &&
+    order.state != Cancelled &&
+    order.state != Expired {
+    actions.push(
+      @html.button(
+        type_="button",
+        class="quiet-button",
+        disabled=state.loading,
+        on_click=command(
+          emit,
+          BeginConfirmation(CancelOrder(order.order_id, order.generation)),
+        ),
+        if order.state == Fulfilled {
+          copy(state.locale, "End access and cancel", "结束访问并取消")
+        } else {
+          copy(state.locale, "Cancel order", "取消订单")
+        },
+      ),
+    )
   }
   if actions.length() == 0 {
     actions.push(
@@ -654,6 +749,106 @@ fn operator_actions(
       ),
     )
   }
+  if order.state == Fulfilled {
+    actions.push(
+      @html.button(
+        type_="button",
+        class="danger-action",
+        disabled=state.loading,
+        on_click=command(
+          emit,
+          BeginConfirmation(
+            RequestEntitlementReversal(order.order_id, order.generation),
+          ),
+        ),
+        copy(state.locale, "Revoke entitlement", "撤销权益"),
+      ),
+    )
+  }
+  if order.state == ReversalManualIntervention {
+    let failed_reversal_id = state.reversals
+      .iter()
+      .find_first(reversal => {
+        reversal.order_id == order.order_id && reversal.state == ReversalFailed
+      })
+      .map(reversal => reversal.reversal_id)
+      .unwrap_or("")
+    actions.push(
+      @html.p(
+        class="offline-action-note",
+        copy(
+          state.locale,
+          "Compare the external entitlement authority with the failed reversal receipt before selecting a recovery.",
+          "选择恢复方式前，请对照失败撤销回执核验外部权益授权方的实际状态。",
+        ),
+      ),
+    )
+    actions.push(
+      @html.button(
+        type_="button",
+        class="secondary-action",
+        disabled=state.loading || failed_reversal_id == "",
+        on_click=command(
+          emit,
+          BeginConfirmation(
+            RecoverFailedReversal(
+              order.order_id,
+              failed_reversal_id,
+              order.generation,
+              RetryReversal,
+            ),
+          ),
+        ),
+        copy(state.locale, "Retry revocation", "重新尝试撤销"),
+      ),
+    )
+    actions.push(
+      @html.button(
+        type_="button",
+        class="danger-action",
+        disabled=state.loading || failed_reversal_id == "",
+        on_click=command(
+          emit,
+          BeginConfirmation(
+            RecoverFailedReversal(
+              order.order_id,
+              failed_reversal_id,
+              order.generation,
+              ConfirmRevoked,
+            ),
+          ),
+        ),
+        copy(
+          state.locale,
+          "Confirm access revoked",
+          "确认访问权限已撤销",
+        ),
+      ),
+    )
+    actions.push(
+      @html.button(
+        type_="button",
+        class="quiet-button",
+        disabled=state.loading || failed_reversal_id == "",
+        on_click=command(
+          emit,
+          BeginConfirmation(
+            RecoverFailedReversal(
+              order.order_id,
+              failed_reversal_id,
+              order.generation,
+              ConfirmStillActive,
+            ),
+          ),
+        ),
+        copy(
+          state.locale,
+          "Confirm access still active",
+          "确认访问权限仍有效",
+        ),
+      ),
+    )
+  }
   @html.div(class="offline-actions", actions)
 }
 
@@ -682,7 +877,15 @@ fn artifact_card(
       ]),
       @html.div([@html.dt("SHA-256"), @html.dd(class="mono", artifact.sha256)]),
     ]),
-    if state.audience == OperatorCommerce &&
+    if state.audience == CustomerCommerce && artifact.scan_state == ScanPassed {
+      @html.button(
+        type_="button",
+        class="secondary-action",
+        disabled=state.loading,
+        on_click=command(emit, RequestArtifactDownload(artifact.artifact_id)),
+        copy(state.locale, "Download verified file", "下载已验证文件"),
+      )
+    } else if state.audience == OperatorCommerce &&
       artifact.review_state == AwaitingReview {
       @html.div(class="review-actions", [
         @html.button(
@@ -908,6 +1111,24 @@ fn confirmation_title(
       )
     FulfillVerifiedOrder(_, _) =>
       copy(locale, "Create the entitlement now?", "确认立即创建权益？")
+    CancelOrder(_, _) =>
+      copy(
+        locale, "Cancel this order or end its active access?", "确认取消此订单或结束其有效访问？",
+      )
+    RequestEntitlementReversal(_, _) =>
+      copy(locale, "Revoke this entitlement?", "确认撤销此权益？")
+    RecoverFailedReversal(_, _, _, RetryReversal) =>
+      copy(
+        locale, "Retry entitlement revocation?", "重新尝试撤销权益？",
+      )
+    RecoverFailedReversal(_, _, _, ConfirmRevoked) =>
+      copy(
+        locale, "Confirm external access is revoked?", "确认外部访问权限已撤销？",
+      )
+    RecoverFailedReversal(_, _, _, ConfirmStillActive) =>
+      copy(
+        locale, "Confirm external access is still active?", "确认外部访问权限仍有效？",
+      )
   }
 }
 
@@ -946,6 +1167,31 @@ fn confirmation_description(
       copy(
         locale, "Fulfillment creates the entitlement only when every policy-required artifact is scan-passed and independently accepted.",
         "仅当所有策略要求的材料均通过扫描并经独立审核接受后，履约才会创建权益。",
+      )
+    CancelOrder(_, _) =>
+      copy(
+        locale, "Before fulfillment this cancels the order. After fulfillment it starts a generation-fenced entitlement reversal; access ends only after authority confirmation.",
+        "履约前将取消订单；履约后将启动受状态版本保护的权益撤销，只有授权方确认后访问权限才会结束。",
+      )
+    RequestEntitlementReversal(_, _) =>
+      copy(
+        locale, "This starts a generation-fenced authority request. Access remains tracked until the external entitlement authority confirms revocation.",
+        "此操作会启动受状态版本保护的授权方请求；系统将继续跟踪访问权限，直至外部权益授权方确认撤销。",
+      )
+    RecoverFailedReversal(_, _, _, RetryReversal) =>
+      copy(
+        locale, "A new generation-fenced authority request will be created; the failed receipt remains in the audit history.",
+        "系统将创建受状态版本保护的新授权方请求；失败回执仍保留在审计历史中。",
+      )
+    RecoverFailedReversal(_, _, _, ConfirmRevoked) =>
+      copy(
+        locale, "Use only after independently verifying that the external entitlement is already revoked.",
+        "仅在独立核验外部权益确已撤销后使用此操作。",
+      )
+    RecoverFailedReversal(_, _, _, ConfirmStillActive) =>
+      copy(
+        locale, "This returns the order to fulfilled state because the external entitlement remains active.",
+        "因外部权益仍有效，此操作会将订单恢复为已履约状态。",
       )
   }
 }

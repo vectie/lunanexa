@@ -5,6 +5,7 @@ priv struct AppModel {
   subject_ref : String
   connecting : Bool
   demo_mode : Bool
+  machine_clock_generation : Int64
   portal : @enterprise_ui.EnterpriseState
 } derive(Eq)
 
@@ -38,6 +39,30 @@ priv struct SelfUploadIntent {
 extend SelfUploadIntent with ToJson::{to_json}
 
 ///|
+priv struct SelfDownloadIntent {
+  session_id : String
+  idempotency_key : String
+} derive(ToJson)
+
+///|
+extend SelfDownloadIntent with ToJson::{to_json}
+
+///|
+priv struct SelfOfflineOrderAction {
+  order_id : String
+  expected_generation : Int64
+} derive(ToJson)
+
+///|
+extend SelfOfflineOrderAction with ToJson::{to_json}
+
+///|
+priv struct OfflineUploadTransferView {
+  evidence : @offline.OfflineUploadGrantView
+  transfer : @offline.OfflineTransferGrant
+} derive(FromJson)
+
+///|
 priv struct OfflineArtifactView {
   artifact_id : String
   order_id : String
@@ -61,6 +86,7 @@ priv enum Outcome {
     String,
     Array[@portal.EnterpriseModelSummary],
     Array[@notifications.NotificationRecord],
+    Array[@notifications.NotificationPreferenceView],
     Array[@nodelease.CustomerExclusiveMachineView],
     Array[@offline.CommercialOrder],
     Array[@offline_commerce.OfflineArtifactSummary]
@@ -68,9 +94,14 @@ priv enum Outcome {
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
   NotificationRead(@notifications.NotificationRecord)
+  NotificationPreferenceUpdated(@notifications.NotificationPreferenceView)
   MachineTerminated(@nodelease.CustomerExclusiveMachineView)
+  CredentialRedeemed(@credential.CredentialHandoffRedemption)
+  MachineClockAdvanced(Int64, Int64)
   OfflineOrderCreated(@offline.CommercialOrder)
-  UploadGrantCreated
+  OfflineOrderCancelled(@offline.CommercialOrder)
+  EvidenceUploaded(String)
+  ArtifactDownloaded(String)
   Failed(@i18n.Locale, String)
 }
 
@@ -151,6 +182,14 @@ fn apply_enterprise_locale(locale : @i18n.Locale) -> Unit {
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
 
 ///|
+extern "js" fn machine_clock_promise(expires_unix_ms : Int64) -> @js.Promise =
+  #| expires => new Promise(resolve => {
+  #|   const remaining = expires - BigInt(Date.now());
+  #|   const delay = remaining <= 0n ? 0 : Number(remaining > 60000n ? 60000n : remaining);
+  #|   setTimeout(() => resolve(BigInt(Date.now())), delay);
+  #| })
+
+///|
 extern "js" fn random_identifier(prefix : String) -> String =
   #| prefix => `${prefix}-${crypto.randomUUID()}`
 
@@ -186,6 +225,78 @@ extern "js" fn request_promise(
   #|   return text;
   #| }
 
+///| The raw one-time capability lives only in this browser operation. It is
+
+///|
+/// never written to application state or local storage.
+extern "js" fn upload_file_promise(
+  url : String,
+  session_token : String,
+  accepted_media_types : String,
+  maximum_byte_count : Int64,
+) -> @js.Promise =
+  #| (url, sessionToken, acceptedMediaTypes, maximumByteCount) => new Promise((resolve, reject) => {
+  #|   const input = document.createElement("input");
+  #|   input.type = "file";
+  #|   input.accept = acceptedMediaTypes;
+  #|   input.onchange = async () => {
+  #|     try {
+  #|       const file = input.files?.[0];
+  #|       if (!file) throw new Error("No file was selected");
+  #|       if (BigInt(file.size) > maximumByteCount) throw new Error("Selected file exceeds the authorized size");
+  #|       const accepted = acceptedMediaTypes.split(",").filter(Boolean);
+  #|       if (accepted.length && !accepted.includes(file.type)) throw new Error("Selected file type is not authorized");
+  #|       const response = await fetch(url, {
+  #|         method: "PUT",
+  #|         headers: {
+  #|           "Authorization": `Bearer ${sessionToken}`,
+  #|           "Content-Type": file.type,
+  #|         },
+  #|         body: file,
+  #|         cache: "no-store",
+  #|         credentials: "omit",
+  #|         redirect: "error",
+  #|       });
+  #|       if (!response.ok) throw new Error(`Upload failed with HTTP ${response.status}`);
+  #|       resolve(file.name);
+  #|     } catch (error) { reject(error); }
+  #|   };
+  #|   input.oncancel = () => reject(new Error("File selection was cancelled"));
+  #|   input.click();
+  #| })
+
+///|
+extern "js" fn download_file_promise(
+  url : String,
+  session_token : String,
+  maximum_byte_count : Int64,
+  expected_sha256 : String,
+  filename : String,
+) -> @js.Promise =
+  #| async (url, sessionToken, maximumByteCount, expectedSha256, filename) => {
+  #|   const response = await fetch(url, {
+  #|     method: "GET",
+  #|     headers: { "Authorization": `Bearer ${sessionToken}` },
+  #|     cache: "no-store",
+  #|     credentials: "omit",
+  #|     redirect: "error",
+  #|   });
+  #|   if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
+  #|   const bytes = await response.arrayBuffer();
+  #|   if (BigInt(bytes.byteLength) > maximumByteCount) throw new Error("Downloaded file exceeds its authorized size");
+  #|   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  #|   const actual = `sha256:${Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+  #|   if (actual !== expectedSha256) throw new Error("Downloaded file digest does not match the verified artifact");
+  #|   const link = document.createElement("a");
+  #|   const objectUrl = URL.createObjectURL(new Blob([bytes]));
+  #|   try {
+  #|     link.href = objectUrl;
+  #|     link.download = filename;
+  #|     link.click();
+  #|   } finally { URL.revokeObjectURL(objectUrl); }
+  #|   return filename;
+  #| }
+
 ///|
 async fn request(
   verb : String,
@@ -213,6 +324,7 @@ async fn load_self(
   String,
   Array[@portal.EnterpriseModelSummary],
   Array[@notifications.NotificationRecord],
+  Array[@notifications.NotificationPreferenceView],
   Array[@nodelease.CustomerExclusiveMachineView],
   Array[@offline.CommercialOrder],
   Array[@offline_commerce.OfflineArtifactSummary],
@@ -278,6 +390,19 @@ async fn load_self(
   } noraise {
     value => value
   }
+  let notification_preferences : Array[
+    @notifications.NotificationPreferenceView,
+  ] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/notifications/self/preferences",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
   let machines : Array[@nodelease.CustomerExclusiveMachineView] = @json.from_json(
     @json.parse(
       request(
@@ -379,8 +504,8 @@ async fn load_self(
     _ => "—"
   }
   (
-    view, cost_centers, provisional_spend, models, notifications, machines, orders,
-    artifacts,
+    view, cost_centers, provisional_spend, models, notifications, notification_preferences,
+    machines, orders, artifacts,
   )
 }
 
@@ -473,6 +598,39 @@ async fn mark_notification_read(
 }
 
 ///|
+async fn update_notification_preference(
+  model : AppModel,
+  topic : @notifications.NotificationTopic,
+  email_enabled : Bool,
+) -> @notifications.NotificationPreferenceView {
+  let body = {
+      "topic": topic.to_json(),
+      "channels": if email_enabled {
+        let channels : Array[@notifications.NotificationChannel] = [
+          InApp,
+          Email,
+        ]
+        channels.to_json()
+      } else {
+        let channels : Array[@notifications.NotificationChannel] = [InApp]
+        channels.to_json()
+      },
+      "minimum_severity": @notifications.NotificationSeverity::Information.to_json(),
+    }
+    .to_json()
+    .stringify()
+  let response = request(
+    "PUT",
+    model.endpoint,
+    "/v1/notifications/self/preferences",
+    model.token,
+    model.subject_ref,
+    body~,
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
 async fn terminate_machine_access(
   model : AppModel,
   lease_ref : String,
@@ -493,6 +651,23 @@ async fn terminate_machine_access(
     model.token,
     model.subject_ref,
     body~,
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+async fn redeem_machine_credential(
+  model : AppModel,
+  lease_ref : String,
+  generation : Int64,
+) -> @credential.CredentialHandoffRedemption {
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/machine-access/self/\{lease_ref}/credential:redeem",
+    model.token,
+    model.subject_ref,
+    body=({ "expected_generation": generation } : Json).stringify(),
   )
   @json.from_json(@json.parse(response))
 }
@@ -541,7 +716,7 @@ async fn request_offline_upload_grant(
   model : AppModel,
   order_id : String,
   kind : @offline.DocumentArtifactKind,
-) -> @offline.OfflineUploadGrantView {
+) -> OfflineUploadTransferView {
   let artifact_id = random_identifier("offline-artifact")
   let intent : SelfUploadIntent = {
     grant_id: random_identifier("offline-upload-grant"),
@@ -566,7 +741,58 @@ async fn request_offline_upload_grant(
     model.subject_ref,
     body=intent.to_json().stringify(),
   )
-  @json.from_json(@json.parse(response))
+  let grant : OfflineUploadTransferView = @json.from_json(@json.parse(response))
+  if grant.transfer.session_id != "transfer-\{grant.evidence.grant_id}" ||
+    grant.transfer.direction != UploadTransfer {
+    raise Failure("upload transfer grant is not bound to its evidence grant")
+  }
+  grant
+}
+
+///|
+async fn upload_offline_evidence(
+  transfer : @offline.OfflineTransferGrant,
+) -> String {
+  let value = upload_file_promise(
+    transfer.transfer_path,
+    transfer.session_token,
+    transfer.media_types.join(","),
+    transfer.maximum_byte_count,
+  ).wait()
+  value.cast()
+}
+
+///|
+async fn request_and_download_offline_artifact(
+  model : AppModel,
+  artifact_id : String,
+) -> String {
+  let intent : SelfDownloadIntent = {
+    session_id: random_identifier("offline-download"),
+    idempotency_key: random_identifier("offline-download-idempotency"),
+  }
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/offline-commerce/self/artifacts/\{artifact_id}:download",
+    model.token,
+    model.subject_ref,
+    body=intent.to_json().stringify(),
+  )
+  let transfer : @offline.OfflineTransferGrant = @json.from_json(
+    @json.parse(response),
+  )
+  guard transfer.expected_sha256 is Some(expected_sha256) else {
+    raise Failure("download grant is not bound to an artifact digest")
+  }
+  let value = download_file_promise(
+    transfer.transfer_path,
+    transfer.session_token,
+    transfer.maximum_byte_count,
+    expected_sha256,
+    artifact_id,
+  ).wait()
+  value.cast()
 }
 
 ///|
@@ -592,13 +818,14 @@ fn load_command(
         provisional_spend,
         models,
         notifications,
+        notification_preferences,
         machines,
         orders,
         artifacts,
       ) =>
         Loaded(
-          view, cost_centers, provisional_spend, models, notifications, machines,
-          orders, artifacts,
+          view, cost_centers, provisional_spend, models, notifications, notification_preferences,
+          machines, orders, artifacts,
         )
     }
   })
@@ -627,6 +854,45 @@ fn offline_order_command(
 }
 
 ///|
+fn offline_order_cancellation_command(
+  model : AppModel,
+  order_id : String,
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try {
+      let body : SelfOfflineOrderAction = {
+        order_id,
+        expected_generation: generation,
+      }
+      let response = request(
+        "POST",
+        model.endpoint,
+        "/v1/offline-commerce/self/orders/\{order_id}:cancel",
+        model.token,
+        model.subject_ref,
+        body=body.to_json().stringify(),
+      )
+      let order : @offline.CommercialOrder = @json.from_json(
+        @json.parse(response),
+      )
+      OfflineOrderCancelled(order)
+    } catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to cancel the order or end access: \{Repr(error)}",
+            "无法取消订单或结束访问：\{Repr(error)}",
+          ),
+        )
+    }
+  })
+}
+
+///|
 fn offline_upload_grant_command(
   model : AppModel,
   order_id : String,
@@ -634,7 +900,10 @@ fn offline_upload_grant_command(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
-    try request_offline_upload_grant(model, order_id, kind) catch {
+    try {
+      let grant = request_offline_upload_grant(model, order_id, kind)
+      upload_offline_evidence(grant.transfer)
+    } catch {
       error =>
         Failed(
           model.portal.locale,
@@ -645,7 +914,30 @@ fn offline_upload_grant_command(
           ),
         )
     } noraise {
-      _ => UploadGrantCreated
+      filename => EvidenceUploaded(filename)
+    }
+  })
+}
+
+///|
+fn offline_artifact_download_command(
+  model : AppModel,
+  artifact_id : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try request_and_download_offline_artifact(model, artifact_id) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to download the verified artifact: \{Repr(error)}",
+            "无法下载已验证文件：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      filename => ArtifactDownloaded(filename)
     }
   })
 }
@@ -675,6 +967,30 @@ fn notification_read_command(
 }
 
 ///|
+fn notification_preference_command(
+  model : AppModel,
+  topic : @notifications.NotificationTopic,
+  email_enabled : Bool,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try update_notification_preference(model, topic, email_enabled) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to update delivery preferences: \{Repr(error)}",
+            "无法更新投递偏好：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => NotificationPreferenceUpdated(value)
+    }
+  })
+}
+
+///|
 fn machine_termination_command(
   model : AppModel,
   lease_ref : String,
@@ -697,6 +1013,55 @@ fn machine_termination_command(
         )
     } noraise {
       value => MachineTerminated(value)
+    }
+  })
+}
+
+///|
+fn credential_redemption_command(
+  model : AppModel,
+  lease_ref : String,
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try redeem_machine_credential(model, lease_ref, generation) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to redeem machine access: \{Repr(error)}",
+            "无法领取机器访问凭据：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => CredentialRedeemed(value)
+    }
+  })
+}
+
+///|
+fn machine_clock_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let now = model.portal.machine_access.now_unix_ms
+  let expiries = [
+    for machine in model.portal.machine_access.machines if machine.expires_unix_ms >
+    now &&
+    machine.state != Completed &&
+    machine.state != Cancelled => machine.expires_unix_ms
+  ]
+  guard expiries.length() > 0 else { return @rabbita.none }
+  expiries.sort()
+  let next_expiry = expiries[0]
+  let generation = model.machine_clock_generation
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try machine_clock_promise(next_expiry).wait() catch {
+      _ => MachineClockAdvanced(current_unix_ms(), generation)
+    } noraise {
+      value => MachineClockAdvanced(value.cast(), generation)
     }
   })
 }
@@ -731,6 +1096,28 @@ fn replace_notification(
       }
     }
   ]
+}
+
+///|
+fn replace_notification_preference(
+  values : Array[@notifications.NotificationPreferenceView],
+  updated : @notifications.NotificationPreferenceView,
+) -> Array[@notifications.NotificationPreferenceView] {
+  let mut found = false
+  let result = [
+    for value in values => {
+      if value.topic == updated.topic {
+        found = true
+        updated
+      } else {
+        value
+      }
+    }
+  ]
+  if !found {
+    result.push(updated)
+  }
+  result
 }
 
 ///|
@@ -922,6 +1309,34 @@ fn update(
           notification_read_command(model, notification_id, generation, emit),
         )
       }
+    Portal(SetNotificationEmail(topic, enabled)) =>
+      if model.demo_mode {
+        let updated : @notifications.NotificationPreferenceView = {
+          topic,
+          channels: if enabled {
+            [InApp, Email]
+          } else {
+            [InApp]
+          },
+          minimum_severity: Information,
+          updated_unix_ms: current_unix_ms(),
+        }
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              notification_preferences: replace_notification_preference(
+                model.portal.notification_preferences,
+                updated,
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (model, notification_preference_command(model, topic, enabled, emit))
+      }
     Portal(
       MachineAccess(ConfirmTermination(lease_ref, generation, confirmation))
     ) => {
@@ -945,6 +1360,19 @@ fn update(
           machine_termination_command(
             model, lease_ref, generation, confirmation, emit,
           ),
+        )
+      }
+    }
+    Portal(MachineAccess(RedeemCredential(lease_ref, generation))) => {
+      let portal = model.portal.update(
+        MachineAccess(RedeemCredential(lease_ref, generation)),
+      )
+      if model.demo_mode {
+        ({ ..model, portal, }, @rabbita.none)
+      } else {
+        (
+          { ..model, portal, },
+          credential_redemption_command(model, lease_ref, generation, emit),
         )
       }
     }
@@ -1007,6 +1435,38 @@ fn update(
         )
       }
     }
+    Portal(OfflineCommerce(RequestArtifactDownload(artifact_id))) => {
+      let next = model.portal.update(
+        OfflineCommerce(RequestArtifactDownload(artifact_id)),
+      )
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              offline_commerce: {
+                ..next.offline_commerce,
+                loading: false,
+                success_message: Some(
+                  portal_copy(
+                    next.locale,
+                    "Verified download preview; no file was transferred.",
+                    "已预览验证下载；未传输任何文件。",
+                  ),
+                ),
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (
+          { ..model, portal: next },
+          offline_artifact_download_command(model, artifact_id, emit),
+        )
+      }
+    }
     Portal(OfflineCommerce(Refresh)) =>
       if model.demo_mode {
         (model, @rabbita.none)
@@ -1025,6 +1485,19 @@ fn update(
           load_command(model, emit),
         )
       }
+    Portal(OfflineCommerce(ConfirmAction(CancelOrder(order_id, generation)))) => {
+      let next = model.portal.update(
+        OfflineCommerce(ConfirmAction(CancelOrder(order_id, generation))),
+      )
+      if model.demo_mode {
+        ({ ..model, portal: next }, @rabbita.none)
+      } else {
+        (
+          { ..model, portal: next },
+          offline_order_cancellation_command(model, order_id, generation, emit),
+        )
+      }
+    }
     Portal(OfflineCommerce(ConfirmAction(_))) =>
       (
         {
@@ -1055,59 +1528,62 @@ fn update(
         provisional_spend,
         models,
         notifications,
+        notification_preferences,
         machines,
         orders,
         artifacts
       )
-    ) =>
-      (
-        {
-          ..model,
-          connecting: false,
-          portal: {
-            ..model.portal,
-            membership: Some(view.membership),
-            agreements: view.agreements,
-            lease_requests: view.lease_requests,
-            cost_centers,
-            provisional_spend,
-            model_catalog: models,
-            notifications,
-            machine_access: {
-              ..model.portal.machine_access,
-              machines,
-              loading: false,
-            },
-            offline_commerce: {
-              ..model.portal.offline_commerce,
-              orders,
-              artifacts,
-              selected_order_id: match
-                model.portal.offline_commerce.selected_order_id {
-                Some(value) => Some(value)
-                None =>
-                  if orders.length() > 0 {
-                    Some(orders[0].order_id)
-                  } else {
-                    None
-                  }
-              },
-              loading: false,
-              error_message: None,
+    ) => {
+      let next = {
+        ..model,
+        connecting: false,
+        machine_clock_generation: model.machine_clock_generation + 1L,
+        portal: {
+          ..model.portal,
+          membership: Some(view.membership),
+          agreements: view.agreements,
+          lease_requests: view.lease_requests,
+          cost_centers,
+          provisional_spend,
+          model_catalog: models,
+          notifications,
+          notification_preferences,
+          machine_access: {
+            ..model.portal.machine_access,
+            machines,
+            now_unix_ms: current_unix_ms(),
+            loading: false,
+          },
+          offline_commerce: {
+            ..model.portal.offline_commerce,
+            orders,
+            artifacts,
+            selected_order_id: match
+              model.portal.offline_commerce.selected_order_id {
+              Some(value) => Some(value)
+              None =>
+                if orders.length() > 0 {
+                  Some(orders[0].order_id)
+                } else {
+                  None
+                }
             },
             loading: false,
-            success_message: Some(
-              portal_copy(
-                model.portal.locale,
-                "Enterprise access loaded.",
-                "企业访问权限已加载。",
-              ),
-            ),
             error_message: None,
           },
+          loading: false,
+          success_message: Some(
+            portal_copy(
+              model.portal.locale,
+              "Enterprise access loaded.",
+              "企业访问权限已加载。",
+            ),
+          ),
+          error_message: None,
         },
-        @rabbita.none,
-      )
+      }
+      (next, machine_clock_command(next, emit))
+    }
     Outcome(OfflineOrderCreated(order)) =>
       (
         {
@@ -1132,7 +1608,37 @@ fn update(
         },
         @rabbita.none,
       )
-    Outcome(UploadGrantCreated) =>
+    Outcome(OfflineOrderCancelled(order)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              orders: model.portal.offline_commerce.orders.map(existing => {
+                if existing.order_id == order.order_id {
+                  order
+                } else {
+                  existing
+                }
+              }),
+              selected_order_id: Some(order.order_id),
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Cancellation accepted. Active access remains tracked until entitlement authority confirmation.",
+                  "已接受取消请求；有效访问将继续跟踪，直至权益授权方确认。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(EvidenceUploaded(filename)) =>
       (
         {
           ..model,
@@ -1144,8 +1650,30 @@ fn update(
               success_message: Some(
                 portal_copy(
                   model.portal.locale,
-                  "Upload authorization created for one hour. Transfer the file through the configured uploader; this step did not upload a file.",
-                  "已创建一小时有效的上传授权。请通过已配置的上传器传输文件；本步骤尚未上传文件。",
+                  "Evidence uploaded: \{filename}. Safety scanning and reconciliation will continue asynchronously.",
+                  "凭证已上传：\{filename}。安全扫描与核验将异步继续。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ArtifactDownloaded(filename)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            offline_commerce: {
+              ..model.portal.offline_commerce,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Verified artifact downloaded: \{filename}.",
+                  "已下载并校验文件：\{filename}。",
                 ),
               ),
               error_message: None,
@@ -1216,6 +1744,29 @@ fn update(
         },
         @rabbita.none,
       )
+    Outcome(NotificationPreferenceUpdated(preference)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            notification_preferences: replace_notification_preference(
+              model.portal.notification_preferences,
+              preference,
+            ),
+            loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Delivery preferences updated.",
+                "投递偏好已更新。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
     Outcome(MachineTerminated(machine)) =>
       (
         {
@@ -1244,6 +1795,55 @@ fn update(
         },
         @rabbita.none,
       )
+    Outcome(CredentialRedeemed(credential)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            machine_access: model.portal.machine_access.with_redeemed_credential(
+              credential,
+            ),
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "SSH access details redeemed. Verify the host key before connecting.",
+                "SSH 访问详情已领取。连接前请核对主机密钥。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(MachineClockAdvanced(now_unix_ms, generation)) =>
+      if generation != model.machine_clock_generation {
+        (model, @rabbita.none)
+      } else {
+        let expired = model.portal.machine_access.machines.any(machine => {
+          model.portal.machine_access.now_unix_ms < machine.expires_unix_ms &&
+          now_unix_ms >= machine.expires_unix_ms
+        })
+        let next = {
+          ..model,
+          portal: {
+            ..model.portal,
+            machine_access: { ..model.portal.machine_access, now_unix_ms, },
+          },
+        }
+        if expired && !model.demo_mode {
+          (
+            {
+              ..next,
+              connecting: true,
+              machine_clock_generation: generation + 1L,
+            },
+            load_command(next, emit),
+          )
+        } else {
+          (next, machine_clock_command(next, emit))
+        }
+      }
     Outcome(Failed(dispatched_locale, message)) =>
       (
         {
@@ -1295,7 +1895,7 @@ fn app_view(
   let ready = model.portal.membership is Some(_)
   let locale = model.portal.locale
   let connection_styles =
-    #|.portal-connection{position:fixed;z-index:50;right:1rem;top:1rem;width:min(28rem,calc(100vw - 2rem));border:1px solid #2b4654;border-radius:.7rem;background:#0b1720;color:#edf7f3;box-shadow:0 20px 70px rgba(0,0,0,.45)}.portal-connection summary{padding:.75rem 1rem;cursor:pointer;font-weight:800}.portal-connection-body{display:grid;gap:.65rem;padding:0 1rem 1rem}.portal-connection label{display:block;margin-bottom:.25rem;color:#9db0b6;font-size:.7rem}.portal-connection input{width:100%;min-height:2.6rem;padding:.55rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#071218;color:#edf7f3}.portal-connection button{min-height:2.6rem;border:1px solid #35bd8d;border-radius:.45rem;background:#7ee0bd;color:#06251a;font-weight:850}.portal-connection p{margin:0;color:#91a7ad;font-size:.7rem}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}
+    #|.portal-connection{position:fixed;z-index:50;right:1rem;top:1rem;width:min(28rem,calc(100vw - 2rem));border:1px solid #2b4654;border-radius:.7rem;background:#0b1720;color:#edf7f3;box-shadow:0 20px 70px rgba(0,0,0,.45)}.portal-connection summary{min-height:44px;padding:.75rem 1rem;cursor:pointer;font-weight:800}.portal-connection-body{display:grid;gap:.65rem;padding:0 1rem 1rem}.portal-connection label{display:block;margin-bottom:.25rem;color:#9db0b6;font-size:.7rem}.portal-connection input{width:100%;min-height:44px;padding:.55rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#071218;color:#edf7f3}.portal-connection button{min-height:44px;border:1px solid #35bd8d;border-radius:.45rem;background:#7ee0bd;color:#06251a;font-weight:850}.portal-connection p{margin:0;color:#91a7ad;font-size:.7rem}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:52rem){.portal-connection{position:relative;inset:auto;margin:1rem;width:calc(100% - 2rem);box-shadow:0 12px 36px rgba(0,0,0,.28)}.demo-flag{position:relative;inset:auto;display:inline-flex;margin:1rem 1rem 0}}
   @html.div([
     @html.style_tag(connection_styles),
     if model.demo_mode {
@@ -1405,6 +2005,7 @@ fn main {
       subject_ref: "",
       connecting: false,
       demo_mode: is_demo,
+      machine_clock_generation: 0L,
       portal: if is_demo {
         {
           ..@enterprise_ui.demo_state(),

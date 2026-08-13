@@ -5,6 +5,7 @@ import {
   "moonbit-community/rabbita/cmd",
   "moonbit-community/rabbita/html",
   "vectie/lunanexa/nodelease",
+  "vectie/lunanexa/nodelease/credential",
   "vectie/lunanexa/ui/i18n",
 }
 
@@ -21,6 +22,7 @@ pub fn view(MachineAccessState) -> @html.Html
 
 // Types and methods
 pub(all) enum MachineAccessMessage {
+  RedeemCredential(String, Int64)
   BeginTermination(String)
   ConfirmationChanged(String)
   CancelTermination
@@ -30,11 +32,14 @@ pub(all) enum MachineAccessMessage {
 pub(all) struct MachineAccessState {
   locale : @i18n.Locale
   machines : Array[@nodelease.CustomerExclusiveMachineView]
+  redeemed_credentials : Array[@credential.CredentialHandoffRedemption]
+  now_unix_ms : Int64
   confirmation_lease_ref : String?
   confirmation_text : String
   loading : Bool
 } derive(Eq)
 pub fn MachineAccessState::update(Self, MachineAccessMessage) -> Self
+pub fn MachineAccessState::with_redeemed_credential(Self, @credential.CredentialHandoffRedemption) -> Self
 
 // Type aliases
 

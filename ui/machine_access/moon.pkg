@@ -1,5 +1,6 @@
 import {
   "vectie/lunanexa/nodelease",
+  "vectie/lunanexa/nodelease/credential",
   "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",
