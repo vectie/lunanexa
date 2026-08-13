@@ -245,6 +245,23 @@ extern "js" fn request_promise(
   #| }
 
 ///|
+/// Loads only the checked, field-free MoonLeaf scene shipped with demo assets.
+extern "js" fn demo_contract_preview_promise() -> @js.Promise =
+  #| async () => {
+  #|   const response = await fetch("/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json", {
+  #|     method: "GET",
+  #|     headers: { "Accept": "application/json" },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error",
+  #|   });
+  #|   if (!response.ok) throw new Error(`MoonLeaf demo scene HTTP ${response.status}`);
+  #|   const text = await response.text();
+  #|   if (text.length > 524288) throw new Error("MoonLeaf demo scene exceeds its bound");
+  #|   return text;
+  #| }
+
+///|
 /// Readiness uses 503 as a typed not-ready response, so preserve its JSON body.
 extern "js" fn readiness_request_promise(
   url : String,
@@ -1229,6 +1246,7 @@ priv enum LoadOutcome {
   ActionFailed(@i18n.Locale, String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
   ContractPreviewLoaded(@contractdoc.ContractPreviewDocument)
+  ContractPreviewFailed(@i18n.Locale, String)
 }
 
 ///|
@@ -1473,12 +1491,59 @@ fn operator_contract_preview_command(
       ContractPreviewLoaded(@json.from_json(@json.parse(response)))
     } catch {
       _ =>
-        ActionFailed(
+        ContractPreviewFailed(
           model.console.locale,
           console_copy(
             model.console.locale,
             "MoonLeaf contract preview failed.",
             "MoonLeaf 合同预览失败。",
+          ),
+        )
+    }
+  })
+}
+
+///|
+fn demo_operator_contract_preview_command(
+  model : AppModel,
+  packet_id : String,
+  form : @contractdoc.ContractFormKind,
+  changes : Array[@contractdoc.ContractFieldValue],
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let text : String = demo_contract_preview_promise().wait().cast()
+      let template : @contractdoc.ContractPreviewTemplate = @json.from_json(
+        @json.parse(text),
+      )
+      guard model.console.contract_documents.manifest is Some(manifest) else {
+        fail("contract manifest unavailable")
+      }
+      guard model.console.contract_documents.packets.search_by(packet => {
+          packet.packet_id == packet_id
+        })
+        is Some(index) else {
+        fail("contract packet unavailable")
+      }
+      ContractPreviewLoaded(
+        @contractdoc.materialize_preview_template(
+          template,
+          manifest,
+          model.console.contract_documents.packets[index],
+          ManagerOperator,
+          form,
+          changes,
+        ),
+      )
+    } catch {
+      _ =>
+        ContractPreviewFailed(
+          model.console.locale,
+          console_copy(
+            model.console.locale,
+            "MoonLeaf demo preview failed.",
+            "MoonLeaf 演示预览失败。",
           ),
         )
     }
@@ -1702,6 +1767,27 @@ fn update_live(
             ..model.console,
             contract_documents: model.console.contract_documents.update(
               PreviewLoaded(preview),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ContractPreviewFailed(dispatched_locale, message)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: model.console.contract_documents.update(
+              PreviewFailed(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  message,
+                  "MoonLeaf preview failed.",
+                  "MoonLeaf 预览失败。",
+                ),
+              ),
             ),
           },
         },
@@ -3307,9 +3393,15 @@ fn update_live(
           ..model,
           console: { ..model.console, contract_documents: next_documents },
         },
-        operator_contract_preview_command(
-          model, packet_id, revision, form, changes, emit,
-        ),
+        if model.demo_mode {
+          demo_operator_contract_preview_command(
+            model, packet_id, form, changes, emit,
+          )
+        } else {
+          operator_contract_preview_command(
+            model, packet_id, revision, form, changes, emit,
+          )
+        },
       )
     }
     Console(ContractDocuments(SaveInformation(packet_id, revision, changes))) => {
@@ -3369,7 +3461,10 @@ fn update(
       | Console(BeginTerminateExclusiveNodeLease(_, _))
       | Console(BeginRedriveNotificationDelivery(_, _, _))
       | Console(ContractDocuments(_))
-      | Console(DismissConfirmation) => update_live(model, message, emit)
+      | Console(DismissConfirmation)
+      | Outcome(ContractPreviewLoaded(_))
+      | Outcome(ContractPreviewFailed(_, _)) =>
+        update_live(model, message, emit)
       Console(OfflineCommerce(RequestGeneration(_, _)))
       | Console(OfflineCommerce(ConfirmAction(_)))
       | Console(OfflineCommerce(Refresh)) =>

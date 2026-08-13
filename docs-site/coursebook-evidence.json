@@ -24,7 +24,7 @@
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:01ee6e6b19689428b3d1790a62a4bd99eb0984a2dd48fbfab9ad6b3d66a45d31","kind":"implementation","public":true},
     {"id":"api-server","path":"api/server.mbt","digest":"sha256:4156bef4830818a94e0673601ba22fac4631a319fea8598bd323289f85467536","kind":"implementation","public":true},
-    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:496f63048143961c970f40c0295fd40ebc9a95fcb02b749ebbb2a9d33d99d799","kind":"acceptance-script","public":true},
+    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:8a1672eee22b80c52a87863df20c494e830774f8f1de736415b97223a138da4c","kind":"acceptance-script","public":true},
     {"id":"dgx-qualification","path":"deploy/dgx-spark/README.md","digest":"sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512","kind":"runtime-qualification","public":true}
   ],
   "claims": [

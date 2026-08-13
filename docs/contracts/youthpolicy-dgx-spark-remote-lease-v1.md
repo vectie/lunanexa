@@ -116,6 +116,12 @@ stack for legible Chinese. It is not a pagination oracle and is not permission
 to release substituted fonts: the production DOCX/PDF worker must still use the
 approved exact font set and pass the retained page-image fidelity gate.
 
+For controller-free demos, LunaNexa checks in a field-free MoonLeaf scene built
+from the marker copy. `scripts/contract-preview-scene-test.sh` regenerates that
+scene from the authoritative DOCX and compares it byte-for-byte during the
+release gate. User or operator values are applied only in browser memory and
+are restricted by the same typed role ownership rules as the live API.
+
 The marker copy is never a customer artifact and must never be sent to the
 renderer before every marker has been replaced. Its visible markers expand the
 source to 18 pages; a completed contract that does not return to the source's

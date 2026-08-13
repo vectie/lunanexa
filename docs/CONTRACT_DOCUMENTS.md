@@ -74,7 +74,10 @@ inputs. Neither browser renders the other party's controls, even as disabled
 fields. Preview requests apply only the current role's draft to a verified copy
 of the fillable DOCX, reopen it with MoonLeaf, and return MoonLeaf's bounded
 neutral text/table scene for Rabbita rendering. No raster screenshot, alternate
-HTML contract, LibreOffice process, or checked-in page preview is used.
+HTML contract, or LibreOffice process is used. Demo mode serves a field-free
+MoonLeaf scene generated from that same DOCX at build time. The release gate
+regenerates it and requires byte-for-byte equality, so it cannot become a
+second editable contract template.
 
 The customer portal exposes the collection as **Contract forms / 合同表单**.
 Its subject-scoped native API is:
@@ -102,6 +105,11 @@ and PDF pair with one shared render-evidence digest and the source page count.
 MoonLeaf's semantic browser preview does not claim Word-compatible pagination.
 A released PDF still requires the approved exact production font set and
 retained page-level evidence.
+
+The preview UI places the current role's form and the MoonLeaf scene side by
+side on wide screens and stacks them on narrow screens. Source-authored manual
+page breaks are preserved. Automatic Word pagination remains part of the final
+DOCX/PDF render gate, not a browser approximation.
 
 ## Production blockers
 

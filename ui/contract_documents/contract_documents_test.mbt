@@ -193,6 +193,52 @@ test "MoonLeaf scene renders Chinese text and tables without raster assets" {
         grid_widths_twips: [1800, 3600],
         cell_widths_twips: [[Some(1800), Some(3600)]],
       },
+      {
+        kind: "page-break",
+        level: 0,
+        ordered: false,
+        runs: [],
+        rows: [],
+        alignment: None,
+        spacing_before_twips: None,
+        spacing_after_twips: None,
+        line_twips: None,
+        left_indent_twips: None,
+        right_indent_twips: None,
+        first_line_twips: None,
+        hanging_twips: None,
+        grid_widths_twips: [],
+        cell_widths_twips: [],
+      },
+      {
+        kind: "paragraph",
+        level: 0,
+        ordered: false,
+        runs: [
+          {
+            text: "第二页中文内容",
+            bold: false,
+            italic: false,
+            underline: false,
+            font_size_half_points: Some(24),
+            color: None,
+            font_ascii: None,
+            font_east_asia: Some("仿宋_GB2312"),
+            font_complex_script: None,
+          },
+        ],
+        rows: [],
+        alignment: None,
+        spacing_before_twips: None,
+        spacing_after_twips: None,
+        line_twips: None,
+        left_indent_twips: None,
+        right_indent_twips: None,
+        first_line_twips: None,
+        hanging_twips: None,
+        grid_widths_twips: [],
+        cell_widths_twips: [],
+      },
     ],
     diagnostic_codes: [],
     page_width_twips: Some(11906),
@@ -215,5 +261,8 @@ test "MoonLeaf scene renders Chinese text and tables without raster assets" {
   assert_true(html.contains("乙方单位名称"))
   assert_true(html.contains("星海科技"))
   assert_true(html.contains("moonleaf-table"))
+  assert_true(html.contains("合同第 1 页"))
+  assert_true(html.contains("合同第 2 页"))
+  assert_true(html.contains("第二页中文内容"))
   assert_false(html.contains("<img"))
 }
