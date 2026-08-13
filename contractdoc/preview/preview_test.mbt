@@ -73,6 +73,8 @@ async test "MoonLeaf audits the 18-page marker copy against the authoritative DO
     .to_fixedarray()
   let reference = @opc.open(reference_bytes)
   let candidate = @opc.open(candidate_bytes)
+  let reference_pages = @docx.paginate_document(reference)
+  assert_eq(reference_pages.pages.length(), 18)
   let audit = @docx.audit_layout_equivalence(reference, candidate)
   assert_eq(audit.reference_cached_page_count, Some(18))
   assert_eq(audit.candidate_cached_page_count, Some(18))
@@ -96,6 +98,8 @@ async test "MoonLeaf audits the 18-page marker copy against the authoritative DO
     markers.map(marker => { placeholder: marker, value: "" }),
   )
   let generated = @opc.open(generated_bytes.bytes)
+  let generated_pages = @docx.paginate_document(generated)
+  assert_eq(generated_pages.pages.length(), 18)
   let generated_audit = @docx.audit_layout_equivalence(reference, generated)
   assert_eq(generated_audit.reference_cached_page_count, Some(18))
   assert_eq(generated_audit.candidate_cached_page_count, Some(18))

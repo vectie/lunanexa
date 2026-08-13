@@ -29,6 +29,124 @@ fn empty_block(
 }
 
 ///|
+fn preview_flow_block(
+  block : @docx.DocxFlowBlock,
+) -> @contractdoc.ContractPreviewBlock? {
+  match block {
+    FlowParagraph(paragraph) => {
+      let runs = paragraph.runs.map(run => @contractdoc.ContractPreviewRun::{
+        text: run.text,
+        bold: run.bold,
+        italic: run.italic,
+        underline: run.underline,
+        font_size_half_points: run.font_size_half_points,
+        color: run.color,
+        font_ascii: run.font_ascii,
+        font_east_asia: run.font_east_asia,
+        font_complex_script: run.font_complex_script,
+      })
+      Some({
+        ..empty_block("paragraph", runs),
+        level: paragraph.outline_level.unwrap_or(0),
+        alignment: paragraph.metadata.alignment,
+        spacing_before_twips: paragraph.metadata.spacing_before_twips,
+        spacing_after_twips: paragraph.metadata.spacing_after_twips,
+        line_twips: paragraph.metadata.line_twips,
+        left_indent_twips: paragraph.metadata.left_indent_twips,
+        right_indent_twips: paragraph.metadata.right_indent_twips,
+        first_line_twips: paragraph.metadata.first_line_twips,
+        hanging_twips: paragraph.metadata.hanging_twips,
+      })
+    }
+    FlowTable(table) =>
+      Some({
+        ..empty_block("table", []),
+        rows: table.rows.map(row => row.map(cell => cell.text)),
+        grid_widths_twips: table.grid_widths_twips,
+        cell_widths_twips: table.rows.map(row => {
+          row.map(cell => cell.width_twips)
+        }),
+      })
+    FlowPageBreak | FlowSection(_) => None
+  }
+}
+
+///| Apply MoonLeaf's physical page boundaries from a materialized copy to the
+
+///| marker-preserving scene used by the browser demo. Paragraphs remain in
+
+///|
+/// source order; split tables retain the corresponding source row slice.
+fn marker_preserving_pages(
+  source : @docx.DocxPreviewDocument,
+  layout : @docx.PagedDocxDocument,
+) -> Array[Array[@contractdoc.ContractPreviewBlock]] {
+  let source_index = Ref(0)
+  let source_table_row = Ref(0)
+  fn skip_non_content(
+    blocks : Array[@docx.DocxFlowBlock],
+    source_index : Ref[Int],
+  ) -> Unit {
+    while source_index.val < blocks.length() {
+      match blocks[source_index.val] {
+        FlowPageBreak | FlowSection(_) =>
+          source_index.val = source_index.val + 1
+        _ => break
+      }
+    }
+  }
+  layout.pages.map(page => {
+    let output : Array[@contractdoc.ContractPreviewBlock] = []
+    for layout_block in page.blocks {
+      skip_non_content(source.blocks, source_index)
+      match layout_block {
+        FlowParagraph(_) =>
+          if source_index.val < source.blocks.length() {
+            match source.blocks[source_index.val] {
+              FlowParagraph(paragraph) => {
+                match preview_flow_block(FlowParagraph(paragraph)) {
+                  Some(block) => output.push(block)
+                  None => ()
+                }
+                source_index.val = source_index.val + 1
+              }
+              _ => ()
+            }
+          }
+        FlowTable(fragment) =>
+          if source_index.val < source.blocks.length() {
+            match source.blocks[source_index.val] {
+              FlowTable(table) => {
+                let rows : Array[Array[@docx.TableCellInfo]] = []
+                let row_end = (source_table_row.val + fragment.rows.length()).min(
+                  table.rows.length(),
+                )
+                for row_index = source_table_row.val
+                    row_index < row_end
+                    row_index = row_index + 1 {
+                  rows.push(table.rows[row_index])
+                }
+                match preview_flow_block(FlowTable({ ..table, rows, })) {
+                  Some(block) => output.push(block)
+                  None => ()
+                }
+                source_table_row.val = row_end
+                if source_table_row.val >= table.rows.length() {
+                  source_index.val = source_index.val + 1
+                  source_table_row.val = 0
+                }
+              }
+              _ => ()
+            }
+          }
+        FlowPageBreak | FlowSection(_) => ()
+      }
+    }
+    output
+  })
+}
+
+///|
 /// Apply a role-scoped, non-persistent draft to a packet for preview only.
 fn preview_packet(
   manifest : @contractdoc.ContractTemplateManifest,
@@ -98,6 +216,9 @@ pub fn render(
   let rich = @docx.preview_document(archive) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
+  let paged = @docx.paginate_document(archive) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
   let blocks : Array[@contractdoc.ContractPreviewBlock] = []
   let mut section : @docx.SectionInfo? = None
   for block in rich.blocks {
@@ -140,6 +261,10 @@ pub fn render(
       FlowSection(value) => section = Some(value)
     }
   }
+  let pages : Array[Array[@contractdoc.ContractPreviewBlock]] = paged.pages.map(page => {
+      page.blocks.filter_map(preview_flow_block)
+    },
+  )
   let (
     page_width_twips,
     page_height_twips,
@@ -165,6 +290,7 @@ pub fn render(
     packet_revision: packet.revision,
     form,
     blocks,
+    pages,
     diagnostic_codes: session.diagnostics().map(item => item.code),
     page_width_twips,
     page_height_twips,
@@ -197,6 +323,18 @@ pub fn template(
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
   let rich = @docx.preview_document(archive) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
+  let layout_copy = @worker.customize_exact_docx_template(
+    source,
+    marker_defaults.map(item => { placeholder: item.marker, value: item.value }),
+  ) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
+  let layout_archive = @opc.open(layout_copy.bytes) catch {
+    error => raise MoonLeafPreviewFailed("\{Repr(error)}")
+  }
+  let paged = @docx.paginate_document(layout_archive) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
   let blocks : Array[@contractdoc.ContractPreviewBlock] = []
@@ -242,6 +380,7 @@ pub fn template(
       FlowSection(value) => section = Some(value)
     }
   }
+  let pages = marker_preserving_pages(rich, paged)
   let (width, height, top, right, bottom, left) = match section {
     Some(value) =>
       (
@@ -264,6 +403,7 @@ pub fn template(
       packet_revision: 0L,
       form: MasterLease,
       blocks,
+      pages,
       diagnostic_codes: rich.warnings.map(warning => warning.code),
       page_width_twips: width,
       page_height_twips: height,

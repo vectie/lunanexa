@@ -58,5 +58,17 @@ pub fn materialize_preview_template(
       }),
       rows: block.rows.map(row => row.map(cell => replace_markers(cell, values))),
     }),
+    pages: template.scene.pages.map(page => {
+      page.map(block => {
+        ..block,
+        runs: block.runs.map(run => {
+          ..run,
+          text: replace_markers(run.text, values),
+        }),
+        rows: block.rows.map(row => {
+          row.map(cell => replace_markers(cell, values))
+        }),
+      })
+    }),
   }
 }

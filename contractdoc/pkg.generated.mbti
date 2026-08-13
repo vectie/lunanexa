@@ -223,6 +223,7 @@ pub(all) struct ContractPreviewDocument {
   packet_revision : Int64
   form : ContractFormKind
   blocks : Array[ContractPreviewBlock]
+  pages : Array[Array[ContractPreviewBlock]]
   diagnostic_codes : Array[String]
   page_width_twips : Int?
   page_height_twips : Int?
