@@ -259,6 +259,7 @@ pub(all) struct ConsoleState {
   portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
   offline_commerce : @offline_commerce.OfflineCommerceState
+  contract_documents : @contract_documents.ContractDocumentsState
   production_readiness : ProductionReadinessState
   confirmation : Confirmation?
   error_message : String?
@@ -306,6 +307,7 @@ pub(all) enum ConsoleMessage {
   ResolveAlert(String, Int64)
   BeginRedriveNotificationDelivery(String, Int, Int64)
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
+  ContractDocuments(@contract_documents.ContractDocumentsMessage)
 } derive(Eq)
 
 ///|
@@ -365,6 +367,10 @@ pub fn default_state() -> ConsoleState {
       @i18n.default_locale(),
       OperatorCommerce,
     ),
+    contract_documents: @contract_documents.default_state(
+      @i18n.default_locale(),
+      actor_owner=ManagerOperator,
+    ),
     production_readiness: {
       ready: false,
       loading: true,
@@ -387,6 +393,38 @@ pub fn default_state() -> ConsoleState {
 
 ///|
 pub fn demo_state() -> ConsoleState {
+  let contract_manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let contract_packet : @contractdoc.ContractPacket = {
+    packet_id: "contract-packet-demo",
+    idempotency_key: "contract-packet-demo-key",
+    template_id: contract_manifest.template_id,
+    template_version: contract_manifest.template_version,
+    template_sha256: contract_manifest.sha256,
+    tenant_ref: "tenant-demo",
+    organization_id: "org-northstar",
+    subject_ref: "subject-alice",
+    order_ref: "order-demo-2026-001",
+    active_forms: contract_manifest.forms.map(form => form.form),
+    values: [{ field_id: "lessee.name", value: "Northstar Research" }],
+    assignments: [
+      {
+        field_id: "lessee.name",
+        value: "Northstar Research",
+        owner: CustomerMessenger,
+        source_ref: "customer-portal",
+        updated_by: "subject-alice",
+        updated_unix_ms: 1786521600000L,
+      },
+    ],
+    values_sha256: None,
+    confirmed_by: None,
+    confirmed_unix_ms: None,
+    artifacts: [],
+    state: InformationDraft,
+    revision: 2L,
+    created_unix_ms: 1786521600000L,
+    updated_unix_ms: 1786521600000L,
+  }
   let nodes : Array[NodeRow] = [
     {
       node_id: "dgx-spark-01",
@@ -841,6 +879,17 @@ pub fn demo_state() -> ConsoleState {
       @i18n.default_locale(),
       OperatorCommerce,
     ),
+    contract_documents: {
+      ..@contract_documents.default_state(
+        @i18n.default_locale(),
+        actor_owner=ManagerOperator,
+      ),
+      manifest: Some(contract_manifest),
+      packets: [contract_packet],
+      selected_packet_id: Some(contract_packet.packet_id),
+      selected_form: Some(MasterLease),
+      draft_values: contract_packet.values,
+    },
     production_readiness: {
       ready: true,
       loading: false,
@@ -1018,6 +1067,7 @@ fn route_label(locale : @i18n.Locale, route : OperatorRoute) -> String {
     CostCenters => localized(locale, "Cost centers", "成本中心")
     Agreements => localized(locale, "Agreements", "数字协议")
     OfflineCommerce => localized(locale, "Offline commerce", "线下商务")
+    ContractDocuments => localized(locale, "Contract documents", "合同资料")
     QualifiedServices => localized(locale, "Qualified services", "资质服务")
     Nodes => localized(locale, "Nodes", "节点")
     Models => localized(locale, "Models", "模型")
@@ -1066,6 +1116,11 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
       localized(
         locale, "Quote, generate, release, review, and fulfill hybrid offline orders with auditable evidence.",
         "通过可审计凭证完成线上线下协同订单的报价、生成、发布、审核与履约。",
+      )
+    ContractDocuments =>
+      localized(
+        locale, "Complete manager-owned contract fields and review the same live source preview as the customer.",
+        "填写经理/运营方负责的合同字段，并与客户查看同一份源文件实时预览。",
       )
     QualifiedServices =>
       localized(
@@ -1161,6 +1216,7 @@ fn navigation(
       nav_link(locale, CostCenters, current, emit),
       nav_link(locale, Agreements, current, emit),
       nav_link(locale, OfflineCommerce, current, emit),
+      nav_link(locale, ContractDocuments, current, emit),
       nav_link(locale, Policies, current, emit),
       @html.p(class="nav-group-label", localized(locale, "Evidence", "证据")),
       nav_link(locale, QualifiedServices, current, emit),
@@ -5444,6 +5500,17 @@ fn console_view(
             send.map(message => OfflineCommerce(message)),
           )
         None => @offline_commerce.view(commerce)
+      }
+    }
+    ContractDocuments => {
+      let documents = { ..state.contract_documents, locale: state.locale }
+      match emit {
+        Some(send) =>
+          @contract_documents.interactive_view(
+            documents,
+            send.map(message => ContractDocuments(message)),
+          )
+        None => @contract_documents.view(documents)
       }
     }
     QualifiedServices => qualified_services_view(state)

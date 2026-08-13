@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn completion_summary(ContractTemplateManifest, ContractPacket) -> ContractCompletionSummary
+
 pub let contract_version : String
 
 pub fn missing_required_fields(ContractTemplateManifest, ContractPacket) -> Array[String]
@@ -42,10 +44,29 @@ pub(all) enum ContractCollectionPolicy {
   CompleteOffline
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct ContractCompletionSummary {
+  customer_required : Int
+  customer_completed : Int
+  operator_required : Int
+  operator_completed : Int
+  system_required : Int
+  system_completed : Int
+  offline_fields : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ContractDocumentSnapshot {
   schema_version : String
   packets : Array[ContractPacket]
   events : Array[ContractPacketEvent]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractFieldAssignment {
+  field_id : String
+  value : String
+  owner : ContractFieldOwner
+  source_ref : String
+  updated_by : String
+  updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractFieldDefinition {
@@ -58,6 +79,7 @@ pub(all) struct ContractFieldDefinition {
   maximum_characters : Int
   allowed_values : Array[String]
   collection_policy : ContractCollectionPolicy
+  owner : ContractFieldOwner
   locator : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -71,6 +93,14 @@ pub(all) enum ContractFieldKind {
   Choice
   MultilineText
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractFieldOwner {
+  CustomerMessenger
+  ManagerOperator
+  PlatformDerived
+  OfflineParticipant
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ContractFieldOwner::can_edit(Self, Self) -> Bool
 
 pub(all) struct ContractFieldValue {
   field_id : String
@@ -116,6 +146,7 @@ pub(all) struct ContractPacket {
   order_ref : String
   active_forms : Array[ContractFormKind]
   values : Array[ContractFieldValue]
+  assignments : Array[ContractFieldAssignment]
   values_sha256 : String?
   confirmed_by : String?
   confirmed_unix_ms : Int64?
@@ -125,13 +156,14 @@ pub(all) struct ContractPacket {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ContractPacket::assignment(Self, String) -> ContractFieldAssignment?
 pub fn ContractPacket::canonical_values_material(Self) -> String
 pub fn ContractPacket::complete_generation(Self, Int64, ContractGeneratedArtifact, ContractGeneratedArtifact, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::confirm_information(Self, ContractTemplateManifest, Int64, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::marker_replacements(Self, Array[String]) -> Array[ContractFieldValue] raise ContractDocumentError
 pub fn ContractPacket::marker_value(Self, String) -> String raise ContractDocumentError
 pub fn ContractPacket::request_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
-pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], ContractFieldOwner, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::value(Self, String) -> String?
 
 pub(all) struct ContractPacketEvent {
@@ -149,6 +181,7 @@ pub(all) struct ContractPacketEvent {
 pub(all) enum ContractPacketEventKind {
   PacketCreated
   InformationUpdated
+  SystemInformationSynchronized
   InformationConfirmedEvent
   GenerationRequestedEvent
   GenerationCompletedEvent
@@ -162,6 +195,51 @@ pub(all) enum ContractPacketState {
   GenerationRequested
   Generated
   Superseded
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractPreviewBlock {
+  kind : String
+  level : Int
+  ordered : Bool
+  runs : Array[ContractPreviewRun]
+  rows : Array[Array[String]]
+  alignment : String?
+  spacing_before_twips : Int?
+  spacing_after_twips : Int?
+  line_twips : Int?
+  left_indent_twips : Int?
+  right_indent_twips : Int?
+  first_line_twips : Int?
+  hanging_twips : Int?
+  grid_widths_twips : Array[Int]
+  cell_widths_twips : Array[Array[Int?]]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractPreviewDocument {
+  engine : String
+  packet_id : String
+  packet_revision : Int64
+  form : ContractFormKind
+  blocks : Array[ContractPreviewBlock]
+  diagnostic_codes : Array[String]
+  page_width_twips : Int?
+  page_height_twips : Int?
+  margin_top_twips : Int?
+  margin_right_twips : Int?
+  margin_bottom_twips : Int?
+  margin_left_twips : Int?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractPreviewRun {
+  text : String
+  bold : Bool
+  italic : Bool
+  underline : Bool
+  font_size_half_points : Int?
+  color : String?
+  font_ascii : String?
+  font_east_asia : String?
+  font_complex_script : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractTemplateManifest {

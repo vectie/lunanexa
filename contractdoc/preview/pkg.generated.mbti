@@ -1,0 +1,22 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/contractdoc/preview"
+
+import {
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/contractdoc",
+}
+
+// Values
+pub fn render(FixedArray[Byte], @contractdoc.ContractTemplateManifest, @contractdoc.ContractPacket, @contractdoc.ContractFieldOwner, @contractdoc.ContractFormKind, Array[@contractdoc.ContractFieldValue]) -> @contractdoc.ContractPreviewDocument raise ContractPreviewError
+
+// Errors
+pub(all) suberror ContractPreviewError {
+  InvalidDraft(String)
+  MoonLeafPreviewFailed(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+
+// Type aliases
+
+// Traits

@@ -10,7 +10,7 @@ import {
 }
 
 // Values
-pub fn default_state(@i18n.Locale) -> ContractDocumentsState
+pub fn default_state(@i18n.Locale, actor_owner? : @contractdoc.ContractFieldOwner) -> ContractDocumentsState
 
 pub fn interactive_view(ContractDocumentsState, @cmd.Emit[ContractDocumentsMessage]) -> @html.Html
 
@@ -29,6 +29,9 @@ pub(all) enum ContractDocumentConfirmation {
 pub(all) enum ContractDocumentsMessage {
   SelectPacket(String)
   SelectForm(@contractdoc.ContractFormKind)
+  RequestPreview(String, Int64, @contractdoc.ContractFormKind, Array[@contractdoc.ContractFieldValue])
+  PreviewLoaded(@contractdoc.ContractPreviewDocument)
+  PreviewFailed(String)
   FieldChanged(String, String)
   SaveInformation(String, Int64, Array[@contractdoc.ContractFieldValue])
   BeginConfirmInformation(String, Int64)
@@ -41,10 +44,13 @@ pub(all) enum ContractDocumentsMessage {
 
 pub(all) struct ContractDocumentsState {
   locale : @i18n.Locale
+  actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
   packets : Array[@contractdoc.ContractPacket]
   selected_packet_id : String?
   selected_form : @contractdoc.ContractFormKind?
+  preview : @contractdoc.ContractPreviewDocument?
+  preview_loading : Bool
   draft_values : Array[@contractdoc.ContractFieldValue]
   confirmation : ContractDocumentConfirmation?
   loading : Bool

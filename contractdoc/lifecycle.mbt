@@ -47,6 +47,7 @@ pub fn new_packet(
     order_ref,
     active_forms,
     values: [],
+    assignments: [],
     values_sha256: None,
     confirmed_by: None,
     confirmed_unix_ms: None,
@@ -64,6 +65,9 @@ pub fn ContractPacket::update_information(
   manifest : ContractTemplateManifest,
   expected_revision : Int64,
   changes : Array[ContractFieldValue],
+  actor_owner : ContractFieldOwner,
+  actor_ref : String,
+  source_ref : String,
   now_unix_ms : Int64,
 ) -> ContractPacket raise ContractDocumentError {
   if self.revision != expected_revision {
@@ -82,15 +86,34 @@ pub fn ContractPacket::update_information(
   if changes.length() == 0 || changes.length() > 256 {
     raise InvalidInput("contract information update is empty or too large")
   }
+  if actor_owner == OfflineParticipant ||
+    !valid_identifier(actor_ref) ||
+    !valid_identifier(source_ref) {
+    raise InvalidInput("invalid contract information authority")
+  }
   let values : Map[String, String] = Map([])
+  let assignments : Map[String, ContractFieldAssignment] = Map([])
   for existing in self.values {
     values[existing.field_id] = existing.value
+  }
+  for existing in self.assignments {
+    assignments[existing.field_id] = existing
   }
   let seen : Map[String, Unit] = Map([])
   for change in changes {
     guard manifest.field(change.field_id) is Some(definition) &&
       self.active_forms.contains(definition.form) else {
       raise InvalidInput("contract field is outside the active packet")
+    }
+    if definition.collection_policy == CompleteOffline {
+      raise ForbiddenSecret(definition.field_id)
+    }
+    if definition.owner != actor_owner ||
+      (
+        !definition.owner.can_edit(actor_owner) &&
+        actor_owner != PlatformDerived
+      ) {
+      raise InvalidInput("contract field is owned by another participant")
     }
     if seen.contains(change.field_id) {
       raise InvalidInput("contract update repeats a field")
@@ -99,17 +122,31 @@ pub fn ContractPacket::update_information(
     validate_field_value(definition, change.value)
     if change.value.trim() == "" {
       values.remove(change.field_id)
+      assignments.remove(change.field_id)
     } else {
       values[change.field_id] = change.value
+      assignments[change.field_id] = {
+        field_id: change.field_id,
+        value: change.value,
+        owner: definition.owner,
+        source_ref,
+        updated_by: actor_ref,
+        updated_unix_ms: now_unix_ms,
+      }
     }
   }
   let updated_values = values
     .to_array()
     .map(pair => { field_id: pair.0, value: pair.1 })
   updated_values.sort_by((left, right) => left.field_id.compare(right.field_id))
+  let updated_assignments = assignments.to_array().map(pair => pair.1)
+  updated_assignments.sort_by((left, right) => {
+    left.field_id.compare(right.field_id)
+  })
   let draft = {
     ..self,
     values: updated_values,
+    assignments: updated_assignments,
     values_sha256: None,
     confirmed_by: None,
     confirmed_unix_ms: None,

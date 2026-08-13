@@ -80,6 +80,25 @@ priv struct OfflineActionRequest {
 }
 
 ///|
+priv struct ContractInformationUpdate {
+  expected_revision : Int64
+  changes : Array[@contractdoc.ContractFieldValue]
+} derive(ToJson)
+
+///|
+extend ContractInformationUpdate with ToJson::{to_json}
+
+///|
+priv struct ContractPreviewIntent {
+  expected_revision : Int64
+  form : @contractdoc.ContractFormKind
+  changes : Array[@contractdoc.ContractFieldValue]
+} derive(ToJson)
+
+///|
+extend ContractPreviewIntent with ToJson::{to_json}
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -707,6 +726,16 @@ async fn load_console(
       request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
     ),
   )
+  let contract_manifest : @contractdoc.ContractTemplateManifest = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/contract-documents/manifest", token),
+    ),
+  )
+  let contract_packets : Array[@contractdoc.ContractPacket] = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/contract-documents/operator/packets", token),
+    ),
+  )
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -1161,6 +1190,21 @@ async fn load_console(
         None
       },
     },
+    contract_documents: {
+      ..@contract_documents.default_state(locale, actor_owner=ManagerOperator),
+      manifest: Some(contract_manifest),
+      packets: contract_packets,
+      selected_packet_id: contract_packets
+      .get(0)
+      .map(packet => packet.packet_id),
+      selected_form: match contract_packets.get(0) {
+        Some(packet) => packet.active_forms.get(0)
+        None => None
+      },
+      draft_values: contract_packets
+      .get(0)
+      .map_or([], packet => packet.values.copy()),
+    },
     production_readiness,
     confirmation: None,
     error_message: None,
@@ -1183,6 +1227,8 @@ priv enum LoadOutcome {
   ActionComplete(@i18n.Locale, String)
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
+  ContractPacketUpdated(@contractdoc.ContractPacket)
+  ContractPreviewLoaded(@contractdoc.ContractPreviewDocument)
 }
 
 ///|
@@ -1236,6 +1282,14 @@ fn merge_loaded_console(
       terms_digest: current.offline_commerce.terms_digest,
       entitlement_ref: current.offline_commerce.entitlement_ref,
     },
+    contract_documents: {
+      ..loaded.contract_documents,
+      locale: current.locale,
+      selected_packet_id: current.contract_documents.selected_packet_id,
+      selected_form: current.contract_documents.selected_form,
+      preview: current.contract_documents.preview,
+      preview_loading: false,
+    },
     success_message: current.success_message,
   }
 }
@@ -1249,6 +1303,7 @@ fn switch_console_locale(
     ..state,
     locale,
     offline_commerce: { ..state.offline_commerce, locale, },
+    contract_documents: { ..state.contract_documents, locale, },
     // Notices are UI-owned, ephemeral copy. Clear them rather than retaining a
     // message rendered in the previous language; operational state is kept.
     error_message: None,
@@ -1327,6 +1382,104 @@ fn offline_action_command(
         ActionComplete(
           model.console.locale,
           console_copy(model.console.locale, english_success, chinese_success),
+        )
+    }
+  })
+}
+
+///|
+fn replace_contract_packet(
+  packets : Array[@contractdoc.ContractPacket],
+  updated : @contractdoc.ContractPacket,
+) -> Array[@contractdoc.ContractPacket] {
+  let mut found = false
+  let next = packets.map(packet => {
+    if packet.packet_id == updated.packet_id {
+      found = true
+      updated
+    } else {
+      packet
+    }
+  })
+  if !found {
+    next.push(updated)
+  }
+  next
+}
+
+///|
+fn operator_contract_command(
+  model : AppModel,
+  packet_id : String,
+  revision : Int64,
+  changes : Array[@contractdoc.ContractFieldValue],
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let response = request(
+        "PUT",
+        model.endpoint,
+        "/v1/contract-documents/operator/packets/\{packet_id}:information",
+        model.credential,
+        body=ContractInformationUpdate::{ expected_revision: revision, changes }
+          .to_json()
+          .stringify(),
+      )
+      let updated : @contractdoc.ContractPacket = @json.from_json(
+        @json.parse(response),
+      )
+      ContractPacketUpdated(updated)
+    } catch {
+      _ =>
+        ActionFailed(
+          model.console.locale,
+          console_copy(
+            model.console.locale,
+            "Contract information update failed.",
+            "合同资料更新失败。",
+          ),
+        )
+    } noraise {
+      value => value
+    }
+  })
+}
+
+///|
+fn operator_contract_preview_command(
+  model : AppModel,
+  packet_id : String,
+  revision : Int64,
+  form : @contractdoc.ContractFormKind,
+  changes : Array[@contractdoc.ContractFieldValue],
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let response = request(
+        "POST",
+        model.endpoint,
+        "/v1/contract-documents/operator/packets/\{packet_id}:preview",
+        model.credential,
+        body=ContractPreviewIntent::{
+            expected_revision: revision,
+            form,
+            changes,
+          }
+          .to_json()
+          .stringify(),
+      )
+      ContractPreviewLoaded(@json.from_json(@json.parse(response)))
+    } catch {
+      _ =>
+        ActionFailed(
+          model.console.locale,
+          console_copy(
+            model.console.locale,
+            "MoonLeaf contract preview failed.",
+            "MoonLeaf 合同预览失败。",
+          ),
         )
     }
   })
@@ -1508,6 +1661,47 @@ fn update_live(
                 "Operation failed.",
                 "操作失败。",
               ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ContractPacketUpdated(packet)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              packets: replace_contract_packet(
+                model.console.contract_documents.packets,
+                packet,
+              ),
+              selected_packet_id: Some(packet.packet_id),
+              draft_values: packet.values.copy(),
+              loading: false,
+              error_message: None,
+              success_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Manager contract information saved.",
+                  "经理/运营方合同资料已保存。",
+                ),
+              ),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ContractPreviewLoaded(preview)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: model.console.contract_documents.update(
+              PreviewLoaded(preview),
             ),
           },
         },
@@ -3101,6 +3295,46 @@ fn update_live(
         },
         @rabbita.none,
       )
+    Console(ContractDocuments(Refresh)) => (model, load_command(model, emit))
+    Console(
+      ContractDocuments(RequestPreview(packet_id, revision, form, changes))
+    ) => {
+      let next_documents = model.console.contract_documents.update(
+        RequestPreview(packet_id, revision, form, changes),
+      )
+      (
+        {
+          ..model,
+          console: { ..model.console, contract_documents: next_documents },
+        },
+        operator_contract_preview_command(
+          model, packet_id, revision, form, changes, emit,
+        ),
+      )
+    }
+    Console(ContractDocuments(SaveInformation(packet_id, revision, changes))) => {
+      let next_documents = model.console.contract_documents.update(
+        SaveInformation(packet_id, revision, changes),
+      )
+      (
+        {
+          ..model,
+          console: { ..model.console, contract_documents: next_documents },
+        },
+        operator_contract_command(model, packet_id, revision, changes, emit),
+      )
+    }
+    Console(ContractDocuments(message)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: model.console.contract_documents.update(message),
+          },
+        },
+        @rabbita.none,
+      )
   }
 }
 
@@ -3134,6 +3368,7 @@ fn update(
       | Console(BeginEndComputeLease(_))
       | Console(BeginTerminateExclusiveNodeLease(_, _))
       | Console(BeginRedriveNotificationDelivery(_, _, _))
+      | Console(ContractDocuments(_))
       | Console(DismissConfirmation) => update_live(model, message, emit)
       Console(OfflineCommerce(RequestGeneration(_, _)))
       | Console(OfflineCommerce(ConfirmAction(_)))

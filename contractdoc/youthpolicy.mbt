@@ -1,9 +1,39 @@
-///| The source collection is an immutable 14-page packet. Locators describe
+///| The source collection is an immutable 18-page packet. Locators describe
 
 ///| physical OOXML slots, not legal prose; generator implementations must fail
 
 ///|
 /// if the source digest or locator shape differs.
+fn source_field_owner(
+  field_id : String,
+  form : ContractFormKind,
+  collection_policy : ContractCollectionPolicy,
+) -> ContractFieldOwner {
+  if collection_policy == CompleteOffline {
+    return OfflineParticipant
+  }
+  if field_id == "access.order_number" {
+    return PlatformDerived
+  }
+  match form {
+    MasterLease if field_id.has_prefix("lessor.") ||
+      field_id.has_prefix("lease.") ||
+      field_id == "contract.number" => ManagerOperator
+    ReservationApplication if field_id.has_prefix("reservation.operator_") =>
+      ManagerOperator
+    AccessConfirmation => ManagerOperator
+    ViolationNotice | DamageAssessment | SettlementConfirmation =>
+      ManagerOperator
+    EarlyTerminationApplication if field_id.has_prefix("termination.review_") ||
+      field_id == "termination.actual_use_rent" ||
+      field_id == "termination.paid_rent" ||
+      field_id == "termination.balance_type" ||
+      field_id == "termination.balance_amount" => ManagerOperator
+    _ => CustomerMessenger
+  }
+}
+
+///|
 fn field(
   field_id : String,
   form : ContractFormKind,
@@ -15,6 +45,7 @@ fn field(
   locator : String,
   allowed_values? : Array[String] = [],
   collection_policy? : ContractCollectionPolicy = PersistedContractData,
+  owner? : ContractFieldOwner? = None,
 ) -> ContractFieldDefinition {
   {
     field_id,
@@ -26,6 +57,9 @@ fn field(
     maximum_characters,
     allowed_values,
     collection_policy,
+    owner: owner.unwrap_or(
+      source_field_owner(field_id, form, collection_policy),
+    ),
     locator,
   }
 }
@@ -1341,7 +1375,7 @@ pub fn youthpolicy_remote_lease_manifest() -> ContractTemplateManifest {
     fillable_filename: "NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
     fillable_sha256: "sha256:d4445ad5566d5dc1d3d24c9ecd77090e03d1eb8fa7d25c575b012b4d2e6f573a",
     byte_count: 419136L,
-    page_count: 14,
+    page_count: 18,
     section_count: 1,
     forms: [
       {

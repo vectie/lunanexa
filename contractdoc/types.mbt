@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.contract-document.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v1"
+pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v2"
 
 ///|
 pub(all) suberror ContractDocumentError {
@@ -49,6 +49,18 @@ pub(all) enum ContractCollectionPolicy {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Declares who owns the authoritative value for one source-document slot.
+/// `PlatformDerived` values are copied from durable LunaNexa authorities and
+/// are never editable in either browser. `OfflineParticipant` values remain
+/// outside the online packet entirely.
+pub(all) enum ContractFieldOwner {
+  CustomerMessenger
+  ManagerOperator
+  PlatformDerived
+  OfflineParticipant
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct ContractFieldDefinition {
   field_id : String
   form : ContractFormKind
@@ -59,6 +71,7 @@ pub(all) struct ContractFieldDefinition {
   maximum_characters : Int
   allowed_values : Array[String]
   collection_policy : ContractCollectionPolicy
+  owner : ContractFieldOwner
   locator : String
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -96,6 +109,82 @@ pub(all) struct ContractFieldValue {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// One styled text run produced by MoonLeaf's neutral DOCX scene.
+pub(all) struct ContractPreviewRun {
+  text : String
+  bold : Bool
+  italic : Bool
+  underline : Bool
+  font_size_half_points : Int?
+  color : String?
+  font_ascii : String?
+  font_east_asia : String?
+  font_complex_script : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| A provider-neutral MoonLeaf block. `kind` is one of paragraph, heading,
+
+///|
+/// list-item, or table. Table cells preserve source text and line breaks.
+pub(all) struct ContractPreviewBlock {
+  kind : String
+  level : Int
+  ordered : Bool
+  runs : Array[ContractPreviewRun]
+  rows : Array[Array[String]]
+  alignment : String?
+  spacing_before_twips : Int?
+  spacing_after_twips : Int?
+  line_twips : Int?
+  left_indent_twips : Int?
+  right_indent_twips : Int?
+  first_line_twips : Int?
+  hanging_twips : Int?
+  grid_widths_twips : Array[Int]
+  cell_widths_twips : Array[Array[Int?]]
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Bounded live preview derived from the authoritative fillable DOCX by
+
+///|
+/// MoonLeaf. This is a semantic scene, not a raster or invented reflow.
+pub(all) struct ContractPreviewDocument {
+  engine : String
+  packet_id : String
+  packet_revision : Int64
+  form : ContractFormKind
+  blocks : Array[ContractPreviewBlock]
+  diagnostic_codes : Array[String]
+  page_width_twips : Int?
+  page_height_twips : Int?
+  margin_top_twips : Int?
+  margin_right_twips : Int?
+  margin_bottom_twips : Int?
+  margin_left_twips : Int?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractFieldAssignment {
+  field_id : String
+  value : String
+  owner : ContractFieldOwner
+  source_ref : String
+  updated_by : String
+  updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractCompletionSummary {
+  customer_required : Int
+  customer_completed : Int
+  operator_required : Int
+  operator_completed : Int
+  system_required : Int
+  system_completed : Int
+  offline_fields : Int
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) enum ContractPacketState {
   InformationDraft
   ReadyForConfirmation
@@ -129,6 +218,7 @@ pub(all) struct ContractPacket {
   order_ref : String
   active_forms : Array[ContractFormKind]
   values : Array[ContractFieldValue]
+  assignments : Array[ContractFieldAssignment]
   values_sha256 : String?
   confirmed_by : String?
   confirmed_unix_ms : Int64?
@@ -143,6 +233,7 @@ pub(all) struct ContractPacket {
 pub(all) enum ContractPacketEventKind {
   PacketCreated
   InformationUpdated
+  SystemInformationSynchronized
   InformationConfirmedEvent
   GenerationRequestedEvent
   GenerationCompletedEvent

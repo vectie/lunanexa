@@ -97,6 +97,16 @@ priv struct ContractRevisionAction {
 extend ContractRevisionAction with ToJson::{to_json}
 
 ///|
+priv struct ContractPreviewIntent {
+  expected_revision : Int64
+  form : @contractdoc.ContractFormKind
+  changes : Array[@contractdoc.ContractFieldValue]
+} derive(ToJson)
+
+///|
+extend ContractPreviewIntent with ToJson::{to_json}
+
+///|
 priv enum Outcome {
   Loaded(
     @portal.EnterpriseSelfView,
@@ -123,6 +133,7 @@ priv enum Outcome {
   EvidenceUploaded(String)
   ArtifactDownloaded(String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
+  ContractPreviewLoaded(@contractdoc.ContractPreviewDocument)
   Failed(@i18n.Locale, String)
 }
 
@@ -1235,6 +1246,28 @@ fn replace_contract_packet(
 }
 
 ///|
+fn merge_contract_draft(
+  draft : Array[@contractdoc.ContractFieldValue],
+  updated : @contractdoc.ContractPacket,
+) -> Array[@contractdoc.ContractFieldValue] {
+  let values : Map[String, String] = Map([])
+  for item in draft {
+    values[item.field_id] = item.value
+  }
+  for item in updated.values {
+    values[item.field_id] = item.value
+  }
+  let merged = values
+    .to_array()
+    .map(pair => @contractdoc.ContractFieldValue::{
+      field_id: pair.0,
+      value: pair.1,
+    })
+  merged.sort_by((left, right) => left.field_id.compare(right.field_id))
+  merged
+}
+
+///|
 async fn update_contract_information(
   model : AppModel,
   packet_id : String,
@@ -1276,6 +1309,27 @@ async fn contract_revision_action(
 }
 
 ///|
+async fn contract_preview(
+  model : AppModel,
+  packet_id : String,
+  expected_revision : Int64,
+  form : @contractdoc.ContractFormKind,
+  changes : Array[@contractdoc.ContractFieldValue],
+) -> @contractdoc.ContractPreviewDocument {
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/contract-documents/self/\{packet_id}:preview",
+    model.token,
+    model.subject_ref,
+    body=ContractPreviewIntent::{ expected_revision, form, changes }
+      .to_json()
+      .stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
 fn contract_packet_command(
   model : AppModel,
   message : @contract_documents.ContractDocumentsMessage,
@@ -1284,10 +1338,15 @@ fn contract_packet_command(
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
     try {
       match message {
+        RequestPreview(packet_id, revision, form, changes) =>
+          contract_preview(model, packet_id, revision, form, changes)
+          |> ContractPreviewLoaded
         SaveInformation(packet_id, revision, changes) =>
           update_contract_information(model, packet_id, revision, changes)
+          |> ContractPacketUpdated
         ConfirmAction(ConfirmInformation(packet_id, revision)) =>
           contract_revision_action(model, packet_id, revision, None, "confirm")
+          |> ContractPacketUpdated
         ConfirmAction(RequestGeneration(packet_id, revision, digest)) =>
           contract_revision_action(
             model,
@@ -1296,6 +1355,7 @@ fn contract_packet_command(
             Some(digest),
             "generate",
           )
+          |> ContractPacketUpdated
         _ => fail("unsupported contract document operation")
       }
     } catch {
@@ -1308,8 +1368,6 @@ fn contract_packet_command(
             "合同文件操作失败：\{Repr(error)}",
           ),
         )
-    } noraise {
-      value => ContractPacketUpdated(value)
     }
   })
 }
@@ -1687,6 +1745,7 @@ fn update(
         )
       }
     Portal(ContractDocuments(message)) if message is SaveInformation(_, _, _) ||
+      message is RequestPreview(_, _, _, _) ||
       message is ConfirmAction(_) => {
       let next = model.portal.update(ContractDocuments(message))
       if model.demo_mode {
@@ -1698,6 +1757,14 @@ fn update(
         )
       }
     }
+    Outcome(ContractPreviewLoaded(preview)) =>
+      (
+        {
+          ..model,
+          portal: model.portal.update(ContractDocuments(PreviewLoaded(preview))),
+        },
+        @rabbita.none,
+      )
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
     Outcome(
@@ -1892,7 +1959,10 @@ fn update(
               ..model.portal.contract_documents,
               packets,
               selected_packet_id: Some(packet.packet_id),
-              draft_values: packet.values.copy(),
+              draft_values: merge_contract_draft(
+                model.portal.contract_documents.draft_values,
+                packet,
+              ),
               loading: false,
               success_message: Some(
                 portal_copy(

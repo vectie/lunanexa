@@ -9,6 +9,7 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/deployment",
   "vectie/lunanexa/notifications",
+  "vectie/lunanexa/ui/contract_documents",
   "vectie/lunanexa/ui/i18n",
   "vectie/lunanexa/ui/offline_commerce",
   "vectie/lunanexa/workspace",
@@ -113,6 +114,7 @@ pub(all) enum ConsoleMessage {
   ResolveAlert(String, Int64)
   BeginRedriveNotificationDelivery(String, Int, Int64)
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
+  ContractDocuments(@contract_documents.ContractDocumentsMessage)
 } derive(Eq)
 
 pub(all) struct ConsoleState {
@@ -142,6 +144,7 @@ pub(all) struct ConsoleState {
   portal_node_id : String
   qualified_services : Array[QualifiedServiceRow]
   offline_commerce : @offline_commerce.OfflineCommerceState
+  contract_documents : @contract_documents.ContractDocumentsState
   production_readiness : ProductionReadinessState
   confirmation : Confirmation?
   error_message : String?
@@ -280,6 +283,7 @@ pub(all) enum OperatorRoute {
   CostCenters
   Agreements
   OfflineCommerce
+  ContractDocuments
   QualifiedServices
   Nodes
   Models

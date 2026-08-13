@@ -24,6 +24,13 @@ priv struct ContractRevisionAction {
 } derive(FromJson)
 
 ///|
+priv struct ContractPreviewIntent {
+  expected_revision : Int64
+  form : @contractdoc.ContractFormKind
+  changes : Array[@contractdoc.ContractFieldValue]
+} derive(FromJson)
+
+///|
 priv struct ContractGenerationResult {
   packet_id : String
   expected_revision : Int64
@@ -35,6 +42,20 @@ priv struct ContractGenerationResult {
 ///|
 fn contract_packet_id(path : String, suffix : String) -> String? {
   let prefix = "/v1/contract-documents/self/"
+  if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
+    return None
+  }
+  let packet_id = path[prefix.length():path.length() - suffix.length()].to_owned()
+  if @contracts.valid_identifier(packet_id) {
+    Some(packet_id)
+  } else {
+    None
+  }
+}
+
+///|
+fn operator_contract_packet_id(path : String, suffix : String) -> String? {
+  let prefix = "/v1/contract-documents/operator/packets/"
   if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
     return None
   }
@@ -92,6 +113,90 @@ fn contract_document_error(error : Error) -> HttpReply {
 }
 
 ///|
+async fn moonleaf_contract_preview(
+  manifest : @contractdoc.ContractTemplateManifest,
+  packet : @contractdoc.ContractPacket,
+  actor : @contractdoc.ContractFieldOwner,
+  request : ContractPreviewIntent,
+) -> HttpReply {
+  if request.expected_revision != packet.revision {
+    return api_error(
+      409, "StaleContractRevision", "contract packet changed; refresh before previewing",
+      true,
+    )
+  }
+  let template_path = @env.get_env_var("LUNANEXA_CONTRACT_TEMPLATE_PATH").unwrap_or(
+    "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
+  )
+  let template = try
+    @fs.read_file(template_path).binary().to_fixedarray()
+  catch {
+    _ =>
+      return api_error(
+        503, "ContractTemplateUnavailable", "the MoonLeaf contract template is unavailable",
+        true,
+      )
+  } noraise {
+    value => value
+  }
+  let preview = try
+    @contract_preview.render(
+      template,
+      manifest,
+      packet,
+      actor,
+      request.form,
+      request.changes,
+    )
+  catch {
+    _ =>
+      return api_error(
+        400, "ContractPreviewRejected", "MoonLeaf rejected the contract preview request",
+        false,
+      )
+  } noraise {
+    value => value
+  }
+  json_reply(200, preview.to_json())
+}
+
+///|
+fn linked_order_values(
+  packet : @contractdoc.ContractPacket,
+) -> Array[@contractdoc.ContractFieldValue] {
+  if packet.active_forms.contains(AccessConfirmation) {
+    [{ field_id: "access.order_number", value: packet.order_ref }]
+  } else {
+    []
+  }
+}
+
+///|
+async fn synchronize_linked_contract_values(
+  store : @contractdoc_store.ContractDocumentStore,
+  manifest : @contractdoc.ContractTemplateManifest,
+  packet : @contractdoc.ContractPacket,
+) -> @contractdoc.ContractPacket {
+  let changes = linked_order_values(packet).filter(item => {
+    packet.value(item.field_id) != Some(item.value)
+  })
+  if changes.length() == 0 {
+    packet
+  } else {
+    store.update_information(
+      manifest,
+      packet.packet_id,
+      packet.revision,
+      changes,
+      PlatformDerived,
+      "contract-system",
+      "linked-order:\{packet.order_ref}",
+      @async.now(),
+    )
+  }
+}
+
+///|
 async fn ApiService::handle_contract_documents(
   self : ApiService,
   verb : ApiMethod,
@@ -105,6 +210,73 @@ async fn ApiService::handle_contract_documents(
       503, "ContractDocumentStoreUnavailable", "durable contract-document authority is unavailable",
       true,
     )
+  }
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  if path == "/v1/contract-documents/operator/packets" ||
+    path.has_prefix("/v1/contract-documents/operator/packets/") {
+    guard bearer_authorized(headers, self.operator_token) else {
+      return api_error(
+        401, "Unauthenticated", "operator authority is required", false,
+      )
+    }
+    return match (verb, path) {
+      (Get, "/v1/contract-documents/operator/packets") => {
+        let packets = store.snapshot().packets
+        let synchronized = []
+        for packet in packets {
+          synchronized.push(
+            synchronize_linked_contract_values(store, manifest, packet),
+          )
+        }
+        json_reply(200, synchronized.to_json())
+      }
+      (Put, _) if operator_contract_packet_id(path, ":information")
+        is Some(packet_id) => {
+        let decoded : ContractInformationUpdate? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(request) && store.packet(packet_id) is Some(_) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        let updated = try
+          store.update_information(
+            manifest,
+            packet_id,
+            request.expected_revision,
+            request.changes,
+            ManagerOperator,
+            "operator",
+            "operator-console",
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        json_reply(200, updated.to_json())
+      }
+      (Post, _) if operator_contract_packet_id(path, ":preview")
+        is Some(packet_id) => {
+        let decoded : ContractPreviewIntent? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(request) &&
+          store.packet(packet_id) is Some(packet) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        moonleaf_contract_preview(manifest, packet, ManagerOperator, request)
+      }
+      _ => api_error(404, "NotFound", "route was not found", false)
+    }
   }
   if path == "/v1/contract-documents/worker/pending" ||
     path == "/v1/contract-documents/worker/results" {
@@ -159,12 +331,19 @@ async fn ApiService::handle_contract_documents(
   } noraise {
     value => value
   }
-  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   match (verb, path) {
     (Get, "/v1/contract-documents/manifest") =>
       json_reply(200, manifest.to_json())
-    (Get, "/v1/contract-documents/self") =>
-      json_reply(200, store.packets_for_subject(subject_ref).to_json())
+    (Get, "/v1/contract-documents/self") => {
+      let packets = store.packets_for_subject(subject_ref)
+      let synchronized = []
+      for packet in packets {
+        synchronized.push(
+          synchronize_linked_contract_values(store, manifest, packet),
+        )
+      }
+      json_reply(200, synchronized.to_json())
+    }
     (Post, "/v1/contract-documents/self") => {
       let decoded : ContractPacketIntent? = Some(
         @json.from_json(@json.parse(body)),
@@ -220,7 +399,9 @@ async fn ApiService::handle_contract_documents(
           packet_id,
           request.expected_revision,
           request.changes,
+          CustomerMessenger,
           subject_ref,
+          "enterprise-portal",
           @async.now(),
         )
       catch {
@@ -229,6 +410,21 @@ async fn ApiService::handle_contract_documents(
         value => value
       }
       json_reply(200, updated.to_json())
+    }
+    (Post, _) if contract_packet_id(path, ":preview") is Some(packet_id) => {
+      let decoded : ContractPreviewIntent? = Some(
+        @json.from_json(@json.parse(body)),
+      ) catch {
+        _ => None
+      }
+      guard decoded is Some(request) &&
+        store.packet(packet_id) is Some(packet) &&
+        packet.subject_ref == subject_ref else {
+        return api_error(
+          404, "ContractPacketNotFound", "contract packet was not found", false,
+        )
+      }
+      moonleaf_contract_preview(manifest, packet, CustomerMessenger, request)
     }
     (Post, _) if contract_packet_id(path, ":confirm") is Some(packet_id) => {
       let decoded : ContractRevisionAction? = Some(

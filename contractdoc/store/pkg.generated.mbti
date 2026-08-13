@@ -3,6 +3,7 @@ package "vectie/lunanexa/contractdoc/store"
 
 import {
   "moonbitlang/async",
+  "moonbitlang/core/json",
   "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/database",
 }
@@ -29,9 +30,13 @@ pub async fn ContractDocumentStore::packets_for_subject(Self, String) -> Array[@
 pub async fn ContractDocumentStore::pending_generation_packets(Self) -> Array[@contractdoc.ContractPacket]
 pub async fn ContractDocumentStore::request_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::snapshot(Self) -> @contractdoc.ContractDocumentSnapshot
-pub async fn ContractDocumentStore::update_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, Array[@contractdoc.ContractFieldValue], String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::update_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, Array[@contractdoc.ContractFieldValue], @contractdoc.ContractFieldOwner, String, String, Int64) -> @contractdoc.ContractPacket
 
 type ContractPersistence
+
+type LegacyContractDocumentSnapshotV1 derive(@json.FromJson)
+
+type LegacyContractPacketV1 derive(@json.FromJson)
 
 // Type aliases
 

@@ -7,10 +7,13 @@ pub(all) enum ContractDocumentConfirmation {
 ///|
 pub(all) struct ContractDocumentsState {
   locale : @i18n.Locale
+  actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
   packets : Array[@contractdoc.ContractPacket]
   selected_packet_id : String?
   selected_form : @contractdoc.ContractFormKind?
+  preview : @contractdoc.ContractPreviewDocument?
+  preview_loading : Bool
   draft_values : Array[@contractdoc.ContractFieldValue]
   confirmation : ContractDocumentConfirmation?
   loading : Bool
@@ -22,6 +25,14 @@ pub(all) struct ContractDocumentsState {
 pub(all) enum ContractDocumentsMessage {
   SelectPacket(String)
   SelectForm(@contractdoc.ContractFormKind)
+  RequestPreview(
+    String,
+    Int64,
+    @contractdoc.ContractFormKind,
+    Array[@contractdoc.ContractFieldValue]
+  )
+  PreviewLoaded(@contractdoc.ContractPreviewDocument)
+  PreviewFailed(String)
   FieldChanged(String, String)
   SaveInformation(String, Int64, Array[@contractdoc.ContractFieldValue])
   BeginConfirmInformation(String, Int64)
@@ -42,13 +53,19 @@ fn copy(locale : @i18n.Locale, en : String, zh : String) -> String {
 }
 
 ///|
-pub fn default_state(locale : @i18n.Locale) -> ContractDocumentsState {
+pub fn default_state(
+  locale : @i18n.Locale,
+  actor_owner? : @contractdoc.ContractFieldOwner = CustomerMessenger,
+) -> ContractDocumentsState {
   {
     locale,
+    actor_owner,
     manifest: None,
     packets: [],
     selected_packet_id: None,
     selected_form: None,
+    preview: None,
+    preview_loading: false,
     draft_values: [],
     confirmation: None,
     loading: false,
@@ -124,14 +141,28 @@ pub fn ContractDocumentsState::update(
           Some(item) => item.values.copy()
           None => []
         },
+        preview: None,
+        preview_loading: false,
         confirmation: None,
       }
     }
-    SelectForm(form) => { ..self, selected_form: Some(form) }
+    SelectForm(form) => { ..self, selected_form: Some(form), preview: None }
+    RequestPreview(_, _, _, _) =>
+      { ..self, preview_loading: true, error_message: None }
+    PreviewLoaded(preview) =>
+      {
+        ..self,
+        preview: Some(preview),
+        preview_loading: false,
+        error_message: None,
+      }
+    PreviewFailed(message) =>
+      { ..self, preview_loading: false, error_message: Some(message) }
     FieldChanged(field_id, value) =>
       {
         ..self,
         draft_values: upsert_value(self.draft_values, field_id, value),
+        preview: None,
         success_message: None,
         error_message: None,
       }
@@ -223,20 +254,228 @@ fn field_label(
 }
 
 ///|
-fn missing_count(
-  manifest : @contractdoc.ContractTemplateManifest,
-  form : @contractdoc.ContractFormDefinition,
-  values : Array[@contractdoc.ContractFieldValue],
-) -> Int {
-  let mut missing = 0
-  for field_id in form.field_ids {
-    match manifest.field(field_id) {
-      Some(field) if field.required &&
-        draft_value(values, field_id).trim() == "" => missing += 1
-      _ => ()
-    }
+fn preview_runs(runs : Array[@contractdoc.ContractPreviewRun]) -> @rabbita.Html {
+  @html.span(
+    [
+      for run in runs => {
+        let classes = [
+            if run.bold {
+              "is-bold"
+            } else {
+              ""
+            },
+            if run.italic {
+              "is-italic"
+            } else {
+              ""
+            },
+            if run.underline {
+              "is-underline"
+            } else {
+              ""
+            },
+          ]
+          .filter(value => value != "")
+          .join(" ")
+        let attrs = @html.Attrs::build()
+        match run.font_size_half_points {
+          Some(size) =>
+            ignore(attrs.style("font-size", "\{size.to_double() / 2.0}pt"))
+          None => ()
+        }
+        match run.color {
+          Some(color) if color.length() == 6 =>
+            ignore(attrs.style("color", "#\{color}"))
+          _ => ()
+        }
+        match run.font_east_asia {
+          Some(font) if font.trim() != "" =>
+            ignore(attrs.style("font-family", "'\{font}',serif"))
+          _ => ()
+        }
+        @html.span(class=classes, attrs~, run.text)
+      }
+    ],
+  )
+}
+
+///|
+fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
+  let attrs = @html.Attrs::build()
+  match block.alignment {
+    Some("center") => ignore(attrs.style("text-align", "center"))
+    Some("right") | Some("end") => ignore(attrs.style("text-align", "right"))
+    Some("both") | Some("distribute") =>
+      ignore(attrs.style("text-align", "justify"))
+    _ => ()
   }
-  missing
+  match block.spacing_before_twips {
+    Some(value) =>
+      ignore(attrs.style("margin-top", "\{value.to_double() / 20.0}pt"))
+    None => ()
+  }
+  match block.spacing_after_twips {
+    Some(value) =>
+      ignore(attrs.style("margin-bottom", "\{value.to_double() / 20.0}pt"))
+    None => ()
+  }
+  match block.left_indent_twips {
+    Some(value) =>
+      ignore(attrs.style("margin-left", "\{value.to_double() / 20.0}pt"))
+    None => ()
+  }
+  match block.right_indent_twips {
+    Some(value) =>
+      ignore(attrs.style("margin-right", "\{value.to_double() / 20.0}pt"))
+    None => ()
+  }
+  match block.first_line_twips {
+    Some(value) =>
+      ignore(attrs.style("text-indent", "\{value.to_double() / 20.0}pt"))
+    None => ()
+  }
+  match block.kind {
+    "table" => {
+      let total = block.grid_widths_twips.fold(init=0, (sum, value) => {
+        sum + value
+      })
+      @html.table(class="moonleaf-table", attrs~, [
+        if total > 0 {
+          @html.colgroup(
+            [
+              for width in block.grid_widths_twips => {
+                let column = @html.Attrs::build()
+                ignore(
+                  column.style(
+                    "width",
+                    "\{width.to_double() * 100.0 / total.to_double()}%",
+                  ),
+                )
+                @html.col(attrs=column)
+              }
+            ],
+          )
+        } else {
+          @html.nothing
+        },
+        @html.tbody(
+          [
+            for row in block.rows => {
+              @html.tr([ for cell in row => @html.td(cell) ])
+            }
+          ],
+        ),
+      ])
+    }
+    "heading" =>
+      @html.div(class="moonleaf-heading", attrs~, preview_runs(block.runs))
+    "list-item" =>
+      @html.div(class="moonleaf-list-item", attrs~, [
+        @html.span(if block.ordered { "1." } else { "•" }),
+        preview_runs(block.runs),
+      ])
+    _ => @html.p(class="moonleaf-paragraph", attrs~, preview_runs(block.runs))
+  }
+}
+
+///|
+fn preview_panel(
+  state : ContractDocumentsState,
+  emit : @rabbita.Emit[ContractDocumentsMessage]?,
+  manifest : @contractdoc.ContractTemplateManifest,
+  packet : @contractdoc.ContractPacket,
+  form : @contractdoc.ContractFormDefinition?,
+) -> @rabbita.Html {
+  let active_form = form.map(item => item.form)
+  @html.aside(class="contract-preview", [
+    @html.div(class="contract-preview-heading", [
+      @html.div([
+        @html.p(class="eyebrow", "MOONLEAF LIVE PREVIEW"),
+        @html.h2(
+          copy(state.locale, "What will be generated", "将要生成的文件"),
+        ),
+      ]),
+      @html.span(
+        class="contract-preview-revision",
+        "MoonLeaf · r\{packet.revision}",
+      ),
+    ]),
+    @html.div(class="contract-preview-toolbar", [
+      @html.button(
+        type_="button",
+        class="primary-button",
+        disabled=state.preview_loading || active_form is None,
+        on_click=match active_form {
+          Some(kind) =>
+            command(
+              emit,
+              RequestPreview(
+                packet.packet_id,
+                packet.revision,
+                kind,
+                editable_draft_values(state, manifest),
+              ),
+            )
+          None => @rabbita.none
+        },
+        if state.preview_loading {
+          copy(state.locale, "Rendering…", "渲染中…")
+        } else {
+          copy(state.locale, "Render current draft", "渲染当前草稿")
+        },
+      ),
+    ]),
+    @html.div(class="contract-paper-stage", [
+      @html.div(class="contract-paper-viewport", [
+        match state.preview {
+          Some(preview) if active_form == Some(preview.form) =>
+            @html.article(
+              class="contract-paper moonleaf-document",
+              [
+                for block in preview.blocks => preview_block(block)
+              ],
+            )
+          _ =>
+            @html.div(class="contract-paper moonleaf-empty", [
+              @html.strong(
+                copy(
+                  state.locale,
+                  "Render the role-scoped draft with MoonLeaf",
+                  "使用 MoonLeaf 渲染当前角色草稿",
+                ),
+              ),
+              @html.p(
+                copy(
+                  state.locale,
+                  "The preview is created from the authoritative DOCX. No screenshot or alternate template is used.",
+                  "预览直接从权威 DOCX 生成，不使用截图或另一份模板。",
+                ),
+              ),
+            ])
+        },
+      ]),
+    ]),
+    @html.p(
+      class="contract-preview-note",
+      copy(
+        state.locale,
+        "MoonLeaf preserves the DOCX content, tables, text runs, and filled values in this semantic preview. Final pagination is verified when the exact DOCX and PDF artifacts are generated.",
+        "MoonLeaf 在此语义预览中保留 DOCX 的内容、表格、文字样式与填写值；最终分页在生成原格式 DOCX 与 PDF 时校验。",
+      ),
+    ),
+  ])
+}
+
+///|
+fn editable_draft_values(
+  state : ContractDocumentsState,
+  manifest : @contractdoc.ContractTemplateManifest,
+) -> Array[@contractdoc.ContractFieldValue] {
+  state.draft_values.filter(item => {
+    manifest
+    .field(item.field_id)
+    .map_or(false, field => field.owner.can_edit(state.actor_owner))
+  })
 }
 
 ///|
@@ -305,6 +544,46 @@ fn input_for(
 }
 
 ///|
+fn visible_to_actor(
+  actor : @contractdoc.ContractFieldOwner,
+  field : @contractdoc.ContractFieldDefinition,
+) -> Bool {
+  field.owner.can_edit(actor)
+}
+
+///|
+fn role_missing_count(
+  manifest : @contractdoc.ContractTemplateManifest,
+  form : @contractdoc.ContractFormDefinition,
+  values : Array[@contractdoc.ContractFieldValue],
+  actor : @contractdoc.ContractFieldOwner,
+) -> Int {
+  let mut missing = 0
+  for field_id in form.field_ids {
+    match manifest.field(field_id) {
+      Some(field) if visible_to_actor(actor, field) &&
+        field.required &&
+        draft_value(values, field_id).trim() == "" => missing += 1
+      _ => ()
+    }
+  }
+  missing
+}
+
+///|
+fn form_has_actor_fields(
+  manifest : @contractdoc.ContractTemplateManifest,
+  form : @contractdoc.ContractFormDefinition,
+  actor : @contractdoc.ContractFieldOwner,
+) -> Bool {
+  form.field_ids.any(field_id => {
+    manifest
+    .field(field_id)
+    .map_or(false, field => visible_to_actor(actor, field))
+  })
+}
+
+///|
 fn packet_editor(
   state : ContractDocumentsState,
   emit : @rabbita.Emit[ContractDocumentsMessage]?,
@@ -322,14 +601,23 @@ fn packet_editor(
   let editable = packet.state == InformationDraft ||
     packet.state == ReadyForConfirmation ||
     packet.state == InformationConfirmed
+  let actor_title = if state.actor_owner == CustomerMessenger {
+    copy(state.locale, "Your customer information", "填写乙方资料")
+  } else {
+    copy(
+      state.locale,
+      "Your operator information",
+      "填写甲方及运营资料",
+    )
+  }
   @html.section(class="contract-workspace", [
     @html.div(class="contract-progress", [
       @html.strong(state_label(state.locale, packet.state)),
       @html.span(
         copy(
           state.locale,
-          "Source packet: 7 forms · 14 pages",
-          "源合同包：7 份表单 · 14 页",
+          "Source packet: 7 forms · 18 pages",
+          "源合同包：7 份表单 · 18 页",
         ),
       ),
       @html.span("Revision \{packet.revision}"),
@@ -343,8 +631,14 @@ fn packet_editor(
         [
           for definition in manifest.forms if packet.active_forms.contains(
             definition.form,
-          ) => {
-            let count = missing_count(manifest, definition, state.draft_values)
+          ) &&
+          form_has_actor_fields(manifest, definition, state.actor_owner) => {
+            let count = role_missing_count(
+              manifest,
+              definition,
+              state.draft_values,
+              state.actor_owner,
+            )
             @html.button(
               type_="button",
               class=if active_form == Some(definition.form) {
@@ -376,16 +670,13 @@ fn packet_editor(
           Some(definition) =>
             @html.div([
               @html.div(class="contract-form-heading", [
-                @html.p(
-                  class="eyebrow",
-                  copy(state.locale, "SOURCE FORM", "源文件表单"),
-                ),
+                @html.p(class="eyebrow", actor_title),
                 @html.h2(form_title(state.locale, definition)),
                 @html.p(
                   copy(
                     state.locale,
-                    "Labels and choices below come directly from the supplied contract. The system does not add legal wording or calculate missing amounts.",
-                    "以下字段与选项均直接来自所提供合同。系统不会增加法律条款，也不会代填或推算金额。",
+                    "Only the fields assigned to your side are shown. Labels and choices come directly from the supplied contract.",
+                    "这里只显示由您这一方填写的字段；标签与选项均直接来自所提供合同。",
                   ),
                 ),
               ]),
@@ -393,8 +684,10 @@ fn packet_editor(
                 let fields : Array[@rabbita.Html] = []
                 for field_id in definition.field_ids {
                   match manifest.field(field_id) {
-                    Some(field) => fields.push(input_for(state, emit, field))
+                    Some(field) if visible_to_actor(state.actor_owner, field) =>
+                      fields.push(input_for(state, emit, field))
                     None => ()
+                    _ => ()
                   }
                 }
                 @html.div(class="contract-field-grid", fields)
@@ -416,7 +709,7 @@ fn packet_editor(
               SaveInformation(
                 packet.packet_id,
                 packet.revision,
-                state.draft_values.copy(),
+                editable_draft_values(state, manifest),
               ),
             ),
             copy(state.locale, "Save information", "保存资料"),
@@ -457,6 +750,7 @@ fn packet_editor(
           },
         ]),
       ]),
+      preview_panel(state, emit, manifest, packet, form),
     ]),
   ])
 }
@@ -540,6 +834,7 @@ fn contract_documents_view(
     None => state.packets.get(0)
   }
   @html.div(class="contract-documents", [
+    @html.style_tag(contract_styles()),
     @html.header(class="contract-documents-header", [
       @html.div([
         @html.p(
@@ -631,6 +926,13 @@ fn contract_documents_view(
     },
     confirmation(state, emit),
   ])
+}
+
+///|
+fn contract_styles() -> String {
+  (
+    #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(23rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(68vh,56rem);padding:.75rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.contract-paper{display:block;width:100%;min-height:42rem;padding:2.8rem 3.2rem;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:.82rem;line-height:1.75}.moonleaf-document{overflow-wrap:anywhere}.moonleaf-paragraph{min-height:1.4em;margin:.25rem 0;text-indent:2em}.moonleaf-heading{margin:.8rem 0 .45rem;text-align:center;font-size:1.12rem;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:.2rem 0}.moonleaf-table{width:100%;margin:.65rem 0;border-collapse:collapse;table-layout:fixed}.moonleaf-table td{padding:.35rem .45rem;border:1px solid #555;vertical-align:top;white-space:pre-wrap}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:66rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:48rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem}.contract-paper{padding:1.4rem 1rem;font-size:.76rem}}
+  )
 }
 
 ///|

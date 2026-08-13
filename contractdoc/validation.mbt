@@ -55,7 +55,15 @@ pub fn validate_manifest(
       field_ids.contains(field.field_id) ||
       (field.kind == Choice && field.allowed_values.length() < 2) ||
       (field.kind != Choice && field.allowed_values.length() > 0) ||
-      (field.collection_policy == CompleteOffline && field.required) {
+      (field.collection_policy == CompleteOffline && field.required) ||
+      (
+        field.collection_policy == CompleteOffline &&
+        field.owner != OfflineParticipant
+      ) ||
+      (
+        field.collection_policy != CompleteOffline &&
+        field.owner == OfflineParticipant
+      ) {
       raise InvalidInput("invalid or duplicate contract field definition")
     }
     field_ids[field.field_id] = field
@@ -82,6 +90,25 @@ pub fn validate_manifest(
   }
   if manifest.fields.any(field => !forms.contains(field.form)) {
     raise InvalidInput("contract field has no owning form")
+  }
+}
+
+///|
+pub fn ContractFieldOwner::can_edit(
+  self : ContractFieldOwner,
+  actor : ContractFieldOwner,
+) -> Bool {
+  self == actor && (self == CustomerMessenger || self == ManagerOperator)
+}
+
+///|
+pub fn ContractPacket::assignment(
+  self : ContractPacket,
+  field_id : String,
+) -> ContractFieldAssignment? {
+  match self.assignments.search_by(item => item.field_id == field_id) {
+    Some(index) => self.assignments.get(index)
+    None => None
   }
 }
 
@@ -144,13 +171,76 @@ pub fn ContractPacket::canonical_values_material(
 ) -> String {
   let ordered = self.values.copy()
   ordered.sort_by((left, right) => left.field_id.compare(right.field_id))
-  let parts = ["contract-values-v1"]
+  let parts = ["contract-values-v2"]
   for item in ordered {
+    let assignment = self.assignment(item.field_id)
+    let owner = assignment.map_or("unattributed", item => {
+      match item.owner {
+        CustomerMessenger => "customer-messenger"
+        ManagerOperator => "manager-operator"
+        PlatformDerived => "platform-derived"
+        OfflineParticipant => "offline-participant"
+      }
+    })
+    let source_ref = assignment.map_or("unattributed", item => item.source_ref)
     parts.push(
-      "\{item.field_id.length()}:\{item.field_id}\n\{item.value.length()}:\{item.value}",
+      "\{item.field_id.length()}:\{item.field_id}\n\{owner.length()}:\{owner}\n\{source_ref.length()}:\{source_ref}\n\{item.value.length()}:\{item.value}",
     )
   }
   parts.join("\n")
+}
+
+///|
+pub fn completion_summary(
+  manifest : ContractTemplateManifest,
+  packet : ContractPacket,
+) -> ContractCompletionSummary {
+  let mut customer_required = 0
+  let mut customer_completed = 0
+  let mut operator_required = 0
+  let mut operator_completed = 0
+  let mut system_required = 0
+  let mut system_completed = 0
+  let mut offline_fields = 0
+  for definition in manifest.fields {
+    if !packet.active_forms.contains(definition.form) {
+      continue
+    }
+    let complete = packet
+      .value(definition.field_id)
+      .map_or(false, value => value.trim() != "")
+    match definition.owner {
+      CustomerMessenger if definition.required => {
+        customer_required += 1
+        if complete {
+          customer_completed += 1
+        }
+      }
+      ManagerOperator if definition.required => {
+        operator_required += 1
+        if complete {
+          operator_completed += 1
+        }
+      }
+      PlatformDerived if definition.required => {
+        system_required += 1
+        if complete {
+          system_completed += 1
+        }
+      }
+      OfflineParticipant => offline_fields += 1
+      _ => ()
+    }
+  }
+  {
+    customer_required,
+    customer_completed,
+    operator_required,
+    operator_completed,
+    system_required,
+    system_completed,
+    offline_fields,
+  }
 }
 
 ///|

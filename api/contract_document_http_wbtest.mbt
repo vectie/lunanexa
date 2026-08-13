@@ -61,6 +61,33 @@ async test "contract document API is subject scoped and rejects offline secret f
   )
   assert_eq(created.status, 201)
   assert_false(created.body.contains("tenant-b"))
+  let customer_cannot_edit_manager = service.handle(
+    Put,
+    "/v1/contract-documents/self/packet-api-1:information",
+    headers("subject-a"),
+    "{\"expected_revision\":\"1\",\"changes\":[{\"field_id\":\"lessor.name\",\"value\":\"forbidden\"}]}",
+  )
+  assert_eq(customer_cannot_edit_manager.status, 400)
+  let operator = service.handle(
+    Put,
+    "/v1/contract-documents/operator/packets/packet-api-1:information",
+    { "Authorization": "Bearer operator-token" },
+    "{\"expected_revision\":\"1\",\"changes\":[{\"field_id\":\"lessor.name\",\"value\":\"青年政策运营方\"}]}",
+  )
+  assert_eq(operator.status, 200)
+  assert_true(operator.body.contains("ManagerOperator"))
+  assert_false(operator.body.contains("operator-token"))
+  let preview = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-api-1:preview",
+    { "Authorization": "Bearer operator-token" },
+    "{\"expected_revision\":\"2\",\"form\":\"MasterLease\",\"changes\":[{\"field_id\":\"lessor.name\",\"value\":\"青年政策运营方\"}]}",
+  )
+  assert_eq(preview.status, 200)
+  assert_true(preview.body.contains("\"engine\":\"moonleaf\""))
+  assert_true(preview.body.contains("青年政策运营方"))
+  assert_true(preview.body.contains("NVIDIA DGX Spark"))
+  assert_false(preview.body.contains("operator-token"))
   let other = service.handle(
     Get,
     "/v1/contract-documents/self",
@@ -73,7 +100,7 @@ async test "contract document API is subject scoped and rejects offline secret f
     Put,
     "/v1/contract-documents/self/packet-api-1:information",
     headers("subject-a"),
-    "{\"expected_revision\":\"1\",\"changes\":[{\"field_id\":\"lessor.signatory\",\"value\":\"must-not-persist\"}]}",
+    "{\"expected_revision\":\"2\",\"changes\":[{\"field_id\":\"lessor.signatory\",\"value\":\"must-not-persist\"}]}",
   )
   assert_eq(secret.status, 400)
   assert_false(

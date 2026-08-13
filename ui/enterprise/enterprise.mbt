@@ -130,6 +130,7 @@ pub fn demo_state() -> EnterpriseState {
       EarlyTerminationApplication,
     ],
     values: [],
+    assignments: [],
     values_sha256: None,
     confirmed_by: None,
     confirmed_unix_ms: None,

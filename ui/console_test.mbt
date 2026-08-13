@@ -210,6 +210,10 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       },
     ],
     offline_commerce: @offline_commerce.default_state(English, OperatorCommerce),
+    contract_documents: @contract_documents.default_state(
+      @i18n.default_locale(),
+      actor_owner=ManagerOperator,
+    ),
     production_readiness: {
       ready: false,
       loading: false,

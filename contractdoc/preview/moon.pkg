@@ -1,0 +1,14 @@
+import {
+  "vectie/lunanexa/contractdoc",
+  "vectie/lunanexa/commercial/offline/worker",
+  "vectie/moonleaf",
+  "vectie/moonleaf/docx",
+  "vectie/moonleaf/opc",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+} for "test"
