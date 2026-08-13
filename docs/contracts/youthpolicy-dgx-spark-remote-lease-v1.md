@@ -15,7 +15,7 @@ rewrite, summarize, translate, or extend its clauses.
 - Size: 419136 bytes
 - Source package: 14 OOXML parts, no active content, no drawings, no fields,
   no content controls, no footnotes, and no endnotes.
-- Rendered page count: 14
+- Rendered page count: 18 with Chinese glyphs present
 - Section count: 1
 
 The source digest is checked before every fill. A different digest is a new
@@ -54,6 +54,14 @@ confirmed packet revision; it does not rewrite an earlier generated artifact.
 ## Collection and no-invention rules
 
 - Every filled value must come from an authenticated user or operator input.
+- Every online slot declares exactly one owner: customer/messenger,
+  manager/operator, or LunaNexa-linked authority. Offline-only slots never
+  enter packet state.
+- Persisted assignments retain field ID, value, owner, actor, source reference,
+  and update time; audit events continue to omit the value itself.
+- Customer and operator UIs edit the same revision and show a MoonLeaf scene
+  from the authoritative DOCX side by side with their form. Each UI renders only its
+  own party's inputs; the other participant's controls are not present.
 - Missing required values block confirmation and generation.
 - Choices accept only options printed in the source document.
 - Money-in-words fields are collected explicitly; LunaNexa does not invent or
@@ -95,7 +103,7 @@ Before a DOCX/PDF pair is released:
 2. verify the internal marker-copy digest, replace every marker, reject any
    remaining marker, and preserve all package parts above byte-for-byte;
 3. reopen the result with MoonLeaf and reject active content or structural loss;
-4. render the DOCX to PDF and all 14 page images with the approved production
+4. render the DOCX to PDF and all 18 page images with the approved production
    Chinese font set;
 5. compare reference/final page geometry and inspect every final page at 100%;
 6. reject missing glyphs, unexpected page-count change, clipping, overflow,
@@ -103,13 +111,12 @@ Before a DOCX/PDF pair is released:
 7. bind DOCX, PDF, page images, source digest, value digest, and renderer
    receipt into one generation result.
 
-The current local LibreOffice environment does not resolve the source's three
-named Chinese fonts and therefore renders Chinese characters as missing. This
-is a hard PDF release blocker, not permission to substitute fonts or ship a
-visually different contract. The DOCX source and its Chinese text remain
-intact.
+The browser preview is a MoonLeaf neutral scene and uses the browser's CJK font
+stack for legible Chinese. It is not a pagination oracle and is not permission
+to release substituted fonts: the production DOCX/PDF worker must still use the
+approved exact font set and pass the retained page-image fidelity gate.
 
 The marker copy is never a customer artifact and must never be sent to the
 renderer before every marker has been replaced. Its visible markers expand the
 source to 18 pages; a completed contract that does not return to the source's
-14-page count fails the release gate.
+18-page count fails the release gate.

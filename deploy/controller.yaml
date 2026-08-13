@@ -120,6 +120,8 @@ spec:
               value: /var/lib/lunanexa/offline-commerce.json
             - name: LUNANEXA_CONTRACT_DOCUMENT_PATH
               value: /var/lib/lunanexa/contract-documents.json
+            - name: LUNANEXA_CONTRACT_TEMPLATE_PATH
+              value: /usr/share/lunanexa/contracts/youthpolicy/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx
             - name: LUNANEXA_CONTRACT_DOCUMENT_WORKER_TOKEN
               valueFrom:
                 secretKeyRef:

@@ -14,7 +14,7 @@ Contract-document packet state is stored in management PostgreSQL. File-mode
 development uses `LUNANEXA_CONTRACT_DOCUMENT_PATH`; the supplied manifest sets
 `/var/lib/lunanexa/contract-documents.json`. Exact DOCX/PDF publication remains
 blocked until the renderer image contains licensed `仿宋_GB2312`, `黑体`, and
-`方正小标宋简体` fonts and passes the 14-page fidelity gate described in
+`方正小标宋简体` fonts and passes the 18-page fidelity gate described in
 [`CONTRACT_DOCUMENTS.md`](CONTRACT_DOCUMENTS.md).
 
 ## 1. Supported deployment shape
@@ -1183,6 +1183,12 @@ Run the repository-owned validation before every image promotion:
 ```sh
 sh scripts/release-gate.sh
 ```
+
+Mount the immutable fillable source at `LUNANEXA_CONTRACT_TEMPLATE_PATH` in the
+controller. Live browser previews are produced by MoonLeaf from that DOCX and
+returned as a bounded semantic scene; there are no preview image assets or
+LibreOffice dependency. Exact document release still depends on the separate
+DOCX/PDF worker, licensed CJK fonts, and retained render evidence.
 
 The adversarial corpus, exact commands, evidence interpretation and remaining
 blockers are recorded in `docs/PRODUCTION_READINESS.md`. This gate does not
