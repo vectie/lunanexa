@@ -113,6 +113,10 @@ pub fn CommercialOrder::cancel(
     raise StaleGeneration
   }
   if self.state == Fulfilled ||
+    self.state == FulfillmentPending ||
+    self.state == ReversalPending ||
+    self.state == ReversalManualIntervention ||
+    self.state == Revoked ||
     self.state == Rejected ||
     self.state == Cancelled ||
     self.state == Expired {
@@ -121,6 +125,161 @@ pub fn CommercialOrder::cancel(
   {
     ..self,
     state: Cancelled,
+    generation: self.generation + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+pub fn CommercialOrder::expire(
+  self : CommercialOrder,
+  now_unix_ms : Int64,
+) -> CommercialOrder {
+  if now_unix_ms < self.expires_unix_ms ||
+    self.state == Fulfilled ||
+    self.state == FulfillmentPending ||
+    self.state == ReversalPending ||
+    self.state == ReversalManualIntervention ||
+    self.state == Revoked ||
+    self.state == Rejected ||
+    self.state == Cancelled ||
+    self.state == Expired {
+    self
+  } else {
+    {
+      ..self,
+      state: Expired,
+      generation: self.generation + 1L,
+      updated_unix_ms: now_unix_ms,
+    }
+  }
+}
+
+///|
+pub fn CommercialOrder::request_activation(
+  self : CommercialOrder,
+  expected_generation : Int64,
+  now_unix_ms : Int64,
+) -> CommercialOrder raise OfflineCommerceError {
+  if self.generation != expected_generation {
+    raise StaleGeneration
+  }
+  if self.state != UnderReconciliation {
+    raise InvalidTransition("order is not under reconciliation")
+  }
+  {
+    ..self,
+    state: FulfillmentPending,
+    generation: self.generation + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+pub fn CommercialOrder::confirm_activation(
+  self : CommercialOrder,
+  expected_generation : Int64,
+  entitlement_ref : String,
+  now_unix_ms : Int64,
+) -> CommercialOrder raise OfflineCommerceError {
+  if self.generation != expected_generation {
+    raise StaleGeneration
+  }
+  if self.state != FulfillmentPending || !valid_id(entitlement_ref) {
+    raise InvalidTransition("entitlement activation is not pending")
+  }
+  {
+    ..self,
+    entitlement_ref: Some(entitlement_ref),
+    state: Fulfilled,
+    generation: self.generation + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+pub fn CommercialOrder::request_reversal(
+  self : CommercialOrder,
+  expected_generation : Int64,
+  now_unix_ms : Int64,
+) -> CommercialOrder raise OfflineCommerceError {
+  if self.generation != expected_generation {
+    raise StaleGeneration
+  }
+  if self.state != Fulfilled || self.entitlement_ref is None {
+    raise InvalidTransition("fulfilled entitlement is required for reversal")
+  }
+  {
+    ..self,
+    state: ReversalPending,
+    generation: self.generation + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+pub fn CommercialOrder::confirm_reversal(
+  self : CommercialOrder,
+  expected_generation : Int64,
+  now_unix_ms : Int64,
+) -> CommercialOrder raise OfflineCommerceError {
+  if self.generation != expected_generation {
+    raise StaleGeneration
+  }
+  if self.state != ReversalPending {
+    raise InvalidTransition("commercial reversal is not pending")
+  }
+  {
+    ..self,
+    state: Revoked,
+    generation: self.generation + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///| A terminal authority failure never recreates an unbounded reversal loop.
+
+///|
+/// Human operators must reconcile the external entitlement before retrying.
+pub fn CommercialOrder::hold_failed_reversal(
+  self : CommercialOrder,
+  expected_generation : Int64,
+  now_unix_ms : Int64,
+) -> CommercialOrder raise OfflineCommerceError {
+  if self.generation != expected_generation {
+    raise StaleGeneration
+  }
+  if self.state != ReversalPending {
+    raise InvalidTransition("commercial reversal is not pending")
+  }
+  {
+    ..self,
+    state: ReversalManualIntervention,
+    generation: self.generation + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+pub fn CommercialOrder::recover_failed_reversal(
+  self : CommercialOrder,
+  expected_generation : Int64,
+  decision : ReversalRecoveryDecision,
+  now_unix_ms : Int64,
+) -> CommercialOrder raise OfflineCommerceError {
+  if self.generation != expected_generation {
+    raise StaleGeneration
+  }
+  if self.state != ReversalManualIntervention || self.entitlement_ref is None {
+    raise InvalidTransition("commercial reversal is not awaiting intervention")
+  }
+  {
+    ..self,
+    state: match decision {
+      RetryReversal => ReversalPending
+      ConfirmRevoked => Revoked
+      ConfirmStillActive => Fulfilled
+    },
     generation: self.generation + 1L,
     updated_unix_ms: now_unix_ms,
   }

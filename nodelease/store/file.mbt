@@ -9,8 +9,14 @@ pub(all) suberror ExclusiveLeaseStoreError {
 } derive(Debug, Eq)
 
 ///|
+enum ExclusiveLeasePersistence {
+  LeaseFile(String)
+  LeasePostgres(@database.PostgresDatabase)
+}
+
+///|
 pub struct FileExclusiveLeaseStore {
-  path : String
+  persistence : ExclusiveLeasePersistence
   signing_secret : String
   mut leases : Map[String, @nodelease.ExclusiveNodeLease]
   mutex : @async.Mutex
@@ -91,6 +97,43 @@ async fn write_snapshot(
 }
 
 ///|
+fn FileExclusiveLeaseStore::restore(
+  self : FileExclusiveLeaseStore,
+  snapshot : @nodelease.ExclusiveLeaseSnapshot,
+) -> Unit raise ExclusiveLeaseStoreError {
+  if snapshot.schema_version != @nodelease.snapshot_schema_version {
+    raise InvalidSnapshot("unsupported exclusive lease snapshot")
+  }
+  let idempotency_keys : Map[String, String] = Map([])
+  let blocked_nodes : Map[String, String] = Map([])
+  for lease in snapshot.leases {
+    @nodelease.validate_intent(lease.intent) catch {
+      _ => raise InvalidSnapshot("invalid exclusive lease intent")
+    }
+    if lease.generation <= 0L ||
+      lease.updated_unix_ms < lease.created_unix_ms ||
+      !signature_valid(lease, self.signing_secret) {
+      raise InvalidSnapshot("invalid exclusive lease authority receipt")
+    }
+    if self.leases.contains(lease.intent.lease_id) {
+      raise InvalidSnapshot("duplicate exclusive lease identity")
+    }
+    if idempotency_keys.contains(lease.intent.idempotency_key) {
+      raise InvalidSnapshot("duplicate exclusive lease idempotency key")
+    }
+    if @nodelease.state_blocks_managed_placement(lease.state) &&
+      blocked_nodes.contains(lease.intent.node_id) {
+      raise InvalidSnapshot("node has multiple non-terminal exclusive leases")
+    }
+    self.leases[lease.intent.lease_id] = lease
+    idempotency_keys[lease.intent.idempotency_key] = lease.intent.lease_id
+    if @nodelease.state_blocks_managed_placement(lease.state) {
+      blocked_nodes[lease.intent.node_id] = lease.intent.lease_id
+    }
+  }
+}
+
+///|
 pub async fn FileExclusiveLeaseStore::open(
   path : String,
   signing_secret : String,
@@ -99,7 +142,7 @@ pub async fn FileExclusiveLeaseStore::open(
     raise InvalidSnapshot("exclusive lease signing authority is unavailable")
   }
   let store : FileExclusiveLeaseStore = {
-    path,
+    persistence: LeaseFile(path),
     signing_secret,
     leases: Map([]),
     mutex: Mutex(),
@@ -110,38 +153,45 @@ pub async fn FileExclusiveLeaseStore::open(
     ) catch {
       error => raise InvalidSnapshot("\{Repr(error)}")
     }
-    if snapshot.schema_version != @nodelease.snapshot_schema_version {
-      raise InvalidSnapshot("unsupported exclusive lease snapshot")
-    }
-    let idempotency_keys : Map[String, String] = Map([])
-    let blocked_nodes : Map[String, String] = Map([])
-    for lease in snapshot.leases {
-      @nodelease.validate_intent(lease.intent) catch {
-        _ => raise InvalidSnapshot("invalid exclusive lease intent")
-      }
-      if lease.generation <= 0L ||
-        lease.updated_unix_ms < lease.created_unix_ms ||
-        !signature_valid(lease, signing_secret) {
-        raise InvalidSnapshot("invalid exclusive lease authority receipt")
-      }
-      if store.leases.contains(lease.intent.lease_id) {
-        raise InvalidSnapshot("duplicate exclusive lease identity")
-      }
-      if idempotency_keys.contains(lease.intent.idempotency_key) {
-        raise InvalidSnapshot("duplicate exclusive lease idempotency key")
-      }
-      if @nodelease.state_blocks_managed_placement(lease.state) &&
-        blocked_nodes.contains(lease.intent.node_id) {
-        raise InvalidSnapshot("node has multiple non-terminal exclusive leases")
-      }
-      store.leases[lease.intent.lease_id] = lease
-      idempotency_keys[lease.intent.idempotency_key] = lease.intent.lease_id
-      if @nodelease.state_blocks_managed_placement(lease.state) {
-        blocked_nodes[lease.intent.node_id] = lease.intent.lease_id
-      }
-    }
+    store.restore(snapshot)
   } else {
     write_snapshot(path, store.snapshot_unlocked())
+  }
+  store
+}
+
+///|
+pub async fn FileExclusiveLeaseStore::open_postgres(
+  database : @database.PostgresDatabase,
+  signing_secret : String,
+) -> FileExclusiveLeaseStore {
+  if signing_secret == "" {
+    raise InvalidSnapshot("exclusive lease signing authority is unavailable")
+  }
+  let store : FileExclusiveLeaseStore = {
+    persistence: LeasePostgres(database),
+    signing_secret,
+    leases: Map([]),
+    mutex: Mutex(),
+  }
+  match
+    database.load_snapshot(
+      "exclusive_node_leases", @nodelease.snapshot_schema_version,
+    ) {
+    Some(payload) => {
+      let snapshot : @nodelease.ExclusiveLeaseSnapshot = @json.from_json(
+        @json.parse(payload),
+      ) catch {
+        error => raise InvalidSnapshot("\{Repr(error)}")
+      }
+      store.restore(snapshot)
+    }
+    None =>
+      database.save_opaque_snapshot(
+        "exclusive_node_leases",
+        @nodelease.snapshot_schema_version,
+        store.snapshot_unlocked().to_json().stringify(),
+      )
   }
   store
 }
@@ -150,7 +200,16 @@ pub async fn FileExclusiveLeaseStore::open(
 async fn FileExclusiveLeaseStore::persist(
   self : FileExclusiveLeaseStore,
 ) -> Unit {
-  write_snapshot(self.path, self.snapshot_unlocked())
+  let snapshot = self.snapshot_unlocked()
+  match self.persistence {
+    LeaseFile(path) => write_snapshot(path, snapshot)
+    LeasePostgres(database) =>
+      database.save_opaque_snapshot(
+        "exclusive_node_leases",
+        @nodelease.snapshot_schema_version,
+        snapshot.to_json().stringify(),
+      )
+  }
 }
 
 ///|

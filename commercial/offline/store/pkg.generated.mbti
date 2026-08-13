@@ -23,25 +23,50 @@ pub struct OfflineCommerceStore {
   mut upload_keys : Map[String, String]
   mut upload_callbacks : Map[String, @offline.EvidenceUploadCallback]
   mut reviews : Map[String, @offline.EvidenceReview]
+  mut entitlement_activations : Map[String, @offline.EntitlementActivation]
+  mut reversals : Map[String, @offline.CommercialReversal]
+  mut reversal_recoveries : Map[String, @offline.ReversalRecovery]
+  mut transfer_sessions : Map[String, @offline.OfflineTransferSession]
+  mut transfer_evidence : Map[String, @offline.OfflineTransferEvidence]
+  mut work_claims : Map[String, @offline.OfflineWorkClaim]
+  mut worker_health : @offline.OfflineWorkerHealth
   mutex : @async.Mutex
 }
 pub async fn OfflineCommerceStore::artifact(Self, String, String) -> @offline.DocumentArtifact
 pub async fn OfflineCommerceStore::begin_offline_execution(Self, String, Int64, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::cancel_order(Self, String, Int64, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::claim_authority_work(Self, Int64, limit? : Int) -> @offline.OfflineAuthorityWorkBatch
+pub async fn OfflineCommerceStore::claim_generation_requests(Self, Int64, limit? : Int) -> Array[@offline.ArtifactGenerationRequest]
+pub async fn OfflineCommerceStore::complete_activation(Self, @offline.EntitlementActivation) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::complete_generation(Self, @offline.ArtifactGenerationResult) -> @offline.DocumentArtifact
+pub async fn OfflineCommerceStore::complete_reversal(Self, @offline.CommercialReversal) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::complete_upload(Self, @offline.EvidenceUploadCallback) -> @offline.DocumentArtifact
+pub async fn OfflineCommerceStore::consume_transfer_session(Self, String, String, String, Int64, String, String, Int64) -> @offline.OfflineTransferSession
 pub async fn OfflineCommerceStore::create_order(Self, @offline.CommercialOrder) -> @offline.CommercialOrder
-pub async fn OfflineCommerceStore::fulfill(Self, String, Int64, String, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::expire_orders(Self, Int64) -> Array[@offline.CommercialOrder]
+pub async fn OfflineCommerceStore::expire_transfer_sessions(Self, Int64) -> Int
+pub async fn OfflineCommerceStore::fulfill(Self, String, Int64, @offline.EntitlementActivation, Int64) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::grant_upload(Self, @offline.EvidenceUploadGrant) -> @offline.EvidenceUploadGrant
+pub async fn OfflineCommerceStore::issue_transfer_session(Self, @offline.OfflineTransferSession) -> @offline.OfflineTransferSession
 pub async fn OfflineCommerceStore::open(String) -> Self
 pub async fn OfflineCommerceStore::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn OfflineCommerceStore::order(Self, String, String) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::order_for_operator(Self, String) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::orders_for_organization(Self, String) -> Array[@offline.CommercialOrder]
 pub async fn OfflineCommerceStore::quote_order(Self, String, @offline.ImmutableQuote, String, Int64) -> @offline.CommercialOrder
+pub async fn OfflineCommerceStore::record_reconciler_attempt(Self, Int64) -> Unit
+pub async fn OfflineCommerceStore::record_reconciler_failure(Self, String) -> Unit
+pub async fn OfflineCommerceStore::record_reconciler_success(Self, Int64) -> Unit
+pub async fn OfflineCommerceStore::record_worker_acceptance(Self, @offline.OfflineWorkerKind, Int64) -> Unit
+pub async fn OfflineCommerceStore::recover_failed_reversal(Self, @offline.ReversalRecovery) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::register_template(Self, @offline.DocumentTemplate) -> @offline.DocumentTemplate
 pub async fn OfflineCommerceStore::release_offline_packet(Self, String, Int64, Int64) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::request_generation(Self, @offline.ArtifactGenerationRequest) -> @offline.ArtifactGenerationRequest
+pub async fn OfflineCommerceStore::request_reversal(Self, @offline.CommercialReversal) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::review_evidence(Self, @offline.EvidenceReview) -> @offline.DocumentArtifact
 pub async fn OfflineCommerceStore::snapshot(Self) -> @offline.OfflineCommerceSnapshot
+pub async fn OfflineCommerceStore::transfer_session(Self, String, String, String) -> @offline.OfflineTransferSession
+pub async fn OfflineCommerceStore::worker_readiness_blockers(Self, Int64) -> Array[String]
 
 type OfflinePersistence
 

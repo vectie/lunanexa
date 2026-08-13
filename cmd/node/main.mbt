@@ -145,6 +145,7 @@ fn valid_helper_path(path : String) -> Bool {
 async fn execute_lease_action(
   helper : String,
   action : @nodelease.LeaseAgentAction,
+  authorization : String,
 ) -> String? {
   if action is NoAction {
     return None
@@ -152,7 +153,10 @@ async fn execute_lease_action(
   if !valid_helper_path(helper) {
     return None
   }
-  let args = match action {
+  if !@nodelease.helper_authorization_framed(authorization, @async.now()) {
+    return None
+  }
+  let action_args = match action {
     ProvisionAccess(
       lease_id~,
       username~,
@@ -193,16 +197,19 @@ async fn execute_lease_action(
         "--generation",
         generation.to_string(),
       ]
-    QuarantineNode(lease_id~, generation~) =>
+    QuarantineNode(lease_id~, username~, generation~) =>
       [
         "quarantine",
         "--lease-id",
         lease_id,
+        "--username",
+        username,
         "--generation",
         generation.to_string(),
       ]
     NoAction => []
   }
+  let args = [..action_args, "--authorization", authorization]
   let (status, stdout) = @process.collect_stdout(
     helper,
     args,
@@ -267,7 +274,14 @@ async fn reconcile_exclusive_lease(
       let lease : @nodelease.ExclusiveNodeLease = @json.from_json(
         @json.parse(body.text()),
       )
-      lease_guard.observe_remote(Some(lease), now)
+      if @nodelease.valid_node_transport_lease(lease, node_id, token) {
+        lease_guard.observe_remote(Some(lease), now)
+      } else {
+        // An authenticated transport is insufficient: fail closed if the
+        // directive body is stale, cross-node, or modified in transit.
+        control_available = false
+        lease_guard.tick(now)
+      }
     } else if response.code == 404 {
       lease_guard.observe_remote(None, now)
     } else {
@@ -293,7 +307,7 @@ async fn reconcile_exclusive_lease(
         return
       }
       let pending_action = lease_guard.pending_helper_action()
-      let stale = @nodelease.helper_receipt_timestamp(
+      let stale = @nodelease.helper_receipt_timestamp_unverified(
           pending_action,
           lease_guard.snapshot().last_receipt,
         )
@@ -310,14 +324,21 @@ async fn reconcile_exclusive_lease(
     persist_lease_guard(state_path, lease_guard)
     return
   }
-  if execute_lease_action(helper, action) is Some(receipt) {
+  let authorization = lease_guard
+    .helper_authorization(action, now)
+    .unwrap_or("")
+  if execute_lease_action(helper, action, authorization) is Some(receipt) {
     lease_guard.record_success(action, receipt)
     if control_available {
       ignore(flush_lease_observation(base, node_id, token, lease_guard))
     }
   } else {
     let quarantine = lease_guard.record_failure(action)
-    if execute_lease_action(helper, quarantine) is Some(receipt) {
+    let quarantine_authorization = lease_guard
+      .helper_authorization(quarantine, now)
+      .unwrap_or("")
+    if execute_lease_action(helper, quarantine, quarantine_authorization)
+      is Some(receipt) {
       lease_guard.record_success(quarantine, receipt)
       if control_available {
         ignore(flush_lease_observation(base, node_id, token, lease_guard))
@@ -457,15 +478,18 @@ async fn reconcile_once(
   artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
   state_path : String,
   lease_helper : String,
+  exclusive_leases_enabled : Bool,
   lease_guard : @nodelease.LeaseAgentGuard,
   lease_state_path : String,
   materialization_heartbeat_interval_ms : Int,
   lease_receipt_stale_after_ms : Int64,
   telemetry_limits : @settings.TelemetrySafetySettings,
 ) -> Unit {
-  reconcile_exclusive_lease(
-    base, node_id, token, lease_helper, lease_guard, lease_state_path, lease_receipt_stale_after_ms,
-  )
+  if exclusive_leases_enabled {
+    reconcile_exclusive_lease(
+      base, node_id, token, lease_helper, lease_guard, lease_state_path, lease_receipt_stale_after_ms,
+    )
+  }
   let headers = node_headers(node_id, token)
   let (directive_response, directive_body) = @http.get(
     endpoint(base, "/v1/nodes/\{node_id}/directive"),
@@ -732,6 +756,15 @@ async fn main {
   let lease_helper = @env.get_env_var("LUNANEXA_LEASE_HELPER").unwrap_or(
     "/usr/libexec/lunanexa-lease-helper",
   )
+  let exclusive_leases_enabled = match
+    @env.get_env_var("LUNANEXA_EXCLUSIVE_LEASES_ENABLED") {
+    Some("1") => true
+    None | Some("") | Some("0") => false
+    Some(_) =>
+      raise Failure::Failure(
+        "LUNANEXA_EXCLUSIVE_LEASES_ENABLED must be exactly 0 or 1",
+      )
+  }
   while true {
     reconcile_once(
       base,
@@ -745,6 +778,7 @@ async fn main {
       artifact_verifier,
       state_path,
       lease_helper,
+      exclusive_leases_enabled,
       lease_guard,
       lease_state_path,
       global_settings.control_timing.materialization_heartbeat_interval_ms,

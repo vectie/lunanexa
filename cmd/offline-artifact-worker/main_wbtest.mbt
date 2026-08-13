@@ -66,8 +66,10 @@ fn generation_request(now : Int64) -> @offline.ArtifactGenerationRequest {
 ///|
 fn png_evidence() -> FixedArray[Byte] {
   [
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x76, 0x69, 0x73, 0x75, 0x61,
-    0x6c,
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+    0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0x00, 0x00, 0x00, 0x00,
   ]
 }
 
@@ -80,18 +82,25 @@ fn signed_manifest(
   kind? : @offline.DocumentArtifactKind = EditableContractDocx,
   page_or_sheet_count? : Int = 1,
   visual_evidence_filename? : String = "render.png",
+  source_sha256? : String = artifact_sha256,
 ) -> RenderEvidenceManifest {
   let unsigned : RenderEvidenceManifest = {
-    schema_version: 1,
+    schema_version: 2,
     request_id: request.request_id,
     artifact_sha256,
+    source_sha256,
     kind,
     page_or_sheet_count,
     passed: true,
     renderer_receipt: "renderer-receipt-1",
     rendered_unix_ms,
-    visual_evidence_filename,
-    visual_evidence_sha256: visual_sha256,
+    visual_evidence: [
+      {
+        page_or_sheet_index: 1,
+        filename: visual_evidence_filename,
+        sha256: visual_sha256,
+      },
+    ],
     signature: "",
   }
   {
@@ -101,24 +110,78 @@ fn signed_manifest(
 }
 
 ///|
-fn base_job(
-  request : @offline.ArtifactGenerationRequest,
-  manifest_sha256 : String,
-) -> OfflineArtifactJob {
+fn base_job(request : @offline.ArtifactGenerationRequest) -> OfflineArtifactJob {
   {
     schema_version: 1,
     request,
     template_filename: "contract.docx",
     prepared_filename: "contract.prepared.docx",
-    output_filename: "contract.generated.docx",
+    output_filename: if request.kind == PrintReadyContractPdf {
+      "contract.generated.pdf"
+    } else {
+      "contract.generated.docx"
+    },
     result_filename: "result.json",
     render_manifest_filename: "render-manifest.json",
-    render_manifest_sha256: manifest_sha256,
     docx_replacements: [
       { placeholder: "{{ORDER_ID}}", value: "order-worker-1" },
     ],
     xlsx_replacements: [],
   }
+}
+
+///|
+async test "PDF finalization binds rendered bytes to exact MoonLeaf source" {
+  let now = @async.now()
+  let root = "/tmp/lunanexa-offline-worker-pdf-\{now}"
+  @fs.mkdir(root, permission=0o700)
+  let template = docx_template()
+  let request = {
+    ..generation_request(now),
+    kind: PrintReadyContractPdf,
+    expected_object_ref: "object://offline/order-worker-1/contract.pdf",
+  }
+  let customized = @worker.customize_docx_template(template, [
+    { placeholder: "{{ORDER_ID}}", value: "order-worker-1" },
+  ])
+  let pdf = @utf8.encode(
+    "%PDF-1.4\n1 0 obj\n<<>>\nendobj\nxref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 >>\nstartxref\n29\n%%EOF\n",
+  ).to_fixedarray()
+  let evidence = png_evidence()
+  @fs.write_file(
+    "\{root}/contract.docx",
+    Bytes::from_array(template),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  @fs.write_file(
+    "\{root}/contract.generated.pdf",
+    Bytes::from_array(pdf),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  @fs.write_file(
+    "\{root}/render.png",
+    Bytes::from_array(evidence),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  let manifest = signed_manifest(
+    request,
+    sha256(pdf),
+    sha256(evidence),
+    now,
+    kind=PrintReadyContractPdf,
+    source_sha256=sha256(customized.bytes),
+  )
+  write_manifest_and_job(root, request, manifest)
+  assert_eq(prepare_job(root, "job.json"), sha256(customized.bytes))
+  let result = run_job(root, "job.json", TestRenderSecret, now)
+  assert_eq(result.media_type, "application/pdf")
+  assert_eq(result.sha256, sha256(pdf))
+  assert_true(result.moonleaf_verified)
+  assert_true(result.render_verified)
+  @fs.rmdir(root, recursive=true)
 }
 
 ///|
@@ -136,9 +199,7 @@ async fn write_manifest_and_job(
   )
   @fs.write_file(
     "\{root}/job.json",
-    base_job(request, sha256(@utf8.encode(manifest_text).to_fixedarray()))
-    .to_json()
-    .stringify(),
+    base_job(request).to_json().stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )

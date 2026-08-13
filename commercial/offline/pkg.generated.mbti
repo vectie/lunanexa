@@ -10,9 +10,15 @@ import {
 // Values
 pub let contract_version : String
 
+pub fn empty_offline_worker_health() -> OfflineWorkerHealth
+
 pub fn evidence_kind(DocumentArtifactKind) -> OfflineEvidenceKind?
 
 pub fn expected_media_type(DocumentArtifactKind) -> Array[String]
+
+pub fn offline_commerce_readiness(Array[OfflineCommerceCapabilityEvidence], Int64) -> OfflineCommerceReadiness
+
+pub fn pending_offline_commerce_readiness(Int64) -> OfflineCommerceReadiness
 
 pub fn required_evidence(FulfillmentPolicy) -> Array[OfflineEvidenceKind]
 
@@ -22,11 +28,19 @@ pub fn valid_object_ref(String) -> Bool
 
 pub fn valid_sha256(String) -> Bool
 
+pub fn validate_activation(EntitlementActivation) -> Unit raise OfflineCommerceError
+
 pub fn validate_order(CommercialOrder) -> Unit raise OfflineCommerceError
 
 pub fn validate_quote(ImmutableQuote) -> Unit raise OfflineCommerceError
 
+pub fn validate_reversal(CommercialReversal) -> Unit raise OfflineCommerceError
+
+pub fn validate_reversal_recovery(ReversalRecovery) -> Unit raise OfflineCommerceError
+
 pub fn validate_template(DocumentTemplate) -> Unit raise OfflineCommerceError
+
+pub fn validate_transfer_session(OfflineTransferSession) -> Unit raise OfflineCommerceError
 
 // Errors
 pub(all) suberror OfflineCommerceError {
@@ -118,9 +132,47 @@ pub(all) struct CommercialOrder {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn CommercialOrder::begin_offline_execution(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::cancel(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::confirm_activation(Self, Int64, String, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::confirm_reversal(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::expire(Self, Int64) -> Self
+pub fn CommercialOrder::hold_failed_reversal(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::mark_reconciling(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::recover_failed_reversal(Self, Int64, ReversalRecoveryDecision, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::release_offline_packet(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::request_activation(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::request_reversal(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::with_quote(Self, ImmutableQuote, String, Int64) -> Self raise OfflineCommerceError
+
+pub(all) struct CommercialReversal {
+  reversal_id : String
+  idempotency_key : String
+  order_id : String
+  organization_id : String
+  entitlement_ref : String
+  reason : CommercialReversalReason
+  expected_order_generation : Int64
+  state : CommercialReversalState
+  authority_receipt : String?
+  reason_code : String?
+  requested_by : String
+  requested_unix_ms : Int64
+  completed_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CommercialReversalReason {
+  CustomerCancellation
+  ContractExpired
+  PaymentRefunded
+  PaymentVoided
+  InvoiceVoided
+  PolicyRevoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum CommercialReversalState {
+  ReversalRequested
+  ReversalConfirmed
+  ReversalFailed
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct DocumentArtifact {
   artifact_id : String
@@ -171,6 +223,36 @@ pub(all) struct DocumentTemplate {
 pub(all) enum DocumentTemplateKind {
   ContractTemplate
   QuoteScheduleTemplate
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct EntitlementActivation {
+  activation_id : String
+  idempotency_key : String
+  order_id : String
+  organization_id : String
+  purchaser_subject_ref : String
+  kind : EntitlementKind
+  authority_target_ref : String
+  expected_order_generation : Int64
+  state : EntitlementActivationState
+  entitlement_ref : String?
+  authority_receipt : String?
+  reason_code : String?
+  requested_by : String
+  requested_unix_ms : Int64
+  completed_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum EntitlementActivationState {
+  EntitlementActivationRequested
+  EntitlementActivationConfirmed
+  EntitlementActivationRejected
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum EntitlementKind {
+  CapacityCommitment
+  WorkspaceLease
+  ExclusiveMachineLease
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct EvidenceReview {
@@ -245,6 +327,45 @@ pub(all) enum InvoiceTiming {
   InvoiceNotRequired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct OfflineAuthorityWorkBatch {
+  activations : Array[EntitlementActivation]
+  reversals : Array[CommercialReversal]
+  claims : Array[OfflineWorkClaim]
+  heartbeat_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OfflineCommerceCapability {
+  ApprovedLegalTemplates
+  ObjectStorage
+  MalwareScanner
+  OoxmlWorker
+  PdfRenderer
+  SpreadsheetFormulaEngine
+  CjkFonts
+  MachineCallbackIdentity
+  EntitlementAuthority
+  FinanceLegalPolicy
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineCommerceCapabilityEvidence {
+  capability : OfflineCommerceCapability
+  configured : Bool
+  verified : Bool
+  evidence_ref : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineCommerceReadiness {
+  status : OfflineCommerceReadinessStatus
+  capabilities : Array[OfflineCommerceCapabilityEvidence]
+  blocker_codes : Array[String]
+  evaluated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OfflineCommerceReadinessStatus {
+  OfflineCommerceAdaptersPending
+  OfflineCommerceReady
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct OfflineCommerceSnapshot {
   schema_version : String
   templates : Array[DocumentTemplate]
@@ -254,6 +375,13 @@ pub(all) struct OfflineCommerceSnapshot {
   upload_grants : Array[EvidenceUploadGrant]
   upload_callbacks : Array[EvidenceUploadCallback]
   reviews : Array[EvidenceReview]
+  entitlement_activations : Array[EntitlementActivation]
+  reversals : Array[CommercialReversal]
+  reversal_recoveries : Array[ReversalRecovery]
+  transfer_sessions : Array[OfflineTransferSession]
+  transfer_evidence : Array[OfflineTransferEvidence]
+  work_claims : Array[OfflineWorkClaim]
+  worker_health : OfflineWorkerHealth
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum OfflineEvidenceKind {
@@ -271,11 +399,64 @@ pub(all) enum OfflineOrderState {
   PendingOfflineExecution
   PendingEvidenceUpload
   UnderReconciliation
+  FulfillmentPending
   Fulfilled
+  ReversalPending
+  ReversalManualIntervention
+  Revoked
   NeedsCorrection
   Rejected
   Cancelled
   Expired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OfflineTransferDirection {
+  UploadTransfer
+  DownloadTransfer
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineTransferEvidence {
+  session_id : String
+  media_type : String
+  byte_count : Int64
+  sha256 : String
+  provider_receipt : String
+  completed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineTransferGrant {
+  session_id : String
+  transfer_path : String
+  session_token : String
+  direction : OfflineTransferDirection
+  media_types : Array[String]
+  maximum_byte_count : Int64
+  expected_sha256 : String?
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineTransferSession {
+  session_id : String
+  idempotency_key : String
+  session_token_sha256 : String
+  organization_id : String
+  subject_ref : String
+  order_id : String
+  artifact_id : String
+  direction : OfflineTransferDirection
+  media_types : Array[String]
+  maximum_byte_count : Int64
+  expected_sha256 : String?
+  state : OfflineTransferState
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+  consumed_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OfflineTransferState {
+  TransferIssued
+  TransferConsumed
+  TransferExpired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct OfflineUploadGrantView {
@@ -291,6 +472,31 @@ pub(all) struct OfflineUploadGrantView {
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct OfflineWorkClaim {
+  work_id : String
+  worker_kind : OfflineWorkerKind
+  expected_order_generation : Int64
+  attempt : Int
+  claimed_unix_ms : Int64
+  retry_after_unix_ms : Int64
+  completed_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineWorkerHealth {
+  artifact_dispatcher_heartbeat_unix_ms : Int64?
+  artifact_dispatcher_success_unix_ms : Int64?
+  entitlement_dispatcher_heartbeat_unix_ms : Int64?
+  entitlement_dispatcher_success_unix_ms : Int64?
+  reconciler_attempt_unix_ms : Int64?
+  reconciler_success_unix_ms : Int64?
+  reconciler_failure_code : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OfflineWorkerKind {
+  ArtifactDispatcher
+  EntitlementDispatcher
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct QuoteLine {
   line_id : String
   description : String
@@ -298,6 +504,27 @@ pub(all) struct QuoteLine {
   unit : String
   unit_price : @commercial.FixedMoney
   line_total : @commercial.FixedMoney
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ReversalRecovery {
+  recovery_id : String
+  idempotency_key : String
+  order_id : String
+  organization_id : String
+  failed_reversal_id : String
+  expected_order_generation : Int64
+  decision : ReversalRecoveryDecision
+  replacement_reversal_id : String?
+  authority_receipt : String
+  reason_code : String
+  recovered_by : String
+  recovered_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ReversalRecoveryDecision {
+  RetryReversal
+  ConfirmRevoked
+  ConfirmStillActive
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum UploadGrantState {

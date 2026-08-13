@@ -3,13 +3,16 @@ import {
   "vectie/lunanexa/database",
   "moonbitlang/async",
   "moonbitlang/async/fs",
+  "moonbitlang/core/int64",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
 }
 
 supported_targets = "native"
 
 import {
   "moonbitlang/async/fs",
+  "moonbitlang/core/env",
 } for "test"
 
 options(

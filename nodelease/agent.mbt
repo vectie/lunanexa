@@ -13,7 +13,7 @@ pub(all) enum LeaseAgentAction {
   )
   RevokeAccess(lease_id~ : String, username~ : String, generation~ : Int64)
   SanitizeLease(lease_id~ : String, username~ : String, generation~ : Int64)
-  QuarantineNode(lease_id~ : String, generation~ : Int64)
+  QuarantineNode(lease_id~ : String, username~ : String, generation~ : Int64)
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -63,7 +63,7 @@ pub fn LeaseAgentGuard::from_snapshot(
   if snapshot.schema_version != agent_snapshot_schema_version ||
     snapshot.node_id == "" ||
     snapshot.observed_generation < 0L ||
-    snapshot.last_receipt.length() > 512 {
+    snapshot.last_receipt.length() > 1024 {
     raise InvalidIntent("invalid exclusive lease agent snapshot")
   }
   match snapshot.lease {
@@ -84,6 +84,19 @@ pub fn LeaseAgentGuard::from_snapshot(
 ///|
 pub fn LeaseAgentGuard::snapshot(self : LeaseAgentGuard) -> LeaseAgentSnapshot {
   self.snapshot
+}
+
+///|
+pub fn LeaseAgentGuard::helper_authorization(
+  self : LeaseAgentGuard,
+  action : LeaseAgentAction,
+  now_unix_ms : Int64,
+) -> String? {
+  match self.snapshot.lease {
+    Some(lease) =>
+      helper_authorization_from_transport_lease(lease, action, now_unix_ms)
+    None => None
+  }
 }
 
 ///|
@@ -168,6 +181,7 @@ pub fn LeaseAgentGuard::tick(
       _ =>
         return QuarantineNode(
           lease_id=lease.intent.lease_id,
+          username=lease.intent.unix_username,
           generation=lease.generation,
         )
     }
@@ -176,6 +190,7 @@ pub fn LeaseAgentGuard::tick(
     self.snapshot = { ..self.snapshot, state: QuarantinedAgent }
     return QuarantineNode(
       lease_id=lease.intent.lease_id,
+      username=lease.intent.unix_username,
       generation=lease.generation,
     )
   }
@@ -283,6 +298,7 @@ pub fn LeaseAgentGuard::pending_helper_action(
     QuarantinedAgent =>
       QuarantineNode(
         lease_id=lease.intent.lease_id,
+        username=lease.intent.unix_username,
         generation=lease.generation,
       )
     Idle | ProvisionPending | RevocationPending => NoAction
@@ -359,5 +375,12 @@ pub fn LeaseAgentGuard::record_failure(
     state: QuarantinedAgent,
     last_receipt: "agent:helper-failed",
   }
-  QuarantineNode(lease_id~, generation=self.snapshot.observed_generation)
+  let username = self.snapshot.lease
+    .map(value => value.intent.unix_username)
+    .unwrap_or("invalid")
+  QuarantineNode(
+    lease_id~,
+    username~,
+    generation=self.snapshot.observed_generation,
+  )
 }

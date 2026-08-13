@@ -55,7 +55,8 @@ fn expected_action(args : Array[String]) -> @nodelease.LeaseAgentAction? {
       Some(RevokeAccess(lease_id~, username~, generation~))
     "sanitize" if @nodelease.valid_unix_username(username) =>
       Some(SanitizeLease(lease_id~, username~, generation~))
-    "quarantine" => Some(QuarantineNode(lease_id~, generation~))
+    "quarantine" if @nodelease.valid_unix_username(username) =>
+      Some(QuarantineNode(lease_id~, username~, generation~))
     _ => None
   }
 }
@@ -63,7 +64,9 @@ fn expected_action(args : Array[String]) -> @nodelease.LeaseAgentAction? {
 ///|
 async fn main {
   let args = @env.args()
-  guard expected_action(args) is Some(action) else {
+  guard expected_action(args) is Some(action) &&
+    argument_value(args, "--authorization") is Some(authorization) &&
+    @nodelease.helper_authorization_framed(authorization, @async.now()) else {
     raise Failure::Failure("lease helper client rejected unsafe arguments")
   }
   let helper_args = args[1:].to_owned()

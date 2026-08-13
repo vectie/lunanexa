@@ -33,10 +33,7 @@ test "customer machine view exposes live handoff metadata without secrets" {
   )
   assert_eq(view.reachability, Online)
   assert_eq(view.credential_handoff.state, Available)
-  assert_eq(
-    view.credential_handoff.handoff_ref,
-    Some("lease-handoff:customer-lease-1:4"),
-  )
+  assert_eq(view.credential_handoff.handoff_ref, None)
   assert_false(view.credential_handoff.raw_secret_included)
   assert_eq(view.termination_confirmation, Some("TERMINATE customer-lease-1"))
   let public_json = view.to_json().stringify()

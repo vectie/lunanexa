@@ -56,6 +56,7 @@ pub struct GuideProbeWorker {
   policy : @guide_monitor.GuideMonitorPolicy
   scheduler : GuideProbeScheduler
   notifications : @store.NotificationStore
+  observability : @observability.ObservabilityStore?
   identity_secret : String
   observation_secret : String
 }

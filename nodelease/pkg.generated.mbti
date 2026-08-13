@@ -17,9 +17,33 @@ pub fn customer_termination_confirmation(String) -> String
 
 pub fn customer_termination_target(ExclusiveLeaseState) -> ExclusiveLeaseState?
 
+pub let helper_adapter_readiness_contract_version : String
+
+pub fn helper_authorization_framed(String, Int64) -> Bool
+
+pub fn helper_authorization_from_transport_lease(ExclusiveNodeLease, LeaseAgentAction, Int64) -> String?
+
 pub fn helper_receipt(LeaseAgentAction, Int64) -> String
 
 pub fn helper_receipt_timestamp(LeaseAgentAction, String) -> Int64?
+
+pub fn helper_receipt_timestamp_unverified(LeaseAgentAction, String) -> Int64?
+
+pub fn machine_helper_adapter_evidence_ready(MachineHelperAdapterReadinessEvidence, Int64) -> Bool
+
+pub fn machine_helper_adapter_signature(MachineHelperAdapterReadinessEvidence, String) -> String
+
+pub fn node_transport_lease(ExclusiveNodeLease, String, String) -> ExclusiveNodeLease
+
+pub fn node_transport_lease_with_helper_authorizations(ExclusiveNodeLease, String, String, String, Int64) -> ExclusiveNodeLease
+
+pub fn signed_helper_authorization(LeaseAgentAction, Int64, Int64, String) -> String
+
+pub fn signed_helper_receipt(LeaseAgentAction, Int64, String) -> String
+
+pub fn signed_helper_receipt_timestamp(LeaseAgentAction, String, String) -> Int64?
+
+pub fn signed_helper_receipt_timestamp_unverified(LeaseAgentAction, String) -> Int64?
 
 pub let snapshot_schema_version : String
 
@@ -29,7 +53,15 @@ pub fn transition_allowed(ExclusiveLeaseState, ExclusiveLeaseState) -> Bool
 
 pub fn valid_access_credential_ref(String) -> Bool
 
+pub fn valid_helper_authorization(LeaseAgentAction, String, String, Int64) -> Bool
+
 pub fn valid_helper_receipt(LeaseAgentAction, String) -> Bool
+
+pub fn valid_machine_helper_adapter_evidence_signature(MachineHelperAdapterReadinessEvidence, String) -> Bool
+
+pub fn valid_node_transport_lease(ExclusiveNodeLease, String, String) -> Bool
+
+pub fn valid_signed_helper_receipt(LeaseAgentAction, String, String) -> Bool
 
 pub fn valid_unix_username(String) -> Bool
 
@@ -55,6 +87,7 @@ pub(all) struct CustomerCredentialHandoff {
 pub(all) enum CustomerCredentialHandoffState {
   Pending
   Available
+  Recoverable
   Closed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -145,7 +178,7 @@ pub(all) enum LeaseAgentAction {
   ProvisionAccess(lease_id~ : String, username~ : String, credential_ref~ : String, expires_unix_ms~ : Int64, generation~ : Int64)
   RevokeAccess(lease_id~ : String, username~ : String, generation~ : Int64)
   SanitizeLease(lease_id~ : String, username~ : String, generation~ : Int64)
-  QuarantineNode(lease_id~ : String, generation~ : Int64)
+  QuarantineNode(lease_id~ : String, username~ : String, generation~ : Int64)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct LeaseAgentGuard {
@@ -153,6 +186,7 @@ pub struct LeaseAgentGuard {
 }
 pub fn LeaseAgentGuard::acknowledge_observation(Self, String) -> Unit raise ExclusiveLeaseError
 pub fn LeaseAgentGuard::from_snapshot(LeaseAgentSnapshot) -> Self raise ExclusiveLeaseError
+pub fn LeaseAgentGuard::helper_authorization(Self, LeaseAgentAction, Int64) -> String?
 pub fn LeaseAgentGuard::new(String) -> Self
 pub fn LeaseAgentGuard::observe_remote(Self, ExclusiveNodeLease?, Int64) -> LeaseAgentAction raise ExclusiveLeaseError
 pub fn LeaseAgentGuard::pending_helper_action(Self) -> LeaseAgentAction
@@ -187,6 +221,21 @@ pub(all) enum LeaseAgentState {
   SanitizationPending
   Sanitized
   QuarantinedAgent
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineHelperAdapterReadinessEvidence {
+  version : String
+  adapter_id : String
+  node_scope : String
+  covered_node_ids : Array[String]
+  evidence_ref : String
+  checked_unix_ms : Int64
+  expires_unix_ms : Int64
+  provision_verified : Bool
+  revoke_verified : Bool
+  sanitize_verified : Bool
+  quarantine_verified : Bool
+  signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum NodeOperatingMode {

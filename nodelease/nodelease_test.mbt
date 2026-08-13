@@ -160,3 +160,74 @@ test "helper receipt timestamp mutation fuzz rejects framing and zero time" {
     )
   }
 }
+
+///|
+test "helper evidence MAC rejects mutation wrong action and wrong secret" {
+  let action = @nodelease.LeaseAgentAction::SanitizeLease(
+    lease_id="lease-mac-1",
+    username="tenant_mac",
+    generation=9L,
+  )
+  let secret = "lease-helper-receipt-test-secret-more-than-32-bytes"
+  let receipt = @nodelease.signed_helper_receipt(action, 123456L, secret)
+  assert_true(@nodelease.valid_signed_helper_receipt(action, receipt, secret))
+  assert_eq(
+    @nodelease.signed_helper_receipt_timestamp(action, receipt, secret),
+    Some(123456L),
+  )
+  assert_false(
+    @nodelease.valid_signed_helper_receipt(
+      action, receipt, "wrong-lease-helper-secret-with-more-than-32-bytes",
+    ),
+  )
+  assert_false(
+    @nodelease.valid_signed_helper_receipt(
+      RevokeAccess(lease_id="lease-mac-1", username="tenant_mac", generation=9L),
+      receipt,
+      secret,
+    ),
+  )
+  assert_false(
+    @nodelease.valid_signed_helper_receipt(action, "\{receipt}0", secret),
+  )
+  let provision = @nodelease.LeaseAgentAction::ProvisionAccess(
+    lease_id="lease-mac-1",
+    username="tenant_mac",
+    credential_ref="ssh-cert:lease-mac-1",
+    expires_unix_ms=999999L,
+    generation=9L,
+  )
+  let provision_receipt = @nodelease.signed_helper_receipt(
+    provision, 123456L, secret,
+  )
+  let mutations : Array[@nodelease.LeaseAgentAction] = [
+    ProvisionAccess(
+      lease_id="lease-mac-1",
+      username="tenant_other",
+      credential_ref="ssh-cert:lease-mac-1",
+      expires_unix_ms=999999L,
+      generation=9L,
+    ),
+    ProvisionAccess(
+      lease_id="lease-mac-1",
+      username="tenant_mac",
+      credential_ref="ssh-cert:other-credential",
+      expires_unix_ms=999999L,
+      generation=9L,
+    ),
+    ProvisionAccess(
+      lease_id="lease-mac-1",
+      username="tenant_mac",
+      credential_ref="ssh-cert:lease-mac-1",
+      expires_unix_ms=999998L,
+      generation=9L,
+    ),
+  ]
+  for mutation in mutations {
+    assert_false(
+      @nodelease.valid_signed_helper_receipt(
+        mutation, provision_receipt, secret,
+      ),
+    )
+  }
+}

@@ -32,9 +32,16 @@ pub struct ApiService {
   offline_commerce_store : @offline_store.OfflineCommerceStore?
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
+  credential_handoff_store : @credential_store.CredentialHandoffStore?
+  lease_helper_receipt_secret : String
+  machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
+  guide_diagnostics_token : String
   portal_store : @portal_store.FilePortalStore?
   notification_store : @notification_store.NotificationStore?
   observability_store : @observability.ObservabilityStore?
+  notification_delivery_adapter_configured : Bool
+  external_observability_collector_configured : Bool
+  external_export_proof_token : String
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -55,6 +62,14 @@ pub struct ApiService {
   provider_callback_secrets : Map[String, String]
   artifact_worker_callback_token : String?
   artifact_scanner_callback_token : String?
+  entitlement_authority_callback_token : String?
+  offline_transfer_adapter_endpoint : String?
+  offline_transfer_adapter_token : String?
+  offline_transfer_session_secret : String
+  offline_commerce_capabilities : Array[
+    @offline.OfflineCommerceCapabilityEvidence,
+  ]
+  offline_commerce_capabilities_expires_unix_ms : Int64
   node_token : String
   version : String
   active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
@@ -85,9 +100,16 @@ pub fn ApiService::new(
     offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
+    credential_handoff_store: None,
+    lease_helper_receipt_secret: "",
+    machine_helper_adapter_evidence: None,
+    guide_diagnostics_token: "",
     portal_store: None,
     notification_store: None,
     observability_store: None,
+    notification_delivery_adapter_configured: false,
+    external_observability_collector_configured: false,
+    external_export_proof_token: "",
     available_secret_refs: [],
     registry: None,
     enrollment: None,
@@ -108,6 +130,12 @@ pub fn ApiService::new(
     provider_callback_secrets: Map([]),
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
+    entitlement_authority_callback_token: None,
+    offline_transfer_adapter_endpoint: None,
+    offline_transfer_adapter_token: None,
+    offline_transfer_session_secret: "",
+    offline_commerce_capabilities: [],
+    offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
     version,
     active: Map([]),
@@ -140,9 +168,16 @@ pub fn ApiService::with_registry(
     offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
+    credential_handoff_store: None,
+    lease_helper_receipt_secret: "",
+    machine_helper_adapter_evidence: None,
+    guide_diagnostics_token: "",
     portal_store: None,
     notification_store: None,
     observability_store: None,
+    notification_delivery_adapter_configured: false,
+    external_observability_collector_configured: false,
+    external_export_proof_token: "",
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: None,
@@ -163,6 +198,12 @@ pub fn ApiService::with_registry(
     provider_callback_secrets: Map([]),
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
+    entitlement_authority_callback_token: None,
+    offline_transfer_adapter_endpoint: None,
+    offline_transfer_adapter_token: None,
+    offline_transfer_session_secret: "",
+    offline_commerce_capabilities: [],
+    offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
     version,
     active: Map([]),
@@ -196,9 +237,16 @@ pub fn ApiService::with_services(
     offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
+    credential_handoff_store: None,
+    lease_helper_receipt_secret: "",
+    machine_helper_adapter_evidence: None,
+    guide_diagnostics_token: "",
     portal_store: None,
     notification_store: None,
     observability_store: None,
+    notification_delivery_adapter_configured: false,
+    external_observability_collector_configured: false,
+    external_export_proof_token: "",
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -219,6 +267,12 @@ pub fn ApiService::with_services(
     provider_callback_secrets: Map([]),
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
+    entitlement_authority_callback_token: None,
+    offline_transfer_adapter_endpoint: None,
+    offline_transfer_adapter_token: None,
+    offline_transfer_session_secret: "",
+    offline_commerce_capabilities: [],
+    offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
     version,
     active: Map([]),
@@ -254,9 +308,16 @@ pub fn ApiService::with_control_plane(
     offline_commerce_store: None,
     deployment_store: None,
     exclusive_lease_store: None,
+    credential_handoff_store: None,
+    lease_helper_receipt_secret: "",
+    machine_helper_adapter_evidence: None,
+    guide_diagnostics_token: "",
     portal_store: None,
     notification_store: None,
     observability_store: None,
+    notification_delivery_adapter_configured: false,
+    external_observability_collector_configured: false,
+    external_export_proof_token: "",
     available_secret_refs: [],
     registry: Some(registry),
     enrollment: Some(enrollment),
@@ -277,6 +338,12 @@ pub fn ApiService::with_control_plane(
     provider_callback_secrets: Map([]),
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
+    entitlement_authority_callback_token: None,
+    offline_transfer_adapter_endpoint: None,
+    offline_transfer_adapter_token: None,
+    offline_transfer_session_secret: "",
+    offline_commerce_capabilities: [],
+    offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
     version,
     active: Map([]),
@@ -362,6 +429,161 @@ pub fn ApiService::with_offline_artifact_callback_tokens(
   }
 }
 
+///| Installs the separate machine identity used by the typed entitlement
+
+///|
+/// authority. Invalid or reused identities leave the authority unavailable.
+pub fn ApiService::with_entitlement_authority_callback_token(
+  self : ApiService,
+  token : String,
+) -> ApiService {
+  if token.length() < 32 ||
+    token == self.operator_token ||
+    token == self.inference_token ||
+    self.artifact_worker_callback_token == Some(token) ||
+    self.artifact_scanner_callback_token == Some(token) {
+    self
+  } else {
+    { ..self, entitlement_authority_callback_token: Some(token) }
+  }
+}
+
+///|
+fn offline_decimal_port(value : String) -> Bool {
+  if value == "" ||
+    value.length() > 5 ||
+    !value.all(character => character >= '0' && character <= '9') {
+    return false
+  }
+  let port = @string.parse_int64(value) catch { _ => return false }
+  port > 0L && port <= 65535L
+}
+
+///|
+fn offline_safe_host(value : String) -> Bool {
+  value != "" &&
+  value.length() <= 253 &&
+  value.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '.' ||
+    character == '-'
+  }) &&
+  !value.has_prefix(".") &&
+  !value.has_suffix(".") &&
+  !value.contains("..") &&
+  value
+  .split(".")
+  .all(label => label != "" && !label.has_prefix("-") && !label.has_suffix("-"))
+}
+
+///|
+fn offline_safe_https_authority(authority : String) -> Bool {
+  if authority == "" ||
+    authority.contains("@") ||
+    authority.contains("[") ||
+    authority.contains("]") {
+    return false
+  }
+  match authority.rev_find(":") {
+    Some(colon) =>
+      offline_safe_host(authority[:colon].to_owned()) &&
+      offline_decimal_port(authority[colon + 1:].to_owned())
+    None => offline_safe_host(authority)
+  }
+}
+
+///|
+fn offline_safe_loopback_authority(authority : String) -> Bool {
+  if authority.has_prefix("127.0.0.1:") {
+    offline_decimal_port(authority[10:].to_owned())
+  } else if authority.has_prefix("localhost:") {
+    offline_decimal_port(authority[10:].to_owned())
+  } else if authority.has_prefix("[::1]:") {
+    offline_decimal_port(authority[6:].to_owned())
+  } else {
+    false
+  }
+}
+
+///|
+fn safe_offline_transfer_endpoint(endpoint : String) -> Bool {
+  if endpoint == "" ||
+    endpoint != endpoint.trim().to_owned() ||
+    endpoint.length() > 512 ||
+    endpoint.contains("@") ||
+    endpoint.contains("?") ||
+    endpoint.contains("#") ||
+    endpoint.contains("\\") ||
+    endpoint.any(character => character.is_whitespace()) {
+    return false
+  }
+  let (remainder, secure) = if endpoint.has_prefix("https://") {
+    (endpoint[8:].to_owned(), true)
+  } else if endpoint.has_prefix("http://") {
+    (endpoint[7:].to_owned(), false)
+  } else {
+    return false
+  }
+  guard remainder.find("/") is Some(slash) else { return false }
+  let authority = remainder[:slash].to_owned()
+  let path = remainder[slash:].to_owned()
+  path == "/v1/offline-transfers" &&
+  (if secure {
+    offline_safe_https_authority(authority)
+  } else {
+    offline_safe_loopback_authority(authority)
+  })
+}
+
+///| Configures the provider-neutral object-transfer boundary. Invalid or
+
+///|
+/// partial input leaves it unavailable; cmd/control rejects partial startup.
+pub fn ApiService::with_offline_transfer_adapter(
+  self : ApiService,
+  endpoint : String,
+  adapter_token : String,
+  session_secret : String,
+) -> ApiService raise {
+  if !safe_offline_transfer_endpoint(endpoint) ||
+    adapter_token.length() < 32 ||
+    adapter_token.length() > 4096 ||
+    session_secret.length() < 32 ||
+    session_secret.length() > 4096 ||
+    adapter_token == session_secret ||
+    adapter_token == self.operator_token ||
+    adapter_token == self.inference_token ||
+    session_secret == self.operator_token ||
+    session_secret == self.inference_token {
+    raise Failure::Failure("offline transfer adapter configuration is invalid")
+  } else {
+    {
+      ..self,
+      offline_transfer_adapter_endpoint: Some(endpoint),
+      offline_transfer_adapter_token: Some(adapter_token),
+      offline_transfer_session_secret: session_secret,
+    }
+  }
+}
+
+///| Supplies deployment-owned, retained verification evidence. The API never
+
+///|
+/// infers production readiness from the mere presence of repository code.
+pub fn ApiService::with_offline_commerce_capabilities(
+  self : ApiService,
+  capabilities : Array[@offline.OfflineCommerceCapabilityEvidence],
+  expires_unix_ms : Int64,
+) -> ApiService {
+  {
+    ..self,
+    offline_commerce_capabilities: capabilities,
+    offline_commerce_capabilities_expires_unix_ms: expires_unix_ms,
+  }
+}
+
 ///|
 pub fn ApiService::with_technical_store(
   self : ApiService,
@@ -391,6 +613,56 @@ pub fn ApiService::with_exclusive_lease_store(
 }
 
 ///|
+/// Enables restart-safe, one-time, subject-bound SSH credential handoffs.
+pub fn ApiService::with_credential_handoff_store(
+  self : ApiService,
+  credential_handoff_store : @credential_store.CredentialHandoffStore,
+) -> ApiService {
+  { ..self, credential_handoff_store: Some(credential_handoff_store) }
+}
+
+///|
+/// Installs the independent root-helper receipt verifier. It is deliberately
+/// distinct from operator, node-auth, assignment and lease-authority secrets.
+pub fn ApiService::with_lease_helper_receipt_secret(
+  self : ApiService,
+  secret : String,
+) -> ApiService raise Failure {
+  if secret.length() < 32 {
+    raise Failure("lease helper receipt secret must contain at least 32 bytes")
+  }
+  { ..self, lease_helper_receipt_secret: secret }
+}
+
+///|
+/// Records the expiry of retained, deployment-owned proof that the node-side
+/// privileged helper adapter is installed and was exercised successfully.
+pub fn ApiService::with_machine_helper_adapter_evidence(
+  self : ApiService,
+  evidence : @nodelease.MachineHelperAdapterReadinessEvidence,
+) -> ApiService raise Failure {
+  if !@nodelease.machine_helper_adapter_evidence_ready(
+      evidence,
+      evidence.checked_unix_ms,
+    ) {
+    raise Failure("machine helper adapter evidence is invalid")
+  }
+  { ..self, machine_helper_adapter_evidence: Some(evidence) }
+}
+
+///|
+/// Installs a read-only token scoped to the aggregate guide diagnostics route.
+pub fn ApiService::with_guide_diagnostics_token(
+  self : ApiService,
+  token : String,
+) -> ApiService raise Failure {
+  if token.length() < 32 {
+    raise Failure("guide diagnostics token must contain at least 32 bytes")
+  }
+  { ..self, guide_diagnostics_token: token }
+}
+
+///|
 /// Enables the centralized enterprise portal authority used by both the
 /// customer-facing site and the operator approval workflow.
 pub fn ApiService::with_portal_store(
@@ -416,6 +688,40 @@ pub fn ApiService::with_observability_store(
   observability_store : @observability.ObservabilityStore,
 ) -> ApiService {
   { ..self, observability_store: Some(observability_store) }
+}
+
+///|
+/// Installs only deployment evidence, never an adapter credential.
+pub fn ApiService::with_notification_delivery_adapter_configured(
+  self : ApiService,
+  configured : Bool,
+) -> ApiService {
+  { ..self, notification_delivery_adapter_configured: configured }
+}
+
+///| Marks the external collector configured only after deployment explicitly
+
+///|
+/// attests that the collector/export path is installed.
+pub fn ApiService::with_external_observability_collector_configured(
+  self : ApiService,
+  configured : Bool,
+) -> ApiService {
+  { ..self, external_observability_collector_configured: configured }
+}
+
+///| Installs the single-purpose collector-to-sink proof authority. Metrics and
+
+///|
+/// audit readers cannot use their role tokens to forge production readiness.
+pub fn ApiService::with_external_export_proof_token(
+  self : ApiService,
+  token : String,
+) -> ApiService {
+  if token.length() < 32 || token.length() > 4096 {
+    return self
+  }
+  { ..self, external_export_proof_token: token }
 }
 
 ///|
@@ -2026,6 +2332,9 @@ async fn ApiService::dispatch_with_transport(
       413, "PayloadTooLarge", "request body exceeds the public contract limit", false,
     )
   }
+  if path == "/v1/guide-diagnostics/aggregate" {
+    return self.handle_guide_aggregate(verb, headers)
+  }
   if verb != Get && !self.store.current_epoch_is_durable() {
     return api_error(
       409, "StaleControllerEpoch", "controller was fenced by a newer durable epoch",
@@ -2061,7 +2370,17 @@ async fn ApiService::dispatch_with_transport(
     )
   }
   if customer_machine_access_path(path) {
+    if credential_handoff_path(path) {
+      return self.handle_credential_handoff(
+        verb, path, headers, body, allow_asserted_subject,
+      )
+    }
     return self.handle_customer_machine_access(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
+  if credential_handoff_path(path) {
+    return self.handle_credential_handoff(
       verb, path, headers, body, allow_asserted_subject,
     )
   }
@@ -2085,6 +2404,10 @@ async fn ApiService::dispatch_with_transport(
   match (verb, path) {
     (Get, "/health") =>
       json_reply(200, @contracts.health("control", self.version).to_json())
+    (Get, "/ready") => {
+      let ready = self.internal_component_ready()
+      json_reply(if ready { 200 } else { 503 }, { "ready": ready })
+    }
     (Get, "/version") =>
       json_reply(200, {
         "product": "LunaNexa",
@@ -2096,6 +2419,15 @@ async fn ApiService::dispatch_with_transport(
           "active"
         },
       })
+    (Get, "/v1/readiness") => {
+      if !bearer_authorized(headers, self.operator_token) {
+        return api_error(
+          401, "Unauthenticated", "valid operator authority is required", false,
+        )
+      }
+      let readiness = self.management_readiness(@async.now())
+      json_reply(if readiness.ready { 200 } else { 503 }, readiness.to_json())
+    }
     (Get, "/v1/settings/effective") => {
       if !bearer_authorized(headers, self.operator_token) &&
         !bearer_authorized(headers, self.inference_token) &&
@@ -2135,37 +2467,43 @@ async fn ApiService::dispatch_with_transport(
         Some(scheduler) => scheduler.snapshot().active.length()
         None => 0
       }
-      let observability = match self.observability_store {
-        Some(store) => store.snapshot()
-        None =>
-          {
-            schema_version: @observability.snapshot_schema_version,
-            events: [],
-            counters: [],
-          }
+      let (operational_counters_snapshot, operational_event_count) = match
+        self.observability_store {
+        Some(store) => store.metrics_snapshot()
+        None => ([], 0)
       }
-      let notification_snapshot = match self.notification_store {
-        Some(store) => store.snapshot()
+      let (
+        pending_deliveries,
+        dead_letter_deliveries,
+        notification_worker_health,
+      ) = match self.notification_store {
+        Some(store) => store.delivery_metrics()
         None =>
-          {
-            schema_version: @notifications.snapshot_schema_version,
-            records: [],
-            deliveries: [],
-            preferences: [],
-          }
+          (
+            0,
+            0,
+            {
+              generation: 0L,
+              last_heartbeat_unix_ms: None,
+              last_attempt_unix_ms: None,
+              last_success_unix_ms: None,
+              last_failure_unix_ms: None,
+              consecutive_failures: 0,
+              last_error_code: None,
+            },
+          )
       }
-      let pending_deliveries = notification_snapshot.deliveries.count_if(delivery => {
-        delivery.state == PendingDelivery ||
-        delivery.state == RetryScheduled ||
-        delivery.state == Delivering
-      })
-      let dead_letter_deliveries = notification_snapshot.deliveries.count_if(delivery => {
-        delivery.state == DeadLetter
-      })
+      let notification_worker_heartbeat_age_seconds = notification_worker_health.last_heartbeat_unix_ms
+        .map(value => (@async.now() - value).max(0L) / 1000L)
+        .unwrap_or(1000000000L)
       let mut operational_counters = ""
-      for counter in observability.counters {
+      for counter in operational_counters_snapshot {
         operational_counters = operational_counters +
           "lunanexa_operational_events_total{event_code=\"\{counter.event_code}\",target_type=\"\{counter.target_type}\",outcome=\"\{counter.outcome}\",status_class=\"\{counter.status_class}\"} \{counter.value}\n"
+      }
+      let operational_latency = match self.observability_store {
+        Some(store) => store.prometheus_latency_fragment()
+        None => ""
       }
       {
         status: 200,
@@ -2184,10 +2522,55 @@ async fn ApiService::dispatch_with_transport(
         "lunanexa_notification_deliveries_pending \{pending_deliveries}\n" +
         "# TYPE lunanexa_notification_deliveries_dead_letter gauge\n" +
         "lunanexa_notification_deliveries_dead_letter \{dead_letter_deliveries}\n" +
+        "# TYPE lunanexa_notification_worker_last_heartbeat_age_seconds gauge\n" +
+        "lunanexa_notification_worker_last_heartbeat_age_seconds \{notification_worker_heartbeat_age_seconds}\n" +
         "# TYPE lunanexa_operational_event_history gauge\n" +
-        "lunanexa_operational_event_history \{observability.events.length()}\n" +
+        "lunanexa_operational_event_history \{operational_event_count}\n" +
         "# TYPE lunanexa_operational_events_total counter\n" +
-        operational_counters,
+        operational_counters +
+        operational_latency,
+      }
+    }
+    (Get, "/v1/observability/readiness") => {
+      if !bearer_authorized(headers, self.monitoring_token) &&
+        !bearer_authorized(headers, self.audit_token) {
+        return api_error(
+          401, "Unauthenticated", "valid monitoring or audit authority is required",
+          false,
+        )
+      }
+      match self.observability_readiness() {
+        Some(readiness) => json_reply(200, readiness.to_json())
+        None =>
+          api_error(
+            503, "ObservabilityUnavailable", "durable operational observability is unavailable",
+            true,
+          )
+      }
+    }
+    (Post, "/v1/observability/export-proof") => {
+      if self.external_export_proof_token == "" ||
+        !bearer_authorized(headers, self.external_export_proof_token) {
+        return api_error(
+          401, "Unauthenticated", "valid export-proof authority is required", false,
+        )
+      }
+      let proof : @observability.ExternalExportProof = @json.from_json(
+        @json.parse(body),
+      ) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "valid external export proof is required", false,
+          )
+      }
+      json_reply(
+        202,
+        self.record_external_export_proof(proof, @async.now()).to_json(),
+      ) catch {
+        _ =>
+          api_error(
+            409, "ExportProofRejected", "external export proof was rejected", false,
+          )
       }
     }
     (Get, "/v1/observability/events") => {
@@ -2951,7 +3334,17 @@ async fn ApiService::dispatch_with_transport(
       match leases.lease_for_node(node_id) {
         Some(lease) => {
           let reconciled = self.begin_exclusive_provisioning_if_drained(lease)
-          json_reply(200, reconciled.to_json())
+          let credential = node_credential(headers).unwrap_or("")
+          json_reply(
+            200,
+            @nodelease.node_transport_lease_with_helper_authorizations(
+              reconciled,
+              node_id,
+              credential,
+              self.lease_helper_receipt_secret,
+              @async.now(),
+            ).to_json(),
+          )
         }
         None => api_error(404, "NotFound", "node has no exclusive lease", false)
       }
@@ -3609,6 +4002,9 @@ async fn ApiService::operational_actor_class(
     NodeAgent
   } else if path.has_prefix("/v1/provider-callbacks") {
     Provider
+  } else if self.external_export_proof_token != "" &&
+    bearer_authorized(headers, self.external_export_proof_token) {
+    Provider
   } else if bearer_authorized(headers, self.inference_token) ||
     self.api_key_authorization(headers, Inference, false) is Some(_) {
     Customer
@@ -3625,19 +4021,19 @@ async fn ApiService::record_operational_request(
   headers : Map[String, String],
   reply : HttpReply,
   started_unix_ms : Int64,
+  allow_asserted_subject : Bool,
 ) -> Unit {
   guard self.observability_store is Some(store) else { return }
   let completed = @async.now()
   let generated = "request-\{digest_hex("\{api_method_label(verb)}|\{path}|\{started_unix_ms}")[:32]}"
   let correlation_id = match header(headers, "X-Request-Id") {
-    Some(value) if @contracts.valid_identifier(value) => value
+    Some(value) if @contracts.valid_identifier(value) =>
+      "request-external-\{digest_hex(value)[:32]}"
     _ => generated
   }
-  let tenant_hash = match header(headers, "X-LunaNexa-Tenant") {
-    Some(value) if @contracts.valid_identifier(value) =>
-      Some("sha256:\{digest_hex(value)}")
-    _ => None
-  }
+  let tenant_hash = self.trusted_operational_tenant_hash(
+    headers, allow_asserted_subject,
+  )
   let outcome = if reply.status >= 500 {
     "error"
   } else if reply.status >= 400 {
@@ -3646,9 +4042,9 @@ async fn ApiService::record_operational_request(
     "accepted"
   }
   ignore(
-    store.record({
+    store.record_generated({
       version: @observability.contract_version,
-      event_id: "event-\{digest_hex("\{correlation_id}|\{completed}|\{reply.status}")[:40]}",
+      event_id: "event-pending",
       timestamp_unix_ms: completed,
       severity: if reply.status >= 500 {
         Error
@@ -3734,7 +4130,9 @@ async fn ApiService::handle_with_transport(
   let reply = self.dispatch_with_transport(
     verb, path, headers, body, allow_asserted_subject,
   )
-  self.record_operational_request(verb, path, headers, reply, started)
+  self.record_operational_request(
+    verb, path, headers, reply, started, allow_asserted_subject,
+  )
   reply
 }
 

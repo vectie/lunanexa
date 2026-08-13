@@ -55,8 +55,58 @@ pub async fn GuideProbeWorker::open(
     policy,
     scheduler,
     notifications,
+    observability: None,
     identity_secret,
     observation_secret,
+  }
+}
+
+///| Installs the aggregate-only operational event sink. Probe responses and
+
+///|
+/// guide identities never enter observability payloads.
+pub fn GuideProbeWorker::with_observability_store(
+  self : GuideProbeWorker,
+  observability : @observability.ObservabilityStore,
+) -> GuideProbeWorker {
+  { ..self, observability: Some(observability) }
+}
+
+///|
+async fn GuideProbeWorker::record_probe_event(
+  self : GuideProbeWorker,
+  now_unix_ms : Int64,
+  healthy : Bool,
+  correlation_receipt : String,
+  duration_ms : Int64,
+) -> Unit {
+  match self.observability {
+    Some(store) =>
+      store.record_component_event(
+        "event-guide-probe-\{now_unix_ms}",
+        now_unix_ms,
+        if healthy {
+          Information
+        } else {
+          Error
+        },
+        "guide-monitor",
+        "GuideDiagnosticsProbeCompleted",
+        correlation_receipt,
+        "guide",
+        if healthy {
+          "healthy"
+        } else {
+          "degraded"
+        },
+        if healthy {
+          200
+        } else {
+          503
+        },
+        duration_ms,
+      )
+    None => ()
   }
 }
 
@@ -79,6 +129,7 @@ pub async fn GuideProbeWorker::run_once(
       }
     Some(plan) => plan
   }
+  let started = @async.now()
   let mut failure_code : String? = None
   let observation = fetch_observation(
     self.config,
@@ -101,6 +152,14 @@ pub async fn GuideProbeWorker::run_once(
     self.observation_secret,
     now_unix_ms,
   )
+  self.record_probe_event(
+    now_unix_ms,
+    failure_code is None &&
+    !monitor_result.adapter_alert_active &&
+    !monitor_result.knowledge_alert_active,
+    plan.correlation_receipt,
+    (@async.now() - started).max(0L),
+  )
   {
     was_due: true,
     probe_ok: failure_code is None,
@@ -109,14 +168,27 @@ pub async fn GuideProbeWorker::run_once(
   }
 }
 
-/// Resilient periodic loop. A single filesystem, transport, decoding, or store
-/// failure cannot terminate the controller's long-running monitor task.
+/// Unexpected persistence or reconciliation failures are recorded when
+/// possible and then propagated to the controller supervisor.
 
 ///|
 pub async fn GuideProbeWorker::run_forever(self : GuideProbeWorker) -> Unit {
   for ;; {
-    ignore(self.run_once(@async.now())) catch {
-      _ => ()
+    let now = @async.now()
+    ignore(self.run_once(now)) catch {
+      error => {
+        ignore(
+          self.record_probe_event(
+            now,
+            false,
+            "guide-probe-worker-failed-\{now}",
+            0L,
+          ),
+        ) catch {
+          _ => ()
+        }
+        raise error
+      }
     }
     @async.sleep(self.policy.probe_interval_ms.to_int().max(1000))
   }

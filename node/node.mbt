@@ -171,6 +171,25 @@ pub fn EnrollmentService::authorized(
   certificate.expires_unix_ms > now_unix_ms
 }
 
+///| Returns the bounded set of nodes whose enrollment certificate and node
+
+///| authority are both live. Readiness compares this exact authority set with
+
+///|
+/// the independently signed helper-adapter coverage set.
+pub fn EnrollmentService::active_node_ids(
+  self : EnrollmentService,
+  now_unix_ms : Int64,
+) -> Array[String] {
+  let result = [
+    for node_id, certificate in self.certificates if certificate.expires_unix_ms >
+    now_unix_ms &&
+    self.authorities.contains(node_id) => node_id
+  ]
+  result.sort()
+  result
+}
+
 ///|
 pub fn EnrollmentService::rotate(
   self : EnrollmentService,

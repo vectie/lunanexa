@@ -15,7 +15,11 @@ pub let contract_version : String
 
 pub fn preference_allows(NotificationPreference, NotificationEvent, NotificationChannel) -> Bool
 
+pub fn preference_view(NotificationPreference) -> NotificationPreferenceView
+
 pub let snapshot_schema_version : String
+
+pub fn validate_delivery_envelope(NotificationDeliveryEnvelope) -> Unit raise NotificationError
 
 pub fn validate_event(NotificationEvent) -> Unit raise NotificationError
 
@@ -88,6 +92,10 @@ pub(all) struct NotificationAction {
   now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct NotificationAdapterReceipt {
+  provider_receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct NotificationAssignmentAction {
   notification_id : String
   expected_generation : Int64
@@ -122,6 +130,63 @@ pub(all) struct NotificationDelivery {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn NotificationDelivery::record_result(Self, DeliveryResult, Int) -> Self raise NotificationError
 
+pub(all) struct NotificationDeliveryEnvelope {
+  version : String
+  delivery_id : String
+  channel : NotificationChannel
+  audience : NotificationAudience
+  topic : NotificationTopic
+  code : String
+  severity : NotificationSeverity
+  title_key : String
+  body_key : String
+  parameters : Map[String, String]
+  created_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationDeliveryReadiness {
+  version : String
+  state : NotificationDeliveryReadinessState
+  adapter_configured : Bool
+  pending_count : Int
+  delivering_count : Int
+  dead_letter_count : Int
+  capacity_exhausted : Bool
+  worker_health : NotificationWorkerHealth
+  supported_channels : Array[NotificationChannel]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum NotificationDeliveryReadinessState {
+  DeliveryReady
+  AdaptersPending
+  DeliveryDegraded
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationDeliveryRedriveAction {
+  delivery_id : String
+  expected_attempt_count : Int
+  expected_updated_unix_ms : Int64
+  actor_ref : String
+  now_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationDeliveryRedriveReceipt {
+  receipt_id : String
+  delivery_id : String
+  actor_ref : String
+  previous_attempt_count : Int
+  accepted_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationDeliveryRunSummary {
+  attempted : Int
+  delivered : Int
+  retry_scheduled : Int
+  dead_lettered : Int
+  skipped : Int
+  readiness : NotificationDeliveryReadiness
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct NotificationEvent {
   version : String
   notification_id : String
@@ -153,6 +218,22 @@ pub(all) struct NotificationPreference {
   channels : Array[NotificationChannel]
   minimum_severity : NotificationSeverity
   updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationPreferenceView {
+  topic : NotificationTopic
+  channels : Array[NotificationChannel]
+  minimum_severity : NotificationSeverity
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationReconciliationSummary {
+  reconciled_unix_ms : Int64
+  subject_count : Int
+  operator_alert_count : Int
+  expired_silence_count : Int
+  pending_delivery_count : Int
+  dead_letter_count : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct NotificationRecord {
@@ -192,6 +273,8 @@ pub(all) struct NotificationSnapshot {
   records : Array[NotificationRecord]
   deliveries : Array[NotificationDelivery]
   preferences : Array[NotificationPreference]
+  worker_health : NotificationWorkerHealth
+  redrive_audit : Array[NotificationDeliveryRedriveReceipt]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum NotificationTopic {
@@ -204,6 +287,16 @@ pub(all) enum NotificationTopic {
   AccessCredential
   GuideDiagnostics
   DeliveryHealth
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct NotificationWorkerHealth {
+  generation : Int64
+  last_heartbeat_unix_ms : Int64?
+  last_attempt_unix_ms : Int64?
+  last_success_unix_ms : Int64?
+  last_failure_unix_ms : Int64?
+  consecutive_failures : Int
+  last_error_code : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 // Type aliases

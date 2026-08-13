@@ -1,4 +1,44 @@
 ///|
+fn offline_ready_capabilities() -> Array[
+  @offline.OfflineCommerceCapabilityEvidence,
+] {
+  let kinds : Array[@offline.OfflineCommerceCapability] = [
+    ApprovedLegalTemplates,
+    ObjectStorage,
+    MalwareScanner,
+    OoxmlWorker,
+    PdfRenderer,
+    SpreadsheetFormulaEngine,
+    CjkFonts,
+    MachineCallbackIdentity,
+    EntitlementAuthority,
+    FinanceLegalPolicy,
+  ]
+  kinds.mapi((index, capability) => {
+    capability,
+    configured: true,
+    verified: true,
+    evidence_ref: Some("evidence/readiness-\{index}"),
+  })
+}
+
+///|
+priv struct OfflineTestReversalRecoveryAction {
+  recovery_id : String
+  idempotency_key : String
+  order_id : String
+  failed_reversal_id : String
+  expected_generation : Int64
+  decision : @offline.ReversalRecoveryDecision
+  replacement_reversal_id : String?
+  authority_receipt : String
+  reason_code : String
+} derive(ToJson)
+
+///|
+extend OfflineTestReversalRecoveryAction with ToJson::{to_json}
+
+///|
 async fn offline_api_fixture(
   directory : String,
 ) -> (@api.ApiService, @offline_store.OfflineCommerceStore) {
@@ -40,6 +80,10 @@ async fn offline_api_fixture(
   let notifications = @notification_store.NotificationStore::open(
     "\{directory}/notifications.json",
   )
+  offline.record_worker_acceptance(ArtifactDispatcher, now)
+  offline.record_worker_acceptance(EntitlementDispatcher, now)
+  offline.record_reconciler_attempt(now)
+  offline.record_reconciler_success(now)
   let service = @api.ApiService::new(
       @store.FileStore::open("\{directory}/state.json"),
       runtime,
@@ -53,6 +97,17 @@ async fn offline_api_fixture(
     .with_notification_store(notifications)
     .with_offline_artifact_callback_tokens(
       "artifact-worker-token-32-bytes-minimum-a", "artifact-scanner-token-32-bytes-minimum-b",
+    )
+    .with_entitlement_authority_callback_token(
+      "entitlement-authority-token-32-bytes-minimum-c",
+    )
+    .with_offline_transfer_adapter(
+      "http://127.0.0.1:1/v1/offline-transfers", "offline-transfer-adapter-token-32-bytes-minimum-d",
+      "offline-transfer-session-secret-32-bytes-minimum-e",
+    )
+    .with_offline_commerce_capabilities(
+      offline_ready_capabilities(),
+      @async.now() + 3600000L,
     )
   (service, offline)
 }
@@ -437,6 +492,346 @@ async test "offline callback identity builder rejects weak reused human secrets"
 }
 
 ///|
+async test "entitlement callback authority is distinct terminal and idempotent" {
+  let directory = @fs.tmpdir(prefix="lunanexa-entitlement-callback-")
+  let (base, store) = offline_api_fixture(directory)
+  let service = base.with_entitlement_authority_callback_token(
+    "entitlement-authority-token-32-bytes-minimum-c",
+  )
+  let now = @async.now()
+  let draft = store.create_order({
+    order_id: "order-entitlement-callback",
+    idempotency_key: "idem-entitlement-callback",
+    tenant_ref: "tenant-a",
+    organization_id: "org-a",
+    project_id: "project-a",
+    purchaser_subject_ref: "subject-a",
+    selected_service_code: "exclusive-dgx",
+    selected_sla_code: "standard",
+    policy: {
+      require_executed_agreement: true,
+      require_payment: false,
+      invoice_timing: InvoiceNotRequired,
+      require_identity_verification: false,
+      require_internal_approval: false,
+    },
+    quote: None,
+    agreement_ref: None,
+    artifact_ids: [],
+    entitlement_ref: None,
+    state: Draft,
+    generation: 1L,
+    created_unix_ms: now,
+    updated_unix_ms: now,
+    expires_unix_ms: now + 3600000L,
+  })
+  let quoted = store.quote_order(
+    draft.order_id,
+    offline_test_quote("entitlement-callback", now),
+    "operator-a",
+    now,
+  )
+  let begun = store.begin_offline_execution(
+    quoted.order_id,
+    quoted.generation,
+    now + 1L,
+  )
+  ignore(
+    store.register_template({
+      template_id: "contract-http-a",
+      version: "v1",
+      kind: ContractTemplate,
+      locale: "zh-CN",
+      media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      object_ref: "s3://templates/contract-http-a.docx",
+      sha256: "sha256:" + "a".repeat(64),
+      byte_count: 1000L,
+      active_content_allowed: false,
+      created_unix_ms: now,
+      superseded_unix_ms: None,
+    }),
+  )
+  let generation : @offline.ArtifactGenerationRequest = {
+    request_id: "generation-http-a",
+    order_id: begun.order_id,
+    organization_id: begun.organization_id,
+    artifact_id: "contract-pdf-http-a",
+    kind: PrintReadyContractPdf,
+    template_id: "contract-http-a",
+    template_version: "v1",
+    locale: "zh-CN",
+    expected_object_ref: "s3://orders/order-entitlement-callback/contract.pdf",
+    input_snapshot_sha256: "sha256:" + "a".repeat(64),
+    requested_by: "operator-a",
+    requested_unix_ms: now + 1L,
+  }
+  ignore(store.request_generation(generation))
+  ignore(store.claim_generation_requests(now + 2L))
+  ignore(
+    store.complete_generation({
+      request_id: generation.request_id,
+      artifact_id: generation.artifact_id,
+      expected_object_ref: generation.expected_object_ref,
+      media_type: "application/pdf",
+      byte_count: 2000L,
+      sha256: "sha256:" + "d".repeat(64),
+      worker_receipt: "worker-http-a",
+      verified: true,
+      active_content_detected: false,
+      moonleaf_verified: false,
+      render_verified: true,
+      formula_error_count: 0,
+      visual_evidence_sha256: "sha256:" + "e".repeat(64),
+      completed_unix_ms: now + 2L,
+    }),
+  )
+  let awaiting = store.release_offline_packet(
+    begun.order_id,
+    store.order("org-a", begun.order_id).generation,
+    now + 3L,
+  )
+  let grant : @offline.EvidenceUploadGrant = {
+    grant_id: "grant-entitlement-http-a",
+    idempotency_key: "upload-entitlement-http-a",
+    order_id: awaiting.order_id,
+    organization_id: awaiting.organization_id,
+    subject_ref: awaiting.purchaser_subject_ref,
+    artifact_id: "executed-entitlement-http-a",
+    kind: ExecutedContractScan,
+    revision: 1,
+    expected_object_ref: "object://offline-uploads/org-a/order-entitlement-callback/executed-entitlement-http-a",
+    allowed_media_types: ["application/pdf"],
+    maximum_byte_count: 1000000L,
+    expires_unix_ms: now + 600000L,
+    state: UploadGranted,
+    created_unix_ms: now + 4L,
+  }
+  ignore(store.grant_upload(grant))
+  let upload_callback : @offline.EvidenceUploadCallback = {
+    callback_id: "callback-entitlement-http-a",
+    grant_id: grant.grant_id,
+    expected_object_ref: grant.expected_object_ref,
+    media_type: "application/pdf",
+    byte_count: 1000L,
+    sha256: "sha256:" + "c".repeat(64),
+    scan_passed: true,
+    active_content_detected: false,
+    scanner_receipt: "scanner-entitlement-http-a",
+    verified: true,
+    completed_unix_ms: now + 5L,
+  }
+  assert_true(grant.allowed_media_types.contains(upload_callback.media_type))
+  assert_true(@offline.valid_sha256(upload_callback.sha256))
+  assert_true(upload_callback.completed_unix_ms <= grant.expires_unix_ms)
+  assert_eq(upload_callback.expected_object_ref, grant.expected_object_ref)
+  assert_true(upload_callback.byte_count > 0L)
+  assert_true(upload_callback.byte_count <= grant.maximum_byte_count)
+  assert_true(@contracts.valid_identifier(upload_callback.callback_id))
+  assert_true(@contracts.valid_identifier(upload_callback.scanner_receipt))
+  assert_true(upload_callback.verified)
+  let artifact = store.complete_upload(upload_callback) catch {
+    @offline.OfflineCommerceError::ArtifactUnavailable(reason) => fail(reason)
+    error => raise error
+  }
+  ignore(
+    store.review_evidence({
+      review_id: "review-entitlement-http-a",
+      order_id: awaiting.order_id,
+      artifact_id: artifact.artifact_id,
+      expected_artifact_sha256: artifact.sha256,
+      reviewer_ref: "legal-a",
+      accepted: true,
+      reason_code: "EvidenceVerified",
+      audit_receipt: "audit-entitlement-http-a",
+      reviewed_unix_ms: now + 6L,
+    }),
+  )
+  let order = store.order("org-a", awaiting.order_id)
+  let activation : @offline.EntitlementActivation = {
+    activation_id: "activation-http-a",
+    idempotency_key: "activation-http-idem-a",
+    order_id: order.order_id,
+    organization_id: order.organization_id,
+    purchaser_subject_ref: order.purchaser_subject_ref,
+    kind: ExclusiveMachineLease,
+    authority_target_ref: "lease-target-a",
+    expected_order_generation: order.generation,
+    state: EntitlementActivationRequested,
+    entitlement_ref: None,
+    authority_receipt: None,
+    reason_code: None,
+    requested_by: "operator-a",
+    requested_unix_ms: now,
+    completed_unix_ms: None,
+  }
+  ignore(store.fulfill(order.order_id, order.generation, activation, now))
+  let path = "/v1/offline-commerce/operator/entitlement-activation-results"
+  let authority = {
+    "Authorization": "Bearer entitlement-authority-token-32-bytes-minimum-c",
+  }
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/offline-commerce/operator/entitlement-work/pending",
+      { "Authorization": "Bearer operator-token" },
+      "",
+    ).status,
+    401,
+  )
+  let claimed = service.handle(
+    Get,
+    "/v1/offline-commerce/operator/entitlement-work/pending",
+    authority,
+    "",
+  )
+  assert_eq(claimed.status, 200)
+  assert_true(claimed.body.contains(activation.activation_id))
+  assert_eq(
+    service.handle(
+      Post,
+      path,
+      { "Authorization": "Bearer operator-token" },
+      "{}",
+    ).status,
+    401,
+  )
+  assert_eq(
+    service.handle(Post, path, authority, activation.to_json().stringify()).status,
+    400,
+  )
+  let missing_receipt = {
+    ..activation,
+    state: EntitlementActivationConfirmed,
+    entitlement_ref: Some("lease-a"),
+  }
+  assert_eq(
+    service.handle(Post, path, authority, missing_receipt.to_json().stringify()).status,
+    400,
+  )
+  let confirmed : @offline.EntitlementActivation = {
+    ..missing_receipt,
+    authority_receipt: Some("authority-receipt-a"),
+  }
+  let expired_service = service.with_offline_commerce_capabilities(
+    offline_ready_capabilities(),
+    @async.now() - 1L,
+  )
+  let first = expired_service.handle(
+    Post,
+    path,
+    authority,
+    confirmed.to_json().stringify(),
+  )
+  assert_eq(first.status, 200)
+  assert_true(first.body.contains("Fulfilled"))
+  let replay = expired_service.handle(
+    Post,
+    path,
+    authority,
+    confirmed.to_json().stringify(),
+  )
+  assert_eq(replay.status, 200)
+  let mutated = { ..confirmed, authority_target_ref: "lease-target-attacker" }
+  assert_eq(
+    expired_service.handle(Post, path, authority, mutated.to_json().stringify()).status,
+    409,
+  )
+  let active = store.order_for_operator(order.order_id)
+  let failed_reversal : @offline.CommercialReversal = {
+    reversal_id: "reversal-http-failed-a",
+    idempotency_key: "reversal-http-failed-a",
+    order_id: active.order_id,
+    organization_id: active.organization_id,
+    entitlement_ref: active.entitlement_ref.unwrap(),
+    reason: CustomerCancellation,
+    expected_order_generation: active.generation,
+    state: ReversalRequested,
+    authority_receipt: None,
+    reason_code: None,
+    requested_by: "operator-a",
+    requested_unix_ms: now + 7L,
+    completed_unix_ms: None,
+  }
+  ignore(store.request_reversal(failed_reversal))
+  ignore(store.claim_authority_work(now + 8L))
+  let intervention = store.complete_reversal({
+    ..failed_reversal,
+    state: ReversalFailed,
+    authority_receipt: Some("authority-failure-http-a"),
+    reason_code: Some("authority-unavailable"),
+    completed_unix_ms: Some(now + 9L),
+  })
+  let recovery_body : OfflineTestReversalRecoveryAction = {
+    recovery_id: "recovery-http-a",
+    idempotency_key: "recovery-http-a",
+    order_id: intervention.order_id,
+    failed_reversal_id: failed_reversal.reversal_id,
+    expected_generation: intervention.generation,
+    decision: ConfirmRevoked,
+    replacement_reversal_id: None,
+    authority_receipt: "operator-confirmed-revocation-http-a",
+    reason_code: "authority-state-reconciled",
+  }
+  let recovered = service.handle(
+    Post,
+    "/v1/offline-commerce/operator/reversal-recoveries",
+    { "Authorization": "Bearer operator-token" },
+    recovery_body.to_json().stringify(),
+  )
+  assert_eq(recovered.status, 200)
+  assert_true(recovered.body.contains("Revoked"))
+}
+
+///|
+async test "configured readiness is evaluated rather than inferred" {
+  let directory = @fs.tmpdir(prefix="lunanexa-offline-ready-api-")
+  let (base, _) = offline_api_fixture(directory)
+  let service = base.with_offline_commerce_capabilities(
+    offline_ready_capabilities(),
+    @async.now() + 3600000L,
+  )
+  let response = service.handle(
+    Get,
+    "/v1/offline-commerce/operator/readiness",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_eq(response.status, 200)
+  assert_true(response.body.contains("OfflineCommerceReady"))
+  assert_false(response.body.contains("PdfRendererPending"))
+  let expired_service = base.with_offline_commerce_capabilities(
+    offline_ready_capabilities(),
+    @async.now() - 1L,
+  )
+  let expired = expired_service.handle(
+    Get,
+    "/v1/offline-commerce/operator/readiness",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_true(expired.body.contains("ReadinessEvidenceExpired"))
+  assert_true(expired.body.contains("OfflineCommerceAdaptersPending"))
+  let blocked = expired_service.handle(
+    Post,
+    "/v1/offline-commerce/operator/quotes",
+    { "Authorization": "Bearer operator-token" },
+    "{}",
+  )
+  assert_eq(blocked.status, 503)
+  assert_true(blocked.body.contains("ReadinessEvidenceExpired"))
+  let callback_reconciled = expired_service.handle(
+    Post,
+    "/v1/offline-commerce/operator/entitlement-activation-results",
+    { "Authorization": "Bearer entitlement-authority-token-32-bytes-minimum-c" },
+    "{}",
+  )
+  // Terminal callbacks remain reachable for work issued before evidence
+  // expiry; this malformed body reaches validation instead of readiness.
+  assert_eq(callback_reconciled.status, 400)
+  assert_false(callback_reconciled.body.contains("ReadinessEvidenceExpired"))
+}
+
+///|
 async test "offline lifecycle reconciliation emits safe deduplicated customer notices" {
   let directory = @fs.tmpdir(prefix="lunanexa-offline-notices-")
   let (service, store) = offline_api_fixture(directory)
@@ -496,4 +891,66 @@ async test "offline lifecycle reconciliation emits safe deduplicated customer no
     @json.parse(inbox.body),
   )
   assert_eq(records.length(), 1)
+}
+
+///|
+async test "offline readiness stays pending and purchaser cancellation is fenced" {
+  let directory = @fs.tmpdir(prefix="lunanexa-offline-readiness-cancel-")
+  let (ready_service, _) = offline_api_fixture(directory)
+  let service = ready_service.with_offline_commerce_capabilities([], 0L)
+  let operator = { "Authorization": "Bearer operator-token" }
+  let readiness = service.handle(
+    Get,
+    "/v1/offline-commerce/operator/readiness",
+    operator,
+    "",
+  )
+  assert_eq(readiness.status, 200)
+  assert_true(readiness.body.contains("OfflineCommerceAdaptersPending"))
+  assert_true(readiness.body.contains("PdfRendererPending"))
+  let now = @async.now()
+  let subject = {
+    "Authorization": "Bearer inference-token",
+    "X-LunaNexa-Subject": "subject-a",
+  }
+  let created = service.handle(
+    Post,
+    "/v1/offline-commerce/self/orders",
+    subject,
+    (
+      {
+        "order_id": "order-self-cancel",
+        "idempotency_key": "idem-self-cancel",
+        "project_id": "project-a",
+        "selected_service_code": "exclusive-dgx",
+        "selected_sla_code": "standard",
+        "expires_unix_ms": (now + 3600000L).to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(created.status, 201)
+  let stale = service.handle(
+    Post,
+    "/v1/offline-commerce/self/orders/order-self-cancel:cancel",
+    subject,
+    (
+      {
+        "order_id": "order-self-cancel",
+        "expected_generation": 2L.to_json(),
+        "now_unix_ms": now.to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(stale.status, 409)
+  let cancelled = service.handle(
+    Post,
+    "/v1/offline-commerce/self/orders/order-self-cancel:cancel",
+    subject,
+    (
+      {
+        "order_id": "order-self-cancel",
+        "expected_generation": 1L.to_json(),
+        "now_unix_ms": now.to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(cancelled.status, 200)
+  assert_true(cancelled.body.contains("Cancelled"))
 }

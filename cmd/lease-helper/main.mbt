@@ -6,6 +6,7 @@ priv struct HelperRequest {
   credential_ref : String
   expires_unix_ms : Int64
   generation : Int64
+  authorization : String
 }
 
 ///|
@@ -121,6 +122,7 @@ fn parse_request(args : Array[String]) -> HelperRequest raise {
   ) catch {
     _ => raise Failure::Failure("lease helper generation is invalid")
   }
+  let authorization = argument_value(args, "--authorization").unwrap_or("")
   let request : HelperRequest = {
     action,
     lease_id,
@@ -128,6 +130,7 @@ fn parse_request(args : Array[String]) -> HelperRequest raise {
     credential_ref,
     expires_unix_ms,
     generation,
+    authorization,
   }
   if !@leasehelper.valid_helper_request(
       action,
@@ -340,13 +343,41 @@ async fn lease_generation_marker(
   if generation <= 0L {
     raise Failure::Failure("lease generation marker is invalid")
   }
+  if request.generation < generation {
+    raise Failure::Failure("lease generation marker is newer than request")
+  }
   if has_account || @fs.exists(home_path) {
     if !@fs.exists(home_path) ||
       !marker_matches("\{home_path}/.lunanexa-lease", recorded) {
       raise Failure::Failure("tenant home is not owned by this exclusive lease")
     }
   }
-  Some(recorded)
+  if request.generation > generation {
+    // main verifies the controller-issued full-action MAC before any action
+    // reaches this function. Advancing both markers therefore records exactly
+    // that authorized lifecycle generation; an argv-only higher generation
+    // cannot cross this boundary.
+    let advanced = "\{request.lease_id}:\{request.generation}"
+    @fs.write_file(
+      generation_marker,
+      advanced,
+      create_mode=CreateOrTruncate,
+      permission=0o600,
+      sync=Full,
+    )
+    if @fs.exists(home_path) {
+      @fs.write_file(
+        "\{home_path}/.lunanexa-lease",
+        advanced,
+        create_mode=CreateOrTruncate,
+        permission=0o600,
+        sync=Full,
+      )
+    }
+    Some(advanced)
+  } else {
+    Some(recorded)
+  }
 }
 
 ///|
@@ -537,6 +568,12 @@ async fn sanitize(config : HostConfig, request : HelperRequest) -> Unit {
 
 ///|
 async fn quarantine(config : HostConfig, request : HelperRequest) -> Unit {
+  let mut lockdown_error : Error? = None
+  try revoke(config, request) catch {
+    error => lockdown_error = Some(error)
+  } noraise {
+    _ => ()
+  }
   ensure_directory(config.quarantine_root, 0o700)
   let marker = @leasehelper.scoped_host_path(
     config.quarantine_root,
@@ -550,6 +587,9 @@ async fn quarantine(config : HostConfig, request : HelperRequest) -> Unit {
     permission=0o600,
     sync=Full,
   )
+  if lockdown_error is Some(error) {
+    raise error
+  }
 }
 
 ///|
@@ -576,7 +616,11 @@ fn action_contract(request : HelperRequest) -> @nodelease.LeaseAgentAction {
         generation=request.generation,
       )
     "quarantine" =>
-      QuarantineNode(lease_id=request.lease_id, generation=request.generation)
+      QuarantineNode(
+        lease_id=request.lease_id,
+        username=request.username,
+        generation=request.generation,
+      )
     _ => NoAction
   }
 }
@@ -590,6 +634,30 @@ async fn main {
   let config = host_config()
   require_root(config)
   let request = parse_request(@env.args())
+  let receipt_secret_path = @env.get_env_var(
+    "LUNANEXA_LEASE_HELPER_RECEIPT_SECRET_PATH",
+  ).unwrap_or("/etc/lunanexa-root/lease-helper-receipt-key")
+  if !receipt_secret_path.has_prefix("/") || !@fs.exists(receipt_secret_path) {
+    raise Failure::Failure("lease helper receipt authority is unavailable")
+  }
+  let receipt_secret = @fs.read_file(receipt_secret_path)
+    .text()
+    .trim()
+    .to_owned()
+  if receipt_secret.length() < 32 {
+    raise Failure::Failure("lease helper receipt authority is too short")
+  }
+  let action = action_contract(request)
+  if !@nodelease.valid_helper_authorization(
+      action,
+      request.authorization,
+      receipt_secret,
+      @async.now(),
+    ) {
+    raise Failure::Failure(
+      "lease helper action authority is invalid or expired",
+    )
+  }
   match request.action {
     "provision" => provision(config, request)
     "revoke" => revoke(config, request)
@@ -597,5 +665,7 @@ async fn main {
     "quarantine" => quarantine(config, request)
     _ => raise Failure::Failure("unsupported lease helper action")
   }
-  println(@nodelease.helper_receipt(action_contract(request), @async.now()))
+  println(
+    @nodelease.signed_helper_receipt(action, @async.now(), receipt_secret),
+  )
 }

@@ -1,5 +1,6 @@
 ///|
 fn safe_public_text(value : String, maximum_length : Int) -> Bool {
+  let normalized = value.to_lower()
   value.length() > 0 &&
   value.length() <= maximum_length &&
   value.all(character => {
@@ -8,7 +9,11 @@ fn safe_public_text(value : String, maximum_length : Int) -> Bool {
     character != '>' &&
     character != '\n' &&
     character != '\r'
-  })
+  }) &&
+  ![
+    "bearer ", "authorization:", "password=", "private key", "ssh-rsa ", "callback_body",
+    "document_bytes", "raw_prompt", "model_output",
+  ].any(marker => normalized.contains(marker))
 }
 
 ///|
@@ -73,5 +78,27 @@ pub fn validate_rule(rule : AlertRule) -> Unit raise NotificationError {
     !valid_audience(rule.audience) ||
     rule.threshold < 0L {
     raise InvalidInput("invalid alert rule")
+  }
+}
+
+///|
+pub fn validate_delivery_envelope(
+  envelope : NotificationDeliveryEnvelope,
+) -> Unit raise NotificationError {
+  if envelope.version != contract_version ||
+    !@contracts.valid_identifier(envelope.delivery_id) ||
+    envelope.channel == InApp ||
+    !valid_audience(envelope.audience) ||
+    !@contracts.valid_identifier(envelope.code) ||
+    !@contracts.valid_identifier(envelope.title_key) ||
+    !@contracts.valid_identifier(envelope.body_key) ||
+    envelope.parameters.length() > 16 ||
+    envelope.created_unix_ms <= 0L {
+    raise InvalidInput("invalid outbound delivery envelope")
+  }
+  for key, value in envelope.parameters {
+    if !@contracts.valid_identifier(key) || !safe_public_text(value, 256) {
+      raise InvalidInput("invalid outbound delivery parameter")
+    }
   }
 }

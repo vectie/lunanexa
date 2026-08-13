@@ -1,0 +1,38 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/notifications/worker"
+
+import {
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/notifications",
+  "vectie/lunanexa/notifications/store",
+  "vectie/lunanexa/observability",
+}
+
+// Values
+
+// Errors
+pub(all) suberror DeliveryWorkerError {
+  InvalidConfiguration(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+type DeliveryAdapterConfig
+
+pub struct NotificationDeliveryWorker {
+  store : @store.NotificationStore
+  observability_store : @observability.ObservabilityStore?
+  adapter : DeliveryAdapterConfig
+  claim_lease_ms : Int64
+  batch_limit : Int
+  interval_ms : Int
+}
+pub fn NotificationDeliveryWorker::adapters_pending(@store.NotificationStore) -> Self
+pub fn NotificationDeliveryWorker::configured(@store.NotificationStore, String, String, request_timeout_ms? : Int, claim_lease_ms? : Int64, batch_limit? : Int, interval_ms? : Int) -> Self raise DeliveryWorkerError
+pub async fn NotificationDeliveryWorker::readiness(Self, now_unix_ms? : Int64) -> @notifications.NotificationDeliveryReadiness
+pub async fn NotificationDeliveryWorker::run_forever(Self) -> Unit
+pub async fn NotificationDeliveryWorker::run_once(Self, Int64) -> @notifications.NotificationDeliveryRunSummary
+pub fn NotificationDeliveryWorker::with_observability_store(Self, @observability.ObservabilityStore) -> Self
+
+// Type aliases
+
+// Traits

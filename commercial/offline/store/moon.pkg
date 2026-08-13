@@ -11,6 +11,7 @@ supported_targets = "native"
 
 import {
   "moonbitlang/async/fs",
+  "moonbitlang/core/env",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/offline",
 } for "test"

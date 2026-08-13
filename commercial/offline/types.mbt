@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.offline-commerce.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.offline-commerce.snapshot.v1"
+pub let snapshot_schema_version : String = "lunanexa.offline-commerce.snapshot.v5"
 
 ///|
 pub(all) suberror OfflineCommerceError {
@@ -27,11 +27,208 @@ pub(all) enum OfflineOrderState {
   PendingOfflineExecution
   PendingEvidenceUpload
   UnderReconciliation
+  FulfillmentPending
   Fulfilled
+  ReversalPending
+  ReversalManualIntervention
+  Revoked
   NeedsCorrection
   Rejected
   Cancelled
   Expired
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum OfflineCommerceReadinessStatus {
+  OfflineCommerceAdaptersPending
+  OfflineCommerceReady
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum OfflineCommerceCapability {
+  ApprovedLegalTemplates
+  ObjectStorage
+  MalwareScanner
+  OoxmlWorker
+  PdfRenderer
+  SpreadsheetFormulaEngine
+  CjkFonts
+  MachineCallbackIdentity
+  EntitlementAuthority
+  FinanceLegalPolicy
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct OfflineCommerceCapabilityEvidence {
+  capability : OfflineCommerceCapability
+  configured : Bool
+  verified : Bool
+  evidence_ref : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct OfflineCommerceReadiness {
+  status : OfflineCommerceReadinessStatus
+  capabilities : Array[OfflineCommerceCapabilityEvidence]
+  blocker_codes : Array[String]
+  evaluated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum EntitlementKind {
+  CapacityCommitment
+  WorkspaceLease
+  ExclusiveMachineLease
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum EntitlementActivationState {
+  EntitlementActivationRequested
+  EntitlementActivationConfirmed
+  EntitlementActivationRejected
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct EntitlementActivation {
+  activation_id : String
+  idempotency_key : String
+  order_id : String
+  organization_id : String
+  purchaser_subject_ref : String
+  kind : EntitlementKind
+  authority_target_ref : String
+  expected_order_generation : Int64
+  state : EntitlementActivationState
+  entitlement_ref : String?
+  authority_receipt : String?
+  reason_code : String?
+  requested_by : String
+  requested_unix_ms : Int64
+  completed_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum CommercialReversalReason {
+  CustomerCancellation
+  ContractExpired
+  PaymentRefunded
+  PaymentVoided
+  InvoiceVoided
+  PolicyRevoked
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum CommercialReversalState {
+  ReversalRequested
+  ReversalConfirmed
+  ReversalFailed
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct CommercialReversal {
+  reversal_id : String
+  idempotency_key : String
+  order_id : String
+  organization_id : String
+  entitlement_ref : String
+  reason : CommercialReversalReason
+  expected_order_generation : Int64
+  state : CommercialReversalState
+  authority_receipt : String?
+  reason_code : String?
+  requested_by : String
+  requested_unix_ms : Int64
+  completed_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Operator decision after an authenticated entitlement authority failure.
+pub(all) enum ReversalRecoveryDecision {
+  RetryReversal
+  ConfirmRevoked
+  ConfirmStillActive
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Durable, generation-fenced evidence for resolving manual intervention.
+pub(all) struct ReversalRecovery {
+  recovery_id : String
+  idempotency_key : String
+  order_id : String
+  organization_id : String
+  failed_reversal_id : String
+  expected_order_generation : Int64
+  decision : ReversalRecoveryDecision
+  replacement_reversal_id : String?
+  authority_receipt : String
+  reason_code : String
+  recovered_by : String
+  recovered_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Provider-neutral, browser-safe byte-transfer authority. The token is
+
+///| opaque and one-time; object-store routing and provider credentials remain
+
+///|
+/// behind the deployment adapter.
+pub(all) enum OfflineTransferDirection {
+  UploadTransfer
+  DownloadTransfer
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum OfflineTransferState {
+  TransferIssued
+  TransferConsumed
+  TransferExpired
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct OfflineTransferSession {
+  session_id : String
+  idempotency_key : String
+  session_token_sha256 : String
+  organization_id : String
+  subject_ref : String
+  order_id : String
+  artifact_id : String
+  direction : OfflineTransferDirection
+  media_types : Array[String]
+  maximum_byte_count : Int64
+  expected_sha256 : String?
+  state : OfflineTransferState
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+  consumed_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Only this projection may cross into a browser. It exposes a same-origin
+
+///|
+/// route and raw one-time token, never the object-store key.
+pub(all) struct OfflineTransferGrant {
+  session_id : String
+  transfer_path : String
+  session_token : String
+  direction : OfflineTransferDirection
+  media_types : Array[String]
+  maximum_byte_count : Int64
+  expected_sha256 : String?
+  expires_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Provider-neutral, byte-bound completion evidence. The raw one-time token
+
+///|
+/// is deliberately absent.
+pub(all) struct OfflineTransferEvidence {
+  session_id : String
+  media_type : String
+  byte_count : Int64
+  sha256 : String
+  provider_receipt : String
+  completed_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -171,6 +368,61 @@ pub(all) struct ArtifactGenerationRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) enum OfflineWorkerKind {
+  ArtifactDispatcher
+  EntitlementDispatcher
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| A durable, retry-bounded claim. Re-polling before `retry_after_unix_ms`
+
+///|
+/// never creates a second attempt, and a terminal callback completes it.
+pub(all) struct OfflineWorkClaim {
+  work_id : String
+  worker_kind : OfflineWorkerKind
+  expected_order_generation : Int64
+  attempt : Int
+  claimed_unix_ms : Int64
+  retry_after_unix_ms : Int64
+  completed_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Durable worker evidence used by production readiness. Configuration flags
+
+///|
+/// cannot synthesize any of these timestamps.
+pub(all) struct OfflineWorkerHealth {
+  artifact_dispatcher_heartbeat_unix_ms : Int64?
+  artifact_dispatcher_success_unix_ms : Int64?
+  entitlement_dispatcher_heartbeat_unix_ms : Int64?
+  entitlement_dispatcher_success_unix_ms : Int64?
+  reconciler_attempt_unix_ms : Int64?
+  reconciler_success_unix_ms : Int64?
+  reconciler_failure_code : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub fn empty_offline_worker_health() -> OfflineWorkerHealth {
+  {
+    artifact_dispatcher_heartbeat_unix_ms: None,
+    artifact_dispatcher_success_unix_ms: None,
+    entitlement_dispatcher_heartbeat_unix_ms: None,
+    entitlement_dispatcher_success_unix_ms: None,
+    reconciler_attempt_unix_ms: None,
+    reconciler_success_unix_ms: None,
+    reconciler_failure_code: None,
+  }
+}
+
+///|
+pub(all) struct OfflineAuthorityWorkBatch {
+  activations : Array[EntitlementActivation]
+  reversals : Array[CommercialReversal]
+  claims : Array[OfflineWorkClaim]
+  heartbeat_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct ArtifactGenerationResult {
   request_id : String
   artifact_id : String
@@ -300,4 +552,11 @@ pub(all) struct OfflineCommerceSnapshot {
   upload_grants : Array[EvidenceUploadGrant]
   upload_callbacks : Array[EvidenceUploadCallback]
   reviews : Array[EvidenceReview]
+  entitlement_activations : Array[EntitlementActivation]
+  reversals : Array[CommercialReversal]
+  reversal_recoveries : Array[ReversalRecovery]
+  transfer_sessions : Array[OfflineTransferSession]
+  transfer_evidence : Array[OfflineTransferEvidence]
+  work_claims : Array[OfflineWorkClaim]
+  worker_health : OfflineWorkerHealth
 } derive(Debug, Eq, ToJson, FromJson)

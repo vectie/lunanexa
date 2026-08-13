@@ -6,6 +6,7 @@ async fn customer_machine_test_service(
   ApiService,
   @nodelease_store.FileExclusiveLeaseStore,
   @portal_store.FilePortalStore,
+  @credential_store.CredentialHandoffStore,
 ) {
   let durable = @store.FileStore::open("\{directory}/state.json")
   durable.put_heartbeat(customer_machine_test_heartbeat(now))
@@ -84,7 +85,33 @@ async fn customer_machine_test_service(
     )
     .with_portal_store(portal)
     .with_exclusive_lease_store(leases)
-  (service, leases, portal)
+  let unsigned_issuer : @credential.CredentialIssuerReadinessEvidence = {
+    version: @credential.issuer_readiness_contract_version,
+    adapter_id: "test-ssh-ca",
+    health_endpoint: "https://issuer.example/healthz",
+    evidence_ref: "retained-test-issuer-health",
+    checked_unix_ms: now,
+    expires_unix_ms: now + 600000L,
+    healthy: true,
+    signature: "",
+  }
+  let issuer_secret = "customer-machine-issuer-evidence-more-than-32-bytes"
+  let issuer_evidence = {
+    ..unsigned_issuer,
+    signature: @credential_store.issuer_readiness_signature(
+      unsigned_issuer, issuer_secret,
+    ),
+  }
+  let credentials = @credential_store.CredentialHandoffStore::open(
+    "\{directory}/credential-handoffs.json",
+    "customer-machine-credential-secret-more-than-32-bytes",
+  ).with_issuer_readiness(issuer_evidence)
+  (
+    service.with_credential_handoff_store(credentials),
+    leases,
+    portal,
+    credentials,
+  )
 }
 
 ///|
@@ -121,7 +148,9 @@ fn customer_headers(subject_ref : String) -> Map[String, String] {
 async test "customer machine listing is live tenant safe and secret free" {
   let directory = @fs.tmpdir(prefix="lunanexa-customer-machine-")
   let now = @async.now()
-  let (service, _, _) = customer_machine_test_service(directory, now)
+  let (service, leases, _, credentials) = customer_machine_test_service(
+    directory, now,
+  )
   let own = service.handle(
     Get,
     "/v1/machine-access/self",
@@ -135,10 +164,36 @@ async test "customer machine listing is live tenant safe and secret free" {
   assert_eq(views.length(), 1)
   assert_eq(views[0].state, Active)
   assert_eq(views[0].reachability, Online)
-  assert_eq(views[0].credential_handoff.state, Available)
+  assert_eq(views[0].credential_handoff.state, Pending)
   assert_false(own.body.contains("customer-node-a"))
   assert_false(own.body.contains("internal-customer-a"))
   assert_false(own.body.contains("access_credential_ref"))
+  let lease = leases.lease("lease-customer-a").unwrap()
+  ignore(
+    credentials.issue(
+      {
+        request_id: "customer-machine-handoff-a",
+        lease_id: lease.intent.lease_id,
+        expected_generation: lease.generation,
+        host_alias: "machine.cluster.example",
+        ssh_port: 22,
+        host_key_fingerprint: "SHA256:abcdefghijklmnopqrstuvwxyzABCDEFG1234567890_-",
+        issuer_redirect_url: "https://issuer.example/redeem/customer-machine-a",
+      },
+      lease,
+      @async.now(),
+    ),
+  )
+  let with_handoff = service.handle(
+    Get,
+    "/v1/machine-access/self",
+    customer_headers("subject-a"),
+    "",
+  )
+  let issued_views : Array[@nodelease.CustomerExclusiveMachineView] = @json.from_json(
+    @json.parse(with_handoff.body),
+  )
+  assert_eq(issued_views[0].credential_handoff.state, Available)
   let other = service.handle(
     Get,
     "/v1/machine-access/self",
@@ -159,7 +214,7 @@ async test "customer machine listing is live tenant safe and secret free" {
 async test "customer termination requires subject confirmation and generation" {
   let directory = @fs.tmpdir(prefix="lunanexa-customer-terminate-")
   let now = @async.now()
-  let (service, leases, _) = customer_machine_test_service(directory, now)
+  let (service, leases, _, _) = customer_machine_test_service(directory, now)
   let current = leases.lease("lease-customer-a").unwrap()
   let request : @nodelease.CustomerExclusiveLeaseTerminationRequest = {
     expected_generation: current.generation,
@@ -217,7 +272,7 @@ async test "customer termination requires subject confirmation and generation" {
 async test "customer termination creates durable operator signal when enabled" {
   let directory = @fs.tmpdir(prefix="lunanexa-customer-signal-")
   let now = @async.now()
-  let (base, leases, _) = customer_machine_test_service(directory, now)
+  let (base, leases, _, _) = customer_machine_test_service(directory, now)
   let notifications = @notification_store.NotificationStore::open(
     "\{directory}/notifications.json",
   )
@@ -251,7 +306,9 @@ async test "customer termination creates durable operator signal when enabled" {
 async test "customer machine expiry reconciles durably across restart" {
   let directory = @fs.tmpdir(prefix="lunanexa-customer-expiry-")
   let now = @async.now()
-  let (service, leases, portal) = customer_machine_test_service(directory, now)
+  let (service, leases, portal, _) = customer_machine_test_service(
+    directory, now,
+  )
   let active = leases.lease("lease-customer-a").unwrap()
   let expiring_intent = {
     ..active.intent,

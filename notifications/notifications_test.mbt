@@ -117,3 +117,20 @@ test "preferences always retain the in-app channel" {
     _ => fail("expected invalid preference")
   }
 }
+
+///|
+test "notification receipts and parameters reject secret-shaped material" {
+  for
+    value in [
+      "Bearer production-token", "authorization: private", "private key data", "raw_prompt customer text",
+      "model_output private text",
+    ] {
+    let event = { ..subject_event(), source_receipt: value }
+    try @notifications.validate_event(event) catch {
+      InvalidInput(_) => ()
+      error => fail("unexpected error: \{Repr(error)}")
+    } noraise {
+      _ => fail("secret-shaped notification receipt was accepted")
+    }
+  }
+}

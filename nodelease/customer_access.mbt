@@ -15,6 +15,7 @@ pub(all) enum CustomerMachineReachability {
 pub(all) enum CustomerCredentialHandoffState {
   Pending
   Available
+  Recoverable
   Closed
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -130,11 +131,9 @@ pub fn customer_machine_view(
     last_seen_unix_ms: heartbeat_unix_ms,
     credential_handoff: {
       state: handoff_state,
-      handoff_ref: if handoff_state == Available {
-        Some("lease-handoff:\{lease.intent.lease_id}:\{lease.generation}")
-      } else {
-        None
-      },
+      // The broker reference is intentionally available only from the
+      // subject-authorized credential endpoint, never this list projection.
+      handoff_ref: None,
       credential_kind: "short-lived-ssh-certificate",
       valid_until_unix_ms: lease.intent.expires_unix_ms,
       raw_secret_included: false,

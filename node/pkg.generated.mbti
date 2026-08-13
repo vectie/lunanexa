@@ -104,6 +104,7 @@ pub struct EnrollmentService {
   certificates : Map[String, NodeCertificate]
   authorities : Map[String, NodeAuthority]
 }
+pub fn EnrollmentService::active_node_ids(Self, Int64) -> Array[String]
 pub fn EnrollmentService::authorized(Self, String, String, Int64) -> Bool
 pub fn EnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate raise NodeError
 pub fn EnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
@@ -124,6 +125,7 @@ pub struct FileEnrollmentService {
   service : EnrollmentService
   mutex : @async.Mutex
 }
+pub async fn FileEnrollmentService::active_node_ids(Self, Int64) -> Array[String]
 pub async fn FileEnrollmentService::authorized(Self, String, String, Int64) -> Bool
 pub async fn FileEnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken

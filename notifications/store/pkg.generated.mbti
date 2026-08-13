@@ -19,6 +19,8 @@ pub struct NotificationStore {
   mut records : Map[String, @notifications.NotificationRecord]
   mut deliveries : Map[String, @notifications.NotificationDelivery]
   mut preferences : Map[String, @notifications.NotificationPreference]
+  mut worker_health : @notifications.NotificationWorkerHealth
+  redrive_audit : Array[@notifications.NotificationDeliveryRedriveReceipt]
   history_limit : Int
   maximum_delivery_attempts : Int
   mutex : @async.Mutex
@@ -26,17 +28,26 @@ pub struct NotificationStore {
 pub async fn NotificationStore::acknowledge_operator(Self, @notifications.NotificationAction) -> @notifications.NotificationRecord
 pub async fn NotificationStore::assign_operator(Self, @notifications.NotificationAssignmentAction) -> @notifications.NotificationRecord
 pub async fn NotificationStore::claim_due_deliveries(Self, Int64, Int64, Int) -> Array[@notifications.NotificationDelivery]
+pub async fn NotificationStore::delivery_metrics(Self) -> (Int, Int, @notifications.NotificationWorkerHealth)
+pub async fn NotificationStore::delivery_readiness(Self, Bool, now_unix_ms? : Int64, worker_freshness_ms? : Int64) -> @notifications.NotificationDeliveryReadiness
 pub async fn NotificationStore::enqueue(Self, @notifications.NotificationEvent) -> @notifications.NotificationRecord
+pub async fn NotificationStore::expire_silences(Self, Int64) -> Int
 pub async fn NotificationStore::mark_read_for_subject(Self, String, String, @notifications.NotificationAction) -> @notifications.NotificationRecord
 pub async fn NotificationStore::open(String, history_limit? : Int, maximum_delivery_attempts? : Int) -> Self
 pub async fn NotificationStore::open_postgres(@database.PostgresDatabase, history_limit? : Int, maximum_delivery_attempts? : Int) -> Self
+pub async fn NotificationStore::preferences_for_subject(Self, String, String) -> Array[@notifications.NotificationPreference]
+pub async fn NotificationStore::record(Self, String) -> @notifications.NotificationRecord?
 pub async fn NotificationStore::record_by_deduplication_key(Self, String, @notifications.NotificationAudience) -> @notifications.NotificationRecord?
 pub async fn NotificationStore::record_delivery_result(Self, @notifications.DeliveryResult) -> @notifications.NotificationDelivery
+pub async fn NotificationStore::record_worker_failure(Self, Int64, String) -> @notifications.NotificationWorkerHealth
+pub async fn NotificationStore::record_worker_pass(Self, Int64, Int, Int, Int, Int) -> @notifications.NotificationWorkerHealth
 pub async fn NotificationStore::records_for_operators(Self, Int64) -> Array[@notifications.NotificationRecord]
 pub async fn NotificationStore::records_for_subject(Self, String, String, Int64) -> Array[@notifications.NotificationRecord]
+pub async fn NotificationStore::redrive_dead_letter(Self, @notifications.NotificationDeliveryRedriveAction) -> @notifications.NotificationDeliveryRedriveReceipt
 pub async fn NotificationStore::resolve_operator(Self, @notifications.NotificationAction) -> @notifications.NotificationRecord
 pub async fn NotificationStore::set_preference(Self, @notifications.NotificationPreference) -> @notifications.NotificationPreference
 pub async fn NotificationStore::silence_operator(Self, @notifications.NotificationSilenceAction) -> @notifications.NotificationRecord
+pub async fn NotificationStore::skip_delivery_if_ineligible(Self, String, Int, Int64) -> @notifications.NotificationDelivery?
 pub async fn NotificationStore::snapshot(Self) -> @notifications.NotificationSnapshot
 
 // Type aliases

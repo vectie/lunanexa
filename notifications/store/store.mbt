@@ -10,9 +10,35 @@ pub struct NotificationStore {
   mut records : Map[String, @notifications.NotificationRecord]
   mut deliveries : Map[String, @notifications.NotificationDelivery]
   mut preferences : Map[String, @notifications.NotificationPreference]
+  mut worker_health : @notifications.NotificationWorkerHealth
+  redrive_audit : Array[@notifications.NotificationDeliveryRedriveReceipt]
   history_limit : Int
   maximum_delivery_attempts : Int
   mutex : @async.Mutex
+}
+
+///| Backward-compatible reader for snapshots written before worker health and
+
+///|
+/// redrive receipts became durable readiness evidence.
+priv struct LegacyNotificationSnapshot {
+  schema_version : String
+  records : Array[@notifications.NotificationRecord]
+  deliveries : Array[@notifications.NotificationDelivery]
+  preferences : Array[@notifications.NotificationPreference]
+} derive(FromJson)
+
+///|
+fn empty_worker_health() -> @notifications.NotificationWorkerHealth {
+  {
+    generation: 0L,
+    last_heartbeat_unix_ms: None,
+    last_attempt_unix_ms: None,
+    last_success_unix_ms: None,
+    last_failure_unix_ms: None,
+    consecutive_failures: 0,
+    last_error_code: None,
+  }
 }
 
 ///|
@@ -57,6 +83,28 @@ fn NotificationStore::snapshot_unlocked(
     records: sorted_records(self.records),
     deliveries: sorted_deliveries(self.deliveries),
     preferences: sorted_preferences(self.preferences),
+    worker_health: self.worker_health,
+    redrive_audit: self.redrive_audit.copy(),
+  }
+}
+
+///|
+fn decode_snapshot(
+  payload : String,
+) -> @notifications.NotificationSnapshot raise {
+  let value = @json.parse(payload)
+  @json.from_json(value) catch {
+    _ => {
+      let legacy : LegacyNotificationSnapshot = @json.from_json(value)
+      {
+        schema_version: legacy.schema_version,
+        records: legacy.records,
+        deliveries: legacy.deliveries,
+        preferences: legacy.preferences,
+        worker_health: empty_worker_health(),
+        redrive_audit: [],
+      }
+    }
   }
 }
 
@@ -84,6 +132,11 @@ fn NotificationStore::restore(
   if snapshot.schema_version != @notifications.snapshot_schema_version {
     raise InvalidInput("unsupported notification snapshot")
   }
+  if snapshot.records.length() > self.history_limit {
+    raise InvalidInput(
+      "notification snapshot exceeds the configured history bound",
+    )
+  }
   for record in snapshot.records {
     @notifications.validate_event(record.event)
     if record.generation <= 0L ||
@@ -110,6 +163,28 @@ fn NotificationStore::restore(
     }
     self.preferences[preference.preference_id] = preference
   }
+  let health = snapshot.worker_health
+  if health.generation < 0L ||
+    health.consecutive_failures < 0 ||
+    health.last_error_code.map_or(false, code => {
+      !@contracts.valid_identifier(code)
+    }) {
+    raise InvalidInput("invalid notification worker health")
+  }
+  self.worker_health = health
+  if snapshot.redrive_audit.length() > 1000 {
+    raise InvalidInput("notification redrive audit is unbounded")
+  }
+  for receipt in snapshot.redrive_audit {
+    if !@contracts.valid_identifier(receipt.receipt_id) ||
+      !@contracts.valid_identifier(receipt.delivery_id) ||
+      !@contracts.valid_identifier(receipt.actor_ref) ||
+      receipt.previous_attempt_count <= 0 ||
+      receipt.accepted_unix_ms <= 0L {
+      raise InvalidInput("invalid notification redrive audit")
+    }
+    self.redrive_audit.push(receipt)
+  }
 }
 
 ///|
@@ -129,6 +204,8 @@ fn NotificationStore::empty(
     records: Map([]),
     deliveries: Map([]),
     preferences: Map([]),
+    worker_health: empty_worker_health(),
+    redrive_audit: [],
     history_limit,
     maximum_delivery_attempts,
     mutex: Mutex(),
@@ -152,9 +229,7 @@ pub async fn NotificationStore::open(
     maximum_delivery_attempts,
   )
   if @fs.exists(path) {
-    let snapshot : @notifications.NotificationSnapshot = @json.from_json(
-      @json.parse(@fs.read_file(path).text()),
-    ) catch {
+    let snapshot = decode_snapshot(@fs.read_file(path).text()) catch {
       error =>
         raise @notifications.NotificationError::InvalidInput(
           "invalid notification snapshot: \{Repr(error)}",
@@ -183,9 +258,7 @@ pub async fn NotificationStore::open_postgres(
       "notifications", @notifications.snapshot_schema_version,
     ) {
     Some(payload) => {
-      let snapshot : @notifications.NotificationSnapshot = @json.from_json(
-        @json.parse(payload),
-      ) catch {
+      let snapshot = decode_snapshot(payload) catch {
         error =>
           raise @notifications.NotificationError::InvalidInput(
             "invalid notification snapshot: \{Repr(error)}",
@@ -245,6 +318,7 @@ fn NotificationStore::channels_for_event_unlocked(
       }
       [InApp]
     }
+    PlatformOperators if event.severity == Critical => [InApp, Webhook]
     PlatformOperators | TenantUsers(_) => [InApp]
   }
 }
@@ -280,6 +354,36 @@ fn NotificationStore::prune_unlocked(self : NotificationStore) -> Unit {
       self.deliveries.remove(id)
     }
   }
+}
+
+///| Makes one slot without discarding an active record. If the durable active
+
+///| set itself reaches the configured bound, admission fails closed rather than
+
+///|
+/// silently losing an alert.
+fn NotificationStore::make_capacity_unlocked(
+  self : NotificationStore,
+) -> Unit raise @notifications.NotificationError {
+  if self.records.length() < self.history_limit {
+    return
+  }
+  for record in sorted_records(self.records) {
+    if record.lifecycle == Resolved {
+      self.records.remove(record.event.notification_id)
+      let delivery_ids = [
+        for id, delivery in self.deliveries if delivery.notification_id ==
+        record.event.notification_id => id
+      ]
+      for id in delivery_ids {
+        self.deliveries.remove(id)
+      }
+      if self.records.length() < self.history_limit {
+        return
+      }
+    }
+  }
+  raise InvalidInput("notification active history capacity is exhausted")
 }
 
 ///|
@@ -326,6 +430,7 @@ pub async fn NotificationStore::enqueue(
         )
       }
     }
+    self.make_capacity_unlocked()
     let record : @notifications.NotificationRecord = {
       event,
       lifecycle: Unread,
@@ -448,6 +553,26 @@ pub async fn NotificationStore::records_for_subject(
 }
 
 ///|
+pub async fn NotificationStore::preferences_for_subject(
+  self : NotificationStore,
+  tenant_ref : String,
+  subject_ref : String,
+) -> Array[@notifications.NotificationPreference] {
+  if !@contracts.valid_identifier(tenant_ref) ||
+    !@contracts.valid_identifier(subject_ref) {
+    raise @notifications.NotificationError::InvalidInput(
+      "invalid notification subject",
+    )
+  }
+  self.mutex.acquire()
+  let preferences = sorted_preferences(self.preferences).filter(preference => {
+    preference.tenant_ref == tenant_ref && preference.subject_ref == subject_ref
+  })
+  self.mutex.release()
+  preferences
+}
+
+///|
 pub async fn NotificationStore::records_for_operators(
   self : NotificationStore,
   now_unix_ms : Int64,
@@ -467,6 +592,245 @@ pub async fn NotificationStore::records_for_operators(
 }
 
 ///|
+pub async fn NotificationStore::record(
+  self : NotificationStore,
+  notification_id : String,
+) -> @notifications.NotificationRecord? {
+  if !@contracts.valid_identifier(notification_id) {
+    raise @notifications.NotificationError::InvalidInput(
+      "invalid notification identity",
+    )
+  }
+  self.mutex.acquire()
+  let result = self.records.get(notification_id)
+  self.mutex.release()
+  result
+}
+
+///| Clears elapsed silence windows as a durable generation-fenced state
+
+///| transition. This makes silence expiry independent of whether an operator
+
+///|
+/// currently has the alert page open.
+pub async fn NotificationStore::expire_silences(
+  self : NotificationStore,
+  now_unix_ms : Int64,
+) -> Int {
+  if now_unix_ms <= 0L {
+    raise @notifications.NotificationError::InvalidInput(
+      "invalid notification time",
+    )
+  }
+  self.mutex.acquire()
+  let previous = self.records.copy()
+  try {
+    let mut expired = 0
+    for notification_id, record in self.records {
+      if record.lifecycle != Resolved &&
+        record.silenced_until_unix_ms.map_or(false, expiry => {
+          expiry <= now_unix_ms
+        }) {
+        self.records[notification_id] = {
+          ..record,
+          generation: record.generation + 1L,
+          silenced_until_unix_ms: None,
+          updated_unix_ms: now_unix_ms,
+        }
+        expired += 1
+      }
+    }
+    if expired > 0 {
+      self.persist()
+    }
+    self.mutex.release()
+    expired
+  } catch {
+    error => {
+      self.records = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+pub async fn NotificationStore::delivery_readiness(
+  self : NotificationStore,
+  adapter_configured : Bool,
+  now_unix_ms? : Int64 = 0L,
+  worker_freshness_ms? : Int64 = 300000L,
+) -> @notifications.NotificationDeliveryReadiness {
+  let now = if now_unix_ms > 0L { now_unix_ms } else { @async.now() }
+  self.mutex.acquire()
+  let pending = self.deliveries
+    .values()
+    .count_if(delivery => {
+      delivery.channel != InApp &&
+      (delivery.state == PendingDelivery || delivery.state == RetryScheduled)
+    })
+  let delivering = self.deliveries
+    .values()
+    .count_if(delivery => {
+      delivery.channel != InApp && delivery.state == Delivering
+    })
+  let dead_letters = self.deliveries
+    .values()
+    .count_if(delivery => {
+      delivery.channel != InApp && delivery.state == DeadLetter
+    })
+  let capacity_exhausted = self.records.length() >= self.history_limit &&
+    !self.records.values().any(record => record.lifecycle == Resolved)
+  let health = self.worker_health
+  self.mutex.release()
+  let heartbeat_fresh = health.last_heartbeat_unix_ms.map_or(false, value => {
+    value <= now && now - value <= worker_freshness_ms
+  })
+  let attempt_fresh = health.last_attempt_unix_ms.map_or(false, value => {
+    value <= now && now - value <= worker_freshness_ms
+  })
+  let success_fresh = health.last_success_unix_ms.map_or(false, value => {
+    value <= now && now - value <= worker_freshness_ms
+  })
+  {
+    version: @notifications.contract_version,
+    state: if dead_letters > 0 ||
+      capacity_exhausted ||
+      health.consecutive_failures > 0 ||
+      (health.last_heartbeat_unix_ms is Some(_) && !heartbeat_fresh) {
+      DeliveryDegraded
+    } else if !adapter_configured {
+      AdaptersPending
+    } else if !heartbeat_fresh || !attempt_fresh || !success_fresh {
+      AdaptersPending
+    } else {
+      DeliveryReady
+    },
+    adapter_configured,
+    pending_count: pending,
+    delivering_count: delivering,
+    dead_letter_count: dead_letters,
+    capacity_exhausted,
+    worker_health: health,
+    supported_channels: if adapter_configured {
+      [InApp, Email, Sms, Webhook]
+    } else {
+      [InApp]
+    },
+  }
+}
+
+///| Persists one completed worker pass. A success timestamp is proof of a real
+
+///|
+/// adapter exchange, not merely an idle loop or configured endpoint.
+pub async fn NotificationStore::record_worker_pass(
+  self : NotificationStore,
+  now_unix_ms : Int64,
+  attempted : Int,
+  delivered : Int,
+  retry_scheduled : Int,
+  dead_lettered : Int,
+) -> @notifications.NotificationWorkerHealth {
+  if now_unix_ms <= 0L ||
+    attempted < 0 ||
+    delivered < 0 ||
+    retry_scheduled < 0 ||
+    dead_lettered < 0 ||
+    delivered + retry_scheduled + dead_lettered > attempted {
+    raise @notifications.NotificationError::InvalidInput(
+      "invalid notification worker pass",
+    )
+  }
+  self.mutex.acquire()
+  let previous = self.worker_health
+  try {
+    let failed = retry_scheduled > 0 || dead_lettered > 0
+    self.worker_health = {
+      generation: previous.generation + 1L,
+      last_heartbeat_unix_ms: Some(now_unix_ms),
+      last_attempt_unix_ms: if attempted > 0 {
+        Some(now_unix_ms)
+      } else {
+        previous.last_attempt_unix_ms
+      },
+      last_success_unix_ms: if attempted > 0 && delivered == attempted {
+        Some(now_unix_ms)
+      } else {
+        previous.last_success_unix_ms
+      },
+      last_failure_unix_ms: if failed {
+        Some(now_unix_ms)
+      } else {
+        previous.last_failure_unix_ms
+      },
+      consecutive_failures: if failed {
+        previous.consecutive_failures + 1
+      } else if attempted > 0 && delivered == attempted {
+        0
+      } else {
+        previous.consecutive_failures
+      },
+      last_error_code: if dead_lettered > 0 {
+        Some("DeliveryDeadLettered")
+      } else if retry_scheduled > 0 {
+        Some("DeliveryRetryScheduled")
+      } else if attempted > 0 && delivered == attempted {
+        None
+      } else {
+        previous.last_error_code
+      },
+    }
+    self.persist()
+    self.mutex.release()
+    self.worker_health
+  } catch {
+    error => {
+      self.worker_health = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///| Records an unexpected worker-loop failure before the controller task fails
+
+///|
+/// closed and is restarted by its supervisor.
+pub async fn NotificationStore::record_worker_failure(
+  self : NotificationStore,
+  now_unix_ms : Int64,
+  error_code : String,
+) -> @notifications.NotificationWorkerHealth {
+  if now_unix_ms <= 0L || !@contracts.valid_identifier(error_code) {
+    raise @notifications.NotificationError::InvalidInput(
+      "invalid notification worker failure",
+    )
+  }
+  self.mutex.acquire()
+  let previous = self.worker_health
+  try {
+    self.worker_health = {
+      ..previous,
+      generation: previous.generation + 1L,
+      last_heartbeat_unix_ms: Some(now_unix_ms),
+      last_failure_unix_ms: Some(now_unix_ms),
+      consecutive_failures: previous.consecutive_failures + 1,
+      last_error_code: Some(error_code),
+    }
+    self.persist()
+    self.mutex.release()
+    self.worker_health
+  } catch {
+    error => {
+      self.worker_health = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn NotificationStore::record_by_deduplication_key(
   self : NotificationStore,
   deduplication_key : String,
@@ -478,10 +842,15 @@ pub async fn NotificationStore::record_by_deduplication_key(
     )
   }
   self.mutex.acquire()
+  let matching = sorted_records(self.records).filter(record => {
+    record.event.deduplication_key == deduplication_key &&
+    record.event.audience == audience
+  })
   let mut found : @notifications.NotificationRecord? = None
-  for _, record in self.records {
-    if record.event.deduplication_key == deduplication_key &&
-      record.event.audience == audience {
+  for record in matching {
+    if record.lifecycle != Resolved {
+      found = Some(record)
+    } else if found is None {
       found = Some(record)
     }
   }
@@ -523,11 +892,13 @@ pub async fn NotificationStore::mark_read_for_subject(
   action : @notifications.NotificationAction,
 ) -> @notifications.NotificationRecord {
   self.replace_record(action.notification_id, record => {
-    guard record.event.audience
-      is Subject(tenant_ref=tenant, subject_ref=subject) &&
-      tenant == tenant_ref &&
-      subject == subject_ref &&
-      action.actor_ref == subject_ref else {
+    let visible = match record.event.audience {
+      Subject(tenant_ref=tenant, subject_ref=subject) =>
+        tenant == tenant_ref && subject == subject_ref
+      TenantUsers(tenant_ref=tenant) => tenant == tenant_ref
+      PlatformOperators => false
+    }
+    guard visible && action.actor_ref == subject_ref else {
       raise @notifications.NotificationError::Unauthorized
     }
     record.mark_read(action)
@@ -588,6 +959,142 @@ pub async fn NotificationStore::assign_operator(
 }
 
 ///|
+fn delivery_ineligible_reason(
+  record : @notifications.NotificationRecord,
+  now_unix_ms : Int64,
+) -> String? {
+  if record.lifecycle == Resolved {
+    Some("NotificationResolved")
+  } else if record.event.expires_unix_ms.map_or(false, expiry => {
+      expiry <= now_unix_ms
+    }) {
+    Some("NotificationExpired")
+  } else if record.silenced_until_unix_ms.map_or(false, until => {
+      until > now_unix_ms
+    }) {
+    Some("NotificationSilenced")
+  } else {
+    None
+  }
+}
+
+///| Rechecks lifecycle immediately before transport. This closes the race in
+
+///|
+/// which an operator resolves or silences an alert after the worker claims it.
+pub async fn NotificationStore::skip_delivery_if_ineligible(
+  self : NotificationStore,
+  delivery_id : String,
+  expected_attempt_count : Int,
+  now_unix_ms : Int64,
+) -> @notifications.NotificationDelivery? {
+  self.mutex.acquire()
+  let previous = self.deliveries.copy()
+  try {
+    guard self.deliveries.get(delivery_id) is Some(delivery) &&
+      delivery.state == Delivering &&
+      delivery.attempt_count == expected_attempt_count &&
+      self.records.get(delivery.notification_id) is Some(record) else {
+      self.mutex.release()
+      return None
+    }
+    guard delivery_ineligible_reason(record, now_unix_ms) is Some(reason) else {
+      self.mutex.release()
+      return None
+    }
+    let skipped = {
+      ..delivery,
+      state: DeliverySkipped,
+      next_attempt_unix_ms: None,
+      provider_receipt: None,
+      last_error_code: Some(reason),
+      updated_unix_ms: now_unix_ms,
+    }
+    self.deliveries[delivery_id] = skipped
+    self.persist()
+    self.mutex.release()
+    Some(skipped)
+  } catch {
+    error => {
+      self.deliveries = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///| Requeues exactly the dead-letter generation the operator inspected and
+
+///| records a bounded durable receipt. The delivery ID remains stable so the
+
+///|
+/// downstream adapter's idempotency key still protects ambiguous outcomes.
+pub async fn NotificationStore::redrive_dead_letter(
+  self : NotificationStore,
+  action : @notifications.NotificationDeliveryRedriveAction,
+) -> @notifications.NotificationDeliveryRedriveReceipt {
+  if !@contracts.valid_identifier(action.delivery_id) ||
+    !@contracts.valid_identifier(action.actor_ref) ||
+    action.expected_attempt_count <= 0 ||
+    action.expected_updated_unix_ms <= 0L ||
+    action.now_unix_ms < action.expected_updated_unix_ms {
+    raise @notifications.NotificationError::InvalidInput(
+      "invalid notification redrive",
+    )
+  }
+  self.mutex.acquire()
+  let previous_deliveries = self.deliveries.copy()
+  let previous_audit = self.redrive_audit.copy()
+  try {
+    guard self.deliveries.get(action.delivery_id) is Some(delivery) else {
+      raise @notifications.NotificationError::NotFound(action.delivery_id)
+    }
+    if delivery.state != DeadLetter {
+      raise @notifications.NotificationError::InvalidTransition(
+        "only dead-letter deliveries may be redriven",
+      )
+    }
+    if delivery.attempt_count != action.expected_attempt_count ||
+      delivery.updated_unix_ms != action.expected_updated_unix_ms {
+      raise @notifications.NotificationError::StaleGeneration
+    }
+    let receipt : @notifications.NotificationDeliveryRedriveReceipt = {
+      receipt_id: "redrive-\{action.now_unix_ms}-\{self.redrive_audit.length() + 1}",
+      delivery_id: action.delivery_id,
+      actor_ref: action.actor_ref,
+      previous_attempt_count: delivery.attempt_count,
+      accepted_unix_ms: action.now_unix_ms,
+    }
+    self.deliveries[action.delivery_id] = {
+      ..delivery,
+      state: PendingDelivery,
+      attempt_count: 0,
+      next_attempt_unix_ms: Some(action.now_unix_ms),
+      provider_receipt: None,
+      last_error_code: None,
+      updated_unix_ms: action.now_unix_ms,
+    }
+    self.redrive_audit.push(receipt)
+    while self.redrive_audit.length() > 1000 {
+      ignore(self.redrive_audit.remove(0))
+    }
+    self.persist()
+    self.mutex.release()
+    receipt
+  } catch {
+    error => {
+      self.deliveries = previous_deliveries
+      self.redrive_audit.clear()
+      for receipt in previous_audit {
+        self.redrive_audit.push(receipt)
+      }
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn NotificationStore::claim_due_deliveries(
   self : NotificationStore,
   now_unix_ms : Int64,
@@ -621,7 +1128,20 @@ pub async fn NotificationStore::claim_due_deliveries(
       if claimed.length() >= limit {
         break
       }
-      if delivery.attempt_count >= self.maximum_delivery_attempts {
+      let ineligible = match self.records.get(delivery.notification_id) {
+        Some(record) => delivery_ineligible_reason(record, now_unix_ms)
+        None => Some("NotificationRecordMissing")
+      }
+      if ineligible is Some(reason) {
+        self.deliveries[delivery.delivery_id] = {
+          ..delivery,
+          state: DeliverySkipped,
+          next_attempt_unix_ms: None,
+          provider_receipt: None,
+          last_error_code: Some(reason),
+          updated_unix_ms: now_unix_ms,
+        }
+      } else if delivery.attempt_count >= self.maximum_delivery_attempts {
         self.deliveries[delivery.delivery_id] = {
           ..delivery,
           state: DeadLetter,
@@ -686,4 +1206,27 @@ pub async fn NotificationStore::snapshot(
   let snapshot = self.snapshot_unlocked()
   self.mutex.release()
   snapshot
+}
+
+///| Lightweight scrape projection; avoids copying notification records,
+
+///|
+/// preferences and redrive receipts for every Prometheus request.
+pub async fn NotificationStore::delivery_metrics(
+  self : NotificationStore,
+) -> (Int, Int, @notifications.NotificationWorkerHealth) {
+  self.mutex.acquire()
+  let pending = self.deliveries
+    .values()
+    .count_if(delivery => {
+      delivery.state == PendingDelivery ||
+      delivery.state == RetryScheduled ||
+      delivery.state == Delivering
+    })
+  let dead = self.deliveries
+    .values()
+    .count_if(delivery => delivery.state == DeadLetter)
+  let health = self.worker_health
+  self.mutex.release()
+  (pending, dead, health)
 }

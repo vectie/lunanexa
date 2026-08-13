@@ -7,6 +7,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/guide_monitor",
   "vectie/lunanexa/notifications/store",
+  "vectie/lunanexa/observability",
 }
 
 // Values
@@ -62,12 +63,14 @@ pub struct GuideProbeWorker {
   policy : @guide_monitor.GuideMonitorPolicy
   scheduler : GuideProbeScheduler
   notifications : @store.NotificationStore
+  observability : @observability.ObservabilityStore?
   identity_secret : String
   observation_secret : String
 }
 pub async fn GuideProbeWorker::open(GuideProbeConfig, @guide_monitor.GuideMonitorPolicy, String, @store.NotificationStore, String, String) -> Self
 pub async fn GuideProbeWorker::run_forever(Self) -> Unit
 pub async fn GuideProbeWorker::run_once(Self, Int64) -> GuideProbeRunResult
+pub fn GuideProbeWorker::with_observability_store(Self, @observability.ObservabilityStore) -> Self
 
 // Type aliases
 

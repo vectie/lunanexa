@@ -49,12 +49,31 @@ async fn ApiService::customer_machine_view(
   lease : @nodelease.ExclusiveNodeLease,
   now_unix_ms : Int64,
 ) -> @nodelease.CustomerExclusiveMachineView {
-  @nodelease.customer_machine_view(
+  let base = @nodelease.customer_machine_view(
     lease,
     self.customer_machine_heartbeat_time(lease.intent.node_id),
     now_unix_ms,
     self.global_settings.control_timing.heartbeat_timeout_ms,
   )
+  if lease.state != Active || now_unix_ms >= lease.intent.expires_unix_ms {
+    return base
+  }
+  let handoff_state = match self.credential_handoff_store {
+    Some(credentials) if credentials.issuer_adapter_ready(now_unix_ms) =>
+      match
+        credentials.view_for_lease(lease, lease.intent.subject_ref, now_unix_ms) {
+        Some(view) if view.can_redeem =>
+          @nodelease.CustomerCredentialHandoffState::Available
+        Some(view) if view.can_recover => Recoverable
+        Some(_) => Closed
+        None => Pending
+      }
+    Some(_) | None => Pending
+  }
+  {
+    ..base,
+    credential_handoff: { ..base.credential_handoff, state: handoff_state },
+  }
 }
 
 ///|
@@ -216,6 +235,10 @@ async fn ApiService::handle_customer_machine_access(
           )
       } noraise {
         value => value
+      }
+      match self.credential_handoff_store {
+        Some(store) => ignore(store.revoke_for_lease(lease_id, now))
+        None => ()
       }
       self.publish_exclusive_lease_directive(
         transitioned,

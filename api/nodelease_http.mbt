@@ -92,13 +92,15 @@ async fn ApiService::observe_node_lease_action(
     "quarantine" =>
       QuarantineNode(
         lease_id=initial.intent.lease_id,
+        username=initial.intent.unix_username,
         generation=initial.generation,
       )
     _ => NoAction
   }
-  guard @nodelease.helper_receipt_timestamp(
+  guard @nodelease.signed_helper_receipt_timestamp(
       expected_action,
       observation.receipt,
+      self.lease_helper_receipt_secret,
     )
     is Some(helper_timestamp) &&
     helper_timestamp >= initial.updated_unix_ms &&
@@ -167,6 +169,17 @@ async fn ApiService::observe_node_lease_action(
   } noraise {
     value => value
   }
+  if observation.action == "revoke" ||
+    observation.action == "sanitize" ||
+    observation.action == "quarantine" {
+    match self.credential_handoff_store {
+      Some(store) =>
+        ignore(
+          store.revoke_for_lease(transitioned.intent.lease_id, @async.now()),
+        )
+      None => ()
+    }
+  }
   self.publish_exclusive_lease_directive(
     transitioned,
     directive_state_for_exclusive_lease(transitioned.state),
@@ -185,22 +198,26 @@ async fn ApiService::node_exists(self : ApiService, node_id : String) -> Bool {
 }
 
 ///|
-async fn ApiService::reconcile_expired_exclusive_leases(
+pub async fn ApiService::reconcile_expired_exclusive_leases(
   self : ApiService,
 ) -> Unit {
   guard self.exclusive_lease_store is Some(leases) else { return }
   let before = leases.leases()
   let now = @async.now()
-  if !leases.reconcile_expired(now) {
-    return
-  }
-  for lease in leases.leases() {
+  let changed_any = leases.reconcile_expired(now)
+  let after = leases.leases()
+  for lease in after {
     let changed = before
       .iter()
       .find_first(previous => previous.intent.lease_id == lease.intent.lease_id)
       .map(previous => previous.generation != lease.generation)
       .unwrap_or(false)
     if changed {
+      match self.credential_handoff_store {
+        Some(credentials) =>
+          ignore(credentials.revoke_for_lease(lease.intent.lease_id, now))
+        None => ()
+      }
       self.publish_exclusive_lease_directive(
         lease,
         directive_state_for_exclusive_lease(lease.state),
@@ -211,6 +228,36 @@ async fn ApiService::reconcile_expired_exclusive_leases(
         lease.authority_receipt,
       )
     }
+  }
+  self.record_component_event(
+    "event-exclusive-lease-expiry-reconcile-\{now}",
+    now,
+    Information,
+    "controller",
+    "ExclusiveLeaseExpiryReconciliationCompleted",
+    "exclusive-lease-expiry-reconcile-\{now}",
+    "exclusive_lease",
+    "healthy",
+    200,
+    0L,
+  )
+  ignore(changed_any)
+}
+
+///| Controller-owned clock reconciliation. Failures propagate to the structured
+
+///|
+/// supervisor so the process cannot remain Ready with a dead expiry loop.
+pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(
+  self : ApiService,
+  interval_ms : Int,
+) -> Unit {
+  if interval_ms < 1000 || interval_ms > 300000 {
+    raise Failure::Failure("exclusive lease reconcile interval is invalid")
+  }
+  for ;; {
+    self.reconcile_expired_exclusive_leases()
+    @async.sleep(interval_ms)
   }
 }
 

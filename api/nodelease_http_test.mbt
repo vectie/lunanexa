@@ -1,4 +1,7 @@
 ///|
+let lease_helper_test_secret = "lease-helper-test-receipt-secret-more-than-thirty-two-bytes"
+
+///|
 fn exclusive_lease_intent(now : Int64) -> @nodelease.ExclusiveNodeLeaseIntent {
   {
     version: @nodelease.contract_version,
@@ -122,8 +125,10 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
     "lease-signing-secret",
   )
   let service = @api.ApiService::new(
-    durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
-  ).with_exclusive_lease_store(lease_store)
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    )
+    .with_exclusive_lease_store(lease_store)
+    .with_lease_helper_receipt_secret(lease_helper_test_secret)
   let headers = { "Authorization": "Bearer operator-token" }
   let now = @async.now()
   let unsafe_intent = {
@@ -216,7 +221,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: provisioning.intent.lease_id,
       observed_generation: created.generation,
       action: "provision",
-      receipt: @nodelease.helper_receipt(provision_action, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        provision_action,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -232,7 +241,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: provisioning.intent.lease_id,
       observed_generation: provisioning.generation,
       action: "provision",
-      receipt: @nodelease.helper_receipt(provision_action, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        provision_action,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -323,7 +336,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: expiring.intent.lease_id,
       observed_generation: expiring.generation,
       action: "revoke",
-      receipt: @nodelease.helper_receipt(revoke_action, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        revoke_action,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -347,7 +364,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: revoked.intent.lease_id,
       observed_generation: revoked.generation,
       action: "sanitize",
-      receipt: @nodelease.helper_receipt(sanitize_action, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        sanitize_action,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -381,6 +402,7 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
   )
   let quarantine_action = @nodelease.LeaseAgentAction::QuarantineNode(
     lease_id=next_lease.intent.lease_id,
+    username=next_lease.intent.unix_username,
     generation=next_lease.generation,
   )
   let quarantined_reply = service.handle(
@@ -391,7 +413,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: next_lease.intent.lease_id,
       observed_generation: next_lease.generation,
       action: "quarantine",
-      receipt: @nodelease.helper_receipt(quarantine_action, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        quarantine_action,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -405,6 +431,7 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
   assert_true(lease_store.node_blocks_managed_placement("node-a"))
   let repeat_action = @nodelease.LeaseAgentAction::QuarantineNode(
     lease_id=quarantined.intent.lease_id,
+    username=quarantined.intent.unix_username,
     generation=quarantined.generation,
   )
   let repeated = service.handle(
@@ -415,7 +442,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: quarantined.intent.lease_id,
       observed_generation: quarantined.generation,
       action: "quarantine",
-      receipt: @nodelease.helper_receipt(repeat_action, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        repeat_action,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -455,7 +486,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: recovery_start.intent.lease_id,
       observed_generation: recovery_start.generation,
       action: "revoke",
-      receipt: @nodelease.helper_receipt(recovery_revoke, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        recovery_revoke,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -479,7 +514,11 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       lease_id: recovery_revoked.intent.lease_id,
       observed_generation: recovery_revoked.generation,
       action: "sanitize",
-      receipt: @nodelease.helper_receipt(recovery_sanitize, @async.now()),
+      receipt: @nodelease.signed_helper_receipt(
+        recovery_sanitize,
+        @async.now(),
+        lease_helper_test_secret,
+      ),
       observed_unix_ms: @async.now(),
     }
     .to_json()
@@ -593,6 +632,66 @@ async test "node polling converts a naturally expired active lease into cleanup"
   assert_eq(expired.state, Expiring)
   assert_eq(durable.node_directive("node-a").unwrap().desired_state, Draining)
   assert_true(lease_store.node_blocks_managed_placement("node-a"))
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "controller clock expiry advances without node or browser traffic" {
+  let directory = @fs.tmpdir(prefix="lunanexa-exclusive-clock-expiry-")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  let leases = @nodelease_store.FileExclusiveLeaseStore::open(
+    "\{directory}/leases.json",
+    "lease-signing-secret-more-than-thirty-two-bytes",
+  )
+  let now = @async.now()
+  let intent = {
+    ..exclusive_lease_intent(now),
+    idempotency_key: "clock-expiry",
+    lease_id: "clock-expiry-lease",
+    expires_unix_ms: now + 20L,
+  }
+  let reserved = leases.issue(intent, now)
+  let provisioning = leases.transition(
+    intent.lease_id,
+    {
+      expected_generation: reserved.generation,
+      state: Provisioning,
+      evidence_receipt: "provisioned",
+    },
+    now + 1L,
+  )
+  let active = leases.transition(
+    intent.lease_id,
+    {
+      expected_generation: provisioning.generation,
+      state: Active,
+      evidence_receipt: "active",
+    },
+    now + 2L,
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let credentials = @credential_store.CredentialHandoffStore::open(
+    "\{directory}/credentials.json",
+    "clock-expiry-credential-secret-more-than-thirty-two-bytes",
+  )
+  let service = @api.ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    )
+    .with_exclusive_lease_store(leases)
+    .with_credential_handoff_store(credentials)
+  // The scheduler invokes this same controller-owned pass; no route read is used.
+  @async.sleep(25)
+  service.reconcile_expired_exclusive_leases()
+  assert_eq(leases.lease(intent.lease_id).unwrap().state, Expiring)
+  assert_true(durable.node_directive(intent.node_id) is Some(_))
+  ignore(active)
   @fs.rmdir(directory, recursive=true)
 }
 

@@ -140,6 +140,18 @@ pub fn preference_allows(
 }
 
 ///|
+pub fn preference_view(
+  preference : NotificationPreference,
+) -> NotificationPreferenceView {
+  {
+    topic: preference.topic,
+    channels: preference.channels,
+    minimum_severity: preference.minimum_severity,
+    updated_unix_ms: preference.updated_unix_ms,
+  }
+}
+
+///|
 pub fn alert_fires(rule : AlertRule, observation : AlertObservation) -> Bool {
   rule.enabled &&
   (match rule.comparator {

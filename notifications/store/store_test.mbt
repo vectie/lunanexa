@@ -151,3 +151,270 @@ async test "operator alerts support acknowledgement silence assignment and resol
   assert_eq(resolved.silenced_until_unix_ms, None)
   @fs.remove(path)
 }
+
+///|
+async test "elapsed silence expires durably and readiness exposes pending adapters" {
+  let path = temp_path("silence-expiry")
+  let store = @store.NotificationStore::open(path)
+  let event : @notifications.NotificationEvent = {
+    ..lease_event("notice-silenced", "audit:silence"),
+    audience: PlatformOperators,
+    code: "NodeUnreachable",
+  }
+  ignore(store.enqueue(event))
+  let silenced = store.silence_operator({
+    notification_id: event.notification_id,
+    expected_generation: 1L,
+    actor_ref: "operator-a",
+    now_unix_ms: 1100L,
+    silenced_until_unix_ms: 1200L,
+  })
+  assert_eq(silenced.silenced_until_unix_ms, Some(1200L))
+  assert_eq(store.expire_silences(1200L), 1)
+  let reopened = @store.NotificationStore::open(path)
+  let restored = reopened.record(event.notification_id).unwrap()
+  assert_eq(restored.silenced_until_unix_ms, None)
+  assert_eq(restored.generation, 3L)
+  let readiness = reopened.delivery_readiness(false)
+  assert_eq(readiness.state, AdaptersPending)
+  assert_eq(readiness.supported_channels, [InApp])
+  @fs.remove(path)
+}
+
+///|
+async test "critical operator alert escalates and resolved claimed work is skipped" {
+  let path = temp_path("operator-escalation-skip")
+  let store = @store.NotificationStore::open(path)
+  let event : @notifications.NotificationEvent = {
+    ..lease_event("operator-critical", "audit:operator-critical"),
+    audience: PlatformOperators,
+    code: "NodeUnreachable",
+    severity: Critical,
+    expires_unix_ms: None,
+  }
+  ignore(store.enqueue(event))
+  let snapshot = store.snapshot()
+  assert_true(snapshot.deliveries.any(delivery => delivery.channel == Webhook))
+  let claimed = store.claim_due_deliveries(1000L, 100L, 10)
+  assert_eq(claimed.length(), 1)
+  ignore(
+    store.resolve_operator({
+      notification_id: event.notification_id,
+      expected_generation: 1L,
+      actor_ref: "operator-a",
+      now_unix_ms: 1050L,
+    }),
+  )
+  let skipped = store.skip_delivery_if_ineligible(
+    claimed[0].delivery_id,
+    claimed[0].attempt_count,
+    1060L,
+  )
+  assert_true(skipped is Some({ state: DeliverySkipped, .. }))
+  let reopened = @store.NotificationStore::open(path)
+  assert_true(
+    reopened.snapshot().deliveries.any(delivery => {
+      delivery.state == DeliverySkipped &&
+      delivery.last_error_code == Some("NotificationResolved")
+    }),
+  )
+  @fs.remove(path)
+}
+
+///|
+async test "expired and silenced outbound work is never claimed" {
+  let path = temp_path("expiry-silence-skip")
+  let store = @store.NotificationStore::open(path)
+  ignore(
+    store.set_preference({
+      preference_id: "pref-expiry",
+      tenant_ref: "tenant-a",
+      subject_ref: "subject-a",
+      topic: LeaseLifecycle,
+      channels: [InApp, Webhook],
+      minimum_severity: Information,
+      updated_unix_ms: 900L,
+    }),
+  )
+  ignore(store.enqueue(lease_event("expired-outbound", "audit:expired")))
+  assert_eq(store.claim_due_deliveries(10000L, 100L, 10).length(), 0)
+  assert_true(
+    store.snapshot().deliveries.any(delivery => {
+      delivery.notification_id == "expired-outbound" &&
+      delivery.channel == Webhook &&
+      delivery.state == DeliverySkipped
+    }),
+  )
+  @fs.remove(path)
+}
+
+///|
+async test "dead-letter redrive is generation fenced audited and restart durable" {
+  let path = temp_path("redrive")
+  let store = @store.NotificationStore::open(path, maximum_delivery_attempts=1)
+  ignore(
+    store.set_preference({
+      preference_id: "pref-redrive",
+      tenant_ref: "tenant-a",
+      subject_ref: "subject-a",
+      topic: LeaseLifecycle,
+      channels: [InApp, Email],
+      minimum_severity: Information,
+      updated_unix_ms: 900L,
+    }),
+  ) catch {
+    error => fail("preference failed: \{Repr(error)}")
+  }
+  ignore(store.enqueue(lease_event("notice-redrive", "audit:redrive"))) catch {
+    error => fail("enqueue failed: \{Repr(error)}")
+  }
+  let claimed = store.claim_due_deliveries(1000L, 100L, 10) catch {
+    error => fail("claim failed: \{Repr(error)}")
+  }
+  let claimed = claimed[0]
+  let dead = store.record_delivery_result({
+    delivery_id: claimed.delivery_id,
+    expected_attempt_count: claimed.attempt_count,
+    delivered: false,
+    retryable: false,
+    provider_receipt: None,
+    error_code: Some("ProviderRejected"),
+    next_attempt_unix_ms: None,
+    now_unix_ms: 1100L,
+  }) catch {
+    error => fail("dead-letter result failed: \{Repr(error)}")
+  }
+  let receipt = store.redrive_dead_letter({
+    delivery_id: dead.delivery_id,
+    expected_attempt_count: dead.attempt_count,
+    expected_updated_unix_ms: dead.updated_unix_ms,
+    actor_ref: "operator-a",
+    now_unix_ms: 1200L,
+  }) catch {
+    error => fail("redrive failed: \{Repr(error)}")
+  }
+  assert_eq(receipt.previous_attempt_count, 1)
+  try
+    store.redrive_dead_letter({
+      delivery_id: dead.delivery_id,
+      expected_attempt_count: dead.attempt_count,
+      expected_updated_unix_ms: dead.updated_unix_ms,
+      actor_ref: "operator-a",
+      now_unix_ms: 1300L,
+    })
+  catch {
+    @notifications.NotificationError::InvalidTransition(_) => ()
+    _ => fail("unexpected redrive failure")
+  } noraise {
+    _ => fail("stale redrive must fail")
+  }
+  let reopened = @store.NotificationStore::open(
+    path,
+    maximum_delivery_attempts=1,
+  ) catch {
+    error => fail("reopen failed: \{Repr(error)}")
+  }
+  assert_eq(reopened.snapshot().redrive_audit.length(), 1)
+  assert_true(
+    reopened.snapshot().deliveries.any(delivery => {
+      delivery.delivery_id == dead.delivery_id &&
+      delivery.state == PendingDelivery &&
+      delivery.attempt_count == 0
+    }),
+  )
+  @fs.remove(path)
+}
+
+///|
+async test "active retention is hard bounded and newest active dedupe wins" {
+  let path = temp_path("hard-cap")
+  let store = @store.NotificationStore::open(path, history_limit=2)
+  let first : @notifications.NotificationEvent = {
+    ..lease_event("notice-old", "audit:old"),
+    audience: PlatformOperators,
+    code: "NodeUnreachable",
+  }
+  ignore(store.enqueue(first))
+  ignore(
+    store.resolve_operator({
+      notification_id: first.notification_id,
+      expected_generation: 1L,
+      actor_ref: "operator-a",
+      now_unix_ms: 1100L,
+    }),
+  )
+  let recurrent = {
+    ..first,
+    notification_id: "notice-new",
+    source_receipt: "audit:new",
+    created_unix_ms: 1200L,
+  }
+  ignore(store.enqueue(recurrent))
+  assert_eq(
+    store
+    .record_by_deduplication_key(first.deduplication_key, first.audience)
+    .map(record => record.event.notification_id),
+    Some("notice-new"),
+  )
+  ignore(
+    store.enqueue({
+      ..first,
+      notification_id: "notice-other",
+      deduplication_key: "other-key",
+      source_receipt: "audit:other",
+      created_unix_ms: 1300L,
+    }),
+  )
+  try
+    store.enqueue({
+      ..first,
+      notification_id: "notice-overflow",
+      deduplication_key: "overflow-key",
+      source_receipt: "audit:overflow",
+      created_unix_ms: 1400L,
+    })
+  catch {
+    @notifications.NotificationError::InvalidInput(_) => ()
+    _ => fail("unexpected capacity failure")
+  } noraise {
+    _ => fail("active capacity must fail closed")
+  }
+  assert_eq(store.snapshot().records.length(), 2)
+  @fs.remove(path)
+}
+
+///|
+async test "worker readiness requires recent successful delivery and survives restart" {
+  let path = temp_path("worker-health")
+  let store = @store.NotificationStore::open(path)
+  assert_eq(
+    store.delivery_readiness(true, now_unix_ms=1000L).state,
+    AdaptersPending,
+  )
+  ignore(store.record_worker_pass(1000L, 1, 1, 0, 0))
+  assert_eq(
+    store.delivery_readiness(true, now_unix_ms=1001L).state,
+    DeliveryReady,
+  )
+  let reopened = @store.NotificationStore::open(path)
+  assert_eq(
+    reopened.delivery_readiness(true, now_unix_ms=1002L).state,
+    DeliveryReady,
+  )
+  ignore(reopened.record_worker_failure(1100L, "WorkerPassFailed"))
+  ignore(reopened.record_worker_pass(1101L, 0, 0, 0, 0))
+  assert_eq(
+    reopened.delivery_readiness(true, now_unix_ms=1102L).state,
+    DeliveryDegraded,
+  )
+  let stale = @store.NotificationStore::open(path)
+  assert_eq(
+    stale.delivery_readiness(
+      true,
+      now_unix_ms=400000L,
+      worker_freshness_ms=1000L,
+    ).state,
+    DeliveryDegraded,
+  )
+  @fs.remove(path)
+}

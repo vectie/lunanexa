@@ -110,12 +110,172 @@ pub fn validate_order(
   match order.quote {
     Some(quote) => validate_quote(quote)
     None =>
-      if order.state != Draft {
+      if order.state != Draft &&
+        order.state != Cancelled &&
+        order.state != Expired &&
+        order.state != Rejected {
         raise InvalidInput("non-draft order requires a quote")
       }
   }
   if order.artifact_ids.length() > 256 {
     raise InvalidInput("too many order artifacts")
+  }
+  if (
+      order.state == Fulfilled ||
+      order.state == ReversalPending ||
+      order.state == ReversalManualIntervention ||
+      order.state == Revoked
+    ) &&
+    order.entitlement_ref is None {
+    raise InvalidInput("entitlement lifecycle state requires a reference")
+  }
+}
+
+///|
+pub fn validate_transfer_session(
+  session : OfflineTransferSession,
+) -> Unit raise OfflineCommerceError {
+  if !valid_id(session.session_id) ||
+    !valid_id(session.idempotency_key) ||
+    !valid_sha256(session.session_token_sha256) ||
+    !valid_id(session.organization_id) ||
+    !valid_id(session.subject_ref) ||
+    !valid_id(session.order_id) ||
+    !valid_id(session.artifact_id) ||
+    session.media_types.length() == 0 ||
+    session.media_types.length() > 8 ||
+    session.media_types.any(value => value.length() == 0 || value.length() > 128) ||
+    session.maximum_byte_count <= 0L ||
+    session.maximum_byte_count > 100000000L ||
+    session.expected_sha256.map_or(false, value => !valid_sha256(value)) ||
+    session.issued_unix_ms <= 0L ||
+    session.expires_unix_ms <= session.issued_unix_ms ||
+    session.expires_unix_ms > session.issued_unix_ms + 900000L ||
+    session.consumed_unix_ms.map_or(false, value => {
+      value < session.issued_unix_ms || value > session.expires_unix_ms
+    }) {
+    raise InvalidInput("invalid offline transfer session")
+  }
+  match session.state {
+    TransferIssued =>
+      if session.consumed_unix_ms is Some(_) {
+        raise InvalidInput("issued transfer session is already consumed")
+      }
+    TransferConsumed =>
+      if session.consumed_unix_ms is None {
+        raise InvalidInput("consumed transfer session lacks time evidence")
+      }
+    TransferExpired => ()
+  }
+}
+
+///|
+pub fn validate_activation(
+  activation : EntitlementActivation,
+) -> Unit raise OfflineCommerceError {
+  if !valid_id(activation.activation_id) ||
+    !valid_id(activation.idempotency_key) ||
+    !valid_id(activation.order_id) ||
+    !valid_id(activation.organization_id) ||
+    !valid_id(activation.purchaser_subject_ref) ||
+    !valid_id(activation.authority_target_ref) ||
+    activation.expected_order_generation <= 0L ||
+    !valid_id(activation.requested_by) ||
+    activation.requested_unix_ms <= 0L ||
+    activation.entitlement_ref.map_or(false, value => !valid_id(value)) ||
+    activation.authority_receipt.map_or(false, value => !valid_id(value)) ||
+    activation.reason_code.map_or(false, value => !valid_id(value)) ||
+    activation.completed_unix_ms.map_or(false, value => {
+      value < activation.requested_unix_ms
+    }) {
+    raise InvalidInput("invalid entitlement activation")
+  }
+  match activation.state {
+    EntitlementActivationRequested =>
+      if activation.entitlement_ref is Some(_) ||
+        activation.authority_receipt is Some(_) ||
+        activation.completed_unix_ms is Some(_) {
+        raise InvalidInput("pending activation contains completion evidence")
+      }
+    EntitlementActivationConfirmed =>
+      if activation.entitlement_ref is None ||
+        activation.authority_receipt is None ||
+        activation.completed_unix_ms is None {
+        raise InvalidInput("confirmed activation lacks authority evidence")
+      }
+    EntitlementActivationRejected =>
+      if activation.reason_code is None ||
+        activation.authority_receipt is None ||
+        activation.completed_unix_ms is None {
+        raise InvalidInput("rejected activation lacks reason evidence")
+      }
+  }
+}
+
+///|
+pub fn validate_reversal(
+  reversal : CommercialReversal,
+) -> Unit raise OfflineCommerceError {
+  if !valid_id(reversal.reversal_id) ||
+    !valid_id(reversal.idempotency_key) ||
+    !valid_id(reversal.order_id) ||
+    !valid_id(reversal.organization_id) ||
+    !valid_id(reversal.entitlement_ref) ||
+    reversal.expected_order_generation <= 0L ||
+    !valid_id(reversal.requested_by) ||
+    reversal.requested_unix_ms <= 0L ||
+    reversal.authority_receipt.map_or(false, value => !valid_id(value)) ||
+    reversal.reason_code.map_or(false, value => !valid_id(value)) ||
+    reversal.completed_unix_ms.map_or(false, value => {
+      value < reversal.requested_unix_ms
+    }) {
+    raise InvalidInput("invalid commercial reversal")
+  }
+  match reversal.state {
+    ReversalRequested =>
+      if reversal.authority_receipt is Some(_) ||
+        reversal.completed_unix_ms is Some(_) {
+        raise InvalidInput("pending reversal contains completion evidence")
+      }
+    ReversalConfirmed =>
+      if reversal.authority_receipt is None ||
+        reversal.completed_unix_ms is None {
+        raise InvalidInput("confirmed reversal lacks authority evidence")
+      }
+    ReversalFailed =>
+      if reversal.reason_code is None ||
+        reversal.authority_receipt is None ||
+        reversal.completed_unix_ms is None {
+        raise InvalidInput("failed reversal lacks reason evidence")
+      }
+  }
+}
+
+///|
+pub fn validate_reversal_recovery(
+  recovery : ReversalRecovery,
+) -> Unit raise OfflineCommerceError {
+  if !valid_id(recovery.recovery_id) ||
+    !valid_id(recovery.idempotency_key) ||
+    !valid_id(recovery.order_id) ||
+    !valid_id(recovery.organization_id) ||
+    !valid_id(recovery.failed_reversal_id) ||
+    recovery.expected_order_generation <= 0L ||
+    !valid_id(recovery.authority_receipt) ||
+    !valid_id(recovery.reason_code) ||
+    !valid_id(recovery.recovered_by) ||
+    recovery.recovered_unix_ms <= 0L {
+    raise InvalidInput("invalid reversal recovery evidence")
+  }
+  match recovery.decision {
+    RetryReversal =>
+      if recovery.replacement_reversal_id.map_or(true, id => !valid_id(id)) {
+        raise InvalidInput("reversal retry lacks replacement reversal id")
+      }
+    ConfirmRevoked | ConfirmStillActive =>
+      if recovery.replacement_reversal_id is Some(_) {
+        raise InvalidInput("terminal reconciliation contains replacement id")
+      }
   }
 }
 

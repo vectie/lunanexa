@@ -22,7 +22,6 @@ pub(all) struct OfflineArtifactJob {
   output_filename : String
   result_filename : String
   render_manifest_filename : String
-  render_manifest_sha256 : String
   docx_replacements : Array[@worker.TextReplacement]
   xlsx_replacements : Array[@worker.CellReplacement]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
@@ -31,14 +30,20 @@ pub(all) struct RenderEvidenceManifest {
   schema_version : Int
   request_id : String
   artifact_sha256 : String
+  source_sha256 : String
   kind : @offline.DocumentArtifactKind
   page_or_sheet_count : Int
   passed : Bool
   renderer_receipt : String
   rendered_unix_ms : Int64
-  visual_evidence_filename : String
-  visual_evidence_sha256 : String
+  visual_evidence : Array[RenderVisualEvidence]
   signature : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RenderVisualEvidence {
+  page_or_sheet_index : Int
+  filename : String
+  sha256 : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 // Type aliases

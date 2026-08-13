@@ -93,6 +93,17 @@ pub async fn FileEnrollmentService::authorized(
 }
 
 ///|
+pub async fn FileEnrollmentService::active_node_ids(
+  self : FileEnrollmentService,
+  now_unix_ms : Int64,
+) -> Array[String] {
+  self.mutex.acquire()
+  let result = self.service.active_node_ids(now_unix_ms)
+  self.mutex.release()
+  result
+}
+
+///|
 pub async fn FileEnrollmentService::rotate(
   self : FileEnrollmentService,
   node_id : String,

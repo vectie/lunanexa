@@ -14,6 +14,8 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
   "vectie/lunanexa/node",
+  "vectie/lunanexa/nodelease",
+  "vectie/lunanexa/notifications",
   "vectie/lunanexa/observability",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/runtimes",
@@ -53,9 +55,16 @@ pub struct ApiService {
   offline_commerce_store : @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore?
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
+  credential_handoff_store : @vectie/lunanexa/nodelease/credential/store.CredentialHandoffStore?
+  lease_helper_receipt_secret : String
+  machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
+  guide_diagnostics_token : String
   portal_store : @vectie/lunanexa/portal/store.FilePortalStore?
   notification_store : @vectie/lunanexa/notifications/store.NotificationStore?
   observability_store : @observability.ObservabilityStore?
+  notification_delivery_adapter_configured : Bool
+  external_observability_collector_configured : Bool
+  external_export_proof_token : String
   available_secret_refs : Array[String]
   registry : @registry.FileRegistry?
   enrollment : @node.FileEnrollmentService?
@@ -76,6 +85,12 @@ pub struct ApiService {
   provider_callback_secrets : Map[String, String]
   artifact_worker_callback_token : String?
   artifact_scanner_callback_token : String?
+  entitlement_authority_callback_token : String?
+  offline_transfer_adapter_endpoint : String?
+  offline_transfer_adapter_token : String?
+  offline_transfer_session_secret : String
+  offline_commerce_capabilities : Array[@offline.OfflineCommerceCapabilityEvidence]
+  offline_commerce_capabilities_expires_unix_ms : Int64
   node_token : String
   version : String
   active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
@@ -86,22 +101,43 @@ pub struct ApiService {
   execution_slots : @semaphore.Semaphore
 }
 pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], String) -> HttpReply
+pub async fn ApiService::internal_component_ready(Self) -> Bool
+pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadiness
 pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub async fn ApiService::observability_readiness(Self, now_unix_ms? : Int64) -> @observability.ObservabilityReadiness?
+pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
+pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
+pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
+pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
+pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
+pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int) -> Unit
+pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
+pub async fn ApiService::trusted_operational_tenant_hash(Self, Map[String, String], Bool) -> String?
 pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_control_plane(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @scheduler.FileScheduler, @telemetry.FileTelemetry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_credential_handoff_store(Self, @vectie/lunanexa/nodelease/credential/store.CredentialHandoffStore) -> Self
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
+pub fn ApiService::with_entitlement_authority_callback_token(Self, String) -> Self
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
+pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
+pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
+pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure
+pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
+pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
+pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
 pub fn ApiService::with_observability_store(Self, @observability.ObservabilityStore) -> Self
 pub fn ApiService::with_offline_artifact_callback_tokens(Self, String, String) -> Self
+pub fn ApiService::with_offline_commerce_capabilities(Self, Array[@offline.OfflineCommerceCapabilityEvidence], Int64) -> Self
 pub fn ApiService::with_offline_commerce_store(Self, @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore) -> Self
+pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -> Self raise
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
@@ -125,6 +161,25 @@ pub(all) struct HttpReply {
   content_type : String
 } derive(Eq, @debug.Debug)
 
+pub(all) struct ManagementReadiness {
+  version : String
+  ready : Bool
+  blocker_codes : Array[String]
+  notification_delivery : @notifications.NotificationDeliveryReadiness?
+  observability : @observability.ObservabilityReadiness?
+  offline_commerce : @offline.OfflineCommerceReadiness
+  credential_broker_configured : Bool
+  machine_helper_receipt_verifier_configured : Bool
+  machine_helper_adapter_verified : Bool
+  machine_helper_adapter_node_scope : String?
+  machine_helper_covered_node_count : Int
+  eligible_enrolled_node_count : Int
+  exclusive_machine_authority_configured : Bool
+  artifact_signature_verifier_configured : Bool
+  guide_diagnostics_configured : Bool
+  exclusive_lease_expiry_reconciler_healthy : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct OfflineArtifactView {
   artifact_id : String
   order_id : String
@@ -138,6 +193,11 @@ pub(all) struct OfflineArtifactView {
   scan_state : @offline.ArtifactScanState
   review_state : @offline.ArtifactReviewState
   created_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OfflineUploadTransferView {
+  evidence : @offline.OfflineUploadGrantView
+  transfer : @offline.OfflineTransferGrant
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum StreamEvent {

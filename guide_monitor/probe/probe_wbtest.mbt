@@ -161,6 +161,56 @@ async fn exercise_response(
 }
 
 ///|
+async test "probe emits aggregate typed observability without private response data" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever(allow_failure=true) <| ((request, _, connection) => {
+        if request.path == "/health" {
+          send_json(
+            connection, 200, "OK", "{\"ok\":true,\"dependencies\":{\"coursebook\":{\"ok\":true},\"admin_diagnostics\":{\"ok\":true,\"enabled\":true}}}",
+          )
+        } else {
+          let correlation = header_value(
+            request.headers,
+            "x-lunanexa-correlation-id",
+          ).unwrap_or("")
+          send_json(
+            connection,
+            200,
+            "OK",
+            diagnostics_body(Healthy, correlation),
+          )
+        }
+      })
+    }
+    let directory = @fs.tmpdir(prefix="lunanexa-guide-probe-observability-")
+    let notifications = @store.NotificationStore::open(
+      "\{directory}/notifications.json",
+    )
+    let operational = @observability.ObservabilityStore::open(
+      "\{directory}/operational.json",
+    )
+    let worker = GuideProbeWorker::open(
+      test_config("http://\{server.addr}"),
+      test_policy(),
+      "\{directory}/scheduler.json",
+      notifications,
+      identity_test_secret,
+      observation_test_secret,
+    ).with_observability_store(operational)
+    ignore(worker.run_once(100000L))
+    let events = operational.snapshot().events
+    assert_eq(events.length(), 1)
+    assert_eq(events[0].event_code, "GuideDiagnosticsProbeCompleted")
+    assert_eq(events[0].target_type, "guide")
+    assert_eq(events[0].outcome, "healthy")
+    assert_false(events.to_json().stringify().contains("private-body-secret"))
+    @fs.rmdir(directory, recursive=true)
+  }
+}
+
+///|
 test "origin validation permits only exact loopback HTTP or explicit HTTPS" {
   validate_origin("http://127.0.0.1:4390", false)
   validate_origin("http://localhost:80", false)

@@ -12,6 +12,7 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/guide_monitor",
   "vectie/lunanexa/notifications/store",
+  "vectie/lunanexa/observability",
 }
 
 supported_targets = "native"

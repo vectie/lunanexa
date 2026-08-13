@@ -161,6 +161,17 @@ pub(all) struct NotificationPreference {
   updated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
+///| Tenant-safe preference projection. Durable identity and tenant bindings
+
+///|
+/// are enforced by the server and are never returned to the browser.
+pub(all) struct NotificationPreferenceView {
+  topic : NotificationTopic
+  channels : Array[NotificationChannel]
+  minimum_severity : NotificationSeverity
+  updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
 ///|
 pub(all) enum AlertComparator {
   AtLeast
@@ -196,4 +207,114 @@ pub(all) struct NotificationSnapshot {
   records : Array[NotificationRecord]
   deliveries : Array[NotificationDelivery]
   preferences : Array[NotificationPreference]
+  worker_health : NotificationWorkerHealth
+  redrive_audit : Array[NotificationDeliveryRedriveReceipt]
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Durable health of the autonomous outbound-delivery worker. A configured
+
+///|
+/// adapter is not considered ready until a real delivery attempt succeeds.
+pub(all) struct NotificationWorkerHealth {
+  generation : Int64
+  last_heartbeat_unix_ms : Int64?
+  last_attempt_unix_ms : Int64?
+  last_success_unix_ms : Int64?
+  last_failure_unix_ms : Int64?
+  consecutive_failures : Int
+  last_error_code : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Generation-fenced operator request to redrive one dead-letter delivery.
+pub(all) struct NotificationDeliveryRedriveAction {
+  delivery_id : String
+  expected_attempt_count : Int
+  expected_updated_unix_ms : Int64
+  actor_ref : String
+  now_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Durable audit receipt for an accepted dead-letter redrive.
+pub(all) struct NotificationDeliveryRedriveReceipt {
+  receipt_id : String
+  delivery_id : String
+  actor_ref : String
+  previous_attempt_count : Int
+  accepted_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum NotificationDeliveryReadinessState {
+  DeliveryReady
+  AdaptersPending
+  DeliveryDegraded
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Public management projection for the outbound notification boundary. It
+
+///| reports configuration and queue health without returning provider
+
+///|
+/// endpoints, credentials, recipient addresses, or message bodies.
+pub(all) struct NotificationDeliveryReadiness {
+  version : String
+  state : NotificationDeliveryReadinessState
+  adapter_configured : Bool
+  pending_count : Int
+  delivering_count : Int
+  dead_letter_count : Int
+  capacity_exhausted : Bool
+  worker_health : NotificationWorkerHealth
+  supported_channels : Array[NotificationChannel]
+} derive(Debug, Eq, ToJson, FromJson)
+
+///| Bounded provider-neutral request sent to the deployment-owned delivery
+
+///| adapter. The adapter resolves recipient destinations from the opaque
+
+///| audience; LunaNexa never stores email addresses, phone numbers, or webhook
+
+///|
+/// secrets in notification state.
+pub(all) struct NotificationDeliveryEnvelope {
+  version : String
+  delivery_id : String
+  channel : NotificationChannel
+  audience : NotificationAudience
+  topic : NotificationTopic
+  code : String
+  severity : NotificationSeverity
+  title_key : String
+  body_key : String
+  parameters : Map[String, String]
+  created_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Minimal response accepted from an outbound delivery adapter.
+pub(all) struct NotificationAdapterReceipt {
+  provider_receipt : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Result of one bounded autonomous notification reconciliation pass.
+pub(all) struct NotificationReconciliationSummary {
+  reconciled_unix_ms : Int64
+  subject_count : Int
+  operator_alert_count : Int
+  expired_silence_count : Int
+  pending_delivery_count : Int
+  dead_letter_count : Int
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct NotificationDeliveryRunSummary {
+  attempted : Int
+  delivered : Int
+  retry_scheduled : Int
+  dead_lettered : Int
+  skipped : Int
+  readiness : NotificationDeliveryReadiness
 } derive(Debug, Eq, ToJson, FromJson)
