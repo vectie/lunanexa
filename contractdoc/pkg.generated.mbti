@@ -1,0 +1,188 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/contractdoc"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub let contract_version : String
+
+pub fn missing_required_fields(ContractTemplateManifest, ContractPacket) -> Array[String]
+
+pub fn new_packet(ContractTemplateManifest, String, String, String, String, String, String, Array[ContractFormKind], Int64) -> ContractPacket raise ContractDocumentError
+
+pub let snapshot_schema_version : String
+
+pub fn validate_field_value(ContractFieldDefinition, String) -> Unit raise ContractDocumentError
+
+pub fn validate_manifest(ContractTemplateManifest) -> Unit raise ContractDocumentError
+
+pub fn youthpolicy_remote_lease_manifest() -> ContractTemplateManifest
+
+// Errors
+pub(all) suberror ContractDocumentError {
+  InvalidInput(String)
+  NotFound(String)
+  AlreadyExists(String)
+  IdempotencyConflict(String)
+  StaleRevision
+  InvalidTransition(String)
+  MissingRequiredFields(Array[String])
+  TemplateMismatch
+  ConfirmationMismatch
+  ForbiddenSecret(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) enum ContractCollectionPolicy {
+  PersistedContractData
+  PersistedPersonalContact
+  CompleteOffline
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractDocumentSnapshot {
+  schema_version : String
+  packets : Array[ContractPacket]
+  events : Array[ContractPacketEvent]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractFieldDefinition {
+  field_id : String
+  form : ContractFormKind
+  label_zh_cn : String
+  label_en : String
+  kind : ContractFieldKind
+  required : Bool
+  maximum_characters : Int
+  allowed_values : Array[String]
+  collection_policy : ContractCollectionPolicy
+  locator : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractFieldKind {
+  PlainText
+  Identifier
+  CalendarDate
+  WholeNumber
+  MoneyAmount
+  MoneyUppercase
+  Choice
+  MultilineText
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractFieldValue {
+  field_id : String
+  value : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractFormDefinition {
+  form : ContractFormKind
+  title_zh_cn : String
+  title_en : String
+  field_ids : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractFormKind {
+  MasterLease
+  ReservationApplication
+  AccessConfirmation
+  ViolationNotice
+  DamageAssessment
+  SettlementConfirmation
+  EarlyTerminationApplication
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractGeneratedArtifact {
+  artifact_id : String
+  media_type : String
+  sha256 : String
+  byte_count : Int64
+  page_count : Int
+  render_evidence_sha256 : String
+  generated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractPacket {
+  packet_id : String
+  idempotency_key : String
+  template_id : String
+  template_version : String
+  template_sha256 : String
+  tenant_ref : String
+  organization_id : String
+  subject_ref : String
+  order_ref : String
+  active_forms : Array[ContractFormKind]
+  values : Array[ContractFieldValue]
+  values_sha256 : String?
+  confirmed_by : String?
+  confirmed_unix_ms : Int64?
+  artifacts : Array[ContractGeneratedArtifact]
+  state : ContractPacketState
+  revision : Int64
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ContractPacket::canonical_values_material(Self) -> String
+pub fn ContractPacket::complete_generation(Self, Int64, ContractGeneratedArtifact, ContractGeneratedArtifact, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::confirm_information(Self, ContractTemplateManifest, Int64, String, String, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::marker_replacements(Self, Array[String]) -> Array[ContractFieldValue] raise ContractDocumentError
+pub fn ContractPacket::marker_value(Self, String) -> String raise ContractDocumentError
+pub fn ContractPacket::request_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::value(Self, String) -> String?
+
+pub(all) struct ContractPacketEvent {
+  event_id : String
+  packet_id : String
+  revision : Int64
+  kind : ContractPacketEventKind
+  actor_ref : String
+  changed_field_ids : Array[String]
+  values_sha256 : String?
+  artifact_sha256 : String?
+  occurred_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractPacketEventKind {
+  PacketCreated
+  InformationUpdated
+  InformationConfirmedEvent
+  GenerationRequestedEvent
+  GenerationCompletedEvent
+  PacketSupersededEvent
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractPacketState {
+  InformationDraft
+  ReadyForConfirmation
+  InformationConfirmed
+  GenerationRequested
+  Generated
+  Superseded
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractTemplateManifest {
+  contract_version : String
+  collection_id : String
+  template_id : String
+  template_version : String
+  locale : String
+  filename : String
+  media_type : String
+  sha256 : String
+  fillable_filename : String
+  fillable_sha256 : String
+  byte_count : Int64
+  page_count : Int
+  section_count : Int
+  forms : Array[ContractFormDefinition]
+  fields : Array[ContractFieldDefinition]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ContractTemplateManifest::field(Self, String) -> ContractFieldDefinition?
+
+// Type aliases
+
+// Traits

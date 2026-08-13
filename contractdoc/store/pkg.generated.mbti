@@ -1,0 +1,38 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/contractdoc/store"
+
+import {
+  "moonbitlang/async",
+  "vectie/lunanexa/contractdoc",
+  "vectie/lunanexa/database",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct ContractDocumentStore {
+  persistence : ContractPersistence
+  mut packets : Map[String, @contractdoc.ContractPacket]
+  mut idempotency_keys : Map[String, String]
+  mut events : Array[@contractdoc.ContractPacketEvent]
+  mutex : @async.Mutex
+}
+pub async fn ContractDocumentStore::complete_generation(Self, String, Int64, @contractdoc.ContractGeneratedArtifact, @contractdoc.ContractGeneratedArtifact, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::confirm_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::create_packet(Self, @contractdoc.ContractPacket, String) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::open(String) -> Self
+pub async fn ContractDocumentStore::open_postgres(@database.PostgresDatabase) -> Self
+pub async fn ContractDocumentStore::packet(Self, String) -> @contractdoc.ContractPacket?
+pub async fn ContractDocumentStore::packets_for_subject(Self, String) -> Array[@contractdoc.ContractPacket]
+pub async fn ContractDocumentStore::pending_generation_packets(Self) -> Array[@contractdoc.ContractPacket]
+pub async fn ContractDocumentStore::request_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::snapshot(Self) -> @contractdoc.ContractDocumentSnapshot
+pub async fn ContractDocumentStore::update_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, Array[@contractdoc.ContractFieldValue], String, Int64) -> @contractdoc.ContractPacket
+
+type ContractPersistence
+
+// Type aliases
+
+// Traits
