@@ -265,9 +265,11 @@ fn preview_font_stack(font : String) -> String {
 }
 
 ///|
-/// Scale a source DOCX half-point measurement against its 595.25pt page.
+/// Scale a source DOCX half-point measurement against the 9025-twip content
+/// box. Container query units resolve against the paper's content box after
+/// its 1440-twip A4 margins, not the outer 11905-twip page.
 fn half_points_cqw(value : Int) -> String {
-  "\{value.to_double() * 1000.0 / 11905.0}cqw"
+  "\{value.to_double() * 1000.0 / 9025.0}cqw"
 }
 
 ///| Scale source twips against the physical page width. Using container query
@@ -277,11 +279,28 @@ fn half_points_cqw(value : Int) -> String {
 ///|
 /// side-by-side preview instead of clipping an unscaled desktop page.
 fn twips_cqw(value : Int) -> String {
-  "\{value.to_double() * 100.0 / 11905.0}cqw"
+  "\{value.to_double() * 100.0 / 9025.0}cqw"
 }
 
 ///|
 fn preview_runs(runs : Array[@contractdoc.ContractPreviewRun]) -> @rabbita.Html {
+  if runs.is_empty() {
+    return @html.span(" ")
+  }
+  if runs.all(run => run.text.is_empty()) {
+    let spacer = @html.Attrs::build()
+    let source = runs[0]
+    match source.font_size_half_points {
+      Some(size) => ignore(spacer.style("font-size", half_points_cqw(size)))
+      None => ()
+    }
+    match source.font_east_asia {
+      Some(font) if font.trim() != "" =>
+        ignore(spacer.style("font-family", preview_font_stack(font)))
+      _ => ()
+    }
+    return @html.span(attrs=spacer, " ")
+  }
   @html.span(
     [
       for run in runs => {
@@ -326,40 +345,133 @@ fn preview_runs(runs : Array[@contractdoc.ContractPreviewRun]) -> @rabbita.Html 
 }
 
 ///|
-fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
-  let attrs = @html.Attrs::build()
-  match block.alignment {
+fn apply_paragraph_layout(
+  attrs : @html.Attrs,
+  alignment : String?,
+  spacing_before_twips : Int?,
+  spacing_after_twips : Int?,
+  line_twips : Int?,
+  line_rule : String?,
+  left_indent_twips : Int?,
+  right_indent_twips : Int?,
+  first_line_twips : Int?,
+) -> Unit {
+  match alignment {
     Some("center") => ignore(attrs.style("text-align", "center"))
     Some("right") | Some("end") => ignore(attrs.style("text-align", "right"))
     Some("both") | Some("distribute") =>
       ignore(attrs.style("text-align", "justify"))
     _ => ()
   }
-  match block.spacing_before_twips {
+  match spacing_before_twips {
     Some(value) => ignore(attrs.style("margin-top", twips_cqw(value)))
     None => ()
   }
-  match block.spacing_after_twips {
+  match spacing_after_twips {
     Some(value) => ignore(attrs.style("margin-bottom", twips_cqw(value)))
     None => ()
   }
-  match block.line_twips {
-    Some(value) if value > 0 =>
+  match line_twips {
+    Some(value) if value > 0 && line_rule == Some("exact") =>
       ignore(attrs.style("line-height", twips_cqw(value)))
+    Some(value) if value > 0 =>
+      ignore(
+        attrs.style("line-height", (value.to_double() / 240.0).to_string()),
+      )
     _ => ()
   }
-  match block.left_indent_twips {
+  match left_indent_twips {
     Some(value) => ignore(attrs.style("margin-left", twips_cqw(value)))
     None => ()
   }
-  match block.right_indent_twips {
+  match right_indent_twips {
     Some(value) => ignore(attrs.style("margin-right", twips_cqw(value)))
     None => ()
   }
-  match block.first_line_twips {
+  match first_line_twips {
     Some(value) => ignore(attrs.style("text-indent", twips_cqw(value)))
     None => ()
   }
+}
+
+///|
+fn preview_cell_paragraph(
+  paragraph : @contractdoc.ContractPreviewParagraph,
+) -> @rabbita.Html {
+  let attrs = @html.Attrs::build()
+  apply_paragraph_layout(
+    attrs,
+    paragraph.alignment,
+    paragraph.spacing_before_twips,
+    paragraph.spacing_after_twips,
+    paragraph.line_twips,
+    paragraph.line_rule,
+    paragraph.left_indent_twips,
+    paragraph.right_indent_twips,
+    paragraph.first_line_twips,
+  )
+  @html.p(class="moonleaf-cell-paragraph", attrs~, preview_runs(paragraph.runs))
+}
+
+///|
+fn cell_grid_start(row : @contractdoc.ContractPreviewRow, index : Int) -> Int {
+  let start = Ref(0)
+  for cell_index = 0; cell_index < index; cell_index = cell_index + 1 {
+    start.val = start.val + row.cells[cell_index].grid_span.max(1)
+  }
+  start.val
+}
+
+///|
+fn continuation_at(
+  row : @contractdoc.ContractPreviewRow,
+  grid_start : Int,
+) -> Bool {
+  let cursor = Ref(0)
+  for cell in row.cells {
+    if cursor.val == grid_start {
+      return cell.vertical_merge == Some("continue")
+    }
+    cursor.val = cursor.val + cell.grid_span.max(1)
+  }
+  false
+}
+
+///|
+fn cell_rowspan(
+  rows : Array[@contractdoc.ContractPreviewRow],
+  row_index : Int,
+  cell_index : Int,
+) -> Int {
+  if rows[row_index].cells[cell_index].vertical_merge != Some("restart") {
+    return 1
+  }
+  let grid_start = cell_grid_start(rows[row_index], cell_index)
+  let span = Ref(1)
+  for next = row_index + 1; next < rows.length(); next = next + 1 {
+    if continuation_at(rows[next], grid_start) {
+      span.val = span.val + 1
+    } else {
+      break
+    }
+  }
+  span.val
+}
+
+///|
+fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
+  let attrs = @html.Attrs::build()
+  apply_paragraph_layout(
+    attrs,
+    block.alignment,
+    block.spacing_before_twips,
+    block.spacing_after_twips,
+    block.line_twips,
+    block.line_rule,
+    block.left_indent_twips,
+    block.right_indent_twips,
+    block.first_line_twips,
+  )
   match block.kind {
     "table" => {
       let total = block.grid_widths_twips.fold(init=0, (sum, value) => {
@@ -386,8 +498,70 @@ fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
         },
         @html.tbody(
           [
-            for row in block.rows => {
-              @html.tr([ for cell in row => @html.td(cell) ])
+            for row_index, row in block.rows => {
+              let row_attrs = @html.Attrs::build()
+              match row.height_twips {
+                Some(value) =>
+                  ignore(row_attrs.style("height", twips_cqw(value)))
+                None => ignore(row_attrs.style("height", twips_cqw(720)))
+              }
+              @html.tr(
+                attrs=row_attrs,
+                [
+                  for cell_index, cell in row.cells => {
+                    if cell.vertical_merge == Some("continue") {
+                      @html.nothing
+                    } else {
+                      let cell_attrs = @html.Attrs::build()
+                      ignore(
+                        cell_attrs.style(
+                          "padding-top",
+                          twips_cqw(cell.margin_top_twips.unwrap_or(60)),
+                        ),
+                      )
+                      ignore(
+                        cell_attrs.style(
+                          "padding-right",
+                          twips_cqw(cell.margin_right_twips.unwrap_or(120)),
+                        ),
+                      )
+                      ignore(
+                        cell_attrs.style(
+                          "padding-bottom",
+                          twips_cqw(cell.margin_bottom_twips.unwrap_or(30)),
+                        ),
+                      )
+                      ignore(
+                        cell_attrs.style(
+                          "padding-left",
+                          twips_cqw(cell.margin_left_twips.unwrap_or(120)),
+                        ),
+                      )
+                      match cell.vertical_alignment {
+                        Some("center") =>
+                          ignore(cell_attrs.style("vertical-align", "middle"))
+                        Some("bottom") =>
+                          ignore(cell_attrs.style("vertical-align", "bottom"))
+                        _ => ignore(cell_attrs.style("vertical-align", "top"))
+                      }
+                      @html.td(
+                        colspan=cell.grid_span.max(1),
+                        rowspan=cell_rowspan(block.rows, row_index, cell_index),
+                        attrs=cell_attrs,
+                        if cell.paragraphs.is_empty() {
+                          [@html.span(cell.text)]
+                        } else {
+                          [
+                            for paragraph in cell.paragraphs => {
+                              preview_cell_paragraph(paragraph)
+                            }
+                          ]
+                        },
+                      )
+                    }
+                  }
+                ],
+              )
             }
           ],
         ),
@@ -987,7 +1161,7 @@ fn contract_documents_view(
 ///|
 fn contract_styles() -> String {
   (
-    #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(30rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision,.contract-page-count{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(76vh,64rem);padding:1rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.moonleaf-pages{display:grid;gap:1.5rem}.contract-paper{container-type:inline-size;display:block;box-sizing:border-box;width:100%;min-height:0;padding:12.1%;overflow:hidden;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:0;line-height:normal}.moonleaf-document{overflow-wrap:anywhere}.moonleaf-paragraph,.moonleaf-heading,.moonleaf-list-item{font-size:2.688cqw;line-height:4.704cqw}.moonleaf-paragraph{min-height:0;margin:0;text-indent:0}.moonleaf-heading{margin:0;text-align:center;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:0}.moonleaf-table{width:100%;margin:0;border-collapse:collapse;table-layout:fixed;font-size:2.15cqw;line-height:3.25cqw}.moonleaf-table td{padding:.2cqw .3cqw;border:1px solid #555;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:78rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:52rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem;padding:.5rem}}
+    #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(30rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision,.contract-page-count{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(76vh,64rem);padding:1rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.moonleaf-pages{display:grid;gap:1.5rem}.contract-paper{container-type:inline-size;display:block;box-sizing:border-box;width:100%;min-height:0;padding:12.1%;overflow:hidden;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:0;line-height:normal}.moonleaf-document{overflow-wrap:anywhere}.moonleaf-paragraph,.moonleaf-heading,.moonleaf-list-item,.moonleaf-cell-paragraph{font-size:2.688cqw;line-height:4.704cqw}.moonleaf-paragraph,.moonleaf-cell-paragraph{min-height:0;margin:0;text-indent:0}.moonleaf-heading{margin:0;text-align:center;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:0}.moonleaf-table{width:100%;margin:0;border-collapse:collapse;table-layout:fixed;font-size:2.688cqw;line-height:normal}.moonleaf-table td{box-sizing:border-box;border:1px solid #555;white-space:pre-wrap;overflow-wrap:anywhere}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:78rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:52rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem;padding:.5rem}}
   )
 }
 
