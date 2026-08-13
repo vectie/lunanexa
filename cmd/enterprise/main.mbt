@@ -79,6 +79,24 @@ priv struct OfflineArtifactView {
 } derive(FromJson)
 
 ///|
+priv struct ContractInformationUpdate {
+  expected_revision : Int64
+  changes : Array[@contractdoc.ContractFieldValue]
+} derive(ToJson)
+
+///|
+extend ContractInformationUpdate with ToJson::{to_json}
+
+///|
+priv struct ContractRevisionAction {
+  expected_revision : Int64
+  expected_values_sha256 : String?
+} derive(ToJson)
+
+///|
+extend ContractRevisionAction with ToJson::{to_json}
+
+///|
 priv enum Outcome {
   Loaded(
     @portal.EnterpriseSelfView,
@@ -89,7 +107,9 @@ priv enum Outcome {
     Array[@notifications.NotificationPreferenceView],
     Array[@nodelease.CustomerExclusiveMachineView],
     Array[@offline.CommercialOrder],
-    Array[@offline_commerce.OfflineArtifactSummary]
+    Array[@offline_commerce.OfflineArtifactSummary],
+    @contractdoc.ContractTemplateManifest,
+    Array[@contractdoc.ContractPacket]
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
@@ -102,6 +122,7 @@ priv enum Outcome {
   OfflineOrderCancelled(@offline.CommercialOrder)
   EvidenceUploaded(String)
   ArtifactDownloaded(String)
+  ContractPacketUpdated(@contractdoc.ContractPacket)
   Failed(@i18n.Locale, String)
 }
 
@@ -328,6 +349,8 @@ async fn load_self(
   Array[@nodelease.CustomerExclusiveMachineView],
   Array[@offline.CommercialOrder],
   Array[@offline_commerce.OfflineArtifactSummary],
+  @contractdoc.ContractTemplateManifest,
+  Array[@contractdoc.ContractPacket],
 ) {
   let body = request(
     "GET",
@@ -458,6 +481,28 @@ async fn load_self(
       })
     }
   }
+  let contract_manifest : @contractdoc.ContractTemplateManifest = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/contract-documents/manifest",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  let contract_packets : Array[@contractdoc.ContractPacket] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/contract-documents/self",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
   let cost_centers : Array[@enterprise_ui.EnterpriseCostCenterRow] = match
     commercial {
     Some(snapshot) =>
@@ -505,7 +550,7 @@ async fn load_self(
   }
   (
     view, cost_centers, provisional_spend, models, notifications, notification_preferences,
-    machines, orders, artifacts,
+    machines, orders, artifacts, contract_manifest, contract_packets,
   )
 }
 
@@ -822,10 +867,12 @@ fn load_command(
         machines,
         orders,
         artifacts,
+        contract_manifest,
+        contract_packets,
       ) =>
         Loaded(
           view, cost_centers, provisional_spend, models, notifications, notification_preferences,
-          machines, orders, artifacts,
+          machines, orders, artifacts, contract_manifest, contract_packets,
         )
     }
   })
@@ -1161,6 +1208,108 @@ fn lease_command(
         )
     } noraise {
       value => LeaseCreated(value)
+    }
+  })
+}
+
+///|
+fn replace_contract_packet(
+  values : Array[@contractdoc.ContractPacket],
+  updated : @contractdoc.ContractPacket,
+) -> Array[@contractdoc.ContractPacket] {
+  let mut found = false
+  let next = [
+    for value in values => {
+      if value.packet_id == updated.packet_id {
+        found = true
+        updated
+      } else {
+        value
+      }
+    }
+  ]
+  if !found {
+    next.push(updated)
+  }
+  next
+}
+
+///|
+async fn update_contract_information(
+  model : AppModel,
+  packet_id : String,
+  expected_revision : Int64,
+  changes : Array[@contractdoc.ContractFieldValue],
+) -> @contractdoc.ContractPacket {
+  let response = request(
+    "PUT",
+    model.endpoint,
+    "/v1/contract-documents/self/\{packet_id}:information",
+    model.token,
+    model.subject_ref,
+    body=ContractInformationUpdate::{ expected_revision, changes }
+      .to_json()
+      .stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+async fn contract_revision_action(
+  model : AppModel,
+  packet_id : String,
+  expected_revision : Int64,
+  expected_values_sha256 : String?,
+  suffix : String,
+) -> @contractdoc.ContractPacket {
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/contract-documents/self/\{packet_id}:\{suffix}",
+    model.token,
+    model.subject_ref,
+    body=ContractRevisionAction::{ expected_revision, expected_values_sha256 }
+      .to_json()
+      .stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+fn contract_packet_command(
+  model : AppModel,
+  message : @contract_documents.ContractDocumentsMessage,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try {
+      match message {
+        SaveInformation(packet_id, revision, changes) =>
+          update_contract_information(model, packet_id, revision, changes)
+        ConfirmAction(ConfirmInformation(packet_id, revision)) =>
+          contract_revision_action(model, packet_id, revision, None, "confirm")
+        ConfirmAction(RequestGeneration(packet_id, revision, digest)) =>
+          contract_revision_action(
+            model,
+            packet_id,
+            revision,
+            Some(digest),
+            "generate",
+          )
+        _ => fail("unsupported contract document operation")
+      }
+    } catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Contract document operation failed: \{Repr(error)}",
+            "合同文件操作失败：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => ContractPacketUpdated(value)
     }
   })
 }
@@ -1519,6 +1668,36 @@ fn update(
         },
         @rabbita.none,
       )
+    Portal(ContractDocuments(Refresh)) =>
+      if model.demo_mode {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              contract_documents: {
+                ..model.portal.contract_documents,
+                loading: true,
+              },
+            },
+          },
+          load_command(model, emit),
+        )
+      }
+    Portal(ContractDocuments(message)) if message is SaveInformation(_, _, _) ||
+      message is ConfirmAction(_) => {
+      let next = model.portal.update(ContractDocuments(message))
+      if model.demo_mode {
+        ({ ..model, portal: next }, @rabbita.none)
+      } else {
+        (
+          { ..model, portal: next },
+          contract_packet_command(model, message, emit),
+        )
+      }
+    }
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
     Outcome(
@@ -1531,7 +1710,9 @@ fn update(
         notification_preferences,
         machines,
         orders,
-        artifacts
+        artifacts,
+        contract_manifest,
+        contract_packets
       )
     ) => {
       let next = {
@@ -1568,6 +1749,21 @@ fn update(
                   None
                 }
             },
+            loading: false,
+            error_message: None,
+          },
+          contract_documents: {
+            ..model.portal.contract_documents,
+            manifest: Some(contract_manifest),
+            packets: contract_packets,
+            selected_packet_id: match
+              model.portal.contract_documents.selected_packet_id {
+              Some(value) => Some(value)
+              None => contract_packets.get(0).map(packet => packet.packet_id)
+            },
+            draft_values: contract_packets
+            .get(0)
+            .map_or([], packet => packet.values.copy()),
             loading: false,
             error_message: None,
           },
@@ -1682,6 +1878,36 @@ fn update(
         },
         @rabbita.none,
       )
+    Outcome(ContractPacketUpdated(packet)) => {
+      let packets = replace_contract_packet(
+        model.portal.contract_documents.packets,
+        packet,
+      )
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            contract_documents: {
+              ..model.portal.contract_documents,
+              packets,
+              selected_packet_id: Some(packet.packet_id),
+              draft_values: packet.values.copy(),
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Contract packet updated.",
+                  "合同资料包已更新。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    }
     Outcome(AgreementUpdated(agreement)) =>
       (
         {
@@ -2018,6 +2244,10 @@ fn main {
             ..@enterprise_ui.demo_state().offline_commerce,
             locale: initial_locale,
           },
+          contract_documents: {
+            ..@enterprise_ui.demo_state().contract_documents,
+            locale: initial_locale,
+          },
         }
       } else {
         {
@@ -2029,6 +2259,10 @@ fn main {
           },
           offline_commerce: {
             ..@enterprise_ui.default_state(current_unix_ms()).offline_commerce,
+            locale: initial_locale,
+          },
+          contract_documents: {
+            ..@enterprise_ui.default_state(current_unix_ms()).contract_documents,
             locale: initial_locale,
           },
         }

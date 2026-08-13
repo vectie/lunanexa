@@ -1,0 +1,58 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/contract_documents"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/contractdoc",
+  "vectie/lunanexa/ui/i18n",
+}
+
+// Values
+pub fn default_state(@i18n.Locale) -> ContractDocumentsState
+
+pub fn interactive_view(ContractDocumentsState, @cmd.Emit[ContractDocumentsMessage]) -> @html.Html
+
+pub fn render(ContractDocumentsState) -> String
+
+pub fn view(ContractDocumentsState) -> @html.Html
+
+// Errors
+
+// Types and methods
+pub(all) enum ContractDocumentConfirmation {
+  ConfirmInformation(String, Int64)
+  RequestGeneration(String, Int64, String)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum ContractDocumentsMessage {
+  SelectPacket(String)
+  SelectForm(@contractdoc.ContractFormKind)
+  FieldChanged(String, String)
+  SaveInformation(String, Int64, Array[@contractdoc.ContractFieldValue])
+  BeginConfirmInformation(String, Int64)
+  BeginRequestGeneration(String, Int64, String)
+  DismissConfirmation
+  ConfirmAction(ContractDocumentConfirmation)
+  Refresh
+  ClearNotice
+} derive(Eq)
+
+pub(all) struct ContractDocumentsState {
+  locale : @i18n.Locale
+  manifest : @contractdoc.ContractTemplateManifest?
+  packets : Array[@contractdoc.ContractPacket]
+  selected_packet_id : String?
+  selected_form : @contractdoc.ContractFormKind?
+  draft_values : Array[@contractdoc.ContractFieldValue]
+  confirmation : ContractDocumentConfirmation?
+  loading : Bool
+  success_message : String?
+  error_message : String?
+} derive(Eq)
+pub fn ContractDocumentsState::update(Self, ContractDocumentsMessage) -> Self
+
+// Type aliases
+
+// Traits
