@@ -417,6 +417,12 @@ async fn main {
   let offline_commerce_path = @env.get_env_var("LUNANEXA_OFFLINE_COMMERCE_PATH").unwrap_or(
     "lunanexa-offline-commerce.json",
   )
+  let contract_document_path = @env.get_env_var(
+    "LUNANEXA_CONTRACT_DOCUMENT_PATH",
+  ).unwrap_or("lunanexa-contract-documents.json")
+  let contract_document_worker_token = @env.get_env_var(
+    "LUNANEXA_CONTRACT_DOCUMENT_WORKER_TOKEN",
+  )
   let access_path = @env.get_env_var("LUNANEXA_ACCESS_PATH").unwrap_or(
     "lunanexa-access.json",
   )
@@ -651,6 +657,12 @@ async fn main {
       @offline_store.OfflineCommerceStore::open_postgres(database)
     None => @offline_store.OfflineCommerceStore::open(offline_commerce_path)
   }
+  let contract_document_store = match management_database {
+    Some(database) =>
+      @contractdoc_store.ContractDocumentStore::open_postgres(database)
+    None =>
+      @contractdoc_store.ContractDocumentStore::open(contract_document_path)
+  }
   let api_key_issuer_secret = required_environment(
     "LUNANEXA_API_KEY_ISSUER_SECRET",
   )
@@ -831,6 +843,13 @@ async fn main {
       )
     _ => ()
   }
+  match contract_document_worker_token {
+    Some(secret) if secret != "" =>
+      operational_secrets.push(
+        ("LUNANEXA_CONTRACT_DOCUMENT_WORKER_TOKEN", secret),
+      )
+    _ => ()
+  }
   for _, secret in configured_provider_callback_secrets {
     operational_secrets.push(("LUNANEXA_PROVIDER_CALLBACK_SECRET", secret))
   }
@@ -887,6 +906,7 @@ async fn main {
     )
     .with_external_export_proof_token(external_export_proof_token)
     .with_offline_commerce_store(offline_commerce_store)
+    .with_contract_document_store(contract_document_store)
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
@@ -918,6 +938,17 @@ async fn main {
         configuration.2,
       )
     None => initial_service
+  }
+  let configured_service = match contract_document_worker_token {
+    Some(token) if token != "" => {
+      if token.length() < 32 || token.length() > 4096 {
+        raise Failure::Failure(
+          "LUNANEXA_CONTRACT_DOCUMENT_WORKER_TOKEN must contain 32 to 4096 bytes",
+        )
+      }
+      configured_service.with_contract_document_worker_token(token)
+    }
+    _ => configured_service
   }
   let configured_service = match machine_helper_readiness {
     Some(evidence) =>

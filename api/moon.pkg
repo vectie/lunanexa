@@ -1,6 +1,8 @@
 import {
   "vectie/lunanexa/access",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/contractdoc",
+  "vectie/lunanexa/contractdoc/store" @contractdoc_store,
   "vectie/lunanexa/database",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations" @commercial_integrations,

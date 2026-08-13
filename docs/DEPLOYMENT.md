@@ -10,6 +10,13 @@ below before using the detailed reference sections. The most important
 distinction is that the management node is selected through Kubernetes
 placement; only DGX compute nodes perform LunaNexa enrollment.
 
+Contract-document packet state is stored in management PostgreSQL. File-mode
+development uses `LUNANEXA_CONTRACT_DOCUMENT_PATH`; the supplied manifest sets
+`/var/lib/lunanexa/contract-documents.json`. Exact DOCX/PDF publication remains
+blocked until the renderer image contains licensed `仿宋_GB2312`, `黑体`, and
+`方正小标宋简体` fonts and passes the 14-page fidelity gate described in
+[`CONTRACT_DOCUMENTS.md`](CONTRACT_DOCUMENTS.md).
+
 ## 1. Supported deployment shape
 
 The repository templates assume one Kubernetes cluster containing the

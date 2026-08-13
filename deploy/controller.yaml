@@ -118,6 +118,14 @@ spec:
                   optional: true
             - name: LUNANEXA_OFFLINE_COMMERCE_PATH
               value: /var/lib/lunanexa/offline-commerce.json
+            - name: LUNANEXA_CONTRACT_DOCUMENT_PATH
+              value: /var/lib/lunanexa/contract-documents.json
+            - name: LUNANEXA_CONTRACT_DOCUMENT_WORKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: contract-document-worker-token
+                  optional: true
             - name: LUNANEXA_ARTIFACT_WORKER_CALLBACK_TOKEN
               valueFrom:
                 secretKeyRef:

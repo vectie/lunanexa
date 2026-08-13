@@ -30,6 +30,8 @@ pub struct ApiService {
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @commercial_integrations.IntegrationStore
   offline_commerce_store : @offline_store.OfflineCommerceStore?
+  contract_document_store : @contractdoc_store.ContractDocumentStore?
+  contract_document_worker_token : String
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   credential_handoff_store : @credential_store.CredentialHandoffStore?
@@ -98,6 +100,8 @@ pub fn ApiService::new(
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     offline_commerce_store: None,
+    contract_document_store: None,
+    contract_document_worker_token: "",
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -166,6 +170,8 @@ pub fn ApiService::with_registry(
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     offline_commerce_store: None,
+    contract_document_store: None,
+    contract_document_worker_token: "",
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -235,6 +241,8 @@ pub fn ApiService::with_services(
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     offline_commerce_store: None,
+    contract_document_store: None,
+    contract_document_worker_token: "",
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -306,6 +314,8 @@ pub fn ApiService::with_control_plane(
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
     offline_commerce_store: None,
+    contract_document_store: None,
+    contract_document_worker_token: "",
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -401,6 +411,32 @@ pub fn ApiService::with_offline_commerce_store(
   offline_commerce_store : @offline_store.OfflineCommerceStore,
 ) -> ApiService {
   { ..self, offline_commerce_store: Some(offline_commerce_store) }
+}
+
+///|
+/// Enables the durable, source-template-bound contract document authority.
+pub fn ApiService::with_contract_document_store(
+  self : ApiService,
+  contract_document_store : @contractdoc_store.ContractDocumentStore,
+) -> ApiService {
+  { ..self, contract_document_store: Some(contract_document_store) }
+}
+
+///| Installs a machine-only contract renderer identity. Human portal and
+
+///|
+/// operator tokens are never accepted on worker routes.
+pub fn ApiService::with_contract_document_worker_token(
+  self : ApiService,
+  token : String,
+) -> ApiService {
+  if token.length() < 32 ||
+    token == self.operator_token ||
+    token == self.inference_token {
+    self
+  } else {
+    { ..self, contract_document_worker_token: token }
+  }
 }
 
 ///|
@@ -2392,6 +2428,11 @@ async fn ApiService::dispatch_with_transport(
       verb, path, headers, body, allow_asserted_subject,
     )
   }
+  if contract_document_path(path) {
+    return self.handle_contract_documents(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   if commercial_management_path(path) {
     return self.handle_commercial_management(verb, path, headers, body)
   }
@@ -3974,6 +4015,8 @@ fn operational_target_type(path : String) -> String {
     "exclusive_lease"
   } else if path.has_prefix("/v1/offline-commerce") {
     "commercial"
+  } else if path.has_prefix("/v1/contract-documents") {
+    "contract_document"
   } else if path.has_prefix("/v1/commercial") {
     "commercial"
   } else if path.has_prefix("/v1/workspace") {
