@@ -382,7 +382,7 @@ async fn prepare_job(configured_root : String, job_filename : String) -> String 
   let template = read_bounded_bytes(template_path, 100000000)
   let customized = match job.request.kind {
     EditableContractDocx | PrintReadyContractPdf =>
-      @worker.customize_docx_template(template, job.docx_replacements) catch {
+      @worker.customize_exact_docx_template(template, job.docx_replacements) catch {
         _ => raise Failure("MoonLeaf rejected the DOCX customization")
       }
     QuoteScheduleXlsx =>
@@ -512,7 +512,7 @@ async fn run_job(
   let template = read_bounded_bytes(template_path, 100000000)
   let customized = match job.request.kind {
     EditableContractDocx | PrintReadyContractPdf =>
-      @worker.customize_docx_template(template, job.docx_replacements) catch {
+      @worker.customize_exact_docx_template(template, job.docx_replacements) catch {
         _ => raise Failure("MoonLeaf rejected the DOCX customization")
       }
     QuoteScheduleXlsx =>

@@ -174,6 +174,28 @@ test "MoonLeaf performs bounded DOCX placeholder and XLSX cell edits" {
 }
 
 ///|
+test "exact DOCX customization rejects incomplete and unknown marker sets" {
+  let bytes = docx_fixture()
+  try @worker.customize_exact_docx_template(bytes, []) catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected exact customization error: \{Repr(error)}")
+  } noraise {
+    _ => fail("empty exact replacement set must fail")
+  }
+  try
+    @worker.customize_exact_docx_template(bytes, [
+      { placeholder: "{{ORDER_ID}}", value: "order-1" },
+      { placeholder: "{{UNKNOWN}}", value: "value" },
+    ])
+  catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected unknown-marker error: \{Repr(error)}")
+  } noraise {
+    _ => fail("unknown exact replacement must fail")
+  }
+}
+
+///|
 test "worker reports active OOXML parts and rejects cached formula errors" {
   let active = @worker.verify_ooxml(
     "contract.docx",
@@ -206,5 +228,33 @@ test "worker rejects mismatched kind and malformed OOXML" {
   ) catch {
     MoonLeafRejected(_) => ()
     _ => fail("malformed OOXML was accepted")
+  }
+}
+
+///|
+async test "embedded youthpolicy contract has a complete exact marker boundary" {
+  let path = "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx"
+  let bytes = @fs.read_file(path).binary().to_fixedarray()
+  let markers = @worker.exact_docx_markers(bytes)
+  assert_eq(markers.length(), 152)
+  let replacements = markers.map(marker => @worker.TextReplacement::{
+    placeholder: marker,
+    value: "",
+  })
+  let customized = @worker.customize_exact_docx_template(bytes, replacements)
+  assert_eq(customized.replacement_count, 152)
+  assert_true(customized.verification.moonleaf_verified)
+  let reopened = @opc.open(customized.bytes)
+  assert_false(reopened.text("word/document.xml").contains("{{"))
+  try
+    @worker.customize_exact_docx_template(
+      bytes,
+      replacements[0:replacements.length() - 1].to_owned(),
+    )
+  catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected incomplete marker error: \{Repr(error)}")
+  } noraise {
+    _ => fail("incomplete youthpolicy marker set must fail")
   }
 }

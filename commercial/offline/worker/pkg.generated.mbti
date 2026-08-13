@@ -10,7 +10,11 @@ import {
 // Values
 pub fn customize_docx_template(FixedArray[Byte], Array[TextReplacement]) -> CustomizedOoxml raise WorkerVerificationError
 
+pub fn customize_exact_docx_template(FixedArray[Byte], Array[TextReplacement]) -> CustomizedOoxml raise WorkerVerificationError
+
 pub fn customize_xlsx_template(FixedArray[Byte], Array[CellReplacement]) -> CustomizedOoxml raise WorkerVerificationError
+
+pub fn exact_docx_markers(FixedArray[Byte]) -> Array[String] raise WorkerVerificationError
 
 pub fn verify_ooxml(String, @offline.DocumentArtifactKind, FixedArray[Byte]) -> OoxmlVerification raise WorkerVerificationError
 

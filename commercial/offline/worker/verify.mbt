@@ -231,6 +231,81 @@ pub fn customize_docx_template(
   }
 }
 
+///| Exact-format legal templates use one verified marker per physical slot.
+
+///| This path requires the caller to account for every marker. Missing or
+
+///|
+/// unknown values fail instead of leaking markers or inventing contract text.
+pub fn customize_exact_docx_template(
+  bytes : FixedArray[Byte],
+  replacements : Array[TextReplacement],
+) -> CustomizedOoxml raise WorkerVerificationError {
+  if replacements.length() == 0 || replacements.length() > 512 {
+    raise InvalidInput("exact DOCX replacements are empty or exceed the bound")
+  }
+  let expected = exact_docx_markers(bytes)
+  if expected.length() == 0 || expected.length() != replacements.length() {
+    raise InvalidInput("exact DOCX replacement set is incomplete")
+  }
+  let expected_set : Map[String, Unit] = Map([])
+  for marker in expected {
+    expected_set[marker] = ()
+  }
+  let provided : Map[String, Unit] = Map([])
+  for replacement in replacements {
+    if !expected_set.contains(replacement.placeholder) ||
+      provided.contains(replacement.placeholder) ||
+      !safe_replacement_text(replacement.value, 4000) {
+      raise InvalidInput("exact DOCX replacement is unknown or invalid")
+    }
+    provided[replacement.placeholder] = ()
+  }
+  let result = customize_docx_template(bytes, replacements)
+  let reopened = @opc.open(result.bytes) catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
+  let completed = reopened.text("word/document.xml") catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
+  if completed.contains("{{") || completed.contains("}}") {
+    raise InvalidInput("exact DOCX output retains a marker")
+  }
+  result
+}
+
+///|
+/// Returns each distinct physical marker in deterministic lexical order.
+pub fn exact_docx_markers(
+  bytes : FixedArray[Byte],
+) -> Array[String] raise WorkerVerificationError {
+  let archive = @opc.open(bytes) catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
+  let source = archive.text("word/document.xml") catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
+  let mut cursor = 0
+  let expected : Map[String, Unit] = Map([])
+  while cursor < source.length() {
+    guard source[cursor:].find("{{") is Some(relative_start) else { break }
+    let start = cursor + relative_start
+    guard source[start + 2:].find("}}") is Some(relative_end) else {
+      raise InvalidInput("exact DOCX template contains an open marker")
+    }
+    let end = start + 2 + relative_end + 2
+    let marker = source[start:end].to_owned()
+    if marker.length() < 5 || marker.length() > 180 {
+      raise InvalidInput("exact DOCX marker is invalid")
+    }
+    expected[marker] = ()
+    cursor = end
+  }
+  let markers = expected.to_array().map(pair => pair.0)
+  markers.sort()
+  markers
+}
+
 ///|
 pub fn customize_xlsx_template(
   bytes : FixedArray[Byte],
