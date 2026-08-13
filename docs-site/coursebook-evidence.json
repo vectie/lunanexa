@@ -2,9 +2,9 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "085067be3aaba692e4f5b128299afdd97cbfd193",
-    "working_tree": "implementation-under-validation",
-    "inspected_at": "2026-08-13T04:40:34Z"
+    "revision": "cb490f9e3c01759f51f7fa2578c62c3e26c9342c",
+    "working_tree": "release-gate-passed",
+    "inspected_at": "2026-08-13T04:59:14Z"
   },
   "sources": [
     {"id":"readme","path":"README.mbt.md","digest":"sha256:9bcea9a7bc2e9ffefa5a84e68c9aba83a3f5df09a1df1a858cf01b8062edf858","kind":"overview","public":true},

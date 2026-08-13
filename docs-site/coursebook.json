@@ -6,9 +6,9 @@
     "tagline": "Operate a private GPU fleet as a governed model provider.",
     "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting LunaNexa.",
     "language": "en",
-    "revision": "b314f4a6234281a53cb245b587f3526dcbc95fe6",
+    "revision": "cb490f9e3c01759f51f7fa2578c62c3e26c9342c",
     "freshness": "reviewed",
-    "updated_at": "2026-08-12T15:14:47Z"
+    "updated_at": "2026-08-13T04:59:14Z"
   },
   "navigation": [
     {"id":"overview","label":"Overview","page_ids":["welcome","feature-map","boundaries"]},
@@ -707,7 +707,7 @@
         {"kind":"heading","level":2,"id":"projection-boundary","text":"Projection boundary"},
         {"kind":"paragraph","text":"The repository remains authoritative. This site organizes its evidence around reader questions and renders only structured text blocks. It does not execute authored HTML, embed production state, or claim that documentation generation tested the real cluster."},
         {"kind":"heading","level":2,"id":"freshness","text":"Freshness"},
-        {"kind":"callout","tone":"warning","title":"Current status: draft","text":"The source revision is db481df6, and the working tree includes uncommitted deployment and runtime changes. Regenerate and review after those changes are committed, and again after tomorrow's real deployment evidence exists."},
+        {"kind":"callout","tone":"info","title":"Current repository release","text":"Source revision cb490f9e passed the complete repository release gate. Physical DGX enrollment, external adapter acceptance, production PostgreSQL, and named human approval remain separate deployment gates and are not implied by this repository release."},
         {"kind":"heading","level":2,"id":"pet","text":"The read-only documentation pet"},
         {"kind":"paragraph","text":"The Ask guide panel is optional. A same-origin server sends the published coursebook and public evidence projection to MoonClaw's existing read-only Cowork endpoint. The adapter validates a narrow answer schema and known page citations. It cannot edit LunaNexa, run commands, expose gateway details, or substitute for operator authority."},
         {"kind":"heading","level":2,"id":"reference-lessons","text":"Lessons adapted from the Suanli reference"},
