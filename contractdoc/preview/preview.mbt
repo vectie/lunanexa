@@ -19,12 +19,65 @@ fn empty_block(
     spacing_before_twips: None,
     spacing_after_twips: None,
     line_twips: None,
+    line_rule: None,
     left_indent_twips: None,
     right_indent_twips: None,
     first_line_twips: None,
     hanging_twips: None,
     grid_widths_twips: [],
-    cell_widths_twips: [],
+  }
+}
+
+///|
+fn preview_run(run : @docx.RunMetadata) -> @contractdoc.ContractPreviewRun {
+  {
+    text: run.text,
+    bold: run.bold,
+    italic: run.italic,
+    underline: run.underline,
+    font_size_half_points: run.font_size_half_points,
+    color: run.color,
+    font_ascii: run.font_ascii,
+    font_east_asia: run.font_east_asia,
+    font_complex_script: run.font_complex_script,
+  }
+}
+
+///|
+fn preview_paragraph(
+  paragraph : @docx.ParagraphInfo,
+) -> @contractdoc.ContractPreviewParagraph {
+  {
+    runs: paragraph.runs.map(preview_run),
+    alignment: paragraph.metadata.alignment,
+    spacing_before_twips: paragraph.metadata.spacing_before_twips,
+    spacing_after_twips: paragraph.metadata.spacing_after_twips,
+    line_twips: paragraph.metadata.line_twips,
+    line_rule: paragraph.metadata.line_rule,
+    left_indent_twips: paragraph.metadata.left_indent_twips,
+    right_indent_twips: paragraph.metadata.right_indent_twips,
+    first_line_twips: paragraph.metadata.first_line_twips,
+    hanging_twips: paragraph.metadata.hanging_twips,
+  }
+}
+
+///|
+fn preview_row(row : @docx.TableRowInfo) -> @contractdoc.ContractPreviewRow {
+  {
+    cells: row.cells.map(cell => {
+      text: cell.text,
+      paragraphs: cell.paragraphs.map(preview_paragraph),
+      grid_span: cell.grid_span,
+      vertical_merge: cell.vertical_merge,
+      width_twips: cell.width_twips,
+      margin_top_twips: cell.margin_top_twips,
+      margin_right_twips: cell.margin_right_twips,
+      margin_bottom_twips: cell.margin_bottom_twips,
+      margin_left_twips: cell.margin_left_twips,
+      vertical_alignment: cell.vertical_alignment,
+    }),
+    height_twips: row.height_twips,
+    height_rule: row.height_rule,
   }
 }
 
@@ -34,17 +87,7 @@ fn preview_flow_block(
 ) -> @contractdoc.ContractPreviewBlock? {
   match block {
     FlowParagraph(paragraph) => {
-      let runs = paragraph.runs.map(run => @contractdoc.ContractPreviewRun::{
-        text: run.text,
-        bold: run.bold,
-        italic: run.italic,
-        underline: run.underline,
-        font_size_half_points: run.font_size_half_points,
-        color: run.color,
-        font_ascii: run.font_ascii,
-        font_east_asia: run.font_east_asia,
-        font_complex_script: run.font_complex_script,
-      })
+      let runs = paragraph.runs.map(preview_run)
       Some({
         ..empty_block("paragraph", runs),
         level: paragraph.outline_level.unwrap_or(0),
@@ -52,6 +95,7 @@ fn preview_flow_block(
         spacing_before_twips: paragraph.metadata.spacing_before_twips,
         spacing_after_twips: paragraph.metadata.spacing_after_twips,
         line_twips: paragraph.metadata.line_twips,
+        line_rule: paragraph.metadata.line_rule,
         left_indent_twips: paragraph.metadata.left_indent_twips,
         right_indent_twips: paragraph.metadata.right_indent_twips,
         first_line_twips: paragraph.metadata.first_line_twips,
@@ -61,11 +105,8 @@ fn preview_flow_block(
     FlowTable(table) =>
       Some({
         ..empty_block("table", []),
-        rows: table.rows.map(row => row.map(cell => cell.text)),
+        rows: table.rows.map(preview_row),
         grid_widths_twips: table.grid_widths_twips,
-        cell_widths_twips: table.rows.map(row => {
-          row.map(cell => cell.width_twips)
-        }),
       })
     FlowPageBreak | FlowSection(_) => None
   }
@@ -117,7 +158,7 @@ fn marker_preserving_pages(
           if source_index.val < source.blocks.length() {
             match source.blocks[source_index.val] {
               FlowTable(table) => {
-                let rows : Array[Array[@docx.TableCellInfo]] = []
+                let rows : Array[@docx.TableRowInfo] = []
                 let row_end = (source_table_row.val + fragment.rows.length()).min(
                   table.rows.length(),
                 )
@@ -224,17 +265,7 @@ pub fn render(
   for block in rich.blocks {
     match block {
       FlowParagraph(paragraph) => {
-        let runs = paragraph.runs.map(run => @contractdoc.ContractPreviewRun::{
-          text: run.text,
-          bold: run.bold,
-          italic: run.italic,
-          underline: run.underline,
-          font_size_half_points: run.font_size_half_points,
-          color: run.color,
-          font_ascii: run.font_ascii,
-          font_east_asia: run.font_east_asia,
-          font_complex_script: run.font_complex_script,
-        })
+        let runs = paragraph.runs.map(preview_run)
         blocks.push({
           ..empty_block("paragraph", runs),
           level: paragraph.outline_level.unwrap_or(0),
@@ -242,6 +273,7 @@ pub fn render(
           spacing_before_twips: paragraph.metadata.spacing_before_twips,
           spacing_after_twips: paragraph.metadata.spacing_after_twips,
           line_twips: paragraph.metadata.line_twips,
+          line_rule: paragraph.metadata.line_rule,
           left_indent_twips: paragraph.metadata.left_indent_twips,
           right_indent_twips: paragraph.metadata.right_indent_twips,
           first_line_twips: paragraph.metadata.first_line_twips,
@@ -251,11 +283,8 @@ pub fn render(
       FlowTable(table) =>
         blocks.push({
           ..empty_block("table", []),
-          rows: table.rows.map(row => row.map(cell => cell.text)),
+          rows: table.rows.map(preview_row),
           grid_widths_twips: table.grid_widths_twips,
-          cell_widths_twips: table.rows.map(row => {
-            row.map(cell => cell.width_twips)
-          }),
         })
       FlowPageBreak => blocks.push(empty_block("page-break", []))
       FlowSection(value) => section = Some(value)
@@ -343,25 +372,13 @@ pub fn template(
     match block {
       FlowParagraph(paragraph) =>
         blocks.push({
-          ..empty_block(
-            "paragraph",
-            paragraph.runs.map(run => {
-              text: run.text,
-              bold: run.bold,
-              italic: run.italic,
-              underline: run.underline,
-              font_size_half_points: run.font_size_half_points,
-              color: run.color,
-              font_ascii: run.font_ascii,
-              font_east_asia: run.font_east_asia,
-              font_complex_script: run.font_complex_script,
-            }),
-          ),
+          ..empty_block("paragraph", paragraph.runs.map(preview_run)),
           level: paragraph.outline_level.unwrap_or(0),
           alignment: paragraph.metadata.alignment,
           spacing_before_twips: paragraph.metadata.spacing_before_twips,
           spacing_after_twips: paragraph.metadata.spacing_after_twips,
           line_twips: paragraph.metadata.line_twips,
+          line_rule: paragraph.metadata.line_rule,
           left_indent_twips: paragraph.metadata.left_indent_twips,
           right_indent_twips: paragraph.metadata.right_indent_twips,
           first_line_twips: paragraph.metadata.first_line_twips,
@@ -370,11 +387,8 @@ pub fn template(
       FlowTable(table) =>
         blocks.push({
           ..empty_block("table", []),
-          rows: table.rows.map(row => row.map(cell => cell.text)),
+          rows: table.rows.map(preview_row),
           grid_widths_twips: table.grid_widths_twips,
-          cell_widths_twips: table.rows.map(row => {
-            row.map(cell => cell.width_twips)
-          }),
         })
       FlowPageBreak => blocks.push(empty_block("page-break", []))
       FlowSection(value) => section = Some(value)

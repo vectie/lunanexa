@@ -44,7 +44,7 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
   let visible_text = preview.blocks.fold(init="", fn(acc, block) {
     let run_text = block.runs.fold(init="", fn(text, run) { text + run.text })
     let cell_text = block.rows.fold(init="", fn(text, row) {
-      text + row.join("")
+      text + row.cells.map(cell => cell.text).join("")
     })
     acc + run_text + cell_text
   })

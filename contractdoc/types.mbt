@@ -122,6 +122,41 @@ pub(all) struct ContractPreviewRun {
   font_complex_script : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
+///|
+pub(all) struct ContractPreviewParagraph {
+  runs : Array[ContractPreviewRun]
+  alignment : String?
+  spacing_before_twips : Int?
+  spacing_after_twips : Int?
+  line_twips : Int?
+  line_rule : String?
+  left_indent_twips : Int?
+  right_indent_twips : Int?
+  first_line_twips : Int?
+  hanging_twips : Int?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractPreviewCell {
+  text : String
+  paragraphs : Array[ContractPreviewParagraph]
+  grid_span : Int
+  vertical_merge : String?
+  width_twips : Int?
+  margin_top_twips : Int?
+  margin_right_twips : Int?
+  margin_bottom_twips : Int?
+  margin_left_twips : Int?
+  vertical_alignment : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractPreviewRow {
+  cells : Array[ContractPreviewCell]
+  height_twips : Int?
+  height_rule : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
 ///| A provider-neutral MoonLeaf block. `kind` is one of paragraph, heading,
 
 ///|
@@ -131,17 +166,17 @@ pub(all) struct ContractPreviewBlock {
   level : Int
   ordered : Bool
   runs : Array[ContractPreviewRun]
-  rows : Array[Array[String]]
+  rows : Array[ContractPreviewRow]
   alignment : String?
   spacing_before_twips : Int?
   spacing_after_twips : Int?
   line_twips : Int?
+  line_rule : String?
   left_indent_twips : Int?
   right_indent_twips : Int?
   first_line_twips : Int?
   hanging_twips : Int?
   grid_widths_twips : Array[Int]
-  cell_widths_twips : Array[Array[Int?]]
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///| Bounded live preview derived from the authoritative fillable DOCX by

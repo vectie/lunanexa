@@ -45,30 +45,40 @@ pub fn materialize_preview_template(
     }
     output
   }
-  {
-    ..template.scene,
-    packet_id: packet.packet_id,
-    packet_revision: draft.revision,
-    form,
-    blocks: template.scene.blocks.map(block => {
+  fn replace_block(
+    block : ContractPreviewBlock,
+    values : Array[(String, String)],
+  ) -> ContractPreviewBlock {
+    {
       ..block,
       runs: block.runs.map(run => {
         ..run,
         text: replace_markers(run.text, values),
       }),
-      rows: block.rows.map(row => row.map(cell => replace_markers(cell, values))),
-    }),
+      rows: block.rows.map(row => {
+        ..row,
+        cells: row.cells.map(cell => {
+          ..cell,
+          text: replace_markers(cell.text, values),
+          paragraphs: cell.paragraphs.map(paragraph => {
+            ..paragraph,
+            runs: paragraph.runs.map(run => {
+              ..run,
+              text: replace_markers(run.text, values),
+            }),
+          }),
+        }),
+      }),
+    }
+  }
+  {
+    ..template.scene,
+    packet_id: packet.packet_id,
+    packet_revision: draft.revision,
+    form,
+    blocks: template.scene.blocks.map(block => replace_block(block, values)),
     pages: template.scene.pages.map(page => {
-      page.map(block => {
-        ..block,
-        runs: block.runs.map(run => {
-          ..run,
-          text: replace_markers(run.text, values),
-        }),
-        rows: block.rows.map(row => {
-          row.map(cell => replace_markers(cell, values))
-        }),
-      })
+      page.map(block => replace_block(block, values))
     }),
   }
 }
