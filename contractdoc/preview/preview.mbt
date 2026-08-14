@@ -201,6 +201,76 @@ fn marker_preserving_pages(
 }
 
 ///|
+/// Resolve each physical page to its source form from the authoritative form
+/// heading in the MoonLeaf scene. A form continues onto following pages until
+/// the next declared heading; no browser copy or page-number table is used.
+fn page_forms_from_source_headings(
+  pages : Array[Array[@contractdoc.ContractPreviewBlock]],
+  forms : Array[@contractdoc.ContractFormDefinition],
+) -> Array[@contractdoc.ContractFormKind] raise ContractPreviewError {
+  guard forms.get(0) is Some(first) else {
+    raise InvalidDraft("contract manifest has no forms")
+  }
+  let mut current = first.form
+  let page_forms : Array[@contractdoc.ContractFormKind] = []
+  for page in pages {
+    let text = page.fold(init="", fn(acc, block) {
+      let runs = block.runs.map(run => run.text).join("")
+      let cells = block.rows.fold(init="", fn(row_text, row) {
+        row_text + row.cells.map(cell => cell.text).join("")
+      })
+      acc + runs + cells
+    })
+    for index, definition in forms {
+      if index > 0 && text.contains(definition.title_zh_cn) {
+        current = definition.form
+      }
+    }
+    page_forms.push(current)
+  }
+  for definition in forms {
+    if !page_forms.contains(definition.form) {
+      raise InvalidDraft("MoonLeaf scene is missing a declared contract form")
+    }
+  }
+  page_forms
+}
+
+///|
+fn selected_form_pages(
+  pages : Array[Array[@contractdoc.ContractPreviewBlock]],
+  page_forms : Array[@contractdoc.ContractFormKind],
+  form : @contractdoc.ContractFormKind,
+) -> Array[Array[@contractdoc.ContractPreviewBlock]] raise ContractPreviewError {
+  if pages.length() != page_forms.length() {
+    raise InvalidDraft("MoonLeaf page ownership is incomplete")
+  }
+  let selected : Array[Array[@contractdoc.ContractPreviewBlock]] = []
+  for index, page in pages {
+    if page_forms.get(index) == Some(form) {
+      selected.push(page)
+    }
+  }
+  if selected.length() == 0 {
+    raise InvalidDraft("selected contract form has no MoonLeaf pages")
+  }
+  selected
+}
+
+///|
+fn flattened_pages(
+  pages : Array[Array[@contractdoc.ContractPreviewBlock]],
+) -> Array[@contractdoc.ContractPreviewBlock] {
+  let blocks : Array[@contractdoc.ContractPreviewBlock] = []
+  for page in pages {
+    for block in page {
+      blocks.push(block)
+    }
+  }
+  blocks
+}
+
+///|
 /// Apply a role-scoped, non-persistent draft to a packet for preview only.
 fn preview_packet(
   manifest : @contractdoc.ContractTemplateManifest,
@@ -276,43 +346,14 @@ pub fn render(
   ) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
-  let blocks : Array[@contractdoc.ContractPreviewBlock] = []
-  for block in rich.blocks {
-    match block {
-      FlowParagraph(paragraph) => {
-        let runs = paragraph.runs.map(preview_run)
-        blocks.push({
-          ..empty_block("paragraph", runs),
-          level: paragraph.outline_level.unwrap_or(0),
-          alignment: paragraph.metadata.alignment,
-          spacing_before_twips: paragraph.metadata.spacing_before_twips,
-          spacing_after_twips: paragraph.metadata.spacing_after_twips,
-          line_twips: paragraph.metadata.line_twips,
-          line_rule: paragraph.metadata.line_rule,
-          left_indent_twips: paragraph.metadata.left_indent_twips,
-          right_indent_twips: paragraph.metadata.right_indent_twips,
-          first_line_twips: paragraph.metadata.first_line_twips,
-          hanging_twips: paragraph.metadata.hanging_twips,
-        })
-      }
-      FlowTable(table) =>
-        blocks.push({
-          ..empty_block("table", []),
-          rows: table.rows.map(preview_row),
-          grid_widths_twips: table.grid_widths_twips,
-        })
-      FlowPageBreak => blocks.push(empty_block("page-break", []))
-      FlowSection(_) => ()
-    }
-  }
-  let pages : Array[Array[@contractdoc.ContractPreviewBlock]] = paged.pages.map(page => {
-      page.blocks.filter_map(preview_flow_block)
-    },
-  )
+  let all_pages = marker_preserving_pages(rich, paged)
+  let page_forms = page_forms_from_source_headings(all_pages, manifest.forms)
+  let pages = selected_form_pages(all_pages, page_forms, form)
+  let blocks = flattened_pages(pages)
   {
     engine: "moonleaf",
     packet_id: packet.packet_id,
-    packet_revision: packet.revision,
+    packet_revision: draft.revision,
     form,
     blocks,
     pages,
@@ -393,6 +434,7 @@ pub fn template(
     }
   }
   let pages = marker_preserving_pages(rich, paged)
+  let page_forms = page_forms_from_source_headings(pages, manifest.forms)
   {
     template_id: manifest.template_id,
     template_version: manifest.template_version,
@@ -412,6 +454,7 @@ pub fn template(
       margin_bottom_twips: Some(paged.margin_bottom_twips),
       margin_left_twips: Some(paged.margin_left_twips),
     },
+    page_forms,
     marker_defaults,
   }
 }

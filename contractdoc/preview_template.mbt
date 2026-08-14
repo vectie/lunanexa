@@ -12,7 +12,8 @@ pub fn materialize_preview_template(
   if template.template_id != manifest.template_id ||
     template.template_version != manifest.template_version ||
     template.template_sha256 != manifest.fillable_sha256 ||
-    !packet.active_forms.contains(form) {
+    !packet.active_forms.contains(form) ||
+    template.page_forms.length() != template.scene.pages.length() {
     raise TemplateMismatch
   }
   let draft = if changes.length() == 0 {
@@ -71,14 +72,27 @@ pub fn materialize_preview_template(
       }),
     }
   }
+  let pages : Array[Array[ContractPreviewBlock]] = []
+  for index, page in template.scene.pages {
+    if template.page_forms.get(index) == Some(form) {
+      pages.push(page.map(block => replace_block(block, values)))
+    }
+  }
+  if pages.length() == 0 {
+    raise TemplateMismatch
+  }
+  let blocks : Array[ContractPreviewBlock] = []
+  for page in pages {
+    for block in page {
+      blocks.push(block)
+    }
+  }
   {
     ..template.scene,
     packet_id: packet.packet_id,
     packet_revision: draft.revision,
     form,
-    blocks: template.scene.blocks.map(block => replace_block(block, values)),
-    pages: template.scene.pages.map(page => {
-      page.map(block => replace_block(block, values))
-    }),
+    blocks,
+    pages,
   }
 }

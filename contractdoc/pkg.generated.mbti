@@ -287,6 +287,7 @@ pub(all) struct ContractPreviewTemplate {
   template_version : String
   template_sha256 : String
   scene : ContractPreviewDocument
+  page_forms : Array[ContractFormKind]
   marker_defaults : Array[ContractPreviewMarker]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 

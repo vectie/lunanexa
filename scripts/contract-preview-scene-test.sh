@@ -16,6 +16,15 @@ jq -e '
   . as $root |
   .scene.engine == "moonleaf" and
   (.scene.pages | length) == 18 and
+  (.page_forms == ([range(0; 11) | "MasterLease"] + [
+    "ReservationApplication",
+    "ReservationApplication",
+    "AccessConfirmation",
+    "ViolationNotice",
+    "DamageAssessment",
+    "SettlementConfirmation",
+    "EarlyTerminationApplication"
+  ])) and
   ([14, 15, 16, 17, 18] | all(. as $page |
     ($page - 1) as $index |
     ([$root.scene.pages[$index][] | .runs[]?.text] | join("")) |

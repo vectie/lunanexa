@@ -214,6 +214,12 @@ pub(all) struct ContractPreviewTemplate {
   template_version : String
   template_sha256 : String
   scene : ContractPreviewDocument
+  /// The owning form for every physical page in `scene.pages`.
+  ///
+  /// This is emitted by MoonLeaf from the declared source-form headings. It
+  /// lets the browser select one source contract without relying on a second
+  /// template, a hard-coded page-number table, or browser reflow.
+  page_forms : Array[ContractFormKind]
   marker_defaults : Array[ContractPreviewMarker]
 } derive(Debug, Eq, ToJson, FromJson)
 
