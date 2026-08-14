@@ -255,21 +255,23 @@ fn field_label(
 
 ///|
 fn preview_font_stack(font : String) -> String {
-  if font.contains("黑体") || font.contains("Hei") {
-    "'\{font}','Heiti SC','STHeiti','Noto Sans CJK SC','Source Han Sans SC',sans-serif"
+  if font.contains("方正小标宋") || font.contains("XiaoBiaoSong") {
+    "'LunaNexa FZ XiaoBiaoSong','\{font}','Songti SC','STSong',serif"
+  } else if font.contains("黑体") || font.contains("Hei") {
+    "'LunaNexa SimHei','\{font}','Heiti SC','STHeiti','Noto Sans CJK SC','Source Han Sans SC',sans-serif"
   } else if font.contains("仿宋") || font.contains("FangSong") {
-    "'\{font}','FangSong','STFangsong','Songti SC','STSong','Noto Serif CJK SC','Source Han Serif SC',serif"
+    "'LunaNexa FangSong GB2312','\{font}','FangSong','STFangsong','Songti SC','STSong','Noto Serif CJK SC','Source Han Serif SC',serif"
   } else {
     "'\{font}','Songti SC','STSong','Noto Serif CJK SC','Source Han Serif SC',serif"
   }
 }
 
 ///|
-/// Scale a source DOCX half-point measurement against the 9025-twip content
-/// box. Container query units resolve against the paper's content box after
-/// its 1440-twip A4 margins, not the outer 11905-twip page.
-fn half_points_cqw(value : Int) -> String {
-  "\{value.to_double() * 1000.0 / 9025.0}cqw"
+/// Scale a source DOCX half-point measurement against MoonLeaf's effective
+/// content box. Container query units resolve against the paper's content box,
+/// not the outer physical page.
+fn half_points_cqw(value : Int, content_width_twips : Int) -> String {
+  "\{value.to_double() * 1000.0 / content_width_twips.to_double()}cqw"
 }
 
 ///| Scale source twips against the physical page width. Using container query
@@ -278,12 +280,15 @@ fn half_points_cqw(value : Int) -> String {
 
 ///|
 /// side-by-side preview instead of clipping an unscaled desktop page.
-fn twips_cqw(value : Int) -> String {
-  "\{value.to_double() * 100.0 / 9025.0}cqw"
+fn twips_cqw(value : Int, content_width_twips : Int) -> String {
+  "\{value.to_double() * 100.0 / content_width_twips.to_double()}cqw"
 }
 
 ///|
-fn preview_runs(runs : Array[@contractdoc.ContractPreviewRun]) -> @rabbita.Html {
+fn preview_runs(
+  runs : Array[@contractdoc.ContractPreviewRun],
+  content_width_twips : Int,
+) -> @rabbita.Html {
   if runs.is_empty() {
     return @html.span(" ")
   }
@@ -291,7 +296,10 @@ fn preview_runs(runs : Array[@contractdoc.ContractPreviewRun]) -> @rabbita.Html 
     let spacer = @html.Attrs::build()
     let source = runs[0]
     match source.font_size_half_points {
-      Some(size) => ignore(spacer.style("font-size", half_points_cqw(size)))
+      Some(size) =>
+        ignore(
+          spacer.style("font-size", half_points_cqw(size, content_width_twips)),
+        )
       None => ()
     }
     match source.font_east_asia {
@@ -325,7 +333,13 @@ fn preview_runs(runs : Array[@contractdoc.ContractPreviewRun]) -> @rabbita.Html 
           .join(" ")
         let attrs = @html.Attrs::build()
         match run.font_size_half_points {
-          Some(size) => ignore(attrs.style("font-size", half_points_cqw(size)))
+          Some(size) =>
+            ignore(
+              attrs.style(
+                "font-size",
+                half_points_cqw(size, content_width_twips),
+              ),
+            )
           None => ()
         }
         match run.color {
@@ -355,6 +369,7 @@ fn apply_paragraph_layout(
   left_indent_twips : Int?,
   right_indent_twips : Int?,
   first_line_twips : Int?,
+  content_width_twips : Int,
 ) -> Unit {
   match alignment {
     Some("center") => ignore(attrs.style("text-align", "center"))
@@ -364,16 +379,20 @@ fn apply_paragraph_layout(
     _ => ()
   }
   match spacing_before_twips {
-    Some(value) => ignore(attrs.style("margin-top", twips_cqw(value)))
+    Some(value) =>
+      ignore(attrs.style("margin-top", twips_cqw(value, content_width_twips)))
     None => ()
   }
   match spacing_after_twips {
-    Some(value) => ignore(attrs.style("margin-bottom", twips_cqw(value)))
+    Some(value) =>
+      ignore(
+        attrs.style("margin-bottom", twips_cqw(value, content_width_twips)),
+      )
     None => ()
   }
   match line_twips {
     Some(value) if value > 0 && line_rule == Some("exact") =>
-      ignore(attrs.style("line-height", twips_cqw(value)))
+      ignore(attrs.style("line-height", twips_cqw(value, content_width_twips)))
     Some(value) if value > 0 =>
       ignore(
         attrs.style("line-height", (value.to_double() / 240.0).to_string()),
@@ -381,15 +400,18 @@ fn apply_paragraph_layout(
     _ => ()
   }
   match left_indent_twips {
-    Some(value) => ignore(attrs.style("margin-left", twips_cqw(value)))
+    Some(value) =>
+      ignore(attrs.style("margin-left", twips_cqw(value, content_width_twips)))
     None => ()
   }
   match right_indent_twips {
-    Some(value) => ignore(attrs.style("margin-right", twips_cqw(value)))
+    Some(value) =>
+      ignore(attrs.style("margin-right", twips_cqw(value, content_width_twips)))
     None => ()
   }
   match first_line_twips {
-    Some(value) => ignore(attrs.style("text-indent", twips_cqw(value)))
+    Some(value) =>
+      ignore(attrs.style("text-indent", twips_cqw(value, content_width_twips)))
     None => ()
   }
 }
@@ -397,6 +419,7 @@ fn apply_paragraph_layout(
 ///|
 fn preview_cell_paragraph(
   paragraph : @contractdoc.ContractPreviewParagraph,
+  content_width_twips : Int,
 ) -> @rabbita.Html {
   let attrs = @html.Attrs::build()
   apply_paragraph_layout(
@@ -409,8 +432,13 @@ fn preview_cell_paragraph(
     paragraph.left_indent_twips,
     paragraph.right_indent_twips,
     paragraph.first_line_twips,
+    content_width_twips,
   )
-  @html.p(class="moonleaf-cell-paragraph", attrs~, preview_runs(paragraph.runs))
+  @html.p(
+    class="moonleaf-cell-paragraph",
+    attrs~,
+    preview_runs(paragraph.runs, content_width_twips),
+  )
 }
 
 ///|
@@ -459,7 +487,10 @@ fn cell_rowspan(
 }
 
 ///|
-fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
+fn preview_block(
+  block : @contractdoc.ContractPreviewBlock,
+  content_width_twips : Int,
+) -> @rabbita.Html {
   let attrs = @html.Attrs::build()
   apply_paragraph_layout(
     attrs,
@@ -471,6 +502,7 @@ fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
     block.left_indent_twips,
     block.right_indent_twips,
     block.first_line_twips,
+    content_width_twips,
   )
   match block.kind {
     "table" => {
@@ -502,8 +534,19 @@ fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
               let row_attrs = @html.Attrs::build()
               match row.height_twips {
                 Some(value) =>
-                  ignore(row_attrs.style("height", twips_cqw(value)))
-                None => ignore(row_attrs.style("height", twips_cqw(720)))
+                  ignore(
+                    row_attrs.style(
+                      "height",
+                      twips_cqw(value, content_width_twips),
+                    ),
+                  )
+                None =>
+                  ignore(
+                    row_attrs.style(
+                      "height",
+                      twips_cqw(720, content_width_twips),
+                    ),
+                  )
               }
               @html.tr(
                 attrs=row_attrs,
@@ -516,25 +559,37 @@ fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
                       ignore(
                         cell_attrs.style(
                           "padding-top",
-                          twips_cqw(cell.margin_top_twips.unwrap_or(60)),
+                          twips_cqw(
+                            cell.margin_top_twips.unwrap_or(60),
+                            content_width_twips,
+                          ),
                         ),
                       )
                       ignore(
                         cell_attrs.style(
                           "padding-right",
-                          twips_cqw(cell.margin_right_twips.unwrap_or(120)),
+                          twips_cqw(
+                            cell.margin_right_twips.unwrap_or(120),
+                            content_width_twips,
+                          ),
                         ),
                       )
                       ignore(
                         cell_attrs.style(
                           "padding-bottom",
-                          twips_cqw(cell.margin_bottom_twips.unwrap_or(30)),
+                          twips_cqw(
+                            cell.margin_bottom_twips.unwrap_or(30),
+                            content_width_twips,
+                          ),
                         ),
                       )
                       ignore(
                         cell_attrs.style(
                           "padding-left",
-                          twips_cqw(cell.margin_left_twips.unwrap_or(120)),
+                          twips_cqw(
+                            cell.margin_left_twips.unwrap_or(120),
+                            content_width_twips,
+                          ),
                         ),
                       )
                       match cell.vertical_alignment {
@@ -553,7 +608,9 @@ fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
                         } else {
                           [
                             for paragraph in cell.paragraphs => {
-                              preview_cell_paragraph(paragraph)
+                              preview_cell_paragraph(
+                                paragraph, content_width_twips,
+                              )
                             }
                           ]
                         },
@@ -568,14 +625,28 @@ fn preview_block(block : @contractdoc.ContractPreviewBlock) -> @rabbita.Html {
       ])
     }
     "heading" =>
-      @html.div(class="moonleaf-heading", attrs~, preview_runs(block.runs))
+      @html.div(
+        class="moonleaf-heading",
+        attrs~,
+        preview_runs(block.runs, content_width_twips),
+      )
     "list-item" =>
       @html.div(class="moonleaf-list-item", attrs~, [
         @html.span(if block.ordered { "1." } else { "•" }),
-        preview_runs(block.runs),
+        preview_runs(block.runs, content_width_twips),
       ])
-    _ => @html.p(class="moonleaf-paragraph", attrs~, preview_runs(block.runs))
+    _ =>
+      @html.p(
+        class="moonleaf-paragraph",
+        attrs~,
+        preview_runs(block.runs, content_width_twips),
+      )
   }
+}
+
+///|
+fn page_percent(value_twips : Int, page_width_twips : Int) -> String {
+  "\{value_twips.to_double() * 100.0 / page_width_twips.to_double()}%"
 }
 
 ///|
@@ -642,6 +713,17 @@ fn preview_panel(
         match state.preview {
           Some(preview) if active_form == Some(preview.form) => {
             let pages = preview.pages
+            let page_width_twips = preview.page_width_twips.unwrap_or(11905)
+            let page_height_twips = preview.page_height_twips.unwrap_or(16840)
+            let margin_top_twips = preview.margin_top_twips.unwrap_or(1440)
+            let margin_right_twips = preview.margin_right_twips.unwrap_or(1800)
+            let margin_bottom_twips = preview.margin_bottom_twips.unwrap_or(
+              1440,
+            )
+            let margin_left_twips = preview.margin_left_twips.unwrap_or(1800)
+            let content_width_twips = (page_width_twips -
+            margin_left_twips -
+            margin_right_twips).max(1)
             @html.div(
               class="moonleaf-pages",
               [
@@ -653,12 +735,43 @@ fn preview_panel(
                       "合同第 \{index + 1} 页，共 \{pages.length()} 页",
                     ),
                   )
-                  ignore(paper.style("aspect-ratio", "11905 / 16840"))
+                  ignore(
+                    paper.style(
+                      "aspect-ratio",
+                      "\{page_width_twips} / \{page_height_twips}",
+                    ),
+                  )
+                  ignore(
+                    paper.style(
+                      "padding-top",
+                      page_percent(margin_top_twips, page_width_twips),
+                    ),
+                  )
+                  ignore(
+                    paper.style(
+                      "padding-right",
+                      page_percent(margin_right_twips, page_width_twips),
+                    ),
+                  )
+                  ignore(
+                    paper.style(
+                      "padding-bottom",
+                      page_percent(margin_bottom_twips, page_width_twips),
+                    ),
+                  )
+                  ignore(
+                    paper.style(
+                      "padding-left",
+                      page_percent(margin_left_twips, page_width_twips),
+                    ),
+                  )
                   @html.article(
                     class="contract-paper moonleaf-document",
                     attrs=paper,
                     [
-                      for block in page => preview_block(block)
+                      for block in page => {
+                        preview_block(block, content_width_twips)
+                      }
                     ],
                   )
                 }
@@ -1161,7 +1274,7 @@ fn contract_documents_view(
 ///|
 fn contract_styles() -> String {
   (
-    #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(30rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision,.contract-page-count{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(76vh,64rem);padding:1rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.moonleaf-pages{display:grid;gap:1.5rem}.contract-paper{container-type:inline-size;display:block;box-sizing:border-box;width:100%;min-height:0;padding:12.1%;overflow:hidden;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:0;line-height:normal}.moonleaf-document{overflow-wrap:anywhere}.moonleaf-paragraph,.moonleaf-heading,.moonleaf-list-item,.moonleaf-cell-paragraph{font-size:2.688cqw;line-height:4.704cqw}.moonleaf-paragraph,.moonleaf-cell-paragraph{min-height:0;margin:0;text-indent:0}.moonleaf-heading{margin:0;text-align:center;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:0}.moonleaf-table{width:100%;margin:0;border-collapse:collapse;table-layout:fixed;font-size:2.688cqw;line-height:normal}.moonleaf-table td{box-sizing:border-box;border:1px solid #555;white-space:pre-wrap;overflow-wrap:anywhere}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:78rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:52rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem;padding:.5rem}}
+    #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(30rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision,.contract-page-count{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(76vh,64rem);padding:1rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.moonleaf-pages{display:grid;gap:1.5rem}.contract-paper{container-type:inline-size;display:block;box-sizing:border-box;width:100%;min-height:0;overflow:hidden;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:0;line-height:normal}.moonleaf-document{font-kerning:normal;font-synthesis:none;word-break:normal;overflow-wrap:break-word}.moonleaf-document span{white-space:pre-wrap}.moonleaf-paragraph,.moonleaf-heading,.moonleaf-list-item,.moonleaf-cell-paragraph{font-size:2.89cqw;line-height:6.743cqw;text-justify:inter-character}.moonleaf-paragraph,.moonleaf-cell-paragraph{min-height:0;margin:0;text-indent:0}.moonleaf-heading{margin:0;text-align:center;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:0}.moonleaf-table{width:100%;margin:0;border-collapse:collapse;table-layout:fixed;font-size:2.89cqw;line-height:normal}.moonleaf-table td{box-sizing:border-box;border:1px solid #555;white-space:pre-wrap;overflow-wrap:anywhere}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:78rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:52rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem;padding:.5rem}}
   )
 }
 

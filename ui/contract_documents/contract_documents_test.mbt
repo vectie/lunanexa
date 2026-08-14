@@ -239,7 +239,15 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
   }
   let second = {
     ..empty,
-    runs: [{ ..title_run, text: "第二页中文内容", bold: false }],
+    runs: [
+      {
+        ..title_run,
+        text: "第二页中文内容",
+        bold: false,
+        font_ascii: Some("仿宋_GB2312"),
+        font_east_asia: Some("仿宋_GB2312"),
+      },
+    ],
   }
   let preview : @contractdoc.ContractPreviewDocument = {
     engine: "moonleaf",
@@ -252,9 +260,9 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
     page_width_twips: Some(11906),
     page_height_twips: Some(16838),
     margin_top_twips: Some(1440),
-    margin_right_twips: Some(1440),
+    margin_right_twips: Some(1800),
     margin_bottom_twips: Some(1440),
-    margin_left_twips: Some(1440),
+    margin_left_twips: Some(1800),
   }
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let html = @contract_documents.render({
@@ -274,5 +282,10 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
   assert_true(html.contains("合同第 1 页"))
   assert_true(html.contains("合同第 2 页"))
   assert_true(html.contains("第二页中文内容"))
+  assert_true(html.contains("LunaNexa FZ XiaoBiaoSong"))
+  assert_true(html.contains("LunaNexa FangSong GB2312"))
+  assert_true(html.contains("font-kerning:normal"))
+  assert_true(html.contains("text-justify:inter-character"))
+  assert_true(html.contains("white-space:pre-wrap"))
   assert_false(html.contains("<img"))
 }

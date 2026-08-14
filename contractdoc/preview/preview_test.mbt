@@ -35,7 +35,12 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
   )
   assert_eq(preview.engine, "moonleaf")
   assert_eq(preview.packet_revision, 2L)
-  assert_true(preview.page_width_twips is Some(_))
+  assert_eq(preview.page_width_twips, Some(11905))
+  assert_eq(preview.page_height_twips, Some(16840))
+  assert_eq(preview.margin_top_twips, Some(1440))
+  assert_eq(preview.margin_right_twips, Some(1800))
+  assert_eq(preview.margin_bottom_twips, Some(1440))
+  assert_eq(preview.margin_left_twips, Some(1800))
   assert_true(preview.blocks.any(block => block.kind == "table"))
   assert_eq(
     preview.blocks.filter(block => block.kind == "page-break").length(),

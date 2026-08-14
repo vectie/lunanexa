@@ -112,9 +112,19 @@ Before a DOCX/PDF pair is released:
    receipt into one generation result.
 
 The browser preview is a MoonLeaf neutral scene and uses the browser's CJK font
-stack for legible Chinese. It is not a pagination oracle and is not permission
-to release substituted fonts: the production DOCX/PDF worker must still use the
-approved exact font set and pass the retained page-image fidelity gate.
+stack for legible Chinese. When licensed files are installed through
+`scripts/install-contract-fonts.sh`, the preview embeds those exact faces from
+the LunaNexa origin and prefers them over local fallbacks. It is not a
+pagination oracle and is not permission to release substituted fonts: the
+production DOCX/PDF worker must still use the approved exact font set and pass
+the retained page-image fidelity gate.
+
+The source omits `w:pgMar`; the verified WPS reference applies 1440-twip
+top/bottom margins and 1800-twip left/right margins. The MoonLeaf preview uses
+that same explicit profile and the resulting 8305-twip content width. Literal
+multi-space runs are preserved, justified Chinese lines use inter-character
+spacing, and source kerning remains enabled. The source contains no explicit
+run-level character-spacing or character-scale override, so none is added.
 The typed renderer evidence must identify MoonLeaf; another office engine is
 not an allowed compatibility fallback.
 

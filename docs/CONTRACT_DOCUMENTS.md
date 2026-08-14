@@ -111,6 +111,41 @@ side on wide screens and stacks them on narrow screens. Source-authored manual
 page breaks are preserved. Automatic Word pagination remains part of the final
 DOCX/PDF render gate, not a browser approximation.
 
+This retained DOCX declares A4 dimensions but omits `w:pgMar`. Its verified WPS
+layout uses the Chinese document default: 1440 twips at the top and bottom and
+1800 twips at the left and right. LunaNexa passes that explicit profile to
+MoonLeaf and records the resulting effective margins in the browser scene. The
+Rabbita renderer scales every font, line, indent, cell inset, and paragraph gap
+against the resulting 8305-twip content box. It preserves source-authored ASCII
+spaces with `white-space: pre-wrap`, uses inter-character justification for
+Chinese justified lines, and leaves kerning enabled. The current source has
+`w:kern="2"` throughout but has no explicit run-level `w:spacing` or `w:w`;
+LunaNexa therefore does not invent global tracking or character scaling.
+
+### Licensed font installation
+
+The browser and MoonLeaf renderer consume the same organization-approved font
+files. They are deployment inputs and must not be committed to this repository.
+On a management Mac, install verified files with:
+
+```sh
+scripts/install-contract-fonts.sh \
+  /licensed-fonts/FangSong_GB2312.ttf \
+  /licensed-fonts/FZXiaoBiaoSong-B05S.ttf \
+  /licensed-fonts/SimHei.ttf
+sh scripts/build-browser-bundles.sh
+```
+
+The installer verifies each font's internal family and rejects a restricted
+OS/2 embedding flag. It copies accepted files into the Git-ignored
+`assets/fonts/private/` build input and the current macOS user's
+`~/Library/Fonts/LunaNexa/` directory. The static browser bundle then serves
+them from its own origin through `assets/fonts/contract-fonts.css`; no third
+party font CDN receives contract text. Supplying a renamed substitute is an
+error, not a fallback. Production renderer images mount the same approved
+files from a deployment secret or read-only volume rather than baking them
+into a public image layer.
+
 ## Production blockers
 
 - approved Chinese fonts matching `仿宋_GB2312`, `黑体`, and

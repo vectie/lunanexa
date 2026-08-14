@@ -5,6 +5,19 @@ pub(all) suberror ContractPreviewError {
 } derive(Debug, Eq)
 
 ///|
+/// The retained youth-policy DOCX omits `w:pgMar`. WPS applies the Chinese
+/// document default in that case: 1 inch vertically and 1.25 inches
+/// horizontally. Keep that inherited layout explicit in MoonLeaf so browser
+/// wrapping and the generated document use the same 8305-twip content box.
+fn youthpolicy_pagination_profile() -> @docx.PaginationProfile {
+  {
+    ..@docx.PaginationProfile::default(),
+    default_margin_right_twips: 1800,
+    default_margin_left_twips: 1800,
+  }
+}
+
+///|
 fn empty_block(
   kind : String,
   runs : Array[@contractdoc.ContractPreviewRun],
@@ -257,11 +270,13 @@ pub fn render(
   let rich = @docx.preview_document(archive) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
-  let paged = @docx.paginate_document(archive) catch {
+  let paged = @docx.paginate_document(
+    archive,
+    profile=youthpolicy_pagination_profile(),
+  ) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
   let blocks : Array[@contractdoc.ContractPreviewBlock] = []
-  let mut section : @docx.SectionInfo? = None
   for block in rich.blocks {
     match block {
       FlowParagraph(paragraph) => {
@@ -287,32 +302,13 @@ pub fn render(
           grid_widths_twips: table.grid_widths_twips,
         })
       FlowPageBreak => blocks.push(empty_block("page-break", []))
-      FlowSection(value) => section = Some(value)
+      FlowSection(_) => ()
     }
   }
   let pages : Array[Array[@contractdoc.ContractPreviewBlock]] = paged.pages.map(page => {
       page.blocks.filter_map(preview_flow_block)
     },
   )
-  let (
-    page_width_twips,
-    page_height_twips,
-    margin_top_twips,
-    margin_right_twips,
-    margin_bottom_twips,
-    margin_left_twips,
-  ) = match section {
-    Some(value) =>
-      (
-        value.page_width_twips,
-        value.page_height_twips,
-        value.margin_top_twips,
-        value.margin_right_twips,
-        value.margin_bottom_twips,
-        value.margin_left_twips,
-      )
-    None => (None, None, None, None, None, None)
-  }
   {
     engine: "moonleaf",
     packet_id: packet.packet_id,
@@ -321,12 +317,12 @@ pub fn render(
     blocks,
     pages,
     diagnostic_codes: session.diagnostics().map(item => item.code),
-    page_width_twips,
-    page_height_twips,
-    margin_top_twips,
-    margin_right_twips,
-    margin_bottom_twips,
-    margin_left_twips,
+    page_width_twips: Some(paged.page_width_twips),
+    page_height_twips: Some(paged.page_height_twips),
+    margin_top_twips: Some(paged.margin_top_twips),
+    margin_right_twips: Some(paged.margin_right_twips),
+    margin_bottom_twips: Some(paged.margin_bottom_twips),
+    margin_left_twips: Some(paged.margin_left_twips),
   }
 }
 
@@ -363,11 +359,13 @@ pub fn template(
   let layout_archive = @opc.open(layout_copy.bytes) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
-  let paged = @docx.paginate_document(layout_archive) catch {
+  let paged = @docx.paginate_document(
+    layout_archive,
+    profile=youthpolicy_pagination_profile(),
+  ) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }
   let blocks : Array[@contractdoc.ContractPreviewBlock] = []
-  let mut section : @docx.SectionInfo? = None
   for block in rich.blocks {
     match block {
       FlowParagraph(paragraph) =>
@@ -391,22 +389,10 @@ pub fn template(
           grid_widths_twips: table.grid_widths_twips,
         })
       FlowPageBreak => blocks.push(empty_block("page-break", []))
-      FlowSection(value) => section = Some(value)
+      FlowSection(_) => ()
     }
   }
   let pages = marker_preserving_pages(rich, paged)
-  let (width, height, top, right, bottom, left) = match section {
-    Some(value) =>
-      (
-        value.page_width_twips,
-        value.page_height_twips,
-        value.margin_top_twips,
-        value.margin_right_twips,
-        value.margin_bottom_twips,
-        value.margin_left_twips,
-      )
-    None => (None, None, None, None, None, None)
-  }
   {
     template_id: manifest.template_id,
     template_version: manifest.template_version,
@@ -419,12 +405,12 @@ pub fn template(
       blocks,
       pages,
       diagnostic_codes: rich.warnings.map(warning => warning.code),
-      page_width_twips: width,
-      page_height_twips: height,
-      margin_top_twips: top,
-      margin_right_twips: right,
-      margin_bottom_twips: bottom,
-      margin_left_twips: left,
+      page_width_twips: Some(paged.page_width_twips),
+      page_height_twips: Some(paged.page_height_twips),
+      margin_top_twips: Some(paged.margin_top_twips),
+      margin_right_twips: Some(paged.margin_right_twips),
+      margin_bottom_twips: Some(paged.margin_bottom_twips),
+      margin_left_twips: Some(paged.margin_left_twips),
     },
     marker_defaults,
   }
