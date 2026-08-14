@@ -161,6 +161,7 @@ test "exclusive machine termination confirmation binds node user and generation"
     demo_mode: false,
     console: state,
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (prepared, _) = update_live(
@@ -211,6 +212,7 @@ test "locale switch is local and preserves operational session state" {
     demo_mode: false,
     console: state,
     next_directive_generation: 42L,
+    contract_preview_generation: 0L,
   }
   let switched = switch_app_locale(model, ChineseSimplified)
   assert_eq(switched.console.locale, ChineseSimplified)
@@ -315,6 +317,7 @@ test "Simplified Chinese connection drawer localizes security copy" {
     demo_mode: false,
     console: { ..@ui.default_state(), locale: ChineseSimplified },
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -344,6 +347,7 @@ test "demo mode presents a read-only cluster snapshot" {
     demo_mode: true,
     console: @ui.demo_state(),
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -365,6 +369,7 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     demo_mode: true,
     console: { ..@ui.demo_state(), route: Leases },
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let lease = model.console.exclusive_node_leases[0]
@@ -402,6 +407,7 @@ test "demo mode previews every destructive node operation without mutation" {
     demo_mode: true,
     console: { ..@ui.demo_state(), route: Nodes },
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let node_id = model.console.nodes[0].node_id
@@ -432,6 +438,7 @@ test "demo mode exercises one-click preflight without controller mutation" {
     demo_mode: true,
     console: { ..@ui.demo_state(), route: Catalog },
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (named, _) = update(
@@ -473,6 +480,7 @@ test "navigation clears stale operation notices and confirmation" {
       ),
     },
     next_directive_generation: 1L,
+    contract_preview_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (next, _) = update(model, Console(Navigate(Catalog)), emit)
@@ -480,4 +488,57 @@ test "navigation clears stale operation notices and confirmation" {
   assert_true(next.console.success_message is None)
   assert_true(next.console.error_message is None)
   assert_true(next.console.confirmation is None)
+}
+
+///|
+test "contract tab and field changes schedule one generation-fenced preview" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    console: { ..@ui.demo_state(), route: ContractDocuments },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (selected, _) = update(
+    model,
+    Console(ContractDocuments(SelectForm(ReservationApplication))),
+    emit,
+  )
+  assert_eq(selected.contract_preview_generation, 1L)
+  assert_eq(
+    selected.console.contract_documents.selected_form,
+    Some(ReservationApplication),
+  )
+  assert_true(selected.console.contract_documents.preview_loading)
+  let (changed, _) = update(
+    selected,
+    Console(
+      ContractDocuments(
+        FieldChanged("reservation.operator_comment", "档期已核验"),
+      ),
+    ),
+    emit,
+  )
+  assert_eq(changed.contract_preview_generation, 2L)
+  assert_true(
+    changed.console.contract_documents.draft_values.any(value => {
+      value.field_id == "reservation.operator_comment" &&
+      value.value == "档期已核验"
+    }),
+  )
+  guard changed.console.contract_documents.preview_request() is Some(request) else {
+    fail("expected pending preview request")
+  }
+  let (after_stale, _) = update(changed, ContractPreviewDue(1L, request), emit)
+  assert_eq(after_stale.contract_preview_generation, 2L)
+  assert_eq(
+    after_stale.console.contract_documents.draft_values,
+    changed.console.contract_documents.draft_values,
+  )
 }

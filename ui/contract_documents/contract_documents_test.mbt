@@ -67,6 +67,46 @@ test "field changes remain local until explicit save" {
 }
 
 ///|
+test "reactive preview follows the selected form and current role draft" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let packet = @contractdoc.new_packet(
+    manifest,
+    "packet-preview-request",
+    "packet-preview-request-key",
+    "tenant-preview",
+    "organization-preview",
+    "subject-preview",
+    "order-preview",
+    manifest.forms.map(form => form.form),
+    1000L,
+  )
+  let state = {
+    ..@contract_documents.default_state(
+      ChineseSimplified,
+      actor_owner=ManagerOperator,
+    ),
+    manifest: Some(manifest),
+    packets: [packet],
+    selected_packet_id: Some(packet.packet_id),
+    selected_form: Some(ReservationApplication),
+    draft_values: [
+      { field_id: "reservation.operator_comment", value: "档期已核验" },
+      { field_id: "reservation.organization_name", value: "客户不可代填" },
+    ],
+  }
+  guard state.preview_request()
+    is Some(RequestPreview(packet_id, revision, form, changes)) else {
+    fail("expected a reactive preview request")
+  }
+  assert_eq(packet_id, packet.packet_id)
+  assert_eq(revision, packet.revision)
+  assert_eq(form, ReservationApplication)
+  assert_eq(changes, [
+    { field_id: "reservation.operator_comment", value: "档期已核验" },
+  ])
+}
+
+///|
 test "customer and operator share one packet with role-owned fields and live preview" {
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let packet = @contractdoc.new_packet(

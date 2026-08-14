@@ -57,6 +57,7 @@ pub(all) struct ContractDocumentsState {
   success_message : String?
   error_message : String?
 } derive(Eq)
+pub fn ContractDocumentsState::preview_request(Self) -> ContractDocumentsMessage?
 pub fn ContractDocumentsState::update(Self, ContractDocumentsMessage) -> Self
 
 // Type aliases

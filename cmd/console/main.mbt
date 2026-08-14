@@ -262,6 +262,12 @@ extern "js" fn demo_contract_preview_promise() -> @js.Promise =
   #| }
 
 ///|
+extern "js" fn contract_preview_delay_promise(
+  milliseconds : Int,
+) -> @js.Promise =
+  #| milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+
+///|
 /// Readiness uses 503 as a typed not-ready response, so preserve its JSON body.
 extern "js" fn readiness_request_promise(
   url : String,
@@ -1245,8 +1251,8 @@ priv enum LoadOutcome {
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
-  ContractPreviewLoaded(@contractdoc.ContractPreviewDocument)
-  ContractPreviewFailed(@i18n.Locale, String)
+  ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
+  ContractPreviewFailed(Int64, @i18n.Locale, String)
 }
 
 ///|
@@ -1260,6 +1266,7 @@ priv struct AppModel {
   demo_mode : Bool
   console : @ui.ConsoleState
   next_directive_generation : Int64
+  contract_preview_generation : Int64
 } derive(Eq)
 
 ///|
@@ -1271,6 +1278,7 @@ priv enum AppMessage {
   CommercialOrganizationChanged(String)
   Connect
   Console(@ui.ConsoleMessage)
+  ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
   Outcome(LoadOutcome)
 }
 
@@ -1467,6 +1475,7 @@ fn operator_contract_command(
 ///|
 fn operator_contract_preview_command(
   model : AppModel,
+  generation : Int64,
   packet_id : String,
   revision : Int64,
   form : @contractdoc.ContractFormKind,
@@ -1488,10 +1497,11 @@ fn operator_contract_preview_command(
           .to_json()
           .stringify(),
       )
-      ContractPreviewLoaded(@json.from_json(@json.parse(response)))
+      ContractPreviewLoaded(generation, @json.from_json(@json.parse(response)))
     } catch {
       _ =>
         ContractPreviewFailed(
+          generation,
           model.console.locale,
           console_copy(
             model.console.locale,
@@ -1506,6 +1516,7 @@ fn operator_contract_preview_command(
 ///|
 fn demo_operator_contract_preview_command(
   model : AppModel,
+  generation : Int64,
   packet_id : String,
   form : @contractdoc.ContractFormKind,
   changes : Array[@contractdoc.ContractFieldValue],
@@ -1527,6 +1538,7 @@ fn demo_operator_contract_preview_command(
         fail("contract packet unavailable")
       }
       ContractPreviewLoaded(
+        generation,
         @contractdoc.materialize_preview_template(
           template,
           manifest,
@@ -1539,6 +1551,7 @@ fn demo_operator_contract_preview_command(
     } catch {
       _ =>
         ContractPreviewFailed(
+          generation,
           model.console.locale,
           console_copy(
             model.console.locale,
@@ -1548,6 +1561,36 @@ fn demo_operator_contract_preview_command(
         )
     }
   })
+}
+
+///|
+fn schedule_contract_preview(
+  model : AppModel,
+  documents : @contract_documents.ContractDocumentsState,
+  delay_ms : Int,
+  emit : @rabbita.Emit[AppMessage],
+) -> (AppModel, @rabbita.Cmd) {
+  guard documents.preview_request() is Some(request) else {
+    return (
+      { ..model, console: { ..model.console, contract_documents: documents } },
+      @rabbita.none,
+    )
+  }
+  let generation = model.contract_preview_generation + 1L
+  let pending = documents.update(request)
+  let next = {
+    ..model,
+    contract_preview_generation: generation,
+    console: { ..model.console, contract_documents: pending },
+  }
+  let command = @rabbita.perform(message => emit(message), async fn() noraise {
+    try contract_preview_delay_promise(delay_ms).wait() catch {
+      _ => ContractPreviewDue(generation, request)
+    } noraise {
+      _ => ContractPreviewDue(generation, request)
+    }
+  })
+  (next, command)
 }
 
 ///|
@@ -1619,6 +1662,27 @@ fn update_live(
       apply_console_locale(locale)
       (switch_app_locale(model, locale), @rabbita.none)
     }
+    ContractPreviewDue(generation, request) =>
+      if generation != model.contract_preview_generation {
+        (model, @rabbita.none)
+      } else {
+        match request {
+          RequestPreview(packet_id, revision, form, changes) =>
+            (
+              model,
+              if model.demo_mode {
+                demo_operator_contract_preview_command(
+                  model, generation, packet_id, form, changes, emit,
+                )
+              } else {
+                operator_contract_preview_command(
+                  model, generation, packet_id, revision, form, changes, emit,
+                )
+              },
+            )
+          _ => (model, @rabbita.none)
+        }
+      }
     Connect => {
       if !commercial_organization_is_valid(model.commercial_organization) {
         return (
@@ -1759,55 +1823,70 @@ fn update_live(
         },
         @rabbita.none,
       )
-    Outcome(ContractPreviewLoaded(preview)) =>
-      (
-        {
-          ..model,
-          console: {
-            ..model.console,
-            contract_documents: model.console.contract_documents.update(
-              PreviewLoaded(preview),
-            ),
+    Outcome(ContractPreviewLoaded(generation, preview)) =>
+      if generation != model.contract_preview_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              contract_documents: model.console.contract_documents.update(
+                PreviewLoaded(preview),
+              ),
+            },
           },
-        },
-        @rabbita.none,
-      )
-    Outcome(ContractPreviewFailed(dispatched_locale, message)) =>
-      (
-        {
-          ..model,
-          console: {
-            ..model.console,
-            contract_documents: model.console.contract_documents.update(
-              PreviewFailed(
-                locale_fenced_notice(
-                  model.console.locale,
-                  dispatched_locale,
-                  message,
-                  "MoonLeaf preview failed.",
-                  "MoonLeaf 预览失败。",
+          @rabbita.none,
+        )
+      }
+    Outcome(ContractPreviewFailed(generation, dispatched_locale, message)) =>
+      if generation != model.contract_preview_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              contract_documents: model.console.contract_documents.update(
+                PreviewFailed(
+                  locale_fenced_notice(
+                    model.console.locale,
+                    dispatched_locale,
+                    message,
+                    "MoonLeaf preview failed.",
+                    "MoonLeaf 预览失败。",
+                  ),
                 ),
               ),
-            ),
+            },
           },
-        },
-        @rabbita.none,
-      )
+          @rabbita.none,
+        )
+      }
     Console(Navigate(route)) => {
       scroll_console_top()
-      (
-        {
-          ..model,
-          console: {
-            ..model.console,
-            route,
-            confirmation: None,
-            error_message: None,
-            success_message: None,
-          },
+      let next = {
+        ..model,
+        console: {
+          ..model.console,
+          route,
+          confirmation: None,
+          error_message: None,
+          success_message: None,
         },
-        @rabbita.none,
-      )
+      }
+      match route {
+        ContractDocuments =>
+          schedule_contract_preview(
+            next,
+            next.console.contract_documents,
+            0,
+            emit,
+          )
+        _ => (next, @rabbita.none)
+      }
     }
     Console(BeginDrain(node_id)) =>
       (
@@ -3382,27 +3461,23 @@ fn update_live(
         @rabbita.none,
       )
     Console(ContractDocuments(Refresh)) => (model, load_command(model, emit))
+    Console(ContractDocuments(SelectForm(form))) => {
+      let documents = model.console.contract_documents.update(SelectForm(form))
+      schedule_contract_preview(model, documents, 0, emit)
+    }
+    Console(ContractDocuments(FieldChanged(field_id, value))) => {
+      let documents = model.console.contract_documents.update(
+        FieldChanged(field_id, value),
+      )
+      schedule_contract_preview(model, documents, 250, emit)
+    }
     Console(
       ContractDocuments(RequestPreview(packet_id, revision, form, changes))
     ) => {
       let next_documents = model.console.contract_documents.update(
         RequestPreview(packet_id, revision, form, changes),
       )
-      (
-        {
-          ..model,
-          console: { ..model.console, contract_documents: next_documents },
-        },
-        if model.demo_mode {
-          demo_operator_contract_preview_command(
-            model, packet_id, form, changes, emit,
-          )
-        } else {
-          operator_contract_preview_command(
-            model, packet_id, revision, form, changes, emit,
-          )
-        },
-      )
+      schedule_contract_preview(model, next_documents, 0, emit)
     }
     Console(ContractDocuments(SaveInformation(packet_id, revision, changes))) => {
       let next_documents = model.console.contract_documents.update(
@@ -3462,8 +3537,9 @@ fn update(
       | Console(BeginRedriveNotificationDelivery(_, _, _))
       | Console(ContractDocuments(_))
       | Console(DismissConfirmation)
-      | Outcome(ContractPreviewLoaded(_))
-      | Outcome(ContractPreviewFailed(_, _)) =>
+      | ContractPreviewDue(_, _)
+      | Outcome(ContractPreviewLoaded(_, _))
+      | Outcome(ContractPreviewFailed(_, _, _)) =>
         update_live(model, message, emit)
       Console(OfflineCommerce(RequestGeneration(_, _)))
       | Console(OfflineCommerce(ConfirmAction(_)))
@@ -3804,6 +3880,7 @@ fn main {
         }
       },
       next_directive_generation: 1L,
+      contract_preview_generation: 0L,
     },
     view=app_view,
     update~,

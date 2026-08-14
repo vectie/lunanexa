@@ -6,6 +6,7 @@ priv struct AppModel {
   connecting : Bool
   demo_mode : Bool
   machine_clock_generation : Int64
+  contract_preview_generation : Int64
   portal : @enterprise_ui.EnterpriseState
 } derive(Eq)
 
@@ -133,8 +134,8 @@ priv enum Outcome {
   EvidenceUploaded(String)
   ArtifactDownloaded(String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
-  ContractPreviewLoaded(@contractdoc.ContractPreviewDocument)
-  ContractPreviewFailed(@i18n.Locale, String)
+  ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
+  ContractPreviewFailed(Int64, @i18n.Locale, String)
   Failed(@i18n.Locale, String)
 }
 
@@ -145,6 +146,7 @@ priv enum AppMessage {
   SubjectChanged(String)
   Connect
   Portal(@enterprise_ui.EnterpriseMessage)
+  ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
   Outcome(Outcome)
 }
 
@@ -221,6 +223,12 @@ extern "js" fn machine_clock_promise(expires_unix_ms : Int64) -> @js.Promise =
   #|   const delay = remaining <= 0n ? 0 : Number(remaining > 60000n ? 60000n : remaining);
   #|   setTimeout(() => resolve(BigInt(Date.now())), delay);
   #| })
+
+///|
+extern "js" fn contract_preview_delay_promise(
+  milliseconds : Int,
+) -> @js.Promise =
+  #| milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
 ///|
 /// Loads only the checked, field-free MoonLeaf scene shipped with demo assets.
@@ -1380,6 +1388,7 @@ async fn demo_contract_preview(
 ///|
 fn contract_packet_command(
   model : AppModel,
+  generation : Int64,
   message : @contract_documents.ContractDocumentsMessage,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
@@ -1387,8 +1396,10 @@ fn contract_packet_command(
     try {
       match message {
         RequestPreview(packet_id, revision, form, changes) =>
-          contract_preview(model, packet_id, revision, form, changes)
-          |> ContractPreviewLoaded
+          ContractPreviewLoaded(
+            generation,
+            contract_preview(model, packet_id, revision, form, changes),
+          )
         SaveInformation(packet_id, revision, changes) =>
           update_contract_information(model, packet_id, revision, changes)
           |> ContractPacketUpdated
@@ -1414,13 +1425,43 @@ fn contract_packet_command(
           "合同文件操作失败：\{Repr(error)}",
         )
         if message is RequestPreview(_, _, _, _) {
-          ContractPreviewFailed(model.portal.locale, failure)
+          ContractPreviewFailed(generation, model.portal.locale, failure)
         } else {
           Failed(model.portal.locale, failure)
         }
       }
     }
   })
+}
+
+///|
+fn schedule_contract_preview(
+  model : AppModel,
+  documents : @contract_documents.ContractDocumentsState,
+  delay_ms : Int,
+  emit : @rabbita.Emit[AppMessage],
+) -> (AppModel, @rabbita.Cmd) {
+  guard documents.preview_request() is Some(request) else {
+    return (
+      { ..model, portal: { ..model.portal, contract_documents: documents } },
+      @rabbita.none,
+    )
+  }
+  let generation = model.contract_preview_generation + 1L
+  let pending = documents.update(request)
+  let next = {
+    ..model,
+    contract_preview_generation: generation,
+    portal: { ..model.portal, contract_documents: pending },
+  }
+  let command = @rabbita.perform(message => emit(message), async fn() noraise {
+    try contract_preview_delay_promise(delay_ms).wait() catch {
+      _ => ContractPreviewDue(generation, request)
+    } noraise {
+      _ => ContractPreviewDue(generation, request)
+    }
+  })
+  (next, command)
 }
 
 ///|
@@ -1477,6 +1518,43 @@ fn update(
         @rabbita.none,
       )
     }
+    Portal(Navigate(route)) => {
+      let portal = model.portal.update(Navigate(route))
+      let next = { ..model, portal, }
+      match route {
+        ContractDocuments =>
+          schedule_contract_preview(next, portal.contract_documents, 0, emit)
+        _ => (next, @rabbita.none)
+      }
+    }
+    ContractPreviewDue(generation, request) =>
+      if generation != model.contract_preview_generation {
+        (model, @rabbita.none)
+      } else if model.demo_mode {
+        match request {
+          RequestPreview(packet_id, _, form, changes) =>
+            (
+              model,
+              @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+                try
+                  demo_contract_preview(model, packet_id, form, changes)
+                catch {
+                  error =>
+                    ContractPreviewFailed(
+                      generation,
+                      model.portal.locale,
+                      "MoonLeaf preview failed: \{Repr(error)}",
+                    )
+                } noraise {
+                  preview => ContractPreviewLoaded(generation, preview)
+                }
+              }),
+            )
+          _ => (model, @rabbita.none)
+        }
+      } else {
+        (model, contract_packet_command(model, generation, request, emit))
+      }
     Portal(SignAgreement(agreement_id)) => {
       let next = model.portal.update(SignAgreement(agreement_id))
       if model.demo_mode {
@@ -1795,69 +1873,78 @@ fn update(
           load_command(model, emit),
         )
       }
+    Portal(ContractDocuments(SelectForm(form))) => {
+      let documents = model.portal.contract_documents.update(SelectForm(form))
+      schedule_contract_preview(model, documents, 0, emit)
+    }
+    Portal(ContractDocuments(FieldChanged(field_id, value))) => {
+      let documents = model.portal.contract_documents.update(
+        FieldChanged(field_id, value),
+      )
+      schedule_contract_preview(model, documents, 250, emit)
+    }
+    Portal(ContractDocuments(RequestPreview(_, _, _, _) as request)) => {
+      let documents = model.portal.contract_documents.update(request)
+      schedule_contract_preview(model, documents, 0, emit)
+    }
     Portal(ContractDocuments(message)) if message is SaveInformation(_, _, _) ||
-      message is RequestPreview(_, _, _, _) ||
       message is ConfirmAction(_) => {
       let next = model.portal.update(ContractDocuments(message))
       if model.demo_mode {
-        match message {
-          RequestPreview(packet_id, _, form, changes) =>
-            (
-              { ..model, portal: next },
-              @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
-                try
-                  demo_contract_preview(model, packet_id, form, changes)
-                catch {
-                  error =>
-                    ContractPreviewFailed(
-                      model.portal.locale,
-                      "MoonLeaf preview failed: \{Repr(error)}",
-                    )
-                } noraise {
-                  preview => ContractPreviewLoaded(preview)
-                }
-              }),
-            )
-          _ => ({ ..model, portal: next }, @rabbita.none)
-        }
+        ({ ..model, portal: next }, @rabbita.none)
       } else {
         (
           { ..model, portal: next },
-          contract_packet_command(model, message, emit),
+          contract_packet_command(
+            model,
+            model.contract_preview_generation,
+            message,
+            emit,
+          ),
         )
       }
     }
-    Outcome(ContractPreviewLoaded(preview)) =>
-      (
-        {
-          ..model,
-          portal: model.portal.update(ContractDocuments(PreviewLoaded(preview))),
-        },
-        @rabbita.none,
-      )
-    Outcome(ContractPreviewFailed(dispatched_locale, message)) =>
-      (
-        {
-          ..model,
-          portal: {
-            ..model.portal,
-            contract_documents: model.portal.contract_documents.update(
-              PreviewFailed(
-                if dispatched_locale == model.portal.locale {
-                  message
-                } else {
-                  portal_copy(
-                    model.portal.locale,
-                    "MoonLeaf preview failed. Retry the preview.",
-                    "MoonLeaf 预览失败。请重试预览。",
-                  )
-                },
-              ),
+    Outcome(ContractPreviewLoaded(generation, preview)) =>
+      if generation != model.contract_preview_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: model.portal.update(
+              ContractDocuments(PreviewLoaded(preview)),
             ),
           },
-        },
-        @rabbita.none,
-      )
+          @rabbita.none,
+        )
+      }
+    Outcome(ContractPreviewFailed(generation, dispatched_locale, message)) =>
+      if generation != model.contract_preview_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              contract_documents: model.portal.contract_documents.update(
+                PreviewFailed(
+                  if dispatched_locale == model.portal.locale {
+                    message
+                  } else {
+                    portal_copy(
+                      model.portal.locale,
+                      "MoonLeaf preview failed. It will retry after the next edit.",
+                      "MoonLeaf 预览失败；下次编辑后将自动重试。",
+                    )
+                  },
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
     Outcome(
@@ -2395,6 +2482,7 @@ fn main {
       connecting: false,
       demo_mode: is_demo,
       machine_clock_generation: 0L,
+      contract_preview_generation: 0L,
       portal: if is_demo {
         {
           ..@enterprise_ui.demo_state(),
