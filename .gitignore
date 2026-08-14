@@ -18,3 +18,7 @@
 /deploy/local/
 /lunanexa-*.json
 /lunanexa-*.json.*
+
+# Licensed contract fonts are deployment inputs, never repository content.
+/assets/fonts/private/*
+!/assets/fonts/private/README.md

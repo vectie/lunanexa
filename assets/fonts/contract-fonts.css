@@ -1,0 +1,27 @@
+/*
+ * Licensed font binaries live beside this file only in the built artifact.
+ * They are deployment inputs and are intentionally not tracked by Git.
+ */
+@font-face {
+  font-family: "LunaNexa FangSong GB2312";
+  src: url("./private/FangSong_GB2312.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "LunaNexa FZ XiaoBiaoSong";
+  src: url("./private/FZXiaoBiaoSong-B05S.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "LunaNexa SimHei";
+  src: url("./private/SimHei.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
