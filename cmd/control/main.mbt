@@ -1009,6 +1009,15 @@ async fn main {
         ).to_int(),
       )
     }
+    group.spawn_bg(allow_failure=false) <| () => {
+      service.run_contract_expiry_reconciler_forever(
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_CONTRACT_EXPIRY_RECONCILE_INTERVAL_MS").unwrap_or(
+            "3600000",
+          ),
+        ).to_int(),
+      )
+    }
     match guide_probe_worker {
       Some(worker) =>
         group.spawn_bg(allow_failure=false) <| () => { worker.run_forever() }

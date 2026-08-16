@@ -7,11 +7,19 @@ import {
 }
 
 // Values
+pub fn calendar_date_days(String) -> Int64?
+
 pub fn completion_summary(ContractTemplateManifest, ContractPacket) -> ContractCompletionSummary
 
 pub let contract_version : String
 
+pub fn days_from_civil(Int, Int, Int) -> Int64
+
+pub fn days_until(String, Int64) -> Int64?
+
 pub fn form_creation_stage(ContractFormKind) -> ContractFormStage
+
+pub fn format_cny_minor_units(Int64) -> String
 
 pub fn manifest_for_template_id(String) -> ContractTemplateManifest
 
@@ -20,6 +28,8 @@ pub fn materialize_preview_template(ContractPreviewTemplate, ContractTemplateMan
 pub fn missing_required_fields(ContractTemplateManifest, ContractPacket) -> Array[String]
 
 pub fn new_packet(ContractTemplateManifest, String, String, String, String, String, String, String?, Array[ContractFormKind], Int64) -> ContractPacket raise ContractDocumentError
+
+pub fn parse_cny_minor_units(String) -> Int64?
 
 pub let snapshot_schema_version : String
 
@@ -42,8 +52,10 @@ pub(all) suberror ContractDocumentError {
   ConfirmationMismatch
   ForbiddenSecret(String)
   ContractNotEffective(String)
+  ContractNotRenewable(String)
   InvalidEvidence(String)
   InvalidExecutionDate(String)
+  SettlementMismatch(String)
 } derive(Eq, @debug.Debug)
 
 // Types and methods
@@ -204,6 +216,7 @@ pub fn ContractPacket::fail_generation(Self, Int64, String, Int64) -> Self raise
 pub fn ContractPacket::marker_replacements(Self, Array[String]) -> Array[ContractFieldValue] raise ContractDocumentError
 pub fn ContractPacket::marker_value(Self, String) -> String raise ContractDocumentError
 pub fn ContractPacket::register_execution(Self, Int64, ContractExecution, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::renewal_draft(Self, ContractTemplateManifest, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::request_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::supersede_packet(Self, Int64, ContractSupersession, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], ContractFieldOwner, String, String, Int64) -> Self raise ContractDocumentError

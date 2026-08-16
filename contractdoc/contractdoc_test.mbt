@@ -487,3 +487,119 @@ test "follow-up forms map to the effective creation stage" {
     EffectiveStage,
   )
 }
+
+///|
+test "renewal draft carries initial forms and drops offline and derived values" {
+  let base = @contractdoc.youthpolicy_remote_lease_manifest()
+  let derived : @contractdoc.ContractFieldDefinition = {
+    field_id: "lease.derived_marker",
+    form: MasterLease,
+    label_zh_cn: "派生标记",
+    label_en: "Derived marker",
+    kind: PlainText,
+    required: false,
+    maximum_characters: 64,
+    allowed_values: [],
+    collection_policy: PersistedContractData,
+    owner: PlatformDerived,
+    locator: "synthetic",
+  }
+  let manifest = { ..base, fields: base.fields + [derived] }
+  let source = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-source",
+      "packet-source-key",
+      "tenant-1",
+      "org-1",
+      "subject-1",
+      "order-1",
+      None,
+      [MasterLease, AccessConfirmation],
+      1000L,
+    ),
+    state: Effective,
+    values: [
+      { field_id: "lessee.name", value: "星海科技" },
+      { field_id: "lease.start_date", value: "2026-09-01" },
+      { field_id: "lease.derived_marker", value: "derived-value" },
+      { field_id: "lessee.signatory", value: "offline-signature" },
+      { field_id: "access.order_number", value: "order-1" },
+    ],
+  }
+  let renewal = source.renewal_draft(
+    manifest, "packet-renewal-1", "packet-renewal-key-1", 5000L,
+  )
+  assert_eq(renewal.packet_id, "packet-renewal-1")
+  assert_eq(renewal.idempotency_key, "packet-renewal-key-1")
+  assert_eq(renewal.state, InformationDraft)
+  assert_eq(renewal.revision, 1L)
+  // Effective-stage forms are relationship children and do not renew.
+  assert_eq(renewal.active_forms, [MasterLease])
+  assert_eq(renewal.preceding_packet_ref, Some("packet-source"))
+  assert_eq(renewal.tenant_ref, "tenant-1")
+  assert_eq(renewal.organization_id, "org-1")
+  assert_eq(renewal.subject_ref, "subject-1")
+  assert_eq(renewal.order_ref, "order-1")
+  assert_eq(renewal.value("lessee.name"), Some("星海科技"))
+  assert_eq(renewal.value("lease.start_date"), Some("2026-09-01"))
+  // Platform-derived values are re-derived by the server; offline-completed
+  // signatures are redone offline; neither is copied.
+  assert_eq(renewal.value("lease.derived_marker"), None)
+  assert_eq(renewal.value("lessee.signatory"), None)
+  assert_eq(renewal.value("access.order_number"), None)
+  assert_eq(renewal.values_sha256, None)
+  assert_eq(renewal.created_unix_ms, 5000L)
+}
+
+///|
+test "renewal draft requires an effective source with initial-stage forms" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let drafting = @contractdoc.new_packet(
+    manifest,
+    "packet-draft",
+    "packet-draft-key",
+    "tenant-1",
+    "org-1",
+    "subject-1",
+    "order-1",
+    None,
+    [MasterLease],
+    1000L,
+  )
+  try
+    drafting.renewal_draft(
+      manifest, "packet-renewal-2", "packet-renewal-key-2", 5000L,
+    )
+  catch {
+    ContractNotRenewable(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a non-effective packet must not renew")
+  }
+  let follow_up_only = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-followup",
+      "packet-followup-key",
+      "tenant-1",
+      "org-1",
+      "subject-1",
+      "order-1",
+      Some("packet-master"),
+      [AccessConfirmation],
+      1000L,
+    ),
+    state: Effective,
+  }
+  try
+    follow_up_only.renewal_draft(
+      manifest, "packet-renewal-3", "packet-renewal-key-3", 5000L,
+    )
+  catch {
+    ContractNotRenewable(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a packet without initial-stage forms must not renew")
+  }
+}

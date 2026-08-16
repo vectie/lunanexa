@@ -5,6 +5,7 @@ pub(all) enum ContractDocumentConfirmation {
   RegisterExecution(String, Int64, String, String)
   ClosePacket(String, Int64, @contractdoc.ContractClosureKind, String)
   SupersedePacket(String, Int64, String, String)
+  RequestRenewal(String)
 } derive(Debug, Eq)
 
 ///|
@@ -19,6 +20,7 @@ pub(all) enum ContractPacketCapability {
   RegisterExecution
   ClosePacket
   SupersedePacket
+  RequestRenewal
 } derive(Debug, Eq)
 
 ///|
@@ -32,6 +34,11 @@ pub fn contract_packet_capabilities(
     packet.state == InformationConfirmed
   if editable {
     capabilities.push(SaveInformation)
+  }
+  // Renewal is offered to both roles from an effective packet: the customer
+  // initiates it in the portal, the operator prepares it in the console.
+  if packet.state == Effective {
+    capabilities.push(RequestRenewal)
   }
   // Confirmation and generation requests are the customer's attestation; the
   // backend exposes the matching routes only on the customer side.
@@ -98,6 +105,7 @@ pub(all) enum ContractDocumentsMessage {
   BeginRegisterExecution(String, Int64)
   BeginClosePacket(String, Int64)
   BeginSupersedePacket(String, Int64)
+  BeginRequestRenewal(String)
   ConfirmationInputChanged(ContractConfirmationField, String)
   DismissConfirmation
   ConfirmAction(ContractDocumentConfirmation)
@@ -270,6 +278,8 @@ pub fn ContractDocumentsState::update(
         ..self,
         confirmation: Some(SupersedePacket(packet_id, revision, "", "")),
       }
+    BeginRequestRenewal(packet_id) =>
+      { ..self, confirmation: Some(RequestRenewal(packet_id)) }
     ConfirmationInputChanged(field, value) =>
       {
         ..self,
@@ -520,7 +530,7 @@ fn state_guidance(
         "Signed on \{packet.execution.map_or("", item => item.signed_on)}; evidence digest \{packet.execution.map_or("", item => short_digest(item.evidence_sha256))}. The packet is effective and read-only.",
         "已于 \{packet.execution.map_or("", item => item.signed_on)} 签署生效，证据摘要 \{packet.execution.map_or("", item => short_digest(item.evidence_sha256))}。资料包只读。",
       )
-      match effective_window(packet) {
+      let windowed = match effective_window(packet) {
         Some((start_date, end_date)) =>
           base +
           copy(
@@ -530,6 +540,11 @@ fn state_guidance(
           )
         None => base
       }
+      windowed +
+      copy(
+        locale, " Renewal is available: request it to open a draft packet that carries this information forward.",
+        " 可发起续约：新建草稿资料包并带入本资料包的资料。",
+      )
     }
     Closed =>
       copy(
@@ -1373,6 +1388,11 @@ fn capability_button(
         BeginSupersedePacket(packet.packet_id, packet.revision),
         copy(state.locale, "Supersede packet", "替代资料包"),
       )
+    RequestRenewal =>
+      (
+        BeginRequestRenewal(packet.packet_id),
+        copy(state.locale, "Request renewal", "发起续约"),
+      )
   }
   @html.button(
     type_="button",
@@ -1702,8 +1722,9 @@ fn confirmation(
       match action {
         RegisterExecution(_) | ClosePacket(_) | SupersedePacket(_) =>
           operator_confirmation(state, emit, action)
-        ConfirmInformation(_) | RequestGeneration(_) => {
+        ConfirmInformation(_) | RequestGeneration(_) | RequestRenewal(_) => {
           let generating = action is RequestGeneration(_, _, _)
+          let renewing = action is RequestRenewal(_)
           @html.div(class="modal-backdrop", [
             @html.section(
               class="confirmation-dialog",
@@ -1715,6 +1736,12 @@ fn confirmation(
                       state.locale,
                       "Generate from the confirmed values?",
                       "按已确认资料生成文件？",
+                    )
+                  } else if renewing {
+                    copy(
+                      state.locale,
+                      "Request a renewal of this contract?",
+                      "发起该合同的续约？",
                     )
                   } else {
                     copy(
@@ -1730,6 +1757,12 @@ fn confirmation(
                       state.locale,
                       "The generator may only replace declared blanks. It must preserve the supplied wording, layout, pagination, headers, footers, tables, and styles; otherwise the job fails.",
                       "生成器仅可替换已声明的空白项；必须保留源文件的文字、布局、分页、页眉页脚、表格与样式，否则任务失败。",
+                    )
+                  } else if renewing {
+                    copy(
+                      state.locale,
+                      "A new draft packet carries this packet's initial forms and information forward. Signatures and seals are redone offline, and every value can still be edited before confirmation.",
+                      "系统将新建草稿资料包并带入本资料包的初始表单与资料；签字盖章在线下重新完成，所有资料在确认前仍可修改。",
                     )
                   } else {
                     copy(
@@ -1752,6 +1785,8 @@ fn confirmation(
                     on_click=command(emit, ConfirmAction(action)),
                     if generating {
                       copy(state.locale, "Request generation", "申请生成")
+                    } else if renewing {
+                      copy(state.locale, "Request renewal", "发起续约")
                     } else {
                       copy(state.locale, "Confirm information", "确认资料")
                     },

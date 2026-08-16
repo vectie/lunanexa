@@ -108,10 +108,12 @@ pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadines
 pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub async fn ApiService::observability_readiness(Self, now_unix_ms? : Int64) -> @observability.ObservabilityReadiness?
 pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
+pub async fn ApiService::reconcile_expiring_contracts(Self, Int64) -> Unit
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
 pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
+pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit

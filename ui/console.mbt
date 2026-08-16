@@ -3448,6 +3448,14 @@ fn alert_code_label(locale : @i18n.Locale, code : String) -> String {
       localized(
         locale, "Guide knowledge is stale", "指南知识版本已过期",
       )
+    "ContractExpiring" =>
+      localized(
+        locale, "Contract is nearing its end date", "合同即将到期",
+      )
+    "AccessCredentialsRevoked" =>
+      localized(
+        locale, "Access credentials revoked on contract close", "合同关闭，访问凭据已撤销",
+      )
     _ => code
   }
 }

@@ -129,6 +129,15 @@ priv struct ContractSupersessionIntent {
 extend ContractSupersessionIntent with ToJson::{to_json}
 
 ///|
+priv struct ContractRenewalIntent {
+  packet_id : String
+  idempotency_key : String
+} derive(ToJson)
+
+///|
+extend ContractRenewalIntent with ToJson::{to_json}
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -1552,6 +1561,18 @@ fn operator_contract_lifecycle_command(
             english_success: "Contract packet superseded.",
             chinese_success: "合同数据包已被取代。",
           }
+        RequestRenewal(packet_id) =>
+          {
+            path: "/v1/contract-documents/operator/packets/\{packet_id}:renew",
+            body: ContractRenewalIntent::{
+              packet_id: random_identifier("contract-renewal"),
+              idempotency_key: random_identifier("contract-renewal-idempotency"),
+            }
+            .to_json()
+            .stringify(),
+            english_success: "Contract renewal draft created.",
+            chinese_success: "合同续约草稿已创建。",
+          }
         _ => fail("unsupported contract lifecycle action")
       }
       let response = request(
@@ -1662,6 +1683,23 @@ fn demo_contract_lifecycle_action(
           ),
           "Demo superseded the contract packet locally; no request was sent.",
           "演示已在本地取代合同数据包；未发送请求。",
+        )
+      }
+      RequestRenewal(packet_id) => {
+        let packet = demo_contract_packet(model, packet_id)
+        let manifest = match model.console.contract_documents.manifest {
+          Some(value) => value
+          None => fail("contract manifest unavailable")
+        }
+        (
+          packet.renewal_draft(
+            manifest,
+            random_identifier("contract-renewal"),
+            random_identifier("contract-renewal-idempotency"),
+            now,
+          ),
+          "Demo created the contract renewal draft locally; no request was sent.",
+          "演示已在本地创建合同续约草稿；未发送请求。",
         )
       }
       _ => fail("unsupported contract lifecycle action")
@@ -3799,7 +3837,10 @@ fn update_live(
         console: { ..model.console, contract_documents: next_documents },
       }
       match action {
-        RegisterExecution(_) | ClosePacket(_) | SupersedePacket(_) =>
+        RegisterExecution(_)
+        | ClosePacket(_)
+        | SupersedePacket(_)
+        | RequestRenewal(_) =>
           if model.demo_mode {
             demo_contract_lifecycle_action(next, action)
           } else {

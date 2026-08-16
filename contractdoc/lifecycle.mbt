@@ -81,6 +81,87 @@ pub fn new_packet(
 }
 
 ///|
+/// Opens a renewal draft from an effective packet. Only initial-stage forms
+/// (master lease, reservation application) carry into the renewal;
+/// effective-stage forms are children of the closing relationship and are
+/// never renewed. Values copy over as a drafting starting point except
+/// offline-completed fields (signatures and seals are redone offline) and
+/// platform-derived fields (the server re-derives them on the new packet).
+pub fn ContractPacket::renewal_draft(
+  self : ContractPacket,
+  manifest : ContractTemplateManifest,
+  packet_id : String,
+  idempotency_key : String,
+  now_unix_ms : Int64,
+) -> ContractPacket raise ContractDocumentError {
+  if self.state != Effective {
+    raise ContractNotRenewable("contract packet is not effective")
+  }
+  if self.template_id != manifest.template_id ||
+    self.template_version != manifest.template_version ||
+    self.template_sha256 != manifest.sha256 {
+    raise TemplateMismatch
+  }
+  let renewed_forms = self.active_forms.filter(form => {
+    form_creation_stage(form) == InitialStage
+  })
+  if renewed_forms.length() == 0 {
+    raise ContractNotRenewable("contract packet has no initial-stage forms")
+  }
+  if !valid_identifier(packet_id) ||
+    !valid_identifier(idempotency_key) ||
+    now_unix_ms <= 0L {
+    raise InvalidInput("invalid contract renewal")
+  }
+  let values : Array[ContractFieldValue] = []
+  let assignments : Array[ContractFieldAssignment] = []
+  for existing in self.values {
+    guard manifest.field(existing.field_id) is Some(definition) else {
+      continue
+    }
+    if !renewed_forms.contains(definition.form) ||
+      definition.collection_policy == CompleteOffline ||
+      definition.owner == PlatformDerived {
+      continue
+    }
+    values.push(existing)
+    match self.assignment(existing.field_id) {
+      Some(assignment) => assignments.push(assignment)
+      None => ()
+    }
+  }
+  {
+    packet_id,
+    idempotency_key,
+    template_id: manifest.template_id,
+    template_version: manifest.template_version,
+    template_sha256: manifest.sha256,
+    tenant_ref: self.tenant_ref,
+    organization_id: self.organization_id,
+    subject_ref: self.subject_ref,
+    // Known simplification: the renewal keeps the source order reference even
+    // though a commercial renewal may sit under a new order.
+    order_ref: self.order_ref,
+    preceding_packet_ref: Some(self.packet_id),
+    active_forms: renewed_forms,
+    values,
+    assignments,
+    values_sha256: None,
+    confirmed_by: None,
+    confirmed_unix_ms: None,
+    artifacts: [],
+    state: InformationDraft,
+    execution: None,
+    closure: None,
+    supersession: None,
+    generation_failure: None,
+    revision: 1L,
+    created_unix_ms: now_unix_ms,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
 pub fn ContractPacket::update_information(
   self : ContractPacket,
   manifest : ContractTemplateManifest,

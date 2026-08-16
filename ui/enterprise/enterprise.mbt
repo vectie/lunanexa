@@ -1227,6 +1227,17 @@ fn notification_detail(
         locale, "Upload the executed contract, payment receipt, and invoice evidence to continue.",
         "请上传已签署合同、付款回执和发票证据以继续流程。",
       )
+    "ContractExpiring" =>
+      copy(
+        locale,
+        "Your contract ends on \{record.event.parameters.get("end_date").unwrap_or("unknown")} (\{record.event.parameters.get("days_remaining").unwrap_or("?")} days remaining). Contact the operator or request a renewal from the contract page.",
+        "您的合同将于 \{record.event.parameters.get("end_date").unwrap_or("未知日期")} 到期（剩余 \{record.event.parameters.get("days_remaining").unwrap_or("?")} 天）。请联系运营方，或在合同页面发起续约。",
+      )
+    "AccessCredentialsRevoked" =>
+      copy(
+        locale, "Your API credentials were revoked because the master lease closed.",
+        "由于主租赁合同已关闭，您的 API 访问凭据已被撤销。",
+      )
     _ =>
       copy(
         locale, "Open the related record for details.", "请打开相关记录查看详情。",

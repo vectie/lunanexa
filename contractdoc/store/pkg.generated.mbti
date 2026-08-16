@@ -31,6 +31,7 @@ pub async fn ContractDocumentStore::packet(Self, String) -> @contractdoc.Contrac
 pub async fn ContractDocumentStore::packets_for_subject(Self, String) -> Array[@contractdoc.ContractPacket]
 pub async fn ContractDocumentStore::pending_generation_packets(Self) -> Array[@contractdoc.ContractPacket]
 pub async fn ContractDocumentStore::register_execution(Self, String, Int64, @contractdoc.ContractExecution, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::renew_packet(Self, String, String, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::request_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::snapshot(Self) -> @contractdoc.ContractDocumentSnapshot
 pub async fn ContractDocumentStore::supersede_packet(Self, String, Int64, String, String, String, Int64) -> @contractdoc.ContractPacket

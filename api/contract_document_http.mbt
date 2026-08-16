@@ -13,6 +13,12 @@ priv struct ContractPacketIntent {
 } derive(FromJson)
 
 ///|
+priv struct ContractRenewalIntent {
+  packet_id : String
+  idempotency_key : String
+} derive(FromJson)
+
+///|
 priv struct ContractInformationUpdate {
   expected_revision : Int64
   changes : Array[@contractdoc.ContractFieldValue]
@@ -142,6 +148,11 @@ fn contract_document_error(error : Error) -> HttpReply {
         409, "ContractPredecessorNotEffective", "the preceding contract packet is not effective",
         false,
       )
+    @contractdoc.ContractDocumentError::ContractNotRenewable(_) =>
+      api_error(
+        409, "ContractRenewalRejected", "contract packet is not in a renewable state",
+        false,
+      )
     @contractdoc.ContractDocumentError::InvalidEvidence(_) =>
       api_error(
         400, "ContractEvidenceRejected", "contract execution evidence is invalid",
@@ -152,6 +163,8 @@ fn contract_document_error(error : Error) -> HttpReply {
         400, "ContractExecutionDateRejected", "the signing date must be a YYYY-MM-DD calendar date",
         false,
       )
+    @contractdoc.ContractDocumentError::SettlementMismatch(detail) =>
+      api_error(409, "ContractSettlementMismatch", detail, false)
     _ =>
       api_error(
         400, "ContractDocumentRejected", "contract document request was rejected",
@@ -357,10 +370,28 @@ async fn ApiService::handle_contract_documents(
         ) catch {
           _ => None
         }
-        guard decoded is Some(request) && store.packet(packet_id) is Some(_) else {
+        guard decoded is Some(request) &&
+          store.packet(packet_id) is Some(packet) else {
           return api_error(
             404, "ContractPacketNotFound", "contract packet was not found", false,
           )
+        }
+        let now = @async.now()
+        // Early termination is gated on the settlement ledger: the effective
+        // settlement amount due must match the organization's commercial
+        // ledger before the contract relationship may close.
+        let settlement_check : SettlementLedgerCheck? = if request.kind ==
+          EarlyTermination {
+          self.check_settlement_against_ledger(packet, now)
+        } else {
+          None
+        }
+        match settlement_check {
+          Some(Mismatched(detail)) =>
+            return contract_document_error(
+              @contractdoc.ContractDocumentError::SettlementMismatch(detail),
+            )
+          _ => ()
         }
         let updated = try
           store.close_packet(
@@ -369,12 +400,71 @@ async fn ApiService::handle_contract_documents(
             request.kind,
             request.reason,
             "operator",
-            @async.now(),
+            now,
           )
         catch {
           error => return contract_document_error(error)
         } noraise {
           value => value
+        }
+        match settlement_check {
+          Some(Matched(settlement_ref~, minor_units~)) =>
+            self.operator_audit(
+              "contract.settlement.reconciled",
+              updated.packet_id,
+              "settlement:\{settlement_ref}:amount-cny:\{@contractdoc.format_cny_minor_units(minor_units)}:ledger-matched",
+            )
+          Some(LedgerUnused(settlement_ref~)) =>
+            self.operator_audit(
+              "contract.settlement.ledger-unused",
+              updated.packet_id,
+              "settlement:\{settlement_ref}:ledger-not-in-use",
+            )
+          _ => ()
+        }
+        // Closing a master lease ends the access relationship, so every
+        // still-active API credential of the subject is revoked. Superseded
+        // packets deliberately do NOT trigger revocation: the successor
+        // packet continues the relationship, so the `:supersede` branch
+        // stays untouched.
+        if updated.active_forms.contains(MasterLease) {
+          match self.access_store {
+            Some(access) => {
+              let mut revoked_count = 0
+              for
+                credential in access.views_for_subject(
+                  updated.tenant_ref,
+                  updated.subject_ref,
+                ) {
+                if credential.revoked_unix_ms is None {
+                  ignore(access.revoke(credential.key_id, now))
+                  revoked_count += 1
+                }
+              }
+              self.operator_audit(
+                "access.api-key.revoke",
+                updated.packet_id,
+                "contract-close:\{updated.packet_id}:revoked-keys:\{revoked_count}",
+              )
+              if revoked_count > 0 {
+                self.enqueue_subject_notification(
+                  updated.tenant_ref,
+                  updated.subject_ref,
+                  "AccessCredentialsRevoked",
+                  AccessCredential,
+                  Warning,
+                  updated.packet_id,
+                  "contract-packet:\{updated.packet_id}:closed",
+                  Map([
+                    ("packet_id", updated.packet_id),
+                    ("revoked_count", revoked_count.to_string()),
+                  ]),
+                  now,
+                )
+              }
+            }
+            None => ()
+          }
         }
         json_reply(200, updated.to_json())
       }
@@ -405,6 +495,36 @@ async fn ApiService::handle_contract_documents(
           value => value
         }
         json_reply(200, updated.to_json())
+      }
+      (Post, _) if operator_contract_packet_id(path, ":renew")
+        is Some(source_packet_id) => {
+        let decoded : ContractRenewalIntent? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(intent) &&
+          @contracts.valid_identifier(intent.packet_id) &&
+          @contracts.valid_identifier(intent.idempotency_key) &&
+          store.packet(source_packet_id) is Some(_) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        let renewed = try
+          store.renew_packet(
+            source_packet_id,
+            intent.packet_id,
+            intent.idempotency_key,
+            "operator",
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        json_reply(201, renewed.to_json())
       }
       _ => api_error(404, "NotFound", "route was not found", false)
     }
@@ -538,6 +658,36 @@ async fn ApiService::handle_contract_documents(
         value => value
       }
       json_reply(201, synchronized.to_json())
+    }
+    (Post, _) if contract_packet_id(path, ":renew") is Some(source_packet_id) => {
+      let decoded : ContractRenewalIntent? = Some(
+        @json.from_json(@json.parse(body)),
+      ) catch {
+        _ => None
+      }
+      guard decoded is Some(intent) &&
+        @contracts.valid_identifier(intent.packet_id) &&
+        @contracts.valid_identifier(intent.idempotency_key) &&
+        store.packet(source_packet_id) is Some(source) &&
+        source.subject_ref == subject_ref else {
+        return api_error(
+          404, "ContractPacketNotFound", "contract packet was not found", false,
+        )
+      }
+      let renewed = try
+        store.renew_packet(
+          source_packet_id,
+          intent.packet_id,
+          intent.idempotency_key,
+          subject_ref,
+          @async.now(),
+        )
+      catch {
+        error => return contract_document_error(error)
+      } noraise {
+        value => value
+      }
+      json_reply(201, renewed.to_json())
     }
     (Put, _) if contract_packet_id(path, ":information") is Some(packet_id) => {
       let decoded : ContractInformationUpdate? = Some(

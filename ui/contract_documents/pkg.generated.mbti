@@ -38,6 +38,7 @@ pub(all) enum ContractDocumentConfirmation {
   RegisterExecution(String, Int64, String, String)
   ClosePacket(String, Int64, @contractdoc.ContractClosureKind, String)
   SupersedePacket(String, Int64, String, String)
+  RequestRenewal(String)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ContractDocumentsMessage {
@@ -53,6 +54,7 @@ pub(all) enum ContractDocumentsMessage {
   BeginRegisterExecution(String, Int64)
   BeginClosePacket(String, Int64)
   BeginSupersedePacket(String, Int64)
+  BeginRequestRenewal(String)
   ConfirmationInputChanged(ContractConfirmationField, String)
   DismissConfirmation
   ConfirmAction(ContractDocumentConfirmation)
@@ -86,6 +88,7 @@ pub(all) enum ContractPacketCapability {
   RegisterExecution
   ClosePacket
   SupersedePacket
+  RequestRenewal
 } derive(Eq, @debug.Debug)
 
 // Type aliases

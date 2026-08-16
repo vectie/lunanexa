@@ -395,12 +395,20 @@ test "capabilities follow packet state and actor role" {
     ),
     [RegisterExecution, SupersedePacket],
   )
+  // Renewal is offered to both roles from an effective packet.
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(Effective),
+      CustomerMessenger,
+    ),
+    [RequestRenewal],
+  )
   assert_eq(
     @contract_documents.contract_packet_capabilities(
       packet(Effective),
       ManagerOperator,
     ),
-    [ClosePacket],
+    [RequestRenewal, ClosePacket],
   )
   assert_eq(
     @contract_documents.contract_packet_capabilities(
@@ -508,6 +516,7 @@ test "guidance surfaces failure reasons evidence and closure facts" {
   )
   assert_true(effective.contains("2026-08-14"))
   assert_true(effective.contains("111111111111"))
+  assert_true(effective.contains("Renewal is available"))
   let closed = scene(
     {
       ..packet(Closed),

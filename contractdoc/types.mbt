@@ -17,8 +17,10 @@ pub(all) suberror ContractDocumentError {
   ConfirmationMismatch
   ForbiddenSecret(String)
   ContractNotEffective(String)
+  ContractNotRenewable(String)
   InvalidEvidence(String)
   InvalidExecutionDate(String)
+  SettlementMismatch(String)
 } derive(Debug, Eq)
 
 ///|

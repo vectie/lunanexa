@@ -81,6 +81,7 @@ the lifecycle allows, so the role-by-state matrix is enforced by construction:
 | `RegisterExecution` | no | yes | `Generated` |
 | `ClosePacket` | no | yes | `Effective` |
 | `SupersedePacket` | no | yes | any state except `Effective`, `Closed`, or `Superseded` |
+| `RequestRenewal` | yes | yes | `Effective` |
 
 The responsibility split mirrors the offline contract process. The customer
 owns information confirmation and generation requests — their attestation of
@@ -102,7 +103,22 @@ Two cross-packet rules bind packets together:
 - An `EarlyTermination` closure requires a same-tenant
   `SettlementConfirmation` packet in `Effective` or `Closed` state; a merely
   generated settlement is unsigned and the store rejects the close. `Expired`
-  and `Settled` closures have no settlement precondition.
+  and `Settled` closures have no settlement precondition. When the
+  organization has commercial ledger entries, the close additionally
+  reconciles the settlement's `settlement.amount_due` against the ledger's
+  provisional total for the organization; a mismatch is rejected with
+  `SettlementMismatch` (HTTP 409 `ContractSettlementMismatch`). When the
+  organization has no ledger entries the comparison is skipped and an audit
+  note records that the ledger was not in use.
+- An `Effective` packet can be renewed (`POST …/self/{id}:renew` for the
+  owning customer, `POST …/operator/packets/{id}:renew` for the operator).
+  The renewal is a fresh `InformationDraft` packet that links back through
+  `preceding_packet_ref`, carries only the initial-stage forms, and copies
+  the source values as a drafting starting point — except offline-completed
+  fields (signatures and seals are redone offline) and platform-derived
+  fields (the server re-derives them). A source that is not `Effective`, or
+  that has no initial-stage forms, is rejected with `ContractNotRenewable`
+  (HTTP 409 `ContractRenewalRejected`).
 
 Every mutation carries an `expected_revision` fence; a stale revision is
 rejected with a conflict. Generation requests additionally carry the expected
@@ -111,6 +127,14 @@ customer confirmed. Any information change clears the confirmation and its
 digest, forcing a fresh review before generation. Preview is available in any
 state: it applies only the requesting role's draft to a verified copy of the
 fillable DOCX and is revision-fenced like every other operation.
+
+A scheduled reconciler scans `Effective` packets and reminds both the
+customer subject and platform operators of upcoming lease end dates
+(`lease.end_date` / `reservation.end_date`) at the 30-day, 7-day, and 1-day
+windows, with per-window deduplication. The control plane runs it every
+`LUNANEXA_CONTRACT_EXPIRY_RECONCILE_INTERVAL_MS` (default one hour). The
+reminders never close the packet: expiry itself remains an explicit operator
+closure.
 
 ## Privacy
 
@@ -172,7 +196,9 @@ Its subject-scoped native API is:
   information; only from `ReadyForConfirmation`;
 - `POST /v1/contract-documents/self/{packet_id}:generate` — request or retry
   generation (202); only from `InformationConfirmed` or `GenerationFailed`,
-  digest-fenced.
+  digest-fenced;
+- `POST /v1/contract-documents/self/{packet_id}:renew` — open a renewal draft
+  from an `Effective` packet owned by the subject (201).
 
 The operator side uses the same packets through an operator-token API:
 
@@ -185,7 +211,13 @@ The operator side uses the same packets through an operator-token API:
   register the offline signed evidence; only from `Generated`;
 - `POST /v1/contract-documents/operator/packets/{packet_id}:close` — close
   with kind `Expired`, `EarlyTermination`, or `Settled`; only from
-  `Effective`, with the settlement rule for early termination;
+  `Effective`, with the settlement and ledger-reconciliation rules for early
+  termination. Closing a packet whose forms include `MasterLease` also
+  revokes the subject's still-active API credentials and notifies the
+  subject; `Superseded` packets never trigger revocation, because the
+  successor packet continues the relationship;
+- `POST /v1/contract-documents/operator/packets/{packet_id}:renew` — open a
+  renewal draft from an `Effective` packet (201);
 - `POST /v1/contract-documents/operator/packets/{packet_id}:supersede` —
   supersede by a successor packet; any state except `Effective`, `Closed`,
   or `Superseded`.
@@ -258,15 +290,15 @@ The lifecycle model deliberately does not yet do the following:
 
 - no automatic expiry scheduling: a lease that runs to its end date stays
   `Effective` until an operator closes it — `ClosureKind::Expired` is a manual
-  operator close, not a timer;
-- no renewal or amendment flow for `Effective` packets: closing the packet
-  and creating a new one (supersession is reserved for pre-effect packets) is
-  the current path;
-- no cross-check of settlement packets against commercial ledger balances —
-  the early-termination gate checks that a settlement packet exists in a
-  qualifying state, not that its amounts match the ledger;
-- `access/` API keys are not gated on packet state: closing or superseding a
-  packet does not revoke or suspend issued access credentials.
+  operator close, not a timer (expiry reminder notifications fire at the
+  30/7/1-day windows, but never close the packet);
+- no amendment flow for `Effective` packets: renewal opens a fresh draft
+  linked through `preceding_packet_ref`; changing a packet in force still
+  requires closing it and creating a new one (supersession is reserved for
+  pre-effect packets);
+- closing a `MasterLease` packet revokes the subject's still-active API
+  credentials, but `access/` keys are not otherwise gated on packet state:
+  suspending a packet does not suspend issued credentials.
 
 ## Production blockers
 

@@ -433,6 +433,71 @@ pub async fn ContractDocumentStore::create_packet(
 }
 
 ///|
+/// Persists a renewal draft for an effective source packet, following the
+/// same idempotency-key replay pattern as `create_packet`: a replayed key
+/// returns the stored renewal when it points back at the same source, and
+/// any other reuse conflicts. The manifest is resolved from the source
+/// packet's persisted template id.
+pub async fn ContractDocumentStore::renew_packet(
+  self : ContractDocumentStore,
+  source_packet_id : String,
+  packet_id : String,
+  idempotency_key : String,
+  actor_ref : String,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractPacket {
+  self.mutex.acquire()
+  let before_packets = self.packets.copy()
+  let before_keys = self.idempotency_keys.copy()
+  let before_events = self.events.copy()
+  try {
+    match self.idempotency_keys.get(idempotency_key) {
+      Some(existing_id) =>
+        match self.packets.get(existing_id) {
+          Some(existing) if existing_id == packet_id &&
+            existing.preceding_packet_ref == Some(source_packet_id) => {
+            self.mutex.release()
+            return existing
+          }
+          _ =>
+            raise @contractdoc.ContractDocumentError::IdempotencyConflict(
+              idempotency_key,
+            )
+        }
+      None => ()
+    }
+    if self.packets.contains(packet_id) {
+      raise @contractdoc.ContractDocumentError::AlreadyExists(packet_id)
+    }
+    guard self.packets.get(source_packet_id) is Some(source) else {
+      raise @contractdoc.ContractDocumentError::NotFound("contract packet")
+    }
+    let renewal = source.renewal_draft(
+      @contractdoc.manifest_for_template_id(source.template_id),
+      packet_id,
+      idempotency_key,
+      now_unix_ms,
+    )
+    self.packets[renewal.packet_id] = renewal
+    self.idempotency_keys[renewal.idempotency_key] = renewal.packet_id
+    self.events.push(
+      event_for(renewal, PacketCreated, actor_ref, [], None, now_unix_ms),
+    )
+    self.persist()
+    self.mutex.release()
+    renewal
+  } catch {
+    error => {
+      self.packets = before_packets
+      self.idempotency_keys = before_keys
+      self.events = before_events
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn ContractDocumentStore::packet(
   self : ContractDocumentStore,
   packet_id : String,

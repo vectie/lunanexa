@@ -108,6 +108,15 @@ priv struct ContractPreviewIntent {
 extend ContractPreviewIntent with ToJson::{to_json}
 
 ///|
+priv struct ContractRenewalIntent {
+  packet_id : String
+  idempotency_key : String
+} derive(ToJson)
+
+///|
+extend ContractRenewalIntent with ToJson::{to_json}
+
+///|
 priv enum Outcome {
   Loaded(
     @portal.EnterpriseSelfView,
@@ -1335,6 +1344,27 @@ async fn contract_revision_action(
 }
 
 ///|
+async fn renew_contract_packet(
+  model : AppModel,
+  source_packet_id : String,
+) -> @contractdoc.ContractPacket {
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/contract-documents/self/\{source_packet_id}:renew",
+    model.token,
+    model.subject_ref,
+    body=ContractRenewalIntent::{
+        packet_id: random_identifier("contract-renewal"),
+        idempotency_key: random_identifier("contract-renewal-idempotency"),
+      }
+      .to_json()
+      .stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
 async fn contract_preview(
   model : AppModel,
   packet_id : String,
@@ -1445,6 +1475,13 @@ fn demo_contract_transition(
       }
       requested.complete_generation(requested.revision, docx, pdf, now_unix_ms)
     }
+    ConfirmAction(RequestRenewal(_)) =>
+      packet.renewal_draft(
+        manifest,
+        random_identifier("contract-renewal"),
+        random_identifier("contract-renewal-idempotency"),
+        now_unix_ms,
+      )
     _ => packet
   }
 }
@@ -1462,6 +1499,7 @@ fn demo_contract_action(
     SaveInformation(packet_id, _, _) => packet_id
     ConfirmAction(ConfirmInformation(packet_id, _)) => packet_id
     ConfirmAction(RequestGeneration(packet_id, _, _)) => packet_id
+    ConfirmAction(RequestRenewal(packet_id)) => packet_id
     _ => return { ..documents, loading: false }
   }
   guard documents.manifest is Some(manifest) &&
@@ -1512,6 +1550,12 @@ fn demo_contract_action(
         "Demo information confirmed; generation can now be requested.",
         "演示模式：信息已确认，现在可以请求生成合同。",
       )
+    ConfirmAction(RequestRenewal(_)) =>
+      portal_copy(
+        documents.locale,
+        "Demo renewal draft created locally; no controller was contacted.",
+        "演示模式：续约草稿已在本地创建，未连接控制平面。",
+      )
     _ =>
       portal_copy(
         documents.locale,
@@ -1560,6 +1604,8 @@ fn contract_packet_command(
             "generate",
           )
           |> ContractPacketUpdated
+        ConfirmAction(RequestRenewal(packet_id)) =>
+          renew_contract_packet(model, packet_id) |> ContractPacketUpdated
         _ => fail("unsupported contract document operation")
       }
     } catch {
