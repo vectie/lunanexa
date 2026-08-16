@@ -11,6 +11,7 @@ fn packet(
     "org-a",
     "subject-a",
     "order-a",
+    None,
     [MasterLease],
     1000L,
   )
@@ -77,6 +78,7 @@ test "reactive preview follows the selected form and current role draft" {
     "organization-preview",
     "subject-preview",
     "order-preview",
+    None,
     manifest.forms.map(form => form.form),
     1000L,
   )
@@ -117,6 +119,7 @@ test "customer and operator share one packet with role-owned fields and live pre
       "org-1",
       "subject-1",
       "order-1",
+      None,
       [MasterLease, AccessConfirmation],
       1000L,
     )
@@ -328,4 +331,281 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
   assert_true(html.contains("text-justify:inter-character"))
   assert_true(html.contains("white-space:pre-wrap"))
   assert_false(html.contains("<img"))
+}
+
+///|
+fn scene(
+  packet : @contractdoc.ContractPacket,
+  actor_owner : @contractdoc.ContractFieldOwner,
+) -> String {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  @contract_documents.render({
+    ..@contract_documents.default_state(English, actor_owner~),
+    manifest: Some(manifest),
+    packets: [packet],
+    selected_packet_id: Some(packet.packet_id),
+  })
+}
+
+///|
+test "capabilities follow packet state and actor role" {
+  let digest = Some(
+    "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(InformationDraft),
+      CustomerMessenger,
+    ),
+    [SaveInformation],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(ReadyForConfirmation),
+      CustomerMessenger,
+    ),
+    [SaveInformation, ConfirmInformation],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      { ..packet(InformationConfirmed), values_sha256: digest },
+      CustomerMessenger,
+    ),
+    [SaveInformation, RequestGeneration],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      { ..packet(GenerationFailed), values_sha256: digest },
+      CustomerMessenger,
+    ),
+    [RetryGeneration],
+  )
+  // Customers never see operator lifecycle actions.
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(Generated),
+      CustomerMessenger,
+    ),
+    [],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(Generated),
+      ManagerOperator,
+    ),
+    [RegisterExecution, SupersedePacket],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(Effective),
+      ManagerOperator,
+    ),
+    [ClosePacket],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(Closed),
+      ManagerOperator,
+    ),
+    [],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(Superseded),
+      ManagerOperator,
+    ),
+    [],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(InformationDraft),
+      ManagerOperator,
+    ),
+    [SaveInformation, SupersedePacket],
+  )
+  // Confirmation and generation requests are the customer's attestation; the
+  // operator never sees them, only the shared save and operator lifecycle
+  // actions.
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(ReadyForConfirmation),
+      ManagerOperator,
+    ),
+    [SaveInformation, SupersedePacket],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      { ..packet(InformationConfirmed), values_sha256: digest },
+      ManagerOperator,
+    ),
+    [SaveInformation, SupersedePacket],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      { ..packet(GenerationFailed), values_sha256: digest },
+      ManagerOperator,
+    ),
+    [SupersedePacket],
+  )
+  assert_eq(
+    @contract_documents.contract_packet_capabilities(
+      packet(ReadyForConfirmation),
+      CustomerMessenger,
+    ),
+    [SaveInformation, ConfirmInformation],
+  )
+}
+
+///|
+test "step bar marks the current step and generation failures" {
+  let generated = scene(packet(Generated), CustomerMessenger)
+  assert_true(generated.contains("contract-step is-done"))
+  assert_true(generated.contains("contract-step is-current"))
+  let failed = scene(packet(GenerationFailed), CustomerMessenger)
+  assert_true(failed.contains("contract-step is-failed"))
+  let superseded = scene(
+    {
+      ..packet(Superseded),
+      supersession: Some({
+        successor_ref: "packet-002",
+        reason: "reissued with corrected dates",
+        superseded_by: "operator",
+        superseded_unix_ms: 3000L,
+      }),
+    },
+    CustomerMessenger,
+  )
+  assert_true(superseded.contains("contract-step-badge is-superseded"))
+  assert_true(superseded.contains("packet-002"))
+  assert_false(superseded.contains("contract-step is-current"))
+}
+
+///|
+test "guidance surfaces failure reasons evidence and closure facts" {
+  let failed = scene(
+    {
+      ..packet(GenerationFailed),
+      values_sha256: Some(
+        "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      ),
+      generation_failure: Some("renderer crashed"),
+    },
+    CustomerMessenger,
+  )
+  assert_true(failed.contains("renderer crashed"))
+  assert_true(failed.contains("Retry generation"))
+  let effective = scene(
+    {
+      ..packet(Effective),
+      execution: Some({
+        evidence_sha256: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        signed_on: "2026-08-14",
+        registered_by: "operator",
+        registered_unix_ms: 6000L,
+      }),
+    },
+    ManagerOperator,
+  )
+  assert_true(effective.contains("2026-08-14"))
+  assert_true(effective.contains("111111111111"))
+  let closed = scene(
+    {
+      ..packet(Closed),
+      closure: Some({
+        kind: EarlyTermination,
+        reason: "tenant vacated ahead of term",
+        closed_by: "operator",
+        closed_unix_ms: 8000L,
+      }),
+    },
+    ManagerOperator,
+  )
+  assert_true(closed.contains("Early termination"))
+  assert_true(closed.contains("tenant vacated ahead of term"))
+  let customer_generated = scene(packet(Generated), CustomerMessenger)
+  assert_false(customer_generated.contains("Register signed evidence"))
+  let operator_generated = scene(packet(Generated), ManagerOperator)
+  assert_true(operator_generated.contains("Register signed evidence"))
+  assert_true(operator_generated.contains("Supersede packet"))
+}
+
+///|
+test "effective guidance renders the recorded lease window when present" {
+  let execution : @contractdoc.ContractExecution? = Some({
+    evidence_sha256: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    signed_on: "2026-08-15",
+    registered_by: "operator",
+    registered_unix_ms: 7000L,
+  })
+  let windowed = scene(
+    {
+      ..packet(Effective),
+      values: [
+        { field_id: "lease.start_date", value: "2026-09-01" },
+        { field_id: "lease.end_date", value: "2026-10-01" },
+      ],
+      execution,
+    },
+    ManagerOperator,
+  )
+  assert_true(windowed.contains("Recorded effective window"))
+  assert_true(windowed.contains("2026-09-01"))
+  assert_true(windowed.contains("2026-10-01"))
+  let reservation_windowed = scene(
+    {
+      ..packet(Effective),
+      values: [
+        { field_id: "reservation.start_date", value: "2026-11-01" },
+        { field_id: "reservation.end_date", value: "2026-12-01" },
+      ],
+      execution,
+    },
+    CustomerMessenger,
+  )
+  assert_true(reservation_windowed.contains("2026-11-01"))
+  assert_true(reservation_windowed.contains("2026-12-01"))
+  // Form kinds without lease date fields render no window line.
+  let plain = scene({ ..packet(Effective), execution, }, ManagerOperator)
+  assert_false(plain.contains("Recorded effective window"))
+}
+
+///|
+test "operator dialogs collect typed payloads for lifecycle actions" {
+  let base = @contract_documents.default_state(
+    English,
+    actor_owner=ManagerOperator,
+  )
+  let executing = base.update(BeginRegisterExecution("packet-001", 5L))
+  assert_eq(
+    executing.confirmation,
+    Some(RegisterExecution("packet-001", 5L, "", "")),
+  )
+  let filled = executing
+    .update(
+      ConfirmationInputChanged(
+        EvidenceDigest,
+        "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      ),
+    )
+    .update(ConfirmationInputChanged(SignedOn, "2026-08-14"))
+  assert_eq(
+    filled.confirmation,
+    Some(
+      RegisterExecution(
+        "packet-001", 5L, "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "2026-08-14",
+      ),
+    ),
+  )
+  let closing = base
+    .update(BeginClosePacket("packet-001", 6L))
+    .update(ConfirmationInputChanged(ClosureKind, "EarlyTermination"))
+    .update(ConfirmationInputChanged(ClosureReason, "tenant vacated"))
+  assert_eq(
+    closing.confirmation,
+    Some(ClosePacket("packet-001", 6L, EarlyTermination, "tenant vacated")),
+  )
+  let acted = closing.update(ConfirmAction(closing.confirmation.unwrap()))
+  assert_true(acted.loading)
+  assert_eq(acted.confirmation, None)
 }

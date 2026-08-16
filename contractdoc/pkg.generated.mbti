@@ -11,11 +11,15 @@ pub fn completion_summary(ContractTemplateManifest, ContractPacket) -> ContractC
 
 pub let contract_version : String
 
+pub fn form_creation_stage(ContractFormKind) -> ContractFormStage
+
+pub fn manifest_for_template_id(String) -> ContractTemplateManifest
+
 pub fn materialize_preview_template(ContractPreviewTemplate, ContractTemplateManifest, ContractPacket, ContractFieldOwner, ContractFormKind, Array[ContractFieldValue]) -> ContractPreviewDocument raise ContractDocumentError
 
 pub fn missing_required_fields(ContractTemplateManifest, ContractPacket) -> Array[String]
 
-pub fn new_packet(ContractTemplateManifest, String, String, String, String, String, String, Array[ContractFormKind], Int64) -> ContractPacket raise ContractDocumentError
+pub fn new_packet(ContractTemplateManifest, String, String, String, String, String, String, String?, Array[ContractFormKind], Int64) -> ContractPacket raise ContractDocumentError
 
 pub let snapshot_schema_version : String
 
@@ -37,9 +41,25 @@ pub(all) suberror ContractDocumentError {
   TemplateMismatch
   ConfirmationMismatch
   ForbiddenSecret(String)
+  ContractNotEffective(String)
+  InvalidEvidence(String)
+  InvalidExecutionDate(String)
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct ContractClosure {
+  kind : ContractClosureKind
+  reason : String
+  closed_by : String
+  closed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractClosureKind {
+  Expired
+  EarlyTermination
+  Settled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) enum ContractCollectionPolicy {
   PersistedContractData
   PersistedPersonalContact
@@ -60,6 +80,13 @@ pub(all) struct ContractDocumentSnapshot {
   schema_version : String
   packets : Array[ContractPacket]
   events : Array[ContractPacketEvent]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractExecution {
+  evidence_sha256 : String
+  signed_on : String
+  registered_by : String
+  registered_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractFieldAssignment {
@@ -126,6 +153,11 @@ pub(all) enum ContractFormKind {
   EarlyTerminationApplication
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) enum ContractFormStage {
+  InitialStage
+  EffectiveStage
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ContractGeneratedArtifact {
   artifact_id : String
   media_type : String
@@ -146,6 +178,7 @@ pub(all) struct ContractPacket {
   organization_id : String
   subject_ref : String
   order_ref : String
+  preceding_packet_ref : String?
   active_forms : Array[ContractFormKind]
   values : Array[ContractFieldValue]
   assignments : Array[ContractFieldAssignment]
@@ -154,17 +187,25 @@ pub(all) struct ContractPacket {
   confirmed_unix_ms : Int64?
   artifacts : Array[ContractGeneratedArtifact]
   state : ContractPacketState
+  execution : ContractExecution?
+  closure : ContractClosure?
+  supersession : ContractSupersession?
+  generation_failure : String?
   revision : Int64
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn ContractPacket::assignment(Self, String) -> ContractFieldAssignment?
 pub fn ContractPacket::canonical_values_material(Self) -> String
+pub fn ContractPacket::close_packet(Self, Int64, ContractClosure, Bool, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::complete_generation(Self, Int64, ContractGeneratedArtifact, ContractGeneratedArtifact, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::confirm_information(Self, ContractTemplateManifest, Int64, String, String, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::fail_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::marker_replacements(Self, Array[String]) -> Array[ContractFieldValue] raise ContractDocumentError
 pub fn ContractPacket::marker_value(Self, String) -> String raise ContractDocumentError
+pub fn ContractPacket::register_execution(Self, Int64, ContractExecution, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::request_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::supersede_packet(Self, Int64, ContractSupersession, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], ContractFieldOwner, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::value(Self, String) -> String?
 
@@ -187,6 +228,9 @@ pub(all) enum ContractPacketEventKind {
   InformationConfirmedEvent
   GenerationRequestedEvent
   GenerationCompletedEvent
+  GenerationFailedEvent
+  ExecutionRegisteredEvent
+  PacketClosedEvent
   PacketSupersededEvent
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -196,6 +240,9 @@ pub(all) enum ContractPacketState {
   InformationConfirmed
   GenerationRequested
   Generated
+  GenerationFailed
+  Effective
+  Closed
   Superseded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -289,6 +336,13 @@ pub(all) struct ContractPreviewTemplate {
   scene : ContractPreviewDocument
   page_forms : Array[ContractFormKind]
   marker_defaults : Array[ContractPreviewMarker]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractSupersession {
+  successor_ref : String
+  reason : String
+  superseded_by : String
+  superseded_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractTemplateManifest {

@@ -20,23 +20,31 @@ pub struct ContractDocumentStore {
   mut events : Array[@contractdoc.ContractPacketEvent]
   mutex : @async.Mutex
 }
+pub async fn ContractDocumentStore::close_packet(Self, String, Int64, @contractdoc.ContractClosureKind, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::complete_generation(Self, String, Int64, @contractdoc.ContractGeneratedArtifact, @contractdoc.ContractGeneratedArtifact, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::confirm_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::create_packet(Self, @contractdoc.ContractPacket, String) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::fail_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::open(String) -> Self
 pub async fn ContractDocumentStore::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn ContractDocumentStore::packet(Self, String) -> @contractdoc.ContractPacket?
 pub async fn ContractDocumentStore::packets_for_subject(Self, String) -> Array[@contractdoc.ContractPacket]
 pub async fn ContractDocumentStore::pending_generation_packets(Self) -> Array[@contractdoc.ContractPacket]
+pub async fn ContractDocumentStore::register_execution(Self, String, Int64, @contractdoc.ContractExecution, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::request_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::snapshot(Self) -> @contractdoc.ContractDocumentSnapshot
+pub async fn ContractDocumentStore::supersede_packet(Self, String, Int64, String, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::update_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, Array[@contractdoc.ContractFieldValue], @contractdoc.ContractFieldOwner, String, String, Int64) -> @contractdoc.ContractPacket
 
 type ContractPersistence
 
 type LegacyContractDocumentSnapshotV1 derive(@json.FromJson)
 
+type LegacyContractDocumentSnapshotV2 derive(@json.FromJson)
+
 type LegacyContractPacketV1 derive(@json.FromJson)
+
+type LegacyContractPacketV2 derive(@json.FromJson)
 
 // Type aliases
 

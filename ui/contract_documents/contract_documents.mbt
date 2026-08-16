@@ -2,7 +2,65 @@
 pub(all) enum ContractDocumentConfirmation {
   ConfirmInformation(String, Int64)
   RequestGeneration(String, Int64, String)
+  RegisterExecution(String, Int64, String, String)
+  ClosePacket(String, Int64, @contractdoc.ContractClosureKind, String)
+  SupersedePacket(String, Int64, String, String)
 } derive(Debug, Eq)
+
+///|
+/// The actions a packet offers to a given role in its current state. The
+/// action bar renders exactly this list, so both browser surfaces stay
+/// consistent with the lifecycle rules by construction.
+pub(all) enum ContractPacketCapability {
+  SaveInformation
+  ConfirmInformation
+  RequestGeneration
+  RetryGeneration
+  RegisterExecution
+  ClosePacket
+  SupersedePacket
+} derive(Debug, Eq)
+
+///|
+pub fn contract_packet_capabilities(
+  packet : @contractdoc.ContractPacket,
+  actor_owner : @contractdoc.ContractFieldOwner,
+) -> Array[ContractPacketCapability] {
+  let capabilities : Array[ContractPacketCapability] = []
+  let editable = packet.state == InformationDraft ||
+    packet.state == ReadyForConfirmation ||
+    packet.state == InformationConfirmed
+  if editable {
+    capabilities.push(SaveInformation)
+  }
+  // Confirmation and generation requests are the customer's attestation; the
+  // backend exposes the matching routes only on the customer side.
+  if actor_owner == CustomerMessenger {
+    if packet.state == ReadyForConfirmation {
+      capabilities.push(ConfirmInformation)
+    }
+    if packet.state == InformationConfirmed && packet.values_sha256 is Some(_) {
+      capabilities.push(RequestGeneration)
+    }
+    if packet.state == GenerationFailed && packet.values_sha256 is Some(_) {
+      capabilities.push(RetryGeneration)
+    }
+  }
+  if actor_owner == ManagerOperator {
+    if packet.state == Generated {
+      capabilities.push(RegisterExecution)
+    }
+    if packet.state == Effective {
+      capabilities.push(ClosePacket)
+    }
+    if packet.state != Effective &&
+      packet.state != Closed &&
+      packet.state != Superseded {
+      capabilities.push(SupersedePacket)
+    }
+  }
+  capabilities
+}
 
 ///|
 pub(all) struct ContractDocumentsState {
@@ -37,11 +95,28 @@ pub(all) enum ContractDocumentsMessage {
   SaveInformation(String, Int64, Array[@contractdoc.ContractFieldValue])
   BeginConfirmInformation(String, Int64)
   BeginRequestGeneration(String, Int64, String)
+  BeginRegisterExecution(String, Int64)
+  BeginClosePacket(String, Int64)
+  BeginSupersedePacket(String, Int64)
+  ConfirmationInputChanged(ContractConfirmationField, String)
   DismissConfirmation
   ConfirmAction(ContractDocumentConfirmation)
   Refresh
   ClearNotice
 } derive(Eq)
+
+///|
+/// The editable inputs of the operator action dialogs. Values are kept inside
+/// the pending confirmation so `ConfirmAction` always carries the complete,
+/// typed payload the shell needs for its HTTP call.
+pub(all) enum ContractConfirmationField {
+  EvidenceDigest
+  SignedOn
+  ClosureKind
+  ClosureReason
+  SuccessorReference
+  SupersessionReason
+} derive(Debug, Eq)
 
 ///|
 fn copy(locale : @i18n.Locale, en : String, zh : String) -> String {
@@ -180,6 +255,42 @@ pub fn ContractDocumentsState::update(
         ..self,
         confirmation: Some(RequestGeneration(packet_id, revision, digest)),
       }
+    BeginRegisterExecution(packet_id, revision) =>
+      {
+        ..self,
+        confirmation: Some(RegisterExecution(packet_id, revision, "", "")),
+      }
+    BeginClosePacket(packet_id, revision) =>
+      {
+        ..self,
+        confirmation: Some(ClosePacket(packet_id, revision, Expired, "")),
+      }
+    BeginSupersedePacket(packet_id, revision) =>
+      {
+        ..self,
+        confirmation: Some(SupersedePacket(packet_id, revision, "", "")),
+      }
+    ConfirmationInputChanged(field, value) =>
+      {
+        ..self,
+        confirmation: self.confirmation.map(action => {
+          match (action, field) {
+            (RegisterExecution(id, revision, _, signed_on), EvidenceDigest) =>
+              RegisterExecution(id, revision, value, signed_on)
+            (RegisterExecution(id, revision, digest, _), SignedOn) =>
+              RegisterExecution(id, revision, digest, value)
+            (ClosePacket(id, revision, _, reason), ClosureKind) =>
+              ClosePacket(id, revision, closure_kind_from(value), reason)
+            (ClosePacket(id, revision, kind, _), ClosureReason) =>
+              ClosePacket(id, revision, kind, value)
+            (SupersedePacket(id, revision, _, reason), SuccessorReference) =>
+              SupersedePacket(id, revision, value, reason)
+            (SupersedePacket(id, revision, successor, _), SupersessionReason) =>
+              SupersedePacket(id, revision, successor, value)
+            (current, _) => current
+          }
+        }),
+      }
     DismissConfirmation => { ..self, confirmation: None }
     ConfirmAction(_) =>
       {
@@ -233,6 +344,229 @@ fn command(
 }
 
 ///|
+fn closure_kind_from(value : String) -> @contractdoc.ContractClosureKind {
+  match value {
+    "EarlyTermination" => EarlyTermination
+    "Settled" => Settled
+    _ => Expired
+  }
+}
+
+///|
+fn closure_kinds() -> Array[@contractdoc.ContractClosureKind] {
+  [Expired, EarlyTermination, Settled]
+}
+
+///|
+fn closure_kind_label(
+  locale : @i18n.Locale,
+  kind : @contractdoc.ContractClosureKind,
+) -> String {
+  match kind {
+    Expired => copy(locale, "Expired", "到期")
+    EarlyTermination => copy(locale, "Early termination", "提前退租")
+    Settled => copy(locale, "Settled", "已结算")
+  }
+}
+
+///|
+fn short_digest(digest : String) -> String {
+  let prefix = if digest.has_prefix("sha256:") {
+    digest[7:].to_owned()
+  } else {
+    digest
+  }
+  if prefix.length() > 12 {
+    "\{prefix[:12]}…"
+  } else {
+    prefix
+  }
+}
+
+///|
+/// Lifecycle steps for the progress bar. Terminal states that sit outside the
+/// happy path (superseded) are rendered as a badge instead of a step.
+priv enum ContractStep {
+  FillInformation
+  ReviewConfirm
+  GenerateDocuments
+  SignedEffective
+  ClosedArchived
+} derive(Eq)
+
+///|
+fn step_index(state : @contractdoc.ContractPacketState) -> Int {
+  match state {
+    InformationDraft | ReadyForConfirmation => 0
+    InformationConfirmed => 1
+    GenerationRequested | Generated | GenerationFailed => 2
+    Effective => 3
+    Closed | Superseded => 4
+  }
+}
+
+///|
+fn step_label(locale : @i18n.Locale, step : ContractStep) -> String {
+  match step {
+    FillInformation => copy(locale, "Fill information", "填写资料")
+    ReviewConfirm => copy(locale, "Review and confirm", "审阅确认")
+    GenerateDocuments => copy(locale, "Generate documents", "生成文件")
+    SignedEffective => copy(locale, "Signed and effective", "签署生效")
+    ClosedArchived => copy(locale, "Closed and archived", "关闭归档")
+  }
+}
+
+///|
+fn step_bar(
+  locale : @i18n.Locale,
+  packet : @contractdoc.ContractPacket,
+) -> @rabbita.Html {
+  if packet.state == Superseded {
+    return @html.div(class="contract-steps-terminal", [
+      @html.span(
+        class="contract-step-badge is-superseded",
+        copy(locale, "Superseded packet", "已替代的资料包"),
+      ),
+      @html.span(
+        copy(
+          locale,
+          "Replaced by \{packet.supersession.map_or("", item => item.successor_ref)}",
+          "由 \{packet.supersession.map_or("", item => item.successor_ref)} 替代",
+        ),
+      ),
+    ])
+  }
+  let steps = [
+    FillInformation,
+    ReviewConfirm,
+    GenerateDocuments,
+    SignedEffective,
+    ClosedArchived,
+  ]
+  let current = step_index(packet.state)
+  @html.ol(
+    class="contract-steps",
+    [
+      for index, step in steps => {
+        let tone = if packet.state == GenerationFailed &&
+          step == GenerateDocuments {
+          "contract-step is-failed"
+        } else if index < current {
+          "contract-step is-done"
+        } else if index == current {
+          "contract-step is-current"
+        } else {
+          "contract-step"
+        }
+        @html.li(class=tone, [
+          @html.span(class="contract-step-marker", "\{index + 1}"),
+          @html.span(step_label(locale, step)),
+        ])
+      }
+    ],
+  )
+}
+
+///|
+/// Per-state guidance: what this state means and what happens next. Terminal
+/// states surface their recorded evidence, closure, or supersession facts.
+fn state_guidance(
+  locale : @i18n.Locale,
+  packet : @contractdoc.ContractPacket,
+  actor_owner : @contractdoc.ContractFieldOwner,
+) -> String {
+  match packet.state {
+    InformationDraft =>
+      copy(
+        locale, "Fill in the fields assigned to your side, then save. Nothing is generated from blank or invented values.",
+        "填写贵方负责的字段并保存；系统不会用空白或虚构内容生成合同。",
+      )
+    ReadyForConfirmation =>
+      copy(
+        locale, "All required fields are complete. Review the preview against the source wording, then confirm.",
+        "必填字段已齐全。请对照源合同文字审阅预览，然后确认。",
+      )
+    InformationConfirmed =>
+      copy(
+        locale, "Information is confirmed. Request generation to produce the exact DOCX and PDF pair.",
+        "资料已确认。申请生成以产出原格式 DOCX 与 PDF。",
+      )
+    GenerationRequested =>
+      copy(
+        locale, "The renderer is producing the DOCX and PDF pair with a fidelity gate. No edits are accepted meanwhile.",
+        "渲染器正在带保真校验地生成 DOCX 与 PDF；期间不接受修改。",
+      )
+    GenerationFailed =>
+      copy(
+        locale,
+        "Generation failed: \{packet.generation_failure.unwrap_or("unknown reason")}. The confirmed values are unchanged; you can retry generation.",
+        "生成失败：\{packet.generation_failure.unwrap_or("未知原因")}。已确认资料未变，可重试生成。",
+      )
+    Generated =>
+      if actor_owner == ManagerOperator {
+        copy(
+          locale, "Documents are generated. After the offline signing and stamping, register the evidence digest to make the packet effective.",
+          "文件已生成。线下签署盖章完成后，登记证据摘要以使合同生效。",
+        )
+      } else {
+        copy(
+          locale, "Documents are generated. Signing and stamping happen offline; the operator will register the signed evidence.",
+          "文件已生成。签署盖章在线下完成，由运营方登记签署证据。",
+        )
+      }
+    Effective => {
+      let base = copy(
+        locale,
+        "Signed on \{packet.execution.map_or("", item => item.signed_on)}; evidence digest \{packet.execution.map_or("", item => short_digest(item.evidence_sha256))}. The packet is effective and read-only.",
+        "已于 \{packet.execution.map_or("", item => item.signed_on)} 签署生效，证据摘要 \{packet.execution.map_or("", item => short_digest(item.evidence_sha256))}。资料包只读。",
+      )
+      match effective_window(packet) {
+        Some((start_date, end_date)) =>
+          base +
+          copy(
+            locale,
+            " Recorded effective window: \{start_date} to \{end_date}.",
+            " 已记录生效租期：\{start_date} 至 \{end_date}。",
+          )
+        None => base
+      }
+    }
+    Closed =>
+      copy(
+        locale,
+        "Closed (\{packet.closure.map_or("", item => closure_kind_label(locale, item.kind))}): \{packet.closure.map_or("", item => item.reason)}",
+        "已关闭（\{packet.closure.map_or("", item => closure_kind_label(locale, item.kind))}）：\{packet.closure.map_or("", item => item.reason)}",
+      )
+    Superseded =>
+      copy(
+        locale,
+        "Superseded by \{packet.supersession.map_or("", item => item.successor_ref)}: \{packet.supersession.map_or("", item => item.reason)}. Continue in the successor packet.",
+        "已被 \{packet.supersession.map_or("", item => item.successor_ref)} 替代：\{packet.supersession.map_or("", item => item.reason)}。请在后续资料包中继续。",
+      )
+  }
+}
+
+///|
+/// The recorded lease window of an Effective packet, read back from the
+/// submitted form values. MasterLease packets record `lease.*_date`;
+/// ReservationApplication packets record `reservation.*_date`. Other form
+/// kinds carry no window and render nothing extra.
+fn effective_window(packet : @contractdoc.ContractPacket) -> (String, String)? {
+  match (packet.value("lease.start_date"), packet.value("lease.end_date")) {
+    (Some(start_date), Some(end_date)) => Some((start_date, end_date))
+    _ =>
+      match
+        (
+          packet.value("reservation.start_date"),
+          packet.value("reservation.end_date"),
+        ) {
+        (Some(start_date), Some(end_date)) => Some((start_date, end_date))
+        _ => None
+      }
+  }
+}
+
+///|
 fn text_command(
   emit : @rabbita.Emit[ContractDocumentsMessage]?,
   wrap : (String) -> ContractDocumentsMessage,
@@ -257,6 +591,12 @@ fn state_label(
       copy(locale, "Generating exact documents", "正在生成原格式文件")
     Generated =>
       copy(locale, "DOCX and PDF generated", "DOCX 与 PDF 已生成")
+    GenerationFailed =>
+      copy(
+        locale, "Generation failed, retry available", "生成失败，可重试",
+      )
+    Effective => copy(locale, "Signed and effective", "已签署生效")
+    Closed => copy(locale, "Closed", "已关闭")
     Superseded => copy(locale, "Superseded", "已替代")
   }
 }
@@ -970,6 +1310,80 @@ fn form_has_actor_fields(
 }
 
 ///|
+fn capability_button(
+  state : ContractDocumentsState,
+  emit : @rabbita.Emit[ContractDocumentsMessage]?,
+  manifest : @contractdoc.ContractTemplateManifest,
+  packet : @contractdoc.ContractPacket,
+  capability : ContractPacketCapability,
+) -> @rabbita.Html {
+  let quiet = match capability {
+    SaveInformation | ClosePacket | SupersedePacket => true
+    _ => false
+  }
+  let (message, label) : (ContractDocumentsMessage, String) = match capability {
+    SaveInformation =>
+      (
+        SaveInformation(
+          packet.packet_id,
+          packet.revision,
+          editable_draft_values(state, manifest),
+        ),
+        copy(state.locale, "Save information", "保存资料"),
+      )
+    ConfirmInformation =>
+      (
+        BeginConfirmInformation(packet.packet_id, packet.revision),
+        copy(state.locale, "Review and confirm", "审阅并确认"),
+      )
+    RequestGeneration =>
+      (
+        BeginRequestGeneration(
+          packet.packet_id,
+          packet.revision,
+          packet.values_sha256.unwrap_or(""),
+        ),
+        copy(
+          state.locale,
+          "Generate exact DOCX + PDF",
+          "生成原格式 DOCX + PDF",
+        ),
+      )
+    RetryGeneration =>
+      (
+        BeginRequestGeneration(
+          packet.packet_id,
+          packet.revision,
+          packet.values_sha256.unwrap_or(""),
+        ),
+        copy(state.locale, "Retry generation", "重试生成"),
+      )
+    RegisterExecution =>
+      (
+        BeginRegisterExecution(packet.packet_id, packet.revision),
+        copy(state.locale, "Register signed evidence", "登记签署证据"),
+      )
+    ClosePacket =>
+      (
+        BeginClosePacket(packet.packet_id, packet.revision),
+        copy(state.locale, "Close packet", "关闭资料包"),
+      )
+    SupersedePacket =>
+      (
+        BeginSupersedePacket(packet.packet_id, packet.revision),
+        copy(state.locale, "Supersede packet", "替代资料包"),
+      )
+  }
+  @html.button(
+    type_="button",
+    class=if quiet { "quiet-button" } else { "primary-button" },
+    disabled=state.loading,
+    on_click=command(emit, message),
+    label,
+  )
+}
+
+///|
 fn packet_editor(
   state : ContractDocumentsState,
   emit : @rabbita.Emit[ContractDocumentsMessage]?,
@@ -984,9 +1398,6 @@ fn packet_editor(
     Some(kind) => find_form(manifest.forms, kind)
     None => None
   }
-  let editable = packet.state == InformationDraft ||
-    packet.state == ReadyForConfirmation ||
-    packet.state == InformationConfirmed
   let actor_title = if state.actor_owner == CustomerMessenger {
     copy(state.locale, "Your customer information", "填写乙方资料")
   } else {
@@ -1008,6 +1419,11 @@ fn packet_editor(
       ),
       @html.span("Revision \{packet.revision}"),
     ]),
+    step_bar(state.locale, packet),
+    @html.p(
+      class="contract-guidance",
+      state_guidance(state.locale, packet, state.actor_owner),
+    ),
     @html.div(class="contract-editor-layout", [
       @html.nav(
         class="contract-form-nav",
@@ -1085,59 +1501,193 @@ fn packet_editor(
               copy(state.locale, "Select a form.", "请选择表单。"),
             )
         },
-        @html.div(class="contract-actions", [
-          @html.button(
-            type_="button",
-            class="quiet-button",
-            disabled=!editable || state.loading,
-            on_click=command(
-              emit,
-              SaveInformation(
-                packet.packet_id,
-                packet.revision,
-                editable_draft_values(state, manifest),
-              ),
-            ),
-            copy(state.locale, "Save information", "保存资料"),
-          ),
-          if packet.state == ReadyForConfirmation {
-            @html.button(
-              type_="button",
-              class="primary-button",
-              disabled=state.loading,
-              on_click=command(
-                emit,
-                BeginConfirmInformation(packet.packet_id, packet.revision),
-              ),
-              copy(state.locale, "Review and confirm", "审阅并确认"),
-            )
-          } else if packet.state == InformationConfirmed &&
-            packet.values_sha256 is Some(digest) {
-            @html.button(
-              type_="button",
-              class="primary-button",
-              disabled=state.loading,
-              on_click=command(
-                emit,
-                BeginRequestGeneration(
-                  packet.packet_id,
-                  packet.revision,
-                  digest,
-                ),
-              ),
-              copy(
-                state.locale,
-                "Generate exact DOCX + PDF",
-                "生成原格式 DOCX + PDF",
-              ),
-            )
-          } else {
-            @html.span("")
-          },
-        ]),
+        @html.div(
+          class="contract-actions",
+          [
+            for
+              capability in contract_packet_capabilities(
+                packet,
+                state.actor_owner,
+              ) => capability_button(state, emit, manifest, packet, capability)
+          ],
+        ),
       ]),
       preview_panel(state, packet, form),
     ]),
+  ])
+}
+
+///|
+fn dialog_text_input(
+  emit : @rabbita.Emit[ContractDocumentsMessage]?,
+  id : String,
+  label : String,
+  value : String,
+  field : ContractConfirmationField,
+) -> @rabbita.Html {
+  @html.div(class="contract-field", [
+    @html.label(for_=id, [@html.span(label)]),
+    @html.input(
+      id~,
+      value~,
+      on_input=text_command(emit, next => ConfirmationInputChanged(field, next)),
+    ),
+  ])
+}
+
+///|
+/// Dialog for the operator lifecycle actions: registering offline execution
+/// evidence, closing an effective packet, and superseding a stale packet.
+fn operator_confirmation(
+  state : ContractDocumentsState,
+  emit : @rabbita.Emit[ContractDocumentsMessage]?,
+  action : ContractDocumentConfirmation,
+) -> @rabbita.Html {
+  let (title, body) : (String, String) = match action {
+    RegisterExecution(_) =>
+      (
+        copy(
+          state.locale,
+          "Register the signed and stamped evidence?",
+          "登记签署盖章证据？",
+        ),
+        copy(
+          state.locale,
+          "Signing stays offline. Record only the digest of the stamped scan and the signing date; the scan itself never enters the platform.",
+          "签署保持在线下完成。这里只记录盖章扫描件的摘要与签署日期；扫描件本身不进入平台。",
+        ),
+      )
+    ClosePacket(_) =>
+      (
+        copy(
+          state.locale,
+          "Close this effective packet?",
+          "关闭该已生效资料包？",
+        ),
+        copy(
+          state.locale,
+          "Closing is final. Early termination is accepted only after a settlement confirmation has been generated.",
+          "关闭不可撤销。提前退租只有在结算确认单生成后才会被接受。",
+        ),
+      )
+    _ =>
+      (
+        copy(state.locale, "Supersede this packet?", "替代该资料包？"),
+        copy(
+          state.locale,
+          "The packet becomes read-only and every follower moves to the successor packet. Effective or closed packets cannot be superseded.",
+          "替代后本资料包转为只读，后续工作都在后续资料包中进行。已生效或已关闭的资料包不能被替代。",
+        ),
+      )
+  }
+  let inputs : Array[@rabbita.Html] = match action {
+    RegisterExecution(_, _, digest, signed_on) =>
+      [
+        dialog_text_input(
+          emit,
+          "contract-confirm-evidence",
+          copy(
+            state.locale,
+            "Evidence digest (sha256:…)",
+            "证据摘要（sha256:…）",
+          ),
+          digest,
+          EvidenceDigest,
+        ),
+        dialog_text_input(
+          emit,
+          "contract-confirm-signed-on",
+          copy(state.locale, "Signing date", "签署日期"),
+          signed_on,
+          SignedOn,
+        ),
+      ]
+    ClosePacket(_, _, kind, reason) =>
+      [
+        @html.div(class="contract-field", [
+          @html.label(for_="contract-confirm-closure-kind", [
+            @html.span(copy(state.locale, "Closure kind", "关闭类型")),
+          ]),
+          @html.select(
+            id="contract-confirm-closure-kind",
+            on_change=text_command(emit, next => {
+              ConfirmationInputChanged(ClosureKind, next)
+            }),
+            [
+              for candidate in closure_kinds() => {
+                @html.option(
+                  value=match candidate {
+                    Expired => "Expired"
+                    EarlyTermination => "EarlyTermination"
+                    Settled => "Settled"
+                  },
+                  selected=kind == candidate,
+                  closure_kind_label(state.locale, candidate),
+                )
+              }
+            ],
+          ),
+        ]),
+        dialog_text_input(
+          emit,
+          "contract-confirm-closure-reason",
+          copy(state.locale, "Closure reason", "关闭原因"),
+          reason,
+          ClosureReason,
+        ),
+      ]
+    SupersedePacket(_, _, successor, reason) =>
+      [
+        dialog_text_input(
+          emit,
+          "contract-confirm-successor",
+          copy(state.locale, "Successor packet id", "后续资料包编号"),
+          successor,
+          SuccessorReference,
+        ),
+        dialog_text_input(
+          emit,
+          "contract-confirm-supersede-reason",
+          copy(state.locale, "Supersession reason", "替代原因"),
+          reason,
+          SupersessionReason,
+        ),
+      ]
+    _ => []
+  }
+  let ready = match action {
+    RegisterExecution(_, _, digest, signed_on) =>
+      digest.trim() != "" && signed_on.trim() != ""
+    ClosePacket(_, _, _, reason) => reason.trim() != ""
+    SupersedePacket(_, _, successor, reason) =>
+      successor.trim() != "" && reason.trim() != ""
+    _ => true
+  }
+  @html.div(class="modal-backdrop", [
+    @html.section(
+      class="confirmation-dialog",
+      attrs=@html.Attrs::build().role("alertdialog").aria_modal("true"),
+      [
+        @html.h2(title),
+        @html.p(body),
+        @html.div(class="contract-field-grid", inputs),
+        @html.div(class="dialog-actions", [
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            on_click=command(emit, DismissConfirmation),
+            copy(state.locale, "Go back", "返回检查"),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=!ready || state.loading,
+            on_click=command(emit, ConfirmAction(action)),
+            copy(state.locale, "Confirm", "确认执行"),
+          ),
+        ]),
+      ],
+    ),
   ])
 }
 
@@ -1148,65 +1698,70 @@ fn confirmation(
 ) -> @rabbita.Html {
   match state.confirmation {
     None => @html.span("")
-    Some(action) => {
-      let generating = action is RequestGeneration(_, _, _)
-      @html.div(class="modal-backdrop", [
-        @html.section(
-          class="confirmation-dialog",
-          attrs=@html.Attrs::build().role("alertdialog").aria_modal("true"),
-          [
-            @html.h2(
-              if generating {
-                copy(
-                  state.locale,
-                  "Generate from the confirmed values?",
-                  "按已确认资料生成文件？",
-                )
-              } else {
-                copy(
-                  state.locale,
-                  "Confirm the information is exact?",
-                  "确认资料准确无误？",
-                )
-              },
+    Some(action) =>
+      match action {
+        RegisterExecution(_) | ClosePacket(_) | SupersedePacket(_) =>
+          operator_confirmation(state, emit, action)
+        ConfirmInformation(_) | RequestGeneration(_) => {
+          let generating = action is RequestGeneration(_, _, _)
+          @html.div(class="modal-backdrop", [
+            @html.section(
+              class="confirmation-dialog",
+              attrs=@html.Attrs::build().role("alertdialog").aria_modal("true"),
+              [
+                @html.h2(
+                  if generating {
+                    copy(
+                      state.locale,
+                      "Generate from the confirmed values?",
+                      "按已确认资料生成文件？",
+                    )
+                  } else {
+                    copy(
+                      state.locale,
+                      "Confirm the information is exact?",
+                      "确认资料准确无误？",
+                    )
+                  },
+                ),
+                @html.p(
+                  if generating {
+                    copy(
+                      state.locale,
+                      "The generator may only replace declared blanks. It must preserve the supplied wording, layout, pagination, headers, footers, tables, and styles; otherwise the job fails.",
+                      "生成器仅可替换已声明的空白项；必须保留源文件的文字、布局、分页、页眉页脚、表格与样式，否则任务失败。",
+                    )
+                  } else {
+                    copy(
+                      state.locale,
+                      "Names, dates, amounts, and Chinese uppercase amounts are recorded exactly as entered. The system does not infer or correct them.",
+                      "姓名、日期、金额及金额大写将按输入原样记录；系统不会推断或更正。",
+                    )
+                  },
+                ),
+                @html.div(class="dialog-actions", [
+                  @html.button(
+                    type_="button",
+                    class="quiet-button",
+                    on_click=command(emit, DismissConfirmation),
+                    copy(state.locale, "Go back", "返回检查"),
+                  ),
+                  @html.button(
+                    type_="button",
+                    class="primary-button",
+                    on_click=command(emit, ConfirmAction(action)),
+                    if generating {
+                      copy(state.locale, "Request generation", "申请生成")
+                    } else {
+                      copy(state.locale, "Confirm information", "确认资料")
+                    },
+                  ),
+                ]),
+              ],
             ),
-            @html.p(
-              if generating {
-                copy(
-                  state.locale,
-                  "The generator may only replace declared blanks. It must preserve the supplied wording, layout, pagination, headers, footers, tables, and styles; otherwise the job fails.",
-                  "生成器仅可替换已声明的空白项；必须保留源文件的文字、布局、分页、页眉页脚、表格与样式，否则任务失败。",
-                )
-              } else {
-                copy(
-                  state.locale,
-                  "Names, dates, amounts, and Chinese uppercase amounts are recorded exactly as entered. The system does not infer or correct them.",
-                  "姓名、日期、金额及金额大写将按输入原样记录；系统不会推断或更正。",
-                )
-              },
-            ),
-            @html.div(class="dialog-actions", [
-              @html.button(
-                type_="button",
-                class="quiet-button",
-                on_click=command(emit, DismissConfirmation),
-                copy(state.locale, "Go back", "返回检查"),
-              ),
-              @html.button(
-                type_="button",
-                class="primary-button",
-                on_click=command(emit, ConfirmAction(action)),
-                if generating {
-                  copy(state.locale, "Request generation", "申请生成")
-                } else {
-                  copy(state.locale, "Confirm information", "确认资料")
-                },
-              ),
-            ]),
-          ],
-        ),
-      ])
-    }
+          ])
+        }
+      }
   }
 }
 
@@ -1317,6 +1872,7 @@ fn contract_documents_view(
 ///|
 fn contract_styles() -> String {
   (
+    #|.contract-steps{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem;margin:0;padding:.6rem .8rem}.contract-step{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .6rem;border:1px solid var(--line,#223743);border-radius:999px;color:var(--muted,#91a7ad);font-size:.85rem}.contract-step-marker{display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;border:1px solid currentColor;font-size:.75rem}.contract-step.is-done{color:var(--ink,#ecf5f2);border-color:rgba(126,224,189,.35)}.contract-step.is-current{color:var(--ink,#ecf5f2);border-color:rgba(126,224,189,.7);background:rgba(126,224,189,.1)}.contract-step.is-failed{color:#f2a3a3;border-color:rgba(242,163,163,.6);background:rgba(242,163,163,.08)}.contract-steps-terminal{display:flex;align-items:center;gap:.6rem;padding:.6rem .8rem;color:var(--muted,#91a7ad)}.contract-step-badge.is-superseded{padding:.3rem .6rem;border:1px solid rgba(242,163,163,.6);border-radius:999px;color:#f2a3a3;font-size:.85rem}.contract-guidance{margin:0;padding:0 .8rem .8rem;color:var(--muted,#91a7ad)}
     #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(30rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision,.contract-page-count{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-sync{display:inline-flex;align-items:center;min-height:2rem;padding:.35rem .6rem;border:1px solid rgba(126,224,189,.28);border-radius:999px;color:#7ee0bd;font-size:.72rem;font-weight:750}.contract-preview-sync.is-loading{color:#f1c36d;border-color:rgba(241,195,109,.35)}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(76vh,64rem);padding:1rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.moonleaf-pages{display:grid;gap:1.5rem}.contract-paper{container-type:inline-size;display:block;box-sizing:border-box;width:100%;min-height:0;overflow:hidden;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:0;line-height:normal}.moonleaf-document{font-kerning:normal;font-synthesis:none;word-break:normal;overflow-wrap:break-word}.moonleaf-document span{white-space:pre-wrap}.moonleaf-paragraph,.moonleaf-heading,.moonleaf-list-item,.moonleaf-cell-paragraph{font-size:2.89cqw;line-height:6.743cqw;text-justify:inter-character}.moonleaf-paragraph,.moonleaf-cell-paragraph{min-height:0;margin:0;text-indent:0}.moonleaf-heading{margin:0;text-align:center;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:0}.moonleaf-table{width:100%;margin:0;border-collapse:collapse;table-layout:fixed;font-size:2.89cqw;line-height:normal}.moonleaf-table td{box-sizing:border-box;border:1px solid #555;white-space:pre-wrap;overflow-wrap:anywhere}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:78rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:52rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem;padding:.5rem}}
   )
 }

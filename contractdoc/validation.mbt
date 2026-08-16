@@ -11,6 +11,27 @@ fn valid_sha256(value : String) -> Bool {
 }
 
 ///|
+/// A calendar date in `YYYY-MM-DD` shape with month 01-12 and day 01-31. The
+/// check is structural only; it does not validate calendar arithmetic.
+fn valid_calendar_date(value : String) -> Bool {
+  let characters = value.to_array()
+  if characters.length() != 10 || characters[4] != '-' || characters[7] != '-' {
+    return false
+  }
+  for index, character in characters {
+    if index != 4 && index != 7 && !character.is_ascii_digit() {
+      return false
+    }
+  }
+  let zero = '0'.to_int()
+  let month = (characters[5].to_int() - zero) * 10 +
+    characters[6].to_int() -
+    zero
+  let day = (characters[8].to_int() - zero) * 10 + characters[9].to_int() - zero
+  month >= 1 && month <= 12 && day >= 1 && day <= 31
+}
+
+///|
 fn printable_bounded(value : String, maximum : Int) -> Bool {
   value.length() <= maximum &&
   value.all(character => character.is_printable() && character != '\u{0000}')

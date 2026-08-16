@@ -99,6 +99,36 @@ priv struct ContractPreviewIntent {
 extend ContractPreviewIntent with ToJson::{to_json}
 
 ///|
+priv struct ContractExecutionRegistration {
+  expected_revision : Int64
+  evidence_sha256 : String
+  signed_on : String
+} derive(ToJson)
+
+///|
+extend ContractExecutionRegistration with ToJson::{to_json}
+
+///|
+priv struct ContractClosureIntent {
+  expected_revision : Int64
+  kind : @contractdoc.ContractClosureKind
+  reason : String
+} derive(ToJson)
+
+///|
+extend ContractClosureIntent with ToJson::{to_json}
+
+///|
+priv struct ContractSupersessionIntent {
+  expected_revision : Int64
+  successor_ref : String
+  reason : String
+} derive(ToJson)
+
+///|
+extend ContractSupersessionIntent with ToJson::{to_json}
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -1251,6 +1281,8 @@ priv enum LoadOutcome {
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
+  ContractLifecycleComplete(@i18n.Locale, @contractdoc.ContractPacket, String)
+  ContractActionFailed(@i18n.Locale, String)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
 }
@@ -1458,7 +1490,7 @@ fn operator_contract_command(
       ContractPacketUpdated(updated)
     } catch {
       _ =>
-        ActionFailed(
+        ContractActionFailed(
           model.console.locale,
           console_copy(
             model.console.locale,
@@ -1470,6 +1502,220 @@ fn operator_contract_command(
       value => value
     }
   })
+}
+
+///|
+fn operator_contract_lifecycle_command(
+  model : AppModel,
+  action : @contract_documents.ContractDocumentConfirmation,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let request_spec = match action {
+        RegisterExecution(packet_id, revision, evidence_sha256, signed_on) =>
+          {
+            path: "/v1/contract-documents/operator/packets/\{packet_id}:execute",
+            body: ContractExecutionRegistration::{
+              expected_revision: revision,
+              evidence_sha256,
+              signed_on,
+            }
+            .to_json()
+            .stringify(),
+            english_success: "Contract execution registered; the packet is now effective.",
+            chinese_success: "合同签署已登记，数据包现已生效。",
+          }
+        ClosePacket(packet_id, revision, kind, reason) =>
+          {
+            path: "/v1/contract-documents/operator/packets/\{packet_id}:close",
+            body: ContractClosureIntent::{
+              expected_revision: revision,
+              kind,
+              reason,
+            }
+            .to_json()
+            .stringify(),
+            english_success: "Contract packet closed.",
+            chinese_success: "合同数据包已关闭。",
+          }
+        SupersedePacket(packet_id, revision, successor_ref, reason) =>
+          {
+            path: "/v1/contract-documents/operator/packets/\{packet_id}:supersede",
+            body: ContractSupersessionIntent::{
+              expected_revision: revision,
+              successor_ref,
+              reason,
+            }
+            .to_json()
+            .stringify(),
+            english_success: "Contract packet superseded.",
+            chinese_success: "合同数据包已被取代。",
+          }
+        _ => fail("unsupported contract lifecycle action")
+      }
+      let response = request(
+        "POST",
+        model.endpoint,
+        request_spec.path,
+        model.credential,
+        body=request_spec.body,
+      )
+      let updated : @contractdoc.ContractPacket = @json.from_json(
+        @json.parse(response),
+      )
+      ContractLifecycleComplete(
+        model.console.locale,
+        updated,
+        console_copy(
+          model.console.locale,
+          request_spec.english_success,
+          request_spec.chinese_success,
+        ),
+      )
+    } catch {
+      _ =>
+        ContractActionFailed(
+          model.console.locale,
+          console_copy(
+            model.console.locale,
+            "Contract lifecycle action failed.",
+            "合同生命周期操作失败。",
+          ),
+        )
+    } noraise {
+      value => value
+    }
+  })
+}
+
+///|
+fn demo_contract_packet(
+  model : AppModel,
+  packet_id : String,
+) -> @contractdoc.ContractPacket raise {
+  guard model.console.contract_documents.packets.search_by(packet => {
+      packet.packet_id == packet_id
+    })
+    is Some(index) else {
+    fail("contract packet unavailable")
+  }
+  model.console.contract_documents.packets[index]
+}
+
+///|
+/// Demo mode has no backend; the operator lifecycle actions replay the same
+/// deterministic transition against the in-memory demo packet instead of
+/// sending HTTP. The shared lifecycle guards still apply, so a packet in the
+/// wrong state produces the same rejection the controller would return.
+fn demo_contract_lifecycle_action(
+  model : AppModel,
+  action : @contract_documents.ContractDocumentConfirmation,
+) -> (AppModel, @rabbita.Cmd) {
+  try {
+    let now = current_unix_ms()
+    let (updated, english_success, chinese_success) = match action {
+      RegisterExecution(packet_id, revision, evidence_sha256, signed_on) => {
+        let packet = demo_contract_packet(model, packet_id)
+        (
+          packet.register_execution(
+            revision,
+            {
+              evidence_sha256,
+              signed_on,
+              registered_by: "operator",
+              registered_unix_ms: now,
+            },
+            now,
+          ),
+          "Demo registered the contract execution locally; no request was sent.",
+          "演示已在本地登记合同签署生效；未发送请求。",
+        )
+      }
+      ClosePacket(packet_id, revision, kind, reason) => {
+        let packet = demo_contract_packet(model, packet_id)
+        // The demo has no sibling packets to settle against; the operator's
+        // confirmation dialog stands in for the store-level settlement check.
+        (
+          packet.close_packet(
+            revision,
+            { kind, reason, closed_by: "operator", closed_unix_ms: now },
+            true,
+            now,
+          ),
+          "Demo closed the contract packet locally; no request was sent.",
+          "演示已在本地关闭合同数据包；未发送请求。",
+        )
+      }
+      SupersedePacket(packet_id, revision, successor_ref, reason) => {
+        let packet = demo_contract_packet(model, packet_id)
+        (
+          packet.supersede_packet(
+            revision,
+            {
+              successor_ref,
+              reason,
+              superseded_by: "operator",
+              superseded_unix_ms: now,
+            },
+            now,
+          ),
+          "Demo superseded the contract packet locally; no request was sent.",
+          "演示已在本地取代合同数据包；未发送请求。",
+        )
+      }
+      _ => fail("unsupported contract lifecycle action")
+    }
+    (
+      {
+        ..model,
+        console: {
+          ..model.console,
+          contract_documents: {
+            ..model.console.contract_documents,
+            packets: replace_contract_packet(
+              model.console.contract_documents.packets,
+              updated,
+            ),
+            selected_packet_id: Some(updated.packet_id),
+            draft_values: updated.values.copy(),
+            loading: false,
+            error_message: None,
+            success_message: Some(
+              console_copy(
+                model.console.locale,
+                english_success,
+                chinese_success,
+              ),
+            ),
+          },
+        },
+      },
+      @rabbita.none,
+    )
+  } catch {
+    error =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Demo contract lifecycle action was rejected: \{Repr(error)}",
+                  "演示合同生命周期操作被拒绝：\{Repr(error)}",
+                ),
+              ),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+  }
 }
 
 ///|
@@ -1816,6 +2062,59 @@ fn update_live(
                   model.console.locale,
                   "Manager contract information saved.",
                   "经理/运营方合同资料已保存。",
+                ),
+              ),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ContractLifecycleComplete(dispatched_locale, packet, message)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              packets: replace_contract_packet(
+                model.console.contract_documents.packets,
+                packet,
+              ),
+              selected_packet_id: Some(packet.packet_id),
+              draft_values: packet.values.copy(),
+              loading: false,
+              error_message: None,
+              success_message: Some(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  message,
+                  "Contract lifecycle action completed.",
+                  "合同生命周期操作已完成。",
+                ),
+              ),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ContractActionFailed(dispatched_locale, message)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              loading: false,
+              error_message: Some(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  message,
+                  "Contract lifecycle action failed.",
+                  "合同生命周期操作失败。",
                 ),
               ),
             },
@@ -3490,6 +3789,46 @@ fn update_live(
         },
         operator_contract_command(model, packet_id, revision, changes, emit),
       )
+    }
+    Console(ContractDocuments(ConfirmAction(action))) => {
+      let next_documents = model.console.contract_documents.update(
+        ConfirmAction(action),
+      )
+      let next = {
+        ..model,
+        console: { ..model.console, contract_documents: next_documents },
+      }
+      match action {
+        RegisterExecution(_) | ClosePacket(_) | SupersedePacket(_) =>
+          if model.demo_mode {
+            demo_contract_lifecycle_action(next, action)
+          } else {
+            (next, operator_contract_lifecycle_command(model, action, emit))
+          }
+        _ =>
+          // Customer attestations are never offered to the operator; drop them
+          // defensively so the confirmation dialog never spins.
+          (
+            {
+              ..next,
+              console: {
+                ..next.console,
+                contract_documents: {
+                  ..next.console.contract_documents,
+                  loading: false,
+                  error_message: Some(
+                    console_copy(
+                      model.console.locale,
+                      "This contract attestation belongs to the customer portal.",
+                      "该合同确认操作属于客户门户。",
+                    ),
+                  ),
+                },
+              },
+            },
+            @rabbita.none,
+          )
+      }
     }
     Console(ContractDocuments(message)) =>
       (

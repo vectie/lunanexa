@@ -8,6 +8,7 @@ priv struct ContractPacketIntent {
   packet_id : String
   idempotency_key : String
   order_ref : String
+  preceding_packet_ref : String?
   active_forms : Array[@contractdoc.ContractFormKind]
 } derive(FromJson)
 
@@ -37,6 +38,38 @@ priv struct ContractGenerationResult {
   docx : @contractdoc.ContractGeneratedArtifact
   pdf : @contractdoc.ContractGeneratedArtifact
   worker_receipt : String
+} derive(FromJson)
+
+///|
+priv struct ContractGenerationFailure {
+  packet_id : String
+  expected_revision : Int64
+  reason : String
+  worker_receipt : String
+} derive(FromJson)
+
+///|
+/// The operator registers evidence of the offline signed-and-stamped packet.
+/// `registered_by` is fixed server-side to the operator authority; browsers
+/// never supply actor identities.
+priv struct ContractExecutionRegistration {
+  expected_revision : Int64
+  evidence_sha256 : String
+  signed_on : String
+} derive(FromJson)
+
+///|
+priv struct ContractClosureIntent {
+  expected_revision : Int64
+  kind : @contractdoc.ContractClosureKind
+  reason : String
+} derive(FromJson)
+
+///|
+priv struct ContractSupersessionIntent {
+  expected_revision : Int64
+  successor_ref : String
+  reason : String
 } derive(FromJson)
 
 ///|
@@ -102,6 +135,21 @@ fn contract_document_error(error : Error) -> HttpReply {
     @contractdoc.ContractDocumentError::ForbiddenSecret(_) =>
       api_error(
         400, "ContractSecretRejected", "this source field must be completed offline",
+        false,
+      )
+    @contractdoc.ContractDocumentError::ContractNotEffective(_) =>
+      api_error(
+        409, "ContractPredecessorNotEffective", "the preceding contract packet is not effective",
+        false,
+      )
+    @contractdoc.ContractDocumentError::InvalidEvidence(_) =>
+      api_error(
+        400, "ContractEvidenceRejected", "contract execution evidence is invalid",
+        false,
+      )
+    @contractdoc.ContractDocumentError::InvalidExecutionDate(_) =>
+      api_error(
+        400, "ContractExecutionDateRejected", "the signing date must be a YYYY-MM-DD calendar date",
         false,
       )
     _ =>
@@ -172,6 +220,9 @@ fn linked_order_values(
 }
 
 ///|
+/// Applies platform-derived linked values on the creation write path. Reads
+/// (`GET`) never mutate the store; the order reference is fixed at creation,
+/// so synchronizing here and on idempotent replays keeps the value durable.
 async fn synchronize_linked_contract_values(
   store : @contractdoc_store.ContractDocumentStore,
   manifest : @contractdoc.ContractTemplateManifest,
@@ -220,16 +271,8 @@ async fn ApiService::handle_contract_documents(
       )
     }
     return match (verb, path) {
-      (Get, "/v1/contract-documents/operator/packets") => {
-        let packets = store.snapshot().packets
-        let synchronized = []
-        for packet in packets {
-          synchronized.push(
-            synchronize_linked_contract_values(store, manifest, packet),
-          )
-        }
-        json_reply(200, synchronized.to_json())
-      }
+      (Get, "/v1/contract-documents/operator/packets") =>
+        json_reply(200, store.snapshot().packets.to_json())
       (Put, _) if operator_contract_packet_id(path, ":information")
         is Some(packet_id) => {
         let decoded : ContractInformationUpdate? = Some(
@@ -275,11 +318,100 @@ async fn ApiService::handle_contract_documents(
         }
         moonleaf_contract_preview(manifest, packet, ManagerOperator, request)
       }
+      (Post, _) if operator_contract_packet_id(path, ":execute")
+        is Some(packet_id) => {
+        let decoded : ContractExecutionRegistration? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(request) && store.packet(packet_id) is Some(_) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        let evidence : @contractdoc.ContractExecution = {
+          evidence_sha256: request.evidence_sha256,
+          signed_on: request.signed_on,
+          registered_by: "operator",
+          registered_unix_ms: @async.now(),
+        }
+        let updated = try
+          store.register_execution(
+            packet_id,
+            request.expected_revision,
+            evidence,
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        json_reply(200, updated.to_json())
+      }
+      (Post, _) if operator_contract_packet_id(path, ":close")
+        is Some(packet_id) => {
+        let decoded : ContractClosureIntent? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(request) && store.packet(packet_id) is Some(_) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        let updated = try
+          store.close_packet(
+            packet_id,
+            request.expected_revision,
+            request.kind,
+            request.reason,
+            "operator",
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        json_reply(200, updated.to_json())
+      }
+      (Post, _) if operator_contract_packet_id(path, ":supersede")
+        is Some(packet_id) => {
+        let decoded : ContractSupersessionIntent? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(request) && store.packet(packet_id) is Some(_) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        let updated = try
+          store.supersede_packet(
+            packet_id,
+            request.expected_revision,
+            request.successor_ref,
+            request.reason,
+            "operator",
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        json_reply(200, updated.to_json())
+      }
       _ => api_error(404, "NotFound", "route was not found", false)
     }
   }
   if path == "/v1/contract-documents/worker/pending" ||
-    path == "/v1/contract-documents/worker/results" {
+    path == "/v1/contract-documents/worker/results" ||
+    path == "/v1/contract-documents/worker/failures" {
     guard self.contract_document_worker_token != "" &&
       bearer_authorized(headers, self.contract_document_worker_token) else {
       return api_error(
@@ -317,6 +449,33 @@ async fn ApiService::handle_contract_documents(
         }
         json_reply(200, completed.to_json())
       }
+      (Post, "/v1/contract-documents/worker/failures") => {
+        let decoded : ContractGenerationFailure? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(failure) &&
+          @contracts.valid_identifier(failure.worker_receipt) else {
+          return api_error(
+            400, "InvalidRequest", "invalid contract generation failure", false,
+          )
+        }
+        let failed = try
+          store.fail_generation(
+            failure.packet_id,
+            failure.expected_revision,
+            failure.reason,
+            "contract-renderer",
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        json_reply(200, failed.to_json())
+      }
       _ => api_error(404, "NotFound", "route was not found", false)
     }
   }
@@ -334,16 +493,8 @@ async fn ApiService::handle_contract_documents(
   match (verb, path) {
     (Get, "/v1/contract-documents/manifest") =>
       json_reply(200, manifest.to_json())
-    (Get, "/v1/contract-documents/self") => {
-      let packets = store.packets_for_subject(subject_ref)
-      let synchronized = []
-      for packet in packets {
-        synchronized.push(
-          synchronize_linked_contract_values(store, manifest, packet),
-        )
-      }
-      json_reply(200, synchronized.to_json())
-    }
+    (Get, "/v1/contract-documents/self") =>
+      json_reply(200, store.packets_for_subject(subject_ref).to_json())
     (Post, "/v1/contract-documents/self") => {
       let decoded : ContractPacketIntent? = Some(
         @json.from_json(@json.parse(body)),
@@ -365,6 +516,7 @@ async fn ApiService::handle_contract_documents(
           view.membership.organization_id,
           subject_ref,
           intent.order_ref,
+          intent.preceding_packet_ref,
           intent.active_forms,
           now,
         )
@@ -378,7 +530,14 @@ async fn ApiService::handle_contract_documents(
       } noraise {
         value => value
       }
-      json_reply(201, persisted.to_json())
+      let synchronized = try
+        synchronize_linked_contract_values(store, manifest, persisted)
+      catch {
+        error => return contract_document_error(error)
+      } noraise {
+        value => value
+      }
+      json_reply(201, synchronized.to_json())
     }
     (Put, _) if contract_packet_id(path, ":information") is Some(packet_id) => {
       let decoded : ContractInformationUpdate? = Some(

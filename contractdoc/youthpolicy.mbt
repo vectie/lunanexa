@@ -65,6 +65,22 @@ fn field(
 }
 
 ///|
+/// Resolves the manifest for a persisted template id. Only the youthpolicy
+/// remote-lease collection ships today; unknown ids fall back to it so
+/// snapshot migrations stay template-aware without inventing manifests.
+pub fn manifest_for_template_id(
+  template_id : String,
+) -> ContractTemplateManifest {
+  let known = [youthpolicy_remote_lease_manifest()]
+  for manifest in known {
+    if manifest.template_id == template_id {
+      return manifest
+    }
+  }
+  known[0]
+}
+
+///|
 pub fn youthpolicy_remote_lease_manifest() -> ContractTemplateManifest {
   let master_fields = [
     field(

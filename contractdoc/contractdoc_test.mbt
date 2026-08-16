@@ -20,6 +20,7 @@ test "generation remains blocked until supplied information is confirmed" {
     "org-1",
     "subject-1",
     "order-1",
+    None,
     [MasterLease],
     1000L,
   )
@@ -50,6 +51,7 @@ test "secret-bearing offline fields cannot enter persisted packet data" {
     "org-1",
     "subject-1",
     "order-1",
+    None,
     [AccessConfirmation],
     1000L,
   )
@@ -82,6 +84,7 @@ test "physical choice markers use source glyphs and missing optional slots stay 
     "org-1",
     "subject-1",
     "order-1",
+    None,
     [MasterLease],
     1000L,
   ).update_information(
@@ -110,6 +113,7 @@ test "generation rejects a MoonLeaf receipt with the wrong physical page count" 
     "organization-page-count",
     "subject-page-count",
     "order-page-count",
+    None,
     [MasterLease],
     1000L,
   )
@@ -155,6 +159,7 @@ test "field ownership prevents cross-party edits and records provenance" {
     "org-1",
     "subject-1",
     "order-1",
+    None,
     [MasterLease, ReservationApplication, AccessConfirmation],
     1000L,
   )
@@ -196,4 +201,289 @@ test "field ownership prevents cross-party edits and records provenance" {
   } noraise {
     _ => fail("customer must not edit manager-owned information")
   }
+}
+
+///|
+fn lifecycle_test_packet(
+  packet_id : String,
+  state : @contractdoc.ContractPacketState,
+  revision : Int64,
+  values_sha256 : String?,
+) -> @contractdoc.ContractPacket {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let packet = try! @contractdoc.new_packet(
+    manifest,
+    packet_id,
+    "\{packet_id}-key",
+    "tenant-1",
+    "org-1",
+    "subject-1",
+    "order-1",
+    None,
+    [MasterLease],
+    1000L,
+  )
+  { ..packet, state, revision, values_sha256 }
+}
+
+///|
+test "failed generation records the reason and retries with the confirmed digest" {
+  let digest = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  let requested = lifecycle_test_packet(
+    "packet-retry",
+    GenerationRequested,
+    3L,
+    Some(digest),
+  )
+  let draft = { ..requested, state: InformationDraft }
+  try draft.fail_generation(3L, "renderer crashed", 4000L) catch {
+    InvalidTransition(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("only a requested generation may fail")
+  }
+  try requested.fail_generation(3L, "  ", 4000L) catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("empty failure reasons must be rejected")
+  }
+  let failed = requested.fail_generation(3L, "renderer crashed", 4000L)
+  assert_eq(failed.state, GenerationFailed)
+  assert_eq(failed.generation_failure, Some("renderer crashed"))
+  let retried = failed.request_generation(failed.revision, digest, 5000L)
+  assert_eq(retried.state, GenerationRequested)
+  assert_eq(retried.generation_failure, None)
+  let failed_again = retried.fail_generation(
+    retried.revision,
+    "renderer crashed again",
+    6000L,
+  )
+  try
+    failed_again.request_generation(
+      failed_again.revision,
+      "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      7000L,
+    )
+  catch {
+    ConfirmationMismatch => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a stale digest must not retry generation")
+  }
+}
+
+///|
+test "execution registration requires generated state and valid evidence" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let digest = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  let generated = lifecycle_test_packet(
+    "packet-execution",
+    Generated,
+    5L,
+    Some(digest),
+  )
+  let evidence : @contractdoc.ContractExecution = {
+    evidence_sha256: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    signed_on: "2026-08-14",
+    registered_by: "operator-1",
+    registered_unix_ms: 6000L,
+  }
+  let drafting = { ..generated, state: InformationDraft }
+  try drafting.register_execution(5L, evidence, 6000L) catch {
+    InvalidTransition(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("only a generated packet may register execution")
+  }
+  try
+    generated.register_execution(
+      5L,
+      { ..evidence, evidence_sha256: "not-a-digest" },
+      6000L,
+    )
+  catch {
+    InvalidEvidence(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a malformed evidence digest must be rejected")
+  }
+  try
+    generated.register_execution(5L, { ..evidence, signed_on: " " }, 6000L)
+  catch {
+    InvalidEvidence(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an empty signing date must be rejected")
+  }
+  for
+    bad_date in [
+      "14/08/2026", "2026-8-4", "2026-13-14", "2026-08-00", "2026-08-32",
+    ] {
+    try
+      generated.register_execution(
+        5L,
+        { ..evidence, signed_on: bad_date },
+        6000L,
+      )
+    catch {
+      InvalidExecutionDate(_) => ()
+      error => fail("unexpected error: \{Repr(error)}")
+    } noraise {
+      _ => fail("a malformed signing date must be rejected: \{bad_date}")
+    }
+  }
+  try
+    generated.register_execution(5L, { ..evidence, registered_by: "" }, 6000L)
+  catch {
+    InvalidEvidence(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an invalid registrar must be rejected")
+  }
+  let effective = generated.register_execution(5L, evidence, 6000L)
+  assert_eq(effective.state, Effective)
+  assert_eq(effective.execution, Some(evidence))
+  try
+    effective.update_information(
+      manifest,
+      effective.revision,
+      [{ field_id: "lessee.name", value: "事后修改" }],
+      CustomerMessenger,
+      "subject-1",
+      "enterprise-portal",
+      7000L,
+    )
+  catch {
+    InvalidTransition(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an effective packet must not accept edits")
+  }
+}
+
+///|
+test "closure requires an effective packet and settlements for early termination" {
+  let effective = lifecycle_test_packet("packet-closure", Effective, 6L, None)
+  let expiry : @contractdoc.ContractClosure = {
+    kind: Expired,
+    reason: "lease term ended",
+    closed_by: "operator-1",
+    closed_unix_ms: 8000L,
+  }
+  let generated = { ..effective, state: Generated }
+  try generated.close_packet(6L, expiry, false, 8000L) catch {
+    InvalidTransition(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("only an effective packet may close")
+  }
+  let early : @contractdoc.ContractClosure = {
+    kind: EarlyTermination,
+    reason: "tenant vacated ahead of term",
+    closed_by: "operator-1",
+    closed_unix_ms: 8000L,
+  }
+  try effective.close_packet(6L, early, false, 8000L) catch {
+    InvalidInput("early termination requires a confirmed settlement") => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("early termination without settlement must be rejected")
+  }
+  let terminated = effective.close_packet(6L, early, true, 8000L)
+  assert_eq(terminated.state, Closed)
+  assert_eq(terminated.closure, Some(early))
+  let settled = effective.close_packet(
+    6L,
+    {
+      kind: Settled,
+      reason: "balance cleared",
+      closed_by: "operator-1",
+      closed_unix_ms: 8000L,
+    },
+    false,
+    8000L,
+  )
+  assert_eq(settled.state, Closed)
+  let closed = effective.close_packet(6L, expiry, false, 8000L)
+  assert_eq(closed.state, Closed)
+  assert_eq(closed.closure, Some(expiry))
+  try effective.close_packet(6L, { ..expiry, reason: "" }, false, 8000L) catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an empty closure reason must be rejected")
+  }
+}
+
+///|
+test "supersession is rejected for effective or terminal packets" {
+  let packet = lifecycle_test_packet(
+    "packet-supersede",
+    InformationDraft,
+    1L,
+    None,
+  )
+  let supersession : @contractdoc.ContractSupersession = {
+    successor_ref: "packet-successor",
+    reason: "reissued with corrected dates",
+    superseded_by: "operator-1",
+    superseded_unix_ms: 3000L,
+  }
+  let superseded = packet.supersede_packet(1L, supersession, 3000L)
+  assert_eq(superseded.state, Superseded)
+  assert_eq(superseded.supersession, Some(supersession))
+  let terminal_states : Array[@contractdoc.ContractPacketState] = [
+    Effective,
+    Closed,
+    Superseded,
+  ]
+  for state in terminal_states {
+    let terminal = { ..packet, state, }
+    try terminal.supersede_packet(1L, supersession, 3000L) catch {
+      InvalidTransition(_) => ()
+      error => fail("unexpected error: \{Repr(error)}")
+    } noraise {
+      _ => fail("effective or terminal packets must not be superseded")
+    }
+  }
+  try
+    packet.supersede_packet(1L, { ..supersession, successor_ref: "" }, 3000L)
+  catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an invalid successor reference must be rejected")
+  }
+  try
+    packet.supersede_packet(1L, { ..supersession, reason: " " }, 3000L)
+  catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an empty supersession reason must be rejected")
+  }
+}
+
+///|
+test "follow-up forms map to the effective creation stage" {
+  assert_eq(@contractdoc.form_creation_stage(MasterLease), InitialStage)
+  assert_eq(
+    @contractdoc.form_creation_stage(ReservationApplication),
+    InitialStage,
+  )
+  assert_eq(
+    @contractdoc.form_creation_stage(AccessConfirmation),
+    EffectiveStage,
+  )
+  assert_eq(@contractdoc.form_creation_stage(ViolationNotice), EffectiveStage)
+  assert_eq(@contractdoc.form_creation_stage(DamageAssessment), EffectiveStage)
+  assert_eq(
+    @contractdoc.form_creation_stage(SettlementConfirmation),
+    EffectiveStage,
+  )
+  assert_eq(
+    @contractdoc.form_creation_stage(EarlyTerminationApplication),
+    EffectiveStage,
+  )
 }

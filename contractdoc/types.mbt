@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.contract-document.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v2"
+pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v3"
 
 ///|
 pub(all) suberror ContractDocumentError {
@@ -16,6 +16,9 @@ pub(all) suberror ContractDocumentError {
   TemplateMismatch
   ConfirmationMismatch
   ForbiddenSecret(String)
+  ContractNotEffective(String)
+  InvalidEvidence(String)
+  InvalidExecutionDate(String)
 } derive(Debug, Eq)
 
 ///|
@@ -27,6 +30,15 @@ pub(all) enum ContractFormKind {
   DamageAssessment
   SettlementConfirmation
   EarlyTerminationApplication
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// The lifecycle stage at which a source form may start a new packet. Initial
+/// forms open the contract relationship; effective-stage forms follow an
+/// already effective packet through `preceding_packet_ref`.
+pub(all) enum ContractFormStage {
+  InitialStage
+  EffectiveStage
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -251,6 +263,9 @@ pub(all) enum ContractPacketState {
   InformationConfirmed
   GenerationRequested
   Generated
+  GenerationFailed
+  Effective
+  Closed
   Superseded
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -266,6 +281,40 @@ pub(all) struct ContractGeneratedArtifact {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Registered evidence of the offline signed and stamped contract. Signing
+/// stays offline by design; the platform only records the digest of the
+/// stamped scan, the signing date, and the operator who registered it.
+pub(all) struct ContractExecution {
+  evidence_sha256 : String
+  signed_on : String
+  registered_by : String
+  registered_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum ContractClosureKind {
+  Expired
+  EarlyTermination
+  Settled
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractClosure {
+  kind : ContractClosureKind
+  reason : String
+  closed_by : String
+  closed_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractSupersession {
+  successor_ref : String
+  reason : String
+  superseded_by : String
+  superseded_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct ContractPacket {
   packet_id : String
   idempotency_key : String
@@ -276,6 +325,7 @@ pub(all) struct ContractPacket {
   organization_id : String
   subject_ref : String
   order_ref : String
+  preceding_packet_ref : String?
   active_forms : Array[ContractFormKind]
   values : Array[ContractFieldValue]
   assignments : Array[ContractFieldAssignment]
@@ -284,6 +334,10 @@ pub(all) struct ContractPacket {
   confirmed_unix_ms : Int64?
   artifacts : Array[ContractGeneratedArtifact]
   state : ContractPacketState
+  execution : ContractExecution?
+  closure : ContractClosure?
+  supersession : ContractSupersession?
+  generation_failure : String?
   revision : Int64
   created_unix_ms : Int64
   updated_unix_ms : Int64
@@ -297,6 +351,9 @@ pub(all) enum ContractPacketEventKind {
   InformationConfirmedEvent
   GenerationRequestedEvent
   GenerationCompletedEvent
+  GenerationFailedEvent
+  ExecutionRegisteredEvent
+  PacketClosedEvent
   PacketSupersededEvent
 } derive(Debug, Eq, ToJson, FromJson)
 

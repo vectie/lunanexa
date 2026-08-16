@@ -27,14 +27,90 @@ flowchart LR
 
 ## Durable lifecycle
 
-`contractdoc.ContractPacket` is revision- and digest-fenced:
+`contractdoc.ContractPacket` is revision- and digest-fenced. The full state
+machine has nine states:
 
-`InformationDraft -> ReadyForConfirmation -> InformationConfirmed -> GenerationRequested -> Generated`
+`InformationDraft -> ReadyForConfirmation -> InformationConfirmed -> GenerationRequested -> Generated -> Effective -> Closed`
 
-Any information change clears the prior confirmation. Generated artifacts are
-never mutated. A later reservation, access, incident, settlement, or early
-termination task creates a new packet revision bound to the same source
-template digest and the appropriate form subset.
+`GenerationFailed` is a retryable branch off `GenerationRequested`, and
+`Superseded` is a terminal branch reachable from every pre-`Effective` state.
+
+| From | Action | To | Actor | Preconditions |
+| --- | --- | --- | --- | --- |
+| — | create packet | `InformationDraft` | CustomerMessenger | initial-stage forms start freely; effective-stage forms require a `preceding_packet_ref` naming a same-tenant packet in `Effective` state |
+| `InformationDraft`, `ReadyForConfirmation`, or `InformationConfirmed` | save information | `InformationDraft`, or `ReadyForConfirmation` once all required fields are complete | CustomerMessenger or ManagerOperator, own fields only | editable states only; any change clears the prior confirmation and values digest |
+| `ReadyForConfirmation` | confirm information | `InformationConfirmed` | CustomerMessenger | no missing required fields; records the confirmed values digest |
+| `InformationConfirmed` | request generation | `GenerationRequested` | CustomerMessenger | the expected values digest must equal the confirmed digest |
+| `GenerationFailed` | retry generation | `GenerationRequested` | CustomerMessenger | same digest fencing; the confirmed values are unchanged |
+| `GenerationRequested` | complete generation | `Generated` | renderer worker | a DOCX/PDF pair with valid digests, one shared render-evidence digest, matching page counts, and the declared source page count for known templates |
+| `GenerationRequested` | fail generation | `GenerationFailed` | renderer worker | a non-empty failure reason |
+| `Generated` | register execution | `Effective` | ManagerOperator | a valid evidence digest and a `YYYY-MM-DD` signing date; `registered_by` is fixed server-side to the operator authority |
+| `Effective` | close packet | `Closed` | ManagerOperator | closure kind `Expired`, `EarlyTermination`, or `Settled`; early termination additionally requires a settlement (see cross-packet rules below) |
+| any pre-`Effective` state | supersede packet | `Superseded` | ManagerOperator | a successor reference and reason; `Effective`, `Closed`, and `Superseded` packets are contractual facts and can never be superseded |
+
+Generated artifacts are never mutated. A later reservation, access, incident,
+settlement, or early termination task creates a new packet bound to the same
+source template digest, the appropriate form subset, and the effective
+predecessor packet.
+
+## Lifecycle management rules (合同全生命周期管理)
+
+Each state represents one period of the underlying paper contract:
+
+| State | Contract period | What it means |
+| --- | --- | --- |
+| `InformationDraft` | drafting | either side is filling its owned fields; nothing is generated from blank or invented values |
+| `ReadyForConfirmation` | review/confirmation | all required online fields are complete; the customer reviews the preview against the source wording |
+| `InformationConfirmed` | attested | the customer has attested the values; the confirmed digest is pinned and the packet awaits a generation request |
+| `GenerationRequested` | rendering | the packet is frozen while the renderer worker produces the DOCX/PDF pair under the fidelity gate |
+| `Generated` | awaiting offline signature | the DOCX/PDF pair is retained and read-only; signing and stamping happen offline |
+| `GenerationFailed` | rendering failed | the confirmed values are unchanged; the customer may retry generation |
+| `Effective` | in force | the operator registered the offline signed-and-stamped evidence; the packet is read-only and may anchor follow-up forms |
+| `Closed` | closed | terminal; the closure records its kind (`Expired`, `EarlyTermination`, or `Settled`), reason, and operator |
+| `Superseded` | replaced before effect | terminal; the supersession records the successor packet, reason, and operator |
+
+The action bar in both browser surfaces renders exactly the capability list
+the lifecycle allows, so the role-by-state matrix is enforced by construction:
+
+| Capability | CustomerMessenger | ManagerOperator | State precondition |
+| --- | --- | --- | --- |
+| `SaveInformation` | yes | yes | `InformationDraft`, `ReadyForConfirmation`, or `InformationConfirmed` |
+| `ConfirmInformation` | yes | no | `ReadyForConfirmation` |
+| `RequestGeneration` | yes | no | `InformationConfirmed` with a confirmed values digest |
+| `RetryGeneration` | yes | no | `GenerationFailed` with a confirmed values digest |
+| `RegisterExecution` | no | yes | `Generated` |
+| `ClosePacket` | no | yes | `Effective` |
+| `SupersedePacket` | no | yes | any state except `Effective`, `Closed`, or `Superseded` |
+
+The responsibility split mirrors the offline contract process. The customer
+owns information confirmation and generation requests — their attestation of
+the supplied values. The operator owns execution registration, closure, and
+supersession — the facts of the signed paper contract. The renderer worker
+owns generation results and failures. The step bar condenses the machine into
+five customer-visible steps (fill information, review and confirm, generate
+documents, signed and effective, closed and archived) and shows a terminal
+badge for superseded packets; per-state guidance text explains what each state
+means and what happens next.
+
+Two cross-packet rules bind packets together:
+
+- Effective-stage forms (`AccessConfirmation`, `ViolationNotice`,
+  `DamageAssessment`, `SettlementConfirmation`, `EarlyTerminationApplication`)
+  may only be created with a `preceding_packet_ref` naming a same-tenant
+  packet already in `Effective` state. Initial-stage forms (`MasterLease`,
+  `ReservationApplication`) open the relationship and need no predecessor.
+- An `EarlyTermination` closure requires a same-tenant
+  `SettlementConfirmation` packet in `Effective` or `Closed` state; a merely
+  generated settlement is unsigned and the store rejects the close. `Expired`
+  and `Settled` closures have no settlement precondition.
+
+Every mutation carries an `expected_revision` fence; a stale revision is
+rejected with a conflict. Generation requests additionally carry the expected
+values digest, so a packet can only be rendered from exactly the values the
+customer confirmed. Any information change clears the confirmation and its
+digest, forcing a fresh review before generation. Preview is available in any
+state: it applies only the requesting role's draft to a verified copy of the
+fillable DOCX and is revision-fenced like every other operation.
 
 ## Privacy
 
@@ -82,18 +158,48 @@ second editable contract template.
 The customer portal exposes the collection as **Contract forms / 合同表单**.
 Its subject-scoped native API is:
 
-- `GET /v1/contract-documents/manifest`
-- `GET|POST /v1/contract-documents/self`
-- `PUT /v1/contract-documents/self/{packet_id}:information`
-- `POST /v1/contract-documents/self/{packet_id}:preview`
-- `POST /v1/contract-documents/self/{packet_id}:confirm`
-- `POST /v1/contract-documents/self/{packet_id}:generate`
+- `GET /v1/contract-documents/manifest` — the template manifest and slot
+  definitions;
+- `GET /v1/contract-documents/self` — the subject's packets;
+- `POST /v1/contract-documents/self` — create a packet; effective-stage forms
+  require a `preceding_packet_ref` naming a same-tenant `Effective` packet;
+- `PUT /v1/contract-documents/self/{packet_id}:information` — save owned
+  fields; only in `InformationDraft`, `ReadyForConfirmation`, or
+  `InformationConfirmed`;
+- `POST /v1/contract-documents/self/{packet_id}:preview` — role-scoped
+  MoonLeaf preview; any state, revision-fenced;
+- `POST /v1/contract-documents/self/{packet_id}:confirm` — confirm
+  information; only from `ReadyForConfirmation`;
+- `POST /v1/contract-documents/self/{packet_id}:generate` — request or retry
+  generation (202); only from `InformationConfirmed` or `GenerationFailed`,
+  digest-fenced.
 
-The operator side uses the same packets through:
+The operator side uses the same packets through an operator-token API:
 
-- `GET /v1/contract-documents/operator/packets`
-- `PUT /v1/contract-documents/operator/packets/{packet_id}:information`
-- `POST /v1/contract-documents/operator/packets/{packet_id}:preview`
+- `GET /v1/contract-documents/operator/packets` — all packets;
+- `PUT /v1/contract-documents/operator/packets/{packet_id}:information` —
+  save operator-owned fields; editable states only;
+- `POST /v1/contract-documents/operator/packets/{packet_id}:preview` —
+  operator-scoped preview; any state, revision-fenced;
+- `POST /v1/contract-documents/operator/packets/{packet_id}:execute` —
+  register the offline signed evidence; only from `Generated`;
+- `POST /v1/contract-documents/operator/packets/{packet_id}:close` — close
+  with kind `Expired`, `EarlyTermination`, or `Settled`; only from
+  `Effective`, with the settlement rule for early termination;
+- `POST /v1/contract-documents/operator/packets/{packet_id}:supersede` —
+  supersede by a successor packet; any state except `Effective`, `Closed`,
+  or `Superseded`.
+
+The renderer worker authenticates with its own token and drives the
+asynchronous generation leg:
+
+- `GET /v1/contract-documents/worker/pending` — packets in
+  `GenerationRequested`;
+- `POST /v1/contract-documents/worker/results` — complete generation with the
+  DOCX/PDF artifact pair and a worker receipt; only from
+  `GenerationRequested`;
+- `POST /v1/contract-documents/worker/failures` — record a generation failure
+  with a reason and worker receipt; only from `GenerationRequested`.
 
 The store uses PostgreSQL when management PostgreSQL is configured. Otherwise
 it uses `LUNANEXA_CONTRACT_DOCUMENT_PATH` (default
@@ -145,6 +251,22 @@ party font CDN receives contract text. Supplying a renamed substitute is an
 error, not a fallback. Production renderer images mount the same approved
 files from a deployment secret or read-only volume rather than baking them
 into a public image layer.
+
+## Known gaps
+
+The lifecycle model deliberately does not yet do the following:
+
+- no automatic expiry scheduling: a lease that runs to its end date stays
+  `Effective` until an operator closes it — `ClosureKind::Expired` is a manual
+  operator close, not a timer;
+- no renewal or amendment flow for `Effective` packets: closing the packet
+  and creating a new one (supersession is reserved for pre-effect packets) is
+  the current path;
+- no cross-check of settlement packets against commercial ledger balances —
+  the early-termination gate checks that a settlement packet exists in a
+  qualifying state, not that its amounts match the ledger;
+- `access/` API keys are not gated on packet state: closing or superseding a
+  packet does not revoke or suspend issued access credentials.
 
 ## Production blockers
 

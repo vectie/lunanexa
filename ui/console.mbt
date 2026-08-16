@@ -404,6 +404,7 @@ pub fn demo_state() -> ConsoleState {
     organization_id: "org-northstar",
     subject_ref: "subject-alice",
     order_ref: "order-demo-2026-001",
+    preceding_packet_ref: None,
     active_forms: contract_manifest.forms.map(form => form.form),
     values: [{ field_id: "lessee.name", value: "Northstar Research" }],
     assignments: [
@@ -421,6 +422,10 @@ pub fn demo_state() -> ConsoleState {
     confirmed_unix_ms: None,
     artifacts: [],
     state: InformationDraft,
+    execution: None,
+    closure: None,
+    supersession: None,
+    generation_failure: None,
     revision: 2L,
     created_unix_ms: 1786521600000L,
     updated_unix_ms: 1786521600000L,

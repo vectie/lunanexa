@@ -1386,6 +1386,151 @@ async fn demo_contract_preview(
 }
 
 ///|
+/// Demo confirmation digests are placeholders with the documented digest
+/// shape: no controller hashes the packet in demo mode, but the lifecycle
+/// rules and the generation request round-trip still carry the value.
+let demo_values_digest : String = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+///|
+/// Applies one demo contract action to the seeded packet with the real
+/// lifecycle rules. Generation completes immediately with illustrative
+/// artifact records; the placeholder digests only need the documented shape.
+fn demo_contract_transition(
+  packet : @contractdoc.ContractPacket,
+  manifest : @contractdoc.ContractTemplateManifest,
+  message : @contract_documents.ContractDocumentsMessage,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractPacket raise @contractdoc.ContractDocumentError {
+  match message {
+    SaveInformation(_, expected_revision, changes) =>
+      packet.update_information(
+        manifest,
+        expected_revision,
+        changes,
+        CustomerMessenger,
+        packet.subject_ref,
+        "portal-contract-form:demo",
+        now_unix_ms,
+      )
+    ConfirmAction(ConfirmInformation(_, expected_revision)) =>
+      packet.confirm_information(
+        manifest,
+        expected_revision,
+        demo_values_digest,
+        packet.subject_ref,
+        now_unix_ms,
+      )
+    ConfirmAction(RequestGeneration(_, expected_revision, digest)) => {
+      let requested = packet.request_generation(
+        expected_revision, digest, now_unix_ms,
+      )
+      let evidence = "sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+      let docx : @contractdoc.ContractGeneratedArtifact = {
+        artifact_id: "\{packet.packet_id}-docx-demo",
+        media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        sha256: "sha256:fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9",
+        byte_count: 419200L,
+        page_count: manifest.page_count,
+        render_evidence_sha256: evidence,
+        generated_unix_ms: now_unix_ms,
+      }
+      let pdf : @contractdoc.ContractGeneratedArtifact = {
+        artifact_id: "\{packet.packet_id}-pdf-demo",
+        media_type: "application/pdf",
+        sha256: "sha256:b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c",
+        byte_count: 722000L,
+        page_count: manifest.page_count,
+        render_evidence_sha256: evidence,
+        generated_unix_ms: now_unix_ms,
+      }
+      requested.complete_generation(requested.revision, docx, pdf, now_unix_ms)
+    }
+    _ => packet
+  }
+}
+
+///|
+/// Demo mode runs without a controller, so contract actions transition the
+/// seeded packet locally with the same lifecycle rules the `:information`,
+/// `:confirm`, and `:generate` routes enforce. Generation lands immediately
+/// with illustrative artifact records rather than rendered files.
+fn demo_contract_action(
+  documents : @contract_documents.ContractDocumentsState,
+  message : @contract_documents.ContractDocumentsMessage,
+) -> @contract_documents.ContractDocumentsState {
+  let packet_id = match message {
+    SaveInformation(packet_id, _, _) => packet_id
+    ConfirmAction(ConfirmInformation(packet_id, _)) => packet_id
+    ConfirmAction(RequestGeneration(packet_id, _, _)) => packet_id
+    _ => return { ..documents, loading: false }
+  }
+  guard documents.manifest is Some(manifest) &&
+    documents.packets.search_by(packet => packet.packet_id == packet_id)
+    is Some(index) else {
+    return {
+      ..documents,
+      loading: false,
+      error_message: Some(
+        portal_copy(
+          documents.locale,
+          "Demo contract packet is unavailable.",
+          "演示合同资料包不可用。",
+        ),
+      ),
+    }
+  }
+  let packet = documents.packets[index]
+  let now = current_unix_ms()
+  let updated = try
+    demo_contract_transition(packet, manifest, message, now)
+  catch {
+    error =>
+      return {
+        ..documents,
+        loading: false,
+        error_message: Some(
+          portal_copy(
+            documents.locale,
+            "Demo contract action failed: \{Repr(error)}",
+            "演示模式合同操作失败：\{Repr(error)}",
+          ),
+        ),
+      }
+  } noraise {
+    value => value
+  }
+  let notice = match message {
+    SaveInformation(_, _, _) =>
+      portal_copy(
+        documents.locale,
+        "Demo information saved locally; no controller was contacted.",
+        "演示模式：信息已在本地保存，未连接控制平面。",
+      )
+    ConfirmAction(ConfirmInformation(_, _)) =>
+      portal_copy(
+        documents.locale,
+        "Demo information confirmed; generation can now be requested.",
+        "演示模式：信息已确认，现在可以请求生成合同。",
+      )
+    _ =>
+      portal_copy(
+        documents.locale,
+        "Demo generation completed with illustrative artifacts.",
+        "演示模式：合同已生成示例文件记录。",
+      )
+  }
+  {
+    ..documents,
+    packets: replace_contract_packet(documents.packets, updated),
+    selected_packet_id: Some(updated.packet_id),
+    draft_values: merge_contract_draft(documents.draft_values, updated),
+    loading: false,
+    success_message: Some(notice),
+    error_message: None,
+  }
+}
+
+///|
 fn contract_packet_command(
   model : AppModel,
   generation : Int64,
@@ -1891,7 +2036,19 @@ fn update(
       message is ConfirmAction(_) => {
       let next = model.portal.update(ContractDocuments(message))
       if model.demo_mode {
-        ({ ..model, portal: next }, @rabbita.none)
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              contract_documents: demo_contract_action(
+                next.contract_documents,
+                message,
+              ),
+            },
+          },
+          @rabbita.none,
+        )
       } else {
         (
           { ..model, portal: next },

@@ -120,6 +120,7 @@ pub fn demo_state() -> EnterpriseState {
     organization_id: "org-northstar",
     subject_ref: "subject-alice",
     order_ref: "order-capacity-2026-08",
+    preceding_packet_ref: None,
     active_forms: [
       MasterLease,
       ReservationApplication,
@@ -136,6 +137,10 @@ pub fn demo_state() -> EnterpriseState {
     confirmed_unix_ms: None,
     artifacts: [],
     state: InformationDraft,
+    execution: None,
+    closure: None,
+    supersession: None,
+    generation_failure: None,
     revision: 1L,
     created_unix_ms: now,
     updated_unix_ms: now,

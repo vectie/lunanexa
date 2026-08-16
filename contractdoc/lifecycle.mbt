@@ -11,6 +11,20 @@ fn unique_forms(forms : Array[ContractFormKind]) -> Bool {
 }
 
 ///|
+/// The creation stage of a source form: initial forms open the contract
+/// relationship, while every other form follows an effective packet.
+pub fn form_creation_stage(form : ContractFormKind) -> ContractFormStage {
+  match form {
+    MasterLease | ReservationApplication => InitialStage
+    AccessConfirmation
+    | ViolationNotice
+    | DamageAssessment
+    | SettlementConfirmation
+    | EarlyTerminationApplication => EffectiveStage
+  }
+}
+
+///|
 pub fn new_packet(
   manifest : ContractTemplateManifest,
   packet_id : String,
@@ -19,6 +33,7 @@ pub fn new_packet(
   organization_id : String,
   subject_ref : String,
   order_ref : String,
+  preceding_packet_ref : String?,
   active_forms : Array[ContractFormKind],
   now_unix_ms : Int64,
 ) -> ContractPacket raise ContractDocumentError {
@@ -29,6 +44,7 @@ pub fn new_packet(
     !valid_identifier(organization_id) ||
     !valid_identifier(subject_ref) ||
     !valid_identifier(order_ref) ||
+    !preceding_packet_ref.map_or(true, valid_identifier) ||
     active_forms.length() == 0 ||
     !unique_forms(active_forms) ||
     active_forms.any(form => !manifest.forms.any(item => item.form == form)) ||
@@ -45,6 +61,7 @@ pub fn new_packet(
     organization_id,
     subject_ref,
     order_ref,
+    preceding_packet_ref,
     active_forms,
     values: [],
     assignments: [],
@@ -53,6 +70,10 @@ pub fn new_packet(
     confirmed_unix_ms: None,
     artifacts: [],
     state: InformationDraft,
+    execution: None,
+    closure: None,
+    supersession: None,
+    generation_failure: None,
     revision: 1L,
     created_unix_ms: now_unix_ms,
     updated_unix_ms: now_unix_ms,
@@ -80,6 +101,9 @@ pub fn ContractPacket::update_information(
   }
   if self.state == GenerationRequested ||
     self.state == Generated ||
+    self.state == GenerationFailed ||
+    self.state == Effective ||
+    self.state == Closed ||
     self.state == Superseded {
     raise InvalidTransition("contract packet is not editable")
   }
@@ -195,6 +219,8 @@ pub fn ContractPacket::confirm_information(
 }
 
 ///|
+/// Generation may be requested from `InformationConfirmed`, or retried from
+/// `GenerationFailed` as long as the confirmed values digest still matches.
 pub fn ContractPacket::request_generation(
   self : ContractPacket,
   expected_revision : Int64,
@@ -204,13 +230,39 @@ pub fn ContractPacket::request_generation(
   if self.revision != expected_revision {
     raise StaleRevision
   }
-  if self.state != InformationConfirmed ||
+  if (self.state != InformationConfirmed && self.state != GenerationFailed) ||
     self.values_sha256 != Some(expected_values_sha256) {
     raise ConfirmationMismatch
   }
   {
     ..self,
     state: GenerationRequested,
+    generation_failure: None,
+    revision: self.revision + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+pub fn ContractPacket::fail_generation(
+  self : ContractPacket,
+  expected_revision : Int64,
+  reason : String,
+  now_unix_ms : Int64,
+) -> ContractPacket raise ContractDocumentError {
+  if self.revision != expected_revision {
+    raise StaleRevision
+  }
+  if self.state != GenerationRequested {
+    raise InvalidTransition("contract generation is not requested")
+  }
+  if reason.trim() == "" {
+    raise InvalidInput("contract generation failure reason is empty")
+  }
+  {
+    ..self,
+    state: GenerationFailed,
+    generation_failure: Some(reason),
     revision: self.revision + 1L,
     updated_unix_ms: now_unix_ms,
   }
@@ -256,6 +308,103 @@ pub fn ContractPacket::complete_generation(
     ..self,
     artifacts: self.artifacts + [docx, pdf],
     state: Generated,
+    revision: self.revision + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+/// Registers the offline signed-and-stamped evidence and moves the packet
+/// into effect. Only a generated packet can become effective.
+pub fn ContractPacket::register_execution(
+  self : ContractPacket,
+  expected_revision : Int64,
+  evidence : ContractExecution,
+  now_unix_ms : Int64,
+) -> ContractPacket raise ContractDocumentError {
+  if self.revision != expected_revision {
+    raise StaleRevision
+  }
+  if self.state != Generated {
+    raise InvalidTransition("contract packet is not generated")
+  }
+  if !valid_sha256(evidence.evidence_sha256) ||
+    evidence.signed_on.trim() == "" ||
+    !valid_identifier(evidence.registered_by) {
+    raise InvalidEvidence("contract execution evidence is invalid")
+  }
+  if !valid_calendar_date(evidence.signed_on) {
+    raise InvalidExecutionDate(
+      "contract execution signing date must be YYYY-MM-DD",
+    )
+  }
+  {
+    ..self,
+    state: Effective,
+    execution: Some(evidence),
+    revision: self.revision + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+/// Closes an effective packet. Early termination requires the caller to
+/// confirm that a settlement has been reached; the cross-packet settlement
+/// check itself belongs to the store layer.
+pub fn ContractPacket::close_packet(
+  self : ContractPacket,
+  expected_revision : Int64,
+  closure : ContractClosure,
+  settlement_confirmed : Bool,
+  now_unix_ms : Int64,
+) -> ContractPacket raise ContractDocumentError {
+  if self.revision != expected_revision {
+    raise StaleRevision
+  }
+  if self.state != Effective {
+    raise InvalidTransition("contract packet is not effective")
+  }
+  if closure.kind == EarlyTermination && !settlement_confirmed {
+    raise InvalidInput("early termination requires a confirmed settlement")
+  }
+  if closure.reason.trim() == "" || !valid_identifier(closure.closed_by) {
+    raise InvalidInput("invalid contract closure")
+  }
+  {
+    ..self,
+    state: Closed,
+    closure: Some(closure),
+    revision: self.revision + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}
+
+///|
+/// Supersedes a packet that never took effect. Effective or closed packets
+/// are contractual facts and may only be closed, never voided.
+pub fn ContractPacket::supersede_packet(
+  self : ContractPacket,
+  expected_revision : Int64,
+  supersession : ContractSupersession,
+  now_unix_ms : Int64,
+) -> ContractPacket raise ContractDocumentError {
+  if self.revision != expected_revision {
+    raise StaleRevision
+  }
+  if self.state == Effective || self.state == Closed || self.state == Superseded {
+    raise InvalidTransition(
+      "effective or closed contract packet cannot be superseded",
+    )
+  }
+  if !valid_identifier(supersession.successor_ref) ||
+    supersession.reason.trim() == "" ||
+    !valid_identifier(supersession.superseded_by) {
+    raise InvalidInput("invalid contract supersession")
+  }
+  {
+    ..self,
+    state: Superseded,
+    supersession: Some(supersession),
     revision: self.revision + 1L,
     updated_unix_ms: now_unix_ms,
   }

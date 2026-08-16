@@ -9,6 +9,7 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
     "organization-preview",
     "subject-preview",
     "order-preview",
+    None,
     [MasterLease],
     1000L,
   ).update_information(
@@ -150,6 +151,7 @@ async test "generated demo scene materializes only the authorized role draft" {
     "organization-demo",
     "subject-demo",
     "order-demo",
+    None,
     [MasterLease],
     1000L,
   ).update_information(
@@ -202,8 +204,16 @@ async test "every contract tab materializes only its associated MoonLeaf pages" 
   let scene = template(source, manifest)
   let forms = manifest.forms.map(definition => definition.form)
   let packet = @contractdoc.new_packet(
-    manifest, "packet-all-form-preview", "packet-all-form-preview-key", "tenant-demo",
-    "organization-demo", "subject-demo", "order-demo", forms, 1000L,
+    manifest,
+    "packet-all-form-preview",
+    "packet-all-form-preview-key",
+    "tenant-demo",
+    "organization-demo",
+    "subject-demo",
+    "order-demo",
+    None,
+    forms,
+    1000L,
   )
   let expected_pages = [11, 2, 1, 1, 1, 1, 1]
   let expected_headings = [

@@ -10,6 +10,8 @@ import {
 }
 
 // Values
+pub fn contract_packet_capabilities(@contractdoc.ContractPacket, @contractdoc.ContractFieldOwner) -> Array[ContractPacketCapability]
+
 pub fn default_state(@i18n.Locale, actor_owner? : @contractdoc.ContractFieldOwner) -> ContractDocumentsState
 
 pub fn interactive_view(ContractDocumentsState, @cmd.Emit[ContractDocumentsMessage]) -> @html.Html
@@ -21,9 +23,21 @@ pub fn view(ContractDocumentsState) -> @html.Html
 // Errors
 
 // Types and methods
+pub(all) enum ContractConfirmationField {
+  EvidenceDigest
+  SignedOn
+  ClosureKind
+  ClosureReason
+  SuccessorReference
+  SupersessionReason
+} derive(Eq, @debug.Debug)
+
 pub(all) enum ContractDocumentConfirmation {
   ConfirmInformation(String, Int64)
   RequestGeneration(String, Int64, String)
+  RegisterExecution(String, Int64, String, String)
+  ClosePacket(String, Int64, @contractdoc.ContractClosureKind, String)
+  SupersedePacket(String, Int64, String, String)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ContractDocumentsMessage {
@@ -36,6 +50,10 @@ pub(all) enum ContractDocumentsMessage {
   SaveInformation(String, Int64, Array[@contractdoc.ContractFieldValue])
   BeginConfirmInformation(String, Int64)
   BeginRequestGeneration(String, Int64, String)
+  BeginRegisterExecution(String, Int64)
+  BeginClosePacket(String, Int64)
+  BeginSupersedePacket(String, Int64)
+  ConfirmationInputChanged(ContractConfirmationField, String)
   DismissConfirmation
   ConfirmAction(ContractDocumentConfirmation)
   Refresh
@@ -59,6 +77,16 @@ pub(all) struct ContractDocumentsState {
 } derive(Eq)
 pub fn ContractDocumentsState::preview_request(Self) -> ContractDocumentsMessage?
 pub fn ContractDocumentsState::update(Self, ContractDocumentsMessage) -> Self
+
+pub(all) enum ContractPacketCapability {
+  SaveInformation
+  ConfirmInformation
+  RequestGeneration
+  RetryGeneration
+  RegisterExecution
+  ClosePacket
+  SupersedePacket
+} derive(Eq, @debug.Debug)
 
 // Type aliases
 
