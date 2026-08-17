@@ -56,9 +56,73 @@ pub(all) suberror ContractDocumentError {
   InvalidEvidence(String)
   InvalidExecutionDate(String)
   SettlementMismatch(String)
+  ContractApprovalNotFound(String)
+  ContractApprovalSelfDecision(String)
+  ContractApprovalAlreadyDecided(String)
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct ContractAdmissionView {
+  tenant_ref : String
+  subject_ref : String
+  effective_master_lease : Bool
+  api_key_issuance_allowed : Bool
+  workspace_admission_configured : Bool
+  exclusive_lease_present : Bool
+  evaluated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractAmendment {
+  amendment_id : String
+  tenant_ref : String
+  packet_id : String
+  preceding_packet_ref : String
+  base_revision : Int64
+  changes : Array[ContractFieldValue]
+  reason : String
+  state : ContractAmendmentState
+  effective_unix_ms : Int64?
+  created_by : String
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  revision : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractAmendmentState {
+  Draft
+  PendingApproval
+  Effective
+  Superseded
+  Rejected
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractApproval {
+  approval_id : String
+  packet_id : String
+  action : String
+  expected_revision : Int64
+  payload : ContractApprovalPayload
+  initiator : String
+  created_unix_ms : Int64
+  status : ContractApprovalStatus
+  decided_by : String?
+  decided_unix_ms : Int64?
+  decision_reason : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractApprovalPayload {
+  evidence_sha256 : String?
+  signed_on : String?
+  kind : ContractClosureKind?
+  reason : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractApprovalStatus {
+  Pending
+  Approved
+  Rejected
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ContractClosure {
   kind : ContractClosureKind
   reason : String
@@ -70,6 +134,18 @@ pub(all) enum ContractClosureKind {
   Expired
   EarlyTermination
   Settled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractClosureProposal {
+  proposal_id : String
+  packet_id : String
+  tenant_ref : String
+  violation_packet_ref : String
+  reason : String
+  state : ContractProposalState
+  created_by : String
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum ContractCollectionPolicy {
@@ -92,6 +168,12 @@ pub(all) struct ContractDocumentSnapshot {
   schema_version : String
   packets : Array[ContractPacket]
   events : Array[ContractPacketEvent]
+  approvals : Array[ContractApproval]
+  amendments : Array[ContractAmendment]
+  obligations : Array[ContractObligation]
+  settlement_drafts : Array[ContractSettlementDraft]
+  closure_proposals : Array[ContractClosureProposal]
+  numbers : Array[ContractNumber]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractExecution {
@@ -178,6 +260,55 @@ pub(all) struct ContractGeneratedArtifact {
   page_count : Int
   render_evidence_sha256 : String
   generated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractGovernanceDashboard {
+  tenant_ref : String
+  effective_packets : Int
+  pending_approvals : Int
+  overdue_obligations : Int
+  open_closure_proposals : Int
+  total_amount_minor_units : Int64
+  next_expiry_unix_ms : Int64?
+  generated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractNumber {
+  number : String
+  tenant_ref : String
+  packet_id : String
+  sequence : Int64
+  issued_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractObligation {
+  obligation_id : String
+  tenant_ref : String
+  packet_id : String
+  kind : ContractObligationKind
+  title : String
+  owner_ref : String
+  due_unix_ms : Int64
+  amount_minor_units : Int64?
+  state : ContractObligationState
+  evidence_ref : String?
+  completed_by : String?
+  completed_unix_ms : Int64?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  revision : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractObligationKind {
+  PaymentMilestone
+  Acceptance
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractObligationState {
+  Open
+  Completed
+  Overdue
+  Waived
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractPacket {
@@ -349,6 +480,26 @@ pub(all) struct ContractPreviewTemplate {
   scene : ContractPreviewDocument
   page_forms : Array[ContractFormKind]
   marker_defaults : Array[ContractPreviewMarker]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ContractProposalState {
+  Draft
+  PendingApproval
+  Approved
+  Rejected
+  Applied
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ContractSettlementDraft {
+  draft_id : String
+  packet_id : String
+  tenant_ref : String
+  ledger_snapshot_sha256 : String
+  amount_minor_units : Int64
+  state : ContractProposalState
+  created_by : String
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ContractSupersession {

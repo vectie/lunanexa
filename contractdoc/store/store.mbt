@@ -82,12 +82,27 @@ struct LegacyContractDocumentSnapshotV3 {
 } derive(FromJson)
 
 ///|
+/// v4 added durable approvals; v5 adds governance projections.
+struct LegacyContractDocumentSnapshotV4 {
+  schema_version : String
+  packets : Array[@contractdoc.ContractPacket]
+  events : Array[@contractdoc.ContractPacketEvent]
+  approvals : Array[@contractdoc.ContractApproval]
+} derive(FromJson)
+
+///|
 pub struct ContractDocumentStore {
   persistence : ContractPersistence
   mut packets : Map[String, @contractdoc.ContractPacket]
   mut idempotency_keys : Map[String, String]
   mut events : Array[@contractdoc.ContractPacketEvent]
   mut approvals : Map[String, @contractdoc.ContractApproval]
+  mut amendments : Map[String, @contractdoc.ContractAmendment]
+  mut obligations : Map[String, @contractdoc.ContractObligation]
+  mut settlement_drafts : Map[String, @contractdoc.ContractSettlementDraft]
+  mut closure_proposals : Map[String, @contractdoc.ContractClosureProposal]
+  mut numbers : Map[String, @contractdoc.ContractNumber]
+  mut number_sequences : Map[String, Int64]
   mutex : @async.Mutex
 }
 
@@ -101,6 +116,12 @@ fn ContractDocumentStore::empty(
     idempotency_keys: Map([]),
     events: [],
     approvals: Map([]),
+    amendments: Map([]),
+    obligations: Map([]),
+    settlement_drafts: Map([]),
+    closure_proposals: Map([]),
+    numbers: Map([]),
+    number_sequences: Map([]),
     mutex: Mutex(),
   }
 }
@@ -124,6 +145,51 @@ fn sorted_approvals(
 }
 
 ///|
+fn sorted_amendments(
+  values : Map[String, @contractdoc.ContractAmendment],
+) -> Array[@contractdoc.ContractAmendment] {
+  let pairs = values.to_array()
+  pairs.sort_by((left, right) => left.0.compare(right.0))
+  pairs.map(pair => pair.1)
+}
+
+///|
+fn sorted_obligations(
+  values : Map[String, @contractdoc.ContractObligation],
+) -> Array[@contractdoc.ContractObligation] {
+  let pairs = values.to_array()
+  pairs.sort_by((left, right) => left.0.compare(right.0))
+  pairs.map(pair => pair.1)
+}
+
+///|
+fn sorted_settlement_drafts(
+  values : Map[String, @contractdoc.ContractSettlementDraft],
+) -> Array[@contractdoc.ContractSettlementDraft] {
+  let pairs = values.to_array()
+  pairs.sort_by((left, right) => left.0.compare(right.0))
+  pairs.map(pair => pair.1)
+}
+
+///|
+fn sorted_closure_proposals(
+  values : Map[String, @contractdoc.ContractClosureProposal],
+) -> Array[@contractdoc.ContractClosureProposal] {
+  let pairs = values.to_array()
+  pairs.sort_by((left, right) => left.0.compare(right.0))
+  pairs.map(pair => pair.1)
+}
+
+///|
+fn sorted_numbers(
+  values : Map[String, @contractdoc.ContractNumber],
+) -> Array[@contractdoc.ContractNumber] {
+  let pairs = values.to_array()
+  pairs.sort_by((left, right) => left.0.compare(right.0))
+  pairs.map(pair => pair.1)
+}
+
+///|
 fn ContractDocumentStore::snapshot_unlocked(
   self : ContractDocumentStore,
 ) -> @contractdoc.ContractDocumentSnapshot {
@@ -132,6 +198,11 @@ fn ContractDocumentStore::snapshot_unlocked(
     packets: sorted_packets(self.packets),
     events: self.events.copy(),
     approvals: sorted_approvals(self.approvals),
+    amendments: sorted_amendments(self.amendments),
+    obligations: sorted_obligations(self.obligations),
+    settlement_drafts: sorted_settlement_drafts(self.settlement_drafts),
+    closure_proposals: sorted_closure_proposals(self.closure_proposals),
+    numbers: sorted_numbers(self.numbers),
   }
 }
 
@@ -190,9 +261,35 @@ fn migrate_legacy_snapshot(
           packets: snapshot.packets,
           events: snapshot.events,
           approvals: [],
+          amendments: [],
+          obligations: [],
+          settlement_drafts: [],
+          closure_proposals: [],
+          numbers: [],
         }
       }
     None => ()
+  }
+  let legacy_v4 : LegacyContractDocumentSnapshotV4? = Some(
+    @json.from_json(document),
+  ) catch {
+    _ => None
+  }
+  match legacy_v4 {
+    Some(snapshot) if snapshot.schema_version ==
+      "lunanexa.contract-document.snapshot.v4" =>
+      return {
+        schema_version: @contractdoc.snapshot_schema_version,
+        packets: snapshot.packets,
+        events: snapshot.events,
+        approvals: snapshot.approvals,
+        amendments: [],
+        obligations: [],
+        settlement_drafts: [],
+        closure_proposals: [],
+        numbers: [],
+      }
+    _ => ()
   }
   migrate_legacy_v2_snapshot(document)
 }
@@ -239,6 +336,11 @@ fn migrate_legacy_v2_snapshot(
     packets,
     events: legacy.events,
     approvals: [],
+    amendments: [],
+    obligations: [],
+    settlement_drafts: [],
+    closure_proposals: [],
+    numbers: [],
   }
 }
 
@@ -303,6 +405,11 @@ fn migrate_legacy_v1_snapshot(
     packets,
     events: legacy.events,
     approvals: [],
+    amendments: [],
+    obligations: [],
+    settlement_drafts: [],
+    closure_proposals: [],
+    numbers: [],
   }
 }
 
@@ -333,6 +440,40 @@ fn ContractDocumentStore::restore(
       raise InvalidInput("duplicate contract approval")
     }
     self.approvals[approval.approval_id] = approval
+  }
+  for amendment in snapshot.amendments {
+    if self.amendments.contains(amendment.amendment_id) {
+      raise InvalidInput("duplicate contract amendment")
+    }
+    self.amendments[amendment.amendment_id] = amendment
+  }
+  for obligation in snapshot.obligations {
+    if self.obligations.contains(obligation.obligation_id) {
+      raise InvalidInput("duplicate contract obligation")
+    }
+    self.obligations[obligation.obligation_id] = obligation
+  }
+  for draft in snapshot.settlement_drafts {
+    if self.settlement_drafts.contains(draft.draft_id) {
+      raise InvalidInput("duplicate settlement draft")
+    }
+    self.settlement_drafts[draft.draft_id] = draft
+  }
+  for proposal in snapshot.closure_proposals {
+    if self.closure_proposals.contains(proposal.proposal_id) {
+      raise InvalidInput("duplicate closure proposal")
+    }
+    self.closure_proposals[proposal.proposal_id] = proposal
+  }
+  for number in snapshot.numbers {
+    if self.numbers.contains(number.number) {
+      raise InvalidInput("duplicate contract number")
+    }
+    self.numbers[number.number] = number
+    self.number_sequences[number.tenant_ref] = self.number_sequences
+      .get(number.tenant_ref)
+      .unwrap_or(0L)
+      .max(number.sequence)
   }
 }
 

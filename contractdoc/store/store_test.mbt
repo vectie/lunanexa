@@ -120,6 +120,89 @@ async test "contract packets persist drafts and audit no raw values" {
 }
 
 ///|
+async test "governance projections gate access and survive restart" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contract-governance-")
+  let path = "\{directory}/contracts.json"
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let packet : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-governance",
+      "packet-governance-key",
+      "tenant-governance",
+      "org-governance",
+      "subject-governance",
+      "order-governance",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+  }
+  let store = ContractDocumentStore::open(path)
+  ignore(store.create_packet(packet, packet.subject_ref))
+  assert_true(
+    store.has_effective_master_lease(
+      packet.tenant_ref,
+      packet.subject_ref,
+      2000L,
+    ),
+  )
+  let amendment = store.create_amendment({
+    amendment_id: "amendment-governance",
+    tenant_ref: packet.tenant_ref,
+    packet_id: packet.packet_id,
+    preceding_packet_ref: packet.packet_id,
+    base_revision: packet.revision,
+    changes: [{ field_id: "lease.total_rent", value: "100" }],
+    reason: "renewed price",
+    state: PendingApproval,
+    effective_unix_ms: None,
+    created_by: "operator-a",
+    created_unix_ms: 2000L,
+    updated_unix_ms: 2000L,
+    revision: 1L,
+  })
+  assert_eq(amendment.state, PendingApproval)
+  ignore(
+    store.create_obligation({
+      obligation_id: "obligation-governance",
+      tenant_ref: packet.tenant_ref,
+      packet_id: packet.packet_id,
+      kind: PaymentMilestone,
+      title: "first payment",
+      owner_ref: packet.subject_ref,
+      due_unix_ms: 3000L,
+      amount_minor_units: Some(10000L),
+      state: Open,
+      evidence_ref: None,
+      completed_by: None,
+      completed_unix_ms: None,
+      created_unix_ms: 2000L,
+      updated_unix_ms: 2000L,
+      revision: 1L,
+    }),
+  )
+  let overdue = store.reconcile_obligations(4000L)
+  assert_eq(overdue.length(), 1)
+  let dashboard = store.governance_dashboard(packet.tenant_ref, 4000L)
+  assert_eq(dashboard.effective_packets, 1)
+  assert_eq(dashboard.overdue_obligations, 1)
+  assert_eq(dashboard.total_amount_minor_units, 10000L)
+  let number = store.allocate_contract_number(
+    packet.tenant_ref,
+    packet.packet_id,
+    5000L,
+  )
+  assert_true(number.number.has_prefix("LN-"))
+  let reopened = ContractDocumentStore::open(path)
+  assert_eq(reopened.amendments_for_packet(packet.packet_id).length(), 1)
+  assert_eq(reopened.snapshot().numbers.length(), 1)
+  @fs.remove(path)
+  @fs.remove(directory)
+}
+
+///|
 async test "confirmed generation request and exact paired artifacts survive restart" {
   let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-generation-")
   let path = "\{directory}/packet-store.json"
@@ -724,6 +807,7 @@ async test "generation failure and execution registration append audit events" {
 }
 
 ///|
+
 ///|
 /// Frozen v3 fixture: the packet shape is unchanged in v4; only the approval
 /// records are added. Production code never writes this shape.
@@ -739,8 +823,16 @@ async test "v3 contract snapshots load with empty approval records" {
   let path = "\{directory}/legacy-snapshot.json"
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let packet = @contractdoc.new_packet(
-    manifest, "packet-v3", "packet-v3-key", "tenant-1", "org-1", "subject-1", "order-1",
-    None, [MasterLease], 1000L,
+    manifest,
+    "packet-v3",
+    "packet-v3-key",
+    "tenant-1",
+    "org-1",
+    "subject-1",
+    "order-1",
+    None,
+    [MasterLease],
+    1000L,
   )
   let fixture : LegacySnapshotV3Fixture = {
     schema_version: "lunanexa.contract-document.snapshot.v3",
@@ -805,13 +897,17 @@ async test "contract approvals persist, decide once, and survive a reload" {
   assert_eq(decided.status, Approved)
   assert_eq(decided.decided_by, Some("bob"))
   assert_eq(decided.decided_unix_ms, Some(2000L))
-  try store.decide_approval("approval-1", false, "carol", Some("late"), 3000L) catch {
+  try
+    store.decide_approval("approval-1", false, "carol", Some("late"), 3000L)
+  catch {
     @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("a decided approval must not be decided again")
   }
-  try store.decide_approval("approval-missing", true, "bob", None, 2000L) catch {
+  try
+    store.decide_approval("approval-missing", true, "bob", None, 2000L)
+  catch {
     @contractdoc.ContractDocumentError::ContractApprovalNotFound(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {

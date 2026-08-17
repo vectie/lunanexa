@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.contract-document.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v4"
+pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v5"
 
 ///|
 pub(all) suberror ContractDocumentError {
@@ -386,6 +386,139 @@ pub(all) enum ContractApprovalStatus {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// A controlled change to an effective packet. The original packet remains
+/// immutable; an amendment becomes the next contractual version only after
+/// its own approval/effectivity fence is satisfied.
+pub(all) enum ContractAmendmentState {
+  Draft
+  PendingApproval
+  Effective
+  Superseded
+  Rejected
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractAmendment {
+  amendment_id : String
+  tenant_ref : String
+  packet_id : String
+  preceding_packet_ref : String
+  base_revision : Int64
+  changes : Array[ContractFieldValue]
+  reason : String
+  state : ContractAmendmentState
+  effective_unix_ms : Int64?
+  created_by : String
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  revision : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Durable payment and acceptance obligations are separate from form text.
+pub(all) enum ContractObligationKind {
+  PaymentMilestone
+  Acceptance
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum ContractObligationState {
+  Open
+  Completed
+  Overdue
+  Waived
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractObligation {
+  obligation_id : String
+  tenant_ref : String
+  packet_id : String
+  kind : ContractObligationKind
+  title : String
+  owner_ref : String
+  due_unix_ms : Int64
+  amount_minor_units : Int64?
+  state : ContractObligationState
+  evidence_ref : String?
+  completed_by : String?
+  completed_unix_ms : Int64?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  revision : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum ContractProposalState {
+  Draft
+  PendingApproval
+  Approved
+  Rejected
+  Applied
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractSettlementDraft {
+  draft_id : String
+  packet_id : String
+  tenant_ref : String
+  ledger_snapshot_sha256 : String
+  amount_minor_units : Int64
+  state : ContractProposalState
+  created_by : String
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ContractClosureProposal {
+  proposal_id : String
+  packet_id : String
+  tenant_ref : String
+  violation_packet_ref : String
+  reason : String
+  state : ContractProposalState
+  created_by : String
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Server-owned, tenant-scoped contract number allocation.
+pub(all) struct ContractNumber {
+  number : String
+  tenant_ref : String
+  packet_id : String
+  sequence : Int64
+  issued_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// A deterministic read model for the operator business dashboard.
+pub(all) struct ContractGovernanceDashboard {
+  tenant_ref : String
+  effective_packets : Int
+  pending_approvals : Int
+  overdue_obligations : Int
+  open_closure_proposals : Int
+  total_amount_minor_units : Int64
+  next_expiry_unix_ms : Int64?
+  generated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// One admission projection consumed by key, workspace, and machine clients.
+pub(all) struct ContractAdmissionView {
+  tenant_ref : String
+  subject_ref : String
+  effective_master_lease : Bool
+  api_key_issuance_allowed : Bool
+  workspace_admission_configured : Bool
+  exclusive_lease_present : Bool
+  evaluated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 /// The recorded intent of a pending approval. Execution registrations carry
 /// the evidence digest and signing date; closures carry the kind and reason.
 pub(all) struct ContractApprovalPayload {
@@ -421,4 +554,9 @@ pub(all) struct ContractDocumentSnapshot {
   packets : Array[ContractPacket]
   events : Array[ContractPacketEvent]
   approvals : Array[ContractApproval]
+  amendments : Array[ContractAmendment]
+  obligations : Array[ContractObligation]
+  settlement_drafts : Array[ContractSettlementDraft]
+  closure_proposals : Array[ContractClosureProposal]
+  numbers : Array[ContractNumber]
 } derive(Debug, Eq, ToJson, FromJson)
