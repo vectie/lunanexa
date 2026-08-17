@@ -176,6 +176,30 @@ async test "generated event identities are monotonic under identical timestamps"
 }
 
 ///|
+async test "contract document reconciliation events are allowlisted" {
+  let directory = @fs.tmpdir(prefix="lunanexa-observability-contract-document-")
+  let store = @observability.ObservabilityStore::open(
+    "\{directory}/events.json",
+  )
+  store.record_component_event(
+    "event-contract-document-reconcile",
+    1000L,
+    Information,
+    "controller",
+    "ContractExpiryReconciliationCompleted",
+    "contract-document-reconcile",
+    "contract_document",
+    "healthy",
+    200,
+    0L,
+  )
+  let snapshot = store.snapshot()
+  assert_eq(snapshot.events.length(), 1)
+  assert_eq(snapshot.events[0].target_type, "contract_document")
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "operational events reject high-cardinality or secret-shaped fields" {
   let directory = @fs.tmpdir(prefix="lunanexa-observability-invalid-")
   let store = @observability.ObservabilityStore::open(

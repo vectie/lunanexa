@@ -31,7 +31,12 @@ else
 fi
 
 choose_base_port() {
-  candidate=$((24000 + ($$ % 12000)))
+  # Keep the five-port simulation range away from process-recovery
+  # (20,000-40,000) and the optional PostgreSQL integration range
+  # (30,000-50,000). This avoids TIME_WAIT reuse turning the release gate into
+  # a false controller-start failure when those checks run immediately before
+  # the four-node campaign.
+  candidate=$((52000 + ($$ % 12000)))
   attempts=0
   while [ "$attempts" -lt 200 ]; do
     range_busy=0
@@ -46,8 +51,8 @@ choose_base_port() {
       return 0
     fi
     candidate=$((candidate + 5))
-    if [ "$candidate" -gt 60000 ]; then
-      candidate=24000
+    if [ "$candidate" -gt 64000 ]; then
+      candidate=52000
     fi
     attempts=$((attempts + 1))
   done

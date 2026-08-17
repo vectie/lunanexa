@@ -52,8 +52,9 @@ fn safe_identifier(value : String, maximum? : Int = 256) -> Bool {
 fn safe_target_type(value : String) -> Bool {
   [
     "api", "health", "metrics", "workload", "node", "notification", "notification_delivery",
-    "enterprise_portal", "exclusive_lease", "commercial", "workspace", "deployment",
-    "telemetry", "artifact", "database", "guide", "reconciliation", "runtime", "scheduler",
+    "enterprise_portal", "exclusive_lease", "commercial", "contract_document", "workspace",
+    "deployment", "telemetry", "artifact", "database", "guide", "reconciliation",
+    "runtime", "scheduler",
   ].contains(value)
 }
 

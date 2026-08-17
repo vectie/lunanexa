@@ -23,7 +23,7 @@
     {"id":"production-readiness","path":"docs/PRODUCTION_READINESS.md","digest":"sha256:34dbe44472e75933589cc9794454be93c662cf2bae3ac865f67364bd05a82903","kind":"production-readiness","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:01ee6e6b19689428b3d1790a62a4bd99eb0984a2dd48fbfab9ad6b3d66a45d31","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:6bbe4984c854d3529621916b3e582e9a1712de9786be9addd4ce21717ba1f613","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:5ce9c2e5143d5c459346ffbe4dc1f4d27e870547c300e7136c4bcaa564e91cf8","kind":"implementation","public":true},
     {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:fbcd1897f9c27daa89c8d718a6e900cc46843010eeb880bbe4be1972e8d813e7","kind":"acceptance-script","public":true},
     {"id":"dgx-qualification","path":"deploy/dgx-spark/README.md","digest":"sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512","kind":"runtime-qualification","public":true}
   ],

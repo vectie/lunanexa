@@ -45,7 +45,7 @@ async fn main {
   let control_path = required_environment("LUNANEXA_SIM_CONTROL_PATH")
   let invocation_path = required_environment("LUNANEXA_SIM_INVOCATION_PATH")
   let credential = required_environment("LUNANEXA_SIM_RUNTIME_CREDENTIAL")
-  let server = @http.Server(@socket.Addr::parse(address))
+  let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   println("simulated DGX runtime \{node_id} listening on \{server.addr}")
   server.run_forever(max_connections=64) <| ((request, body, connection) => {
     if request.meth == Get && request.path == "/health" {

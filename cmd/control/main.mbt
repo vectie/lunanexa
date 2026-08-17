@@ -1067,7 +1067,7 @@ async fn main {
       )
     None => authority_service
   }
-  let server = @http.Server(@socket.Addr::parse(address))
+  let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   @async.with_task_group <| group => {
     group.spawn_bg(allow_failure=false) <| () => {
       service.run_notification_reconciler_forever(

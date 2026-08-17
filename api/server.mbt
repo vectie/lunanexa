@@ -4744,6 +4744,6 @@ pub async fn ApiService::serve_on(
 
 ///|
 pub async fn ApiService::serve(self : ApiService, address : String) -> Unit {
-  let server = @http.Server(@socket.Addr::parse(address))
+  let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   self.serve_on(server)
 }
