@@ -305,6 +305,24 @@ Gate:
 
 ## Phase 11 — Technical hardening and commercial governance
 
+### Contract-governance execution order
+
+The contract-document work is implemented as a dependent slice of this phase:
+
+1. operator token-to-identity attribution and restart-safe expiry closure;
+2. threshold-based four-eyes approval for high-value execute/close actions;
+3. Effective MasterLease admission before API-key issuance, with a shared
+   admission projection for workspace and exclusive-machine consumers;
+4. ledger-digested settlement drafts and violation-to-close proposals;
+5. immutable amendment records materialized into a `preceding_packet_ref`
+   version chain;
+6. durable payment/acceptance obligations with overdue reconciliation;
+7. tenant-scoped contract numbering and a deterministic operator business view.
+
+The source DOCX, MoonLeaf preview, offline execution evidence, and all existing
+privacy boundaries remain unchanged by this governance layer. The contract
+store is the durable authority; browser views are projections only.
+
 Deliver:
 
 - deterministic prewarm, startup/readiness/liveness probe, cache,

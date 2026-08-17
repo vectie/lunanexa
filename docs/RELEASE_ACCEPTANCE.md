@@ -15,6 +15,26 @@ Before `EvidenceBundle.release_ready()` may be accepted, attach:
 - security, operations, and license report references;
 - the name of the human accepting the evidence.
 
+For the contract-governance slice, attach evidence for each dependency stage:
+
+- two distinct mapped operator identities, including an audit receipt and an
+  expiry-closure run with the configured grace period;
+- a high-value execute/close request rejected for self-approval and approved
+  by a second operator;
+- Effective MasterLease admission gating before issuing a new API key;
+- a settlement draft bound to an immutable ledger-summary digest and a
+  violation notification that creates a closure proposal without implicit
+  closure;
+- an approved amendment materialized into a successor packet with the correct
+  `preceding_packet_ref` chain;
+- payment and acceptance obligations, including an overdue reconciliation;
+- tenant-scoped contract-number allocation with idempotent retry evidence and
+  the operator governance dashboard projection.
+
+These checks prove the local durable workflow. They do not replace approved
+IdP/RBAC, legal/finance, ledger, invoice, notification or signature-provider
+acceptance for a real deployment.
+
 Measured objectives are evidence for the exact model, runtime, driver, network,
 and hardware profile. They are not promises for a changed profile.
 

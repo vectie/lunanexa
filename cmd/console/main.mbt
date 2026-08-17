@@ -138,6 +138,14 @@ priv struct ContractRenewalIntent {
 extend ContractRenewalIntent with ToJson::{to_json}
 
 ///|
+priv struct ContractGovernanceTenantRequest {
+  tenant_ref : String
+} derive(ToJson)
+
+///|
+extend ContractGovernanceTenantRequest with ToJson::{to_json}
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -805,9 +813,7 @@ async fn load_console(
     @json.from_json(
       @json.parse(
         request(
-          "GET",
-          endpoint,
-          "/v1/contract-documents/operator/approvals?status=pending",
+          "GET", endpoint, "/v1/contract-documents/operator/approvals?status=pending",
           token,
         ),
       ),
@@ -816,6 +822,38 @@ async fn load_console(
     _ => []
   } noraise {
     value => value
+  }
+  let contract_governance_dashboard : @contractdoc.ContractGovernanceDashboard? = {
+    let tenant_ref = contract_packets
+      .get(0)
+      .map(packet => packet.tenant_ref)
+      .unwrap_or(commercial_organization)
+    if tenant_ref == "" {
+      None
+    } else {
+      let body = ContractGovernanceTenantRequest::{ tenant_ref, }
+        .to_json()
+        .stringify()
+      try
+        Some(
+          @json.from_json(
+            @json.parse(
+              request(
+                "POST",
+                endpoint,
+                "/v1/contract-governance/operator/dashboard",
+                token,
+                body~,
+              ),
+            ),
+          ),
+        )
+      catch {
+        _ => None
+      } noraise {
+        value => value
+      }
+    }
   }
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
@@ -1276,6 +1314,7 @@ async fn load_console(
       manifest: Some(contract_manifest),
       packets: contract_packets,
       approvals: contract_approvals,
+      governance_dashboard: contract_governance_dashboard,
       selected_packet_id: contract_packets
       .get(0)
       .map(packet => packet.packet_id),
@@ -1640,6 +1679,7 @@ fn operator_contract_lifecycle_command(
 }
 
 ///|
+#warnings("-unused_value")
 fn operator_contract_approval_command(
   model : AppModel,
   approval_id : String,
@@ -1657,9 +1697,7 @@ fn operator_contract_approval_command(
           ({ "reason": reason } : Json).stringify(),
         )
       }
-      ignore(
-        request("POST", model.endpoint, path, model.credential, body~),
-      )
+      ignore(request("POST", model.endpoint, path, model.credential, body~))
       ContractApprovalDecided(
         model.console.locale,
         console_copy(

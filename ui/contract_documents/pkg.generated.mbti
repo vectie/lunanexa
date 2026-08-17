@@ -30,6 +30,7 @@ pub(all) enum ContractConfirmationField {
   ClosureReason
   SuccessorReference
   SupersessionReason
+  RejectionReason
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ContractDocumentConfirmation {
@@ -39,6 +40,7 @@ pub(all) enum ContractDocumentConfirmation {
   ClosePacket(String, Int64, @contractdoc.ContractClosureKind, String)
   SupersedePacket(String, Int64, String, String)
   RequestRenewal(String)
+  RejectApproval(String, String)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ContractDocumentsMessage {
@@ -55,6 +57,8 @@ pub(all) enum ContractDocumentsMessage {
   BeginClosePacket(String, Int64)
   BeginSupersedePacket(String, Int64)
   BeginRequestRenewal(String)
+  ApproveApproval(String)
+  BeginRejectApproval(String)
   ConfirmationInputChanged(ContractConfirmationField, String)
   DismissConfirmation
   ConfirmAction(ContractDocumentConfirmation)
@@ -67,6 +71,8 @@ pub(all) struct ContractDocumentsState {
   actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
   packets : Array[@contractdoc.ContractPacket]
+  approvals : Array[@contractdoc.ContractApproval]
+  governance_dashboard : @contractdoc.ContractGovernanceDashboard?
   selected_packet_id : String?
   selected_form : @contractdoc.ContractFormKind?
   preview : @contractdoc.ContractPreviewDocument?

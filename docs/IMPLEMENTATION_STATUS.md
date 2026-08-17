@@ -40,6 +40,11 @@ The repository now implements the deployable LunaNexa baseline:
   projects, rating, ledger finalization, budgets, quotas, commitments, RBAC and
   digital agreements, plus normalized external-provider evidence records,
   with restart-complete PostgreSQL snapshots and atomic callback/business commits;
+- a durable contract-governance slice covering operator token-to-identity
+  attribution, configurable expiry closure, four-eyes approval, Effective
+  MasterLease admission gating, ledger-derived settlement drafts, violation
+  closure proposals, immutable amendment chains, payment/acceptance obligations,
+  tenant-scoped contract numbering and an operator governance dashboard;
 - Rabbita routes for cost-center posture, digital agreement evidence and
   qualified-service adapters, with explicit non-production marking for the
   LunaFide deterministic test simulator;
@@ -117,6 +122,13 @@ nonces are now restart durable; commercial callback and business snapshots
 commit atomically. LunaFide remains functional contract evidence, not
 production trust infrastructure, and must be replaced by approved real
 providers.
+
+The contract-governance slice is locally complete in dependency order (A–G):
+operator mapping is an attribution mechanism, not a replacement for an IdP or
+tenant-level RBAC; settlement, invoice, legal, notification and ledger
+providers remain external acceptance gates. The browser is a projection of the
+durable contract store, and customer-owned fields remain customer-owned rather
+than being filled by an operator route.
 
 ## External acceptance still required
 

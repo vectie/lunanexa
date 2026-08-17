@@ -298,17 +298,79 @@ error, not a fallback. Production renderer images mount the same approved
 files from a deployment secret or read-only volume rather than baking them
 into a public image layer.
 
+## Contract-governance API surface
+
+The operator console uses the same durable store for the long-horizon business
+controls. All routes below require a mapped operator identity; every mutation
+is tenant checked and audit attributed to that identity:
+
+- `GET|POST /v1/contract-governance/operator/dashboard` — return the effective
+  contract, pending approval, overdue obligation, closure-proposal, ledger
+  amount, and next-expiry read model for one tenant;
+- `GET /v1/contract-governance/operator/admission` — evaluate the effective
+  `MasterLease`, workspace-lease configuration, exclusive-machine presence,
+  and whether API-key issuance is allowed;
+- `POST /v1/contract-governance/operator/amendments` plus
+  `…/{amendment_id}:approve` and `…:materialize` — request a manager-owned
+  amendment, require a different operator to approve it, then create a fresh
+  renewal draft whose `preceding_packet_ref` is the immutable version link;
+- `POST /v1/contract-governance/operator/obligations` and
+  `…/{obligation_id}:complete` — create and complete payment or acceptance
+  obligations; the controller reconciler marks missed open obligations
+  `Overdue`;
+- `POST …/packets/{packet_id}:draft-settlement` — hash the current commercial
+  ledger summary into a pending settlement draft; the explicit
+  `…/settlement-drafts` route is available for an already verified ledger
+  snapshot;
+- `POST …/packets/{packet_id}/closure-proposals` — link a same-tenant
+  `ViolationNotice` packet to a pending closure proposal without closing the
+  contract implicitly;
+- `POST …/packets/{packet_id}:number` — allocate one tenant-scoped immutable
+  contract number (retries return the existing number for that packet).
+
+The amendment and closure paths deliberately enforce ownership boundaries:
+manager/operator routes cannot write customer/messenger fields, and the
+customer portal never receives operator controls. Settlement amounts remain
+ledger-derived or explicitly supplied as a verified digest; the contract
+document store does not invent prices, legal terms, signatures, seals, or
+offline evidence.
+
 ## Known gaps
 
-The lifecycle model deliberately does not yet do the following:
+The contract governance layer now covers the implementation plan in dependency
+order:
 
-- no amendment flow for `Effective` packets: renewal opens a fresh draft
-  linked through `preceding_packet_ref`; changing a packet in force still
-  requires closing it and creating a new one (supersession is reserved for
-  pre-effect packets);
-- closing a `MasterLease` packet revokes the subject's still-active API
-  credentials, but `access/` keys are not otherwise gated on packet state:
-  suspending a packet does not suspend issued credentials.
+- operator identity is resolved from `LUNANEXA_OPERATOR_TOKENS` and written to
+  contract audit records; the contract expiry reconciler uses a configurable
+  interval and grace period and runs the same credential-revocation effects as
+  a manual close;
+- high-value execute/close transitions use the durable four-eyes approval
+  queue when `LUNANEXA_CONTRACT_APPROVAL_THRESHOLD_CNY` is configured; the
+  initiator cannot approve their own action;
+- access-key issuance is gated by an unexpired `Effective` `MasterLease` when
+  the contract store is configured. `/v1/contract-governance/operator/admission`
+  exposes the effective-contract, workspace, and exclusive-lease admission
+  projection used to converge the three tracks;
+- settlement drafts can be created from the commercial ledger summary with a
+  digest of that snapshot, and violation packets can create durable close
+  proposals for approval rather than closing a packet implicitly;
+- amendments are immutable records attached to an effective packet. An
+  approved amendment can be materialized into a new renewal packet whose
+  `preceding_packet_ref` forms the version chain. The source effective packet
+  is never mutated;
+- payment milestones and acceptance obligations are durable objects with
+  owners, due times, evidence, completion, overdue reconciliation, and a
+  restart-safe operator dashboard projection;
+- contract numbers are allocated by a tenant-scoped server sequence, and the
+  operator browser includes a compact governance view for effective packets
+  and pending approvals.
+
+The following production integrations remain explicit boundaries rather than
+silent defaults: a real ledger/provider identity, legal/finance approval of
+settlement and amendment policy, and an external notification/delivery setup.
+Existing API keys issued before contract gating was enabled are not retroactively
+revoked unless their MasterLease is closed or the access store is reconciled;
+operators should run the admission projection during rollout.
 
 ## Production blockers
 

@@ -78,6 +78,7 @@ verified and cached locally before its runtime container starts.
 | Exclusive lease reservation and managed-placement fence | Implemented | Safe for control-plane testing |
 | Exclusive lease watchdog and helper protocol | Implemented | Persists signed generation, expires offline, reports provision/revoke/sanitize/quarantine evidence |
 | Privileged account/SSH/sanitization helper | Reference implementation included | Install the root-owned helper and fixed client for host-systemd mode; physically validate the host policy before production leases |
+| Contract governance A–G | Implemented locally | Configure operator identity mappings and expiry/approval settings; validate external legal, finance, ledger and notification gates before production use |
 | OCI registry, CA, secret manager and metrics backend | External | Provision independently; they are not LunaNexa services |
 
 The Kubernetes readiness probe calls the disclosure-safe `/ready` local
@@ -89,6 +90,30 @@ offline-commerce evidence, exclusive-machine credentials/helper verification,
 artifact verification and guide diagnostics. Do not make the Kubernetes
 liveness probe depend on external providers; use this endpoint from the release
 check after all provider credentials and signed evidence are installed.
+
+### Contract-governance deployment inputs
+
+The contract governance routes use the same durable contract-document store as
+the packet workflow. Configure the operator mapping as a comma-separated set of
+`token=operator-ref` entries; tokens are host/deployment references and must not
+be committed:
+
+```text
+LUNANEXA_OPERATOR_TOKENS=operator-token-ref-1=operator:alice,operator-token-ref-2=operator:bob
+LUNANEXA_CONTRACT_APPROVAL_THRESHOLD_CNY=50000.00
+LUNANEXA_CONTRACT_EXPIRY_RECONCILE_INTERVAL_MS=3600000
+LUNANEXA_CONTRACT_EXPIRY_GRACE_DAYS=7
+```
+
+The threshold is optional; when configured, high-value execute/close actions
+require a different mapped operator to approve them. The interval and grace
+period are bounded by the controller and apply to automatic expiry closure.
+Operator-token mapping provides audit attribution only. It is not an IdP,
+tenant-level RBAC system, or a replacement for ingress identity; production
+deployments must still bind the operator reference to the approved identity
+provider and tenant policy. Settlement drafts, invoices, legal approval,
+signatures, notification delivery and ledger reconciliation remain external
+gates and must be evidenced before `/v1/readiness` is accepted.
 
 ## First installation: exact order
 
