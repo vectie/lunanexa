@@ -6,6 +6,7 @@ pub(all) enum ContractDocumentConfirmation {
   ClosePacket(String, Int64, @contractdoc.ContractClosureKind, String)
   SupersedePacket(String, Int64, String, String)
   RequestRenewal(String)
+  RejectApproval(String, String)
 } derive(Debug, Eq)
 
 ///|
@@ -75,6 +76,7 @@ pub(all) struct ContractDocumentsState {
   actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
   packets : Array[@contractdoc.ContractPacket]
+  approvals : Array[@contractdoc.ContractApproval]
   selected_packet_id : String?
   selected_form : @contractdoc.ContractFormKind?
   preview : @contractdoc.ContractPreviewDocument?
@@ -106,6 +108,8 @@ pub(all) enum ContractDocumentsMessage {
   BeginClosePacket(String, Int64)
   BeginSupersedePacket(String, Int64)
   BeginRequestRenewal(String)
+  ApproveApproval(String)
+  BeginRejectApproval(String)
   ConfirmationInputChanged(ContractConfirmationField, String)
   DismissConfirmation
   ConfirmAction(ContractDocumentConfirmation)
@@ -124,6 +128,7 @@ pub(all) enum ContractConfirmationField {
   ClosureReason
   SuccessorReference
   SupersessionReason
+  RejectionReason
 } derive(Debug, Eq)
 
 ///|
@@ -145,6 +150,7 @@ pub fn default_state(
     actor_owner,
     manifest: None,
     packets: [],
+    approvals: [],
     selected_packet_id: None,
     selected_form: None,
     preview: None,
@@ -280,6 +286,10 @@ pub fn ContractDocumentsState::update(
       }
     BeginRequestRenewal(packet_id) =>
       { ..self, confirmation: Some(RequestRenewal(packet_id)) }
+    ApproveApproval(_) =>
+      { ..self, loading: true, success_message: None, error_message: None }
+    BeginRejectApproval(approval_id) =>
+      { ..self, confirmation: Some(RejectApproval(approval_id, "")) }
     ConfirmationInputChanged(field, value) =>
       {
         ..self,
@@ -297,6 +307,8 @@ pub fn ContractDocumentsState::update(
               SupersedePacket(id, revision, value, reason)
             (SupersedePacket(id, revision, successor, _), SupersessionReason) =>
               SupersedePacket(id, revision, successor, value)
+            (RejectApproval(id, _), RejectionReason) =>
+              RejectApproval(id, value)
             (current, _) => current
           }
         }),
@@ -1590,6 +1602,19 @@ fn operator_confirmation(
           "关闭不可撤销。提前退租只有在结算确认单生成后才会被接受。",
         ),
       )
+    RejectApproval(_) =>
+      (
+        copy(
+          state.locale,
+          "Reject or withdraw this approval request?",
+          "拒绝或撤回该审批请求？",
+        ),
+        copy(
+          state.locale,
+          "The transition is not applied. A reason is required and is recorded with the decision.",
+          "过渡操作不会执行。必须填写原因，并随决定一并记录。",
+        ),
+      )
     _ =>
       (
         copy(state.locale, "Supersede this packet?", "替代该资料包？"),
@@ -1673,6 +1698,16 @@ fn operator_confirmation(
           SupersessionReason,
         ),
       ]
+    RejectApproval(_, reason) =>
+      [
+        dialog_text_input(
+          emit,
+          "contract-confirm-rejection-reason",
+          copy(state.locale, "Rejection reason", "拒绝原因"),
+          reason,
+          RejectionReason,
+        ),
+      ]
     _ => []
   }
   let ready = match action {
@@ -1681,6 +1716,7 @@ fn operator_confirmation(
     ClosePacket(_, _, _, reason) => reason.trim() != ""
     SupersedePacket(_, _, successor, reason) =>
       successor.trim() != "" && reason.trim() != ""
+    RejectApproval(_, reason) => reason.trim() != ""
     _ => true
   }
   @html.div(class="modal-backdrop", [
@@ -1720,7 +1756,7 @@ fn confirmation(
     None => @html.span("")
     Some(action) =>
       match action {
-        RegisterExecution(_) | ClosePacket(_) | SupersedePacket(_) =>
+        RegisterExecution(_) | ClosePacket(_) | SupersedePacket(_) | RejectApproval(_) =>
           operator_confirmation(state, emit, action)
         ConfirmInformation(_) | RequestGeneration(_) | RequestRenewal(_) => {
           let generating = action is RequestGeneration(_, _, _)
@@ -1801,6 +1837,88 @@ fn confirmation(
 }
 
 ///|
+/// The operator-only four-eyes queue. Pending approval requests render with
+/// Approve/Reject actions; an empty queue renders a single empty-state line
+/// (demo mode seeds no approvals, so no decision buttons are reachable).
+fn approvals_block(
+  state : ContractDocumentsState,
+  emit : @rabbita.Emit[ContractDocumentsMessage]?,
+) -> @rabbita.Html {
+  if state.actor_owner != ManagerOperator {
+    return @html.nothing
+  }
+  let pending = state.approvals.filter(approval => approval.status == Pending)
+  @html.section(class="contract-approvals", [
+    @html.div(class="contract-approvals-heading", [
+      @html.p(
+        class="eyebrow",
+        copy(state.locale, "FOUR-EYES APPROVAL", "双人审批"),
+      ),
+      @html.h2(copy(state.locale, "Pending approvals", "待审批")),
+    ]),
+    if pending.is_empty() {
+      @html.p(
+        class="contract-approvals-empty",
+        copy(state.locale, "No pending approvals.", "暂无待审批事项。"),
+      )
+    } else {
+      @html.ul(
+        class="contract-approvals-list",
+        [
+          for approval in pending => {
+            @html.li(class="contract-approval-item", [
+              @html.div(class="contract-approval-facts", [
+                @html.strong(approval.packet_id),
+                @html.span(
+                  copy(
+                    state.locale,
+                    "action: \{approval.action}",
+                    "操作：\{approval.action}",
+                  ),
+                ),
+                @html.span(
+                  copy(
+                    state.locale,
+                    "initiator: \{approval.initiator}",
+                    "发起人：\{approval.initiator}",
+                  ),
+                ),
+                @html.span(
+                  copy(
+                    state.locale,
+                    "requested: \{approval.created_unix_ms}",
+                    "发起时间：\{approval.created_unix_ms}",
+                  ),
+                ),
+              ]),
+              @html.div(class="contract-approval-actions", [
+                @html.button(
+                  type_="button",
+                  class="primary-button",
+                  disabled=state.loading,
+                  on_click=command(emit, ApproveApproval(approval.approval_id)),
+                  copy(state.locale, "Approve", "批准"),
+                ),
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  disabled=state.loading,
+                  on_click=command(
+                    emit,
+                    BeginRejectApproval(approval.approval_id),
+                  ),
+                  copy(state.locale, "Reject", "拒绝"),
+                ),
+              ]),
+            ])
+          }
+        ],
+      )
+    },
+  ])
+}
+
+///|
 fn contract_documents_view(
   state : ContractDocumentsState,
   emit : @rabbita.Emit[ContractDocumentsMessage]?,
@@ -1844,6 +1962,7 @@ fn contract_documents_view(
         copy(state.locale, "Refresh", "刷新"),
       ),
     ]),
+    approvals_block(state, emit),
     match (state.manifest, selected) {
       (Some(manifest), Some(packet)) =>
         packet_editor(state, emit, manifest, packet)
@@ -1909,6 +2028,7 @@ fn contract_styles() -> String {
   (
     #|.contract-steps{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem;margin:0;padding:.6rem .8rem}.contract-step{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .6rem;border:1px solid var(--line,#223743);border-radius:999px;color:var(--muted,#91a7ad);font-size:.85rem}.contract-step-marker{display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;border:1px solid currentColor;font-size:.75rem}.contract-step.is-done{color:var(--ink,#ecf5f2);border-color:rgba(126,224,189,.35)}.contract-step.is-current{color:var(--ink,#ecf5f2);border-color:rgba(126,224,189,.7);background:rgba(126,224,189,.1)}.contract-step.is-failed{color:#f2a3a3;border-color:rgba(242,163,163,.6);background:rgba(242,163,163,.08)}.contract-steps-terminal{display:flex;align-items:center;gap:.6rem;padding:.6rem .8rem;color:var(--muted,#91a7ad)}.contract-step-badge.is-superseded{padding:.3rem .6rem;border:1px solid rgba(242,163,163,.6);border-radius:999px;color:#f2a3a3;font-size:.85rem}.contract-guidance{margin:0;padding:0 .8rem .8rem;color:var(--muted,#91a7ad)}
     #|.contract-editor-layout{display:grid;grid-template-columns:minmax(10rem,.18fr) minmax(18rem,.58fr) minmax(30rem,1fr)!important}.contract-form-nav{min-width:0;padding:.8rem;border-right:1px solid var(--line,#223743);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted,#91a7ad)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted,#91a7ad)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted,#91a7ad);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line,#223743)}.contract-preview{min-width:0;padding:1.25rem;border-left:1px solid var(--line,#223743);background:var(--panel2,#111f29);color:var(--ink,#ecf5f2)}.contract-preview-heading,.contract-preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.contract-preview-heading h2{margin:.1rem 0}.contract-preview-revision,.contract-page-count{color:var(--muted,#91a7ad);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.contract-preview-sync{display:inline-flex;align-items:center;min-height:2rem;padding:.35rem .6rem;border:1px solid rgba(126,224,189,.28);border-radius:999px;color:#7ee0bd;font-size:.72rem;font-weight:750}.contract-preview-sync.is-loading{color:#f1c36d;border-color:rgba(241,195,109,.35)}.contract-preview-toolbar{margin:.8rem 0}.contract-paper-stage{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}.contract-paper-viewport{height:min(76vh,64rem);padding:1rem;overflow:auto;border:1px solid var(--line,#223743);border-radius:.55rem;background:#273138}.moonleaf-pages{display:grid;gap:1.5rem}.contract-paper{container-type:inline-size;display:block;box-sizing:border-box;width:100%;min-height:0;overflow:hidden;background:white;color:#111;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;font-size:0;line-height:normal}.moonleaf-document{font-kerning:normal;font-synthesis:none;word-break:normal;overflow-wrap:break-word}.moonleaf-document span{white-space:pre-wrap}.moonleaf-paragraph,.moonleaf-heading,.moonleaf-list-item,.moonleaf-cell-paragraph{font-size:2.89cqw;line-height:6.743cqw;text-justify:inter-character}.moonleaf-paragraph,.moonleaf-cell-paragraph{min-height:0;margin:0;text-indent:0}.moonleaf-heading{margin:0;text-align:center;font-weight:700}.moonleaf-list-item{display:flex;gap:.5rem;margin:0}.moonleaf-table{width:100%;margin:0;border-collapse:collapse;table-layout:fixed;font-size:2.89cqw;line-height:normal}.moonleaf-table td{box-sizing:border-box;border:1px solid #555;white-space:pre-wrap;overflow-wrap:anywhere}.is-bold{font-weight:700}.is-italic{font-style:italic}.is-underline{text-decoration:underline}.moonleaf-empty{display:grid;place-content:center;gap:.5rem;text-align:center;color:#3c4850}.moonleaf-empty p{max-width:34rem}.contract-preview-note{color:var(--muted,#91a7ad);font-size:.72rem}@media(max-width:78rem){.contract-editor-layout{grid-template-columns:12rem minmax(0,1fr)!important}.contract-preview{grid-column:1/-1;border-left:0;border-top:1px solid var(--line,#223743)}.contract-paper{max-width:52rem;margin:0 auto}}@media(max-width:52rem){.contract-editor-layout{grid-template-columns:1fr!important}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line,#223743)}.contract-field-grid{grid-template-columns:1fr}.contract-preview-heading{align-items:flex-start;flex-direction:column}.contract-preview-toolbar{position:sticky;top:0;z-index:2;padding:.5rem;background:var(--panel2,#111f29)}.contract-paper-viewport{height:auto;max-height:45rem;padding:.5rem}}
+    #|.contract-approvals{margin:0 0 1rem;padding:.9rem 1rem;border:1px solid var(--line,#223743);border-radius:.6rem}.contract-approvals-heading h2{margin:.15rem 0}.contract-approvals-empty{margin:.4rem 0 0;color:var(--muted,#91a7ad)}.contract-approvals-list{list-style:none;margin:.6rem 0 0;padding:0;display:grid;gap:.5rem}.contract-approval-item{display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap;padding:.5rem .7rem;border:1px solid var(--line,#223743);border-radius:.5rem}.contract-approval-facts{display:flex;gap:1rem;flex-wrap:wrap;color:var(--muted,#91a7ad)}.contract-approval-facts strong{color:var(--ink,#ecf5f2)}.contract-approval-actions{display:flex;gap:.5rem}
   )
 }
 

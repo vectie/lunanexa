@@ -44,7 +44,7 @@ machine has nine states:
 | `GenerationFailed` | retry generation | `GenerationRequested` | CustomerMessenger | same digest fencing; the confirmed values are unchanged |
 | `GenerationRequested` | complete generation | `Generated` | renderer worker | a DOCX/PDF pair with valid digests, one shared render-evidence digest, matching page counts, and the declared source page count for known templates |
 | `GenerationRequested` | fail generation | `GenerationFailed` | renderer worker | a non-empty failure reason |
-| `Generated` | register execution | `Effective` | ManagerOperator | a valid evidence digest and a `YYYY-MM-DD` signing date; `registered_by` is fixed server-side to the operator authority |
+| `Generated` | register execution | `Effective` | ManagerOperator | a valid evidence digest and a `YYYY-MM-DD` signing date; `registered_by` is fixed server-side to the authenticated operator identity |
 | `Effective` | close packet | `Closed` | ManagerOperator | closure kind `Expired`, `EarlyTermination`, or `Settled`; early termination additionally requires a settlement (see cross-packet rules below) |
 | any pre-`Effective` state | supersede packet | `Superseded` | ManagerOperator | a successor reference and reason; `Effective`, `Closed`, and `Superseded` packets are contractual facts and can never be superseded |
 
@@ -66,8 +66,8 @@ Each state represents one period of the underlying paper contract:
 | `Generated` | awaiting offline signature | the DOCX/PDF pair is retained and read-only; signing and stamping happen offline |
 | `GenerationFailed` | rendering failed | the confirmed values are unchanged; the customer may retry generation |
 | `Effective` | in force | the operator registered the offline signed-and-stamped evidence; the packet is read-only and may anchor follow-up forms |
-| `Closed` | closed | terminal; the closure records its kind (`Expired`, `EarlyTermination`, or `Settled`), reason, and operator |
-| `Superseded` | replaced before effect | terminal; the supersession records the successor packet, reason, and operator |
+| `Closed` | closed | terminal; the closure records its kind (`Expired`, `EarlyTermination`, or `Settled`), reason, and closing identity (operator id or `scheduler` for the automatic expiry closure) |
+| `Superseded` | replaced before effect | terminal; the supersession records the successor packet, reason, and operator identity |
 
 The action bar in both browser surfaces renders exactly the capability list
 the lifecycle allows, so the role-by-state matrix is enforced by construction:
@@ -132,9 +132,14 @@ A scheduled reconciler scans `Effective` packets and reminds both the
 customer subject and platform operators of upcoming lease end dates
 (`lease.end_date` / `reservation.end_date`) at the 30-day, 7-day, and 1-day
 windows, with per-window deduplication. The control plane runs it every
-`LUNANEXA_CONTRACT_EXPIRY_RECONCILE_INTERVAL_MS` (default one hour). The
-reminders never close the packet: expiry itself remains an explicit operator
-closure.
+`LUNANEXA_CONTRACT_EXPIRY_RECONCILE_INTERVAL_MS` (default one hour). Once
+the end date is more than `LUNANEXA_CONTRACT_EXPIRY_GRACE_DAYS` (default 7)
+whole days in the past, the reconciler closes the packet automatically with
+kind `Expired` under the `scheduler` identity, runs the same MasterLease
+closure effects as an operator close (API credential revocation plus the
+`AccessCredentialsRevoked` notification), and notifies both the subject and
+the platform operators with `ContractExpiredClosed`. A packet that changed
+between the scan and the close is left for the next pass.
 
 ## Privacy
 
@@ -200,7 +205,16 @@ Its subject-scoped native API is:
 - `POST /v1/contract-documents/self/{packet_id}:renew` — open a renewal draft
   from an `Effective` packet owned by the subject (201).
 
-The operator side uses the same packets through an operator-token API:
+The operator side uses the same packets through an operator-token API.
+Operator identity comes from `LUNANEXA_OPERATOR_TOKENS`, a comma-separated
+list of `id=token` pairs (for example `alice=<token1>,bob=<token2>`);
+malformed entries, duplicate identities, and duplicate tokens are rejected
+at startup. When the variable is unset, the legacy `LUNANEXA_OPERATOR_TOKEN`
+authenticates as the single `operator` identity. Every operator-side
+mutation — information updates, execution registration, closure,
+supersession, renewal — records the authenticated operator id as its actor,
+and so do the audit entries those actions emit. The scheduled automatic
+expiry closure is recorded under the `scheduler` identity instead.
 
 - `GET /v1/contract-documents/operator/packets` — all packets;
 - `PUT /v1/contract-documents/operator/packets/{packet_id}:information` —
@@ -288,10 +302,6 @@ into a public image layer.
 
 The lifecycle model deliberately does not yet do the following:
 
-- no automatic expiry scheduling: a lease that runs to its end date stays
-  `Effective` until an operator closes it — `ClosureKind::Expired` is a manual
-  operator close, not a timer (expiry reminder notifications fire at the
-  30/7/1-day windows, but never close the packet);
 - no amendment flow for `Effective` packets: renewal opens a fresh draft
   linked through `preceding_packet_ref`; changing a packet in force still
   requires closing it and creating a new one (supersession is reserved for

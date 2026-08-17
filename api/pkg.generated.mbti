@@ -78,6 +78,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   operator_token : String
+  operator_tokens : Map[String, String]
   inference_token : String
   audit_token : String
   monitoring_token : String
@@ -108,12 +109,12 @@ pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadines
 pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub async fn ApiService::observability_readiness(Self, now_unix_ms? : Int64) -> @observability.ObservabilityReadiness?
 pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
-pub async fn ApiService::reconcile_expiring_contracts(Self, Int64) -> Unit
+pub async fn ApiService::reconcile_expiring_contracts(Self, Int64, Int64) -> Unit
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
 pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
-pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int) -> Unit
+pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int, Int64) -> Unit
 pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit
@@ -144,6 +145,7 @@ pub fn ApiService::with_offline_artifact_callback_tokens(Self, String, String) -
 pub fn ApiService::with_offline_commerce_capabilities(Self, Array[@offline.OfflineCommerceCapabilityEvidence], Int64) -> Self
 pub fn ApiService::with_offline_commerce_store(Self, @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore) -> Self
 pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -> Self raise
+pub fn ApiService::with_operator_tokens(Self, Array[(String, String)]) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self

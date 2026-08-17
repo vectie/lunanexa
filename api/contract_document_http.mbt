@@ -79,6 +79,30 @@ priv struct ContractSupersessionIntent {
 } derive(FromJson)
 
 ///|
+priv struct ContractApprovalDecision {
+  reason : String
+} derive(FromJson)
+
+///|
+fn closure_kind_name(kind : @contractdoc.ContractClosureKind) -> String {
+  match kind {
+    Expired => "Expired"
+    EarlyTermination => "EarlyTermination"
+    Settled => "Settled"
+  }
+}
+
+///|
+fn closure_kind_from_name(name : String) -> @contractdoc.ContractClosureKind? {
+  match name {
+    "Expired" => Some(Expired)
+    "EarlyTermination" => Some(EarlyTermination)
+    "Settled" => Some(Settled)
+    _ => None
+  }
+}
+
+///|
 fn contract_packet_id(path : String, suffix : String) -> String? {
   let prefix = "/v1/contract-documents/self/"
   if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
@@ -104,6 +128,170 @@ fn operator_contract_packet_id(path : String, suffix : String) -> String? {
   } else {
     None
   }
+}
+
+///|
+fn operator_approval_id(path : String, suffix : String) -> String? {
+  let prefix = "/v1/contract-documents/operator/approvals/"
+  if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
+    return None
+  }
+  let approval_id = path[prefix.length():path.length() - suffix.length()].to_owned()
+  if @contracts.valid_identifier(approval_id) {
+    Some(approval_id)
+  } else {
+    None
+  }
+}
+
+///|
+/// Whether the packet's `lease.total_rent` strictly exceeds the configured
+/// four-eyes threshold. An unparseable or missing amount fails safe and
+/// counts as over threshold; an unset threshold keeps the direct behavior.
+fn ApiService::contract_approval_required(
+  self : ApiService,
+  packet : @contractdoc.ContractPacket,
+) -> Bool {
+  guard self.contract_approval_threshold_minor_units is Some(threshold) else {
+    return false
+  }
+  match packet.value("lease.total_rent") {
+    Some(raw) =>
+      match @contractdoc.parse_cny_minor_units(raw) {
+        Some(amount) => amount > threshold
+        None => true
+      }
+    None => true
+  }
+}
+
+///|
+/// Records a durable pending approval instead of applying the transition and
+/// answers 202. The requesting operator is audited as the initiator and the
+/// platform operators are notified so a second pair of eyes decides.
+async fn ApiService::request_contract_approval(
+  self : ApiService,
+  store : @contractdoc_store.ContractDocumentStore,
+  packet : @contractdoc.ContractPacket,
+  initiator : String,
+  action : String,
+  expected_revision : Int64,
+  payload : @contractdoc.ContractApprovalPayload,
+) -> HttpReply {
+  let now = @async.now()
+  let approval : @contractdoc.ContractApproval = {
+    approval_id: "contract-approval-\{packet.packet_id}-\{now}",
+    packet_id: packet.packet_id,
+    action,
+    expected_revision,
+    payload,
+    initiator,
+    created_unix_ms: now,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
+  let created = try store.create_approval(approval) catch {
+    error => return contract_document_error(error)
+  } noraise {
+    value => value
+  }
+  self.operator_audit_as(
+    initiator,
+    "contract.approval.requested",
+    packet.packet_id,
+    "approval:\{created.approval_id}:action:\{action}",
+  )
+  self.notify_contract_approval_requested(created, now)
+  json_reply(202, created.to_json())
+}
+
+///|
+/// Re-runs the full original server-side path of an approved request. The
+/// recorded payload and revision fence the re-execution: a packet that moved
+/// on is rejected with the same errors the direct route would return, and the
+/// approval stays pending so it can be withdrawn. The initiator is recorded
+/// as the actor of the transition itself.
+async fn ApiService::execute_approved_contract_action(
+  self : ApiService,
+  store : @contractdoc_store.ContractDocumentStore,
+  approval : @contractdoc.ContractApproval,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractPacket raise Error {
+  if approval.action == "execute" {
+    guard approval.payload.evidence_sha256 is Some(evidence_sha256) &&
+      approval.payload.signed_on is Some(signed_on) else {
+      raise @contractdoc.ContractDocumentError::InvalidInput(
+        "contract approval payload is incomplete",
+      )
+    }
+    let evidence : @contractdoc.ContractExecution = {
+      evidence_sha256,
+      signed_on,
+      registered_by: approval.initiator,
+      registered_unix_ms: now_unix_ms,
+    }
+    return store.register_execution(
+      approval.packet_id,
+      approval.expected_revision,
+      evidence,
+      now_unix_ms,
+    )
+  }
+  guard approval.action.has_prefix("close:") &&
+    closure_kind_from_name(approval.action[6:].to_owned()) is Some(kind) &&
+    approval.payload.reason is Some(reason) else {
+    raise @contractdoc.ContractDocumentError::InvalidInput(
+      "contract approval payload is incomplete",
+    )
+  }
+  guard store.packet(approval.packet_id) is Some(packet) else {
+    raise @contractdoc.ContractDocumentError::NotFound("contract packet")
+  }
+  // The settlement gate and ledger reconciliation re-run at decision time:
+  // the ledger may have changed since the request was filed.
+  let settlement_check : SettlementLedgerCheck? = if kind == EarlyTermination {
+    self.check_settlement_against_ledger(packet, now_unix_ms)
+  } else {
+    None
+  }
+  match settlement_check {
+    Some(Mismatched(detail)) =>
+      raise @contractdoc.ContractDocumentError::SettlementMismatch(detail)
+    _ => ()
+  }
+  let updated = store.close_packet(
+    approval.packet_id,
+    approval.expected_revision,
+    kind,
+    reason,
+    approval.initiator,
+    now_unix_ms,
+  )
+  match settlement_check {
+    Some(Matched(settlement_ref~, minor_units~)) =>
+      self.operator_audit_as(
+        approval.initiator,
+        "contract.settlement.reconciled",
+        updated.packet_id,
+        "settlement:\{settlement_ref}:amount-cny:\{@contractdoc.format_cny_minor_units(minor_units)}:ledger-matched",
+      )
+    Some(LedgerUnused(settlement_ref~)) =>
+      self.operator_audit_as(
+        approval.initiator,
+        "contract.settlement.ledger-unused",
+        updated.packet_id,
+        "settlement:\{settlement_ref}:ledger-not-in-use",
+      )
+    _ => ()
+  }
+  self.apply_master_lease_closure_effects(
+    updated,
+    approval.initiator,
+    now_unix_ms,
+  )
+  updated
 }
 
 ///|
@@ -165,6 +353,20 @@ fn contract_document_error(error : Error) -> HttpReply {
       )
     @contractdoc.ContractDocumentError::SettlementMismatch(detail) =>
       api_error(409, "ContractSettlementMismatch", detail, false)
+    @contractdoc.ContractDocumentError::ContractApprovalNotFound(_) =>
+      api_error(
+        404, "ContractApprovalNotFound", "contract approval was not found", false,
+      )
+    @contractdoc.ContractDocumentError::ContractApprovalSelfDecision(_) =>
+      api_error(
+        409, "ContractApprovalSelfDecision", "a second operator must decide the approval",
+        false,
+      )
+    @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(_) =>
+      api_error(
+        409, "ContractApprovalAlreadyDecided", "contract approval was already decided",
+        false,
+      )
     _ =>
       api_error(
         400, "ContractDocumentRejected", "contract document request was rejected",
@@ -278,7 +480,7 @@ async fn ApiService::handle_contract_documents(
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   if path == "/v1/contract-documents/operator/packets" ||
     path.has_prefix("/v1/contract-documents/operator/packets/") {
-    guard bearer_authorized(headers, self.operator_token) else {
+    guard self.operator_identity(headers) is Some(operator_id) else {
       return api_error(
         401, "Unauthenticated", "operator authority is required", false,
       )
@@ -305,7 +507,7 @@ async fn ApiService::handle_contract_documents(
             request.expected_revision,
             request.changes,
             ManagerOperator,
-            "operator",
+            operator_id,
             "operator-console",
             @async.now(),
           )
@@ -338,15 +540,24 @@ async fn ApiService::handle_contract_documents(
         ) catch {
           _ => None
         }
-        guard decoded is Some(request) && store.packet(packet_id) is Some(_) else {
+        guard decoded is Some(request) &&
+          store.packet(packet_id) is Some(packet) else {
           return api_error(
             404, "ContractPacketNotFound", "contract packet was not found", false,
           )
         }
+        if self.contract_approval_required(packet) {
+          return self.request_contract_approval(store, packet, operator_id, "execute", request.expected_revision, {
+            evidence_sha256: Some(request.evidence_sha256),
+            signed_on: Some(request.signed_on),
+            kind: None,
+            reason: None,
+          })
+        }
         let evidence : @contractdoc.ContractExecution = {
           evidence_sha256: request.evidence_sha256,
           signed_on: request.signed_on,
-          registered_by: "operator",
+          registered_by: operator_id,
           registered_unix_ms: @async.now(),
         }
         let updated = try
@@ -393,13 +604,21 @@ async fn ApiService::handle_contract_documents(
             )
           _ => ()
         }
+        if self.contract_approval_required(packet) {
+          return self.request_contract_approval(store, packet, operator_id, "close:\{closure_kind_name(request.kind)}", request.expected_revision, {
+            evidence_sha256: None,
+            signed_on: None,
+            kind: Some(request.kind),
+            reason: Some(request.reason),
+          })
+        }
         let updated = try
           store.close_packet(
             packet_id,
             request.expected_revision,
             request.kind,
             request.reason,
-            "operator",
+            operator_id,
             now,
           )
         catch {
@@ -409,63 +628,27 @@ async fn ApiService::handle_contract_documents(
         }
         match settlement_check {
           Some(Matched(settlement_ref~, minor_units~)) =>
-            self.operator_audit(
+            self.operator_audit_as(
+              operator_id,
               "contract.settlement.reconciled",
               updated.packet_id,
               "settlement:\{settlement_ref}:amount-cny:\{@contractdoc.format_cny_minor_units(minor_units)}:ledger-matched",
             )
           Some(LedgerUnused(settlement_ref~)) =>
-            self.operator_audit(
+            self.operator_audit_as(
+              operator_id,
               "contract.settlement.ledger-unused",
               updated.packet_id,
               "settlement:\{settlement_ref}:ledger-not-in-use",
             )
           _ => ()
         }
-        // Closing a master lease ends the access relationship, so every
-        // still-active API credential of the subject is revoked. Superseded
-        // packets deliberately do NOT trigger revocation: the successor
-        // packet continues the relationship, so the `:supersede` branch
-        // stays untouched.
-        if updated.active_forms.contains(MasterLease) {
-          match self.access_store {
-            Some(access) => {
-              let mut revoked_count = 0
-              for
-                credential in access.views_for_subject(
-                  updated.tenant_ref,
-                  updated.subject_ref,
-                ) {
-                if credential.revoked_unix_ms is None {
-                  ignore(access.revoke(credential.key_id, now))
-                  revoked_count += 1
-                }
-              }
-              self.operator_audit(
-                "access.api-key.revoke",
-                updated.packet_id,
-                "contract-close:\{updated.packet_id}:revoked-keys:\{revoked_count}",
-              )
-              if revoked_count > 0 {
-                self.enqueue_subject_notification(
-                  updated.tenant_ref,
-                  updated.subject_ref,
-                  "AccessCredentialsRevoked",
-                  AccessCredential,
-                  Warning,
-                  updated.packet_id,
-                  "contract-packet:\{updated.packet_id}:closed",
-                  Map([
-                    ("packet_id", updated.packet_id),
-                    ("revoked_count", revoked_count.to_string()),
-                  ]),
-                  now,
-                )
-              }
-            }
-            None => ()
-          }
-        }
+        // Closing a master lease ends the access relationship; the shared
+        // closure effects revoke the subject's still-active API credentials.
+        // Superseded packets deliberately do NOT trigger revocation: the
+        // successor packet continues the relationship, so the `:supersede`
+        // branch stays untouched.
+        self.apply_master_lease_closure_effects(updated, operator_id, now)
         json_reply(200, updated.to_json())
       }
       (Post, _) if operator_contract_packet_id(path, ":supersede")
@@ -486,7 +669,7 @@ async fn ApiService::handle_contract_documents(
             request.expected_revision,
             request.successor_ref,
             request.reason,
-            "operator",
+            operator_id,
             @async.now(),
           )
         catch {
@@ -516,7 +699,7 @@ async fn ApiService::handle_contract_documents(
             source_packet_id,
             intent.packet_id,
             intent.idempotency_key,
-            "operator",
+            operator_id,
             @async.now(),
           )
         catch {
@@ -525,6 +708,111 @@ async fn ApiService::handle_contract_documents(
           value => value
         }
         json_reply(201, renewed.to_json())
+      }
+      _ => api_error(404, "NotFound", "route was not found", false)
+    }
+  }
+  if path == "/v1/contract-documents/operator/approvals" ||
+    path.has_prefix("/v1/contract-documents/operator/approvals?") ||
+    path.has_prefix("/v1/contract-documents/operator/approvals/") {
+    guard self.operator_identity(headers) is Some(operator_id) else {
+      return api_error(
+        401, "Unauthenticated", "operator authority is required", false,
+      )
+    }
+    return match (verb, path) {
+      (Get, _) if path == "/v1/contract-documents/operator/approvals" ||
+        path.has_prefix("/v1/contract-documents/operator/approvals?") => {
+        let status : @contractdoc.ContractApprovalStatus? = if
+          path.contains("status=pending") {
+          Some(Pending)
+        } else if path.contains("status=approved") {
+          Some(Approved)
+        } else if path.contains("status=rejected") {
+          Some(Rejected)
+        } else {
+          None
+        }
+        json_reply(200, store.list_approvals(status).to_json())
+      }
+      (Post, _) if operator_approval_id(path, ":approve") is Some(approval_id) => {
+        guard store.get_approval(approval_id) is Some(approval) else {
+          return api_error(
+            404, "ContractApprovalNotFound", "contract approval was not found",
+            false,
+          )
+        }
+        if approval.status != Pending {
+          return api_error(
+            409, "ContractApprovalAlreadyDecided", "contract approval was already decided",
+            false,
+          )
+        }
+        if operator_id == approval.initiator {
+          return api_error(
+            409, "ContractApprovalSelfDecision", "a second operator must approve the request",
+            false,
+          )
+        }
+        let now = @async.now()
+        // The full original path re-runs here; a failure (revision fence,
+        // state drift, settlement mismatch) leaves the approval pending so
+        // the initiator can withdraw it.
+        ignore(
+          try
+            self.execute_approved_contract_action(store, approval, now)
+          catch {
+            error => return contract_document_error(error)
+          } noraise {
+            value => value
+          },
+        )
+        let decided = try
+          store.decide_approval(approval_id, true, operator_id, None, now)
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        self.operator_audit_as(
+          operator_id,
+          "contract.approval.approved",
+          approval.packet_id,
+          "approval:\{approval.approval_id}:action:\{approval.action}",
+        )
+        json_reply(200, decided.to_json())
+      }
+      (Post, _) if operator_approval_id(path, ":reject") is Some(approval_id) => {
+        let decoded : ContractApprovalDecision? = Some(
+          @json.from_json(@json.parse(body)),
+        ) catch {
+          _ => None
+        }
+        guard decoded is Some(decision) && decision.reason.trim() != "" else {
+          return api_error(
+            400, "InvalidRequest", "a rejection reason is required", false,
+          )
+        }
+        let decided = try
+          store.decide_approval(
+            approval_id,
+            false,
+            operator_id,
+            Some(decision.reason),
+            @async.now(),
+          )
+        catch {
+          error => return contract_document_error(error)
+        } noraise {
+          value => value
+        }
+        self.operator_audit_as(
+          operator_id,
+          "contract.approval.rejected",
+          decided.packet_id,
+          "approval:\{approval_id}:action:\{decided.action}:reason:\{decision.reason}",
+        )
+        json_reply(200, decided.to_json())
       }
       _ => api_error(404, "NotFound", "route was not found", false)
     }

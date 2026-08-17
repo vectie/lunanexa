@@ -36,6 +36,46 @@ fn validate_distinct_operational_secrets(
 }
 
 ///|
+/// Parses `LUNANEXA_OPERATOR_TOKENS` (`alice=tok1,bob=tok2`) into
+/// identity/token pairs for per-operator attribution on the
+/// contract-document operator routes. Malformed entries, duplicate
+/// identities, and duplicate tokens are rejected at startup rather than
+/// silently weakening attribution; error messages never echo token bytes.
+fn parse_operator_tokens(raw : String) -> Array[(String, String)] raise {
+  let pairs : Array[(String, String)] = []
+  for entry_view in raw.split(",") {
+    let entry = entry_view.trim().to_owned()
+    guard entry != "" else {
+      raise Failure::Failure("LUNANEXA_OPERATOR_TOKENS contains an empty entry")
+    }
+    guard entry.find("=") is Some(separator) else {
+      raise Failure::Failure(
+        "LUNANEXA_OPERATOR_TOKENS entries must use the id=token form",
+      )
+    }
+    let identity = entry[:separator].trim().to_owned()
+    let token = entry[separator + 1:].trim().to_owned()
+    guard @contracts.valid_identifier(identity) else {
+      raise Failure::Failure(
+        "LUNANEXA_OPERATOR_TOKENS identity is not a valid identifier: \{identity}",
+      )
+    }
+    guard token.length() >= 32 && token.length() <= 4096 else {
+      raise Failure::Failure(
+        "LUNANEXA_OPERATOR_TOKENS token for \{identity} must contain 32 to 4096 bytes",
+      )
+    }
+    guard !pairs.any(pair => pair.0 == identity || pair.1 == token) else {
+      raise Failure::Failure(
+        "LUNANEXA_OPERATOR_TOKENS repeats an identity or token: \{identity}",
+      )
+    }
+    pairs.push((identity, token))
+  }
+  pairs
+}
+
+///|
 fn secret_references() -> Array[String] {
   @env.get_env_var("LUNANEXA_AVAILABLE_SECRET_REFS")
   .unwrap_or("")
@@ -423,6 +463,21 @@ async fn main {
   let contract_document_worker_token = @env.get_env_var(
     "LUNANEXA_CONTRACT_DOCUMENT_WORKER_TOKEN",
   )
+  // Four-eyes approval threshold for high-value execute/close transitions,
+  // as a decimal CNY yuan string (for example `50000.00`). Unset disables
+  // the approval matrix; a set but unparseable value fails startup.
+  let contract_approval_threshold = match
+    @env.get_env_var("LUNANEXA_CONTRACT_APPROVAL_THRESHOLD_CNY") {
+    Some(raw) if raw.trim() != "" =>
+      match @contractdoc.parse_cny_minor_units(raw) {
+        Some(minor_units) => Some(minor_units)
+        None =>
+          raise Failure::Failure(
+            "LUNANEXA_CONTRACT_APPROVAL_THRESHOLD_CNY must be a decimal CNY amount such as 50000.00",
+          )
+      }
+    _ => None
+  }
   let access_path = @env.get_env_var("LUNANEXA_ACCESS_PATH").unwrap_or(
     "lunanexa-access.json",
   )
@@ -770,6 +825,19 @@ async fn main {
     ),
     ("LUNANEXA_LEASE_HELPER_RECEIPT_SECRET", lease_helper_receipt_secret),
   ]
+  // Multi-operator attribution: when LUNANEXA_OPERATOR_TOKENS is set it
+  // replaces the legacy single operator token on the contract-document
+  // operator routes, and every token joins the distinct-secret validation.
+  let operator_tokens = match @env.get_env_var("LUNANEXA_OPERATOR_TOKENS") {
+    Some(raw) if raw.trim() != "" => {
+      let pairs = parse_operator_tokens(raw)
+      for pair in pairs {
+        operational_secrets.push(("LUNANEXA_OPERATOR_TOKENS:\{pair.0}", pair.1))
+      }
+      pairs
+    }
+    _ => [("operator", operator_token)]
+  }
   match @env.get_env_var("LUNANEXA_NOTIFICATION_DELIVERY_ADAPTER_TOKEN") {
     Some(secret) if secret != "" =>
       operational_secrets.push(
@@ -911,6 +979,7 @@ async fn main {
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
     .with_role_tokens(audit_token, monitoring_token)
+    .with_operator_tokens(operator_tokens)
     .with_assignment_signing_secret(assignment_signing_secret)
     .with_artifact_root(
       @env.get_env_var("LUNANEXA_MODEL_STORE_ROOT").unwrap_or("/data/models"),
@@ -949,6 +1018,11 @@ async fn main {
       configured_service.with_contract_document_worker_token(token)
     }
     _ => configured_service
+  }
+  let configured_service = match contract_approval_threshold {
+    Some(minor_units) =>
+      configured_service.with_contract_approval_threshold(minor_units)
+    None => configured_service
   }
   let configured_service = match machine_helper_readiness {
     Some(evidence) =>
@@ -1016,6 +1090,9 @@ async fn main {
             "3600000",
           ),
         ).to_int(),
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_CONTRACT_EXPIRY_GRACE_DAYS").unwrap_or("7"),
+        ),
       )
     }
     match guide_probe_worker {

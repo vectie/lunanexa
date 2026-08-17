@@ -32,6 +32,9 @@ pub struct ApiService {
   offline_commerce_store : @offline_store.OfflineCommerceStore?
   contract_document_store : @contractdoc_store.ContractDocumentStore?
   contract_document_worker_token : String
+  // Four-eyes approval threshold in CNY minor units: operator execute/close on
+  // a packet whose `lease.total_rent` exceeds it requires a second operator.
+  contract_approval_threshold_minor_units : Int64?
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   credential_handoff_store : @credential_store.CredentialHandoffStore?
@@ -55,6 +58,9 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   operator_token : String
+  // Token → operator identity map for contract-document operator routes,
+  // where every mutation is attributed to the authenticated operator.
+  operator_tokens : Map[String, String]
   inference_token : String
   audit_token : String
   monitoring_token : String
@@ -102,6 +108,7 @@ pub fn ApiService::new(
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
+    contract_approval_threshold_minor_units: None,
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -125,6 +132,7 @@ pub fn ApiService::new(
     reconciliation_only: false,
     runtime,
     operator_token,
+    operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
     monitoring_token: operator_token,
@@ -172,6 +180,7 @@ pub fn ApiService::with_registry(
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
+    contract_approval_threshold_minor_units: None,
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -195,6 +204,7 @@ pub fn ApiService::with_registry(
     reconciliation_only: false,
     runtime,
     operator_token,
+    operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
     monitoring_token: operator_token,
@@ -243,6 +253,7 @@ pub fn ApiService::with_services(
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
+    contract_approval_threshold_minor_units: None,
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -266,6 +277,7 @@ pub fn ApiService::with_services(
     reconciliation_only: false,
     runtime,
     operator_token,
+    operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
     monitoring_token: operator_token,
@@ -316,6 +328,7 @@ pub fn ApiService::with_control_plane(
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
+    contract_approval_threshold_minor_units: None,
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
@@ -339,6 +352,7 @@ pub fn ApiService::with_control_plane(
     reconciliation_only: false,
     runtime,
     operator_token,
+    operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
     monitoring_token: operator_token,
@@ -362,6 +376,26 @@ pub fn ApiService::with_control_plane(
     response_cache_order: [],
     audit_mutex: Mutex(),
     execution_slots: Semaphore(128),
+  }
+}
+
+///|
+/// Installs the token → operator-identity map used by the contract-document
+/// operator routes, replacing the legacy single-token identity on those
+/// routes only. Every other operator route keeps the legacy single-token
+/// check. An empty list leaves the legacy fallback in place.
+pub fn ApiService::with_operator_tokens(
+  self : ApiService,
+  tokens : Array[(String, String)],
+) -> ApiService {
+  if tokens.length() == 0 {
+    self
+  } else {
+    let operator_tokens : Map[String, String] = Map([])
+    for pair in tokens {
+      operator_tokens[pair.1] = pair.0
+    }
+    { ..self, operator_tokens, }
   }
 }
 
@@ -420,6 +454,17 @@ pub fn ApiService::with_contract_document_store(
   contract_document_store : @contractdoc_store.ContractDocumentStore,
 ) -> ApiService {
   { ..self, contract_document_store: Some(contract_document_store) }
+}
+
+///|
+/// Installs the four-eyes approval threshold (CNY minor units). Operator
+/// execute/close transitions on packets above it become durable approval
+/// requests that a second operator must decide.
+pub fn ApiService::with_contract_approval_threshold(
+  self : ApiService,
+  threshold_minor_units : Int64,
+) -> ApiService {
+  { ..self, contract_approval_threshold_minor_units: Some(threshold_minor_units) }
 }
 
 ///| Installs a machine-only contract renderer identity. Human portal and
@@ -1014,6 +1059,22 @@ fn header(headers : Map[String, String], name : String) -> String? {
 fn bearer_authorized(headers : Map[String, String], expected : String) -> Bool {
   expected != "" &&
   header(headers, "Authorization") == Some("Bearer \{expected}")
+}
+
+///|
+/// Resolves the authenticated operator identity from the bearer token through
+/// the token → identity map, or returns `None` when the credential is absent
+/// or unknown. Contract-document operator routes attribute every store
+/// mutation and audit entry to the resolved identity.
+fn ApiService::operator_identity(
+  self : ApiService,
+  headers : Map[String, String],
+) -> String? {
+  guard header(headers, "Authorization") is Some(value) &&
+    value.has_prefix("Bearer ") else {
+    return None
+  }
+  self.operator_tokens.get(value["Bearer ".length():].to_owned())
 }
 
 ///|
@@ -1678,9 +1739,22 @@ async fn ApiService::operator_audit(
   target : String,
   receipt : String,
 ) -> Unit {
+  self.operator_audit_as("operator", action, target, receipt)
+}
+
+///|
+/// Records an operator audit event under an explicit operator identity so
+/// multi-operator consoles keep per-operator attribution.
+async fn ApiService::operator_audit_as(
+  self : ApiService,
+  operator : String,
+  action : String,
+  target : String,
+  receipt : String,
+) -> Unit {
   self.with_audit_lock(() => {
     let event = self.next_audit(
-      "operator",
+      operator,
       action,
       target,
       "previous",

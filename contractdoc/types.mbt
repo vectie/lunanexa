@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.contract-document.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v3"
+pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v4"
 
 ///|
 pub(all) suberror ContractDocumentError {
@@ -21,6 +21,9 @@ pub(all) suberror ContractDocumentError {
   InvalidEvidence(String)
   InvalidExecutionDate(String)
   SettlementMismatch(String)
+  ContractApprovalNotFound(String)
+  ContractApprovalSelfDecision(String)
+  ContractApprovalAlreadyDecided(String)
 } derive(Debug, Eq)
 
 ///|
@@ -376,8 +379,46 @@ pub(all) struct ContractPacketEvent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) enum ContractApprovalStatus {
+  Pending
+  Approved
+  Rejected
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// The recorded intent of a pending approval. Execution registrations carry
+/// the evidence digest and signing date; closures carry the kind and reason.
+pub(all) struct ContractApprovalPayload {
+  evidence_sha256 : String?
+  signed_on : String?
+  kind : ContractClosureKind?
+  reason : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// A durable four-eyes approval for a high-value lifecycle action. The
+/// initiator requests the transition; a different operator decides it. The
+/// recorded `expected_revision` fences the decision: the transition re-runs
+/// against the packet's current state at decision time.
+pub(all) struct ContractApproval {
+  approval_id : String
+  packet_id : String
+  /// `"execute"` or `"close:<kind>"`.
+  action : String
+  expected_revision : Int64
+  payload : ContractApprovalPayload
+  initiator : String
+  created_unix_ms : Int64
+  status : ContractApprovalStatus
+  decided_by : String?
+  decided_unix_ms : Int64?
+  decision_reason : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct ContractDocumentSnapshot {
   schema_version : String
   packets : Array[ContractPacket]
   events : Array[ContractPacketEvent]
+  approvals : Array[ContractApproval]
 } derive(Debug, Eq, ToJson, FromJson)

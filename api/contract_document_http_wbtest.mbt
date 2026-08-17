@@ -671,7 +671,7 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
     @contractdoc.days_from_civil(year, month, day) * 86400000L
   }
   // 24 days remaining: only the 30-day window fires.
-  service.reconcile_expiring_contracts(day_ms(2026, 8, 1))
+  service.reconcile_expiring_contracts(day_ms(2026, 8, 1), 7L)
   assert_eq(
     notifications
     .records_for_subject("tenant-a", "subject-a", day_ms(2026, 8, 1))
@@ -680,7 +680,7 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
   )
   assert_eq(notifications.records_for_operators(day_ms(2026, 8, 1)).length(), 1)
   // A repeated pass at the same time must not duplicate the reminder.
-  service.reconcile_expiring_contracts(day_ms(2026, 8, 1))
+  service.reconcile_expiring_contracts(day_ms(2026, 8, 1), 7L)
   assert_eq(
     notifications
     .records_for_subject("tenant-a", "subject-a", day_ms(2026, 8, 1))
@@ -689,8 +689,8 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
   )
   assert_eq(notifications.records_for_operators(day_ms(2026, 8, 1)).length(), 1)
   // 5 days remaining: the 7-day window fires once.
-  service.reconcile_expiring_contracts(day_ms(2026, 8, 20))
-  service.reconcile_expiring_contracts(day_ms(2026, 8, 20))
+  service.reconcile_expiring_contracts(day_ms(2026, 8, 20), 7L)
+  service.reconcile_expiring_contracts(day_ms(2026, 8, 20), 7L)
   assert_eq(
     notifications
     .records_for_subject("tenant-a", "subject-a", day_ms(2026, 8, 20))
@@ -702,8 +702,8 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
     2,
   )
   // 1 day remaining: the critical 1-day window fires once.
-  service.reconcile_expiring_contracts(day_ms(2026, 8, 24))
-  service.reconcile_expiring_contracts(day_ms(2026, 8, 24))
+  service.reconcile_expiring_contracts(day_ms(2026, 8, 24), 7L)
+  service.reconcile_expiring_contracts(day_ms(2026, 8, 24), 7L)
   let subject_notices = notifications.records_for_subject(
     "tenant-a",
     "subject-a",
@@ -849,4 +849,400 @@ async test "contract renewal creates a linked draft for the owner and the operat
     "{\"packet_id\":\"packet-renewal-3\",\"idempotency_key\":\"packet-renewal-3-key\"}",
   )
   assert_eq(denied.status, 401)
+}
+
+///|
+async test "operator tokens attribute contract actions to the authenticated operator" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contract-operators-")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  let access = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "issuer-secret-with-more-than-32-bytes!",
+  )
+  let now = @async.now()
+  ignore(
+    access.issue(
+      {
+        key_id: "key-a1",
+        tenant_ref: "tenant-a",
+        subject_ref: "subject-a",
+        display_name: "Key key-a1",
+        scopes: [Inference],
+        allowed_models: [],
+        expires_unix_ms: now + 86400000L,
+        maximum_requests: 1000L,
+      },
+      now,
+    ),
+  )
+  let documents = @contractdoc_store.ContractDocumentStore::open(
+    "\{directory}/contracts.json",
+  )
+  let notifications = @notification_store.NotificationStore::open(
+    "\{directory}/notifications.json",
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "legacy-operator-token-0000000000000000", "inference-token",
+      "node-token", "0.1.0",
+    )
+    .with_operator_tokens([
+      ("alice", "alice-operator-token-0000000000000000"),
+      ("bob", "bob-operator-token-000000000000000000"),
+    ])
+    .with_access_store(access)
+    .with_contract_document_store(documents)
+    .with_notification_store(notifications)
+  let alice_headers = {
+    "Authorization": "Bearer alice-operator-token-0000000000000000",
+  }
+  let bob_headers = {
+    "Authorization": "Bearer bob-operator-token-000000000000000000",
+  }
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  fn draft_packet(packet_id : String) -> @contractdoc.ContractPacket raise {
+    @contractdoc.new_packet(
+      manifest,
+      packet_id,
+      "\{packet_id}-key",
+      "tenant-a",
+      "org-a",
+      "subject-a",
+      "order-api-1",
+      None,
+      [MasterLease],
+      1000L,
+    )
+  }
+  ignore(documents.create_packet(draft_packet("packet-info"), "subject-a"))
+  let generated = {
+    ..draft_packet("packet-sign"),
+    state: Generated,
+    revision: 5L,
+  }
+  ignore(documents.create_packet(generated, "subject-a"))
+  let effective = { ..draft_packet("packet-close"), state: Effective }
+  ignore(documents.create_packet(effective, "subject-a"))
+  let renewable = { ..draft_packet("packet-renew-src"), state: Effective }
+  ignore(documents.create_packet(renewable, "subject-a"))
+  let superseding = {
+    ..draft_packet("packet-supersede"),
+    state: InformationDraft,
+  }
+  ignore(documents.create_packet(superseding, "subject-a"))
+  let successor = { ..draft_packet("packet-successor"), revision: 1L }
+  ignore(documents.create_packet(successor, "subject-a"))
+  // An unknown token is rejected, and the legacy single token no longer
+  // authenticates once the multi-operator map is installed.
+  let unknown = service.handle(
+    Get,
+    "/v1/contract-documents/operator/packets",
+    { "Authorization": "Bearer nope" },
+    "",
+  )
+  assert_eq(unknown.status, 401)
+  let legacy = service.handle(
+    Get,
+    "/v1/contract-documents/operator/packets",
+    { "Authorization": "Bearer legacy-operator-token-0000000000000000" },
+    "",
+  )
+  assert_eq(legacy.status, 401)
+  // Alice edits operator-owned information.
+  let informed = service.handle(
+    Put,
+    "/v1/contract-documents/operator/packets/packet-info:information",
+    alice_headers,
+    "{\"expected_revision\":\"1\",\"changes\":[{\"field_id\":\"lessor.name\",\"value\":\"青年政策运营方\"}]}",
+  )
+  assert_eq(informed.status, 200)
+  // Alice registers execution evidence.
+  let executed = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-sign:execute",
+    alice_headers,
+    "{\"expected_revision\":\"5\",\"evidence_sha256\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"signed_on\":\"2026-08-14\"}",
+  )
+  assert_eq(executed.status, 200)
+  assert_eq(
+    documents.packet("packet-sign").unwrap().execution.unwrap().registered_by,
+    "alice",
+  )
+  // Bob closes the effective master lease; the closure and the revocation
+  // audit both carry his identity.
+  let closed = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-close:close",
+    bob_headers,
+    "{\"expected_revision\":\"1\",\"kind\":\"Expired\",\"reason\":\"lease term ended\"}",
+  )
+  assert_eq(closed.status, 200)
+  let closure = documents.packet("packet-close").unwrap().closure.unwrap()
+  assert_eq(closure.closed_by, "bob")
+  assert_eq(closure.kind, Expired)
+  let audits = durable.audit_events()
+  assert_eq(audits.length(), 1)
+  assert_eq(audits[0].actor, "bob")
+  assert_eq(audits[0].action, "access.api-key.revoke")
+  // Bob supersedes a draft.
+  let superseded = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-supersede:supersede",
+    bob_headers,
+    "{\"expected_revision\":\"1\",\"successor_ref\":\"packet-successor\",\"reason\":\"reissued\"}",
+  )
+  assert_eq(superseded.status, 200)
+  assert_eq(
+    documents.packet("packet-supersede").unwrap().supersession.unwrap().superseded_by,
+    "bob",
+  )
+  // Alice opens a renewal draft; the creation event names her.
+  let renewed = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-renew-src:renew",
+    alice_headers,
+    "{\"packet_id\":\"packet-renewal\",\"idempotency_key\":\"packet-renewal-key\"}",
+  )
+  assert_eq(renewed.status, 201)
+  let renewal_events = documents.snapshot().events
+    .iter()
+    .filter(event => event.packet_id == "packet-renewal")
+    .collect()
+  assert_eq(renewal_events.length(), 1)
+  assert_eq(renewal_events[0].actor_ref, "alice")
+  // The information event is attributed to alice as well.
+  let information_events = documents.snapshot().events
+    .iter()
+    .filter(event => event.packet_id == "packet-info")
+    .collect()
+  assert_eq(information_events.length(), 2)
+  assert_eq(information_events[1].actor_ref, "alice")
+}
+
+///|
+async test "legacy single operator token still authenticates as operator" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contract-operator-legacy-")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  let documents = @contractdoc_store.ContractDocumentStore::open(
+    "\{directory}/contracts.json",
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+    durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+  ).with_contract_document_store(documents)
+  let master = {
+    ..@contractdoc.new_packet(
+      @contractdoc.youthpolicy_remote_lease_manifest(),
+      "packet-master",
+      "packet-master-key",
+      "tenant-a",
+      "org-a",
+      "subject-a",
+      "order-api-1",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+  }
+  ignore(documents.create_packet(master, "operator"))
+  let closed = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-master:close",
+    { "Authorization": "Bearer operator-token" },
+    "{\"expected_revision\":\"1\",\"kind\":\"Expired\",\"reason\":\"lease term ended\"}",
+  )
+  assert_eq(closed.status, 200)
+  assert_eq(
+    documents.packet("packet-master").unwrap().closure.unwrap().closed_by,
+    "operator",
+  )
+}
+
+///|
+async test "contract expiry reconciler auto-closes past the grace period once" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contract-autoclose-")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  let access = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "issuer-secret-with-more-than-32-bytes!",
+  )
+  let now = @async.now()
+  for key_id in ["key-a1", "key-a2"] {
+    ignore(
+      access.issue(
+        {
+          key_id,
+          tenant_ref: "tenant-a",
+          subject_ref: "subject-a",
+          display_name: "Key \{key_id}",
+          scopes: [Inference],
+          allowed_models: [],
+          expires_unix_ms: now + 86400000L,
+          maximum_requests: 1000L,
+        },
+        now,
+      ),
+    )
+  }
+  ignore(
+    access.issue(
+      {
+        key_id: "key-b1",
+        tenant_ref: "tenant-b",
+        subject_ref: "subject-b",
+        display_name: "Key key-b1",
+        scopes: [Inference],
+        allowed_models: [],
+        expires_unix_ms: now + 86400000L,
+        maximum_requests: 1000L,
+      },
+      now,
+    ),
+  )
+  let documents = @contractdoc_store.ContractDocumentStore::open(
+    "\{directory}/contracts.json",
+  )
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  // Eleven days past its end date at scan time: beyond the 7-day grace.
+  let expired = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-expired",
+      "packet-expired-key",
+      "tenant-a",
+      "org-a",
+      "subject-a",
+      "order-api-1",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+    values: [{ field_id: "lease.end_date", value: "2026-08-01" }],
+  }
+  ignore(documents.create_packet(expired, "operator"))
+  // Two days past its end date: still inside the grace period.
+  let within_grace = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-grace",
+      "packet-grace-key",
+      "tenant-b",
+      "org-b",
+      "subject-b",
+      "order-api-2",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+    values: [{ field_id: "lease.end_date", value: "2026-08-10" }],
+  }
+  ignore(documents.create_packet(within_grace, "operator"))
+  let notifications = @notification_store.NotificationStore::open(
+    "\{directory}/notifications.json",
+  )
+  let service = ApiService::new(
+      durable,
+      @runtimes.OpenAiTextRuntime::new(
+        "http://127.0.0.1:1/v1/responses",
+        "runtime-secret",
+        "runtime-v1",
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        allow_http_loopback=true,
+      ),
+      "operator-token",
+      "inference-token",
+      "node-token",
+      "0.1.0",
+    )
+    .with_access_store(access)
+    .with_contract_document_store(documents)
+    .with_notification_store(notifications)
+  fn day_ms(year : Int, month : Int, day : Int) -> Int64 {
+    @contractdoc.days_from_civil(year, month, day) * 86400000L
+  }
+  let scan_now = day_ms(2026, 8, 12)
+  service.reconcile_expiring_contracts(scan_now, 7L)
+  // The expired packet closed automatically under the scheduler identity.
+  let closed = documents.packet("packet-expired").unwrap()
+  assert_eq(closed.state, Closed)
+  let closure = closed.closure.unwrap()
+  assert_eq(closure.kind, Expired)
+  assert_eq(closure.closed_by, "scheduler")
+  assert_true(closure.reason.contains("2026-08-01"))
+  let closed_revision = closed.revision
+  // Its subject's credentials were revoked through the shared closure effects.
+  assert_true(
+    access
+    .views_for_subject("tenant-a", "subject-a")
+    .all(credential => credential.revoked_unix_ms is Some(_)),
+  )
+  // Both the subject and the operators were notified of the automatic close.
+  let subject_notices = notifications.records_for_subject(
+    "tenant-a", "subject-a", scan_now,
+  )
+  assert_true(
+    subject_notices
+    .iter()
+    .any(record => record.event.code == "ContractExpiredClosed"),
+  )
+  assert_true(
+    subject_notices
+    .iter()
+    .any(record => record.event.code == "AccessCredentialsRevoked"),
+  )
+  let operator_notices = notifications.records_for_operators(scan_now)
+  assert_eq(operator_notices.length(), 1)
+  assert_eq(operator_notices[0].event.code, "ContractExpiredClosed")
+  assert_eq(operator_notices[0].event.severity, Critical)
+  assert_eq(
+    operator_notices[0].event.parameters.get("end_date"),
+    Some("2026-08-01"),
+  )
+  // The packet still inside its grace period is untouched.
+  let grace = documents.packet("packet-grace").unwrap()
+  assert_eq(grace.state, Effective)
+  assert_true(grace.closure is None)
+  assert_true(
+    access
+    .views_for_subject("tenant-b", "subject-b")
+    .all(credential => credential.revoked_unix_ms is None),
+  )
+  assert_eq(
+    notifications
+    .records_for_subject("tenant-b", "subject-b", scan_now)
+    .length(),
+    0,
+  )
+  // A second pass neither re-closes nor re-notifies.
+  service.reconcile_expiring_contracts(scan_now, 7L)
+  assert_eq(
+    documents.packet("packet-expired").unwrap().revision,
+    closed_revision,
+  )
+  assert_eq(
+    notifications
+    .records_for_subject("tenant-a", "subject-a", scan_now)
+    .length(),
+    subject_notices.length(),
+  )
+  assert_eq(notifications.records_for_operators(scan_now).length(), 1)
+  assert_eq(documents.packet("packet-grace").unwrap().state, Effective)
 }

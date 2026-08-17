@@ -798,6 +798,25 @@ async fn load_console(
       request("GET", endpoint, "/v1/contract-documents/operator/packets", token),
     ),
   )
+  // The approval matrix is optional controller configuration; a controller
+  // without it still answers the listing route, but tolerate a failure so an
+  // older controller does not break the console load.
+  let contract_approvals : Array[@contractdoc.ContractApproval] = try
+    @json.from_json(
+      @json.parse(
+        request(
+          "GET",
+          endpoint,
+          "/v1/contract-documents/operator/approvals?status=pending",
+          token,
+        ),
+      ),
+    )
+  catch {
+    _ => []
+  } noraise {
+    value => value
+  }
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -1256,6 +1275,7 @@ async fn load_console(
       ..@contract_documents.default_state(locale, actor_owner=ManagerOperator),
       manifest: Some(contract_manifest),
       packets: contract_packets,
+      approvals: contract_approvals,
       selected_packet_id: contract_packets
       .get(0)
       .map(packet => packet.packet_id),
@@ -1291,6 +1311,8 @@ priv enum LoadOutcome {
   ActionFailed(@i18n.Locale, String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
   ContractLifecycleComplete(@i18n.Locale, @contractdoc.ContractPacket, String)
+  ContractApprovalRequested(@i18n.Locale)
+  ContractApprovalDecided(@i18n.Locale, String)
   ContractActionFailed(@i18n.Locale, String)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
@@ -1582,18 +1604,25 @@ fn operator_contract_lifecycle_command(
         model.credential,
         body=request_spec.body,
       )
-      let updated : @contractdoc.ContractPacket = @json.from_json(
-        @json.parse(response),
-      )
-      ContractLifecycleComplete(
-        model.console.locale,
-        updated,
-        console_copy(
-          model.console.locale,
-          request_spec.english_success,
-          request_spec.chinese_success,
-        ),
-      )
+      // An over-threshold execute/close is answered 202 with the approval
+      // record instead of the transitioned packet.
+      let document = @json.parse(response)
+      match document {
+        Object(fields) if fields.contains("approval_id") =>
+          ContractApprovalRequested(model.console.locale)
+        _ => {
+          let updated : @contractdoc.ContractPacket = @json.from_json(document)
+          ContractLifecycleComplete(
+            model.console.locale,
+            updated,
+            console_copy(
+              model.console.locale,
+              request_spec.english_success,
+              request_spec.chinese_success,
+            ),
+          )
+        }
+      }
     } catch {
       _ =>
         ContractActionFailed(
@@ -1602,6 +1631,59 @@ fn operator_contract_lifecycle_command(
             model.console.locale,
             "Contract lifecycle action failed.",
             "合同生命周期操作失败。",
+          ),
+        )
+    } noraise {
+      value => value
+    }
+  })
+}
+
+///|
+fn operator_contract_approval_command(
+  model : AppModel,
+  approval_id : String,
+  approve : Bool,
+  reason : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let (path, body) = if approve {
+        ("/v1/contract-documents/operator/approvals/\{approval_id}:approve", "")
+      } else {
+        (
+          "/v1/contract-documents/operator/approvals/\{approval_id}:reject",
+          ({ "reason": reason } : Json).stringify(),
+        )
+      }
+      ignore(
+        request("POST", model.endpoint, path, model.credential, body~),
+      )
+      ContractApprovalDecided(
+        model.console.locale,
+        console_copy(
+          model.console.locale,
+          if approve {
+            "Approval granted; the transition was applied."
+          } else {
+            "Approval request rejected."
+          },
+          if approve {
+            "已批准；过渡操作已执行。"
+          } else {
+            "审批请求已拒绝。"
+          },
+        ),
+      )
+    } catch {
+      _ =>
+        ContractActionFailed(
+          model.console.locale,
+          console_copy(
+            model.console.locale,
+            "Contract approval decision failed.",
+            "合同审批决定失败。",
           ),
         )
     } noraise {
@@ -2136,6 +2218,54 @@ fn update_live(
           },
         },
         @rabbita.none,
+      )
+    Outcome(ContractApprovalRequested(dispatched_locale)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              loading: false,
+              error_message: None,
+              success_message: Some(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  "Approval requested, pending a second operator.",
+                  "approval requested, pending a second operator",
+                  "已提交审批，等待第二位运营商审批。",
+                ),
+              ),
+            },
+          },
+        },
+        load_command(model, emit),
+      )
+    Outcome(ContractApprovalDecided(dispatched_locale, message)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              loading: false,
+              error_message: None,
+              success_message: Some(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  message,
+                  "Contract approval decision recorded.",
+                  "合同审批决定已记录。",
+                ),
+              ),
+            },
+          },
+        },
+        load_command(model, emit),
       )
     Outcome(ContractActionFailed(dispatched_locale, message)) =>
       (

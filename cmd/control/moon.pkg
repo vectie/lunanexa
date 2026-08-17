@@ -5,6 +5,8 @@ import {
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/commercial/offline/store" @offline_store,
   "vectie/lunanexa/contractdoc/store" @contractdoc_store,
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/api",
   "vectie/lunanexa/database",
   "vectie/lunanexa/deployment/store" @deployment_store,

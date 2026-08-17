@@ -722,3 +722,129 @@ async test "generation failure and execution registration append audit events" {
   assert_eq(reopened.packet("packet-worker"), Some(effective))
   @fs.remove(path)
 }
+
+///|
+///|
+/// Frozen v3 fixture: the packet shape is unchanged in v4; only the approval
+/// records are added. Production code never writes this shape.
+priv struct LegacySnapshotV3Fixture {
+  schema_version : String
+  packets : Array[@contractdoc.ContractPacket]
+  events : Array[@contractdoc.ContractPacketEvent]
+} derive(ToJson)
+
+///|
+async test "v3 contract snapshots load with empty approval records" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-v3-migration-")
+  let path = "\{directory}/legacy-snapshot.json"
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let packet = @contractdoc.new_packet(
+    manifest, "packet-v3", "packet-v3-key", "tenant-1", "org-1", "subject-1", "order-1",
+    None, [MasterLease], 1000L,
+  )
+  let fixture : LegacySnapshotV3Fixture = {
+    schema_version: "lunanexa.contract-document.snapshot.v3",
+    packets: [packet],
+    events: [],
+  }
+  @fs.write_file(
+    path,
+    ToJson::to_json(fixture).stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  let store = ContractDocumentStore::open(path)
+  assert_eq(store.packet("packet-v3"), Some(packet))
+  assert_eq(store.list_approvals(None), [])
+  assert_eq(
+    store.snapshot().schema_version,
+    @contractdoc.snapshot_schema_version,
+  )
+  @fs.remove(path)
+}
+
+///|
+async test "contract approvals persist, decide once, and survive a reload" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-approvals-")
+  let path = "\{directory}/approvals.json"
+  let store = ContractDocumentStore::open(path)
+  let pending : @contractdoc.ContractApproval = {
+    approval_id: "approval-1",
+    packet_id: "packet-1",
+    action: "execute",
+    expected_revision: 5L,
+    payload: {
+      evidence_sha256: Some(
+        "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      ),
+      signed_on: Some("2026-08-14"),
+      kind: None,
+      reason: None,
+    },
+    initiator: "alice",
+    created_unix_ms: 1000L,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
+  ignore(store.create_approval(pending))
+  assert_eq(store.get_approval("approval-1"), Some(pending))
+  assert_eq(store.get_approval("approval-missing"), None)
+  assert_eq(store.list_approvals(Some(Pending)), [pending])
+  assert_eq(store.list_approvals(Some(Approved)), [])
+  // The initiator can never approve their own request.
+  try store.decide_approval("approval-1", true, "alice", None, 2000L) catch {
+    @contractdoc.ContractDocumentError::ContractApprovalSelfDecision(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("the initiator must not approve their own request")
+  }
+  // A different operator approves; the decision is recorded once.
+  let decided = store.decide_approval("approval-1", true, "bob", None, 2000L)
+  assert_eq(decided.status, Approved)
+  assert_eq(decided.decided_by, Some("bob"))
+  assert_eq(decided.decided_unix_ms, Some(2000L))
+  try store.decide_approval("approval-1", false, "carol", Some("late"), 3000L) catch {
+    @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a decided approval must not be decided again")
+  }
+  try store.decide_approval("approval-missing", true, "bob", None, 2000L) catch {
+    @contractdoc.ContractDocumentError::ContractApprovalNotFound(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an unknown approval must be rejected")
+  }
+  // The initiator may withdraw (reject) their own pending request.
+  ignore(
+    store.create_approval({
+      ..pending,
+      approval_id: "approval-2",
+      action: "close:EarlyTermination",
+      payload: {
+        evidence_sha256: None,
+        signed_on: None,
+        kind: Some(EarlyTermination),
+        reason: Some("tenant vacated"),
+      },
+    }),
+  )
+  let withdrawn = store.decide_approval(
+    "approval-2",
+    false,
+    "alice",
+    Some("withdrawn by initiator"),
+    4000L,
+  )
+  assert_eq(withdrawn.status, Rejected)
+  assert_eq(withdrawn.decision_reason, Some("withdrawn by initiator"))
+  // Approvals survive a store reload through the snapshot.
+  let reopened = ContractDocumentStore::open(path)
+  assert_eq(reopened.get_approval("approval-1"), Some(decided))
+  assert_eq(reopened.get_approval("approval-2"), Some(withdrawn))
+  assert_eq(reopened.list_approvals(Some(Pending)), [])
+  assert_eq(reopened.list_approvals(None).length(), 2)
+  @fs.remove(path)
+}

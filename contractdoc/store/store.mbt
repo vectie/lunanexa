@@ -72,11 +72,22 @@ struct LegacyContractDocumentSnapshotV2 {
 } derive(FromJson)
 
 ///|
+/// The v3 snapshot shape is retained only for deterministic on-open migration
+/// to v4. Its packets already use the current shape; v4 adds the durable
+/// four-eyes approval records, which default to empty when migrating forward.
+struct LegacyContractDocumentSnapshotV3 {
+  schema_version : String
+  packets : Array[@contractdoc.ContractPacket]
+  events : Array[@contractdoc.ContractPacketEvent]
+} derive(FromJson)
+
+///|
 pub struct ContractDocumentStore {
   persistence : ContractPersistence
   mut packets : Map[String, @contractdoc.ContractPacket]
   mut idempotency_keys : Map[String, String]
   mut events : Array[@contractdoc.ContractPacketEvent]
+  mut approvals : Map[String, @contractdoc.ContractApproval]
   mutex : @async.Mutex
 }
 
@@ -89,6 +100,7 @@ fn ContractDocumentStore::empty(
     packets: Map([]),
     idempotency_keys: Map([]),
     events: [],
+    approvals: Map([]),
     mutex: Mutex(),
   }
 }
@@ -103,6 +115,15 @@ fn sorted_packets(
 }
 
 ///|
+fn sorted_approvals(
+  approvals : Map[String, @contractdoc.ContractApproval],
+) -> Array[@contractdoc.ContractApproval] {
+  let pairs = approvals.to_array()
+  pairs.sort_by((left, right) => left.0.compare(right.0))
+  pairs.map(pair => pair.1)
+}
+
+///|
 fn ContractDocumentStore::snapshot_unlocked(
   self : ContractDocumentStore,
 ) -> @contractdoc.ContractDocumentSnapshot {
@@ -110,6 +131,7 @@ fn ContractDocumentStore::snapshot_unlocked(
     schema_version: @contractdoc.snapshot_schema_version,
     packets: sorted_packets(self.packets),
     events: self.events.copy(),
+    approvals: sorted_approvals(self.approvals),
   }
 }
 
@@ -153,6 +175,32 @@ fn decode_snapshot(
 fn migrate_legacy_snapshot(
   document : Json,
 ) -> @contractdoc.ContractDocumentSnapshot raise @contractdoc.ContractDocumentError {
+  let legacy : LegacyContractDocumentSnapshotV3? = Some(
+    @json.from_json(document),
+  ) catch {
+    _ => None
+  }
+  match legacy {
+    Some(snapshot) =>
+      if snapshot.schema_version == "lunanexa.contract-document.snapshot.v3" {
+        // v3 packets already use the current shape; v4 adds the durable
+        // four-eyes approvals, which start empty.
+        return {
+          schema_version: @contractdoc.snapshot_schema_version,
+          packets: snapshot.packets,
+          events: snapshot.events,
+          approvals: [],
+        }
+      }
+    None => ()
+  }
+  migrate_legacy_v2_snapshot(document)
+}
+
+///|
+fn migrate_legacy_v2_snapshot(
+  document : Json,
+) -> @contractdoc.ContractDocumentSnapshot raise @contractdoc.ContractDocumentError {
   let legacy : LegacyContractDocumentSnapshotV2 = @json.from_json(document) catch {
     _ => return migrate_legacy_v1_snapshot(document)
   }
@@ -190,6 +238,7 @@ fn migrate_legacy_snapshot(
     schema_version: @contractdoc.snapshot_schema_version,
     packets,
     events: legacy.events,
+    approvals: [],
   }
 }
 
@@ -253,6 +302,7 @@ fn migrate_legacy_v1_snapshot(
     schema_version: @contractdoc.snapshot_schema_version,
     packets,
     events: legacy.events,
+    approvals: [],
   }
 }
 
@@ -277,6 +327,12 @@ fn ContractDocumentStore::restore(
     }
     last_revision[event.packet_id] = event.revision
     self.events.push(event)
+  }
+  for approval in snapshot.approvals {
+    if self.approvals.contains(approval.approval_id) {
+      raise InvalidInput("duplicate contract approval")
+    }
+    self.approvals[approval.approval_id] = approval
   }
 }
 
@@ -903,6 +959,125 @@ pub async fn ContractDocumentStore::supersede_packet(
     error => {
       self.packets = before_packets
       self.events = before_events
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Persists a new pending four-eyes approval. Approval records are durable:
+/// they ride inside the contract-document snapshot so a pending request
+/// survives a controller restart.
+pub async fn ContractDocumentStore::create_approval(
+  self : ContractDocumentStore,
+  approval : @contractdoc.ContractApproval,
+) -> @contractdoc.ContractApproval {
+  self.mutex.acquire()
+  let before_approvals = self.approvals.copy()
+  try {
+    if self.approvals.contains(approval.approval_id) {
+      raise @contractdoc.ContractDocumentError::AlreadyExists(
+        approval.approval_id,
+      )
+    }
+    self.approvals[approval.approval_id] = approval
+    self.persist()
+    self.mutex.release()
+    approval
+  } catch {
+    error => {
+      self.approvals = before_approvals
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+pub async fn ContractDocumentStore::get_approval(
+  self : ContractDocumentStore,
+  approval_id : String,
+) -> @contractdoc.ContractApproval? {
+  self.mutex.acquire()
+  let value = self.approvals.get(approval_id)
+  self.mutex.release()
+  value
+}
+
+///|
+/// Lists approvals oldest first; a `Some` status narrows the listing.
+pub async fn ContractDocumentStore::list_approvals(
+  self : ContractDocumentStore,
+  status : @contractdoc.ContractApprovalStatus?,
+) -> Array[@contractdoc.ContractApproval] {
+  self.mutex.acquire()
+  let value = sorted_approvals(self.approvals).filter(approval => {
+    match status {
+      Some(expected) => approval.status == expected
+      None => true
+    }
+  })
+  value.sort_by((left, right) => {
+    let by_created = left.created_unix_ms.compare(right.created_unix_ms)
+    if by_created == 0 {
+      left.approval_id.compare(right.approval_id)
+    } else {
+      by_created
+    }
+  })
+  self.mutex.release()
+  value
+}
+
+///|
+/// Records an approval decision. Only a pending record may be decided, and an
+/// approval (as opposed to a rejection or withdrawal) must come from a
+/// different operator than the initiator — that is the four-eyes rule.
+pub async fn ContractDocumentStore::decide_approval(
+  self : ContractDocumentStore,
+  approval_id : String,
+  approve : Bool,
+  decided_by : String,
+  reason : String?,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractApproval {
+  self.mutex.acquire()
+  let before_approvals = self.approvals.copy()
+  try {
+    guard self.approvals.get(approval_id) is Some(approval) else {
+      raise @contractdoc.ContractDocumentError::ContractApprovalNotFound(
+        approval_id,
+      )
+    }
+    if approval.status != Pending {
+      raise @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(
+        approval_id,
+      )
+    }
+    if approve && decided_by == approval.initiator {
+      raise @contractdoc.ContractDocumentError::ContractApprovalSelfDecision(
+        approval_id,
+      )
+    }
+    let decided : @contractdoc.ContractApproval = {
+      ..approval,
+      status: if approve {
+        Approved
+      } else {
+        Rejected
+      },
+      decided_by: Some(decided_by),
+      decided_unix_ms: Some(now_unix_ms),
+      decision_reason: reason,
+    }
+    self.approvals[approval_id] = decided
+    self.persist()
+    self.mutex.release()
+    decided
+  } catch {
+    error => {
+      self.approvals = before_approvals
       self.mutex.release()
       raise error
     }
