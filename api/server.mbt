@@ -380,10 +380,10 @@ pub fn ApiService::with_control_plane(
 }
 
 ///|
-/// Installs the token → operator-identity map used by the contract-document
-/// operator routes, replacing the legacy single-token identity on those
-/// routes only. Every other operator route keeps the legacy single-token
-/// check. An empty list leaves the legacy fallback in place.
+/// Installs the token → operator-identity map used by every operator route,
+/// replacing the legacy single-token check when the map is non-empty. The
+/// default constructor seeds the map from the legacy token, so an empty list
+/// leaves existing deployments compatible.
 pub fn ApiService::with_operator_tokens(
   self : ApiService,
   tokens : Array[(String, String)],
@@ -464,7 +464,10 @@ pub fn ApiService::with_contract_approval_threshold(
   self : ApiService,
   threshold_minor_units : Int64,
 ) -> ApiService {
-  { ..self, contract_approval_threshold_minor_units: Some(threshold_minor_units) }
+  {
+    ..self,
+    contract_approval_threshold_minor_units: Some(threshold_minor_units),
+  }
 }
 
 ///| Installs a machine-only contract renderer identity. Human portal and
@@ -1075,6 +1078,17 @@ fn ApiService::operator_identity(
     return None
   }
   self.operator_tokens.get(value["Bearer ".length():].to_owned())
+}
+
+///|
+/// All operator authorities use the same token-to-identity map. The default
+/// constructor seeds the legacy token as `operator`, so existing deployments
+/// remain compatible while multi-operator deployments gain one boundary.
+fn ApiService::operator_authorized(
+  self : ApiService,
+  headers : Map[String, String],
+) -> Bool {
+  self.operator_identity(headers) is Some(_)
 }
 
 ///|
@@ -2507,6 +2521,9 @@ async fn ApiService::dispatch_with_transport(
       verb, path, headers, body, allow_asserted_subject,
     )
   }
+  if contract_governance_path(path) {
+    return self.handle_contract_governance(verb, path, headers, body)
+  }
   if commercial_management_path(path) {
     return self.handle_commercial_management(verb, path, headers, body)
   }
@@ -2535,7 +2552,7 @@ async fn ApiService::dispatch_with_transport(
         },
       })
     (Get, "/v1/readiness") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2544,7 +2561,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(if readiness.ready { 200 } else { 503 }, readiness.to_json())
     }
     (Get, "/v1/settings/effective") => {
-      if !bearer_authorized(headers, self.operator_token) &&
+      if !self.operator_authorized(headers) &&
         !bearer_authorized(headers, self.inference_token) &&
         self.api_key_authorization(headers, Inference, false) is None {
         return api_error(
@@ -2558,7 +2575,7 @@ async fn ApiService::dispatch_with_transport(
       )
     }
     (Get, "/v1/settings/admin") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2726,7 +2743,7 @@ async fn ApiService::dispatch_with_transport(
       })
     }
     (Get, "/v1/workspace") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2779,7 +2796,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, view.to_json())
     }
     (Post, "/v1/workspace/users") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2826,7 +2843,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Post, _) if path.has_prefix("/v1/workspace/users/") &&
       path.has_suffix(":activate") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2842,7 +2859,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Post, _) if path.has_prefix("/v1/workspace/users/") &&
       path.has_suffix(":suspend") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2858,7 +2875,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Post, _) if path.has_prefix("/v1/workspace/users/") &&
       path.has_suffix(":revoke") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2873,7 +2890,7 @@ async fn ApiService::dispatch_with_transport(
       )
     }
     (Post, "/v1/workspace/access-grants") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2907,7 +2924,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(201, persisted.to_json())
     }
     (Post, "/v1/workspace/leases") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2940,7 +2957,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Post, _) if path.has_prefix("/v1/workspace/access-grants/") &&
       path.has_suffix(":revoke") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2980,7 +2997,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Post, _) if path.has_prefix("/v1/workspace/leases/") &&
       path.has_suffix(":activate") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -2992,7 +3009,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Post, _) if path.has_prefix("/v1/workspace/leases/") &&
       path.has_suffix(":end") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3025,7 +3042,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, { "lease": persisted, "receipt": receipt })
     }
     (Get, "/v1/scheduler") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3038,7 +3055,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, scheduler.snapshot().to_json())
     }
     (Get, "/v1/recovery/plan") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3072,7 +3089,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, { ..plan, actions, }.to_json())
     }
     (Put, "/v1/quotas") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3098,7 +3115,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Post, "/v1/capacity:forecast") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3147,7 +3164,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true })
     }
     (Get, "/v1/telemetry") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3160,7 +3177,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, telemetry.snapshot().to_json())
     }
     (Post, "/v1/benchmarks") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3191,7 +3208,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(201, summary.to_json())
     }
     (Get, "/v1/nodes") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3199,7 +3216,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, self.store.heartbeats().to_json())
     }
     (Post, "/v1/enrollment/tokens") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3373,7 +3390,7 @@ async fn ApiService::dispatch_with_transport(
       self.observe_node_lease_action(node_id, headers, body)
     }
     (Put, "/v1/nodes/directive") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3465,7 +3482,7 @@ async fn ApiService::dispatch_with_transport(
       }
     }
     (Get, "/v1/assignments") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3491,7 +3508,7 @@ async fn ApiService::dispatch_with_transport(
       )
     }
     (Put, "/v1/assignments") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3576,7 +3593,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Delete, _) if path.has_prefix("/v1/assignments/") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3585,7 +3602,7 @@ async fn ApiService::dispatch_with_transport(
       self.stop_assignment(assignment_id)
     }
     (Post, _) if path.has_prefix("/v1/assignments/") && path.has_suffix("/stop") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3596,7 +3613,7 @@ async fn ApiService::dispatch_with_transport(
       self.stop_assignment(assignment_id)
     }
     (Get, "/v1/registry") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3609,7 +3626,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, registry.snapshot().to_json())
     }
     (Post, "/v1/models") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3635,7 +3652,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Post, "/v1/runtimes") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3663,7 +3680,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Post, "/v1/licenses") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3689,7 +3706,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Post, "/v1/verifications") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3750,7 +3767,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Post, "/v1/evaluations") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3778,7 +3795,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Post, "/v1/models/approve") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3809,7 +3826,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, approved.to_json())
     }
     (Post, "/v1/aliases/promote") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -3849,7 +3866,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, receipt.to_json())
     }
     (Post, "/v1/aliases/rollback") => {
-      if !bearer_authorized(headers, self.operator_token) {
+      if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
@@ -4091,6 +4108,8 @@ fn operational_target_type(path : String) -> String {
     "commercial"
   } else if path.has_prefix("/v1/contract-documents") {
     "contract_document"
+  } else if path.has_prefix("/v1/contract-governance") {
+    "contract_governance"
   } else if path.has_prefix("/v1/commercial") {
     "commercial"
   } else if path.has_prefix("/v1/workspace") {
@@ -4111,7 +4130,7 @@ async fn ApiService::operational_actor_class(
   headers : Map[String, String],
   path : String,
 ) -> @observability.OperationalActorClass {
-  if bearer_authorized(headers, self.operator_token) ||
+  if self.operator_authorized(headers) ||
     bearer_authorized(headers, self.audit_token) ||
     bearer_authorized(headers, self.monitoring_token) {
     Operator

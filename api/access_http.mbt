@@ -135,7 +135,7 @@ async fn ApiService::handle_access_management(
   headers : Map[String, String],
   body : String,
 ) -> HttpReply {
-  if !bearer_authorized(headers, self.operator_token) {
+  if !self.operator_authorized(headers) {
     return api_error(
       401, "Unauthenticated", "valid operator authority is required", false,
     )
@@ -151,6 +151,26 @@ async fn ApiService::handle_access_management(
     (Post, "/v1/access/api-keys") => {
       guard decode_api_key_intent(body) is Some(intent) else {
         return api_error(400, "InvalidRequest", "invalid API key intent", false)
+      }
+      // Contract governance is the source of truth for customer access. When
+      // the contract store is configured, a key can only be issued for a
+      // tenant/subject with a current Effective MasterLease. Keeping the
+      // legacy path permissive when the store is absent preserves local
+      // bootstrap compatibility; production control always wires the store.
+      match self.contract_document_store {
+        Some(contract_store) => {
+          guard contract_store.has_effective_master_lease(
+            intent.tenant_ref,
+            intent.subject_ref,
+            @async.now(),
+          ) else {
+            return api_error(
+              409, "EffectiveMasterLeaseRequired", "an effective, unexpired MasterLease is required before issuing access",
+              false,
+            )
+          }
+        }
+        None => ()
       }
       let issued = try store.issue(intent, @async.now()) catch {
         @access.AccessError::AlreadyExists(_) =>

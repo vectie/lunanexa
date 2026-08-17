@@ -128,6 +128,151 @@ async test "contract document API is subject scoped and rejects offline secret f
 }
 
 ///|
+async test "governance routes enforce effective access and expose the operating view" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contract-governance-api-")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  let documents = @contractdoc_store.ContractDocumentStore::open(
+    "\{directory}/contracts.json",
+  )
+  let access = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "governance-issuer-secret-more-than-32-bytes",
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    )
+    .with_access_store(access)
+    .with_contract_document_store(documents)
+    .with_operator_tokens([
+      ("operator-a", "operator-token"),
+      ("operator-b", "operator-b-token"),
+    ])
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let packet : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-governance-api",
+      "packet-governance-api-key",
+      "tenant-governance-api",
+      "org-governance-api",
+      "subject-governance-api",
+      "order-governance-api",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+  }
+  ignore(documents.create_packet(packet, "operator-a"))
+  let operator_headers = { "Authorization": "Bearer operator-token" }
+  let key_expiry = @async.now() + 86400000L
+  let no_lease_intent : @access.ApiKeyIssueIntent = {
+    key_id: "key-no-lease",
+    tenant_ref: "tenant-other",
+    subject_ref: "subject-other",
+    display_name: "No lease",
+    scopes: [Inference],
+    allowed_models: [],
+    expires_unix_ms: key_expiry,
+    maximum_requests: 10L,
+  }
+  let with_lease_intent : @access.ApiKeyIssueIntent = {
+    key_id: "key-with-lease",
+    tenant_ref: "tenant-governance-api",
+    subject_ref: "subject-governance-api",
+    display_name: "With lease",
+    scopes: [Inference],
+    allowed_models: [],
+    expires_unix_ms: key_expiry,
+    maximum_requests: 10L,
+  }
+  let denied = service.handle(
+    Post,
+    "/v1/access/api-keys",
+    operator_headers,
+    no_lease_intent.to_json().stringify(),
+  )
+  assert_eq(denied.status, 409)
+  let issued = service.handle(
+    Post,
+    "/v1/access/api-keys",
+    operator_headers,
+    with_lease_intent.to_json().stringify(),
+  )
+  assert_eq(issued.status, 201)
+  let amendment = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments",
+    operator_headers,
+    "{\"preceding_packet_ref\":\"packet-governance-api\",\"base_revision\":\"1\",\"reason\":\"price amendment\",\"changes\":[{\"field_id\":\"lease.total_rent\",\"value\":\"100\"}]}",
+  )
+  assert_eq(amendment.status, 201)
+  let amendment_value : @contractdoc.ContractAmendment = @json.from_json(
+    @json.parse(amendment.body),
+  )
+  let customer_owned_amendment = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments",
+    operator_headers,
+    "{\"preceding_packet_ref\":\"packet-governance-api\",\"base_revision\":\"1\",\"reason\":\"cross-owner\",\"changes\":[{\"field_id\":\"lessee.name\",\"value\":\"不应由运营方填写\"}]}",
+  )
+  assert_eq(customer_owned_amendment.status, 409)
+  let self_approval = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments/\{amendment_value.amendment_id}:approve",
+    operator_headers,
+    "",
+  )
+  assert_eq(self_approval.status, 409)
+  let approved = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments/\{amendment_value.amendment_id}:approve",
+    { "Authorization": "Bearer operator-b-token" },
+    "",
+  )
+  assert_eq(approved.status, 200)
+  let materialized = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments/\{amendment_value.amendment_id}:materialize",
+    { "Authorization": "Bearer operator-b-token" },
+    "{\"packet_id\":\"packet-governance-successor\",\"idempotency_key\":\"packet-governance-successor-key\"}",
+  )
+  assert_eq(materialized.status, 201)
+  let successor = documents.packet("packet-governance-successor").unwrap()
+  assert_eq(successor.preceding_packet_ref, Some("packet-governance-api"))
+  assert_eq(successor.value("lease.total_rent"), Some("100"))
+  let dashboard = service.handle(
+    Get,
+    "/v1/contract-governance/operator/dashboard",
+    operator_headers,
+    "{\"tenant_ref\":\"tenant-governance-api\"}",
+  )
+  assert_eq(dashboard.status, 200)
+  assert_true(dashboard.body.contains("effective_packets"))
+  assert_true(dashboard.body.contains("pending_approvals"))
+  let dashboard_post = service.handle(
+    Post,
+    "/v1/contract-governance/operator/dashboard",
+    operator_headers,
+    "{\"tenant_ref\":\"tenant-governance-api\"}",
+  )
+  assert_eq(dashboard_post.status, 200)
+  @fs.remove(directory + "/state.json")
+  @fs.remove(directory + "/state.json.lock")
+  @fs.remove(directory + "/contracts.json")
+  @fs.remove(directory + "/access.json")
+  @fs.remove(directory)
+}
+
+///|
 async test "contract document lifecycle endpoints gate creation and record execution" {
   let directory = @fs.tmpdir(prefix="lunanexa-contract-lifecycle-")
   let durable = @store.FileStore::open("\{directory}/state.json")

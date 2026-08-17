@@ -1030,7 +1030,7 @@ async fn ApiService::handle_notifications(
   }
   let now = @async.now()
   if path == "/v1/notifications/operator/readiness" {
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthorized", "operator authorization is required", false,
       )
@@ -1048,7 +1048,7 @@ async fn ApiService::handle_notifications(
     )
   }
   if path == "/v1/notifications/operator" {
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthorized", "operator authorization is required", false,
       )
@@ -1169,7 +1169,7 @@ async fn ApiService::handle_notifications(
   }
   let redrive_prefix = "/v1/notifications/operator/deliveries/"
   if path.has_prefix(redrive_prefix) && path.has_suffix(":redrive") {
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthorized", "operator authorization is required", false,
       )
@@ -1205,7 +1205,7 @@ async fn ApiService::handle_notifications(
   }
   if notification_action_path(path, "/v1/notifications/operator/")
     is Some((notification_id, action)) {
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthorized", "operator authorization is required", false,
       )

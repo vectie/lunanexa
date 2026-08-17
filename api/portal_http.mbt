@@ -286,7 +286,7 @@ async fn ApiService::handle_enterprise_portal(
     )
   }
   if path.has_prefix("/v1/portal/operator/") {
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthenticated", "valid operator authority is required", false,
       )

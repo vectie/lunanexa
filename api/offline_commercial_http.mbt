@@ -1063,7 +1063,7 @@ async fn ApiService::handle_offline_commerce(
     return json_reply(200, store.claim_authority_work(@async.now()).to_json())
   }
   if path.has_prefix("/v1/offline-commerce/operator/") {
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthenticated", "valid operator authority is required", false,
       )

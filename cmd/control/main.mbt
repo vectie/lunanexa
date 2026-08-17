@@ -416,6 +416,16 @@ async fn run_offline_commerce_reconciler(service : @api.ApiService) -> Unit {
 }
 
 ///|
+/// Contract obligations are a controller concern, not a page-read side
+/// effect. Keep overdue payment/acceptance tasks current after restart.
+async fn run_contract_governance_reconciler(service : @api.ApiService) -> Unit {
+  for ;; {
+    service.reconcile_contract_governance(@async.now())
+    @async.sleep(30000)
+  }
+}
+
+///|
 async fn main {
   let global_settings = load_global_admin_settings()
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
@@ -1073,6 +1083,9 @@ async fn main {
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_offline_commerce_reconciler(service)
+    }
+    group.spawn_bg(allow_failure=false) <| () => {
+      run_contract_governance_reconciler(service)
     }
     group.spawn_bg(allow_failure=false) <| () => {
       service.run_exclusive_lease_expiry_reconciler_forever(

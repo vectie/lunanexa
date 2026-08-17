@@ -110,7 +110,7 @@ async fn ApiService::handle_credential_handoff(
     if verb != Post {
       return api_error(405, "MethodNotAllowed", "POST required", false)
     }
-    if !bearer_authorized(headers, self.operator_token) {
+    if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthenticated", "valid operator authority is required", false,
       )

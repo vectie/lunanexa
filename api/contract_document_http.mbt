@@ -547,12 +547,19 @@ async fn ApiService::handle_contract_documents(
           )
         }
         if self.contract_approval_required(packet) {
-          return self.request_contract_approval(store, packet, operator_id, "execute", request.expected_revision, {
-            evidence_sha256: Some(request.evidence_sha256),
-            signed_on: Some(request.signed_on),
-            kind: None,
-            reason: None,
-          })
+          return self.request_contract_approval(
+            store,
+            packet,
+            operator_id,
+            "execute",
+            request.expected_revision,
+            {
+              evidence_sha256: Some(request.evidence_sha256),
+              signed_on: Some(request.signed_on),
+              kind: None,
+              reason: None,
+            },
+          )
         }
         let evidence : @contractdoc.ContractExecution = {
           evidence_sha256: request.evidence_sha256,
@@ -605,12 +612,19 @@ async fn ApiService::handle_contract_documents(
           _ => ()
         }
         if self.contract_approval_required(packet) {
-          return self.request_contract_approval(store, packet, operator_id, "close:\{closure_kind_name(request.kind)}", request.expected_revision, {
-            evidence_sha256: None,
-            signed_on: None,
-            kind: Some(request.kind),
-            reason: Some(request.reason),
-          })
+          return self.request_contract_approval(
+            store,
+            packet,
+            operator_id,
+            "close:\{closure_kind_name(request.kind)}",
+            request.expected_revision,
+            {
+              evidence_sha256: None,
+              signed_on: None,
+              kind: Some(request.kind),
+              reason: Some(request.reason),
+            },
+          )
         }
         let updated = try
           store.close_packet(
@@ -723,8 +737,9 @@ async fn ApiService::handle_contract_documents(
     return match (verb, path) {
       (Get, _) if path == "/v1/contract-documents/operator/approvals" ||
         path.has_prefix("/v1/contract-documents/operator/approvals?") => {
-        let status : @contractdoc.ContractApprovalStatus? = if
-          path.contains("status=pending") {
+        let status : @contractdoc.ContractApprovalStatus? = if path.contains(
+            "status=pending",
+          ) {
           Some(Pending)
         } else if path.contains("status=approved") {
           Some(Approved)
@@ -738,8 +753,7 @@ async fn ApiService::handle_contract_documents(
       (Post, _) if operator_approval_id(path, ":approve") is Some(approval_id) => {
         guard store.get_approval(approval_id) is Some(approval) else {
           return api_error(
-            404, "ContractApprovalNotFound", "contract approval was not found",
-            false,
+            404, "ContractApprovalNotFound", "contract approval was not found", false,
           )
         }
         if approval.status != Pending {

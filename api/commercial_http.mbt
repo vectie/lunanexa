@@ -318,7 +318,7 @@ async fn ApiService::handle_commercial_management(
   headers : Map[String, String],
   body : String,
 ) -> HttpReply {
-  if !bearer_authorized(headers, self.operator_token) {
+  if !self.operator_authorized(headers) {
     return api_error(
       401, "Unauthenticated", "valid operator authority is required", false,
     )
