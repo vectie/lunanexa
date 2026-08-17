@@ -23,14 +23,91 @@ cat > "$fake_bin/kubectl" <<'EOF'
 #!/bin/sh
 case " $* " in
   *' create namespace '*) printf '%s\n' 'apiVersion: v1' 'kind: Namespace' ;;
+  *' get nodes -l lunanexa.io/role=management --no-headers '*)
+    printf '%s\n' 'lunanexa-sim-control-plane Ready'
+    ;;
+  *' get nodes -l lunanexa.io/role=gpu --no-headers '*)
+    printf '%s\n' 'lunanexa-sim-worker Ready' 'lunanexa-sim-worker2 Ready' 'lunanexa-sim-worker3 Ready' 'lunanexa-sim-worker4 Ready'
+    ;;
 esac
 exit 0
+EOF
+cat > "$fake_bin/colima" <<'EOF'
+#!/bin/sh
+case "${1:-}" in
+  status) test -f "${FAKE_COLIMA_STATE:?}" ;;
+  start)
+    printf '%s\n' "$*" >> "${FAKE_COLIMA_LOG:?}"
+    : > "${FAKE_COLIMA_STATE:?}"
+    ;;
+  *) exit 64 ;;
+esac
+EOF
+cat > "$fake_bin/docker" <<'EOF'
+#!/bin/sh
+test "${1:-}" = info
+test -f "${FAKE_COLIMA_STATE:?}"
+EOF
+cat > "$fake_bin/kind" <<'EOF'
+#!/bin/sh
+case "${1:-} ${2:-}" in
+  'get clusters')
+    if test -f "${FAKE_KIND_STATE:?}"; then printf '%s\n' lunanexa-sim; fi
+    ;;
+  'create cluster')
+    : > "${FAKE_KIND_STATE:?}"
+    ;;
+  'delete cluster')
+    rm -f "${FAKE_KIND_STATE:?}"
+    ;;
+  'get kubeconfig')
+    printf '%s\n' 'apiVersion: v1' 'kind: Config'
+    ;;
+  *) exit 64 ;;
+esac
 EOF
 cat > "$fake_bin/sleep" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
 chmod +x "$fake_bin/ssh" "$fake_bin/scp" "$fake_bin/kubectl" "$fake_bin/sleep"
+chmod +x "$fake_bin/colima" "$fake_bin/docker" "$fake_bin/kind"
+
+local_directory=$test_directory/local-simulation
+local_home=$local_directory/home
+local_kubeconfig=$local_home/.kube/lunanexa-sim
+local_colima_state=$local_directory/colima-running
+local_colima_log=$local_directory/colima.log
+local_kind_state=$local_directory/kind-running
+mkdir -p "$local_home/.kube"
+
+PATH="$fake_bin:$PATH" HOME="$local_home" \
+  FAKE_COLIMA_STATE="$local_colima_state" \
+  FAKE_COLIMA_LOG="$local_colima_log" \
+  FAKE_KIND_STATE="$local_kind_state" \
+  sh "$repo_root/scripts/deploy/run-cluster-install.sh" \
+    --mode preview \
+    --namespace lunanexa \
+    --kubeconfig "$local_kubeconfig" \
+    --confirmation '' \
+    --local-simulation > "$local_directory-preview.log" 2>&1
+grep -q 'will be started during apply' "$local_directory-preview.log"
+test ! -f "$local_colima_state"
+
+PATH="$fake_bin:$PATH" HOME="$local_home" \
+  FAKE_COLIMA_STATE="$local_colima_state" \
+  FAKE_COLIMA_LOG="$local_colima_log" \
+  FAKE_KIND_STATE="$local_kind_state" \
+  sh "$repo_root/scripts/deploy/run-cluster-install.sh" \
+    --mode apply \
+    --namespace lunanexa \
+    --kubeconfig "$local_kubeconfig" \
+    --confirmation 'DEPLOY 4 NODES' \
+    --local-simulation > "$local_directory-apply.log" 2>&1
+grep -q '^start lunanexa --cpus 4 --memory 6 --disk 30 --runtime docker$' "$local_colima_log"
+grep -q 'one management and four compute placements verified' "$local_directory-apply.log"
+test -f "$local_colima_state"
+test -f "$local_kind_state"
 
 make_cli() {
   cli=$1

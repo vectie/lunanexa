@@ -1871,12 +1871,46 @@ fn update(
         MachineAccess(ConfirmTermination(lease_ref, generation, confirmation)),
       )
       if model.demo_mode {
+        let now = current_unix_ms()
+        let machines = portal.machine_access.machines.map(machine => {
+          if machine.lease_ref == lease_ref && machine.generation == generation {
+            {
+              ..machine,
+              state: Expiring,
+              generation: machine.generation + 1L,
+              updated_unix_ms: now,
+              credential_handoff: {
+                ..machine.credential_handoff,
+                state: Closed,
+                handoff_ref: None,
+              },
+              can_terminate: false,
+              termination_confirmation: None,
+            }
+          } else {
+            machine
+          }
+        })
         (
           {
             ..model,
             portal: {
               ..portal,
-              machine_access: { ..portal.machine_access, loading: false },
+              machine_access: {
+                ..portal.machine_access,
+                machines,
+                confirmation_lease_ref: None,
+                confirmation_text: "",
+                loading: false,
+              },
+              success_message: Some(
+                portal_copy(
+                  portal.locale,
+                  "Demo access termination entered verified cleanup; no controller was contacted.",
+                  "演示模式：访问终止已进入验证清理流程，未连接控制平面。",
+                ),
+              ),
+              error_message: None,
             },
           },
           @rabbita.none,

@@ -310,7 +310,11 @@
       const list = element("ol", { className: "step-list" });
       for (const item of array(block.items)) {
         const body = element("div");
-        body.append(element("strong", { text: item.title }), element("p", { text: item.text }));
+        if (typeof item === "string") {
+          body.append(element("p", { text: item }));
+        } else {
+          body.append(element("strong", { text: item.title }), element("p", { text: item.text }));
+        }
         const row = element("li");
         row.append(body);
         list.append(row);

@@ -15,7 +15,7 @@
     {"id":"quickstart","label":"Quickstart","page_ids":["local-quickstart","operator-console","developer-workbench","client-api"]},
     {"id":"concepts","label":"How it works","page_ids":["architecture","request-flow","deployment-flow","enrollment-flow","access-flow","state-ownership"]},
     {"id":"deployment","label":"Deployment","page_ids":["tomorrow-deployment","dgx-runtimes"]},
-    {"id":"operations","label":"Operations","page_ids":["daily-operations","observability-recovery"]},
+    {"id":"operations","label":"Operations","page_ids":["daily-operations","ui-end-to-end-sop","observability-recovery"]},
     {"id":"troubleshooting","label":"Troubleshooting","page_ids":["debug-controller","debug-node-runtime","debug-access-database"]},
     {"id":"reference","label":"Reference","page_ids":["configuration","error-reference"]},
     {"id":"advanced","label":"Technical notes","visibility":"advanced","page_ids":["readiness","source-ledger"]}
@@ -558,6 +558,123 @@
           ["Guide diagnostics","Trusted identity proxy, matching HMAC key, internal HTTPS read-only diagnostics gateway, secret-backed controller authority, network policy, and freshness monitor","Keep administrator diagnostics off; public documentation remains available"]
         ]},
         {"kind":"checkpoint","question":"What should you correlate before resolving an operator alert?","answer":"Confirm the typed condition has recovered, then correlate the alert's source or correlation receipt with the bounded operational event, relevant metric, and immutable audit record. Customer read state or a successful delivery alone is not recovery evidence.","revisit_after_days":2}
+      ]
+    },
+    {
+      "id":"ui-end-to-end-sop",
+      "group_id":"operations",
+      "title":"UI-only end-to-end acceptance SOP",
+      "summary":"Repeat the verified local acceptance journey entirely through the installer, operator console, enterprise portal, MoonLeaf contract workspace, machine-access controls, developer workbench, and coursebook without substituting API calls for user actions.",
+      "audience":"Release operator, acceptance tester, customer administrator, and deployment owner",
+      "estimated_minutes":35,
+      "status":"simulated",
+      "tags":["SOP","UI acceptance","Colima","contracts","machine lifecycle","MoonLeaf"],
+      "source_ids":["operations","deployment","workspaces","operations-commerce-guide"],
+      "blocks":[
+        {"kind":"heading","level":2,"id":"acceptance-boundary","text":"Before you start"},
+        {"kind":"callout","tone":"warning","title":"Know what this run proves","text":"This SOP proves the browser workflows and a five-node Colima/kind simulation. Demo records do not contact a production controller, issue a real SSH certificate, execute a legal contract, settle payment, or prove NVIDIA hardware. Use the same UI sequence against the production origin only after identity, secrets, external adapters, PostgreSQL, and physical-node prerequisites are ready."},
+        {"kind":"table","columns":["Surface","Local URL","Entry action","Expected first view"],"rows":[
+          ["Cluster installer","http://127.0.0.1:4173/installer/","Open the page","Deployment mode and controller connection form"],
+          ["Operator console","http://127.0.0.1:4173/console/?demo=1","Open demo","Overview with cluster posture"],
+          ["Enterprise portal","http://127.0.0.1:4173/enterprise/?demo=1","Open demo","Customer overview and preparation workflow"],
+          ["Developer workbench","http://127.0.0.1:4173/workbench/","Open WebIDE","Secure workspace connection gate"],
+          ["Coursebook","http://127.0.0.1:4390/?page=ui-end-to-end-sop","Open this page","This acceptance SOP"]
+        ]},
+        {"kind":"heading","level":2,"id":"installer-journey","text":"1. Create the minimal local cluster from the installer"},
+        {"kind":"steps","items":[
+          "Open Cluster installer and choose Local Colima simulation.",
+          "Enter the test-only installer token supplied by the local companion process. Never reuse an operator, inference, monitoring, callback, or production token.",
+          "Click Preview and validate. Confirm the embedded terminal says the dedicated Colima profile is ready or will start during apply, the required tools are installed, and the five-node topology is ready or will be created.",
+          "Enter the exact confirmation DEPLOY 4 NODES.",
+          "Click Coordinate simulation. Keep the page open while the embedded terminal streams progress.",
+          "Accept only when the terminal reports one management placement, four compute placements, all five placement probes running, context kind-lunanexa-sim, and command exited successfully."
+        ]},
+        {"kind":"callout","tone":"success","title":"Verified recovery behavior","text":"The installer now starts a stopped dedicated Colima profile during apply and recreates an unhealthy existing lunanexa-sim topology. Preview remains read-only. If either repair fails, the terminal stays failed and the operator must not continue."},
+        {"kind":"heading","level":2,"id":"operator-tour","text":"2. Walk every operator-console page"},
+        {"kind":"table","columns":["Page button","What must appear","Actions exercised or inspected"],"rows":[
+          ["Overview","Cluster running normally; 4/4 machine posture and deployment gate","Open one-click deployment"],
+          ["Alerts","Operator alert center","Acknowledge, assign, silence, resolve, and redrive are consequential controls; use them only on the selected record"],
+          ["Nodes","Hardware nodes","Cordon and Drain controls on each node"],
+          ["Models","Model registry","Rollback control on model records"],
+          ["Catalog","Model service catalog and service operations","Deploy model service, Promote, Roll back, Delete"],
+          ["Deployments","Deployments","Stop"],
+          ["Requests","Request monitoring","Inspect status and bounded receipts"],
+          ["Users & access","Users and access","Suspend, Revoke, Activate"],
+          ["Leases","Lease operations","End and clean up, End lease, Activate"],
+          ["Cost centers","Cost-center governance","Inspect budget and allocation state"],
+          ["Digital agreements","Digital agreement lifecycle and enterprise requests","Approve, Reject"],
+          ["Offline commerce","Offline evidence review","Retry reversal, confirm access revoked or still active, request correction, accept exact digest"],
+          ["Contract records","Contract information, governance, approval queue, form and preview","Choose forms, save data, replace packet"],
+          ["Policies","Policy and operations","Validate and submit"],
+          ["Qualification","Provider qualification adapters","Inspect readiness evidence"],
+          ["Benchmarks","Benchmark evidence","Inspect retained result"],
+          ["Audit","Audit evidence","Correlate actor, state transition, result, and receipt"]
+        ]},
+        {"kind":"heading","level":2,"id":"customer-tour","text":"3. Walk every enterprise-portal page"},
+        {"kind":"table","columns":["Page button","What must appear","Actions exercised or inspected"],"rows":[
+          ["Overview","From agreement signing to an isolated GPU workspace","Apply for capacity"],
+          ["Agreements","Agreements your organization must handle","Review and sign"],
+          ["Lease requests","Request a time-bounded workspace and request history","Submit lease request"],
+          ["My machines","My machine access","Redeem SSH access credential; End access early"],
+          ["Orders & evidence","Order and offline-material timeline","Refresh, upload evidence, cancel order, download verified file"],
+          ["Contract forms","Contract information and documents with MoonLeaf preview","Choose forms and Save data"],
+          ["Notifications","Notification inbox and delivery preferences","Disable email, enable email, mark read"],
+          ["Usage & costs","Usage and cost allocation","Inspect tenant-scoped totals"],
+          ["Model catalog","Shared model catalog","Inspect entitled model services"],
+          ["WebIDE","Developer workbench","Open the secure connection gate"]
+        ]},
+        {"kind":"heading","level":2,"id":"moonleaf-preview","text":"4. Verify the MoonLeaf contract workspace"},
+        {"kind":"table","columns":["Form tab","Expected preview pages"],"rows":[
+          ["NVIDIA DGX Spark compute-device remote lease agreement","11"],
+          ["Compute lease reservation application","2"],
+          ["Compute access enable/disable confirmation","1"],
+          ["Violation notice","1"],
+          ["Equipment damage liability and compensation notice","1"],
+          ["Lease settlement confirmation","1"],
+          ["Early termination application","1"],
+          ["Complete seven-form source packet","18 total"]
+        ]},
+        {"kind":"steps","items":[
+          "In the operator console, open Contract records. Click each form tab and wait for the associated MoonLeaf preview; no tab may show MoonLeaf demo preview failed.",
+          "Open Early termination application. Enter operator-owned settlement values: actual rent 1000, paid rent 1200, refund, refund amount 200, and an operator review decision.",
+          "Do not enter customer-owned identity, request reason, or signature fields from the operator surface. Open the enterprise Contract forms page to complete only customer-owned fields.",
+          "Confirm the preview refreshes automatically without clicking Render current draft, displays Chinese characters and spacing, and contains the new values.",
+          "Click Save data and confirm the preview and draft values remain stable after the save."
+        ]},
+        {"kind":"heading","level":2,"id":"machine-and-workbench","text":"5. End machine access, then inspect the workbench gate"},
+        {"kind":"steps","items":[
+          "In the enterprise portal, click My machines. Confirm Online, username, whole-machine SSH profile, about one day remaining, credential handoff Available, and End access early.",
+          "Click End access early, enter the exact displayed phrase TERMINATE exclusive-lease-demo, then click Terminate access.",
+          "In demo acceptance, confirm the card changes to Expiring, credential handoff Closed, cleanup Revoking access, and the termination button disappears. In production, continue watching until sanitization evidence closes the lease and the operator returns the node to managed service.",
+          "In the demo operator console, open Leases, click End and clean up, review the exact lease, node, user, and generation in the destructive-action dialog, then click Confirm action. Confirm the demo explicitly says it was previewed and no change was persisted.",
+          "Open WebIDE. Confirm Connect / refresh is disabled until a scoped inference token is present. Expand Advanced connection settings and verify controller endpoint and loopback-only opaque subject fields are visible.",
+          "Never expect the workbench lease to grant SSH, arbitrary shell, repository checkout, or managed-node filesystem access; those remain separate from exclusive-machine access."
+        ]},
+        {"kind":"heading","level":2,"id":"renewal-and-close","text":"6. Renewal, contract close, and machine reclamation"},
+        {"kind":"steps","items":[
+          "In Contract forms, open Contract packet and select Signed and effective · packet-demo-effective.",
+          "Confirm the effective record says read-only and every customer field is disabled; historical contract data must not be edited in place.",
+          "Click Request renewal. In the confirmation dialog, review the carry-forward boundary, then click Request renewal once.",
+          "Confirm a new Information draft packet is selected, the preceding effective packet remains in the switcher, the customer-owned organization value is carried forward, and the success notice states that demo mode did not contact a controller."
+        ]},
+        {"kind":"flow","title":"Production lifecycle","steps":[
+          {"title":"Effective contract","text":"Both roles complete only their owned fields; approvals, exact artifacts, and offline evidence make the contract effective."},
+          {"title":"Renewal or amendment","text":"Before expiry, the customer requests renewal or an amendment; the operator reviews the new version, price, term, obligations, and second-person approval when required."},
+          {"title":"Close proposal","text":"Expiry, early termination, or a default notice creates a close proposal and settlement draft from the ledger rather than silently ending access."},
+          {"title":"Revoke and sanitize","text":"The controller closes credential handoff, revokes sessions, drains personal processes, sanitizes the host, and quarantines on any failed evidence."},
+          {"title":"Reclaim","text":"Only a verified current-generation sanitization receipt lets the operator return the machine to managed scheduling and close the contract record."}
+        ]},
+        {"kind":"callout","tone":"warning","title":"Local UI acceptance limit","text":"The browser demo verifies the renewal, close, and reclamation controls and state presentation, but it cannot manufacture a second human approval, legal seal, payment, external credential issuer, root-helper receipt, or physical sanitization. Production acceptance must retain those exact external receipts."},
+        {"kind":"heading","level":2,"id":"stop-conditions","text":"Stop conditions and recovery"},
+        {"kind":"table","columns":["Observed condition","Stop rule","Recovery"],"rows":[
+          ["Preview cannot validate Colima","Do not apply","Start or repair the dedicated profile, then preview again"],
+          ["Existing simulation has missing nodes","Do not trust stale topology","Use Coordinate simulation; the installer recreates only the dedicated lunanexa-sim cluster"],
+          ["MoonLeaf preview fails, loses Chinese, or shows the wrong form","Do not generate or approve documents","Keep the exact template and values, repair rendering/fonts, switch tabs, and compare again"],
+          ["Termination remains Active or credential remains Available","Do not assume access ended","Retry only with the current generation; inspect controller, broker, helper, and notification evidence"],
+          ["Cleanup or sanitization fails","Never return the node to managed service","Quarantine, alert, preserve evidence, and run the approved recovery procedure"],
+          ["Production readiness has blockers","Do not release","Open the protected readiness details and close every named external or internal gate"]
+        ]},
+        {"kind":"checkpoint","question":"What is the final acceptance condition?","answer":"Every visited page renders without an owned UI error; each consequential action reaches its documented next state; MoonLeaf preserves the selected template, Chinese text, spacing, and field ownership; the installer reports one management plus four compute placements; and production release remains blocked until protected readiness and external evidence are green.","revisit_after_days":1}
       ]
     },
     {

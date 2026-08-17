@@ -69,8 +69,27 @@ test("coursebook has a complete unique navigation graph", () => {
     assert.ok(page.summary.trim().length >= 60);
     assert.ok(Array.isArray(page.blocks) && page.blocks.length > 0);
     assert.ok(["implemented", "documented", "planned", "simulated", "unknown"].includes(page.status));
-    for (const block of page.blocks) assert.ok(allowedBlocks.has(block.kind), `${page.id}: unsupported ${block.kind}`);
+    for (const block of page.blocks) {
+      assert.ok(allowedBlocks.has(block.kind), `${page.id}: unsupported ${block.kind}`);
+      if (block.kind === "steps") {
+        for (const item of block.items) {
+          if (typeof item === "string") assert.ok(item.trim(), `${page.id}: blank step`);
+          else {
+            assert.ok(item.title?.trim(), `${page.id}: step title`);
+            assert.ok(item.text?.trim(), `${page.id}: step text`);
+          }
+        }
+      }
+    }
   }
+});
+
+test("coursebook renderer shows both concise and titled procedure steps", async () => {
+  const source = await readFile(resolve(siteRoot, "app.js"), "utf8");
+  assert.match(source, /typeof item === "string"/);
+  assert.match(source, /body\.append\(element\("p", \{ text: item \}\)\)/);
+  assert.match(source, /item\.title/);
+  assert.match(source, /item\.text/);
 });
 
 test("newcomer operations runbook connects both roles without exposing internals", () => {
@@ -94,6 +113,26 @@ test("newcomer operations runbook connects both roles without exposing internals
   assert.doesNotMatch(published, /commercial\/offline|guide_monitor|api\/server|source judgment|chain-of-thought/i);
   assert.doesNotMatch(published, /X-LunaNexa-Subject/);
   assert.match(JSON.stringify(zhBook.pages[page.id]), /告警|线下|独占机器|指南诊断/u);
+});
+
+test("UI-only acceptance SOP records every surface and consequential journey", () => {
+  const page = pageById.get("ui-end-to-end-sop");
+  assert.ok(page);
+  assert.equal(page.group_id, "operations");
+  assert.equal(page.status, "simulated");
+  const published = JSON.stringify(page);
+  for (const surface of [
+    "/installer/", "/console/?demo=1", "/enterprise/?demo=1", "/workbench/",
+  ]) assert.ok(published.includes(surface), surface);
+  for (const action of [
+    "Preview and validate", "Coordinate simulation", "Cordon", "Drain",
+    "Review and sign", "Submit lease request", "Save data", "End access early",
+    "Terminate access", "Request renewal", "Connect / refresh",
+  ]) assert.match(published, new RegExp(action.replaceAll("/", "\\/"), "i"), action);
+  for (const boundary of [
+    "demo records", "production controller", "physical sanitization", "external receipts",
+  ]) assert.match(published, new RegExp(boundary, "i"), boundary);
+  assert.match(JSON.stringify(zhBook.pages[page.id]), /预览并验证|协调模拟|提前结束访问|终止访问|保存资料/u);
 });
 
 test("Simplified Chinese localization covers every page without rewriting code", () => {

@@ -145,6 +145,32 @@ pub fn demo_state() -> EnterpriseState {
     created_unix_ms: now,
     updated_unix_ms: now,
   }
+  let effective_packet : @contractdoc.ContractPacket = {
+    ..demo_packet,
+    packet_id: "packet-demo-effective",
+    idempotency_key: "packet-demo-effective-key",
+    order_ref: "order-capacity-2025-08",
+    preceding_packet_ref: Some("packet-demo-youthpolicy"),
+    active_forms: [MasterLease],
+    values: [
+      { field_id: "lessee.name", value: "Northstar Research" },
+      { field_id: "lease.start_date", value: "2025-09-01" },
+      { field_id: "lease.end_date", value: "2026-08-31" },
+    ],
+    values_sha256: Some(
+      "sha256:7ca7d84d5b028ed5825a0e87104737c15d6f4c71463d8c567ce17e108075eb41",
+    ),
+    state: Effective,
+    execution: Some({
+      evidence_sha256: "sha256:22aeaa2c7a7590c2f7c61c63b0ba354b86d1df1a75d8d13ab3084cf99966fc0a",
+      signed_on: "2025-08-28",
+      registered_by: "operator-demo",
+      registered_unix_ms: now - 30000000000L,
+    }),
+    revision: 8L,
+    created_unix_ms: now - 30000000000L,
+    updated_unix_ms: now - 86400000L,
+  }
   {
     ..default_state(now),
     membership: Some({
@@ -258,6 +284,7 @@ pub fn demo_state() -> EnterpriseState {
     ],
     machine_access: {
       ..@machine_access.default_state(@i18n.default_locale()),
+      now_unix_ms: now,
       machines: [
         {
           version: @nodelease.contract_version,
@@ -290,7 +317,7 @@ pub fn demo_state() -> EnterpriseState {
     contract_documents: {
       ..@contract_documents.default_state(@i18n.default_locale()),
       manifest: Some(manifest),
-      packets: [demo_packet],
+      packets: [demo_packet, effective_packet],
       selected_packet_id: Some("packet-demo-youthpolicy"),
       selected_form: Some(MasterLease),
     },

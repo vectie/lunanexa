@@ -63,18 +63,39 @@ if [ "$local_simulation" -eq 1 ]; then
   for command_name in colima docker kind kubectl; do
     command -v "$command_name" >/dev/null 2>&1
   done
-  colima status lunanexa >/dev/null
+  if ! colima status lunanexa >/dev/null 2>&1; then
+    if [ "$mode" = preview ]; then
+      printf '%s\n' '[local 1/5] dedicated Colima profile is stopped and will be started during apply'
+      printf '%s\n' '[local 2/5] Colima, Docker, kind, and kubectl tooling are installed'
+      printf '%s\n' '[local 3/5] five-node Kubernetes topology will be created during apply'
+      printf '%s\n' '[preview] local Colima simulation can be created; no resources were changed'
+      exit 0
+    fi
+    test "$confirmation" = 'DEPLOY 4 NODES'
+    printf '%s\n' '[local 1/5] starting dedicated minimal Colima profile'
+    colima start lunanexa --cpus 4 --memory 6 --disk 30 --runtime docker
+  fi
   export DOCKER_CONTEXT=colima-lunanexa
   docker info >/dev/null
   printf '%s\n' '[local 1/5] dedicated Colima profile is ready'
   printf '%s\n' '[local 2/5] Docker and kind tooling are ready'
+  topology_ready=0
   if kind get clusters 2>/dev/null | grep -qx lunanexa-sim; then
-    test -f "$kubeconfig"
-    management_count=$(KUBECONFIG="$kubeconfig" kubectl --context kind-lunanexa-sim get nodes -l lunanexa.io/role=management --no-headers | wc -l | tr -d ' ')
-    compute_count=$(KUBECONFIG="$kubeconfig" kubectl --context kind-lunanexa-sim get nodes -l lunanexa.io/role=gpu --no-headers | wc -l | tr -d ' ')
-    test "$management_count" -eq 1
-    test "$compute_count" -eq 4
-    printf '%s\n' '[local 3/5] five-node Kubernetes topology is ready'
+    if test -f "$kubeconfig"; then
+      management_count=$(KUBECONFIG="$kubeconfig" kubectl --context kind-lunanexa-sim get nodes -l lunanexa.io/role=management --no-headers 2>/dev/null | wc -l | tr -d ' ')
+      compute_count=$(KUBECONFIG="$kubeconfig" kubectl --context kind-lunanexa-sim get nodes -l lunanexa.io/role=gpu --no-headers 2>/dev/null | wc -l | tr -d ' ')
+      if test "$management_count" -eq 1 && test "$compute_count" -eq 4; then
+        topology_ready=1
+      fi
+    fi
+    if test "$topology_ready" -eq 1; then
+      printf '%s\n' '[local 3/5] five-node Kubernetes topology is ready'
+    else
+      printf '%s\n' '[local 3/5] stale simulation topology will be recreated during apply'
+      if test "$mode" = apply; then
+        kind delete cluster --name lunanexa-sim
+      fi
+    fi
   else
     printf '%s\n' '[local 3/5] five-node Kubernetes topology will be created during apply'
   fi

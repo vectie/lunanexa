@@ -55,6 +55,33 @@ test "ready packet requires explicit review confirmation" {
 }
 
 ///|
+test "multiple contract packets expose a labelled lifecycle switcher" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let draft = packet(InformationDraft)
+  let effective = {
+    ..packet(Effective),
+    packet_id: "packet-effective",
+    idempotency_key: "packet-effective-key",
+  }
+  let state = {
+    ..@contract_documents.default_state(ChineseSimplified),
+    manifest: Some(manifest),
+    packets: [draft, effective],
+    selected_packet_id: Some("packet-effective"),
+  }
+  let html = @contract_documents.render(state)
+  assert_true(html.contains("contract-packet-selector"))
+  assert_true(html.contains("合同资料包"))
+  assert_true(html.contains("资料填写中 · packet-001"))
+  assert_true(html.contains("已签署生效 · packet-effective"))
+  assert_true(html.contains("发起续约"))
+  assert_true(html.contains("该生命周期记录为只读"))
+  assert_true(html.contains("disabled"))
+  let switched = state.update(SelectPacket("packet-001"))
+  assert_eq(switched.selected_packet_id, Some("packet-001"))
+}
+
+///|
 test "field changes remain local until explicit save" {
   let changed = @contract_documents.default_state(English).update(
     FieldChanged("lease.lessee_name", "Example Organization"),

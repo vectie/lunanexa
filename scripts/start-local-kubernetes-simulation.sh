@@ -29,6 +29,25 @@ export DOCKER_CONTEXT="colima-$colima_profile"
 docker info >/dev/null
 mkdir -p "${kubeconfig_path%/*}"
 
+if kind get clusters 2>/dev/null | grep -qx "$cluster_name"; then
+  temporary_kubeconfig="$kubeconfig_path.tmp.$$"
+  if kind get kubeconfig --name "$cluster_name" > "$temporary_kubeconfig"; then
+    chmod 0600 "$temporary_kubeconfig"
+    mv "$temporary_kubeconfig" "$kubeconfig_path"
+    management_count=$(KUBECONFIG="$kubeconfig_path" kubectl --context "$context_name" get nodes -l lunanexa.io/role=management --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    compute_count=$(KUBECONFIG="$kubeconfig_path" kubectl --context "$context_name" get nodes -l lunanexa.io/role=gpu --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  else
+    rm -f "$temporary_kubeconfig"
+    management_count=0
+    compute_count=0
+  fi
+  if test "$management_count" -ne 1 || test "$compute_count" -ne 4; then
+    printf '%s\n' 'Existing lunanexa-sim cluster is unhealthy; recreating it.'
+    kind delete cluster --name "$cluster_name"
+    rm -f "$kubeconfig_path"
+  fi
+fi
+
 if ! kind get clusters 2>/dev/null | grep -qx "$cluster_name"; then
   kind create cluster \
     --name "$cluster_name" \
