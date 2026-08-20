@@ -46,7 +46,7 @@ machine has nine states:
 | `GenerationRequested` | fail generation | `GenerationFailed` | renderer worker | a non-empty failure reason |
 | `Generated` | register execution | `Effective` | ManagerOperator | a valid evidence digest and a `YYYY-MM-DD` signing date; `registered_by` is fixed server-side to the authenticated operator identity |
 | `Effective` | close packet | `Closed` | ManagerOperator | closure kind `Expired`, `EarlyTermination`, or `Settled`; early termination additionally requires a settlement (see cross-packet rules below) |
-| any pre-`Effective` state | supersede packet | `Superseded` | ManagerOperator | a successor reference and reason; `Effective`, `Closed`, and `Superseded` packets are contractual facts and can never be superseded |
+| any pre-`Effective` state | supersede packet | `Superseded` | ManagerOperator | a successor reference and reason; an `Effective` packet is superseded only by its linked successor when that successor registers execution; `Closed` and `Superseded` packets are terminal |
 
 Generated artifacts are never mutated. A later reservation, access, incident,
 settlement, or early termination task creates a new packet bound to the same
@@ -304,10 +304,10 @@ The operator console uses the same durable store for the long-horizon business
 controls. All routes below require a mapped operator identity; every mutation
 is tenant checked and audit attributed to that identity:
 
-- `GET|POST /v1/contract-governance/operator/dashboard` — return the effective
+- `POST /v1/contract-governance/operator/dashboard` — return the effective
   contract, pending approval, overdue obligation, closure-proposal, ledger
   amount, and next-expiry read model for one tenant;
-- `GET /v1/contract-governance/operator/admission` — evaluate the effective
+- `POST /v1/contract-governance/operator/admission` — evaluate the effective
   `MasterLease`, workspace-lease configuration, exclusive-machine presence,
   and whether API-key issuance is allowed;
 - `POST /v1/contract-governance/operator/amendments` plus
@@ -315,16 +315,18 @@ is tenant checked and audit attributed to that identity:
   amendment, require a different operator to approve it, then create a fresh
   renewal draft whose `preceding_packet_ref` is the immutable version link;
 - `POST /v1/contract-governance/operator/obligations` and
-  `…/{obligation_id}:complete` — create and complete payment or acceptance
-  obligations; the controller reconciler marks missed open obligations
-  `Overdue`;
+  `…/{obligation_id}:complete` / `…:waive` — create, complete, or explicitly
+  waive payment or acceptance obligations; the controller reconciler marks
+  missed open obligations `Overdue`;
 - `POST …/packets/{packet_id}:draft-settlement` — hash the current commercial
   ledger summary into a pending settlement draft; the explicit
   `…/settlement-drafts` route is available for an already verified ledger
-  snapshot;
+  snapshot, with `…/settlement-drafts/{draft_id}:approve` and `:apply`
+  transitions;
 - `POST …/packets/{packet_id}/closure-proposals` — link a same-tenant
   `ViolationNotice` packet to a pending closure proposal without closing the
-  contract implicitly;
+  contract implicitly; `…/closure-proposals/{proposal_id}:approve` and
+  `:apply` provide the explicit review lifecycle;
 - `POST …/packets/{packet_id}:number` — allocate one tenant-scoped immutable
   contract number (retries return the existing number for that packet).
 
@@ -356,14 +358,28 @@ order:
   proposals for approval rather than closing a packet implicitly;
 - amendments are immutable records attached to an effective packet. An
   approved amendment can be materialized into a new renewal packet whose
-  `preceding_packet_ref` forms the version chain. The source effective packet
-  is never mutated;
+  `preceding_packet_ref` forms the version chain. The source remains effective
+  while the successor is a draft, then is atomically marked `Superseded` when
+  the successor registers execution;
 - payment milestones and acceptance obligations are durable objects with
   owners, due times, evidence, completion, overdue reconciliation, and a
   restart-safe operator dashboard projection;
 - contract numbers are allocated by a tenant-scoped server sequence, and the
   operator browser includes a compact governance view for effective packets
   and pending approvals.
+- governance creation routes derive stable request fingerprints, so an exact
+  retry replays the existing amendment, obligation, settlement draft, or
+  closure proposal instead of creating a second record. Materializing an
+  approved amendment is likewise replay-safe and rejects a second successor
+  for the same version link.
+- dashboard and admission projections are `POST` routes because their inputs
+  are JSON; clients must not send a JSON body with `GET`. Approval actions show
+  a confirmation dialog, require a different operator, and compensate a
+  failed guarded transition by reopening the approval.
+- enabling an approval threshold in a single-operator deployment deliberately
+  blocks high-value execute/close actions until a second mapped operator is
+  available. Treat that configuration as a rollout check, not as a silent
+  fallback to one-person approval.
 
 The following production integrations remain explicit boundaries rather than
 silent defaults: a real ledger/provider identity, legal/finance approval of

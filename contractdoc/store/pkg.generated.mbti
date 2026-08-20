@@ -30,7 +30,10 @@ pub struct ContractDocumentStore {
 pub async fn ContractDocumentStore::allocate_contract_number(Self, String, String, Int64) -> @contractdoc.ContractNumber
 pub async fn ContractDocumentStore::amendment(Self, String) -> @contractdoc.ContractAmendment?
 pub async fn ContractDocumentStore::amendments_for_packet(Self, String) -> Array[@contractdoc.ContractAmendment]
+pub async fn ContractDocumentStore::apply_closure_proposal(Self, String, Int64) -> @contractdoc.ContractClosureProposal
+pub async fn ContractDocumentStore::apply_settlement_draft(Self, String, Int64) -> @contractdoc.ContractSettlementDraft
 pub async fn ContractDocumentStore::close_packet(Self, String, Int64, @contractdoc.ContractClosureKind, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::closure_proposal(Self, String) -> @contractdoc.ContractClosureProposal?
 pub async fn ContractDocumentStore::complete_generation(Self, String, Int64, @contractdoc.ContractGeneratedArtifact, @contractdoc.ContractGeneratedArtifact, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::complete_obligation(Self, String, Int64, String, String?, Int64) -> @contractdoc.ContractObligation
 pub async fn ContractDocumentStore::confirm_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
@@ -42,11 +45,15 @@ pub async fn ContractDocumentStore::create_packet(Self, @contractdoc.ContractPac
 pub async fn ContractDocumentStore::create_settlement_draft(Self, @contractdoc.ContractSettlementDraft) -> @contractdoc.ContractSettlementDraft
 pub async fn ContractDocumentStore::decide_amendment(Self, String, Bool, String, Int64) -> @contractdoc.ContractAmendment
 pub async fn ContractDocumentStore::decide_approval(Self, String, Bool, String, String?, Int64) -> @contractdoc.ContractApproval
+pub async fn ContractDocumentStore::decide_closure_proposal(Self, String, Bool, Int64) -> @contractdoc.ContractClosureProposal
+pub async fn ContractDocumentStore::decide_settlement_draft(Self, String, Bool, Int64) -> @contractdoc.ContractSettlementDraft
 pub async fn ContractDocumentStore::fail_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::get_approval(Self, String) -> @contractdoc.ContractApproval?
 pub async fn ContractDocumentStore::governance_dashboard(Self, String, Int64) -> @contractdoc.ContractGovernanceDashboard
 pub async fn ContractDocumentStore::has_effective_master_lease(Self, String, String, Int64) -> Bool
+pub async fn ContractDocumentStore::latest_settlement_confirmation(Self, String, String) -> @contractdoc.ContractPacket?
 pub async fn ContractDocumentStore::list_approvals(Self, @contractdoc.ContractApprovalStatus?) -> Array[@contractdoc.ContractApproval]
+pub async fn ContractDocumentStore::obligation(Self, String) -> @contractdoc.ContractObligation?
 pub async fn ContractDocumentStore::open(String) -> Self
 pub async fn ContractDocumentStore::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn ContractDocumentStore::packet(Self, String) -> @contractdoc.ContractPacket?
@@ -55,10 +62,14 @@ pub async fn ContractDocumentStore::pending_generation_packets(Self) -> Array[@c
 pub async fn ContractDocumentStore::reconcile_obligations(Self, Int64) -> Array[@contractdoc.ContractObligation]
 pub async fn ContractDocumentStore::register_execution(Self, String, Int64, @contractdoc.ContractExecution, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::renew_packet(Self, String, String, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::reopen_approval(Self, String, String) -> @contractdoc.ContractApproval
 pub async fn ContractDocumentStore::request_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::settlement_draft(Self, String) -> @contractdoc.ContractSettlementDraft?
 pub async fn ContractDocumentStore::snapshot(Self) -> @contractdoc.ContractDocumentSnapshot
+pub async fn ContractDocumentStore::successor_packet(Self, String) -> @contractdoc.ContractPacket?
 pub async fn ContractDocumentStore::supersede_packet(Self, String, Int64, String, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::update_information(Self, @contractdoc.ContractTemplateManifest, String, Int64, Array[@contractdoc.ContractFieldValue], @contractdoc.ContractFieldOwner, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::waive_obligation(Self, String, Int64, String, Int64) -> @contractdoc.ContractObligation
 
 type ContractPersistence
 

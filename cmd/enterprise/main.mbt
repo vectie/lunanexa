@@ -2098,6 +2098,12 @@ fn update(
           load_command(model, emit),
         )
       }
+    Portal(ContractDocuments(SelectPacket(packet_id))) => {
+      let documents = model.portal.contract_documents.update(
+        SelectPacket(packet_id),
+      )
+      schedule_contract_preview(model, documents, 0, emit)
+    }
     Portal(ContractDocuments(SelectForm(form))) => {
       let documents = model.portal.contract_documents.update(SelectForm(form))
       schedule_contract_preview(model, documents, 0, emit)

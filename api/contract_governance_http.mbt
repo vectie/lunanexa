@@ -7,6 +7,15 @@ fn contract_governance_path(path : String) -> Bool {
 }
 
 ///|
+/// Request fingerprints keep server-generated governance identifiers unique
+/// when two submissions arrive in the same millisecond. They are not a
+/// substitute for a client idempotency key, but prevent unrelated retries or
+/// records from colliding on a timestamp-only ID.
+fn governance_request_fingerprint(body : String) -> String {
+  digest_hex(body)[:16].to_owned()
+}
+
+///|
 priv struct ContractAmendmentRequest {
   preceding_packet_ref : String
   base_revision : Int64
@@ -35,6 +44,11 @@ priv struct ContractObligationRequest {
 priv struct ContractObligationCompleteRequest {
   expected_revision : Int64
   evidence_ref : String?
+} derive(FromJson)
+
+///|
+priv struct ContractObligationWaiveRequest {
+  expected_revision : Int64
 } derive(FromJson)
 
 ///|
@@ -81,7 +95,7 @@ async fn ApiService::handle_contract_governance(
   }
   let now = @async.now()
   match (verb, path) {
-    (Get, "/v1/contract-governance/operator/admission") => {
+    (Post, "/v1/contract-governance/operator/admission") => {
       let request : ContractAdmissionRequest = @json.from_json(
         @json.parse(body),
       ) catch {
@@ -113,9 +127,7 @@ async fn ApiService::handle_contract_governance(
       }
       json_reply(200, view.to_json())
     }
-    (http_verb, "/v1/contract-governance/operator/dashboard") if http_verb ==
-      Get ||
-      http_verb == Post => {
+    (Post, "/v1/contract-governance/operator/dashboard") => {
       let request : ContractGovernanceTenantRequest = @json.from_json(
         @json.parse(body),
       ) catch {
@@ -162,7 +174,7 @@ async fn ApiService::handle_contract_governance(
         )
       }
       let amendment : @contractdoc.ContractAmendment = {
-        amendment_id: "amendment-{packet_id}-{now}",
+        amendment_id: "amendment-\{packet_id}-\{governance_request_fingerprint(body)}",
         tenant_ref: packet.tenant_ref,
         packet_id,
         preceding_packet_ref: request.preceding_packet_ref,
@@ -176,21 +188,26 @@ async fn ApiService::handle_contract_governance(
         updated_unix_ms: now,
         revision: 1L,
       }
-      let created = try store.create_amendment(amendment) catch {
-        _ =>
-          return api_error(
-            409, "AmendmentRejected", "amendment was rejected", false,
+      match store.amendment(amendment.amendment_id) {
+        Some(existing) => json_reply(200, existing.to_json())
+        None => {
+          let created = try store.create_amendment(amendment) catch {
+            _ =>
+              return api_error(
+                409, "AmendmentRejected", "amendment was rejected", false,
+              )
+          } noraise {
+            value => value
+          }
+          self.operator_audit_as(
+            operator_id,
+            "contract.amendment.create",
+            packet_id,
+            created.amendment_id,
           )
-      } noraise {
-        value => value
+          json_reply(201, created.to_json())
+        }
       }
-      self.operator_audit_as(
-        operator_id,
-        "contract.amendment.create",
-        packet_id,
-        created.amendment_id,
-      )
-      json_reply(201, created.to_json())
     }
     (Post, _) if path.has_suffix(":approve") &&
       path.has_prefix("/v1/contract-governance/operator/amendments/") => {
@@ -229,6 +246,14 @@ async fn ApiService::handle_contract_governance(
             409, "AmendmentNotEffective", "amendment must be effective before materialization",
             false,
           )
+      }
+      match store.successor_packet(amendment.preceding_packet_ref) {
+        Some(existing) if existing.packet_id != request.packet_id =>
+          return api_error(
+            409, "AmendmentMaterializationRejected", "this amendment already has a successor packet",
+            false,
+          )
+        _ => ()
       }
       let successor = store.renew_packet(
         amendment.preceding_packet_ref,
@@ -293,7 +318,7 @@ async fn ApiService::handle_contract_governance(
           )
       }
       let obligation : @contractdoc.ContractObligation = {
-        obligation_id: "obligation-{request.packet_id}-{now}-{request.owner_ref}",
+        obligation_id: "obligation-\{request.packet_id}-\{governance_request_fingerprint(body)}",
         tenant_ref: request.tenant_ref,
         packet_id: request.packet_id,
         kind: request.kind,
@@ -309,19 +334,24 @@ async fn ApiService::handle_contract_governance(
         updated_unix_ms: now,
         revision: 1L,
       }
-      let created = store.create_obligation(obligation) catch {
-        _ =>
-          return api_error(
-            409, "ObligationRejected", "obligation was rejected", false,
+      match store.obligation(obligation.obligation_id) {
+        Some(existing) => json_reply(200, existing.to_json())
+        None => {
+          let created = store.create_obligation(obligation) catch {
+            _ =>
+              return api_error(
+                409, "ObligationRejected", "obligation was rejected", false,
+              )
+          }
+          self.operator_audit_as(
+            operator_id,
+            "contract.obligation.create",
+            request.packet_id,
+            created.obligation_id,
           )
+          json_reply(201, created.to_json())
+        }
       }
-      self.operator_audit_as(
-        operator_id,
-        "contract.obligation.create",
-        request.packet_id,
-        created.obligation_id,
-      )
-      json_reply(201, created.to_json())
     }
     (Post, _) if path.has_suffix(":complete") &&
       path.has_prefix("/v1/contract-governance/operator/obligations/") => {
@@ -352,6 +382,34 @@ async fn ApiService::handle_contract_governance(
       )
       json_reply(200, completed.to_json())
     }
+    (Post, _) if path.has_suffix(":waive") &&
+      path.has_prefix("/v1/contract-governance/operator/obligations/") => {
+      let obligation_id = path["/v1/contract-governance/operator/obligations/".length():path.length() -
+      ":waive".length()].to_owned()
+      let request : ContractObligationWaiveRequest = @json.from_json(
+        @json.parse(body),
+      ) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "invalid obligation waiver", false,
+          )
+      }
+      let waived = store.waive_obligation(
+        obligation_id,
+        request.expected_revision,
+        operator_id,
+        now,
+      ) catch {
+        _ =>
+          return api_error(
+            409, "ObligationRejected", "obligation waiver was rejected", false,
+          )
+      }
+      self.operator_audit_as(
+        operator_id, "contract.obligation.waive", obligation_id, "obligation:waived",
+      )
+      json_reply(200, waived.to_json())
+    }
     (Post, _) if path.has_suffix("/settlement-drafts") &&
       path.has_prefix("/v1/contract-governance/operator/packets/") => {
       let packet_id = path["/v1/contract-governance/operator/packets/".length():path.length() -
@@ -369,7 +427,7 @@ async fn ApiService::handle_contract_governance(
         None => return api_error(404, "NotFound", "packet was not found", false)
       }
       let draft : @contractdoc.ContractSettlementDraft = {
-        draft_id: "settlement-draft-{packet_id}-{now}",
+        draft_id: "settlement-draft-\{packet_id}-\{governance_request_fingerprint(body)}",
         packet_id,
         tenant_ref: packet.tenant_ref,
         ledger_snapshot_sha256: request.ledger_snapshot_sha256,
@@ -379,19 +437,25 @@ async fn ApiService::handle_contract_governance(
         created_unix_ms: now,
         updated_unix_ms: now,
       }
-      let created = store.create_settlement_draft(draft) catch {
-        _ =>
-          return api_error(
-            409, "SettlementDraftRejected", "settlement draft was rejected", false,
+      match store.settlement_draft(draft.draft_id) {
+        Some(existing) => json_reply(200, existing.to_json())
+        None => {
+          let created = store.create_settlement_draft(draft) catch {
+            _ =>
+              return api_error(
+                409, "SettlementDraftRejected", "settlement draft was rejected",
+                false,
+              )
+          }
+          self.operator_audit_as(
+            operator_id,
+            "contract.settlement-draft.create",
+            packet_id,
+            created.draft_id,
           )
+          json_reply(201, created.to_json())
+        }
       }
-      self.operator_audit_as(
-        operator_id,
-        "contract.settlement-draft.create",
-        packet_id,
-        created.draft_id,
-      )
-      json_reply(201, created.to_json())
     }
     (Post, _) if path.has_suffix(":draft-settlement") &&
       path.has_prefix("/v1/contract-governance/operator/packets/") => {
@@ -401,16 +465,21 @@ async fn ApiService::handle_contract_governance(
         Some(value) => value
         None => return api_error(404, "NotFound", "packet was not found", false)
       }
-      let summary = self.commercial_store.summary(
-        packet.organization_id,
-        "CNY",
-        2,
-        now,
-      )
+      let summary = try
+        self.commercial_store.summary(packet.organization_id, "CNY", 2, now)
+      catch {
+        _ =>
+          return api_error(
+            409, "SettlementDraftRejected", "ledger summary is unavailable or uses mixed currencies",
+            false,
+          )
+      } noraise {
+        value => value
+      }
       let digest_input = summary.to_json().stringify()
       let ledger_digest = "sha256:\{@crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(digest_input)))}"
       let draft : @contractdoc.ContractSettlementDraft = {
-        draft_id: "settlement-draft-\{packet_id}-\{now}",
+        draft_id: "settlement-draft-\{packet_id}-\{governance_request_fingerprint(digest_input)}",
         packet_id,
         tenant_ref: packet.tenant_ref,
         ledger_snapshot_sha256: ledger_digest,
@@ -420,19 +489,25 @@ async fn ApiService::handle_contract_governance(
         created_unix_ms: now,
         updated_unix_ms: now,
       }
-      let created = store.create_settlement_draft(draft) catch {
-        _ =>
-          return api_error(
-            409, "SettlementDraftRejected", "settlement draft was rejected", false,
+      match store.settlement_draft(draft.draft_id) {
+        Some(existing) => json_reply(200, existing.to_json())
+        None => {
+          let created = store.create_settlement_draft(draft) catch {
+            _ =>
+              return api_error(
+                409, "SettlementDraftRejected", "settlement draft was rejected",
+                false,
+              )
+          }
+          self.operator_audit_as(
+            operator_id,
+            "contract.settlement-draft.auto",
+            packet_id,
+            created.draft_id,
           )
+          json_reply(201, created.to_json())
+        }
       }
-      self.operator_audit_as(
-        operator_id,
-        "contract.settlement-draft.auto",
-        packet_id,
-        created.draft_id,
-      )
-      json_reply(201, created.to_json())
     }
     (Post, _) if path.has_suffix("/closure-proposals") &&
       path.has_prefix("/v1/contract-governance/operator/packets/") => {
@@ -451,7 +526,7 @@ async fn ApiService::handle_contract_governance(
         None => return api_error(404, "NotFound", "packet was not found", false)
       }
       let proposal : @contractdoc.ContractClosureProposal = {
-        proposal_id: "closure-proposal-{packet_id}-{now}",
+        proposal_id: "closure-proposal-\{packet_id}-\{governance_request_fingerprint(body)}",
         packet_id,
         tenant_ref: packet.tenant_ref,
         violation_packet_ref: request.violation_packet_ref,
@@ -461,19 +536,25 @@ async fn ApiService::handle_contract_governance(
         created_unix_ms: now,
         updated_unix_ms: now,
       }
-      let created = store.create_closure_proposal(proposal) catch {
-        _ =>
-          return api_error(
-            409, "ClosureProposalRejected", "closure proposal was rejected", false,
+      match store.closure_proposal(proposal.proposal_id) {
+        Some(existing) => json_reply(200, existing.to_json())
+        None => {
+          let created = store.create_closure_proposal(proposal) catch {
+            _ =>
+              return api_error(
+                409, "ClosureProposalRejected", "closure proposal was rejected",
+                false,
+              )
+          }
+          self.operator_audit_as(
+            operator_id,
+            "contract.closure-proposal.create",
+            packet_id,
+            created.proposal_id,
           )
+          json_reply(201, created.to_json())
+        }
       }
-      self.operator_audit_as(
-        operator_id,
-        "contract.closure-proposal.create",
-        packet_id,
-        created.proposal_id,
-      )
-      json_reply(201, created.to_json())
     }
     (Post, _) if path.has_suffix(":number") &&
       path.has_prefix("/v1/contract-governance/operator/packets/") => {
@@ -502,6 +583,78 @@ async fn ApiService::handle_contract_governance(
       )
       json_reply(201, number.to_json())
     }
+    (Post, _) if path.has_prefix(
+        "/v1/contract-governance/operator/settlement-drafts/",
+      ) &&
+      path.has_suffix(":approve") => {
+      let draft_id = path["/v1/contract-governance/operator/settlement-drafts/".length():path.length() -
+      ":approve".length()].to_owned()
+      let decided = store.decide_settlement_draft(draft_id, true, now) catch {
+        _ =>
+          return api_error(
+            409, "SettlementDraftRejected", "settlement draft approval was rejected",
+            false,
+          )
+      }
+      self.operator_audit_as(
+        operator_id, "contract.settlement-draft.approve", draft_id, "Approved",
+      )
+      json_reply(200, decided.to_json())
+    }
+    (Post, _) if path.has_prefix(
+        "/v1/contract-governance/operator/settlement-drafts/",
+      ) &&
+      path.has_suffix(":apply") => {
+      let draft_id = path["/v1/contract-governance/operator/settlement-drafts/".length():path.length() -
+      ":apply".length()].to_owned()
+      let applied = store.apply_settlement_draft(draft_id, now) catch {
+        _ =>
+          return api_error(
+            409, "SettlementDraftRejected", "settlement draft apply was rejected",
+            false,
+          )
+      }
+      self.operator_audit_as(
+        operator_id, "contract.settlement-draft.apply", draft_id, "Applied",
+      )
+      json_reply(200, applied.to_json())
+    }
+    (Post, _) if path.has_prefix(
+        "/v1/contract-governance/operator/closure-proposals/",
+      ) &&
+      path.has_suffix(":approve") => {
+      let proposal_id = path["/v1/contract-governance/operator/closure-proposals/".length():path.length() -
+      ":approve".length()].to_owned()
+      let decided = store.decide_closure_proposal(proposal_id, true, now) catch {
+        _ =>
+          return api_error(
+            409, "ClosureProposalRejected", "closure proposal approval was rejected",
+            false,
+          )
+      }
+      self.operator_audit_as(
+        operator_id, "contract.closure-proposal.approve", proposal_id, "Approved",
+      )
+      json_reply(200, decided.to_json())
+    }
+    (Post, _) if path.has_prefix(
+        "/v1/contract-governance/operator/closure-proposals/",
+      ) &&
+      path.has_suffix(":apply") => {
+      let proposal_id = path["/v1/contract-governance/operator/closure-proposals/".length():path.length() -
+      ":apply".length()].to_owned()
+      let applied = store.apply_closure_proposal(proposal_id, now) catch {
+        _ =>
+          return api_error(
+            409, "ClosureProposalRejected", "closure proposal apply was rejected",
+            false,
+          )
+      }
+      self.operator_audit_as(
+        operator_id, "contract.closure-proposal.apply", proposal_id, "Applied",
+      )
+      json_reply(200, applied.to_json())
+    }
     _ =>
       api_error(
         404, "NotFound", "contract governance route was not found", false,
@@ -517,7 +670,36 @@ pub async fn ApiService::reconcile_contract_governance(
   now_unix_ms : Int64,
 ) -> Unit {
   match self.contract_document_store {
-    Some(store) => ignore(store.reconcile_obligations(now_unix_ms))
+    Some(store) => {
+      let overdue = store.reconcile_obligations(now_unix_ms)
+      match self.notification_store {
+        Some(notifications) =>
+          for obligation in overdue {
+            ignore(
+              notifications.enqueue({
+                version: @notifications.contract_version,
+                notification_id: "contract-obligation-overdue-\{obligation.obligation_id}",
+                deduplication_key: "contract-obligation-overdue-\{obligation.obligation_id}",
+                source_receipt: "contract-governance:obligation:\{obligation.obligation_id}:overdue",
+                topic: CommercialAction,
+                code: "ContractObligationOverdue",
+                severity: Warning,
+                audience: TenantUsers(tenant_ref=obligation.tenant_ref),
+                title_key: "alerts.contract_obligation_overdue.title",
+                body_key: "alerts.contract_obligation_overdue.body",
+                parameters: {
+                  "obligation_ref": obligation.obligation_id,
+                  "packet_ref": obligation.packet_id,
+                  "due_unix_ms": obligation.due_unix_ms.to_string(),
+                },
+                created_unix_ms: now_unix_ms,
+                expires_unix_ms: None,
+              }),
+            )
+          }
+        None => ()
+      }
+    }
     None => ()
   }
 }

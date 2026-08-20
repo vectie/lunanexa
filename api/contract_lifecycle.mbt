@@ -22,19 +22,13 @@ async fn ApiService::check_settlement_against_ledger(
   now_unix_ms : Int64,
 ) -> SettlementLedgerCheck? {
   guard self.contract_document_store is Some(store) else { return None }
-  let mut settlement : @contractdoc.ContractPacket? = None
-  for other in store.snapshot().packets {
-    if other.packet_id != packet.packet_id &&
-      other.tenant_ref == packet.tenant_ref &&
-      other.active_forms.contains(SettlementConfirmation) &&
-      (other.state == Effective || other.state == Closed) {
-      match settlement {
-        Some(current) if current.updated_unix_ms >= other.updated_unix_ms => ()
-        _ => settlement = Some(other)
-      }
-    }
+  guard store.latest_settlement_confirmation(
+      packet.tenant_ref,
+      packet.packet_id,
+    )
+    is Some(confirmed) else {
+    return None
   }
-  guard settlement is Some(confirmed) else { return None }
   let amount = match confirmed.value("settlement.amount_due") {
     Some(raw) => @contractdoc.parse_cny_minor_units(raw)
     None => None

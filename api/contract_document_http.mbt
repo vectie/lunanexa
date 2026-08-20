@@ -769,24 +769,24 @@ async fn ApiService::handle_contract_documents(
           )
         }
         let now = @async.now()
-        // The full original path re-runs here; a failure (revision fence,
-        // state drift, settlement mismatch) leaves the approval pending so
-        // the initiator can withdraw it.
-        ignore(
-          try
-            self.execute_approved_contract_action(store, approval, now)
-          catch {
-            error => return contract_document_error(error)
-          } noraise {
-            value => value
-          },
-        )
         let decided = try
           store.decide_approval(approval_id, true, operator_id, None, now)
         catch {
           error => return contract_document_error(error)
         } noraise {
           value => value
+        }
+        // Mark the second-person decision before applying the guarded
+        // transition. If the transition fails, compensate by reopening the
+        // approval so a stale/changed packet never leaves a misleading
+        // Approved record behind.
+        try self.execute_approved_contract_action(store, approval, now) catch {
+          error => {
+            ignore(store.reopen_approval(approval_id, operator_id))
+            return contract_document_error(error)
+          }
+        } noraise {
+          _ => ()
         }
         self.operator_audit_as(
           operator_id,

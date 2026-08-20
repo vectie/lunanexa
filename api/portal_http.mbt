@@ -392,10 +392,14 @@ async fn ApiService::handle_enterprise_portal(
       )
     }
     (Post, "/v1/portal/self/api-keys") => {
-      guard self.access_store is Some(access) &&
-        decode_portal_api_key(body) is Some(intent) else {
+      guard decode_portal_api_key(body) is Some(intent) else {
         return api_error(
           400, "InvalidRequest", "invalid self-service API key intent", false,
+        )
+      }
+      guard self.access_store is Some(access) else {
+        return api_error(
+          503, "AccessStoreUnavailable", "API key state is unavailable", true,
         )
       }
       let view = try portal.self_view(subject_ref) catch {
@@ -406,6 +410,26 @@ async fn ApiService::handle_enterprise_portal(
       if !@portal.role_allows(view.membership.roles, Developer) {
         return api_error(
           403, "PortalAccessDenied", "developer role is required", false,
+        )
+      }
+      // Contract governance is the access authority for customer-issued keys.
+      // Keep this check on the portal path as well as the operator path so a
+      // developer membership cannot bypass an absent, expired, or superseded
+      // master lease.
+      guard self.contract_document_store is Some(contract_store) else {
+        return api_error(
+          503, "ContractStoreUnavailable", "an effective master lease could not be verified",
+          true,
+        )
+      }
+      if !contract_store.has_effective_master_lease(
+          view.membership.tenant_ref,
+          subject_ref,
+          @async.now(),
+        ) {
+        return api_error(
+          409, "MasterLeaseRequired", "an effective master lease is required before issuing an API key",
+          false,
         )
       }
       let issued = try

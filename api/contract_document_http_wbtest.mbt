@@ -24,6 +24,10 @@ async test "contract document API is subject scoped and rejects offline secret f
   let documents = @contractdoc_store.ContractDocumentStore::open(
     "\{directory}/contracts.json",
   )
+  let access_store = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "contract-document-access-issuer-secret-more-than-32-bytes",
+  )
   let runtime = @runtimes.OpenAiTextRuntime::new(
     "http://127.0.0.1:1/v1/responses",
     "runtime-secret",
@@ -36,6 +40,7 @@ async test "contract document API is subject scoped and rejects offline secret f
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_portal_store(portal)
+    .with_access_store(access_store)
     .with_contract_document_store(documents)
     .with_contract_document_worker_token(
       "contract-renderer-test-token-more-than-32-bytes",
@@ -46,7 +51,10 @@ async test "contract document API is subject scoped and rejects offline secret f
   let manifest = service.handle(
     Get,
     "/v1/contract-documents/manifest",
-    headers("subject-a"),
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-a",
+    },
     "",
   )
   assert_eq(manifest.status, 200)
@@ -56,7 +64,10 @@ async test "contract document API is subject scoped and rejects offline secret f
   let created = service.handle(
     Post,
     "/v1/contract-documents/self",
-    headers("subject-a"),
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-a",
+    },
     "{\"packet_id\":\"packet-api-1\",\"idempotency_key\":\"packet-api-key-1\",\"order_ref\":\"order-api-1\",\"active_forms\":[\"MasterLease\"]}",
   )
   assert_eq(created.status, 201)
@@ -218,6 +229,27 @@ async test "governance routes enforce effective access and expose the operating 
   let amendment_value : @contractdoc.ContractAmendment = @json.from_json(
     @json.parse(amendment.body),
   )
+  let amendment_again = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments",
+    operator_headers,
+    "{\"preceding_packet_ref\":\"packet-governance-api\",\"base_revision\":\"1\",\"reason\":\"second price amendment\",\"changes\":[{\"field_id\":\"lease.total_rent\",\"value\":\"110\"}]}",
+  )
+  assert_eq(amendment_again.status, 201)
+  let amendment_again_value : @contractdoc.ContractAmendment = @json.from_json(
+    @json.parse(amendment_again.body),
+  )
+  assert_true(
+    amendment_again_value.amendment_id != amendment_value.amendment_id,
+  )
+  let amendment_replay = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments",
+    operator_headers,
+    "{\"preceding_packet_ref\":\"packet-governance-api\",\"base_revision\":\"1\",\"reason\":\"price amendment\",\"changes\":[{\"field_id\":\"lease.total_rent\",\"value\":\"100\"}]}",
+  )
+  assert_eq(amendment_replay.status, 200)
+  assert_true(amendment_replay.body.contains(amendment_value.amendment_id))
   let customer_owned_amendment = service.handle(
     Post,
     "/v1/contract-governance/operator/amendments",
@@ -249,8 +281,22 @@ async test "governance routes enforce effective access and expose the operating 
   let successor = documents.packet("packet-governance-successor").unwrap()
   assert_eq(successor.preceding_packet_ref, Some("packet-governance-api"))
   assert_eq(successor.value("lease.total_rent"), Some("100"))
+  let materialized_replay = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments/\{amendment_value.amendment_id}:materialize",
+    { "Authorization": "Bearer operator-b-token" },
+    "{\"packet_id\":\"packet-governance-successor\",\"idempotency_key\":\"packet-governance-successor-key\"}",
+  )
+  assert_eq(materialized_replay.status, 201)
+  let duplicate_materialization = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments/\{amendment_value.amendment_id}:materialize",
+    { "Authorization": "Bearer operator-b-token" },
+    "{\"packet_id\":\"packet-governance-successor-2\",\"idempotency_key\":\"packet-governance-successor-key-2\"}",
+  )
+  assert_eq(duplicate_materialization.status, 409)
   let dashboard = service.handle(
-    Get,
+    Post,
     "/v1/contract-governance/operator/dashboard",
     operator_headers,
     "{\"tenant_ref\":\"tenant-governance-api\"}",
@@ -259,17 +305,108 @@ async test "governance routes enforce effective access and expose the operating 
   assert_true(dashboard.body.contains("effective_packets"))
   assert_true(dashboard.body.contains("pending_approvals"))
   let dashboard_post = service.handle(
-    Post,
+    Get,
     "/v1/contract-governance/operator/dashboard",
     operator_headers,
     "{\"tenant_ref\":\"tenant-governance-api\"}",
   )
-  assert_eq(dashboard_post.status, 200)
+  assert_eq(dashboard_post.status, 404)
+  let admission = service.handle(
+    Post,
+    "/v1/contract-governance/operator/admission",
+    operator_headers,
+    "{\"tenant_ref\":\"tenant-governance-api\",\"subject_ref\":\"subject-governance-api\"}",
+  )
+  assert_eq(admission.status, 200)
+  assert_true(admission.body.contains("effective_master_lease"))
+  let admission_get = service.handle(
+    Get,
+    "/v1/contract-governance/operator/admission",
+    operator_headers,
+    "{\"tenant_ref\":\"tenant-governance-api\",\"subject_ref\":\"subject-governance-api\"}",
+  )
+  assert_eq(admission_get.status, 404)
   @fs.remove(directory + "/state.json")
   @fs.remove(directory + "/state.json.lock")
   @fs.remove(directory + "/contracts.json")
   @fs.remove(directory + "/access.json")
   @fs.remove(directory)
+}
+
+///|
+async test "four-eyes HTTP approval is 202, second-person, and replay-safe" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contract-approval-http-")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  let documents = @contractdoc_store.ContractDocumentStore::open(
+    "\{directory}/contracts.json",
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    )
+    .with_contract_document_store(documents)
+    .with_operator_tokens([
+      ("operator-a", "operator-token"),
+      ("operator-b", "operator-b-token"),
+    ])
+    .with_contract_approval_threshold(0L)
+  let packet : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      @contractdoc.youthpolicy_remote_lease_manifest(),
+      "packet-approval-http",
+      "packet-approval-http-key",
+      "tenant-approval-http",
+      "org-approval-http",
+      "subject-approval-http",
+      "order-approval-http",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+    values: [{ field_id: "lease.total_rent", value: "1" }],
+  }
+  ignore(documents.create_packet(packet, "operator-a"))
+  let pending = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-approval-http:close",
+    { "Authorization": "Bearer operator-token" },
+    "{\"expected_revision\":\"1\",\"kind\":\"Expired\",\"reason\":\"term ended\"}",
+  )
+  assert_eq(pending.status, 202)
+  let approval : @contractdoc.ContractApproval = @json.from_json(
+    @json.parse(pending.body),
+  )
+  let self_decision = service.handle(
+    Post,
+    "/v1/contract-documents/operator/approvals/\{approval.approval_id}:approve",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_eq(self_decision.status, 409)
+  let decided = service.handle(
+    Post,
+    "/v1/contract-documents/operator/approvals/\{approval.approval_id}:approve",
+    { "Authorization": "Bearer operator-b-token" },
+    "",
+  )
+  assert_eq(decided.status, 200)
+  assert_eq(documents.packet(packet.packet_id).unwrap().state, Closed)
+  let replay = service.handle(
+    Post,
+    "/v1/contract-documents/operator/approvals/\{approval.approval_id}:approve",
+    { "Authorization": "Bearer operator-b-token" },
+    "",
+  )
+  assert_eq(replay.status, 409)
+  @fs.rmdir(directory, recursive=true)
 }
 
 ///|
@@ -291,6 +428,10 @@ async test "contract document lifecycle endpoints gate creation and record execu
   let documents = @contractdoc_store.ContractDocumentStore::open(
     "\{directory}/contracts.json",
   )
+  let access_store = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "contract-lifecycle-access-issuer-secret-more-than-32-bytes",
+  )
   let runtime = @runtimes.OpenAiTextRuntime::new(
     "http://127.0.0.1:1/v1/responses",
     "runtime-secret",
@@ -303,6 +444,7 @@ async test "contract document lifecycle endpoints gate creation and record execu
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_portal_store(portal)
+    .with_access_store(access_store)
     .with_contract_document_store(documents)
     .with_contract_document_worker_token(
       "contract-renderer-test-token-more-than-32-bytes",
@@ -457,6 +599,26 @@ async test "contract document lifecycle endpoints gate creation and record execu
   )
   assert_eq(effective.status, 200)
   assert_true(effective.body.contains("Effective"))
+  let portal_body = (
+    {
+      "key_id": "portal-key-effective",
+      "display_name": "Portal key",
+      "scopes": ["Inference"],
+      "allowed_models": [],
+      "expires_unix_ms": (@async.now() + 86400000L).to_json(),
+      "maximum_requests": 10L.to_json(),
+    } : Json).stringify()
+  assert_true(decode_portal_api_key(portal_body) is Some(_))
+  let portal_key = service.handle(
+    Post,
+    "/v1/portal/self/api-keys",
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-a",
+    },
+    portal_body,
+  )
+  assert_eq(portal_key.status, 201)
   // Early termination needs an effective settlement; expiry closes directly.
   let early = service.handle(
     Post,

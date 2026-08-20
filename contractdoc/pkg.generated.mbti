@@ -349,6 +349,7 @@ pub fn ContractPacket::marker_value(Self, String) -> String raise ContractDocume
 pub fn ContractPacket::register_execution(Self, Int64, ContractExecution, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::renewal_draft(Self, ContractTemplateManifest, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::request_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
+pub fn ContractPacket::supersede_effective(Self, Int64, ContractSupersession, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::supersede_packet(Self, Int64, ContractSupersession, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], ContractFieldOwner, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::value(Self, String) -> String?

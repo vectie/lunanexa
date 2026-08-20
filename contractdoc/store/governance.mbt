@@ -139,6 +139,39 @@ pub async fn ContractDocumentStore::amendment(
 }
 
 ///|
+pub async fn ContractDocumentStore::obligation(
+  self : ContractDocumentStore,
+  obligation_id : String,
+) -> @contractdoc.ContractObligation? {
+  self.mutex.acquire()
+  let value = self.obligations.get(obligation_id)
+  self.mutex.release()
+  value
+}
+
+///|
+pub async fn ContractDocumentStore::settlement_draft(
+  self : ContractDocumentStore,
+  draft_id : String,
+) -> @contractdoc.ContractSettlementDraft? {
+  self.mutex.acquire()
+  let value = self.settlement_drafts.get(draft_id)
+  self.mutex.release()
+  value
+}
+
+///|
+pub async fn ContractDocumentStore::closure_proposal(
+  self : ContractDocumentStore,
+  proposal_id : String,
+) -> @contractdoc.ContractClosureProposal? {
+  self.mutex.acquire()
+  let value = self.closure_proposals.get(proposal_id)
+  self.mutex.release()
+  value
+}
+
+///|
 /// Approving an amendment changes only the amendment projection; the source
 /// packet is never mutated. A later packet creation can consume the effective
 /// amendment as its immutable predecessor.
@@ -159,6 +192,12 @@ pub async fn ContractDocumentStore::decide_amendment(
       raise @contractdoc.ContractDocumentError::InvalidTransition(
         "amendment is no longer decidable",
       )
+    }
+    guard self.packets.get(amendment.preceding_packet_ref) is Some(packet) &&
+      packet.tenant_ref == amendment.tenant_ref &&
+      packet.state == Effective &&
+      packet.revision == amendment.base_revision else {
+      raise @contractdoc.ContractDocumentError::StaleRevision
     }
     if approved && decided_by == amendment.created_by {
       raise @contractdoc.ContractDocumentError::ContractApprovalSelfDecision(
@@ -262,6 +301,51 @@ pub async fn ContractDocumentStore::complete_obligation(
       state: Completed,
       evidence_ref,
       completed_by: Some(completed_by),
+      completed_unix_ms: Some(now_unix_ms),
+      updated_unix_ms: now_unix_ms,
+      revision: obligation.revision + 1L,
+    }
+    self.obligations[obligation_id] = next
+    self.persist()
+    self.mutex.release()
+    next
+  } catch {
+    error => {
+      self.obligations = before
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Waives an open or overdue obligation with an explicit operator decision.
+pub async fn ContractDocumentStore::waive_obligation(
+  self : ContractDocumentStore,
+  obligation_id : String,
+  expected_revision : Int64,
+  waived_by : String,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractObligation {
+  self.mutex.acquire()
+  let before = self.obligations.copy()
+  try {
+    guard self.obligations.get(obligation_id) is Some(obligation) else {
+      raise @contractdoc.ContractDocumentError::NotFound(obligation_id)
+    }
+    guard obligation.revision == expected_revision else {
+      raise @contractdoc.ContractDocumentError::StaleRevision
+    }
+    guard obligation.state == Open || obligation.state == Overdue else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "obligation is not waivable",
+      )
+    }
+    let next = {
+      ..obligation,
+      state: Waived,
+      evidence_ref: Some("waived-by:\{waived_by}"),
+      completed_by: Some(waived_by),
       completed_unix_ms: Some(now_unix_ms),
       updated_unix_ms: now_unix_ms,
       revision: obligation.revision + 1L,
@@ -394,6 +478,154 @@ pub async fn ContractDocumentStore::create_closure_proposal(
 }
 
 ///|
+/// Approves or rejects a pending settlement draft.
+pub async fn ContractDocumentStore::decide_settlement_draft(
+  self : ContractDocumentStore,
+  draft_id : String,
+  approved : Bool,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractSettlementDraft {
+  self.mutex.acquire()
+  let before = self.settlement_drafts.copy()
+  try {
+    guard self.settlement_drafts.get(draft_id) is Some(draft) else {
+      raise @contractdoc.ContractDocumentError::NotFound(draft_id)
+    }
+    guard draft.state == PendingApproval else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "settlement draft is no longer pending",
+      )
+    }
+    let next = {
+      ..draft,
+      state: if approved {
+        Approved
+      } else {
+        Rejected
+      },
+      created_by: draft.created_by,
+      updated_unix_ms: now_unix_ms,
+    }
+    self.settlement_drafts[draft_id] = next
+    self.persist()
+    self.mutex.release()
+    next
+  } catch {
+    error => {
+      self.settlement_drafts = before
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Applies an approved settlement draft, leaving an auditable terminal state.
+pub async fn ContractDocumentStore::apply_settlement_draft(
+  self : ContractDocumentStore,
+  draft_id : String,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractSettlementDraft {
+  self.mutex.acquire()
+  let before = self.settlement_drafts.copy()
+  try {
+    guard self.settlement_drafts.get(draft_id) is Some(draft) else {
+      raise @contractdoc.ContractDocumentError::NotFound(draft_id)
+    }
+    guard draft.state == Approved else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "settlement draft must be approved before apply",
+      )
+    }
+    let next = { ..draft, state: Applied, updated_unix_ms: now_unix_ms }
+    self.settlement_drafts[draft_id] = next
+    self.persist()
+    self.mutex.release()
+    next
+  } catch {
+    error => {
+      self.settlement_drafts = before
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Approves or rejects a pending closure proposal.
+pub async fn ContractDocumentStore::decide_closure_proposal(
+  self : ContractDocumentStore,
+  proposal_id : String,
+  approved : Bool,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractClosureProposal {
+  self.mutex.acquire()
+  let before = self.closure_proposals.copy()
+  try {
+    guard self.closure_proposals.get(proposal_id) is Some(proposal) else {
+      raise @contractdoc.ContractDocumentError::NotFound(proposal_id)
+    }
+    guard proposal.state == PendingApproval else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "closure proposal is no longer pending",
+      )
+    }
+    let next = {
+      ..proposal,
+      state: if approved {
+        Approved
+      } else {
+        Rejected
+      },
+      updated_unix_ms: now_unix_ms,
+    }
+    self.closure_proposals[proposal_id] = next
+    self.persist()
+    self.mutex.release()
+    next
+  } catch {
+    error => {
+      self.closure_proposals = before
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Applies an approved closure proposal after the operator has executed the
+/// separate packet-close action.
+pub async fn ContractDocumentStore::apply_closure_proposal(
+  self : ContractDocumentStore,
+  proposal_id : String,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractClosureProposal {
+  self.mutex.acquire()
+  let before = self.closure_proposals.copy()
+  try {
+    guard self.closure_proposals.get(proposal_id) is Some(proposal) else {
+      raise @contractdoc.ContractDocumentError::NotFound(proposal_id)
+    }
+    guard proposal.state == Approved else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "closure proposal must be approved before apply",
+      )
+    }
+    let next = { ..proposal, state: Applied, updated_unix_ms: now_unix_ms }
+    self.closure_proposals[proposal_id] = next
+    self.persist()
+    self.mutex.release()
+    next
+  } catch {
+    error => {
+      self.closure_proposals = before
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn ContractDocumentStore::allocate_contract_number(
   self : ContractDocumentStore,
   tenant_ref : String,
@@ -516,4 +748,23 @@ pub async fn ContractDocumentStore::governance_dashboard(
   }
   self.mutex.release()
   dashboard
+}
+
+///|
+/// Returns the authoritative settlement confirmation for a tenant. Callers
+/// use this before applying any ledger reconciliation, while the store uses
+/// the same selector for its final close gate.
+pub async fn ContractDocumentStore::latest_settlement_confirmation(
+  self : ContractDocumentStore,
+  tenant_ref : String,
+  excluded_packet_id : String,
+) -> @contractdoc.ContractPacket? {
+  self.mutex.acquire()
+  let selected = latest_settlement_confirmation_locked(
+    self.packets,
+    tenant_ref,
+    excluded_packet_id,
+  )
+  self.mutex.release()
+  selected
 }

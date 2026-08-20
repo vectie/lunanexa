@@ -136,6 +136,34 @@ fn sorted_packets(
 }
 
 ///|
+/// The single settlement-confirmation selector used by every closure gate.
+/// Keeping this decision in the contract store prevents callers from choosing
+/// different "latest" packets when several confirmations coexist.
+fn latest_settlement_confirmation_locked(
+  packets : Map[String, @contractdoc.ContractPacket],
+  tenant_ref : String,
+  excluded_packet_id : String,
+) -> @contractdoc.ContractPacket? {
+  let mut selected : @contractdoc.ContractPacket? = None
+  for packet in packets.values() {
+    if packet.packet_id != excluded_packet_id &&
+      packet.tenant_ref == tenant_ref &&
+      packet.active_forms.contains(SettlementConfirmation) &&
+      (packet.state == Effective || packet.state == Closed) {
+      match selected {
+        Some(current) if current.updated_unix_ms > packet.updated_unix_ms ||
+          (
+            current.updated_unix_ms == packet.updated_unix_ms &&
+            current.packet_id >= packet.packet_id
+          ) => ()
+        _ => selected = Some(packet)
+      }
+    }
+  }
+  selected
+}
+
+///|
 fn sorted_approvals(
   approvals : Map[String, @contractdoc.ContractApproval],
 ) -> Array[@contractdoc.ContractApproval] {
@@ -706,6 +734,26 @@ pub async fn ContractDocumentStore::packet(
 }
 
 ///|
+/// Returns the current non-terminal successor, if one has already been
+/// materialized from an effective packet.
+pub async fn ContractDocumentStore::successor_packet(
+  self : ContractDocumentStore,
+  source_packet_id : String,
+) -> @contractdoc.ContractPacket? {
+  self.mutex.acquire()
+  let mut value : @contractdoc.ContractPacket? = None
+  for existing in self.packets.values() {
+    if existing.preceding_packet_ref == Some(source_packet_id) &&
+      existing.state != Superseded {
+      value = Some(existing)
+      break
+    }
+  }
+  self.mutex.release()
+  value
+}
+
+///|
 pub async fn ContractDocumentStore::packets_for_subject(
   self : ContractDocumentStore,
   subject_ref : String,
@@ -981,6 +1029,52 @@ pub async fn ContractDocumentStore::register_execution(
         now_unix_ms,
       ),
     )
+    // A renewal/amendment source remains effective while its successor is a
+    // draft, but exactly one packet may be effective once the successor is
+    // executed. Retire the predecessor in this same durable mutation.
+    match packet.preceding_packet_ref {
+      Some(predecessor_id) if packet.active_forms.contains(MasterLease) => {
+        guard self.packets.get(predecessor_id) is Some(predecessor) else {
+          raise @contractdoc.ContractDocumentError::NotFound(
+            "contract predecessor",
+          )
+        }
+        let superseded = predecessor.supersede_effective(
+          predecessor.revision,
+          {
+            successor_ref: packet.packet_id,
+            reason: "successor packet became effective",
+            superseded_by: evidence.registered_by,
+            superseded_unix_ms: now_unix_ms,
+          },
+          now_unix_ms,
+        )
+        self.packets[predecessor_id] = superseded
+        self.events.push(
+          event_for(
+            superseded,
+            PacketSupersededEvent,
+            evidence.registered_by,
+            [],
+            None,
+            now_unix_ms,
+          ),
+        )
+        for amendment_id, amendment in self.amendments {
+          if amendment.preceding_packet_ref == predecessor_id &&
+            amendment.state == Effective {
+            self.amendments[amendment_id] = {
+              ..amendment,
+              state: Superseded,
+              updated_unix_ms: now_unix_ms,
+              revision: amendment.revision + 1L,
+            }
+          }
+        }
+      }
+      Some(_) => ()
+      None => ()
+    }
     self.persist()
     self.mutex.release()
     updated
@@ -1014,12 +1108,12 @@ pub async fn ContractDocumentStore::close_packet(
     guard self.packets.get(packet_id) is Some(packet) else {
       raise @contractdoc.ContractDocumentError::NotFound("contract packet")
     }
-    let settlement_confirmed = sorted_packets(self.packets).any(other => {
-      other.packet_id != packet.packet_id &&
-      other.tenant_ref == packet.tenant_ref &&
-      other.active_forms.contains(SettlementConfirmation) &&
-      (other.state == Effective || other.state == Closed)
-    })
+    let settlement_confirmed = latest_settlement_confirmation_locked(
+        self.packets,
+        packet.tenant_ref,
+        packet.packet_id,
+      )
+      is Some(_)
     let closure : @contractdoc.ContractClosure = {
       kind,
       reason,
@@ -1216,6 +1310,49 @@ pub async fn ContractDocumentStore::decide_approval(
     self.persist()
     self.mutex.release()
     decided
+  } catch {
+    error => {
+      self.approvals = before_approvals
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Reopens an approval after its guarded business transition failed. This is
+/// the compensating half of the controller's two-phase approval flow: a
+/// decision never remains "Approved" when the packet transition did not
+/// commit. Only the same deciding operator may reopen it.
+pub async fn ContractDocumentStore::reopen_approval(
+  self : ContractDocumentStore,
+  approval_id : String,
+  decided_by : String,
+) -> @contractdoc.ContractApproval {
+  self.mutex.acquire()
+  let before_approvals = self.approvals.copy()
+  try {
+    guard self.approvals.get(approval_id) is Some(approval) else {
+      raise @contractdoc.ContractDocumentError::ContractApprovalNotFound(
+        approval_id,
+      )
+    }
+    guard approval.status == Approved && approval.decided_by == Some(decided_by) else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "approval cannot be reopened by this operator",
+      )
+    }
+    let reopened : @contractdoc.ContractApproval = {
+      ..approval,
+      status: Pending,
+      decided_by: None,
+      decided_unix_ms: None,
+      decision_reason: None,
+    }
+    self.approvals[approval_id] = reopened
+    self.persist()
+    self.mutex.release()
+    reopened
   } catch {
     error => {
       self.approvals = before_approvals

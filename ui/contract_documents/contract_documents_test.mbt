@@ -645,3 +645,51 @@ test "operator dialogs collect typed payloads for lifecycle actions" {
   assert_true(acted.loading)
   assert_eq(acted.confirmation, None)
 }
+
+///|
+test "operator approvals use a confirmation gate and task inbox" {
+  let approval : @contractdoc.ContractApproval = {
+    approval_id: "approval-ui-1",
+    packet_id: "packet-001",
+    action: "close:Expired",
+    expected_revision: 4L,
+    payload: {
+      evidence_sha256: None,
+      signed_on: None,
+      kind: Some(Expired),
+      reason: Some("term ended"),
+    },
+    initiator: "operator-a",
+    created_unix_ms: 1000L,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
+  let base = {
+    ..@contract_documents.default_state(
+      ChineseSimplified,
+      actor_owner=ManagerOperator,
+    ),
+    manifest: Some(@contractdoc.youthpolicy_remote_lease_manifest()),
+    packets: [packet(Effective)],
+    selected_packet_id: Some("packet-001"),
+    approvals: [approval],
+    governance_dashboard: Some({
+      tenant_ref: "tenant-a",
+      effective_packets: 1,
+      pending_approvals: 1,
+      overdue_obligations: 1,
+      open_closure_proposals: 0,
+      total_amount_minor_units: 100L,
+      next_expiry_unix_ms: None,
+      generated_unix_ms: 1000L,
+    }),
+  }
+  let armed = base.update(ApproveApproval("approval-ui-1"))
+  assert_eq(armed.confirmation, Some(ApprovePending("approval-ui-1")))
+  let html = @contract_documents.render(armed)
+  assert_true(html.contains("批准这项合同操作？"))
+  assert_true(html.contains("待审批"))
+  assert_true(html.contains("逾期待办"))
+}

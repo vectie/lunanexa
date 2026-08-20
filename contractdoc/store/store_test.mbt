@@ -164,6 +164,26 @@ async test "governance projections gate access and survive restart" {
     revision: 1L,
   })
   assert_eq(amendment.state, PendingApproval)
+  let settlement_draft = store.create_settlement_draft({
+    draft_id: "settlement-draft-governance",
+    packet_id: packet.packet_id,
+    tenant_ref: packet.tenant_ref,
+    ledger_snapshot_sha256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    amount_minor_units: 10000L,
+    state: PendingApproval,
+    created_by: "operator-a",
+    created_unix_ms: 2000L,
+    updated_unix_ms: 2000L,
+  })
+  assert_eq(settlement_draft.state, PendingApproval)
+  assert_eq(
+    store.decide_settlement_draft(settlement_draft.draft_id, true, 3000L).state,
+    Approved,
+  )
+  assert_eq(
+    store.apply_settlement_draft(settlement_draft.draft_id, 4000L).state,
+    Applied,
+  )
   ignore(
     store.create_obligation({
       obligation_id: "obligation-governance",
@@ -189,6 +209,14 @@ async test "governance projections gate access and survive restart" {
   assert_eq(dashboard.effective_packets, 1)
   assert_eq(dashboard.overdue_obligations, 1)
   assert_eq(dashboard.total_amount_minor_units, 10000L)
+  let waived = store.waive_obligation(
+    "obligation-governance", 2L, "operator-a", 5000L,
+  )
+  assert_eq(waived.state, Waived)
+  assert_eq(
+    store.governance_dashboard(packet.tenant_ref, 5000L).overdue_obligations,
+    0,
+  )
   let number = store.allocate_contract_number(
     packet.tenant_ref,
     packet.packet_id,
@@ -198,8 +226,26 @@ async test "governance projections gate access and survive restart" {
   let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.amendments_for_packet(packet.packet_id).length(), 1)
   assert_eq(reopened.snapshot().numbers.length(), 1)
+  ignore(
+    reopened.close_packet(
+      packet.packet_id,
+      packet.revision,
+      Expired,
+      "expired",
+      "operator-a",
+      6000L,
+    ),
+  )
+  try
+    reopened.decide_amendment(amendment.amendment_id, true, "operator-b", 7000L)
+  catch {
+    @contractdoc.ContractDocumentError::StaleRevision => ()
+    _ => fail("unexpected amendment decision error")
+  } noraise {
+    _ => fail("a closed base packet must not accept an old amendment")
+  }
   @fs.remove(path)
-  @fs.remove(directory)
+  @fs.rmdir(directory, recursive=true)
 }
 
 ///|
@@ -853,6 +899,76 @@ async test "v3 contract snapshots load with empty approval records" {
     @contractdoc.snapshot_schema_version,
   )
   @fs.remove(path)
+}
+
+///|
+/// Frozen v4 fixture: migration must preserve real approval records while
+/// adding the governance projections introduced by v5.
+priv struct LegacySnapshotV4Fixture {
+  schema_version : String
+  packets : Array[@contractdoc.ContractPacket]
+  events : Array[@contractdoc.ContractPacketEvent]
+  approvals : Array[@contractdoc.ContractApproval]
+} derive(ToJson)
+
+///|
+extend LegacySnapshotV4Fixture with ToJson::{to_json}
+
+///|
+async test "v4 contract snapshots migrate approvals into v5" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-v4-migration-")
+  let path = "\{directory}/legacy-snapshot.json"
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let packet = @contractdoc.new_packet(
+    manifest,
+    "packet-v4",
+    "packet-v4-key",
+    "tenant-4",
+    "org-4",
+    "subject-4",
+    "order-4",
+    None,
+    [MasterLease],
+    1000L,
+  )
+  let approval : @contractdoc.ContractApproval = {
+    approval_id: "approval-v4",
+    packet_id: packet.packet_id,
+    action: "close:Expired",
+    expected_revision: packet.revision,
+    payload: {
+      evidence_sha256: None,
+      signed_on: None,
+      kind: Some(Expired),
+      reason: Some("expiry"),
+    },
+    initiator: "operator-a",
+    created_unix_ms: 1000L,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
+  let fixture : LegacySnapshotV4Fixture = {
+    schema_version: "lunanexa.contract-document.snapshot.v4",
+    packets: [packet],
+    events: [],
+    approvals: [approval],
+  }
+  @fs.write_file(
+    path,
+    fixture.to_json().stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  let store = ContractDocumentStore::open(path)
+  assert_eq(store.get_approval("approval-v4"), Some(approval))
+  assert_eq(
+    store.snapshot().schema_version,
+    @contractdoc.snapshot_schema_version,
+  )
+  @fs.remove(path)
+  @fs.remove(directory)
 }
 
 ///|

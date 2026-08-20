@@ -1697,7 +1697,7 @@ fn operator_contract_approval_command(
           ({ "reason": reason } : Json).stringify(),
         )
       }
-      ignore(request("POST", model.endpoint, path, model.credential, body~))
+      let _ = request("POST", model.endpoint, path, model.credential, body~)
       ContractApprovalDecided(
         model.console.locale,
         console_copy(
@@ -3966,6 +3966,12 @@ fn update_live(
         @rabbita.none,
       )
     Console(ContractDocuments(Refresh)) => (model, load_command(model, emit))
+    Console(ContractDocuments(SelectPacket(packet_id))) => {
+      let documents = model.console.contract_documents.update(
+        SelectPacket(packet_id),
+      )
+      schedule_contract_preview(model, documents, 0, emit)
+    }
     Console(ContractDocuments(SelectForm(form))) => {
       let documents = model.console.contract_documents.update(SelectForm(form))
       schedule_contract_preview(model, documents, 0, emit)
@@ -3996,6 +4002,18 @@ fn update_live(
         operator_contract_command(model, packet_id, revision, changes, emit),
       )
     }
+    Console(ContractDocuments(ApproveApproval(approval_id))) => {
+      let next_documents = model.console.contract_documents.update(
+        ApproveApproval(approval_id),
+      )
+      (
+        {
+          ..model,
+          console: { ..model.console, contract_documents: next_documents },
+        },
+        @rabbita.none,
+      )
+    }
     Console(ContractDocuments(ConfirmAction(action))) => {
       let next_documents = model.console.contract_documents.update(
         ConfirmAction(action),
@@ -4013,6 +4031,68 @@ fn update_live(
             demo_contract_lifecycle_action(next, action)
           } else {
             (next, operator_contract_lifecycle_command(model, action, emit))
+          }
+        ApprovePending(approval_id) =>
+          if model.demo_mode {
+            (
+              {
+                ..next,
+                console: {
+                  ..next.console,
+                  contract_documents: {
+                    ..next.console.contract_documents,
+                    loading: false,
+                    confirmation: None,
+                    success_message: Some(
+                      console_copy(
+                        model.console.locale,
+                        "Demo is read-only; approval was previewed but not sent.",
+                        "演示为只读；已预览审批操作，但未发送请求。",
+                      ),
+                    ),
+                  },
+                },
+              },
+              @rabbita.none,
+            )
+          } else {
+            (
+              next,
+              operator_contract_approval_command(
+                model, approval_id, true, "", emit,
+              ),
+            )
+          }
+        RejectApproval(approval_id, reason) =>
+          if model.demo_mode {
+            (
+              {
+                ..next,
+                console: {
+                  ..next.console,
+                  contract_documents: {
+                    ..next.console.contract_documents,
+                    loading: false,
+                    confirmation: None,
+                    success_message: Some(
+                      console_copy(
+                        model.console.locale,
+                        "Demo is read-only; rejection was previewed but not sent.",
+                        "演示为只读；已预览拒绝操作，但未发送请求。",
+                      ),
+                    ),
+                  },
+                },
+              },
+              @rabbita.none,
+            )
+          } else {
+            (
+              next,
+              operator_contract_approval_command(
+                model, approval_id, false, reason, emit,
+              ),
+            )
           }
         _ =>
           // Customer attestations are never offered to the operator; drop them

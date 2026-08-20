@@ -490,3 +490,33 @@ pub fn ContractPacket::supersede_packet(
     updated_unix_ms: now_unix_ms,
   }
 }
+
+///|
+/// Internal successor effectivity fence. A normal operator supersession may
+/// only retire a draft, but a renewal successor must retire its effective
+/// predecessor at the exact moment the successor becomes Effective.
+pub fn ContractPacket::supersede_effective(
+  self : ContractPacket,
+  expected_revision : Int64,
+  supersession : ContractSupersession,
+  now_unix_ms : Int64,
+) -> ContractPacket raise ContractDocumentError {
+  if self.revision != expected_revision {
+    raise StaleRevision
+  }
+  if self.state != Effective {
+    raise InvalidTransition("contract predecessor is not effective")
+  }
+  if !valid_identifier(supersession.successor_ref) ||
+    supersession.reason.trim() == "" ||
+    !valid_identifier(supersession.superseded_by) {
+    raise InvalidInput("invalid contract supersession")
+  }
+  {
+    ..self,
+    state: Superseded,
+    supersession: Some(supersession),
+    revision: self.revision + 1L,
+    updated_unix_ms: now_unix_ms,
+  }
+}

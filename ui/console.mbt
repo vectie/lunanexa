@@ -430,6 +430,49 @@ pub fn demo_state() -> ConsoleState {
     created_unix_ms: 1786521600000L,
     updated_unix_ms: 1786521600000L,
   }
+  let effective_contract_packet : @contractdoc.ContractPacket = {
+    ..contract_packet,
+    packet_id: "contract-packet-effective-demo",
+    idempotency_key: "contract-packet-effective-demo-key",
+    order_ref: "order-demo-2026-000",
+    values: [
+      { field_id: "lessee.name", value: "Northstar Research" },
+      { field_id: "lease.start_date", value: "2026-08-01" },
+      { field_id: "lease.end_date", value: "2027-07-31" },
+    ],
+    values_sha256: Some(
+      "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    ),
+    confirmed_by: Some("subject-alice"),
+    confirmed_unix_ms: Some(1786525200000L),
+    state: Effective,
+    execution: Some({
+      evidence_sha256: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      signed_on: "2026-08-01",
+      registered_by: "operator-a",
+      registered_unix_ms: 1786528800000L,
+    }),
+    revision: 5L,
+    updated_unix_ms: 1786528800000L,
+  }
+  let contract_approval : @contractdoc.ContractApproval = {
+    approval_id: "contract-approval-demo",
+    packet_id: effective_contract_packet.packet_id,
+    action: "close:EarlyTermination",
+    expected_revision: effective_contract_packet.revision,
+    payload: {
+      evidence_sha256: None,
+      signed_on: None,
+      kind: Some(EarlyTermination),
+      reason: Some("operator review required"),
+    },
+    initiator: "operator-a",
+    created_unix_ms: 1786529000000L,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
   let nodes : Array[NodeRow] = [
     {
       node_id: "dgx-spark-01",
@@ -890,7 +933,18 @@ pub fn demo_state() -> ConsoleState {
         actor_owner=ManagerOperator,
       ),
       manifest: Some(contract_manifest),
-      packets: [contract_packet],
+      packets: [contract_packet, effective_contract_packet],
+      approvals: [contract_approval],
+      governance_dashboard: Some({
+        tenant_ref: "tenant-demo",
+        effective_packets: 1,
+        pending_approvals: 1,
+        overdue_obligations: 1,
+        open_closure_proposals: 0,
+        total_amount_minor_units: 1280000L,
+        next_expiry_unix_ms: Some(1786528800000L),
+        generated_unix_ms: 1786529000000L,
+      }),
       selected_packet_id: Some(contract_packet.packet_id),
       selected_form: Some(MasterLease),
       draft_values: contract_packet.values,
