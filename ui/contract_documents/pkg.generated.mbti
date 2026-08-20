@@ -46,6 +46,10 @@ pub(all) enum ContractDocumentConfirmation {
 
 pub(all) enum ContractDocumentsMessage {
   SelectPacket(String)
+  SelectTenant(String)
+  SearchChanged(String)
+  ExportGovernance(String)
+  NudgeApproval(String)
   SelectForm(@contractdoc.ContractFormKind)
   RequestPreview(String, Int64, @contractdoc.ContractFormKind, Array[@contractdoc.ContractFieldValue])
   PreviewLoaded(@contractdoc.ContractPreviewDocument)
@@ -72,8 +76,16 @@ pub(all) struct ContractDocumentsState {
   actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
   packets : Array[@contractdoc.ContractPacket]
+  events : Array[@contractdoc.ContractPacketEvent]
   approvals : Array[@contractdoc.ContractApproval]
+  amendments : Array[@contractdoc.ContractAmendment]
+  obligations : Array[@contractdoc.ContractObligation]
+  closure_proposals : Array[@contractdoc.ContractClosureProposal]
+  contract_numbers : Array[@contractdoc.ContractNumber]
+  now_unix_ms : Int64
   governance_dashboard : @contractdoc.ContractGovernanceDashboard?
+  selected_tenant_ref : String?
+  search_query : String
   selected_packet_id : String?
   selected_form : @contractdoc.ContractFormKind?
   preview : @contractdoc.ContractPreviewDocument?

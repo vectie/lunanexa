@@ -63,7 +63,7 @@ async test "v1 contract snapshots migrate ownership and provenance" {
   }
   @fs.write_file(
     path,
-    fixture.to_json().stringify(),
+    ToJson::to_json(fixture).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
@@ -138,9 +138,30 @@ async test "governance projections gate access and survive restart" {
       1000L,
     ),
     state: Effective,
+    values: [{ field_id: "lease.end_date", value: "2026-12-31" }],
   }
   let store = ContractDocumentStore::open(path)
   ignore(store.create_packet(packet, packet.subject_ref))
+  ignore(
+    store.create_packet(
+      {
+        ..@contractdoc.new_packet(
+          manifest,
+          "packet-governance-draft",
+          "packet-governance-draft-key",
+          packet.tenant_ref,
+          packet.organization_id,
+          packet.subject_ref,
+          "order-governance-draft",
+          None,
+          [MasterLease],
+          1001L,
+        ),
+        values: [{ field_id: "lease.end_date", value: "2025-01-01" }],
+      },
+      packet.subject_ref,
+    ),
+  )
   assert_true(
     store.has_effective_master_lease(
       packet.tenant_ref,
@@ -198,6 +219,7 @@ async test "governance projections gate access and survive restart" {
       evidence_ref: None,
       completed_by: None,
       completed_unix_ms: None,
+      created_by: Some("operator-a"),
       created_unix_ms: 2000L,
       updated_unix_ms: 2000L,
       revision: 1L,
@@ -209,6 +231,10 @@ async test "governance projections gate access and survive restart" {
   assert_eq(dashboard.effective_packets, 1)
   assert_eq(dashboard.overdue_obligations, 1)
   assert_eq(dashboard.total_amount_minor_units, 10000L)
+  assert_eq(
+    dashboard.next_expiry_unix_ms,
+    @contractdoc.calendar_date_days("2026-12-31").map(days => days * 86400000L),
+  )
   let waived = store.waive_obligation(
     "obligation-governance", 2L, "operator-a", 5000L,
   )
@@ -439,7 +465,7 @@ async test "v2 contract snapshots load with empty lifecycle extensions" {
   }
   @fs.write_file(
     path,
-    fixture.to_json().stringify(),
+    ToJson::to_json(fixture).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
@@ -941,6 +967,8 @@ async test "v4 contract snapshots migrate approvals into v5" {
       signed_on: None,
       kind: Some(Expired),
       reason: Some("expiry"),
+      amount_minor_units: None,
+      packet_values_sha256: None,
     },
     initiator: "operator-a",
     created_unix_ms: 1000L,
@@ -972,22 +1000,190 @@ async test "v4 contract snapshots migrate approvals into v5" {
 }
 
 ///|
+/// Frozen v5 records predate obligation creator attribution and the immutable
+/// approval review amount/digest. Keeping this fixture structurally old proves
+/// that real long-lived data, rather than a current type with `None` values,
+/// remains readable after the v6 upgrade.
+priv struct LegacyApprovalPayloadV5Fixture {
+  evidence_sha256 : String?
+  signed_on : String?
+  kind : @contractdoc.ContractClosureKind?
+  reason : String?
+} derive(ToJson)
+
+///|
+priv struct LegacyApprovalV5Fixture {
+  approval_id : String
+  packet_id : String
+  action : String
+  expected_revision : Int64
+  payload : LegacyApprovalPayloadV5Fixture
+  initiator : String
+  created_unix_ms : Int64
+  status : @contractdoc.ContractApprovalStatus
+  decided_by : String?
+  decided_unix_ms : Int64?
+  decision_reason : String?
+} derive(ToJson)
+
+///|
+priv struct LegacyObligationV5Fixture {
+  obligation_id : String
+  tenant_ref : String
+  packet_id : String
+  kind : @contractdoc.ContractObligationKind
+  title : String
+  owner_ref : String
+  due_unix_ms : Int64
+  amount_minor_units : Int64?
+  state : @contractdoc.ContractObligationState
+  evidence_ref : String?
+  completed_by : String?
+  completed_unix_ms : Int64?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  revision : Int64
+} derive(ToJson)
+
+///|
+priv struct LegacySnapshotV5Fixture {
+  schema_version : String
+  packets : Array[@contractdoc.ContractPacket]
+  events : Array[@contractdoc.ContractPacketEvent]
+  approvals : Array[LegacyApprovalV5Fixture]
+  amendments : Array[@contractdoc.ContractAmendment]
+  obligations : Array[LegacyObligationV5Fixture]
+  settlement_drafts : Array[@contractdoc.ContractSettlementDraft]
+  closure_proposals : Array[@contractdoc.ContractClosureProposal]
+  numbers : Array[@contractdoc.ContractNumber]
+} derive(ToJson)
+
+///|
+async test "v5 governance snapshots migrate attribution and review evidence" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-v5-migration-")
+  let path = "\{directory}/legacy-snapshot.json"
+  let packet : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      @contractdoc.youthpolicy_remote_lease_manifest(),
+      "packet-v5",
+      "packet-v5-key",
+      "tenant-v5",
+      "org-v5",
+      "subject-v5",
+      "order-v5",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Closed,
+    closure: Some({
+      kind: Expired,
+      reason: "term ended",
+      closed_by: "operator-v5",
+      closed_unix_ms: 2000L,
+    }),
+    revision: 2L,
+  }
+  let fixture : LegacySnapshotV5Fixture = {
+    schema_version: "lunanexa.contract-document.snapshot.v5",
+    packets: [packet],
+    events: [],
+    approvals: [
+      {
+        approval_id: "approval-v5",
+        packet_id: packet.packet_id,
+        action: "close:Expired",
+        expected_revision: packet.revision,
+        payload: {
+          evidence_sha256: None,
+          signed_on: None,
+          kind: Some(Expired),
+          reason: Some("term ended"),
+        },
+        initiator: "operator-v5",
+        created_unix_ms: 1001L,
+        status: Approved,
+        decided_by: Some("operator-reviewer-v5"),
+        decided_unix_ms: Some(2000L),
+        decision_reason: None,
+      },
+    ],
+    amendments: [],
+    obligations: [
+      {
+        obligation_id: "obligation-v5",
+        tenant_ref: packet.tenant_ref,
+        packet_id: packet.packet_id,
+        kind: PaymentMilestone,
+        title: "legacy payment",
+        owner_ref: packet.subject_ref,
+        due_unix_ms: 2000L,
+        amount_minor_units: Some(10000L),
+        state: Open,
+        evidence_ref: None,
+        completed_by: None,
+        completed_unix_ms: None,
+        created_unix_ms: 1001L,
+        updated_unix_ms: 1001L,
+        revision: 1L,
+      },
+    ],
+    settlement_drafts: [],
+    closure_proposals: [],
+    numbers: [],
+  }
+  @fs.write_file(
+    path,
+    ToJson::to_json(fixture).stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  let store = ContractDocumentStore::open(path)
+  let migrated = store.snapshot()
+  assert_eq(migrated.schema_version, @contractdoc.snapshot_schema_version)
+  assert_eq(migrated.approvals[0].payload.amount_minor_units, None)
+  assert_eq(migrated.approvals[0].payload.packet_values_sha256, None)
+  assert_eq(migrated.obligations[0].created_by, None)
+  assert_eq(store.reconcile_approved_approvals(3000L), [])
+  assert_eq(store.get_approval("approval-v5").unwrap().status, Applied)
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "contract approvals persist, decide once, and survive a reload" {
   let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-approvals-")
   let path = "\{directory}/approvals.json"
   let store = ContractDocumentStore::open(path)
+  let approval_packet : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      @contractdoc.youthpolicy_remote_lease_manifest(),
+      "packet-1",
+      "approval-packet-idempotency-key",
+      "tenant-approval",
+      "org-approval",
+      "subject-approval",
+      "order-approval",
+      None,
+      [MasterLease],
+      100L,
+    ),
+    revision: 5L,
+    state: Effective,
+    values: [{ field_id: "lease.total_rent", value: "1" }],
+  }
+  ignore(store.create_packet(approval_packet, "alice"))
   let pending : @contractdoc.ContractApproval = {
     approval_id: "approval-1",
     packet_id: "packet-1",
-    action: "execute",
+    action: "close:Expired",
     expected_revision: 5L,
     payload: {
-      evidence_sha256: Some(
-        "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      ),
-      signed_on: Some("2026-08-14"),
-      kind: None,
-      reason: None,
+      evidence_sha256: None,
+      signed_on: None,
+      kind: Some(Expired),
+      reason: Some("term ended"),
+      amount_minor_units: Some(100L),
+      packet_values_sha256: None,
     },
     initiator: "alice",
     created_unix_ms: 1000L,
@@ -995,6 +1191,23 @@ async test "contract approvals persist, decide once, and survive a reload" {
     decided_by: None,
     decided_unix_ms: None,
     decision_reason: None,
+  }
+  for
+    invalid in [
+      {
+        ..pending,
+        approval_id: "approval-invalid-revision",
+        expected_revision: 4L,
+      },
+      { ..pending, approval_id: "approval-invalid-state", status: Approved },
+      { ..pending, approval_id: "approval-invalid-payload", action: "execute" },
+    ] {
+    try store.create_approval(invalid) catch {
+      @contractdoc.ContractDocumentError::InvalidInput(_) => ()
+      error => fail("unexpected approval validation error: \{Repr(error)}")
+    } noraise {
+      _ => fail("malformed approval must be rejected")
+    }
   }
   ignore(store.create_approval(pending))
   assert_eq(store.get_approval("approval-1"), Some(pending))
@@ -1040,6 +1253,8 @@ async test "contract approvals persist, decide once, and survive a reload" {
         signed_on: None,
         kind: Some(EarlyTermination),
         reason: Some("tenant vacated"),
+        amount_minor_units: Some(100L),
+        packet_values_sha256: None,
       },
     }),
   )
@@ -1059,4 +1274,82 @@ async test "contract approvals persist, decide once, and survive a reload" {
   assert_eq(reopened.list_approvals(Some(Pending)), [])
   assert_eq(reopened.list_approvals(None).length(), 2)
   @fs.remove(path)
+}
+
+///|
+async test "a renewal may become effective after its predecessor already closed" {
+  let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-closed-predecessor-")
+  let store = ContractDocumentStore::open("\{directory}/contracts.json")
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let source : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-predecessor-closed",
+      "packet-predecessor-closed-key",
+      "tenant-predecessor-closed",
+      "org-predecessor-closed",
+      "subject-predecessor-closed",
+      "order-predecessor-closed",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+  }
+  ignore(store.create_packet(source, "operator-a"))
+  let closed = store.close_packet(
+    source.packet_id,
+    source.revision,
+    Expired,
+    "term ended",
+    "operator-a",
+    2000L,
+  )
+  assert_eq(closed.state, Closed)
+  let docx : @contractdoc.ContractGeneratedArtifact = {
+    artifact_id: "artifact-renewal-docx",
+    media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sha256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    byte_count: 100L,
+    page_count: 18,
+    render_evidence_sha256: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    generated_unix_ms: 3000L,
+  }
+  let pdf : @contractdoc.ContractGeneratedArtifact = {
+    ..docx,
+    artifact_id: "artifact-renewal-pdf",
+    media_type: "application/pdf",
+    sha256: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  }
+  let successor : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      manifest,
+      "packet-successor-after-close",
+      "packet-successor-after-close-key",
+      source.tenant_ref,
+      source.organization_id,
+      source.subject_ref,
+      "order-successor-after-close",
+      Some(source.packet_id),
+      [MasterLease],
+      3000L,
+    ),
+    state: Generated,
+    artifacts: [docx, pdf],
+  }
+  ignore(store.create_packet(successor, "operator-a"))
+  let effective = store.register_execution(
+    successor.packet_id,
+    successor.revision,
+    {
+      evidence_sha256: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      signed_on: "2026-08-20",
+      registered_by: "operator-a",
+      registered_unix_ms: 4000L,
+    },
+    4000L,
+  )
+  assert_eq(effective.state, Effective)
+  assert_eq(store.packet(source.packet_id).unwrap().state, Closed)
+  @fs.rmdir(directory, recursive=true)
 }

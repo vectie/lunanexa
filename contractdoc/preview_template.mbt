@@ -16,7 +16,14 @@ pub fn materialize_preview_template(
     template.page_forms.length() != template.scene.pages.length() {
     raise TemplateMismatch
   }
-  let draft = if changes.length() == 0 {
+  // Signed/closed packets are immutable, but their exact recorded values must
+  // remain previewable. Ignore browser draft changes for those states instead
+  // of routing a read-only preview through the edit transition.
+  let read_only = packet.state == Generated ||
+    packet.state == Effective ||
+    packet.state == Closed ||
+    packet.state == Superseded
+  let draft = if changes.length() == 0 || read_only {
     packet
   } else {
     packet.update_information(

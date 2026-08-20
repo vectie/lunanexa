@@ -176,6 +176,22 @@ extern "js" fn scroll_console_top() -> Unit =
   #| }
 
 ///|
+extern "js" fn download_json_file(filename : String, content : String) -> Unit =
+  #| (filename, content) => {
+  #|   const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+  #|   const url = URL.createObjectURL(blob);
+  #|   try {
+  #|     const link = document.createElement("a");
+  #|     link.href = url;
+  #|     link.download = filename.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 180);
+  #|     link.rel = "noopener";
+  #|     link.click();
+  #|   } finally {
+  #|     setTimeout(() => URL.revokeObjectURL(url), 0);
+  #|   }
+  #| }
+
+///|
 extern "js" fn stored_locale_preference() -> String =
   #| () => {
   #|   try {
@@ -287,7 +303,10 @@ extern "js" fn request_promise(
   #|     body: verb === "GET" ? undefined : body
   #|   });
   #|   const text = await response.text();
-  #|   if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  #|   if (!response.ok) {
+  #|     const detail = text.slice(0, 1024).replace(/[\r\n\t]+/g, " ");
+  #|     throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  #|   }
   #|   return text;
   #| }
 
@@ -801,28 +820,17 @@ async fn load_console(
       request("GET", endpoint, "/v1/contract-documents/manifest", token),
     ),
   )
-  let contract_packets : Array[@contractdoc.ContractPacket] = @json.from_json(
+  let contract_snapshot : @contractdoc.ContractDocumentSnapshot = @json.from_json(
     @json.parse(
-      request("GET", endpoint, "/v1/contract-documents/operator/packets", token),
+      request(
+        "GET", endpoint, "/v1/contract-documents/operator/snapshot", token,
+      ),
     ),
   )
-  // The approval matrix is optional controller configuration; a controller
-  // without it still answers the listing route, but tolerate a failure so an
-  // older controller does not break the console load.
-  let contract_approvals : Array[@contractdoc.ContractApproval] = try
-    @json.from_json(
-      @json.parse(
-        request(
-          "GET", endpoint, "/v1/contract-documents/operator/approvals?status=pending",
-          token,
-        ),
-      ),
-    )
-  catch {
-    _ => []
-  } noraise {
-    value => value
-  }
+  let contract_packets = contract_snapshot.packets
+  let contract_approvals = contract_snapshot.approvals.filter(approval => {
+    approval.status == Pending || approval.status == Approved
+  })
   let contract_governance_dashboard : @contractdoc.ContractGovernanceDashboard? = {
     let tenant_ref = contract_packets
       .get(0)
@@ -1313,7 +1321,13 @@ async fn load_console(
       ..@contract_documents.default_state(locale, actor_owner=ManagerOperator),
       manifest: Some(contract_manifest),
       packets: contract_packets,
+      events: contract_snapshot.events,
       approvals: contract_approvals,
+      amendments: contract_snapshot.amendments,
+      obligations: contract_snapshot.obligations,
+      closure_proposals: contract_snapshot.closure_proposals,
+      contract_numbers: contract_snapshot.numbers,
+      now_unix_ms: current_unix_ms(),
       governance_dashboard: contract_governance_dashboard,
       selected_packet_id: contract_packets
       .get(0)
@@ -1353,6 +1367,7 @@ priv enum LoadOutcome {
   ContractApprovalRequested(@i18n.Locale)
   ContractApprovalDecided(@i18n.Locale, String)
   ContractActionFailed(@i18n.Locale, String)
+  ContractConflict(@i18n.Locale)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
 }
@@ -1413,6 +1428,8 @@ fn merge_loaded_console(
     contract_documents: {
       ..loaded.contract_documents,
       locale: current.locale,
+      selected_tenant_ref: current.contract_documents.selected_tenant_ref,
+      search_query: current.contract_documents.search_query,
       selected_packet_id: current.contract_documents.selected_packet_id,
       selected_form: current.contract_documents.selected_form,
       preview: current.contract_documents.preview,
@@ -1559,15 +1576,19 @@ fn operator_contract_command(
       )
       ContractPacketUpdated(updated)
     } catch {
-      _ =>
-        ContractActionFailed(
-          model.console.locale,
-          console_copy(
+      error =>
+        if "\{Repr(error)}".contains("HTTP 409") {
+          ContractConflict(model.console.locale)
+        } else {
+          ContractActionFailed(
             model.console.locale,
-            "Contract information update failed.",
-            "合同资料更新失败。",
-          ),
-        )
+            console_copy(
+              model.console.locale,
+              "Contract information update failed.",
+              "合同资料更新失败。",
+            ),
+          )
+        }
     } noraise {
       value => value
     }
@@ -1663,15 +1684,19 @@ fn operator_contract_lifecycle_command(
         }
       }
     } catch {
-      _ =>
-        ContractActionFailed(
-          model.console.locale,
-          console_copy(
+      error =>
+        if "\{Repr(error)}".contains("HTTP 409") {
+          ContractConflict(model.console.locale)
+        } else {
+          ContractActionFailed(
             model.console.locale,
-            "Contract lifecycle action failed.",
-            "合同生命周期操作失败。",
-          ),
-        )
+            console_copy(
+              model.console.locale,
+              "Contract lifecycle action failed.",
+              "合同生命周期操作失败。",
+            ),
+          )
+        }
     } noraise {
       value => value
     }
@@ -1715,13 +1740,65 @@ fn operator_contract_approval_command(
         ),
       )
     } catch {
+      error =>
+        if "\{Repr(error)}".contains("HTTP 409") {
+          ContractConflict(model.console.locale)
+        } else {
+          ContractActionFailed(
+            model.console.locale,
+            console_copy(
+              model.console.locale,
+              "Contract approval decision failed.",
+              "合同审批决定失败。",
+            ),
+          )
+        }
+    } noraise {
+      value => value
+    }
+  })
+}
+
+///|
+fn contract_governance_export_command(
+  model : AppModel,
+  tenant_ref : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let response = request(
+        "POST",
+        model.endpoint,
+        "/v1/contract-governance/operator/export",
+        model.credential,
+        body=ContractGovernanceTenantRequest::{ tenant_ref, }
+          .to_json()
+          .stringify(),
+      )
+      // Parse before download so a transport/proxy error can never be saved as
+      // a misleading audit report.
+      ignore(@json.parse(response))
+      download_json_file(
+        "lunanexa-contract-governance-\{tenant_ref}.json",
+        response,
+      )
+      ContractApprovalDecided(
+        model.console.locale,
+        console_copy(
+          model.console.locale,
+          "Contract governance report downloaded.",
+          "合同治理报表已下载。",
+        ),
+      )
+    } catch {
       _ =>
         ContractActionFailed(
           model.console.locale,
           console_copy(
             model.console.locale,
-            "Contract approval decision failed.",
-            "合同审批决定失败。",
+            "Contract governance export failed.",
+            "合同治理报表导出失败。",
           ),
         )
     } noraise {
@@ -2327,6 +2404,30 @@ fn update_live(
           },
         },
         @rabbita.none,
+      )
+    Outcome(ContractConflict(dispatched_locale)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: {
+              ..model.console.contract_documents,
+              loading: true,
+              success_message: None,
+              error_message: Some(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  "Another operator updated this contract. The latest revision is being loaded.",
+                  "Another operator updated this contract. The latest revision is being loaded.",
+                  "其他运营人员已更新此合同，正在加载最新版本。",
+                ),
+              ),
+            },
+          },
+        },
+        load_command(model, emit),
       )
     Outcome(ContractPreviewLoaded(generation, preview)) =>
       if generation != model.contract_preview_generation {
@@ -3972,6 +4073,18 @@ fn update_live(
       )
       schedule_contract_preview(model, documents, 0, emit)
     }
+    Console(ContractDocuments(SelectTenant(tenant_ref))) => {
+      let documents = model.console.contract_documents.update(
+        SelectTenant(tenant_ref),
+      )
+      schedule_contract_preview(model, documents, 0, emit)
+    }
+    Console(ContractDocuments(SearchChanged(query))) => {
+      let documents = model.console.contract_documents.update(
+        SearchChanged(query),
+      )
+      schedule_contract_preview(model, documents, 0, emit)
+    }
     Console(ContractDocuments(SelectForm(form))) => {
       let documents = model.console.contract_documents.update(SelectForm(form))
       schedule_contract_preview(model, documents, 0, emit)
@@ -4014,6 +4127,19 @@ fn update_live(
         @rabbita.none,
       )
     }
+    Console(ContractDocuments(ExportGovernance(tenant_ref))) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            contract_documents: model.console.contract_documents.update(
+              ExportGovernance(tenant_ref),
+            ),
+          },
+        },
+        contract_governance_export_command(model, tenant_ref, emit),
+      )
     Console(ContractDocuments(ConfirmAction(action))) => {
       let next_documents = model.console.contract_documents.update(
         ConfirmAction(action),

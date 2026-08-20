@@ -57,3 +57,48 @@ pub fn days_until(date_value : String, now_unix_ms : Int64) -> Int64? {
     None => None
   }
 }
+
+///|
+fn two_digits(value : Int64) -> String {
+  if value < 10L {
+    "0\{value}"
+  } else {
+    value.to_string()
+  }
+}
+
+///|
+/// Formats a non-negative Unix millisecond timestamp as a stable UTC value for
+/// operator/customer projections. This deliberately avoids locale-dependent
+/// host formatting so screenshots, exports, and audit review agree.
+pub fn format_unix_ms_utc(unix_ms : Int64) -> String {
+  if unix_ms < 0L {
+    return "—"
+  }
+  let days = unix_ms / 86400000L
+  let day_ms = unix_ms % 86400000L
+  // Inverse of Howard Hinnant's days_from_civil.
+  let z = days + 719468L
+  let era = if z >= 0L { z / 146097L } else { (z - 146096L) / 146097L }
+  let day_of_era = z - era * 146097L
+  let year_of_era = (
+      day_of_era -
+      day_of_era / 1460L +
+      day_of_era / 36524L -
+      day_of_era / 146096L
+    ) /
+    365L
+  let mut year = year_of_era + era * 400L
+  let day_of_year = day_of_era -
+    (365L * year_of_era + year_of_era / 4L - year_of_era / 100L)
+  let month_prime = (5L * day_of_year + 2L) / 153L
+  let day = day_of_year - (153L * month_prime + 2L) / 5L + 1L
+  let month = month_prime + (if month_prime < 10L { 3L } else { -9L })
+  if month <= 2L {
+    year += 1L
+  }
+  let hour = day_ms / 3600000L
+  let minute = day_ms % 3600000L / 60000L
+  let second = day_ms % 60000L / 1000L
+  "\{year}-\{two_digits(month)}-\{two_digits(day)} \{two_digits(hour)}:\{two_digits(minute)}:\{two_digits(second)} UTC"
+}

@@ -190,6 +190,12 @@ Its subject-scoped native API is:
 - `GET /v1/contract-documents/manifest` — the template manifest and slot
   definitions;
 - `GET /v1/contract-documents/self` — the subject's packets;
+- `GET /v1/contract-documents/self/events` and `GET …/self/governance` —
+  subject-filtered lifecycle events, approvals, amendments, obligations,
+  closure proposals, and contract numbers used by the customer status view;
+- `POST /v1/contract-documents/self/approvals/{approval_id}:nudge` — enqueue
+  one deduplicated operator reminder for an approval belonging to the current
+  subject; it cannot decide or mutate the approval;
 - `POST /v1/contract-documents/self` — create a packet; effective-stage forms
   require a `preceding_packet_ref` naming a same-tenant `Effective` packet;
 - `PUT /v1/contract-documents/self/{packet_id}:information` — save owned
@@ -217,6 +223,8 @@ and so do the audit entries those actions emit. The scheduled automatic
 expiry closure is recorded under the `scheduler` identity instead.
 
 - `GET /v1/contract-documents/operator/packets` — all packets;
+- `GET /v1/contract-documents/operator/snapshot` — one coherent durable
+  packet/event/governance snapshot for the task inbox and timeline;
 - `PUT /v1/contract-documents/operator/packets/{packet_id}:information` —
   save operator-owned fields; editable states only;
 - `POST /v1/contract-documents/operator/packets/{packet_id}:preview` —
@@ -307,6 +315,10 @@ is tenant checked and audit attributed to that identity:
 - `POST /v1/contract-governance/operator/dashboard` — return the effective
   contract, pending approval, overdue obligation, closure-proposal, ledger
   amount, and next-expiry read model for one tenant;
+- `POST /v1/contract-governance/operator/export` — return a tenant-scoped,
+  read-only JSON audit report containing governance metrics, approval and
+  obligation records, contract numbers, proposals, and value-free lifecycle
+  events;
 - `POST /v1/contract-governance/operator/admission` — evaluate the effective
   `MasterLease`, workspace-lease configuration, exclusive-machine presence,
   and whether API-key issuance is allowed;
@@ -337,7 +349,7 @@ ledger-derived or explicitly supplied as a verified digest; the contract
 document store does not invent prices, legal terms, signatures, seals, or
 offline evidence.
 
-## Known gaps
+## Implemented governance and remaining external gates
 
 The contract governance layer now covers the implementation plan in dependency
 order:
@@ -362,20 +374,32 @@ order:
   while the successor is a draft, then is atomically marked `Superseded` when
   the successor registers execution;
 - payment milestones and acceptance obligations are durable objects with
-  owners, due times, evidence, completion, overdue reconciliation, and a
-  restart-safe operator dashboard projection;
-- contract numbers are allocated by a tenant-scoped server sequence, and the
-  operator browser includes a compact governance view for effective packets
-  and pending approvals.
+  owners, creating-operator attribution, due times, evidence, completion,
+  overdue reconciliation, and a restart-safe operator dashboard projection.
+  Snapshot v6 migrates v5 records with unknown creator/review evidence as
+  explicit `None` rather than inventing attribution;
+- contract numbers are allocated by a tenant-scoped server sequence. The
+  operator browser is driven by one tenant-scoped task inbox, supports tenant
+  switching and packet/order/organization/status search, shows the
+  value-free packet timeline, and exports a read-only audit report. The
+  customer browser shows pending approval progress, payment/acceptance
+  obligations, readable amounts/dates, expiry countdown, and a reminder
+  action without exposing operator decision controls;
 - governance creation routes derive stable request fingerprints, so an exact
   retry replays the existing amendment, obligation, settlement draft, or
   closure proposal instead of creating a second record. Materializing an
   approved amendment is likewise replay-safe and rejects a second successor
   for the same version link.
-- dashboard and admission projections are `POST` routes because their inputs
-  are JSON; clients must not send a JSON body with `GET`. Approval actions show
-  a confirmation dialog, require a different operator, and compensate a
-  failed guarded transition by reopening the approval.
+- dashboard, admission, and export projections are `POST` routes because
+  their inputs are JSON; clients must not send a JSON body with `GET`.
+  Approval dialogs show the frozen action, initiator, expected revision,
+  amount, packet-values digest, evidence digest, signing date, and reason.
+  The second-person decision and guarded execute/close transition persist in
+  one store transaction; a stale revision leaves the approval pending, while
+  legacy v5 `Approved` records are reconciled to `Applied` only when the packet
+  already proves the exact action. Otherwise they become explicit recovery
+  tasks. Browser 409 conflicts trigger a truthful refresh instead of leaving a
+  stale form active;
 - enabling an approval threshold in a single-operator deployment deliberately
   blocks high-value execute/close actions until a second mapped operator is
   available. Treat that configuration as a rollout check, not as a silent

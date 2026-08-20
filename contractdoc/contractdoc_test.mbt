@@ -603,3 +603,15 @@ test "renewal draft requires an effective source with initial-stage forms" {
     _ => fail("a packet without initial-stage forms must not renew")
   }
 }
+
+///|
+test "contract dates and money render stable human-readable values" {
+  assert_eq(@contractdoc.format_unix_ms_utc(0L), "1970-01-01 00:00:00 UTC")
+  assert_eq(
+    @contractdoc.format_unix_ms_utc(1787184000000L),
+    "2026-08-20 00:00:00 UTC",
+  )
+  assert_eq(@contractdoc.format_cny_minor_units(0L), "0.00")
+  assert_eq(@contractdoc.format_cny_minor_units(12345L), "123.45")
+  assert_eq(@contractdoc.format_cny_minor_units(-5L), "-0.05")
+}

@@ -171,6 +171,44 @@ pub fn demo_state() -> EnterpriseState {
     created_unix_ms: now - 30000000000L,
     updated_unix_ms: now - 86400000L,
   }
+  let customer_approval : @contractdoc.ContractApproval = {
+    approval_id: "contract-approval-customer-demo",
+    packet_id: effective_packet.packet_id,
+    action: "close:EarlyTermination",
+    expected_revision: effective_packet.revision,
+    payload: {
+      evidence_sha256: None,
+      signed_on: None,
+      kind: Some(EarlyTermination),
+      reason: Some("operator review required"),
+      amount_minor_units: Some(190000L),
+      packet_values_sha256: effective_packet.values_sha256,
+    },
+    initiator: "operator-a",
+    created_unix_ms: now - 1800000L,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
+  let payment_obligation : @contractdoc.ContractObligation = {
+    obligation_id: "contract-obligation-payment-demo",
+    tenant_ref: effective_packet.tenant_ref,
+    packet_id: effective_packet.packet_id,
+    kind: PaymentMilestone,
+    title: "September capacity payment",
+    owner_ref: "subject-alice",
+    due_unix_ms: now + 604800000L,
+    amount_minor_units: Some(190000L),
+    state: Open,
+    evidence_ref: None,
+    completed_by: None,
+    completed_unix_ms: None,
+    created_by: Some("operator-a"),
+    created_unix_ms: now - 86400000L,
+    updated_unix_ms: now - 86400000L,
+    revision: 1L,
+  }
   {
     ..default_state(now),
     membership: Some({
@@ -318,6 +356,35 @@ pub fn demo_state() -> EnterpriseState {
       ..@contract_documents.default_state(@i18n.default_locale()),
       manifest: Some(manifest),
       packets: [demo_packet, effective_packet],
+      events: [
+        {
+          event_id: "contract-event-customer-demo-created",
+          packet_id: effective_packet.packet_id,
+          revision: 1L,
+          kind: PacketCreated,
+          actor_ref: "operator-demo",
+          changed_field_ids: [],
+          values_sha256: None,
+          artifact_sha256: None,
+          occurred_unix_ms: effective_packet.created_unix_ms,
+        },
+        {
+          event_id: "contract-event-customer-demo-effective",
+          packet_id: effective_packet.packet_id,
+          revision: effective_packet.revision,
+          kind: ExecutionRegisteredEvent,
+          actor_ref: "operator-demo",
+          changed_field_ids: [],
+          values_sha256: effective_packet.values_sha256,
+          artifact_sha256: effective_packet.execution.map(value => {
+            value.evidence_sha256
+          }),
+          occurred_unix_ms: effective_packet.updated_unix_ms,
+        },
+      ],
+      approvals: [customer_approval],
+      obligations: [payment_obligation],
+      now_unix_ms: now,
       selected_packet_id: Some("packet-demo-youthpolicy"),
       selected_form: Some(MasterLease),
     },
@@ -1181,6 +1248,14 @@ fn notification_code_label(locale : @i18n.Locale, code : String) -> String {
       copy(locale, "Resource fulfillment is ready", "资源交付已就绪")
     "CommercialReversalStarted" =>
       copy(locale, "Commercial reversal started", "商务撤销已开始")
+    "ContractObligationOverdue" =>
+      copy(
+        locale, "Contract obligation is overdue", "合同履约义务已逾期",
+      )
+    "ContractExpiring" =>
+      copy(locale, "Contract expires soon", "合同即将到期")
+    "AccessCredentialsRevoked" =>
+      copy(locale, "Contract access was revoked", "合同访问权限已撤销")
     _ => code
   }
 }

@@ -319,6 +319,15 @@ The contract-document work is implemented as a dependent slice of this phase:
 6. durable payment/acceptance obligations with overdue reconciliation;
 7. tenant-scoped contract numbering and a deterministic operator business view.
 
+The browser projection for this phase is task-first rather than document-list
+first: one tenant-scoped inbox owns approval recovery, overdue obligations and
+closure proposals; each packet uses the value-free durable event timeline; the
+customer sees approval/obligation/expiry progress and may send a deduplicated
+reminder without gaining operator controls. High-value approval decision and
+execution are one atomic store mutation, and governance JSON exports are
+tenant-scoped read-only evidence. Revision conflicts refresh the authoritative
+snapshot before another action is offered.
+
 The source DOCX, MoonLeaf preview, offline execution evidence, and all existing
 privacy boundaries remain unchanged by this governance layer. The contract
 store is the durable authority; browser views are projections only.

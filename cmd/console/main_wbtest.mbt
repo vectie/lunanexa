@@ -542,3 +542,94 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     changed.console.contract_documents.draft_values,
   )
 }
+
+///|
+test "contract approval and governance controls route through the operator shell" {
+  let approval : @contractdoc.ContractApproval = {
+    approval_id: "approval-shell-1",
+    packet_id: "packet-shell-1",
+    action: "close:Expired",
+    expected_revision: 1L,
+    payload: {
+      evidence_sha256: None,
+      signed_on: None,
+      kind: Some(Expired),
+      reason: Some("term ended"),
+      amount_minor_units: Some(10000L),
+      packet_values_sha256: None,
+    },
+    initiator: "operator-a",
+    created_unix_ms: 1000L,
+    status: Pending,
+    decided_by: None,
+    decided_unix_ms: None,
+    decision_reason: None,
+  }
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "operator-b-token",
+    audit_credential: "audit-token",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "tenant-shell",
+    demo_mode: false,
+    console: {
+      ..@ui.default_state(),
+      route: ContractDocuments,
+      contract_documents: {
+        ..@contract_documents.default_state(
+          English,
+          actor_owner=ManagerOperator,
+        ),
+        approvals: [approval],
+      },
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (reviewing, _) = update_live(
+    model,
+    Console(ContractDocuments(ApproveApproval(approval.approval_id))),
+    emit,
+  )
+  assert_eq(
+    reviewing.console.contract_documents.confirmation,
+    Some(ApprovePending(approval.approval_id)),
+  )
+  let (approving, _) = update_live(
+    reviewing,
+    Console(
+      ContractDocuments(ConfirmAction(ApprovePending(approval.approval_id))),
+    ),
+    emit,
+  )
+  assert_true(approving.console.contract_documents.loading)
+  assert_eq(approving.console.contract_documents.error_message, None)
+  let (rejecting, _) = update_live(
+    model,
+    Console(ContractDocuments(BeginRejectApproval(approval.approval_id))),
+    emit,
+  )
+  assert_true(
+    rejecting.console.contract_documents.confirmation
+    is Some(RejectApproval(_, _)),
+  )
+  let (exporting, _) = update_live(
+    model,
+    Console(ContractDocuments(ExportGovernance("tenant-shell"))),
+    emit,
+  )
+  assert_true(exporting.console.contract_documents.loading)
+  let (conflicted, _) = update_live(
+    model,
+    Outcome(ContractConflict(English)),
+    emit,
+  )
+  assert_true(conflicted.console.contract_documents.loading)
+  assert_true(
+    conflicted.console.contract_documents.error_message
+    .unwrap_or("")
+    .contains("latest revision"),
+  )
+}

@@ -117,6 +117,15 @@ priv struct ContractRenewalIntent {
 extend ContractRenewalIntent with ToJson::{to_json}
 
 ///|
+priv struct ContractSelfGovernance {
+  approvals : Array[@contractdoc.ContractApproval]
+  obligations : Array[@contractdoc.ContractObligation]
+  amendments : Array[@contractdoc.ContractAmendment]
+  closure_proposals : Array[@contractdoc.ContractClosureProposal]
+  numbers : Array[@contractdoc.ContractNumber]
+} derive(FromJson)
+
+///|
 priv enum Outcome {
   Loaded(
     @portal.EnterpriseSelfView,
@@ -129,7 +138,9 @@ priv enum Outcome {
     Array[@offline.CommercialOrder],
     Array[@offline_commerce.OfflineArtifactSummary],
     @contractdoc.ContractTemplateManifest,
-    Array[@contractdoc.ContractPacket]
+    Array[@contractdoc.ContractPacket],
+    Array[@contractdoc.ContractPacketEvent],
+    ContractSelfGovernance
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
@@ -143,6 +154,7 @@ priv enum Outcome {
   EvidenceUploaded(String)
   ArtifactDownloaded(String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
+  ContractApprovalNudged
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
   Failed(@i18n.Locale, String)
@@ -397,6 +409,8 @@ async fn load_self(
   Array[@offline_commerce.OfflineArtifactSummary],
   @contractdoc.ContractTemplateManifest,
   Array[@contractdoc.ContractPacket],
+  Array[@contractdoc.ContractPacketEvent],
+  ContractSelfGovernance,
 ) {
   let body = request(
     "GET",
@@ -549,6 +563,28 @@ async fn load_self(
       ),
     ),
   )
+  let contract_events : Array[@contractdoc.ContractPacketEvent] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/contract-documents/self/events",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  let contract_governance : ContractSelfGovernance = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/contract-documents/self/governance",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
   let cost_centers : Array[@enterprise_ui.EnterpriseCostCenterRow] = match
     commercial {
     Some(snapshot) =>
@@ -596,7 +632,8 @@ async fn load_self(
   }
   (
     view, cost_centers, provisional_spend, models, notifications, notification_preferences,
-    machines, orders, artifacts, contract_manifest, contract_packets,
+    machines, orders, artifacts, contract_manifest, contract_packets, contract_events,
+    contract_governance,
   )
 }
 
@@ -915,10 +952,13 @@ fn load_command(
         artifacts,
         contract_manifest,
         contract_packets,
+        contract_events,
+        contract_governance,
       ) =>
         Loaded(
           view, cost_centers, provisional_spend, models, notifications, notification_preferences,
-          machines, orders, artifacts, contract_manifest, contract_packets,
+          machines, orders, artifacts, contract_manifest, contract_packets, contract_events,
+          contract_governance,
         )
     }
   })
@@ -1626,6 +1666,39 @@ fn contract_packet_command(
 }
 
 ///|
+fn contract_approval_nudge_command(
+  model : AppModel,
+  approval_id : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try {
+      ignore(
+        request(
+          "POST",
+          model.endpoint,
+          "/v1/contract-documents/self/approvals/\{approval_id}:nudge",
+          model.token,
+          model.subject_ref,
+          body="{}",
+        ),
+      )
+      ContractApprovalNudged
+    } catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to send the approval reminder: \{Repr(error)}",
+            "无法发送审批催办：\{Repr(error)}",
+          ),
+        )
+    }
+  })
+}
+
+///|
 fn schedule_contract_preview(
   model : AppModel,
   documents : @contract_documents.ContractDocumentsState,
@@ -2104,6 +2177,18 @@ fn update(
       )
       schedule_contract_preview(model, documents, 0, emit)
     }
+    Portal(ContractDocuments(SelectTenant(tenant_ref))) => {
+      let documents = model.portal.contract_documents.update(
+        SelectTenant(tenant_ref),
+      )
+      schedule_contract_preview(model, documents, 0, emit)
+    }
+    Portal(ContractDocuments(SearchChanged(query))) => {
+      let documents = model.portal.contract_documents.update(
+        SearchChanged(query),
+      )
+      schedule_contract_preview(model, documents, 0, emit)
+    }
     Portal(ContractDocuments(SelectForm(form))) => {
       let documents = model.portal.contract_documents.update(SelectForm(form))
       schedule_contract_preview(model, documents, 0, emit)
@@ -2113,6 +2198,38 @@ fn update(
         FieldChanged(field_id, value),
       )
       schedule_contract_preview(model, documents, 250, emit)
+    }
+    Portal(ContractDocuments(NudgeApproval(approval_id))) => {
+      let documents = model.portal.contract_documents.update(
+        NudgeApproval(approval_id),
+      )
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              contract_documents: {
+                ..documents,
+                loading: false,
+                success_message: Some(
+                  portal_copy(
+                    model.portal.locale,
+                    "Demo reminder recorded locally.",
+                    "演示催办已在本地记录。",
+                  ),
+                ),
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (
+          { ..model, portal: { ..model.portal, contract_documents: documents } },
+          contract_approval_nudge_command(model, approval_id, emit),
+        )
+      }
     }
     Portal(ContractDocuments(RequestPreview(_, _, _, _) as request)) => {
       let documents = model.portal.contract_documents.update(request)
@@ -2202,7 +2319,9 @@ fn update(
         orders,
         artifacts,
         contract_manifest,
-        contract_packets
+        contract_packets,
+        contract_events,
+        contract_governance
       )
     ) => {
       let next = {
@@ -2246,6 +2365,13 @@ fn update(
             ..model.portal.contract_documents,
             manifest: Some(contract_manifest),
             packets: contract_packets,
+            events: contract_events,
+            approvals: contract_governance.approvals,
+            amendments: contract_governance.amendments,
+            obligations: contract_governance.obligations,
+            closure_proposals: contract_governance.closure_proposals,
+            contract_numbers: contract_governance.numbers,
+            now_unix_ms: current_unix_ms(),
             selected_packet_id: match
               model.portal.contract_documents.selected_packet_id {
               Some(value) => Some(value)
@@ -2401,6 +2527,28 @@ fn update(
         @rabbita.none,
       )
     }
+    Outcome(ContractApprovalNudged) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            contract_documents: {
+              ..model.portal.contract_documents,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Approval reminder sent to the operator team.",
+                  "已向运营团队发送审批催办。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+        },
+        @rabbita.none,
+      )
     Outcome(AgreementUpdated(agreement)) =>
       (
         {

@@ -233,6 +233,102 @@ pub async fn ContractDocumentStore::decide_amendment(
 }
 
 ///|
+/// Materializes one effective amendment into exactly one successor draft under
+/// the store mutex. The predecessor lookup, successor uniqueness check,
+/// idempotency reservation, field application, event append, and snapshot
+/// write form one atomic mutation; concurrent requests cannot create siblings.
+pub async fn ContractDocumentStore::materialize_amendment(
+  self : ContractDocumentStore,
+  amendment_id : String,
+  packet_id : String,
+  idempotency_key : String,
+  actor_ref : String,
+  now_unix_ms : Int64,
+) -> @contractdoc.ContractPacket {
+  self.mutex.acquire()
+  let before_packets = self.packets.copy()
+  let before_keys = self.idempotency_keys.copy()
+  let before_events = self.events.copy()
+  try {
+    guard self.amendments.get(amendment_id) is Some(amendment) &&
+      amendment.state == Effective else {
+      raise @contractdoc.ContractDocumentError::InvalidTransition(
+        "amendment must be effective before materialization",
+      )
+    }
+    let mut existing_successor : @contractdoc.ContractPacket? = None
+    for existing in self.packets.values() {
+      if existing.preceding_packet_ref == Some(amendment.preceding_packet_ref) &&
+        existing.state != Superseded {
+        existing_successor = Some(existing)
+        break
+      }
+    }
+    match existing_successor {
+      Some(existing) if existing.packet_id == packet_id => {
+        self.mutex.release()
+        return existing
+      }
+      Some(_) =>
+        raise @contractdoc.ContractDocumentError::AlreadyExists(
+          "contract successor",
+        )
+      None => ()
+    }
+    if self.packets.contains(packet_id) ||
+      self.idempotency_keys.contains(idempotency_key) {
+      raise @contractdoc.ContractDocumentError::IdempotencyConflict(
+        idempotency_key,
+      )
+    }
+    guard self.packets.get(amendment.preceding_packet_ref) is Some(source) &&
+      source.state == Effective &&
+      source.revision == amendment.base_revision else {
+      raise @contractdoc.ContractDocumentError::StaleRevision
+    }
+    let manifest = @contractdoc.manifest_for_template_id(source.template_id)
+    let draft = source.renewal_draft(
+      manifest, packet_id, idempotency_key, now_unix_ms,
+    )
+    let successor = draft.update_information(
+      manifest,
+      draft.revision,
+      amendment.changes,
+      ManagerOperator,
+      actor_ref,
+      "contract-amendment",
+      now_unix_ms,
+    )
+    self.packets[successor.packet_id] = successor
+    self.idempotency_keys[successor.idempotency_key] = successor.packet_id
+    self.events.push(
+      event_for(successor, PacketCreated, actor_ref, [], None, now_unix_ms),
+    )
+    self.events.push(
+      event_for(
+        successor,
+        InformationUpdated,
+        actor_ref,
+        amendment.changes.map(change => change.field_id),
+        None,
+        now_unix_ms,
+      ),
+    )
+    self.persist()
+    self.mutex.release()
+    successor
+  } catch {
+    error => {
+      self.packets = before_packets
+      self.idempotency_keys = before_keys
+      self.events = before_events
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn ContractDocumentStore::create_obligation(
   self : ContractDocumentStore,
   obligation : @contractdoc.ContractObligation,
@@ -715,7 +811,7 @@ pub async fn ContractDocumentStore::governance_dashboard(
     total += obligation.amount_minor_units.unwrap_or(0L)
   }
   let mut next_expiry : Int64? = None
-  for packet in packets {
+  for packet in effective {
     match packet.value("lease.end_date") {
       Some(value) =>
         match @contractdoc.calendar_date_days(value) {

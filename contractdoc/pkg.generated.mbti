@@ -21,6 +21,8 @@ pub fn form_creation_stage(ContractFormKind) -> ContractFormStage
 
 pub fn format_cny_minor_units(Int64) -> String
 
+pub fn format_unix_ms_utc(Int64) -> String
+
 pub fn manifest_for_template_id(String) -> ContractTemplateManifest
 
 pub fn materialize_preview_template(ContractPreviewTemplate, ContractTemplateManifest, ContractPacket, ContractFieldOwner, ContractFormKind, Array[ContractFieldValue]) -> ContractPreviewDocument raise ContractDocumentError
@@ -115,11 +117,14 @@ pub(all) struct ContractApprovalPayload {
   signed_on : String?
   kind : ContractClosureKind?
   reason : String?
+  amount_minor_units : Int64?
+  packet_values_sha256 : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum ContractApprovalStatus {
   Pending
   Approved
+  Applied
   Rejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -294,6 +299,7 @@ pub(all) struct ContractObligation {
   evidence_ref : String?
   completed_by : String?
   completed_unix_ms : Int64?
+  created_by : String?
   created_unix_ms : Int64
   updated_unix_ms : Int64
   revision : Int64

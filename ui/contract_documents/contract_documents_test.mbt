@@ -658,6 +658,10 @@ test "operator approvals use a confirmation gate and task inbox" {
       signed_on: None,
       kind: Some(Expired),
       reason: Some("term ended"),
+      amount_minor_units: Some(100L),
+      packet_values_sha256: Some(
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ),
     },
     initiator: "operator-a",
     created_unix_ms: 1000L,
@@ -692,4 +696,133 @@ test "operator approvals use a confirmation gate and task inbox" {
   assert_true(html.contains("批准这项合同操作？"))
   assert_true(html.contains("待审批"))
   assert_true(html.contains("逾期待办"))
+  assert_true(html.contains("operator-a"))
+  assert_true(html.contains("close:Expired"))
+  assert_true(html.contains("CNY 1.00"))
+  assert_true(html.contains("sha256:aaaaaaaa"))
+  assert_true(html.contains("1970-01-01 00:00:01 UTC"))
+}
+
+///|
+test "customer sees approval progress obligations and expiry without operator actions" {
+  let effective = {
+    ..packet(Effective),
+    values: [{ field_id: "lease.end_date", value: "2026-09-01" }],
+    execution: Some({
+      evidence_sha256: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      signed_on: "2026-08-01",
+      registered_by: "operator-a",
+      registered_unix_ms: 1000L,
+    }),
+  }
+  let html = @contract_documents.render({
+    ..@contract_documents.default_state(ChineseSimplified),
+    manifest: Some(@contractdoc.youthpolicy_remote_lease_manifest()),
+    packets: [effective],
+    selected_packet_id: Some(effective.packet_id),
+    now_unix_ms: @contractdoc.calendar_date_days("2026-08-20").unwrap() *
+    86400000L,
+    approvals: [
+      {
+        approval_id: "approval-customer",
+        packet_id: effective.packet_id,
+        action: "close:Expired",
+        expected_revision: effective.revision,
+        payload: {
+          evidence_sha256: None,
+          signed_on: None,
+          kind: Some(Expired),
+          reason: Some("term ended"),
+          amount_minor_units: Some(12345L),
+          packet_values_sha256: None,
+        },
+        initiator: "operator-a",
+        created_unix_ms: 1000L,
+        status: Pending,
+        decided_by: None,
+        decided_unix_ms: None,
+        decision_reason: None,
+      },
+    ],
+    obligations: [
+      {
+        obligation_id: "obligation-customer",
+        tenant_ref: effective.tenant_ref,
+        packet_id: effective.packet_id,
+        kind: PaymentMilestone,
+        title: "首期付款",
+        owner_ref: effective.subject_ref,
+        due_unix_ms: @contractdoc.calendar_date_days("2026-08-19").unwrap() *
+        86400000L,
+        amount_minor_units: Some(12345L),
+        state: Overdue,
+        evidence_ref: None,
+        completed_by: None,
+        completed_unix_ms: None,
+        created_by: Some("operator-a"),
+        created_unix_ms: 1000L,
+        updated_unix_ms: 2000L,
+        revision: 2L,
+      },
+    ],
+  })
+  assert_true(html.contains("合同状态"))
+  assert_true(html.contains("等待第二人复核"))
+  assert_true(html.contains("催办"))
+  assert_true(html.contains("剩余 12 天"))
+  assert_true(html.contains("首期付款"))
+  assert_true(html.contains("CNY 123.45"))
+  assert_true(html.contains("已逾期"))
+  assert_false(html.contains("核对并批准"))
+  assert_false(html.contains("拒绝"))
+}
+
+///|
+test "operator portfolio switcher scopes tenants and searches durable identifiers" {
+  let packet_a = packet(Effective)
+  let packet_b : @contractdoc.ContractPacket = {
+    ..packet(InformationDraft),
+    packet_id: "packet-tenant-b",
+    idempotency_key: "packet-tenant-b-key",
+    tenant_ref: "tenant-b",
+    organization_id: "organization-b",
+    order_ref: "order-b-searchable",
+  }
+  let base = {
+    ..@contract_documents.default_state(English, actor_owner=ManagerOperator),
+    manifest: Some(@contractdoc.youthpolicy_remote_lease_manifest()),
+    packets: [packet_a, packet_b],
+    selected_tenant_ref: Some("tenant-a"),
+    selected_packet_id: Some(packet_a.packet_id),
+  }
+  let switched = base.update(SelectTenant("tenant-b"))
+  assert_eq(switched.selected_packet_id, Some(packet_b.packet_id))
+  let searched = switched.update(SearchChanged("order-b"))
+  let html = @contract_documents.render(searched)
+  assert_true(html.contains("contract-tenant-selector"))
+  assert_true(html.contains("order-b"))
+  assert_true(html.contains("packet-tenant-b"))
+  assert_false(html.contains("packet-001"))
+}
+
+///|
+test "search moves selection to the first matching packet" {
+  let current = packet(InformationDraft)
+  let matching : @contractdoc.ContractPacket = {
+    ..packet(Effective),
+    packet_id: "packet-effective-search",
+    idempotency_key: "packet-effective-search-key",
+    order_ref: "order-effective-search",
+  }
+  let state = {
+    ..@contract_documents.default_state(English, actor_owner=ManagerOperator),
+    manifest: Some(@contractdoc.youthpolicy_remote_lease_manifest()),
+    packets: [current, matching],
+    selected_tenant_ref: Some("tenant-a"),
+    selected_packet_id: Some(current.packet_id),
+    selected_form: Some(MasterLease),
+  }.update(SearchChanged("effective-search"))
+  assert_eq(state.selected_packet_id, Some(matching.packet_id))
+  assert_eq(state.draft_values, matching.values)
+  assert_eq(state.preview, None)
 }

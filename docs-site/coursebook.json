@@ -639,7 +639,10 @@
           "Open Early termination application. Enter operator-owned settlement values: actual rent 1000, paid rent 1200, refund, refund amount 200, and an operator review decision.",
           "Do not enter customer-owned identity, request reason, or signature fields from the operator surface. Open the enterprise Contract forms page to complete only customer-owned fields.",
           "Confirm the preview refreshes automatically without clicking Render current draft, displays Chinese characters and spacing, and contains the new values.",
-          "Click Save data and confirm the preview and draft values remain stable after the save."
+          "Click Save data and confirm the preview and draft values remain stable after the save.",
+          "In the operator task inbox, select a tenant, search by packet or order, open a pending approval, and verify the confirmation shows action, initiator, expected revision, amount, packet-values digest, evidence and reason before Approve or Reject is enabled.",
+          "In the enterprise portal, confirm the same packet shows approval progress, payment/acceptance obligations, readable dates and CNY amounts, and the expiry countdown without any operator decision button. Click Send reminder once and confirm the success notice.",
+          "Back in the operator console, click Export audit report and inspect the downloaded tenant-scoped JSON: it may contain governance records and value-free lifecycle events, but never tokens, credentials, raw document values, signatures, seals, prompts, or outputs."
         ]},
         {"kind":"heading","level":2,"id":"machine-and-workbench","text":"5. End machine access, then inspect the workbench gate"},
         {"kind":"steps","items":[

@@ -274,6 +274,23 @@ fn decode_snapshot(
 fn migrate_legacy_snapshot(
   document : Json,
 ) -> @contractdoc.ContractDocumentSnapshot raise @contractdoc.ContractDocumentError {
+  // v5 already used the current packet/governance shapes. The v6 additions are
+  // optional attribution/review fields, so the normal decoder supplies `None`
+  // and this branch only advances the schema marker.
+  let legacy_v5 : @contractdoc.ContractDocumentSnapshot? = Some(
+    @json.from_json(document),
+  ) catch {
+    _ => None
+  }
+  match legacy_v5 {
+    Some(snapshot) if snapshot.schema_version ==
+      "lunanexa.contract-document.snapshot.v5" =>
+      return {
+        ..snapshot,
+        schema_version: @contractdoc.snapshot_schema_version,
+      }
+    _ => ()
+  }
   let legacy : LegacyContractDocumentSnapshotV3? = Some(
     @json.from_json(document),
   ) catch {
@@ -1011,6 +1028,7 @@ pub async fn ContractDocumentStore::register_execution(
   self.mutex.acquire()
   let before_packets = self.packets.copy()
   let before_events = self.events.copy()
+  let before_amendments = self.amendments.copy()
   try {
     guard self.packets.get(packet_id) is Some(packet) else {
       raise @contractdoc.ContractDocumentError::NotFound("contract packet")
@@ -1039,27 +1057,33 @@ pub async fn ContractDocumentStore::register_execution(
             "contract predecessor",
           )
         }
-        let superseded = predecessor.supersede_effective(
-          predecessor.revision,
-          {
-            successor_ref: packet.packet_id,
-            reason: "successor packet became effective",
-            superseded_by: evidence.registered_by,
-            superseded_unix_ms: now_unix_ms,
-          },
-          now_unix_ms,
-        )
-        self.packets[predecessor_id] = superseded
-        self.events.push(
-          event_for(
-            superseded,
-            PacketSupersededEvent,
-            evidence.registered_by,
-            [],
-            None,
+        if predecessor.state == Effective {
+          let superseded = predecessor.supersede_effective(
+            predecessor.revision,
+            {
+              successor_ref: packet.packet_id,
+              reason: "successor packet became effective",
+              superseded_by: evidence.registered_by,
+              superseded_unix_ms: now_unix_ms,
+            },
             now_unix_ms,
-          ),
-        )
+          )
+          self.packets[predecessor_id] = superseded
+          self.events.push(
+            event_for(
+              superseded,
+              PacketSupersededEvent,
+              evidence.registered_by,
+              [],
+              None,
+              now_unix_ms,
+            ),
+          )
+        } else if predecessor.state != Closed && predecessor.state != Superseded {
+          raise @contractdoc.ContractDocumentError::InvalidTransition(
+            "contract predecessor is not effective or closed",
+          )
+        }
         for amendment_id, amendment in self.amendments {
           if amendment.preceding_packet_ref == predecessor_id &&
             amendment.state == Effective {
@@ -1082,6 +1106,7 @@ pub async fn ContractDocumentStore::register_execution(
     error => {
       self.packets = before_packets
       self.events = before_events
+      self.amendments = before_amendments
       self.mutex.release()
       raise error
     }
@@ -1211,6 +1236,64 @@ pub async fn ContractDocumentStore::create_approval(
   self.mutex.acquire()
   let before_approvals = self.approvals.copy()
   try {
+    guard approval.approval_id.length() > 0 &&
+      approval.approval_id.length() <= 192 &&
+      approval.packet_id.length() > 0 &&
+      approval.packet_id.length() <= 160 &&
+      approval.initiator.length() > 0 &&
+      approval.initiator.length() <= 160 &&
+      approval.expected_revision > 0L &&
+      approval.created_unix_ms > 0L &&
+      approval.status == Pending &&
+      approval.decided_by is None &&
+      approval.decided_unix_ms is None &&
+      approval.decision_reason is None &&
+      approval.payload.amount_minor_units.map_or(true, amount => amount >= 0L) &&
+      approval.payload.packet_values_sha256.map_or(true, valid_digest) &&
+      self.packets.get(approval.packet_id) is Some(packet) &&
+      packet.revision == approval.expected_revision else {
+      raise @contractdoc.ContractDocumentError::InvalidInput(
+        "invalid contract approval",
+      )
+    }
+    let coherent_payload = if approval.action == "execute" {
+      packet.state == Generated &&
+      approval.payload.evidence_sha256.map_or(false, valid_digest) &&
+      approval.payload.signed_on.map_or(false, value => {
+        @contractdoc.calendar_date_days(value) is Some(_)
+      }) &&
+      approval.payload.kind is None &&
+      approval.payload.reason is None
+    } else {
+      match approval.payload.kind {
+        Some(kind) => {
+          let expected_action = match kind {
+            Expired => "close:Expired"
+            EarlyTermination => "close:EarlyTermination"
+            Settled => "close:Settled"
+          }
+          packet.state == Effective &&
+          approval.action == expected_action &&
+          approval.payload.reason.map_or(false, reason => {
+            valid_governance_text(reason, 512)
+          }) &&
+          approval.payload.evidence_sha256 is None &&
+          approval.payload.signed_on is None
+        }
+        None => false
+      }
+    }
+    let frozen_amount = match packet.value("lease.total_rent") {
+      Some(value) => @contractdoc.parse_cny_minor_units(value)
+      None => None
+    }
+    guard coherent_payload &&
+      approval.payload.amount_minor_units == frozen_amount &&
+      approval.payload.packet_values_sha256 == packet.values_sha256 else {
+      raise @contractdoc.ContractDocumentError::InvalidInput(
+        "contract approval payload does not match its action",
+      )
+    }
     if self.approvals.contains(approval.approval_id) {
       raise @contractdoc.ContractDocumentError::AlreadyExists(
         approval.approval_id,
@@ -1223,6 +1306,206 @@ pub async fn ContractDocumentStore::create_approval(
   } catch {
     error => {
       self.approvals = before_approvals
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Atomically records the second-person decision and applies the guarded
+/// packet transition in the same durable snapshot. This removes the crash
+/// window where an approval could be persisted as approved while the contract
+/// action was not. A legacy v5 `Approved` record is recoverable by the same
+/// method; an already `Applied` decision replays only for its deciding actor.
+pub async fn ContractDocumentStore::decide_and_apply_approval(
+  self : ContractDocumentStore,
+  approval_id : String,
+  decided_by : String,
+  settlement_ledger_matched : Bool,
+  now_unix_ms : Int64,
+) -> (@contractdoc.ContractApproval, @contractdoc.ContractPacket) {
+  self.mutex.acquire()
+  let before_packets = self.packets.copy()
+  let before_events = self.events.copy()
+  let before_approvals = self.approvals.copy()
+  let before_amendments = self.amendments.copy()
+  try {
+    guard self.approvals.get(approval_id) is Some(approval) else {
+      raise @contractdoc.ContractDocumentError::ContractApprovalNotFound(
+        approval_id,
+      )
+    }
+    if approval.status == Applied {
+      guard approval.decided_by == Some(decided_by) &&
+        self.packets.get(approval.packet_id) is Some(packet) else {
+        raise @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(
+          approval_id,
+        )
+      }
+      self.mutex.release()
+      return (approval, packet)
+    }
+    guard approval.status == Pending || approval.status == Approved else {
+      raise @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(
+        approval_id,
+      )
+    }
+    if approval.status == Pending && decided_by == approval.initiator {
+      raise @contractdoc.ContractDocumentError::ContractApprovalSelfDecision(
+        approval_id,
+      )
+    }
+    if approval.status == Approved && approval.decided_by != Some(decided_by) {
+      raise @contractdoc.ContractDocumentError::ContractApprovalAlreadyDecided(
+        approval_id,
+      )
+    }
+    guard self.packets.get(approval.packet_id) is Some(packet) else {
+      raise @contractdoc.ContractDocumentError::NotFound("contract packet")
+    }
+    let updated = if approval.action == "execute" {
+      guard approval.payload.evidence_sha256 is Some(evidence_sha256) &&
+        approval.payload.signed_on is Some(signed_on) else {
+        raise @contractdoc.ContractDocumentError::InvalidInput(
+          "contract approval payload is incomplete",
+        )
+      }
+      let evidence : @contractdoc.ContractExecution = {
+        evidence_sha256,
+        signed_on,
+        registered_by: approval.initiator,
+        registered_unix_ms: now_unix_ms,
+      }
+      let next = packet.register_execution(
+        approval.expected_revision,
+        evidence,
+        now_unix_ms,
+      )
+      self.packets[packet.packet_id] = next
+      self.events.push(
+        event_for(
+          next,
+          ExecutionRegisteredEvent,
+          approval.initiator,
+          [],
+          Some(evidence.evidence_sha256),
+          now_unix_ms,
+        ),
+      )
+      match packet.preceding_packet_ref {
+        Some(predecessor_id) if packet.active_forms.contains(MasterLease) => {
+          guard self.packets.get(predecessor_id) is Some(predecessor) else {
+            raise @contractdoc.ContractDocumentError::NotFound(
+              "contract predecessor",
+            )
+          }
+          // A successor may take effect after the predecessor naturally or
+          // manually closed. Preserve that terminal fact instead of trying to
+          // rewrite it as superseded.
+          if predecessor.state == Effective {
+            let superseded = predecessor.supersede_effective(
+              predecessor.revision,
+              {
+                successor_ref: packet.packet_id,
+                reason: "successor packet became effective",
+                superseded_by: approval.initiator,
+                superseded_unix_ms: now_unix_ms,
+              },
+              now_unix_ms,
+            )
+            self.packets[predecessor_id] = superseded
+            self.events.push(
+              event_for(
+                superseded,
+                PacketSupersededEvent,
+                approval.initiator,
+                [],
+                None,
+                now_unix_ms,
+              ),
+            )
+          } else if predecessor.state != Closed &&
+            predecessor.state != Superseded {
+            raise @contractdoc.ContractDocumentError::InvalidTransition(
+              "contract predecessor is not effective or closed",
+            )
+          }
+          for amendment_id, amendment in self.amendments {
+            if amendment.preceding_packet_ref == predecessor_id &&
+              amendment.state == Effective {
+              self.amendments[amendment_id] = {
+                ..amendment,
+                state: Superseded,
+                updated_unix_ms: now_unix_ms,
+                revision: amendment.revision + 1L,
+              }
+            }
+          }
+        }
+        _ => ()
+      }
+      next
+    } else {
+      guard approval.action.has_prefix("close:") &&
+        approval.payload.kind is Some(kind) &&
+        approval.payload.reason is Some(reason) else {
+        raise @contractdoc.ContractDocumentError::InvalidInput(
+          "contract approval payload is incomplete",
+        )
+      }
+      let settlement_confirmed = kind != EarlyTermination ||
+        (
+          settlement_ledger_matched &&
+          latest_settlement_confirmation_locked(
+            self.packets,
+            packet.tenant_ref,
+            packet.packet_id,
+          )
+          is Some(_)
+        )
+      let closure : @contractdoc.ContractClosure = {
+        kind,
+        reason,
+        closed_by: approval.initiator,
+        closed_unix_ms: now_unix_ms,
+      }
+      let next = packet.close_packet(
+        approval.expected_revision,
+        closure,
+        settlement_confirmed,
+        now_unix_ms,
+      )
+      self.packets[packet.packet_id] = next
+      self.events.push(
+        event_for(
+          next,
+          PacketClosedEvent,
+          approval.initiator,
+          [],
+          None,
+          now_unix_ms,
+        ),
+      )
+      next
+    }
+    let applied : @contractdoc.ContractApproval = {
+      ..approval,
+      status: Applied,
+      decided_by: Some(decided_by),
+      decided_unix_ms: Some(now_unix_ms),
+      decision_reason: None,
+    }
+    self.approvals[approval_id] = applied
+    self.persist()
+    self.mutex.release()
+    (applied, updated)
+  } catch {
+    error => {
+      self.packets = before_packets
+      self.events = before_events
+      self.approvals = before_approvals
+      self.amendments = before_amendments
       self.mutex.release()
       raise error
     }
@@ -1356,6 +1639,70 @@ pub async fn ContractDocumentStore::reopen_approval(
   } catch {
     error => {
       self.approvals = before_approvals
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Reconciles legacy v5 approvals that may have been persisted as `Approved`
+/// immediately before a controller crash. If the packet already proves the
+/// exact action, the approval advances to `Applied`; otherwise it remains an
+/// explicit operator recovery task and is returned to the caller.
+pub async fn ContractDocumentStore::reconcile_approved_approvals(
+  self : ContractDocumentStore,
+  now_unix_ms : Int64,
+) -> Array[@contractdoc.ContractApproval] {
+  self.mutex.acquire()
+  let before = self.approvals.copy()
+  let unresolved : Array[@contractdoc.ContractApproval] = []
+  let mut changed = false
+  try {
+    for approval_id, approval in self.approvals {
+      if approval.status == Approved {
+        let reflected = match self.packets.get(approval.packet_id) {
+          Some(packet) if approval.action == "execute" =>
+            match packet.execution {
+              Some(execution) =>
+                approval.payload.evidence_sha256 ==
+                Some(execution.evidence_sha256) &&
+                approval.payload.signed_on == Some(execution.signed_on) &&
+                execution.registered_by == approval.initiator
+              None => false
+            }
+          Some(packet) if approval.action.has_prefix("close:") =>
+            match packet.closure {
+              Some(closure) =>
+                approval.payload.kind == Some(closure.kind) &&
+                approval.payload.reason == Some(closure.reason) &&
+                closure.closed_by == approval.initiator
+              None => false
+            }
+          _ => false
+        }
+        if reflected {
+          self.approvals[approval_id] = {
+            ..approval,
+            status: Applied,
+            decided_unix_ms: Some(
+              approval.decided_unix_ms.unwrap_or(now_unix_ms),
+            ),
+          }
+          changed = true
+        } else {
+          unresolved.push(approval)
+        }
+      }
+    }
+    if changed {
+      self.persist()
+    }
+    self.mutex.release()
+    unresolved
+  } catch {
+    error => {
+      self.approvals = before
       self.mutex.release()
       raise error
     }

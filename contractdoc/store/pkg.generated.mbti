@@ -44,6 +44,7 @@ pub async fn ContractDocumentStore::create_obligation(Self, @contractdoc.Contrac
 pub async fn ContractDocumentStore::create_packet(Self, @contractdoc.ContractPacket, String) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::create_settlement_draft(Self, @contractdoc.ContractSettlementDraft) -> @contractdoc.ContractSettlementDraft
 pub async fn ContractDocumentStore::decide_amendment(Self, String, Bool, String, Int64) -> @contractdoc.ContractAmendment
+pub async fn ContractDocumentStore::decide_and_apply_approval(Self, String, String, Bool, Int64) -> (@contractdoc.ContractApproval, @contractdoc.ContractPacket)
 pub async fn ContractDocumentStore::decide_approval(Self, String, Bool, String, String?, Int64) -> @contractdoc.ContractApproval
 pub async fn ContractDocumentStore::decide_closure_proposal(Self, String, Bool, Int64) -> @contractdoc.ContractClosureProposal
 pub async fn ContractDocumentStore::decide_settlement_draft(Self, String, Bool, Int64) -> @contractdoc.ContractSettlementDraft
@@ -53,12 +54,14 @@ pub async fn ContractDocumentStore::governance_dashboard(Self, String, Int64) ->
 pub async fn ContractDocumentStore::has_effective_master_lease(Self, String, String, Int64) -> Bool
 pub async fn ContractDocumentStore::latest_settlement_confirmation(Self, String, String) -> @contractdoc.ContractPacket?
 pub async fn ContractDocumentStore::list_approvals(Self, @contractdoc.ContractApprovalStatus?) -> Array[@contractdoc.ContractApproval]
+pub async fn ContractDocumentStore::materialize_amendment(Self, String, String, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::obligation(Self, String) -> @contractdoc.ContractObligation?
 pub async fn ContractDocumentStore::open(String) -> Self
 pub async fn ContractDocumentStore::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn ContractDocumentStore::packet(Self, String) -> @contractdoc.ContractPacket?
 pub async fn ContractDocumentStore::packets_for_subject(Self, String) -> Array[@contractdoc.ContractPacket]
 pub async fn ContractDocumentStore::pending_generation_packets(Self) -> Array[@contractdoc.ContractPacket]
+pub async fn ContractDocumentStore::reconcile_approved_approvals(Self, Int64) -> Array[@contractdoc.ContractApproval]
 pub async fn ContractDocumentStore::reconcile_obligations(Self, Int64) -> Array[@contractdoc.ContractObligation]
 pub async fn ContractDocumentStore::register_execution(Self, String, Int64, @contractdoc.ContractExecution, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::renew_packet(Self, String, String, String, String, Int64) -> @contractdoc.ContractPacket

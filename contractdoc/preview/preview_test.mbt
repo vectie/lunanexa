@@ -242,3 +242,47 @@ async test "every contract tab materializes only its associated MoonLeaf pages" 
     }
   }
 }
+
+///|
+async test "read-only packets preview their recorded values and ignore draft changes" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let source = @fs.read_file(
+      "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
+    )
+    .binary()
+    .to_fixedarray()
+  let scene = template(source, manifest)
+  let draft = @contractdoc.new_packet(
+    manifest,
+    "packet-effective-preview",
+    "packet-effective-preview-key",
+    "tenant-demo",
+    "organization-demo",
+    "subject-demo",
+    "order-demo",
+    None,
+    [MasterLease],
+    1000L,
+  ).update_information(
+    manifest,
+    1L,
+    [{ field_id: "lessee.name", value: "Recorded customer" }],
+    CustomerMessenger,
+    "subject-demo",
+    "customer-portal",
+    2000L,
+  )
+  let effective = { ..draft, state: Effective }
+  let preview = @contractdoc.materialize_preview_template(
+    scene,
+    manifest,
+    effective,
+    CustomerMessenger,
+    MasterLease,
+    [{ field_id: "lessee.name", value: "Uncommitted browser value" }],
+  )
+  let text = preview_visible_text(preview)
+  assert_true(text.contains("Recorded customer"))
+  assert_false(text.contains("Uncommitted browser value"))
+  assert_eq(preview.packet_revision, effective.revision)
+}

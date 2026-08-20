@@ -7,12 +7,35 @@ fn contract_governance_path(path : String) -> Bool {
 }
 
 ///|
+/// Canonicalizes object key order recursively so semantically identical JSON
+/// requests replay the same governance record even when whitespace or input
+/// field order differs.
+fn canonical_governance_json(value : Json) -> String {
+  match value {
+    Object(fields) => {
+      let pairs = fields.to_array()
+      pairs.sort_by((left, right) => left.0.compare(right.0))
+      let parts : Array[String] = []
+      for pair in pairs {
+        parts.push(
+          "\{@json.to_json(pair.0).stringify()}:\{canonical_governance_json(pair.1)}",
+        )
+      }
+      "{\{parts.join(",")}}"
+    }
+    Array(values) => "[\{values.map(canonical_governance_json).join(",")}]"
+    _ => value.stringify()
+  }
+}
+
+///|
 /// Request fingerprints keep server-generated governance identifiers unique
-/// when two submissions arrive in the same millisecond. They are not a
-/// substitute for a client idempotency key, but prevent unrelated retries or
-/// records from colliding on a timestamp-only ID.
+/// and provide exact semantic replay for the same typed JSON request.
 fn governance_request_fingerprint(body : String) -> String {
-  digest_hex(body)[:16].to_owned()
+  let material = canonical_governance_json(@json.parse(body)) catch {
+    _ => body
+  }
+  digest_hex(material)[:16].to_owned()
 }
 
 ///|
@@ -141,6 +164,65 @@ async fn ApiService::handle_contract_governance(
         store.governance_dashboard(request.tenant_ref, now).to_json(),
       )
     }
+    (Post, "/v1/contract-governance/operator/export") => {
+      let request : ContractGovernanceTenantRequest = @json.from_json(
+        @json.parse(body),
+      ) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "tenant_ref is required", false,
+          )
+      }
+      guard request.tenant_ref.trim() != "" else {
+        return api_error(400, "InvalidRequest", "tenant_ref is required", false)
+      }
+      let snapshot = store.snapshot()
+      let packet_ids : Map[String, Unit] = Map([])
+      for packet in snapshot.packets {
+        if packet.tenant_ref == request.tenant_ref {
+          packet_ids[packet.packet_id] = ()
+        }
+      }
+      let approvals = snapshot.approvals.filter(value => {
+        packet_ids.contains(value.packet_id)
+      })
+      let obligations = snapshot.obligations.filter(value => {
+        value.tenant_ref == request.tenant_ref
+      })
+      let proposals = snapshot.closure_proposals.filter(value => {
+        value.tenant_ref == request.tenant_ref
+      })
+      let numbers = snapshot.numbers.filter(value => {
+        value.tenant_ref == request.tenant_ref
+      })
+      let events = snapshot.events.filter(value => {
+        packet_ids.contains(value.packet_id)
+      })
+      let amendment_count = snapshot.amendments
+        .filter(value => value.tenant_ref == request.tenant_ref)
+        .length()
+      self.operator_audit_as(
+        operator_id,
+        "contract.governance.export",
+        request.tenant_ref,
+        "packets:\{packet_ids.length()}:approvals:\{approvals.length()}:obligations:\{obligations.length()}",
+      )
+      json_reply(200, {
+        "version": "lunanexa.contract-governance.export.v1",
+        "tenant_ref": request.tenant_ref,
+        "generated_unix_ms": now.to_json(),
+        "packet_count": packet_ids.length().to_json(),
+        "amendment_count": amendment_count.to_json(),
+        "dashboard": store
+        .governance_dashboard(request.tenant_ref, now)
+        .to_json(),
+        "approvals": approvals.to_json(),
+        "obligations": obligations.to_json(),
+        "closure_proposals": proposals.to_json(),
+        "contract_numbers": numbers.to_json(),
+        "audit_events": events.to_json(),
+      })
+    }
     (Post, "/v1/contract-governance/operator/amendments") => {
       let request : ContractAmendmentRequest = @json.from_json(
         @json.parse(body),
@@ -239,24 +321,8 @@ async fn ApiService::handle_contract_governance(
             false,
           )
       }
-      let amendment = match store.amendment(amendment_id) {
-        Some(value) if value.state == Effective => value
-        _ =>
-          return api_error(
-            409, "AmendmentNotEffective", "amendment must be effective before materialization",
-            false,
-          )
-      }
-      match store.successor_packet(amendment.preceding_packet_ref) {
-        Some(existing) if existing.packet_id != request.packet_id =>
-          return api_error(
-            409, "AmendmentMaterializationRejected", "this amendment already has a successor packet",
-            false,
-          )
-        _ => ()
-      }
-      let successor = store.renew_packet(
-        amendment.preceding_packet_ref,
+      let successor = store.materialize_amendment(
+        amendment_id,
         request.packet_id,
         request.idempotency_key,
         operator_id,
@@ -268,35 +334,7 @@ async fn ApiService::handle_contract_governance(
             false,
           )
       }
-      let needs_changes = amendment.changes.any(change => {
-        successor.value(change.field_id) != Some(change.value)
-      })
-      if needs_changes && successor.revision != 1L {
-        return api_error(
-          409, "AmendmentMaterializationRejected", "the successor draft changed after amendment materialization",
-          false,
-        )
-      }
-      let successor = if !needs_changes {
-        successor
-      } else {
-        store.update_information(
-          @contractdoc.manifest_for_template_id(successor.template_id),
-          successor.packet_id,
-          successor.revision,
-          amendment.changes,
-          ManagerOperator,
-          operator_id,
-          "contract-amendment",
-          now,
-        ) catch {
-          _ =>
-            return api_error(
-              409, "AmendmentMaterializationRejected", "approved amendment fields could not be applied to the successor draft",
-              false,
-            )
-        }
-      }
+      let amendment = store.amendment(amendment_id).unwrap()
       self.operator_audit_as(
         operator_id,
         "contract.amendment.materialize",
@@ -330,6 +368,7 @@ async fn ApiService::handle_contract_governance(
         evidence_ref: None,
         completed_by: None,
         completed_unix_ms: None,
+        created_by: Some(operator_id),
         created_unix_ms: now,
         updated_unix_ms: now,
         revision: 1L,
@@ -672,8 +711,9 @@ pub async fn ApiService::reconcile_contract_governance(
   match self.contract_document_store {
     Some(store) => {
       let overdue = store.reconcile_obligations(now_unix_ms)
+      let recovery_required = store.reconcile_approved_approvals(now_unix_ms)
       match self.notification_store {
-        Some(notifications) =>
+        Some(notifications) => {
           for obligation in overdue {
             ignore(
               notifications.enqueue({
@@ -697,6 +737,30 @@ pub async fn ApiService::reconcile_contract_governance(
               }),
             )
           }
+          for approval in recovery_required {
+            ignore(
+              notifications.enqueue({
+                version: @notifications.contract_version,
+                notification_id: "contract-approval-recovery-\{approval.approval_id}",
+                deduplication_key: "contract-approval-recovery-\{approval.approval_id}",
+                source_receipt: "contract-governance:approval:\{approval.approval_id}:recovery-required",
+                topic: CommercialAction,
+                code: "ContractApprovalRecoveryRequired",
+                severity: Critical,
+                audience: PlatformOperators,
+                title_key: "alerts.contract_approval_recovery.title",
+                body_key: "alerts.contract_approval_recovery.body",
+                parameters: {
+                  "approval_ref": approval.approval_id,
+                  "packet_ref": approval.packet_id,
+                  "action": approval.action,
+                },
+                created_unix_ms: now_unix_ms,
+                expires_unix_ms: None,
+              }),
+            )
+          }
+        }
         None => ()
       }
     }

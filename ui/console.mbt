@@ -465,6 +465,10 @@ pub fn demo_state() -> ConsoleState {
       signed_on: None,
       kind: Some(EarlyTermination),
       reason: Some("operator review required"),
+      amount_minor_units: Some(2880000L),
+      packet_values_sha256: Some(
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ),
     },
     initiator: "operator-a",
     created_unix_ms: 1786529000000L,
@@ -934,7 +938,53 @@ pub fn demo_state() -> ConsoleState {
       ),
       manifest: Some(contract_manifest),
       packets: [contract_packet, effective_contract_packet],
+      events: [
+        {
+          event_id: "contract-event-operator-demo-created",
+          packet_id: effective_contract_packet.packet_id,
+          revision: 1L,
+          kind: PacketCreated,
+          actor_ref: "operator-a",
+          changed_field_ids: [],
+          values_sha256: None,
+          artifact_sha256: None,
+          occurred_unix_ms: effective_contract_packet.created_unix_ms,
+        },
+        {
+          event_id: "contract-event-operator-demo-effective",
+          packet_id: effective_contract_packet.packet_id,
+          revision: effective_contract_packet.revision,
+          kind: ExecutionRegisteredEvent,
+          actor_ref: "operator-a",
+          changed_field_ids: [],
+          values_sha256: effective_contract_packet.values_sha256,
+          artifact_sha256: effective_contract_packet.execution.map(value => {
+            value.evidence_sha256
+          }),
+          occurred_unix_ms: effective_contract_packet.updated_unix_ms,
+        },
+      ],
       approvals: [contract_approval],
+      obligations: [
+        {
+          obligation_id: "contract-obligation-overdue-demo",
+          tenant_ref: effective_contract_packet.tenant_ref,
+          packet_id: effective_contract_packet.packet_id,
+          kind: PaymentMilestone,
+          title: "August capacity payment",
+          owner_ref: "subject-alice",
+          due_unix_ms: 1786442400000L,
+          amount_minor_units: Some(1280000L),
+          state: Overdue,
+          evidence_ref: None,
+          completed_by: None,
+          completed_unix_ms: None,
+          created_by: Some("operator-a"),
+          created_unix_ms: 1786356000000L,
+          updated_unix_ms: 1786529000000L,
+          revision: 2L,
+        },
+      ],
       governance_dashboard: Some({
         tenant_ref: "tenant-demo",
         effective_packets: 1,
@@ -3509,6 +3559,18 @@ fn alert_code_label(locale : @i18n.Locale, code : String) -> String {
     "AccessCredentialsRevoked" =>
       localized(
         locale, "Access credentials revoked on contract close", "合同关闭，访问凭据已撤销",
+      )
+    "ContractObligationOverdue" =>
+      localized(
+        locale, "Contract obligation is overdue", "合同履约义务已逾期",
+      )
+    "ContractApprovalRecoveryRequired" =>
+      localized(
+        locale, "Approved contract action needs recovery", "已批准的合同操作需要恢复执行",
+      )
+    "ContractApprovalNudged" =>
+      localized(
+        locale, "Customer requested an approval update", "客户发起了审批催办",
       )
     _ => code
   }

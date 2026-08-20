@@ -250,6 +250,14 @@ async test "governance routes enforce effective access and expose the operating 
   )
   assert_eq(amendment_replay.status, 200)
   assert_true(amendment_replay.body.contains(amendment_value.amendment_id))
+  let semantic_replay = service.handle(
+    Post,
+    "/v1/contract-governance/operator/amendments",
+    operator_headers,
+    "{\"changes\":[{\"value\":\"100\",\"field_id\":\"lease.total_rent\"}],\"reason\":\"price amendment\",\"base_revision\":\"1\",\"preceding_packet_ref\":\"packet-governance-api\"}",
+  )
+  assert_eq(semantic_replay.status, 200)
+  assert_true(semantic_replay.body.contains(amendment_value.amendment_id))
   let customer_owned_amendment = service.handle(
     Post,
     "/v1/contract-governance/operator/amendments",
@@ -311,6 +319,18 @@ async test "governance routes enforce effective access and expose the operating 
     "{\"tenant_ref\":\"tenant-governance-api\"}",
   )
   assert_eq(dashboard_post.status, 404)
+  let exported_report = service.handle(
+    Post,
+    "/v1/contract-governance/operator/export",
+    operator_headers,
+    "{\"tenant_ref\":\"tenant-governance-api\"}",
+  )
+  assert_eq(exported_report.status, 200)
+  assert_true(
+    exported_report.body.contains("lunanexa.contract-governance.export.v1"),
+  )
+  assert_true(exported_report.body.contains("audit_events"))
+  assert_false(exported_report.body.contains("operator-token"))
   let admission = service.handle(
     Post,
     "/v1/contract-governance/operator/admission",
@@ -340,6 +360,21 @@ async test "four-eyes HTTP approval is 202, second-person, and replay-safe" {
   let documents = @contractdoc_store.ContractDocumentStore::open(
     "\{directory}/contracts.json",
   )
+  let portal = @portal_store.FilePortalStore::open("\{directory}/portal.json")
+  ignore(
+    portal.put_membership({
+      membership_id: "membership-approval-http",
+      tenant_ref: "tenant-approval-http",
+      organization_id: "org-approval-http",
+      subject_ref: "subject-approval-http",
+      roles: [Developer],
+      active: true,
+      created_unix_ms: 1000L,
+    }),
+  )
+  let notifications = @notification_store.NotificationStore::open(
+    "\{directory}/notifications.json",
+  )
   let runtime = @runtimes.OpenAiTextRuntime::new(
     "http://127.0.0.1:1/v1/responses",
     "runtime-secret",
@@ -352,6 +387,8 @@ async test "four-eyes HTTP approval is 202, second-person, and replay-safe" {
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_contract_document_store(documents)
+    .with_portal_store(portal)
+    .with_notification_store(notifications)
     .with_operator_tokens([
       ("operator-a", "operator-token"),
       ("operator-b", "operator-b-token"),
@@ -405,7 +442,97 @@ async test "four-eyes HTTP approval is 202, second-person, and replay-safe" {
     { "Authorization": "Bearer operator-b-token" },
     "",
   )
-  assert_eq(replay.status, 409)
+  assert_eq(replay.status, 200)
+  let replayed : @contractdoc.ContractApproval = @json.from_json(
+    @json.parse(replay.body),
+  )
+  assert_eq(replayed.status, Applied)
+
+  let rejected_packet : @contractdoc.ContractPacket = {
+    ..packet,
+    packet_id: "packet-approval-reject",
+    idempotency_key: "packet-approval-reject-key",
+    order_ref: "order-approval-reject",
+  }
+  ignore(documents.create_packet(rejected_packet, "operator-a"))
+  let reject_pending = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-approval-reject:close",
+    { "Authorization": "Bearer operator-token" },
+    "{\"expected_revision\":\"1\",\"kind\":\"Expired\",\"reason\":\"term ended\"}",
+  )
+  assert_eq(reject_pending.status, 202)
+  let reject_approval : @contractdoc.ContractApproval = @json.from_json(
+    @json.parse(reject_pending.body),
+  )
+  let rejected = service.handle(
+    Post,
+    "/v1/contract-documents/operator/approvals/\{reject_approval.approval_id}:reject",
+    { "Authorization": "Bearer operator-b-token" },
+    "{\"reason\":\"evidence did not match\"}",
+  )
+  assert_eq(rejected.status, 200)
+  let rejected_record : @contractdoc.ContractApproval = @json.from_json(
+    @json.parse(rejected.body),
+  )
+  assert_eq(rejected_record.status, Rejected)
+  assert_eq(
+    documents.packet(rejected_packet.packet_id).unwrap().state,
+    Effective,
+  )
+
+  let stale_packet : @contractdoc.ContractPacket = {
+    ..packet,
+    packet_id: "packet-approval-stale",
+    idempotency_key: "packet-approval-stale-key",
+    order_ref: "order-approval-stale",
+  }
+  ignore(documents.create_packet(stale_packet, "operator-a"))
+  let stale_pending = service.handle(
+    Post,
+    "/v1/contract-documents/operator/packets/packet-approval-stale:close",
+    { "Authorization": "Bearer operator-token" },
+    "{\"expected_revision\":\"1\",\"kind\":\"Expired\",\"reason\":\"term ended\"}",
+  )
+  let stale_approval : @contractdoc.ContractApproval = @json.from_json(
+    @json.parse(stale_pending.body),
+  )
+  let nudged = service.handle(
+    Post,
+    "/v1/contract-documents/self/approvals/\{stale_approval.approval_id}:nudge",
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-approval-http",
+    },
+    "{}",
+  )
+  assert_eq(nudged.status, 202)
+  assert_true(
+    notifications.snapshot().records.any(record => {
+      record.event.code == "ContractApprovalNudged"
+    }),
+  )
+  ignore(
+    documents.close_packet(
+      stale_packet.packet_id,
+      stale_packet.revision,
+      Expired,
+      "closed concurrently",
+      "operator-a",
+      2000L,
+    ),
+  )
+  let stale_decision = service.handle(
+    Post,
+    "/v1/contract-documents/operator/approvals/\{stale_approval.approval_id}:approve",
+    { "Authorization": "Bearer operator-b-token" },
+    "",
+  )
+  assert_eq(stale_decision.status, 409)
+  assert_eq(
+    documents.get_approval(stale_approval.approval_id).unwrap().status,
+    Pending,
+  )
   @fs.rmdir(directory, recursive=true)
 }
 

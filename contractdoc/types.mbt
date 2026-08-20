@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.contract-document.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v5"
+pub let snapshot_schema_version : String = "lunanexa.contract-document.snapshot.v6"
 
 ///|
 pub(all) suberror ContractDocumentError {
@@ -382,6 +382,7 @@ pub(all) struct ContractPacketEvent {
 pub(all) enum ContractApprovalStatus {
   Pending
   Approved
+  Applied
   Rejected
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -443,6 +444,9 @@ pub(all) struct ContractObligation {
   evidence_ref : String?
   completed_by : String?
   completed_unix_ms : Int64?
+  /// The named operator who created the durable obligation. Legacy v5 records
+  /// migrate with `None`; every v6 write records `Some(operator_id)`.
+  created_by : String?
   created_unix_ms : Int64
   updated_unix_ms : Int64
   revision : Int64
@@ -526,6 +530,12 @@ pub(all) struct ContractApprovalPayload {
   signed_on : String?
   kind : ContractClosureKind?
   reason : String?
+  /// Immutable commercial amount captured when approval was requested.
+  amount_minor_units : Int64?
+  /// Digest of the packet values reviewed by the initiator. It allows the
+  /// second operator to compare a frozen fact rather than a mutable browser
+  /// projection. Legacy v5 approvals migrate with `None`.
+  packet_values_sha256 : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

@@ -93,16 +93,6 @@ fn closure_kind_name(kind : @contractdoc.ContractClosureKind) -> String {
 }
 
 ///|
-fn closure_kind_from_name(name : String) -> @contractdoc.ContractClosureKind? {
-  match name {
-    "Expired" => Some(Expired)
-    "EarlyTermination" => Some(EarlyTermination)
-    "Settled" => Some(Settled)
-    _ => None
-  }
-}
-
-///|
 fn contract_packet_id(path : String, suffix : String) -> String? {
   let prefix = "/v1/contract-documents/self/"
   if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
@@ -133,6 +123,20 @@ fn operator_contract_packet_id(path : String, suffix : String) -> String? {
 ///|
 fn operator_approval_id(path : String, suffix : String) -> String? {
   let prefix = "/v1/contract-documents/operator/approvals/"
+  if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
+    return None
+  }
+  let approval_id = path[prefix.length():path.length() - suffix.length()].to_owned()
+  if @contracts.valid_identifier(approval_id) {
+    Some(approval_id)
+  } else {
+    None
+  }
+}
+
+///|
+fn self_approval_id(path : String, suffix : String) -> String? {
+  let prefix = "/v1/contract-documents/self/approvals/"
   if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
     return None
   }
@@ -179,12 +183,20 @@ async fn ApiService::request_contract_approval(
   payload : @contractdoc.ContractApprovalPayload,
 ) -> HttpReply {
   let now = @async.now()
+  let frozen_payload : @contractdoc.ContractApprovalPayload = {
+    ..payload,
+    amount_minor_units: match packet.value("lease.total_rent") {
+      Some(value) => @contractdoc.parse_cny_minor_units(value)
+      None => None
+    },
+    packet_values_sha256: packet.values_sha256,
+  }
   let approval : @contractdoc.ContractApproval = {
     approval_id: "contract-approval-\{packet.packet_id}-\{now}",
     packet_id: packet.packet_id,
     action,
     expected_revision,
-    payload,
+    payload: frozen_payload,
     initiator,
     created_unix_ms: now,
     status: Pending,
@@ -205,93 +217,6 @@ async fn ApiService::request_contract_approval(
   )
   self.notify_contract_approval_requested(created, now)
   json_reply(202, created.to_json())
-}
-
-///|
-/// Re-runs the full original server-side path of an approved request. The
-/// recorded payload and revision fence the re-execution: a packet that moved
-/// on is rejected with the same errors the direct route would return, and the
-/// approval stays pending so it can be withdrawn. The initiator is recorded
-/// as the actor of the transition itself.
-async fn ApiService::execute_approved_contract_action(
-  self : ApiService,
-  store : @contractdoc_store.ContractDocumentStore,
-  approval : @contractdoc.ContractApproval,
-  now_unix_ms : Int64,
-) -> @contractdoc.ContractPacket raise Error {
-  if approval.action == "execute" {
-    guard approval.payload.evidence_sha256 is Some(evidence_sha256) &&
-      approval.payload.signed_on is Some(signed_on) else {
-      raise @contractdoc.ContractDocumentError::InvalidInput(
-        "contract approval payload is incomplete",
-      )
-    }
-    let evidence : @contractdoc.ContractExecution = {
-      evidence_sha256,
-      signed_on,
-      registered_by: approval.initiator,
-      registered_unix_ms: now_unix_ms,
-    }
-    return store.register_execution(
-      approval.packet_id,
-      approval.expected_revision,
-      evidence,
-      now_unix_ms,
-    )
-  }
-  guard approval.action.has_prefix("close:") &&
-    closure_kind_from_name(approval.action[6:].to_owned()) is Some(kind) &&
-    approval.payload.reason is Some(reason) else {
-    raise @contractdoc.ContractDocumentError::InvalidInput(
-      "contract approval payload is incomplete",
-    )
-  }
-  guard store.packet(approval.packet_id) is Some(packet) else {
-    raise @contractdoc.ContractDocumentError::NotFound("contract packet")
-  }
-  // The settlement gate and ledger reconciliation re-run at decision time:
-  // the ledger may have changed since the request was filed.
-  let settlement_check : SettlementLedgerCheck? = if kind == EarlyTermination {
-    self.check_settlement_against_ledger(packet, now_unix_ms)
-  } else {
-    None
-  }
-  match settlement_check {
-    Some(Mismatched(detail)) =>
-      raise @contractdoc.ContractDocumentError::SettlementMismatch(detail)
-    _ => ()
-  }
-  let updated = store.close_packet(
-    approval.packet_id,
-    approval.expected_revision,
-    kind,
-    reason,
-    approval.initiator,
-    now_unix_ms,
-  )
-  match settlement_check {
-    Some(Matched(settlement_ref~, minor_units~)) =>
-      self.operator_audit_as(
-        approval.initiator,
-        "contract.settlement.reconciled",
-        updated.packet_id,
-        "settlement:\{settlement_ref}:amount-cny:\{@contractdoc.format_cny_minor_units(minor_units)}:ledger-matched",
-      )
-    Some(LedgerUnused(settlement_ref~)) =>
-      self.operator_audit_as(
-        approval.initiator,
-        "contract.settlement.ledger-unused",
-        updated.packet_id,
-        "settlement:\{settlement_ref}:ledger-not-in-use",
-      )
-    _ => ()
-  }
-  self.apply_master_lease_closure_effects(
-    updated,
-    approval.initiator,
-    now_unix_ms,
-  )
-  updated
 }
 
 ///|
@@ -478,7 +403,8 @@ async fn ApiService::handle_contract_documents(
     )
   }
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
-  if path == "/v1/contract-documents/operator/packets" ||
+  if path == "/v1/contract-documents/operator/snapshot" ||
+    path == "/v1/contract-documents/operator/packets" ||
     path.has_prefix("/v1/contract-documents/operator/packets/") {
     guard self.operator_identity(headers) is Some(operator_id) else {
       return api_error(
@@ -486,6 +412,8 @@ async fn ApiService::handle_contract_documents(
       )
     }
     return match (verb, path) {
+      (Get, "/v1/contract-documents/operator/snapshot") =>
+        json_reply(200, store.snapshot().to_json())
       (Get, "/v1/contract-documents/operator/packets") =>
         json_reply(200, store.snapshot().packets.to_json())
       (Put, _) if operator_contract_packet_id(path, ":information")
@@ -558,6 +486,8 @@ async fn ApiService::handle_contract_documents(
               signed_on: Some(request.signed_on),
               kind: None,
               reason: None,
+              amount_minor_units: None,
+              packet_values_sha256: None,
             },
           )
         }
@@ -623,6 +553,8 @@ async fn ApiService::handle_contract_documents(
               signed_on: None,
               kind: Some(request.kind),
               reason: Some(request.reason),
+              amount_minor_units: None,
+              packet_values_sha256: None,
             },
           )
         }
@@ -743,6 +675,8 @@ async fn ApiService::handle_contract_documents(
           Some(Pending)
         } else if path.contains("status=approved") {
           Some(Approved)
+        } else if path.contains("status=applied") {
+          Some(Applied)
         } else if path.contains("status=rejected") {
           Some(Rejected)
         } else {
@@ -756,37 +690,56 @@ async fn ApiService::handle_contract_documents(
             404, "ContractApprovalNotFound", "contract approval was not found", false,
           )
         }
-        if approval.status != Pending {
+        if approval.status == Rejected {
           return api_error(
             409, "ContractApprovalAlreadyDecided", "contract approval was already decided",
             false,
           )
         }
-        if operator_id == approval.initiator {
+        if approval.status == Pending && operator_id == approval.initiator {
           return api_error(
             409, "ContractApprovalSelfDecision", "a second operator must approve the request",
             false,
           )
         }
         let now = @async.now()
-        let decided = try
-          store.decide_approval(approval_id, true, operator_id, None, now)
+        guard store.packet(approval.packet_id) is Some(packet) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        let settlement_check : SettlementLedgerCheck? = match
+          approval.payload.kind {
+          Some(EarlyTermination) =>
+            self.check_settlement_against_ledger(packet, now)
+          _ => None
+        }
+        match settlement_check {
+          Some(Mismatched(detail)) =>
+            return contract_document_error(
+              @contractdoc.ContractDocumentError::SettlementMismatch(detail),
+            )
+          _ => ()
+        }
+        let (decided, updated) = try
+          store.decide_and_apply_approval(
+            approval_id,
+            operator_id,
+            settlement_check is Some(Matched(_)) ||
+            settlement_check is Some(LedgerUnused(_)),
+            now,
+          )
         catch {
           error => return contract_document_error(error)
         } noraise {
           value => value
         }
-        // Mark the second-person decision before applying the guarded
-        // transition. If the transition fails, compensate by reopening the
-        // approval so a stale/changed packet never leaves a misleading
-        // Approved record behind.
-        try self.execute_approved_contract_action(store, approval, now) catch {
-          error => {
-            ignore(store.reopen_approval(approval_id, operator_id))
-            return contract_document_error(error)
-          }
-        } noraise {
-          _ => ()
+        if approval.action.has_prefix("close:") {
+          self.apply_master_lease_closure_effects(
+            updated,
+            approval.initiator,
+            now,
+          )
         }
         self.operator_audit_as(
           operator_id,
@@ -917,6 +870,85 @@ async fn ApiService::handle_contract_documents(
       json_reply(200, manifest.to_json())
     (Get, "/v1/contract-documents/self") =>
       json_reply(200, store.packets_for_subject(subject_ref).to_json())
+    (Get, "/v1/contract-documents/self/events") => {
+      let packet_ids : Map[String, Unit] = Map([])
+      for packet in store.packets_for_subject(subject_ref) {
+        packet_ids[packet.packet_id] = ()
+      }
+      json_reply(
+        200,
+        store.snapshot().events
+        .filter(event => packet_ids.contains(event.packet_id))
+        .to_json(),
+      )
+    }
+    (Get, "/v1/contract-documents/self/governance") => {
+      let packet_ids : Map[String, Unit] = Map([])
+      for packet in store.packets_for_subject(subject_ref) {
+        packet_ids[packet.packet_id] = ()
+      }
+      let snapshot = store.snapshot()
+      json_reply(200, {
+        "approvals": snapshot.approvals
+        .filter(value => packet_ids.contains(value.packet_id))
+        .to_json(),
+        "obligations": snapshot.obligations
+        .filter(value => packet_ids.contains(value.packet_id))
+        .to_json(),
+        "amendments": snapshot.amendments
+        .filter(value => packet_ids.contains(value.packet_id))
+        .to_json(),
+        "closure_proposals": snapshot.closure_proposals
+        .filter(value => packet_ids.contains(value.packet_id))
+        .to_json(),
+        "numbers": snapshot.numbers
+        .filter(value => packet_ids.contains(value.packet_id))
+        .to_json(),
+      })
+    }
+    (Post, _) if self_approval_id(path, ":nudge") is Some(approval_id) => {
+      let packets = store.packets_for_subject(subject_ref)
+      let packet_ids : Map[String, Unit] = Map([])
+      for packet in packets {
+        packet_ids[packet.packet_id] = ()
+      }
+      guard store.get_approval(approval_id) is Some(approval) &&
+        packet_ids.contains(approval.packet_id) &&
+        (approval.status == Pending || approval.status == Approved) else {
+        return api_error(404, "NotFound", "approval was not found", false)
+      }
+      guard self.notification_store is Some(notifications) else {
+        return api_error(
+          503, "NotificationStoreUnavailable", "approval reminder delivery is unavailable",
+          true,
+        )
+      }
+      let now = @async.now()
+      ignore(
+        notifications.enqueue({
+          version: @notifications.contract_version,
+          notification_id: "contract-approval-nudge-\{approval.approval_id}-\{now / 3600000L}",
+          deduplication_key: "contract-approval-nudge-\{approval.approval_id}-\{now / 3600000L}",
+          source_receipt: "contract-document:approval:\{approval.approval_id}:customer-nudge",
+          topic: CommercialAction,
+          code: "ContractApprovalNudged",
+          severity: Information,
+          audience: PlatformOperators,
+          title_key: "alerts.contract_approval_nudged.title",
+          body_key: "alerts.contract_approval_nudged.body",
+          parameters: {
+            "approval_ref": approval.approval_id,
+            "packet_ref": approval.packet_id,
+          },
+          created_unix_ms: now,
+          expires_unix_ms: Some(now + 86400000L),
+        }),
+      )
+      json_reply(202, {
+        "approval_id": approval.approval_id,
+        "status": "ReminderQueued",
+      })
+    }
     (Post, "/v1/contract-documents/self") => {
       let decoded : ContractPacketIntent? = Some(
         @json.from_json(@json.parse(body)),
