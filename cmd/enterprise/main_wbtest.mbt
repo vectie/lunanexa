@@ -15,6 +15,8 @@ test "enterprise demo lease submission never claims an operator mutation" {
     subject_ref: "",
     connecting: false,
     demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests },
@@ -36,6 +38,8 @@ test "enterprise contract preview is reactive and generation fenced" {
     subject_ref: "",
     connecting: false,
     demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments },
@@ -80,6 +84,8 @@ test "demo machine termination mirrors the controller cleanup transition" {
     subject_ref: "",
     connecting: false,
     demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
@@ -124,6 +130,8 @@ test "demo credential redemption is explicit and never contains a secret" {
     subject_ref: "",
     connecting: false,
     demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
@@ -168,6 +176,8 @@ test "enterprise demo renews the selected effective contract packet" {
     subject_ref: "",
     connecting: false,
     demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments },
@@ -199,4 +209,104 @@ test "enterprise demo renews the selected effective contract packet" {
   assert_eq(packet.state, InformationDraft)
   assert_eq(packet.preceding_packet_ref, Some("packet-demo-effective"))
   assert_true(packet.packet_id.has_prefix("contract-renewal-"))
+}
+
+///|
+#warnings("-alert_unstable")
+test "signed-out enterprise gate hides application navigation and actions" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    token: "",
+    subject_ref: "",
+    connecting: false,
+    demo_mode: false,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: @enterprise_ui.default_state(1000L),
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("Production sign-in uses enterprise SSO"))
+  assert_true(html.contains("Development credential fallback"))
+  assert_false(html.contains("Enterprise navigation"))
+  assert_false(html.contains("Request capacity"))
+  assert_false(html.contains("Create API key"))
+}
+
+///|
+test "logout erases account key and one-time secret state and fences stale issue" {
+  let portal = @enterprise_ui.demo_state()
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    token: "lnxs_test_session",
+    subject_ref: "subject-alice",
+    connecting: false,
+    demo_mode: false,
+    session_generation: 7L,
+    session_expires_unix_ms: Some(999999L),
+    machine_clock_generation: 2L,
+    contract_preview_generation: 3L,
+    portal: {
+      ..portal,
+      one_time_api_key_secret: Some({
+        key_id: "key-new",
+        display_name: "New integration",
+        secret: "lnx_one_time",
+      }),
+    },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (signed_out, _) = update(model, Logout, emit)
+  assert_eq(signed_out.token, "")
+  assert_eq(signed_out.subject_ref, "")
+  assert_eq(signed_out.portal.membership, None)
+  assert_eq(signed_out.portal.account, None)
+  assert_eq(signed_out.portal.api_keys, [])
+  assert_eq(signed_out.portal.one_time_api_key_secret, None)
+  assert_eq(signed_out.session_generation, 8L)
+  let issued : @enterprise_ui.IssuedApiKeyView = {
+    credential: portal.api_keys[0],
+    secret: "lnx_stale_secret",
+  }
+  let (after_stale, _) = update(
+    signed_out,
+    Outcome(ApiKeyIssued(7L, issued)),
+    emit,
+  )
+  assert_eq(after_stale.portal.membership, None)
+  assert_eq(after_stale.portal.one_time_api_key_secret, None)
+  assert_eq(after_stale.portal.api_keys, [])
+}
+
+///|
+test "matching browser-session expiry clears the local session" {
+  let portal = @enterprise_ui.demo_state()
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    token: "lnxs_test_session",
+    subject_ref: "subject-alice",
+    connecting: false,
+    demo_mode: false,
+    session_generation: 4L,
+    session_expires_unix_ms: Some(1000L),
+    machine_clock_generation: 9L,
+    contract_preview_generation: 0L,
+    portal: {
+      ..portal,
+      machine_access: { ..portal.machine_access, now_unix_ms: 500L },
+    },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (expired, _) = update(
+    model,
+    Outcome(MachineClockAdvanced(1000L, 9L)),
+    emit,
+  )
+  assert_eq(expired.token, "")
+  assert_eq(expired.portal.membership, None)
+  assert_eq(expired.portal.api_keys, [])
 }

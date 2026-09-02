@@ -5,10 +5,31 @@ priv struct AppModel {
   subject_ref : String
   connecting : Bool
   demo_mode : Bool
+  session_generation : Int64
+  session_expires_unix_ms : Int64?
   machine_clock_generation : Int64
   contract_preview_generation : Int64
   portal : @enterprise_ui.EnterpriseState
 } derive(Eq)
+
+///|
+priv struct PortalApiKeyIssueIntent {
+  key_id : String
+  display_name : String
+  scopes : Array[@enterprise_ui.ApiKeyScope]
+  allowed_models : Array[String]
+  expires_unix_ms : Int64
+  maximum_requests : Int64
+} derive(ToJson)
+
+///|
+extend PortalApiKeyIssueIntent with ToJson::{to_json}
+
+///|
+priv struct PortalApiKeyRevokeView {
+  key_id : String
+  revoked_unix_ms : Int64?
+} derive(FromJson)
 
 ///|
 priv struct OfflineOrderIntent {
@@ -147,7 +168,10 @@ priv struct DesktopClientHandoffLaunch {
 ///|
 priv enum Outcome {
   Loaded(
+    Int64,
     @portal.EnterpriseSelfView,
+    @enterprise_ui.AccountView?,
+    Array[@enterprise_ui.BrowserSessionView],
     Array[@enterprise_ui.EnterpriseCostCenterRow],
     String,
     Array[@portal.EnterpriseModelSummary],
@@ -160,7 +184,8 @@ priv enum Outcome {
     Array[@contractdoc.ContractPacket],
     Array[@contractdoc.ContractPacketEvent],
     ContractSelfGovernance,
-    @enterprise_ui.EnterpriseDesktopClient?
+    @enterprise_ui.EnterpriseDesktopClient?,
+    Array[@enterprise_ui.ApiCredentialView]
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
@@ -178,6 +203,9 @@ priv enum Outcome {
   DesktopClientLaunched(String)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
+  ApiKeyIssued(Int64, @enterprise_ui.IssuedApiKeyView)
+  ApiKeyRevoked(Int64, String, Int64?)
+  ApiKeySecretCopied(Int64)
   Failed(@i18n.Locale, String)
 }
 
@@ -187,6 +215,8 @@ priv enum AppMessage {
   TokenChanged(String)
   SubjectChanged(String)
   Connect
+  Logout
+  LogoutCompleted(Int64)
   Portal(@enterprise_ui.EnterpriseMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
   Outcome(Outcome)
@@ -257,6 +287,15 @@ fn apply_enterprise_locale(locale : @i18n.Locale) -> Unit {
 
 ///|
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
+
+///|
+extern "js" fn copy_text_promise(value : String) -> @js.Promise =
+  #| async value => {
+  #|   if (!globalThis.navigator?.clipboard?.writeText) {
+  #|     throw new Error("Clipboard API is unavailable; select and copy the secret manually.");
+  #|   }
+  #|   await globalThis.navigator.clipboard.writeText(value);
+  #| }
 
 ///|
 extern "js" fn machine_clock_promise(expires_unix_ms : Int64) -> @js.Promise =
@@ -503,6 +542,8 @@ async fn load_self(
   model : AppModel,
 ) -> (
   @portal.EnterpriseSelfView,
+  @enterprise_ui.AccountView?,
+  Array[@enterprise_ui.BrowserSessionView],
   Array[@enterprise_ui.EnterpriseCostCenterRow],
   String,
   Array[@portal.EnterpriseModelSummary],
@@ -516,6 +557,7 @@ async fn load_self(
   Array[@contractdoc.ContractPacketEvent],
   ContractSelfGovernance,
   @enterprise_ui.EnterpriseDesktopClient?,
+  Array[@enterprise_ui.ApiCredentialView],
 ) {
   let body = request(
     "GET",
@@ -525,6 +567,53 @@ async fn load_self(
     model.subject_ref,
   )
   let view : @portal.EnterpriseSelfView = @json.from_json(@json.parse(body))
+  let account : @enterprise_ui.AccountView? = if model.token.has_prefix("lnxs_") {
+    Some(
+      @json.from_json(
+        @json.parse(
+          request(
+            "GET",
+            model.endpoint,
+            "/v1/auth/self",
+            model.token,
+            model.subject_ref,
+          ),
+        ),
+      ),
+    )
+  } else {
+    None
+  }
+  let browser_sessions : Array[@enterprise_ui.BrowserSessionView] = if model.token.has_prefix(
+      "lnxs_",
+    ) {
+    @json.from_json(
+      @json.parse(
+        request(
+          "GET",
+          model.endpoint,
+          "/v1/auth/sessions",
+          model.token,
+          model.subject_ref,
+        ),
+      ),
+    )
+  } else {
+    []
+  }
+  // API keys are authority-bearing account state. A failed fetch must fail the
+  // connection instead of presenting a misleading empty list.
+  let api_keys : Array[@enterprise_ui.ApiCredentialView] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/portal/self/api-keys",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
   let commercial : @commercial.CommercialSnapshot? = try
     Some(
       @json.from_json(
@@ -761,9 +850,9 @@ async fn load_self(
     _ => "—"
   }
   (
-    view, cost_centers, provisional_spend, models, notifications, notification_preferences,
-    machines, orders, artifacts, contract_manifest, contract_packets, contract_events,
-    contract_governance, desktop_client,
+    view, account, browser_sessions, cost_centers, provisional_spend, models, notifications,
+    notification_preferences, machines, orders, artifacts, contract_manifest, contract_packets,
+    contract_events, contract_governance, desktop_client, api_keys,
   )
 }
 
@@ -1054,6 +1143,145 @@ async fn request_and_download_offline_artifact(
 }
 
 ///|
+async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
+  let draft = model.portal.api_key_issue_draft
+  let intent : PortalApiKeyIssueIntent = {
+    key_id: random_identifier("api-key"),
+    display_name: draft.display_name.trim().to_owned(),
+    scopes: @enterprise_ui.api_key_scopes(model.portal),
+    allowed_models: @enterprise_ui.api_key_allowed_models(model.portal),
+    expires_unix_ms: current_unix_ms() +
+    draft.lifetime_days.to_int64() * 86400000L,
+    maximum_requests: draft.maximum_requests,
+  }
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/portal/self/api-keys",
+    model.token,
+    model.subject_ref,
+    body=intent.to_json().stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+fn api_key_issue_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try issue_api_key(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to create the API key: \{Repr(error)}",
+            "无法创建 API 密钥：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => ApiKeyIssued(model.session_generation, value)
+    }
+  })
+}
+
+///|
+async fn revoke_api_key(
+  model : AppModel,
+  key_id : String,
+) -> PortalApiKeyRevokeView {
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/portal/self/api-keys/\{key_id}:revoke",
+    model.token,
+    model.subject_ref,
+    body="{}",
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+fn api_key_revoke_command(
+  model : AppModel,
+  key_id : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try revoke_api_key(model, key_id) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to revoke the API key: \{Repr(error)}",
+            "无法撤销 API 密钥：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value =>
+        ApiKeyRevoked(
+          model.session_generation,
+          value.key_id,
+          value.revoked_unix_ms,
+        )
+    }
+  })
+}
+
+///|
+fn copy_api_key_secret_command(
+  model : AppModel,
+  secret : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try copy_text_promise(secret).wait() catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Clipboard access failed. Select and copy the secret manually: \{Repr(error)}",
+            "无法访问剪贴板。请手动选择并复制密钥：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      _ => ApiKeySecretCopied(model.session_generation)
+    }
+  })
+}
+
+///|
+fn logout_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let generation = model.session_generation + 1L
+  @rabbita.perform(value => emit(LogoutCompleted(value)), async fn() noraise {
+    try {
+      ignore(
+        request(
+          "POST",
+          model.endpoint,
+          "/v1/auth/logout",
+          model.token,
+          model.subject_ref,
+          body="{}",
+        ),
+      )
+      generation
+    } catch {
+      // Local secret erasure is immediate even if remote revocation cannot be
+      // confirmed. The gateway's short expiry remains the fail-safe.
+      _ => generation
+    }
+  })
+}
+
+///|
 fn load_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
@@ -1072,6 +1300,8 @@ fn load_command(
     } noraise {
       (
         view,
+        account,
+        browser_sessions,
         cost_centers,
         provisional_spend,
         models,
@@ -1085,11 +1315,27 @@ fn load_command(
         contract_events,
         contract_governance,
         desktop_client,
+        api_keys,
       ) =>
         Loaded(
-          view, cost_centers, provisional_spend, models, notifications, notification_preferences,
-          machines, orders, artifacts, contract_manifest, contract_packets, contract_events,
-          contract_governance, desktop_client,
+          model.session_generation,
+          view,
+          account,
+          browser_sessions,
+          cost_centers,
+          provisional_spend,
+          models,
+          notifications,
+          notification_preferences,
+          machines,
+          orders,
+          artifacts,
+          contract_manifest,
+          contract_packets,
+          contract_events,
+          contract_governance,
+          desktop_client,
+          api_keys,
         )
     }
   })
@@ -1317,6 +1563,11 @@ fn machine_clock_command(
     machine.state != Completed &&
     machine.state != Cancelled => machine.expires_unix_ms
   ]
+  match model.session_expires_unix_ms {
+    Some(expires_unix_ms) if expires_unix_ms > now =>
+      expiries.push(expires_unix_ms)
+    _ => ()
+  }
   guard expiries.length() > 0 else { return @rabbita.none }
   expiries.sort()
   let next_expiry = expiries[0]
@@ -1876,6 +2127,37 @@ fn replace_agreement(
 }
 
 ///|
+fn signed_out_model(model : AppModel) -> AppModel {
+  let locale = model.portal.locale
+  {
+    ..model,
+    token: "",
+    subject_ref: "",
+    connecting: false,
+    session_generation: model.session_generation + 1L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: model.machine_clock_generation + 1L,
+    contract_preview_generation: model.contract_preview_generation + 1L,
+    portal: {
+      ..@enterprise_ui.default_state(current_unix_ms()),
+      locale,
+      machine_access: {
+        ..@enterprise_ui.default_state(current_unix_ms()).machine_access,
+        locale,
+      },
+      offline_commerce: {
+        ..@enterprise_ui.default_state(current_unix_ms()).offline_commerce,
+        locale,
+      },
+      contract_documents: {
+        ..@enterprise_ui.default_state(current_unix_ms()).contract_documents,
+        locale,
+      },
+    },
+  }
+}
+
+///|
 fn update(
   model : AppModel,
   message : AppMessage,
@@ -1904,8 +2186,25 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, connecting: true }, load_command(model, emit))
+        let next = {
+          ..model,
+          connecting: true,
+          session_generation: model.session_generation + 1L,
+        }
+        (next, load_command(next, emit))
       }
+    Logout => {
+      let command = if model.token.has_prefix("lnxs_") {
+        logout_command(model, emit)
+      } else {
+        @rabbita.none
+      }
+      (signed_out_model(model), command)
+    }
+    LogoutCompleted(generation) => {
+      ignore(generation == model.session_generation)
+      (model, @rabbita.none)
+    }
     Portal(LocaleChanged(locale)) => {
       apply_enterprise_locale(locale)
       (
@@ -1922,6 +2221,63 @@ fn update(
         _ => (next, @rabbita.none)
       }
     }
+    Portal(SubmitApiKeyIssue) => {
+      let next = model.portal.update(SubmitApiKeyIssue)
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  next.locale,
+                  "Demo preview only; no API key was issued.",
+                  "仅为演示预览；未签发 API 密钥。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else if !@enterprise_ui.api_key_issue_valid(model.portal) {
+        (model, @rabbita.none)
+      } else {
+        ({ ..model, portal: next }, api_key_issue_command(model, emit))
+      }
+    }
+    Portal(ConfirmRevokeApiKey(key_id)) => {
+      let next = model.portal.update(ConfirmRevokeApiKey(key_id))
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              loading: false,
+              api_key_revoke_id: None,
+              success_message: Some(
+                portal_copy(
+                  next.locale,
+                  "Demo preview only; no API key was revoked.",
+                  "仅为演示预览；未撤销 API 密钥。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        ({ ..model, portal: next }, api_key_revoke_command(model, key_id, emit))
+      }
+    }
+    Portal(CopyOneTimeApiKeySecret) =>
+      match model.portal.one_time_api_key_secret {
+        Some(value) if !model.demo_mode =>
+          (model, copy_api_key_secret_command(model, value.secret, emit))
+        _ => (model, @rabbita.none)
+      }
     ContractPreviewDue(generation, request) =>
       if generation != model.contract_preview_generation {
         (model, @rabbita.none)
@@ -2501,9 +2857,106 @@ fn update(
       }
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
+    Outcome(ApiKeyIssued(generation, issued)) =>
+      if generation != model.session_generation {
+        (model, @rabbita.none)
+      } else {
+        let api_keys = [
+          issued.credential,
+          ..model.portal.api_keys.filter(key => {
+            key.key_id != issued.credential.key_id
+          }),
+        ]
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              api_keys,
+              api_key_issue_open: false,
+              api_key_revoke_id: None,
+              api_key_issue_draft: {
+                display_name: "",
+                model_list_scope: true,
+                inference_scope: true,
+                allowed_models: "",
+                lifetime_days: 30,
+                maximum_requests: 10000L,
+              },
+              one_time_api_key_secret: Some({
+                key_id: issued.credential.key_id,
+                display_name: issued.credential.display_name,
+                secret: issued.secret,
+              }),
+              loading: false,
+              success_message: None,
+              error_message: None,
+            },
+          },
+          @rabbita.none,
+        )
+      }
+    Outcome(ApiKeyRevoked(generation, key_id, revoked_unix_ms)) =>
+      if generation != model.session_generation {
+        (model, @rabbita.none)
+      } else {
+        let revoked_at = revoked_unix_ms.unwrap_or(current_unix_ms())
+        let api_keys = model.portal.api_keys.map(key => {
+          if key.key_id == key_id {
+            { ..key, revoked_unix_ms: Some(revoked_at) }
+          } else {
+            key
+          }
+        })
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              api_keys,
+              api_key_revoke_id: None,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "API key revoked. Requests using it now fail.",
+                  "API 密钥已撤销，使用该密钥的请求现将失败。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+          @rabbita.none,
+        )
+      }
+    Outcome(ApiKeySecretCopied(generation)) =>
+      if generation != model.session_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Secret copied. Save it securely, then clear this dialog.",
+                  "密钥已复制。请安全保存，然后清除此对话框。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+          @rabbita.none,
+        )
+      }
     Outcome(
       Loaded(
+        dispatched_session_generation,
         view,
+        account,
+        browser_sessions,
         cost_centers,
         provisional_spend,
         models,
@@ -2516,9 +2969,13 @@ fn update(
         contract_packets,
         contract_events,
         contract_governance,
-        desktop_client
+        desktop_client,
+        api_keys
       )
     ) => {
+      if dispatched_session_generation != model.session_generation {
+        return (model, @rabbita.none)
+      }
       let next = {
         ..model,
         connecting: false,
@@ -2526,6 +2983,9 @@ fn update(
         portal: {
           ..model.portal,
           membership: Some(view.membership),
+          account,
+          browser_sessions,
+          api_keys,
           agreements: view.agreements,
           lease_requests: view.lease_requests,
           cost_centers,
@@ -2902,6 +3362,13 @@ fn update(
       if generation != model.machine_clock_generation {
         (model, @rabbita.none)
       } else {
+        let session_expired = match model.session_expires_unix_ms {
+          Some(expires_unix_ms) => now_unix_ms >= expires_unix_ms
+          None => false
+        }
+        if session_expired {
+          return (signed_out_model(model), @rabbita.none)
+        }
         let expired = model.portal.machine_access.machines.any(machine => {
           model.portal.machine_access.now_unix_ms < machine.expires_unix_ms &&
           now_unix_ms >= machine.expires_unix_ms
@@ -2970,104 +3437,181 @@ fn update(
 }
 
 ///|
+extern "js" fn development_transport_allowed(endpoint : String) -> Bool =
+  #| (endpoint) => {
+  #|   try {
+  #|     const url = new URL(endpoint, globalThis.location?.href || "http://localhost/");
+  #|     return url.protocol === "https:" || url.hostname === "localhost" ||
+  #|       url.hostname === "127.0.0.1" || url.hostname === "::1";
+  #|   } catch (_) { return false; }
+  #| }
+
+///|
 fn app_view(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Html {
-  let ready = model.portal.membership is Some(_)
   let locale = model.portal.locale
-  let connection_styles =
-    #|.portal-connection{position:fixed;z-index:50;right:1rem;top:1rem;width:min(28rem,calc(100vw - 2rem));border:1px solid #2b4654;border-radius:.7rem;background:#0b1720;color:#edf7f3;box-shadow:0 20px 70px rgba(0,0,0,.45)}.portal-connection summary{min-height:44px;padding:.75rem 1rem;cursor:pointer;font-weight:800}.portal-connection-body{display:grid;gap:.65rem;padding:0 1rem 1rem}.portal-connection label{display:block;margin-bottom:.25rem;color:#9db0b6;font-size:.7rem}.portal-connection input{width:100%;min-height:44px;padding:.55rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#071218;color:#edf7f3}.portal-connection button{min-height:44px;border:1px solid #35bd8d;border-radius:.45rem;background:#7ee0bd;color:#06251a;font-weight:850}.portal-connection p{margin:0;color:#91a7ad;font-size:.7rem}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:52rem){.portal-connection{position:relative;inset:auto;margin:1rem;width:calc(100% - 2rem);box-shadow:0 12px 36px rgba(0,0,0,.28)}.demo-flag{position:relative;inset:auto;display:inline-flex;margin:1rem 1rem 0}}
-  @html.div([
-    @html.style_tag(connection_styles),
-    if model.demo_mode {
+  let transport_allowed = development_transport_allowed(model.endpoint)
+  let shell_styles =
+    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:38rem){.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  if model.demo_mode {
+    return @html.div([
+      @html.style_tag(shell_styles),
       @html.div(
         class="demo-flag",
         portal_copy(
           locale, "DEMO · enterprise portal", "演示 · 企业门户",
         ),
-      )
-    } else {
-      @html.details(
-        class="portal-connection",
-        open=!ready,
-        attrs=@html.Attrs::build().aria_label(
-          portal_copy(locale, "Enterprise connection", "企业门户连接"),
-        ),
+      ),
+      @enterprise_ui.interactive_view(
+        model.portal,
+        emit.map(message => Portal(message)),
+      ),
+    ])
+  }
+  guard model.portal.membership is Some(membership) else {
+    return @html.main_(class="login-gate", [
+      @html.style_tag(shell_styles),
+      @html.section(
+        class="login-card",
+        attrs=@html.Attrs::build().aria_labelledby("enterprise-sign-in-title"),
         [
-          @html.summary(
-            if ready {
-              portal_copy(
-                locale, "Enterprise connection ready", "企业连接就绪",
-              )
-            } else {
-              portal_copy(
-                locale, "Connect enterprise identity", "连接企业身份",
-              )
-            },
+          @html.div(class="login-mark", "NX"),
+          @html.h1(
+            id="enterprise-sign-in-title",
+            portal_copy(
+              locale, "LunaNexa enterprise access", "LunaNexa 企业访问",
+            ),
           ),
-          @html.div(class="portal-connection-body", [
-            @html.div([
-              @html.label(
-                for_="portal-token",
-                portal_copy(
-                  locale, "Scoped inference token", "限定范围的推理令牌",
-                ),
-              ),
-              @html.input(
-                id="portal-token",
-                input_type=Password,
-                value=model.token,
-                auto_complete=Off,
-                on_input=emit.map(value => TokenChanged(value)),
-              ),
-            ]),
-            @html.div([
-              @html.label(
-                for_="portal-subject",
-                portal_copy(
-                  locale, "Opaque subject (loopback acceptance only)", "不透明主体引用（仅限环回验收）",
-                ),
-              ),
-              @html.input(
-                id="portal-subject",
-                value=model.subject_ref,
-                maxlength=256,
-                auto_complete=Off,
-                on_input=emit.map(value => SubjectChanged(value)),
-              ),
-            ]),
-            @html.div([
-              @html.label(
-                for_="portal-endpoint",
-                portal_copy(locale, "Controller endpoint", "控制器端点"),
-              ),
-              @html.input(
-                id="portal-endpoint",
-                value=model.endpoint,
-                on_input=emit.map(value => EndpointChanged(value)),
-              ),
-            ]),
-            @html.button(
-              type_="button",
-              disabled=model.connecting || model.token == "",
-              on_click=emit(Connect),
-              if model.connecting {
-                portal_copy(locale, "Connecting…", "正在连接…")
-              } else {
-                portal_copy(locale, "Connect / refresh", "连接 / 刷新")
-              },
+          @html.p(
+            portal_copy(
+              locale, "Your account, organization membership and roles are established by the trusted identity ingress.",
+              "您的账户、组织成员资格和角色由受信任的身份入口建立。",
             ),
-            @html.p(
+          ),
+          @html.p(
+            class="login-sso-note",
+            portal_copy(
+              locale, "Production sign-in uses enterprise SSO and ingress-managed MFA. LunaNexa never accepts an account password here.",
+              "生产环境登录使用企业 SSO 和入口管理的多因素认证。LunaNexa 不会在此接收账户密码。",
+            ),
+          ),
+          match model.portal.error_message {
+            Some(message) =>
+              @html.p(
+                class="login-error",
+                attrs=@html.Attrs::build().role("alert"),
+                message,
+              )
+            None => @html.nothing
+          },
+          @html.details(class="development-fallback", [
+            @html.summary(
               portal_copy(
-                locale, "Credentials remain in this page's browser memory and are never sent to a managed GPU node.",
-                "凭据仅保留在此页面的浏览器内存中，绝不会发送到受管 GPU 节点。",
+                locale, "Development credential fallback", "开发凭据后备方式",
               ),
             ),
+            @html.div(class="development-form", [
+              @html.p(
+                class="development-warning",
+                portal_copy(
+                  locale, "Local acceptance only. Enter a short-lived scoped token and opaque test subject. Public plain HTTP is blocked.",
+                  "仅用于本地验收。请输入短期限定范围令牌和不透明测试主体。公共明文 HTTP 已被阻止。",
+                ),
+              ),
+              @html.div([
+                @html.label(
+                  for_="portal-token",
+                  portal_copy(
+                    locale, "Scoped development token", "限定范围开发令牌",
+                  ),
+                ),
+                @html.input(
+                  id="portal-token",
+                  input_type=Password,
+                  value=model.token,
+                  auto_complete=Off,
+                  on_input=emit.map(value => TokenChanged(value)),
+                ),
+              ]),
+              @html.div([
+                @html.label(
+                  for_="portal-subject",
+                  portal_copy(
+                    locale, "Opaque test subject", "不透明测试主体",
+                  ),
+                ),
+                @html.input(
+                  id="portal-subject",
+                  value=model.subject_ref,
+                  maxlength=256,
+                  auto_complete=Off,
+                  on_input=emit.map(value => SubjectChanged(value)),
+                ),
+              ]),
+              @html.div([
+                @html.label(
+                  for_="portal-endpoint",
+                  portal_copy(locale, "Controller endpoint", "控制器端点"),
+                ),
+                @html.input(
+                  id="portal-endpoint",
+                  value=model.endpoint,
+                  on_input=emit.map(value => EndpointChanged(value)),
+                ),
+              ]),
+              @html.button(
+                type_="button",
+                disabled=model.connecting ||
+                  model.token == "" ||
+                  model.subject_ref == "" ||
+                  !transport_allowed,
+                on_click=emit(Connect),
+                if model.connecting {
+                  portal_copy(locale, "Connecting…", "正在连接…")
+                } else {
+                  portal_copy(
+                    locale, "Connect development identity", "连接开发身份",
+                  )
+                },
+              ),
+              if transport_allowed {
+                @html.nothing
+              } else {
+                @html.p(
+                  class="login-error",
+                  attrs=@html.Attrs::build().role("alert"),
+                  portal_copy(
+                    locale, "Use HTTPS, localhost, or loopback for development credentials.",
+                    "开发凭据仅可通过 HTTPS、localhost 或环回地址使用。",
+                  ),
+                )
+              },
+            ]),
           ]),
         ],
-      )
-    },
+      ),
+    ])
+  }
+  @html.div([
+    @html.style_tag(shell_styles),
+    @html.header(class="session-strip", [
+      @html.p([
+        @html.strong(membership.subject_ref),
+        @html.span(
+          " · \{membership.organization_id} · " +
+          portal_copy(
+            locale, "development browser session; ends on logout or reload", "开发浏览器会话；退出或重新加载时结束",
+          ),
+        ),
+      ]),
+      @html.button(
+        type_="button",
+        on_click=emit(Logout),
+        portal_copy(locale, "Log out", "退出登录"),
+      ),
+    ]),
     @enterprise_ui.interactive_view(
       model.portal,
       emit.map(message => Portal(message)),
@@ -3087,6 +3631,8 @@ fn main {
       subject_ref: "",
       connecting: false,
       demo_mode: is_demo,
+      session_generation: 0L,
+      session_expires_unix_ms: None,
       machine_clock_generation: 0L,
       contract_preview_generation: 0L,
       portal: if is_demo {
