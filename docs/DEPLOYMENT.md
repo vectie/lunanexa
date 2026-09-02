@@ -99,11 +99,11 @@ check after all provider credentials and signed evidence are installed.
 
 The contract governance routes use the same durable contract-document store as
 the packet workflow. Configure the operator mapping as a comma-separated set of
-`token=operator-ref` entries; tokens are host/deployment references and must not
+`operator-ref=token` entries; tokens are host/deployment references and must not
 be committed:
 
 ```text
-LUNANEXA_OPERATOR_TOKENS=operator-token-ref-1=operator:alice,operator-token-ref-2=operator:bob
+LUNANEXA_OPERATOR_TOKENS=operator:alice=FROM_SECRET_PROVIDER_ALICE,operator:bob=FROM_SECRET_PROVIDER_BOB
 LUNANEXA_CONTRACT_APPROVAL_THRESHOLD_CNY=50000.00
 LUNANEXA_CONTRACT_EXPIRY_RECONCILE_INTERVAL_MS=3600000
 LUNANEXA_CONTRACT_EXPIRY_GRACE_DAYS=7
@@ -1097,6 +1097,14 @@ Provision:
 
 The native controller is designed to sit behind this trusted ingress. Do not
 publish its port directly to an untrusted network.
+
+For interactive human accounts, use the opt-in
+`deploy/oidc-browser-ingress.yaml` profile and follow
+[`IDENTITY_INGRESS.md`](IDENTITY_INGRESS.md). It keeps password/MFA and the
+upstream browser login with an approved OIDC provider, maps the verified
+issuer/subject to a stable LunaNexa account, and routes both browser hosts
+through the identity gateway. The static-token path remains only for CLI,
+automation, localhost, and the explicitly local development foundation.
 
 ## 8. Prepare each selected compute host
 

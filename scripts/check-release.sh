@@ -6,6 +6,7 @@ cd "$repo_root"
 
 sh scripts/check-isolation.sh
 sh scripts/validate-lunaflux-promotion-boundary.sh
+sh scripts/deploy/oidc-browser-ingress-manifest-test.sh
 
 if rg -n 'image:[[:space:]]+[^@[:space:]]+:(latest|main|master)' deploy >/dev/null; then
   printf '%s\n' 'image scan failed: mutable runtime image tag found' >&2

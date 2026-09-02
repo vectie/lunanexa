@@ -213,6 +213,8 @@ spec:
               value: /var/lib/lunanexa/observability.json
             - name: LUNANEXA_ACCESS_PATH
               value: /var/lib/lunanexa/access.json
+            - name: LUNANEXA_ACCOUNT_PATH
+              value: /var/lib/lunanexa/accounts.json
             - name: LUNANEXA_TECHNICAL_PATH
               value: /var/lib/lunanexa/technical.json
             - name: LUNANEXA_MODEL_STORE_ROOT
@@ -346,6 +348,15 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: api-key-issuer-secret
+            # Optional only for the local/static-token profile. The production
+            # OIDC profile provisions this key and the controller fails closed
+            # for signed identity exchange when it is absent.
+            - name: LUNANEXA_IDENTITY_ASSERTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: identity-assertion-secret
+                  optional: true
             - name: LUNANEXA_COSIGN_BINARY
               value: /usr/bin/cosign
             - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH
