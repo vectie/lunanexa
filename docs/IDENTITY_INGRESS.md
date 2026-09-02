@@ -94,16 +94,20 @@ roles and tenant access from LunaNexa stores.
 `LUNANEXA_IDENTITY_ASSERTION_SECRET` is mounted from the same Kubernetes Secret
 key into the identity gateway and controller. It must contain at least 32
 unpredictable bytes and be distinct from every operator, inference, audit,
-cookie, API-key issuer, assignment, or callback authority. Rotation must use a
+cookie, API-key issuer, account-session issuer, assignment, or callback
+authority. Rotation must use a
 reviewed overlap procedure; never replace the key while an old gateway replica
 can still issue assertions unless the controller temporarily accepts an
 explicit previous key identifier.
 
 The exchange reveals one `lnxs_...` session secret. The browser keeps it only
 in memory and sends it as an `Authorization: Bearer` header. LunaNexa persists
-only its digest. Reload intentionally loses this LunaNexa bearer; the still
-valid OIDC gateway session may perform a fresh, state-bound exchange. Long-lived
-automation uses separately issued `lnx_...` API keys, not the browser session.
+only its digest. LunaNexa derives that secret with the separate required
+`LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET`; the identity assertion key must never
+be reused for session issuance. Reload intentionally loses this LunaNexa
+bearer; the still valid OIDC gateway session may perform a fresh, state-bound
+exchange. Long-lived automation uses separately issued `lnx_...` API keys, not
+the browser session.
 
 ## Cookies, CSRF, and origins
 
@@ -183,6 +187,13 @@ scripts/deploy/render-oidc-browser-ingress.sh \
 The renderer rejects non-HTTPS issuers, malformed or equal browser hosts,
 mutable images, unsafe substitution characters, and unresolved inputs. It
 writes the rendered file with mode `0600`. Do not use a mutable image tag.
+
+The controller's required `lunanexa-control-credentials` Secret must also
+contain an independent `account-session-issuer-secret`. The standard
+`scripts/deploy/generate-management-secrets.sh` creates it with the other
+distinct control-plane authorities. It is not mounted into the identity
+gateway. Conversely, `identity-assertion-secret` remains optional in the local
+static-token profile but is mandatory whenever this OIDC profile is enabled.
 
 The identity provider must be reachable on TCP 443 from a namespace labeled
 `lunanexa.io/service=oidc-provider`. Kubernetes NetworkPolicy cannot select an

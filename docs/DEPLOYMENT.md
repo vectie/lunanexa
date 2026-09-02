@@ -1045,6 +1045,8 @@ The `lunanexa-control-credentials` Secret must provide:
   other signing authority);
 - `api-key-issuer-secret` (at least 32 random bytes, independent of every other
   signing authority).
+- `account-session-issuer-secret` (at least 32 random bytes, independent of the
+  OIDC identity-assertion key and every other signing authority).
 
 The separate `lunanexa-database` Secret must provide `database`, `username`,
 `password`, and `url`. The URL is consumed only by the management controller

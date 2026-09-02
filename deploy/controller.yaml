@@ -348,6 +348,11 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: api-key-issuer-secret
+            - name: LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: account-session-issuer-secret
             # Optional only for the local/static-token profile. The production
             # OIDC profile provisions this key and the controller fails closed
             # for signed identity exchange when it is absent.

@@ -25,7 +25,8 @@ for name in \
   runtime-token operator-token inference-token audit-token monitoring-token \
   assignment-signing-secret catalog-signing-secret exclusive-lease-signing-secret \
   credential-handoff-issuer-secret client-handoff-issuer-secret lease-helper-receipt-secret \
-  guide-diagnostics-token api-key-issuer-secret provider-callback-secret \
+  guide-diagnostics-token api-key-issuer-secret account-session-issuer-secret \
+  provider-callback-secret \
   artifact-worker-callback-token artifact-scanner-callback-token \
   entitlement-authority-callback-token guide-admin-auth-key guide-observation-secret; do
   openssl rand -hex 32 | tr -d '\n' > "$credentials_directory/$name"
