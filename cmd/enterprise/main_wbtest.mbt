@@ -12,8 +12,10 @@ test "enterprise demo lease submission never claims an operator mutation" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: true,
     session_generation: 0L,
     session_expires_unix_ms: None,
@@ -35,8 +37,10 @@ test "enterprise contract preview is reactive and generation fenced" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: true,
     session_generation: 0L,
     session_expires_unix_ms: None,
@@ -81,8 +85,10 @@ test "demo machine termination mirrors the controller cleanup transition" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: true,
     session_generation: 0L,
     session_expires_unix_ms: None,
@@ -127,8 +133,10 @@ test "demo credential redemption is explicit and never contains a secret" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: true,
     session_generation: 0L,
     session_expires_unix_ms: None,
@@ -173,8 +181,10 @@ test "enterprise demo renews the selected effective contract packet" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: true,
     session_generation: 0L,
     session_expires_unix_ms: None,
@@ -217,8 +227,10 @@ test "signed-out enterprise gate hides application navigation and actions" {
   let model : AppModel = {
     endpoint: "https://controller.example.test",
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: false,
     session_generation: 0L,
     session_expires_unix_ms: None,
@@ -231,7 +243,9 @@ test "signed-out enterprise gate hides application navigation and actions" {
     @rabbita.Val::constant(app_view(model, emit))
   })
   assert_true(html.contains("Production sign-in uses enterprise SSO"))
+  assert_true(html.contains("href=\"/auth/oidc/start?audience=enterprise\""))
   assert_true(html.contains("Development credential fallback"))
+  assert_false(html.contains("session_token="))
   assert_false(html.contains("Enterprise navigation"))
   assert_false(html.contains("Request capacity"))
   assert_false(html.contains("Create API key"))
@@ -243,8 +257,10 @@ test "logout erases account key and one-time secret state and fences stale issue
   let model : AppModel = {
     endpoint: "https://controller.example.test",
     token: "lnxs_test_session",
+    csrf_token: "csrf-test",
     subject_ref: "subject-alice",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: false,
     session_generation: 7L,
     session_expires_unix_ms: Some(999999L),
@@ -262,6 +278,7 @@ test "logout erases account key and one-time secret state and fences stale issue
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (signed_out, _) = update(model, Logout, emit)
   assert_eq(signed_out.token, "")
+  assert_eq(signed_out.csrf_token, "")
   assert_eq(signed_out.subject_ref, "")
   assert_eq(signed_out.portal.membership, None)
   assert_eq(signed_out.portal.account, None)
@@ -283,13 +300,54 @@ test "logout erases account key and one-time secret state and fences stale issue
 }
 
 ///|
+test "gateway bootstrap remains memory-only and generation fenced" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    token: "",
+    csrf_token: "",
+    subject_ref: "",
+    connecting: false,
+    bootstrap_started: false,
+    demo_mode: false,
+    session_generation: 3L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: @enterprise_ui.default_state(1000L),
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (started, _) = update(model, Bootstrap, emit)
+  assert_true(started.bootstrap_started)
+  assert_true(started.connecting)
+  let browser_session : GatewayBrowserBootstrap = {
+    session_token: "lnxs_memory_only",
+    csrf_token: "csrf-memory-only",
+    expires_unix_ms: 9999999999999L,
+  }
+  let (ready, _) = update(started, BootstrapReady(3L, browser_session), emit)
+  assert_eq(ready.token, "lnxs_memory_only")
+  assert_eq(ready.csrf_token, "csrf-memory-only")
+  assert_eq(ready.session_expires_unix_ms, Some(9999999999999L))
+  assert_eq(ready.session_generation, 4L)
+  let stale_session : GatewayBrowserBootstrap = {
+    ..browser_session,
+    session_token: "lnxs_stale",
+  }
+  let (after_stale, _) = update(ready, BootstrapReady(3L, stale_session), emit)
+  assert_eq(after_stale.token, "lnxs_memory_only")
+  assert_eq(after_stale.csrf_token, "csrf-memory-only")
+}
+
+///|
 test "matching browser-session expiry clears the local session" {
   let portal = @enterprise_ui.demo_state()
   let model : AppModel = {
     endpoint: "https://controller.example.test",
     token: "lnxs_test_session",
+    csrf_token: "csrf-test",
     subject_ref: "subject-alice",
     connecting: false,
+    bootstrap_started: true,
     demo_mode: false,
     session_generation: 4L,
     session_expires_unix_ms: Some(1000L),
