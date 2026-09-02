@@ -155,6 +155,7 @@ test "exclusive machine termination confirmation binds node user and generation"
     endpoint: "https://controller.example.test",
     credential: "operator-secret",
     audit_credential: "audit-secret",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -207,6 +208,7 @@ test "locale switch is local and preserves operational session state" {
     endpoint: "https://controller.example.test",
     credential: "operator-secret",
     audit_credential: "audit-secret",
+    csrf_token: "",
     inference_credential: "inference-secret",
     inference_subject_ref: "subject:opaque-1",
     commercial_organization: "org-1",
@@ -274,6 +276,7 @@ test "model source search is edited independently from generic operations" {
     endpoint: "https://controller.example.test",
     credential: "operator-secret",
     audit_credential: "audit-secret",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -303,6 +306,7 @@ test "changing an operator credential clears authenticated UI authority" {
     endpoint: "https://controller.example.test",
     credential: "old-operator-secret",
     audit_credential: "audit-secret",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -372,6 +376,7 @@ test "Simplified Chinese connection drawer localizes security copy" {
     endpoint: "https://controller.example.test",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -391,8 +396,8 @@ test "Simplified Chinese connection drawer localizes security copy" {
   })
   for
     value in [
-      "控制器连接", "需要凭据", "运维令牌", "审计令牌", "推理令牌（可选）",
-      "商业组织（可选）", "不透明主体引用（可选）", "凭据仅保存在浏览器内存中",
+      "控制器连接", "需要凭据", "账户会话", "推理令牌（可选）",
+      "商业组织（可选）", "不透明主体引用（可选）", "账户会话仅保存在浏览器内存中",
       "连接并刷新",
     ] {
     assert_true(html.contains(value))
@@ -407,6 +412,7 @@ test "unauthenticated operator sees login gate instead of console shell" {
     endpoint: "http://127.0.0.1:4174",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -422,7 +428,10 @@ test "unauthenticated operator sees login gate instead of console shell" {
   })
   assert_true(html.contains("Operator login"))
   assert_true(html.contains("Operator access starts here."))
+  assert_true(html.contains("/auth/oidc/start?audience=operator"))
+  assert_true(html.contains("login-account-session"))
   assert_true(html.contains("login-operator-token"))
+  assert_true(html.contains("Local development token fallback"))
   assert_false(html.contains("Primary navigation"))
   assert_false(html.contains("Model registry"))
 }
@@ -434,6 +443,7 @@ test "public plain HTTP renders login landing but blocks credential entry" {
     endpoint: "http://106.39.18.146:4174",
     credential: "operator-secret",
     audit_credential: "audit-secret",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -451,7 +461,80 @@ test "public plain HTTP renders login landing but blocks credential entry" {
     html.contains("Administrative login is blocked on public plain HTTP"),
   )
   assert_true(html.contains("disabled"))
+  assert_true(html.contains("Organization sign-in requires HTTPS"))
+  assert_false(html.contains("/auth/oidc/start?audience=operator"))
+  assert_true(html.contains("login-account-session"))
+  assert_false(html.contains("login-operator-token"))
+  assert_false(html.contains("login-audit-token"))
   assert_false(html.contains("Model registry"))
+}
+
+///|
+#warnings("-alert_unstable")
+test "remote HTTPS login offers OIDC and never renders static token fallback" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: @ui.default_state(),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("/auth/oidc/start?audience=operator"))
+  assert_true(html.contains("Continue with organization sign-in"))
+  assert_true(html.contains("login-account-session"))
+  assert_false(html.contains("login-operator-token"))
+  assert_false(html.contains("login-audit-token"))
+  assert_false(html.contains("localStorage"))
+}
+
+///|
+test "one account session supplies operator and audit authority in memory" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: @ui.default_state(),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (pasted, _) = update_live(
+    model,
+    AccountSessionChanged("lnxs_session-value"),
+    emit,
+  )
+  assert_eq(pasted.credential, "lnxs_session-value")
+  assert_eq(pasted.audit_credential, "lnxs_session-value")
+  let (bootstrapped, _) = update_live(
+    model,
+    GatewaySessionLoaded({
+      session_token: "lnxs_gateway-session",
+      csrf_token: "csrf-memory-only",
+      expires_unix_ms: 9999999999999L,
+    }),
+    emit,
+  )
+  assert_eq(bootstrapped.credential, "lnxs_gateway-session")
+  assert_eq(bootstrapped.audit_credential, "lnxs_gateway-session")
+  assert_eq(bootstrapped.csrf_token, "csrf-memory-only")
+  assert_true(bootstrapped.console.loading)
 }
 
 ///|
@@ -460,6 +543,7 @@ test "logout clears authorities and loaded operator state" {
     endpoint: "https://controller.example.test",
     credential: "operator-secret",
     audit_credential: "audit-secret",
+    csrf_token: "csrf-memory-only",
     inference_credential: "inference-secret",
     inference_subject_ref: "subject-one",
     commercial_organization: "org-one",
@@ -477,6 +561,7 @@ test "logout clears authorities and loaded operator state" {
   let (logged_out, _) = update_live(model, Logout, emit)
   assert_eq(logged_out.credential, "")
   assert_eq(logged_out.audit_credential, "")
+  assert_eq(logged_out.csrf_token, "")
   assert_eq(logged_out.inference_credential, "")
   assert_eq(logged_out.console.locale, ChineseSimplified)
   assert_false(logged_out.console.operator_authenticated)
@@ -490,6 +575,7 @@ test "demo mode presents a read-only cluster snapshot" {
     endpoint: "http://127.0.0.1:4173",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -513,6 +599,7 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     endpoint: "http://127.0.0.1:4173",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -552,6 +639,7 @@ test "demo mode previews every destructive node operation without mutation" {
     endpoint: "http://127.0.0.1:4173",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -584,6 +672,7 @@ test "demo mode exercises one-click preflight without controller mutation" {
     endpoint: "http://127.0.0.1:4173",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -620,6 +709,7 @@ test "navigation clears stale operation notices and confirmation" {
     endpoint: "http://127.0.0.1:4173",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -650,6 +740,7 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     endpoint: "http://127.0.0.1:4173",
     credential: "",
     audit_credential: "",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
@@ -724,6 +815,7 @@ test "contract approval and governance controls route through the operator shell
     endpoint: "http://127.0.0.1:4174",
     credential: "operator-b-token",
     audit_credential: "audit-token",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "tenant-shell",
@@ -822,6 +914,7 @@ test "model import polling is generation fenced and logout invalidates it" {
     endpoint: "http://127.0.0.1:4174",
     credential: "operator-token",
     audit_credential: "audit-token",
+    csrf_token: "",
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",

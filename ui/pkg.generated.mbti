@@ -16,6 +16,8 @@ import {
 }
 
 // Values
+pub fn account_roles_after_toggle(Array[UiAccountRole], UiAccountRole) -> Array[UiAccountRole]
+
 pub fn all_routes() -> Array[OperatorRoute]
 
 pub fn confirmation_receipt(DestructiveAction, String) -> Confirmation
@@ -45,6 +47,30 @@ pub(all) struct AccessGrantRow {
   state : @workspace.WorkspaceAccessGrantState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct AccountInviteDraft {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  identity_subject : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[UiAccountRole]
+} derive(Eq)
+
+pub(all) struct AccountView {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[UiAccountRole]
+  state : UiAccountState
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct AgreementRow {
   agreement_id : String
   agreement_type : String
@@ -60,6 +86,15 @@ pub(all) struct AuditRow {
   evidence : String
   result : String
   receipt : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BrowserSessionView {
+  session_id : String
+  account_id : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  last_used_unix_ms : Int64
+  revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ComputeLeaseRow {
@@ -119,6 +154,19 @@ pub(all) enum ConsoleMessage {
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
   BeginRedriveNotificationDelivery(String, Int, Int64)
+  AccountInviteIdChanged(String)
+  AccountInviteSubjectRefChanged(String)
+  AccountInviteIssuerChanged(String)
+  AccountInviteProviderSubjectChanged(String)
+  AccountInviteDisplayNameChanged(String)
+  AccountInviteEmailChanged(String)
+  AccountInviteReceiptChanged(String)
+  AccountInviteRoleToggled(UiAccountRole)
+  SubmitAccountInvite
+  BeginActivateAccount(String)
+  BeginSuspendAccount(String)
+  BeginRevokeAccount(String)
+  BeginSetAccountRoles(String, Array[UiAccountRole])
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
   ContractDocuments(@contract_documents.ContractDocumentsMessage)
 } derive(Eq)
@@ -140,6 +188,10 @@ pub(all) struct ConsoleState {
   audit : Array[AuditRow]
   notifications : Array[NotificationRow]
   notification_deliveries : Array[NotificationDeliveryRow]
+  accounts : Array[AccountView]
+  authenticated_account : AccountView?
+  account_sessions : Array[BrowserSessionView]
+  account_invite : AccountInviteDraft
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -198,6 +250,10 @@ pub(all) enum DestructiveAction {
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
   RedriveNotificationDelivery(String, Int, Int64)
+  ActivateAccount(String)
+  SuspendAccount(String)
+  RevokeAccount(String)
+  SetAccountRoles(String, Array[UiAccountRole])
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct EnterpriseLeaseRequestRow {
@@ -421,6 +477,19 @@ pub(all) struct StreamEventView {
   text : String
   receipt : String
 } derive(Eq)
+
+pub(all) enum UiAccountRole {
+  PlatformOperator
+  AuditReader
+  EnterpriseUser
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum UiAccountState {
+  Invited
+  Active
+  Suspended
+  Revoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct UserAccessRow {
   user_id : String

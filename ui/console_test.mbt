@@ -105,6 +105,52 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         last_error_code: "ProviderUnavailable",
       },
     ],
+    accounts: [
+      {
+        account_id: "account-operator",
+        subject_ref: "subject-operator",
+        identity_issuer: "https://identity.example.test",
+        display_name: "Ari Chen",
+        email: "ari@example.test",
+        identity_receipt: "identity:receipt:1",
+        roles: [PlatformOperator, AuditReader],
+        state: Active,
+        created_unix_ms: 1786200000000L,
+        updated_unix_ms: 1786200300000L,
+      },
+    ],
+    authenticated_account: Some({
+      account_id: "account-operator",
+      subject_ref: "subject-operator",
+      identity_issuer: "https://identity.example.test",
+      display_name: "Ari Chen",
+      email: "ari@example.test",
+      identity_receipt: "identity:receipt:1",
+      roles: [PlatformOperator, AuditReader],
+      state: Active,
+      created_unix_ms: 1786200000000L,
+      updated_unix_ms: 1786200300000L,
+    }),
+    account_sessions: [
+      {
+        session_id: "session-current",
+        account_id: "account-operator",
+        created_unix_ms: 1786200000000L,
+        expires_unix_ms: 1786240000000L,
+        last_used_unix_ms: 1786200300000L,
+        revoked_unix_ms: None,
+      },
+    ],
+    account_invite: {
+      account_id: "",
+      subject_ref: "",
+      identity_issuer: "",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      identity_receipt: "",
+      roles: [EnterpriseUser],
+    },
     users: [
       {
         user_id: "user-1",
@@ -1004,6 +1050,88 @@ test "users route presents identity, scope, expiry, and confirmed revoke" {
   assert_true(html.contains("Revoke user user-1"))
   assert_true(html.contains("Revoking this grant removes its scoped access"))
   assert_true(html.contains("grant-1 · user-1 · workspace/team-a"))
+}
+
+///|
+test "users route manages external accounts without exposing identity digests or secrets" {
+  let state = console_state(Users)
+  let html = @ui.render(state)
+  assert_true(html.contains("Signed-in account"))
+  assert_true(html.contains("External identity mappings"))
+  assert_true(html.contains("Invite an external identity"))
+  assert_true(html.contains("account-provider-subject"))
+  assert_true(html.contains("type=\"password\""))
+  assert_true(html.contains("Platform operator"))
+  assert_true(html.contains("Audit reader"))
+  assert_true(html.contains("aria-pressed=\"true\""))
+  assert_true(html.contains("session-current"))
+  assert_false(html.contains("identity_subject_sha256"))
+  assert_false(html.contains("secret_sha256"))
+  assert_false(html.contains("session_token"))
+}
+
+///|
+test "account lifecycle and role changes require scoped typed confirmations" {
+  let state = console_state(Users)
+  let activate = @ui.render({
+    ..state,
+    confirmation: Some(
+      @ui.confirmation_receipt(
+        ActivateAccount("account-operator"),
+        "account-operator · Ari Chen · ari@example.test",
+      ),
+    ),
+  })
+  assert_true(activate.contains("Confirm account change"))
+  assert_true(
+    activate.contains("external identity to exchange a fresh browser session"),
+  )
+  let roles = @ui.render({
+    ..state,
+    confirmation: Some(
+      @ui.confirmation_receipt(
+        SetAccountRoles("account-operator", [AuditReader]),
+        "account-operator · Ari Chen · ari@example.test",
+      ),
+    ),
+  })
+  assert_true(roles.contains("replaces the account"))
+  assert_true(roles.contains("LunaNexa roles"))
+  assert_true(roles.contains("Audit reader"))
+  let revoked = @ui.render({
+    ..state,
+    confirmation: Some(
+      @ui.confirmation_receipt(
+        RevokeAccount("account-operator"),
+        "account-operator · Ari Chen · ari@example.test",
+      ),
+    ),
+  })
+  assert_true(revoked.contains("terminal"))
+  assert_true(revoked.contains("revokes every browser session"))
+}
+
+///|
+test "account role controls preserve one typed role and responsive access" {
+  assert_eq(@ui.account_roles_after_toggle([EnterpriseUser], EnterpriseUser), [
+    EnterpriseUser,
+  ])
+  assert_eq(
+    @ui.account_roles_after_toggle(
+      [PlatformOperator, AuditReader],
+      PlatformOperator,
+    ),
+    [AuditReader],
+  )
+  let html = @ui.render(console_state(Users))
+  assert_true(html.contains("min-height: 44px"))
+  assert_true(
+    html.contains(".account-invite-grid { grid-template-columns: 1fr; }"),
+  )
+  assert_true(
+    html.contains(".account-table .resource-table { min-width: 66rem; }"),
+  )
+  assert_true(html.contains("prefers-reduced-motion: reduce"))
 }
 
 ///|

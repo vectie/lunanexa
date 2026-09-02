@@ -178,6 +178,62 @@ pub(all) struct UserAccessRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Portable browser projection of the account contract. These DTOs mirror the
+/// public JSON vocabulary without importing the native durable account store.
+pub(all) enum UiAccountRole {
+  PlatformOperator
+  AuditReader
+  EnterpriseUser
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum UiAccountState {
+  Invited
+  Active
+  Suspended
+  Revoked
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct AccountView {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[UiAccountRole]
+  state : UiAccountState
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct BrowserSessionView {
+  session_id : String
+  account_id : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  last_used_unix_ms : Int64
+  revoked_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// UI-owned draft for creating the LunaNexa mapping for an externally
+/// authenticated human. The upstream subject is accepted only for submission;
+/// it is never included in the account table or a public account view.
+pub(all) struct AccountInviteDraft {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  identity_subject : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[UiAccountRole]
+} derive(Eq)
+
+///|
 pub(all) struct AccessGrantRow {
   grant_id : String
   user_id : String
@@ -267,6 +323,10 @@ pub(all) enum DestructiveAction {
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
   RedriveNotificationDelivery(String, Int, Int64)
+  ActivateAccount(String)
+  SuspendAccount(String)
+  RevokeAccount(String)
+  SetAccountRoles(String, Array[UiAccountRole])
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -304,6 +364,10 @@ pub(all) struct ConsoleState {
   audit : Array[AuditRow]
   notifications : Array[NotificationRow]
   notification_deliveries : Array[NotificationDeliveryRow]
+  accounts : Array[AccountView]
+  authenticated_account : AccountView?
+  account_sessions : Array[BrowserSessionView]
+  account_invite : AccountInviteDraft
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -372,6 +436,19 @@ pub(all) enum ConsoleMessage {
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
   BeginRedriveNotificationDelivery(String, Int, Int64)
+  AccountInviteIdChanged(String)
+  AccountInviteSubjectRefChanged(String)
+  AccountInviteIssuerChanged(String)
+  AccountInviteProviderSubjectChanged(String)
+  AccountInviteDisplayNameChanged(String)
+  AccountInviteEmailChanged(String)
+  AccountInviteReceiptChanged(String)
+  AccountInviteRoleToggled(UiAccountRole)
+  SubmitAccountInvite
+  BeginActivateAccount(String)
+  BeginSuspendAccount(String)
+  BeginRevokeAccount(String)
+  BeginSetAccountRoles(String, Array[UiAccountRole])
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
   ContractDocuments(@contract_documents.ContractDocumentsMessage)
 } derive(Eq)
@@ -420,6 +497,19 @@ pub fn default_state() -> ConsoleState {
     audit: [],
     notifications: [],
     notification_deliveries: [],
+    accounts: [],
+    authenticated_account: None,
+    account_sessions: [],
+    account_invite: {
+      account_id: "",
+      subject_ref: "",
+      identity_issuer: "",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      identity_receipt: "",
+      roles: [EnterpriseUser],
+    },
     users: [],
     access_grants: [],
     compute_leases: [],
@@ -877,6 +967,64 @@ pub fn demo_state() -> ConsoleState {
     ],
     notifications: [],
     notification_deliveries: [],
+    accounts: [
+      {
+        account_id: "account-alice",
+        subject_ref: "subject-alice",
+        identity_issuer: "https://identity.example.test",
+        display_name: "Alice Chen",
+        email: "alice@example.test",
+        identity_receipt: "identity:demo:alice",
+        roles: [PlatformOperator, AuditReader],
+        state: Active,
+        created_unix_ms: 1786500000000L,
+        updated_unix_ms: 1786503600000L,
+      },
+      {
+        account_id: "account-mina",
+        subject_ref: "subject-mina",
+        identity_issuer: "https://identity.example.test",
+        display_name: "Mina Rao",
+        email: "mina@example.test",
+        identity_receipt: "identity:demo:mina",
+        roles: [EnterpriseUser],
+        state: Invited,
+        created_unix_ms: 1786500000000L,
+        updated_unix_ms: 1786500000000L,
+      },
+    ],
+    authenticated_account: Some({
+      account_id: "account-alice",
+      subject_ref: "subject-alice",
+      identity_issuer: "https://identity.example.test",
+      display_name: "Alice Chen",
+      email: "alice@example.test",
+      identity_receipt: "identity:demo:alice",
+      roles: [PlatformOperator, AuditReader],
+      state: Active,
+      created_unix_ms: 1786500000000L,
+      updated_unix_ms: 1786503600000L,
+    }),
+    account_sessions: [
+      {
+        session_id: "session-demo-current",
+        account_id: "account-alice",
+        created_unix_ms: 1786500000000L,
+        expires_unix_ms: 1786543200000L,
+        last_used_unix_ms: 1786503600000L,
+        revoked_unix_ms: None,
+      },
+    ],
+    account_invite: {
+      account_id: "",
+      subject_ref: "",
+      identity_issuer: "",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      identity_receipt: "",
+      roles: [EnterpriseUser],
+    },
     users: [
       {
         user_id: "user-alice",
@@ -2006,6 +2154,155 @@ fn service_operation_state_badge(
 }
 
 ///|
+fn account_state_badge(
+  locale : @i18n.Locale,
+  state : UiAccountState,
+) -> @rabbita.Html {
+  match state {
+    Invited =>
+      status_badge(localized(locale, "Invited", "已邀请"), "pending")
+    Active => status_badge(localized(locale, "Active", "有效"), "ok")
+    Suspended =>
+      status_badge(localized(locale, "Suspended", "已暂停"), "warning")
+    Revoked => status_badge(localized(locale, "Revoked", "已撤销"), "danger")
+  }
+}
+
+///|
+fn account_role_label(locale : @i18n.Locale, role : UiAccountRole) -> String {
+  match role {
+    PlatformOperator => localized(locale, "Platform operator", "平台运维")
+    AuditReader => localized(locale, "Audit reader", "审计读取者")
+    EnterpriseUser => localized(locale, "Enterprise user", "企业用户")
+  }
+}
+
+///|
+pub fn account_roles_after_toggle(
+  roles : Array[UiAccountRole],
+  role : UiAccountRole,
+) -> Array[UiAccountRole] {
+  if roles.contains(role) {
+    if roles.length() == 1 {
+      roles
+    } else {
+      roles.filter(value => value != role)
+    }
+  } else {
+    roles + [role]
+  }
+}
+
+///|
+fn account_invite_ready(draft : AccountInviteDraft) -> Bool {
+  draft.account_id.trim() != "" &&
+  draft.subject_ref.trim() != "" &&
+  draft.identity_issuer.trim() != "" &&
+  draft.identity_subject.trim() != "" &&
+  draft.display_name.trim() != "" &&
+  draft.email.trim() != "" &&
+  draft.identity_receipt.trim() != "" &&
+  draft.roles.length() > 0
+}
+
+///|
+fn account_role_controls(
+  locale : @i18n.Locale,
+  account_id : String,
+  roles : Array[UiAccountRole],
+  loading : Bool,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  @html.div(
+    class="account-role-controls",
+    attrs=@html.Attrs::build().aria_label(
+      localized(
+        locale,
+        "Roles for account \{account_id}",
+        "账户 \{account_id} 的角色",
+      ),
+    ),
+    [
+      for role in [PlatformOperator, AuditReader, EnterpriseUser] => {
+        let selected = roles.contains(role)
+        @html.button(
+          type_="button",
+          class=if selected { "role-toggle selected" } else { "role-toggle" },
+          disabled=loading || (selected && roles.length() == 1),
+          attrs=@html.Attrs::build().aria_pressed(
+            if selected {
+              "true"
+            } else {
+              "false"
+            },
+          ),
+          title=if selected && roles.length() == 1 {
+            localized(
+              locale, "Every account must retain at least one role", "每个账户必须至少保留一个角色",
+            )
+          } else {
+            localized(
+              locale,
+              "Change \{account_role_label(locale, role)} role",
+              "更改\{account_role_label(locale, role)}角色",
+            )
+          },
+          on_click=command(
+            emit,
+            BeginSetAccountRoles(
+              account_id,
+              account_roles_after_toggle(roles, role),
+            ),
+          ),
+          account_role_label(locale, role),
+        )
+      }
+    ],
+  )
+}
+
+///|
+fn account_invite_role_controls(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  @html.fieldset(class="account-role-fieldset", [
+    @html.legend(localized(state.locale, "Initial roles", "初始角色")),
+    @html.p(
+      class="field-help",
+      localized(
+        state.locale,
+        "Roles are assigned from LunaNexa's durable account record, never from identity headers.",
+        "角色来自 LunaNexa 的持久账户记录，绝不来自身份标头。",
+      ),
+    ),
+    @html.div(
+      class="account-role-controls",
+      [
+        for role in [PlatformOperator, AuditReader, EnterpriseUser] => {
+          let selected = state.account_invite.roles.contains(role)
+          @html.button(
+            type_="button",
+            class=if selected { "role-toggle selected" } else { "role-toggle" },
+            disabled=state.loading ||
+              (selected && state.account_invite.roles.length() == 1),
+            attrs=@html.Attrs::build().aria_pressed(
+              if selected {
+                "true"
+              } else {
+                "false"
+              },
+            ),
+            on_click=command(emit, AccountInviteRoleToggled(role)),
+            account_role_label(state.locale, role),
+          )
+        }
+      ],
+    ),
+  ])
+}
+
+///|
 fn users_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -2035,6 +2332,429 @@ fn users_view(
         ),
       ),
     ]),
+    match state.authenticated_account {
+      Some(account) =>
+        @html.section(
+          class="account-self",
+          attrs=@html.Attrs::build().aria_labelledby("signed-in-account-title"),
+          [
+            @html.div([
+              @html.p(
+                class="eyebrow",
+                localized(state.locale, "Current authority", "当前权限"),
+              ),
+              @html.h3(
+                id="signed-in-account-title",
+                localized(
+                  state.locale,
+                  "Signed-in account",
+                  "当前登录账户",
+                ),
+              ),
+              @html.p(class="section-copy", [
+                @html.strong(account.display_name),
+                @html.span(" · \{account.email}"),
+                @html.span(class="mono secondary", " · \{account.account_id}"),
+              ]),
+            ]),
+            @html.div(class="account-self-evidence", [
+              account_state_badge(state.locale, account.state),
+              @html.span(
+                class="secondary",
+                localized(
+                  state.locale,
+                  "\{account.roles.length()} roles · \{state.account_sessions.count_if(session => session.revoked_unix_ms is None)} active sessions",
+                  "\{account.roles.length()} 个角色 · \{state.account_sessions.count_if(session => session.revoked_unix_ms is None)} 个有效会话",
+                ),
+              ),
+            ]),
+            @html.details(class="account-session-evidence", [
+              @html.summary(
+                localized(
+                  state.locale,
+                  "Session evidence (\{state.account_sessions.length()})",
+                  "会话证据（\{state.account_sessions.length()}）",
+                ),
+              ),
+              if state.account_sessions.length() == 0 {
+                @html.p(
+                  class="empty-state compact",
+                  localized(
+                    state.locale,
+                    "No browser sessions are recorded.",
+                    "没有已记录的浏览器会话。",
+                  ),
+                )
+              } else {
+                @html.div(class="table-scroll", [
+                  @html.table(class="resource-table", [
+                    @html.caption(
+                      class="sr-only",
+                      localized(
+                        state.locale,
+                        "Browser sessions",
+                        "浏览器会话",
+                      ),
+                    ),
+                    @html.thead(
+                      @html.tr([
+                        @html.th(
+                          scope=Col,
+                          localized(state.locale, "Session", "会话"),
+                        ),
+                        @html.th(
+                          scope=Col,
+                          localized(state.locale, "Last used", "最近使用"),
+                        ),
+                        @html.th(
+                          scope=Col,
+                          localized(state.locale, "Expires", "到期"),
+                        ),
+                        @html.th(
+                          scope=Col,
+                          localized(state.locale, "State", "状态"),
+                        ),
+                      ]),
+                    ),
+                    @html.tbody(
+                      [
+                        for session in state.account_sessions => {
+                          @html.tr([
+                            @html.td(class="mono", session.session_id),
+                            @html.td(session.last_used_unix_ms.to_string()),
+                            @html.td(session.expires_unix_ms.to_string()),
+                            @html.td(
+                              if session.revoked_unix_ms is Some(_) {
+                                status_badge(
+                                  localized(
+                                    state.locale,
+                                    "Revoked",
+                                    "已撤销",
+                                  ),
+                                  "muted",
+                                )
+                              } else {
+                                status_badge(
+                                  localized(state.locale, "Active", "有效"),
+                                  "ok",
+                                )
+                              },
+                            ),
+                          ])
+                        }
+                      ],
+                    ),
+                  ]),
+                ])
+              },
+            ]),
+          ],
+        )
+      None =>
+        @html.p(
+          class="account-self account-self-static",
+          localized(
+            state.locale,
+            "This console is using the localhost development-token fallback. Sign in with an lnxs_ account session to inspect personal session evidence.",
+            "此控制台正在使用本机开发令牌回退。请使用 lnxs_ 账户会话登录以查看个人会话证据。",
+          ),
+        )
+    },
+    @html.details(class="account-invite-panel", [
+      @html.summary(
+        localized(
+          state.locale,
+          "Invite an external identity",
+          "邀请外部身份",
+        ),
+      ),
+      @html.div(class="account-invite-content", [
+        @html.p(
+          class="section-copy",
+          localized(
+            state.locale,
+            "Map a verified identity-provider subject to a LunaNexa account. Passwords, MFA factors, and provider tokens remain with the external provider.",
+            "将已验证的身份提供商主体映射到 LunaNexa 账户。密码、多因素认证和提供商令牌仍由外部提供商保管。",
+          ),
+        ),
+        @html.div(class="account-invite-grid", [
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-id",
+              localized(state.locale, "Account ID", "账户 ID"),
+            ),
+            @html.input(
+              id="account-id",
+              value=state.account_invite.account_id,
+              maxlength=128,
+              auto_complete=Off,
+              on_input=text_command(emit, value => AccountInviteIdChanged(value)),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-subject-ref",
+              localized(
+                state.locale,
+                "Opaque subject reference",
+                "不透明主体引用",
+              ),
+            ),
+            @html.input(
+              id="account-subject-ref",
+              value=state.account_invite.subject_ref,
+              maxlength=128,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccountInviteSubjectRefChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-issuer",
+              localized(state.locale, "Identity issuer", "身份签发方"),
+            ),
+            @html.input(
+              id="account-issuer",
+              value=state.account_invite.identity_issuer,
+              maxlength=512,
+              auto_complete=Off,
+              placeholder="https://id.example.com",
+              on_input=text_command(emit, value => {
+                AccountInviteIssuerChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-provider-subject",
+              localized(state.locale, "Provider subject", "提供商主体"),
+            ),
+            @html.input(
+              id="account-provider-subject",
+              input_type=Password,
+              value=state.account_invite.identity_subject,
+              maxlength=1024,
+              auto_complete=Off,
+              attrs=@html.Attrs::build().aria_describedby(
+                "account-provider-subject-help",
+              ),
+              on_input=text_command(emit, value => {
+                AccountInviteProviderSubjectChanged(value)
+              }),
+            ),
+            @html.p(
+              id="account-provider-subject-help",
+              class="field-help",
+              localized(
+                state.locale,
+                "Submitted once for hashing; neither the provider subject nor its digest appears in account views.",
+                "仅提交一次以生成哈希；账户视图不会显示提供商主体或其摘要。",
+              ),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-display-name",
+              localized(state.locale, "Display name", "显示名称"),
+            ),
+            @html.input(
+              id="account-display-name",
+              value=state.account_invite.display_name,
+              maxlength=128,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccountInviteDisplayNameChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-email",
+              localized(state.locale, "Email", "电子邮箱"),
+            ),
+            @html.input(
+              id="account-email",
+              input_type=Email,
+              value=state.account_invite.email,
+              maxlength=320,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccountInviteEmailChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="account-identity-receipt",
+              localized(
+                state.locale,
+                "Identity evidence receipt",
+                "身份凭证回执",
+              ),
+            ),
+            @html.input(
+              id="account-identity-receipt",
+              value=state.account_invite.identity_receipt,
+              maxlength=512,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccountInviteReceiptChanged(value)
+              }),
+            ),
+          ]),
+        ]),
+        account_invite_role_controls(state, emit),
+        @html.div(class="account-invite-actions", [
+          @html.span(
+            class="secondary",
+            localized(
+              state.locale,
+              "The new account starts Invited and cannot sign in until activated.",
+              "新账户初始为“已邀请”，激活后才能登录。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=state.loading ||
+              !account_invite_ready(state.account_invite),
+            on_click=command(emit, SubmitAccountInvite),
+            localized(state.locale, "Create invitation", "创建邀请"),
+          ),
+        ]),
+      ]),
+    ]),
+    @html.div(class="subsection-heading", [
+      @html.div([
+        @html.p(
+          class="eyebrow",
+          localized(state.locale, "Application accounts", "应用账户"),
+        ),
+        @html.h3(
+          localized(
+            state.locale,
+            "External identity mappings",
+            "外部身份映射",
+          ),
+        ),
+      ]),
+      @html.span(
+        class="resource-count",
+        localized(
+          state.locale,
+          "\{state.accounts.length()} accounts",
+          "\{state.accounts.length()} 个账户",
+        ),
+      ),
+    ]),
+    if state.accounts.length() == 0 {
+      @html.p(
+        class="empty-state compact",
+        localized(
+          state.locale,
+          "No human accounts are registered. Create an invitation after the external identity provider is configured.",
+          "尚未注册任何人员账户。请在配置外部身份提供商后创建邀请。",
+        ),
+      )
+    } else {
+      @html.div(class="table-scroll account-table", [
+        @html.table(class="resource-table", [
+          @html.caption(
+            class="sr-only",
+            localized(state.locale, "Human accounts", "人员账户"),
+          ),
+          @html.thead(
+            @html.tr([
+              @html.th(scope=Col, localized(state.locale, "Account", "账户")),
+              @html.th(
+                scope=Col,
+                localized(state.locale, "Identity mapping", "身份映射"),
+              ),
+              @html.th(scope=Col, localized(state.locale, "State", "状态")),
+              @html.th(scope=Col, localized(state.locale, "Roles", "角色")),
+              @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
+            ]),
+          ),
+          @html.tbody(
+            [
+              for account in state.accounts => {
+                @html.tr([
+                  @html.td([
+                    @html.strong(account.display_name),
+                    @html.span(class="secondary", account.email),
+                    @html.span(class="mono secondary", account.account_id),
+                  ]),
+                  @html.td([
+                    @html.strong(account.identity_issuer),
+                    @html.span(class="mono secondary", account.subject_ref),
+                    @html.span(class="mono secondary", account.identity_receipt),
+                  ]),
+                  @html.td(account_state_badge(state.locale, account.state)),
+                  @html.td(
+                    account_role_controls(
+                      state.locale,
+                      account.account_id,
+                      account.roles,
+                      state.loading || account.state == Revoked,
+                      emit,
+                    ),
+                  ),
+                  @html.td(class="row-actions", [
+                    if account.state == Invited || account.state == Suspended {
+                      @html.button(
+                        type_="button",
+                        disabled=state.loading,
+                        on_click=command(
+                          emit,
+                          BeginActivateAccount(account.account_id),
+                        ),
+                        localized(state.locale, "Activate…", "激活…"),
+                      )
+                    } else {
+                      @html.nothing
+                    },
+                    if account.state == Active {
+                      @html.button(
+                        type_="button",
+                        class="danger-secondary",
+                        disabled=state.loading,
+                        on_click=command(
+                          emit,
+                          BeginSuspendAccount(account.account_id),
+                        ),
+                        localized(state.locale, "Suspend…", "暂停…"),
+                      )
+                    } else {
+                      @html.nothing
+                    },
+                    if account.state != Revoked {
+                      @html.button(
+                        type_="button",
+                        class="danger-secondary",
+                        disabled=state.loading,
+                        on_click=command(
+                          emit,
+                          BeginRevokeAccount(account.account_id),
+                        ),
+                        localized(state.locale, "Revoke…", "撤销…"),
+                      )
+                    } else {
+                      @html.span(
+                        class="secondary",
+                        localized(state.locale, "Terminal", "已终止"),
+                      )
+                    },
+                  ]),
+                ])
+              }
+            ],
+          ),
+        ]),
+      ])
+    },
+    @html.h3(localized(state.locale, "Workspace profiles", "工作区档案")),
     if state.users.length() == 0 {
       @html.p(
         class="empty-state",
@@ -5638,6 +6358,27 @@ fn confirmation_copy(
   action : DestructiveAction,
 ) -> String {
   match action {
+    ActivateAccount(_) =>
+      localized(
+        locale, "Activating this account allows its external identity to exchange a fresh browser session with the listed LunaNexa roles.",
+        "激活此账户后，其外部身份可按列出的 LunaNexa 角色换取新的浏览器会话。",
+      )
+    SuspendAccount(_) =>
+      localized(
+        locale, "Suspending this account immediately revokes its browser sessions and blocks new account authorization until reactivated.",
+        "暂停此账户会立即撤销其浏览器会话，并阻止新的账户授权，直至重新激活。",
+      )
+    RevokeAccount(_) =>
+      localized(
+        locale, "Revoking this account is terminal, revokes every browser session, and prevents this external identity from signing in again.",
+        "撤销此账户是终止性操作，会撤销全部浏览器会话，并阻止此外部身份再次登录。",
+      )
+    SetAccountRoles(_, roles) =>
+      localized(
+        locale,
+        "This replaces the account's LunaNexa roles with: \{roles.map(role => account_role_label(locale, role)).join(", ")}. Existing sessions are re-authorized against the new roles immediately.",
+        "此操作会将账户的 LunaNexa 角色替换为：\{roles.map(role => account_role_label(locale, role)).join("、")}。现有会话会立即按新角色重新授权。",
+      )
     SuspendUser(_) =>
       localized(
         locale, "Suspending this identity immediately blocks new workspace authorization. Existing records remain available for audit and later reactivation.",
@@ -5710,6 +6451,8 @@ fn confirmation_view(
     None => @html.nothing
     Some(value) => {
       let recovery = value.action is RedriveNotificationDelivery(_, _, _)
+      let account_change = value.action is ActivateAccount(_) ||
+        value.action is SetAccountRoles(_, _)
       @html.aside(
         class="confirmation-panel",
         attrs=@html.Attrs::build()
@@ -5721,6 +6464,10 @@ fn confirmation_view(
             class="eyebrow danger-copy",
             if recovery {
               localized(locale, "Recovery operation", "恢复操作")
+            } else if account_change {
+              localized(
+                locale, "Account authority change", "账户权限变更",
+              )
             } else {
               localized(locale, "Destructive operation", "破坏性操作")
             },
@@ -5731,6 +6478,8 @@ fn confirmation_view(
               localized(
                 locale, "Confirm delivery redrive", "确认重新投递",
               )
+            } else if account_change {
+              localized(locale, "Confirm account change", "确认账户变更")
             } else {
               localized(
                 locale, "Confirm destructive operation", "确认破坏性操作",
@@ -5766,6 +6515,8 @@ fn confirmation_view(
               on_click=command(emit, ConfirmAction(value.action)),
               if recovery {
                 localized(locale, "Confirm redrive", "确认重新投递")
+              } else if account_change {
+                localized(locale, "Confirm change", "确认变更")
               } else {
                 localized(locale, "Confirm operation", "确认操作")
               },
@@ -6151,6 +6902,26 @@ fn console_styles() -> String {
     #|.row-actions .secondary { padding: .65rem 0; }
     #|.secondary { color: var(--muted); font-size: .74rem; }
     #|.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+    #|.account-self { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 0 0 1rem; padding: .9rem 1rem; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: .65rem; background: var(--accent-soft); }
+    #|.account-self h3 { margin: 0; }
+    #|.account-self .section-copy { margin-top: .2rem; }
+    #|.account-self-static { display: block; color: var(--muted-strong); }
+    #|.account-self-evidence { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .55rem; }
+    #|.account-session-evidence { width: 100%; border-top: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line)); }
+    #|.account-session-evidence summary { min-height: 44px; padding: .65rem 0; cursor: pointer; color: var(--muted-strong); font-weight: 700; }
+    #|.account-session-evidence .resource-table { min-width: 38rem; }
+    #|.account-invite-panel { margin-bottom: 1.2rem; overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
+    #|.account-invite-panel summary { min-height: 44px; padding: .8rem 1rem; cursor: pointer; color: var(--ink); font-weight: 760; }
+    #|.account-invite-panel[open] summary { border-bottom: 1px solid var(--line); background: var(--surface-subtle); }
+    #|.account-invite-content { padding: 1rem; }
+    #|.account-invite-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1rem; margin-top: 1rem; }
+    #|.account-role-fieldset { margin: 1rem 0 0; padding: .8rem; border: 1px solid var(--line); border-radius: .5rem; }
+    #|.account-role-fieldset legend { padding: 0 .35rem; font-weight: 730; }
+    #|.account-role-controls { display: flex; flex-wrap: wrap; gap: .35rem; }
+    #|.role-toggle { min-height: 44px; padding: .45rem .65rem; font-size: .7rem; }
+    #|.role-toggle.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+    #|.account-invite-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+    #|.account-table .resource-table { min-width: 66rem; }
     #|.status { display: inline-flex !important; align-items: center; gap: .35rem; width: max-content; padding: .2rem .5rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-subtle); color: var(--muted-strong); font-size: .7rem; font-weight: 720; line-height: 1.2; }
     #|.status::before { width: .38rem; height: .38rem; border-radius: 999px; background: currentColor; content: ""; }
     #|.status-ok { border-color: color-mix(in srgb, var(--success) 30%, var(--line)); background: var(--success-soft); color: var(--success); }
@@ -6349,6 +7120,7 @@ fn console_styles() -> String {
     #|  .connection-actions { display: grid; }
     #|  .node-summary { grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, .7fr) minmax(7rem, .7fr) auto; }
     #|  .node-memory-summary { display: none; }
+    #|  .account-invite-grid { grid-template-columns: 1fr; }
     #|}
     #|@media (max-width: 40rem) {
     #|  .connection-endpoint { display: none; }
@@ -6366,6 +7138,9 @@ fn console_styles() -> String {
     #|  .policy-summary > div:last-child { border-bottom: 0; }
     #|  .operation-actions { align-items: stretch; flex-direction: column; }
     #|  .operation-actions button { width: 100%; }
+    #|  .account-self, .account-invite-actions { align-items: stretch; flex-direction: column; }
+    #|  .account-self-evidence { justify-content: flex-start; }
+    #|  .account-invite-actions button { width: 100%; }
     #|  .model-onboarding-steps { grid-template-columns: 1fr; }
     #|  .model-source-search { grid-template-columns: 1fr; }
     #|  .topology-graph { min-width: 44rem; padding: 1rem; }
