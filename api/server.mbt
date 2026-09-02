@@ -24,6 +24,8 @@ pub(all) struct CancellationReceipt {
 pub struct ApiService {
   global_settings : @settings.GlobalAdminSettings
   store : @store.FileStore
+  account_store : @account.AccountStore?
+  identity_assertion_secret : String
   access_store : @access.AccessStore?
   management_database : @database.PostgresDatabase?
   technical_store : @technical_store.TechnicalStore?
@@ -104,6 +106,8 @@ pub fn ApiService::new(
   {
     global_settings: @settings.default_global_admin_settings(),
     store,
+    account_store: None,
+    identity_assertion_secret: "",
     access_store: None,
     management_database: None,
     technical_store: None,
@@ -180,6 +184,8 @@ pub fn ApiService::with_registry(
   {
     global_settings: @settings.default_global_admin_settings(),
     store,
+    account_store: None,
+    identity_assertion_secret: "",
     access_store: None,
     management_database: None,
     technical_store: None,
@@ -257,6 +263,8 @@ pub fn ApiService::with_services(
   {
     global_settings: @settings.default_global_admin_settings(),
     store,
+    account_store: None,
+    identity_assertion_secret: "",
     access_store: None,
     management_database: None,
     technical_store: None,
@@ -336,6 +344,8 @@ pub fn ApiService::with_control_plane(
   {
     global_settings: @settings.default_global_admin_settings(),
     store,
+    account_store: None,
+    identity_assertion_secret: "",
     access_store: None,
     management_database: None,
     technical_store: None,
@@ -417,6 +427,17 @@ pub fn ApiService::with_operator_tokens(
     }
     { ..self, operator_tokens, }
   }
+}
+
+///|
+/// Enables externally authenticated human accounts and short-lived browser
+/// sessions. Passwords and upstream IdP tokens remain outside LunaNexa.
+pub fn ApiService::with_account_store(
+  self : ApiService,
+  account_store : @account.AccountStore,
+  identity_assertion_secret : String,
+) -> ApiService {
+  { ..self, account_store: Some(account_store), identity_assertion_secret }
 }
 
 ///|
@@ -1140,26 +1161,69 @@ fn bearer_authorized(headers : Map[String, String], expected : String) -> Bool {
 /// the token → identity map, or returns `None` when the credential is absent
 /// or unknown. Contract-document operator routes attribute every store
 /// mutation and audit entry to the resolved identity.
-fn ApiService::operator_identity(
+async fn ApiService::account_session_authorization(
+  self : ApiService,
+  headers : Map[String, String],
+  required_role : @account.AccountRole,
+) -> @account.AccountAuthorization? {
+  guard self.account_store is Some(accounts) &&
+    bearer_secret(headers) is Some(secret) &&
+    secret.has_prefix("lnxs_") else {
+    return None
+  }
+  Some(accounts.authorize(secret, @async.now(), required_role~)) catch {
+    _ => None
+  }
+}
+
+///|
+async fn ApiService::operator_identity(
   self : ApiService,
   headers : Map[String, String],
 ) -> String? {
   guard header(headers, "Authorization") is Some(value) &&
     value.has_prefix("Bearer ") else {
-    return None
+    return self
+      .account_session_authorization(headers, PlatformOperator)
+      .map(value => value.account.subject_ref)
   }
-  self.operator_tokens.get(value["Bearer ".length():].to_owned())
+  match self.operator_tokens.get(value["Bearer ".length():].to_owned()) {
+    Some(identity) => Some(identity)
+    None =>
+      self
+      .account_session_authorization(headers, PlatformOperator)
+      .map(value => value.account.subject_ref)
+  }
 }
 
 ///|
 /// All operator authorities use the same token-to-identity map. The default
 /// constructor seeds the legacy token as `operator`, so existing deployments
 /// remain compatible while multi-operator deployments gain one boundary.
-fn ApiService::operator_authorized(
+async fn ApiService::operator_authorized(
   self : ApiService,
   headers : Map[String, String],
 ) -> Bool {
   self.operator_identity(headers) is Some(_)
+}
+
+///|
+async fn ApiService::audit_authorized(
+  self : ApiService,
+  headers : Map[String, String],
+) -> Bool {
+  bearer_authorized(headers, self.audit_token) ||
+  self.account_session_authorization(headers, AuditReader) is Some(_)
+}
+
+///|
+async fn ApiService::enterprise_session_subject(
+  self : ApiService,
+  headers : Map[String, String],
+) -> String? {
+  self
+  .account_session_authorization(headers, EnterpriseUser)
+  .map(value => value.account.subject_ref)
 }
 
 ///|
@@ -2632,6 +2696,11 @@ async fn ApiService::dispatch_with_transport(
   if model_source_path(path) {
     return self.handle_model_source(verb, path, headers, body)
   }
+  if account_path(path) {
+    return self.handle_accounts(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   if access_management_path(path) {
     return self.handle_access_management(verb, path, headers, body)
   }
@@ -2825,7 +2894,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Get, "/v1/observability/readiness") => {
       if !bearer_authorized(headers, self.monitoring_token) &&
-        !bearer_authorized(headers, self.audit_token) {
+        !self.audit_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid monitoring or audit authority is required",
           false,
@@ -2867,7 +2936,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Get, "/v1/observability/events") => {
       if !bearer_authorized(headers, self.monitoring_token) &&
-        !bearer_authorized(headers, self.audit_token) {
+        !self.audit_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid monitoring or audit authority is required",
           false,
@@ -2926,13 +2995,16 @@ async fn ApiService::dispatch_with_transport(
       json_reply(200, snapshot.to_json())
     }
     (Get, "/v1/workspace/self") => {
-      if !bearer_authorized(headers, self.inference_token) {
-        return api_error(
-          401, "Unauthenticated", "valid inference authority is required", false,
-        )
+      let subject_ref = match self.enterprise_session_subject(headers) {
+        Some(subject) => Some(subject)
+        None =>
+          if bearer_authorized(headers, self.inference_token) {
+            trusted_workspace_subject(headers, allow_asserted_subject)
+          } else {
+            None
+          }
       }
-      guard trusted_workspace_subject(headers, allow_asserted_subject)
-        is Some(subject_ref) else {
+      guard subject_ref is Some(subject_ref) else {
         return api_error(
           401, "Unauthenticated", "a verified auth-TLS identity or accepted loopback subject assertion is required",
           false,
@@ -4235,7 +4307,7 @@ async fn ApiService::dispatch_with_transport(
       json_reply(202, receipt.to_json())
     }
     (Get, "/v1/audit") => {
-      if !bearer_authorized(headers, self.audit_token) {
+      if !self.audit_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid audit authority is required", false,
         )
@@ -4301,7 +4373,7 @@ async fn ApiService::operational_actor_class(
   path : String,
 ) -> @observability.OperationalActorClass {
   if self.operator_authorized(headers) ||
-    bearer_authorized(headers, self.audit_token) ||
+    self.audit_authorized(headers) ||
     bearer_authorized(headers, self.monitoring_token) {
     Operator
   } else if node_credential(headers) is Some(_) {

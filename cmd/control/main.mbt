@@ -512,6 +512,9 @@ async fn main {
   let access_path = @env.get_env_var("LUNANEXA_ACCESS_PATH").unwrap_or(
     "lunanexa-access.json",
   )
+  let account_path = @env.get_env_var("LUNANEXA_ACCOUNT_PATH").unwrap_or(
+    "lunanexa-accounts.json",
+  )
   let credential_handoff_path = @env.get_env_var(
     "LUNANEXA_CREDENTIAL_HANDOFF_PATH",
   ).unwrap_or("lunanexa-credential-handoffs.json")
@@ -773,6 +776,20 @@ async fn main {
       @access.AccessStore::open_postgres(database, api_key_issuer_secret)
     None => @access.AccessStore::open(access_path, api_key_issuer_secret)
   }
+  let account_session_issuer_secret = required_environment(
+    "LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET",
+  )
+  let identity_assertion_secret = @env.get_env_var(
+    "LUNANEXA_IDENTITY_ASSERTION_SECRET",
+  ).unwrap_or("")
+  let account_store = match management_database {
+    Some(database) =>
+      @account.AccountStore::open_postgres(
+        database, account_session_issuer_secret,
+      )
+    None =>
+      @account.AccountStore::open(account_path, account_session_issuer_secret)
+  }
   let credential_handoff_issuer_secret = required_environment(
     "LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET",
   )
@@ -898,12 +915,18 @@ async fn main {
     ("LUNANEXA_CATALOG_SIGNING_SECRET", catalog_signing_secret),
     ("LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET", exclusive_lease_signing_secret),
     ("LUNANEXA_API_KEY_ISSUER_SECRET", api_key_issuer_secret),
+    ("LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET", account_session_issuer_secret),
     (
       "LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET", credential_handoff_issuer_secret,
     ),
     ("LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET", client_handoff_issuer_secret),
     ("LUNANEXA_LEASE_HELPER_RECEIPT_SECRET", lease_helper_receipt_secret),
   ]
+  if identity_assertion_secret != "" {
+    operational_secrets.push(
+      ("LUNANEXA_IDENTITY_ASSERTION_SECRET", identity_assertion_secret),
+    )
+  }
   // Multi-operator attribution: when LUNANEXA_OPERATOR_TOKENS is set it
   // replaces the legacy single operator token on the contract-document
   // operator routes, and every token joins the distinct-secret validation.
@@ -1041,6 +1064,7 @@ async fn main {
       @env.get_env_var("LUNANEXA_REQUIRE_WORKSPACE_LEASE") == Some("1"),
     )
     .with_access_store(access_store)
+    .with_account_store(account_store, identity_assertion_secret)
     .with_technical_store(technical_operations)
     .with_deployment_store(
       deployment_store,

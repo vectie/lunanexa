@@ -22,11 +22,10 @@ test "offline upload projection and operator actor are server-owned" {
   assert_false(encoded.contains("spoofed-customer"))
   assert_false(encoded.contains("secret-idempotency-key"))
   assert_eq(offline_operator_actor(Map([])), "platform-operator")
-  let mtls = offline_operator_actor({
+  let untrusted_proxy_headers = offline_operator_actor({
     "ssl-client-verify": "SUCCESS",
     "ssl-client-subject-dn": "CN=operator-7,O=LunaNexa",
     "X-LunaNexa-Subject": "spoofed-operator",
   })
-  assert_true(mtls.has_prefix("mtls:sha256:"))
-  assert_false(mtls.contains("spoofed-operator"))
+  assert_eq(untrusted_proxy_headers, "platform-operator")
 }
