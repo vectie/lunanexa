@@ -758,6 +758,8 @@ async test "contract document lifecycle endpoints gate creation and record execu
     portal_body,
   )
   assert_eq(portal_key.status, 201)
+  assert_true(portal_key.body.contains("\"secret\":\"lnx_"))
+  assert_false(portal_key.body.contains("secret_sha256"))
   // Early termination needs an effective settlement; expiry closes directly.
   let early = service.handle(
     Post,

@@ -52,6 +52,7 @@ pub struct ApiService {
   account_store : @account.AccountStore?
   identity_assertion_secret : String
   access_store : @access.AccessStore?
+  allow_legacy_unbound_access : Bool
   management_database : @database.PostgresDatabase?
   technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
@@ -150,6 +151,7 @@ pub fn ApiService::with_external_observability_collector_configured(Self, Bool) 
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure
 pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
+pub fn ApiService::with_legacy_unbound_access_for_local_testing(Self) -> Self
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
 pub fn ApiService::with_model_source_adapter(Self, String, String) -> Self raise Failure
 pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self
