@@ -2711,6 +2711,9 @@ async fn ApiService::dispatch_with_transport(
   if model_source_path(path) {
     return self.handle_model_source(verb, path, headers, body)
   }
+  if access_onboarding_path(path) {
+    return self.handle_access_onboarding(verb, path, headers, body)
+  }
   if account_path(path) {
     return self.handle_accounts(
       verb, path, headers, body, allow_asserted_subject,

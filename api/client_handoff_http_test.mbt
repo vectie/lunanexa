@@ -215,6 +215,22 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     "Authorization": "Bearer inference-token",
     "X-LunaNexa-Subject": "subject-client",
   }
+  let client_readiness = service.handle(
+    Get,
+    "/v1/portal/self/client",
+    enterprise_headers,
+    "",
+  )
+  assert_eq(client_readiness.status, 200)
+  let client_readiness_json = @json.parse(client_readiness.body)
+  guard client_readiness_json is Object(client_fields) else {
+    fail("expected desktop client readiness")
+  }
+  assert_eq(client_fields["contract_ready"], true)
+  assert_eq(client_fields["workspace_ready"], true)
+  assert_eq(client_fields["models_ready"], true)
+  assert_eq(client_fields["ready"], true)
+  assert_eq(client_fields["approved_model_aliases"], ["text.default"])
   let issue_body = (
     {
       "request_id": "desktop-request-1",

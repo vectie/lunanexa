@@ -219,16 +219,61 @@ async fn ApiService::handle_client_handoff(
     )
   }
   match (verb, path) {
-    (Get, "/v1/portal/self/client") =>
+    (Get, "/v1/portal/self/client") => {
+      let now = @async.now()
+      let contract_ready = match self.contract_document_store {
+        Some(contracts) =>
+          contracts.has_effective_master_lease(
+            portal_view.membership.tenant_ref,
+            subject_ref,
+            now,
+          )
+        None => false
+      }
+      let workspace_ready = match self.workspace_directory {
+        Some(directory) =>
+          try {
+            ignore(
+              directory.authorize_subject_for_tenant(
+                subject_ref,
+                portal_view.membership.tenant_ref,
+                Developer,
+                now,
+              ),
+            )
+            true
+          } catch {
+            _ => false
+          }
+        None => false
+      }
+      let aliases = access_package_approved_aliases(self.registry)
+      let blockers : Array[String] = []
+      if !contract_ready {
+        blockers.push("MasterLeaseRequired")
+      }
+      if !workspace_ready {
+        blockers.push("ActiveWorkspaceLeaseRequired")
+      }
+      if aliases.length() == 0 {
+        blockers.push("ApprovedModelRequired")
+      }
       json_reply(200, {
         "client_id": config.client_id,
         "display_name": config.display_name,
         "launch_uri": config.launch_uri,
         "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
+        "contract_ready": contract_ready,
+        "workspace_ready": workspace_ready,
+        "models_ready": aliases.length() > 0,
+        "ready": blockers.length() == 0,
+        "blocker_codes": blockers.to_json(),
+        "approved_model_aliases": aliases.to_json(),
         "handoffs": handoffs
         .views_for_subject(portal_view.membership.tenant_ref, subject_ref)
         .to_json(),
       })
+    }
     (Post, "/v1/portal/self/client-handoffs") => {
       guard decode_portal_client_handoff(body) is Some(intent) &&
         intent.client_id == config.client_id &&
