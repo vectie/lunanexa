@@ -148,6 +148,7 @@ verify_management_secret_manifest() {
       def resources:
         [.[] | if .kind == "List" then .items[] else . end];
       [
+        "account-session-issuer-secret",
         "api-key-issuer-secret",
         "artifact-scanner-callback-token",
         "artifact-worker-callback-token",

@@ -50,6 +50,7 @@ case " $* " in
   *' create --dry-run=client '*' -f '*' -o json '*)
     jq -nc --arg scenario "${TEST_SCENARIO:-healthy}" '
       [
+        "account-session-issuer-secret",
         "api-key-issuer-secret",
         "artifact-scanner-callback-token",
         "artifact-worker-callback-token",

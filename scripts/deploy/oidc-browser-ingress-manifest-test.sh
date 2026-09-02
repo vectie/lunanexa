@@ -4,6 +4,7 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 manifest=$repo_root/deploy/oidc-browser-ingress.yaml
 base_policy=$repo_root/deploy/network-policy.yaml
+controller_manifest=$repo_root/deploy/controller.yaml
 dev_patch=$repo_root/deploy/management-foundation/network-policy-dev-browser-patch.yaml
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-oidc-ingress-test.XXXXXX")
 cleanup() { rm -rf "$test_directory"; }
@@ -62,6 +63,10 @@ if rg -q 'lunanexa-(console|workbench)-public-gateway' "$base_controller_policy"
 fi
 rg -q 'app: lunanexa-console-public-gateway' "$dev_patch"
 rg -q 'app: lunanexa-workbench-public-gateway' "$dev_patch"
+rg -q 'name: LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET' "$controller_manifest"
+rg -q 'key: account-session-issuer-secret' "$controller_manifest"
+test "$(rg -c 'name: LUNANEXA_IDENTITY_ASSERTION_SECRET' "$controller_manifest")" -eq 1
+rg -U -q 'name: LUNANEXA_IDENTITY_ASSERTION_SECRET(.|\n)*optional: true' "$controller_manifest"
 
 # Render and parse the complete multi-document profile offline. Secret values
 # remain absent.
