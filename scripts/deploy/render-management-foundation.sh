@@ -68,7 +68,7 @@ trap cleanup EXIT HUP INT TERM
 for manifest in prerequisites postgres controller console enterprise workbench model-source network-policy; do
   cp "$repo_root/deploy/$manifest.yaml" "$work_directory/$manifest.yaml"
 done
-for template in kustomization prerequisites-patch controller-patch workloads-patch model-source-patch console-public-service public-sites; do
+for template in kustomization prerequisites-patch controller-patch workloads-patch model-source-patch network-policy-dev-browser-patch console-public-service public-sites; do
   cp "$repo_root/deploy/management-foundation/$template.yaml" "$work_directory/$template.yaml"
 done
 

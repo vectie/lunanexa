@@ -1,0 +1,19 @@
+- op: add
+  path: /spec/ingress/0/from/-
+  value:
+    podSelector:
+      matchLabels:
+        app: lunanexa-console-public-gateway
+- op: add
+  path: /spec/ingress/0/from/-
+  value:
+    podSelector:
+      matchLabels:
+        app: lunanexa-workbench-public-gateway
+- op: add
+  path: /spec/ingress/0/from/-
+  value:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: console

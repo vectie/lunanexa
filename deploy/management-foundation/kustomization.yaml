@@ -16,3 +16,11 @@ patches:
   - path: controller-patch.yaml
   - path: workloads-patch.yaml
   - path: model-source-patch.yaml
+  # The management-foundation profile is an explicitly local/development
+  # installation with temporary plain-HTTP gateways and static browser tokens.
+  # Production overlays must omit this patch and send browser traffic only
+  # through lunanexa-identity-gateway.
+  - path: network-policy-dev-browser-patch.yaml
+    target:
+      kind: NetworkPolicy
+      name: lunanexa-control

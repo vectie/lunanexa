@@ -15,17 +15,13 @@ spec:
               lunanexa.io/plane: node-agent
         - podSelector:
             matchLabels:
-              app: lunanexa-console-public-gateway
-        - podSelector:
-            matchLabels:
-              app: lunanexa-workbench-public-gateway
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/part-of: lunanexa
-              lunanexa.io/plane: console
+              app: lunanexa-identity-gateway
         - namespaceSelector:
             matchLabels:
               lunanexa.io/ingress: trusted
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
         - namespaceSelector:
             matchLabels:
               lunanexa.io/service: observability-proof
