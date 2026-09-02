@@ -1,0 +1,142 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/workspace/client_handoff"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub let contract_version : String
+
+pub let snapshot_schema_version : String
+
+pub fn valid_client_launch_config(ClientLaunchConfig) -> Bool
+
+pub fn validate_issue_intent(ClientHandoffIssueIntent, Int64) -> Unit raise ClientHandoffError
+
+// Errors
+pub(all) suberror ClientHandoffError {
+  InvalidInput(String)
+  InvalidSnapshot(String)
+  AlreadyExists(String)
+  IdempotencyConflict
+  NotFound
+  Unauthorized
+  ClientMismatch
+  AlreadyRedeemed
+  Expired
+  Revoked
+  QuotaExceeded
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct ClientAuthorization {
+  key_id : String
+  tenant_ref : String
+  subject_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientCredential {
+  key_id : String
+  handoff_id : String
+  client_id : String
+  tenant_ref : String
+  subject_ref : String
+  secret_sha256 : String
+  allowed_models : Array[String]
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+  maximum_requests : Int64
+  consumed_requests : Int64
+  revoked_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientHandoffIssueIntent {
+  request_id : String
+  client_id : String
+  tenant_ref : String
+  subject_ref : String
+  display_name : String
+  allowed_models : Array[String]
+  handoff_expires_unix_ms : Int64
+  credential_expires_unix_ms : Int64
+  maximum_requests : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientHandoffRecord {
+  version : String
+  handoff_id : String
+  request_id : String
+  client_id : String
+  tenant_ref : String
+  subject_ref : String
+  api_key_id : String
+  code_sha256 : String
+  display_name : String
+  allowed_models : Array[String]
+  created_unix_ms : Int64
+  handoff_expires_unix_ms : Int64
+  credential_expires_unix_ms : Int64
+  maximum_requests : Int64
+  redeemed_unix_ms : Int64?
+  revoked_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientHandoffRedemption {
+  handoff_id : String
+  client_id : String
+  api_key_id : String
+  api_secret : String
+  tenant_ref : String
+  subject_ref : String
+  allowed_models : Array[String]
+  expires_unix_ms : Int64
+  maximum_requests : Int64
+  one_time : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientHandoffSnapshot {
+  schema_version : String
+  handoffs : Array[ClientHandoffRecord]
+  credentials : Array[ClientCredential]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientHandoffView {
+  handoff_id : String
+  request_id : String
+  client_id : String
+  api_key_id : String
+  display_name : String
+  allowed_models : Array[String]
+  created_unix_ms : Int64
+  handoff_expires_unix_ms : Int64
+  credential_expires_unix_ms : Int64
+  maximum_requests : Int64
+  consumed_requests : Int64
+  redeemed_unix_ms : Int64?
+  revoked_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ClientLaunchConfig {
+  client_id : String
+  display_name : String
+  launch_uri : String
+  public_api_base_url : String
+  handoff_lifetime_ms : Int64
+  maximum_requests : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct IssuedClientHandoff {
+  handoff_id : String
+  client_id : String
+  handoff_code : String
+  handoff_expires_unix_ms : Int64
+  credential_expires_unix_ms : Int64
+  redemption_path : String
+  one_time : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

@@ -37,6 +37,61 @@ pub(all) struct ModelRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct ModelSourceCatalogRow {
+  id : String
+  display_name : String
+  description : String
+  downloads : Int64
+  likes : Int64
+  license : String
+  tasks : Array[String]
+  created_at : String
+  last_modified : String
+  file_size : Int64
+  params : Int64
+  tags : Array[String]
+  private : Bool
+  gated : Bool
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ModelSourceCatalogPage {
+  models : Array[ModelSourceCatalogRow]
+  total_count : Int64
+  page_number : Int
+  page_size : Int
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum ModelImportState {
+  Queued
+  Downloading
+  Verified
+  Failed
+  Cancelled
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ModelImportRow {
+  import_id : String
+  source : String
+  model_id : String
+  revision : String
+  state : ModelImportState
+  files_total : Int
+  files_completed : Int
+  bytes_total : Int64
+  bytes_completed : Int64
+  manifest_digest : String
+  artifact_uri : String
+  license : String
+  error_code : String
+  cancel_requested : Bool
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct DeploymentRow {
   assignment_id : String
   deployment_id : String
@@ -265,6 +320,11 @@ pub(all) struct ConsoleState {
   error_message : String?
   success_message : String?
   loading : Bool
+  operator_authenticated : Bool
+  model_source_query : String
+  model_source_results : Array[ModelSourceCatalogRow]
+  model_source_total : Int64
+  model_imports : Array[ModelImportRow]
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -292,6 +352,12 @@ pub(all) enum ConsoleMessage {
   DismissConfirmation
   ConfirmAction(DestructiveAction)
   Refresh
+  ModelSourceQueryChanged(String)
+  SearchModelSource
+  DownloadModelSource(String)
+  CancelModelImport(String)
+  RetryModelImport(String)
+  RefreshModelImports
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -381,6 +447,11 @@ pub fn default_state() -> ConsoleState {
     error_message: None,
     success_message: None,
     loading: false,
+    operator_authenticated: false,
+    model_source_query: "MiniCPM",
+    model_source_results: [],
+    model_source_total: 0L,
+    model_imports: [],
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -870,7 +941,7 @@ pub fn demo_state() -> ConsoleState {
         cost_center_id: "cc-research",
         organization_id: "org-luna",
         display_name: "Research",
-        parent_cost_center_id: "—",
+        parent_cost_center_id: "",
         project_count: 3,
         provisional_spend: "CNY 12,840.00",
         budget_posture: "Within budget",
@@ -879,7 +950,7 @@ pub fn demo_state() -> ConsoleState {
         cost_center_id: "cc-platform",
         organization_id: "org-luna",
         display_name: "Platform",
-        parent_cost_center_id: "—",
+        parent_cost_center_id: "",
         project_count: 2,
         provisional_spend: "CNY 8,120.00",
         budget_posture: "Approval at 80%",
@@ -1005,6 +1076,7 @@ pub fn demo_state() -> ConsoleState {
       blocker_codes: [],
       error: None,
     },
+    operator_authenticated: true,
     quick_template: "text-small@v1",
   }
 }
@@ -1131,15 +1203,6 @@ fn enterprise_request_state_label(
     "Rejected" => localized(locale, value, "已拒绝")
     "Cancelled" => localized(locale, value, "已取消")
     _ => value
-  }
-}
-
-///|
-fn benchmark_evidence_label(locale : @i18n.Locale, value : String) -> String {
-  if locale.is_chinese() {
-    value.replace_all(old=" · failures ", new=" · 失败率 ")
-  } else {
-    value
   }
 }
 
@@ -2197,6 +2260,12 @@ fn leases_view(
         ),
       ),
     ]),
+    if state.exclusive_node_leases.length() == 0 &&
+      state.compute_leases.length() == 0 {
+      @html.nothing
+    } else {
+      lease_lifecycle_graph(state)
+    },
     @html.div(class="subsection-heading", [
       @html.div([
         @html.h3(
@@ -2469,11 +2538,12 @@ fn nodes_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("nodes-title"), [
+    cluster_topology(state),
     @html.div(class="section-heading", [
       @html.div([
         @html.h2(
           id="nodes-title",
-          localized(state.locale, "Hardware nodes", "硬件节点"),
+          localized(state.locale, "Node inventory", "节点清单"),
         ),
         @html.p(
           class="section-copy",
@@ -2524,6 +2594,322 @@ fn nodes_view(
       )
     },
   ])
+}
+
+///|
+fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
+  let active_nodes = state.nodes
+    .iter()
+    .filter(node => node.state == Active)
+    .count()
+  let management_label = if state.operator_authenticated {
+    localized(state.locale, "Connected", "已连接")
+  } else {
+    localized(state.locale, "Authentication required", "需要认证")
+  }
+  let management_tone = if state.operator_authenticated {
+    "ok"
+  } else {
+    "warning"
+  }
+  @html.section(
+    class="cluster-topology",
+    attrs=@html.Attrs::build().aria_labelledby("cluster-topology-title"),
+    [
+      @html.header(class="topology-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            localized(state.locale, "Logical network", "逻辑网络"),
+          ),
+          @html.h2(
+            id="cluster-topology-title",
+            localized(state.locale, "Cluster topology", "集群拓扑"),
+          ),
+          @html.p(
+            localized(
+              state.locale,
+              "Live roles and control paths derived from this console session and enrolled-node heartbeats.",
+              "根据当前控制台会话和已注册节点心跳展示实时角色与控制链路。",
+            ),
+          ),
+        ]),
+        @html.div(class="topology-summary", [
+          @html.span(class="topology-summary-item", [
+            @html.strong("1"),
+            @html.span(
+              localized(state.locale, " management plane", " 个管理平面"),
+            ),
+          ]),
+          @html.span(class="topology-summary-item", [
+            @html.strong(state.nodes.length().to_string()),
+            @html.span(
+              localized(state.locale, " compute nodes", " 个计算节点"),
+            ),
+          ]),
+          @html.span(class="topology-summary-item", [
+            @html.strong(active_nodes.to_string()),
+            @html.span(localized(state.locale, " active", " 个正常")),
+          ]),
+        ]),
+      ]),
+      @html.figure(class="topology-graph-frame", [
+        @html.div(
+          class="topology-graph",
+          attrs=@html.Attrs::build()
+            .role("img")
+            .aria_label(
+              localized(
+                state.locale,
+                "Network graph from operator access through the management plane to enrolled compute nodes, with metadata and model storage dependencies.",
+                "从运维访问经管理平面连接到已注册计算节点，并包含元数据与模型存储依赖的网络图。",
+              ),
+            ),
+          [
+            @html.div(class="graph-node graph-access-node", [
+              @html.span(
+                class="graph-node-symbol",
+                attrs=@html.Attrs::build().aria_hidden("true"),
+                "OP",
+              ),
+              @html.div([
+                @html.small(localized(state.locale, "Entry", "入口")),
+                @html.h3(
+                  localized(state.locale, "Operator access", "运维访问"),
+                ),
+                @html.span(
+                  localized(
+                    state.locale,
+                    "Authenticated browser session",
+                    "已认证浏览器会话",
+                  ),
+                ),
+              ]),
+              status_badge(
+                localized(state.locale, "Authenticated", "已认证"),
+                if state.operator_authenticated {
+                  "ok"
+                } else {
+                  "warning"
+                },
+              ),
+            ]),
+            @html.div(
+              class="graph-edge graph-edge-https",
+              attrs=@html.Attrs::build().aria_hidden("true"),
+              @html.span("HTTPS"),
+            ),
+            @html.div(class="graph-management-stack", [
+              @html.div(class="graph-node graph-control-node", [
+                @html.span(
+                  class="graph-node-symbol",
+                  attrs=@html.Attrs::build().aria_hidden("true"),
+                  "CP",
+                ),
+                @html.div([
+                  @html.small(localized(state.locale, "Control", "控制")),
+                  @html.h3(
+                    localized(state.locale, "Management plane", "管理平面"),
+                  ),
+                  @html.span(
+                    localized(
+                      state.locale,
+                      "API · Scheduler · Reconciler",
+                      "API · 调度器 · 协调器",
+                    ),
+                  ),
+                ]),
+                status_badge(management_label, management_tone),
+              ]),
+              @html.div(class="graph-dependency-branch", [
+                @html.div(class="graph-node graph-dependency-node", [
+                  @html.span(
+                    class="graph-node-symbol graph-node-symbol-data",
+                    attrs=@html.Attrs::build().aria_hidden("true"),
+                    "DB",
+                  ),
+                  @html.div([
+                    @html.small(localized(state.locale, "State", "状态")),
+                    @html.strong("PostgreSQL"),
+                    @html.span(localized(state.locale, "Metadata", "元数据")),
+                  ]),
+                ]),
+                @html.div(class="graph-node graph-dependency-node", [
+                  @html.span(
+                    class="graph-node-symbol graph-node-symbol-store",
+                    attrs=@html.Attrs::build().aria_hidden("true"),
+                    "MS",
+                  ),
+                  @html.div([
+                    @html.small(localized(state.locale, "Artifacts", "制品")),
+                    @html.strong(
+                      localized(state.locale, "Model storage", "模型存储"),
+                    ),
+                    @html.span(
+                      localized(
+                        state.locale,
+                        "Registry references",
+                        "注册表引用",
+                      ),
+                    ),
+                  ]),
+                ]),
+              ]),
+            ]),
+            @html.div(
+              class="graph-edge graph-edge-mtls",
+              attrs=@html.Attrs::build().aria_hidden("true"),
+              [
+                @html.span(
+                  localized(state.locale, "mTLS + heartbeat", "mTLS + 心跳"),
+                ),
+              ],
+            ),
+            @html.div(class="graph-compute-cluster", [
+              @html.div(class="graph-cluster-heading", [
+                @html.div([
+                  @html.small(localized(state.locale, "Execution", "执行")),
+                  @html.h3(
+                    localized(state.locale, "Compute plane", "计算平面"),
+                  ),
+                ]),
+                @html.span(
+                  localized(
+                    state.locale,
+                    "\{state.nodes.length()} enrolled",
+                    "已注册 \{state.nodes.length()} 个",
+                  ),
+                ),
+              ]),
+              if state.nodes.length() == 0 {
+                @html.div(class="topology-missing graph-compute-missing", [
+                  status_badge(
+                    localized(
+                      state.locale,
+                      "Enrollment required",
+                      "等待注册",
+                    ),
+                    "warning",
+                  ),
+                  @html.strong(
+                    localized(
+                      state.locale,
+                      "No compute link established",
+                      "尚未建立计算链路",
+                    ),
+                  ),
+                  @html.span(
+                    localized(
+                      state.locale,
+                      "Enroll a node to establish desired-state and heartbeat channels.",
+                      "注册节点后将建立期望状态与心跳通道。",
+                    ),
+                  ),
+                ])
+              } else {
+                @html.ul(
+                  class="graph-compute-list",
+                  [
+                    for node in state.nodes => {
+                      @html.li(class="graph-node graph-compute-node", [
+                        @html.span(
+                          class="graph-node-symbol graph-node-symbol-compute",
+                          attrs=@html.Attrs::build().aria_hidden("true"),
+                          "GPU",
+                        ),
+                        @html.div([
+                          @html.strong(class="mono", node.node_id),
+                          @html.small(
+                            class="mono",
+                            architecture_label(state.locale, node.architecture),
+                          ),
+                        ]),
+                        node_state_badge(state.locale, node.state),
+                      ])
+                    }
+                  ],
+                )
+              },
+            ]),
+          ],
+        ),
+        @html.figcaption(
+          localized(
+            state.locale,
+            "Arrows show authenticated control traffic; each compute branch represents an enrolled node-agent channel.",
+            "箭头表示已认证的控制流量；每条计算分支代表一个已注册的节点代理通道。",
+          ),
+        ),
+      ]),
+      @html.details(class="topology-relationships", [
+        @html.summary(
+          localized(
+            state.locale,
+            "Connection inventory and trust boundaries",
+            "连接清单与信任边界",
+          ),
+        ),
+        @html.dl([
+          @html.div([
+            @html.dt(
+              localized(
+                state.locale,
+                "Operator console → Management API",
+                "运维控制台 → 管理 API",
+              ),
+            ),
+            @html.dd(
+              localized(
+                state.locale,
+                "Authenticated HTTPS · operator commands and read models",
+                "认证 HTTPS · 运维命令与读取模型",
+              ),
+            ),
+          ]),
+          @html.div([
+            @html.dt(
+              localized(
+                state.locale,
+                "Management plane ↔ Compute nodes",
+                "管理平面 ↔ 计算节点",
+              ),
+            ),
+            @html.dd(
+              localized(
+                state.locale,
+                "Mutual TLS · desired state, receipts, telemetry, and heartbeats",
+                "双向 TLS · 期望状态、回执、遥测与心跳",
+              ),
+            ),
+          ]),
+          @html.div([
+            @html.dt(
+              localized(
+                state.locale,
+                "Management services → Persistent stores",
+                "管理服务 → 持久化存储",
+              ),
+            ),
+            @html.dd(
+              localized(
+                state.locale,
+                "Metadata and model-artifact references · never exposed to tenants",
+                "元数据与模型制品引用 · 不向租户暴露",
+              ),
+            ),
+          ]),
+        ]),
+        @html.p(
+          class="topology-scope-note",
+          localized(
+            state.locale,
+            "Scope: LunaNexa logical roles. Optional bastions, VPNs, switches, physical NICs, and cabling are external infrastructure and are not inferred here.",
+            "范围：LunaNexa 逻辑角色。可选堡垒机、VPN、交换机、物理网卡和线缆属于外部基础设施，此处不作推断。",
+          ),
+        ),
+      ]),
+    ],
+  )
 }
 
 ///|
@@ -2699,6 +3085,46 @@ fn node_item(
 }
 
 ///|
+fn model_source_size(value : Int64) -> String {
+  if value >= 1073741824L {
+    "\{value / 1073741824L}.\{(value % 1073741824L) * 10L / 1073741824L} GiB"
+  } else {
+    "\{value / 1048576L} MiB"
+  }
+}
+
+///|
+fn model_import_for(
+  imports : Array[ModelImportRow],
+  model_id : String,
+) -> ModelImportRow? {
+  imports.iter().find_first(import_ => import_.model_id == model_id)
+}
+
+///|
+fn model_import_label(
+  locale : @i18n.Locale,
+  state : ModelImportState,
+) -> String {
+  match state {
+    Queued => localized(locale, "Queued", "等待下载")
+    Downloading => localized(locale, "Downloading", "下载中")
+    Verified => localized(locale, "Checksum verified", "校验和已验证")
+    Failed => localized(locale, "Failed", "失败")
+    Cancelled => localized(locale, "Cancelled", "已取消")
+  }
+}
+
+///|
+fn model_import_progress(import_ : ModelImportRow) -> Int {
+  if import_.bytes_total <= 0L {
+    0
+  } else {
+    (import_.bytes_completed * 100L / import_.bytes_total).min(100L).to_int()
+  }
+}
+
+///|
 fn models_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -2728,15 +3154,316 @@ fn models_view(
         ),
       ),
     ]),
-    if state.models.length() == 0 {
+    @html.div(class="operation-panel model-onboarding-panel", [
+      @html.div(class="operation-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            localized(state.locale, "ModelScope catalog", "魔搭模型库"),
+          ),
+          @html.h3(
+            localized(
+              state.locale,
+              "Find and import a model",
+              "查找并导入模型",
+            ),
+          ),
+        ]),
+        @html.span(
+          class="status status-pending",
+          localized(state.locale, "Operator workflow", "运维工作流"),
+        ),
+      ]),
       @html.p(
-        class="empty-state",
+        class="section-copy",
         localized(
           state.locale,
-          "No model artifacts registered.",
-          "尚未注册模型制品。",
+          "Search ModelScope, download an exact revision into the governed model store, verify every declared SHA-256, then complete signature, evaluation, and explicit approval before users can select it.",
+          "从魔搭搜索模型，将精确版本下载到受治理的模型库并验证每个文件的 SHA-256；完成签名、评测与明确批准后，用户才能选择该模型。",
         ),
-      )
+      ),
+      @html.ol(class="deployment-steps model-onboarding-steps", [
+        @html.li([
+          @html.span("1"),
+          @html.strong(
+            localized(state.locale, "Search catalog", "搜索模型库"),
+          ),
+        ]),
+        @html.li([
+          @html.span("2"),
+          @html.strong(
+            localized(state.locale, "Download & checksum", "下载并校验"),
+          ),
+        ]),
+        @html.li([
+          @html.span("3"),
+          @html.strong(
+            localized(state.locale, "Sign & evaluate", "签名并评测"),
+          ),
+        ]),
+        @html.li([
+          @html.span("4"),
+          @html.strong(
+            localized(
+              state.locale,
+              "Approve for users",
+              "批准供用户使用",
+            ),
+          ),
+        ]),
+      ]),
+      @html.div(class="model-source-search", [
+        @html.label(
+          for_="model-source-query",
+          localized(state.locale, "Search ModelScope", "搜索魔搭模型"),
+        ),
+        @html.input(
+          id="model-source-query",
+          input_type=Text,
+          maxlength=120,
+          value=state.model_source_query,
+          on_input=text_command(emit, value => ModelSourceQueryChanged(value)),
+        ),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=!state.operator_authenticated ||
+            state.model_source_query.trim() == "" ||
+            state.loading,
+          on_click=command(emit, SearchModelSource),
+          localized(state.locale, "Search", "搜索"),
+        ),
+      ]),
+      @html.div(class="operation-actions", [
+        @html.span(
+          class="secondary",
+          if state.operator_authenticated {
+            localized(
+              state.locale,
+              "Downloads are durable; checksum verification is not signature approval.",
+              "下载任务可持久恢复；校验和验证不等于签名批准。",
+            )
+          } else {
+            localized(
+              state.locale,
+              "Sign in with operator authority to browse and import models.",
+              "请使用运维权限登录后浏览并导入模型。",
+            )
+          },
+        ),
+        @html.button(
+          type_="button",
+          class="secondary-button",
+          disabled=!state.operator_authenticated || state.loading,
+          on_click=command(emit, RefreshModelImports),
+          localized(state.locale, "Refresh downloads", "刷新下载任务"),
+        ),
+      ]),
+      if state.model_source_results.length() == 0 {
+        @html.div(class="model-source-hint", [
+          @html.strong(
+            localized(
+              state.locale,
+              "Search by model or organization",
+              "按模型或组织搜索",
+            ),
+          ),
+          @html.span(
+            localized(
+              state.locale,
+              "Try MiniCPM, Qwen, embedding, or OpenBMB.",
+              "可尝试 MiniCPM、Qwen、embedding 或 OpenBMB。",
+            ),
+          ),
+        ])
+      } else {
+        @html.div(
+          class="model-source-results",
+          [
+            for candidate in state.model_source_results => {
+              let import_ = model_import_for(state.model_imports, candidate.id)
+              @html.article(class="model-source-card", [
+                @html.div(class="model-source-card-heading", [
+                  @html.div([
+                    @html.strong(candidate.display_name),
+                    @html.span(class="mono secondary", candidate.id),
+                  ]),
+                  @html.span(
+                    class="status status-neutral",
+                    if candidate.license == "" {
+                      localized(
+                        state.locale,
+                        "License unspecified",
+                        "未声明许可证",
+                      )
+                    } else {
+                      candidate.license
+                    },
+                  ),
+                ]),
+                @html.p(
+                  class="section-copy",
+                  if candidate.description == "" {
+                    localized(
+                      state.locale,
+                      "No catalog description.",
+                      "模型库未提供简介。",
+                    )
+                  } else {
+                    candidate.description
+                  },
+                ),
+                @html.div(class="model-source-facts", [
+                  @html.span(model_source_size(candidate.file_size)),
+                  @html.span("\{candidate.params / 1000000L}M params"),
+                  @html.span("↓ \{candidate.downloads}"),
+                  @html.span(candidate.tasks.join(", ")),
+                ]),
+                match import_ {
+                  Some(value) =>
+                    @html.div(class="model-import-status", [
+                      @html.div([
+                        @html.strong(
+                          model_import_label(state.locale, value.state),
+                        ),
+                        @html.span(
+                          class="secondary mono",
+                          "\{model_import_progress(value)}% · \{value.files_completed}/\{value.files_total}",
+                        ),
+                      ]),
+                      @html.div(class="model-import-track", [
+                        @html.span(
+                          class="model-import-fill",
+                          style=["width: \{model_import_progress(value)}%"],
+                          "",
+                        ),
+                      ]),
+                      if value.state == Downloading || value.state == Queued {
+                        @html.button(
+                          type_="button",
+                          class="secondary-button danger-button",
+                          disabled=value.cancel_requested || state.loading,
+                          on_click=command(
+                            emit,
+                            CancelModelImport(value.import_id),
+                          ),
+                          if value.cancel_requested {
+                            localized(
+                              state.locale,
+                              "Cancelling…",
+                              "正在取消…",
+                            )
+                          } else {
+                            localized(state.locale, "Cancel", "取消")
+                          },
+                        )
+                      } else if value.state == Verified {
+                        @html.div(class="approval-gate-note", [
+                          @html.strong(
+                            localized(
+                              state.locale,
+                              "Downloaded; approval gates remain",
+                              "下载完成；仍需通过批准门槛",
+                            ),
+                          ),
+                          @html.span(
+                            localized(
+                              state.locale,
+                              "Source checksum passed. Approval remains disabled until a deployable package is signed, its license is accepted, evaluation passes, and a qualified runtime template references the exact digest.",
+                              "源文件校验已通过。只有可部署制品完成签名、许可证获接受、评测通过，且合格运行时模板引用同一摘要后，才能批准供用户使用。",
+                            ),
+                          ),
+                          @html.ul(class="model-approval-checklist", [
+                            @html.li(
+                              localized(
+                                state.locale,
+                                "Passed · ModelScope file sizes and SHA-256",
+                                "已通过 · 魔搭文件大小与 SHA-256",
+                              ),
+                            ),
+                            @html.li(
+                              localized(
+                                state.locale,
+                                "Pending · Deployable package and signature",
+                                "待完成 · 可部署制品及签名",
+                              ),
+                            ),
+                            @html.li(
+                              localized(
+                                state.locale,
+                                "Pending · License acceptance and evaluation",
+                                "待完成 · 许可证接受及评测",
+                              ),
+                            ),
+                            @html.li(
+                              localized(
+                                state.locale,
+                                "Pending · Qualified runtime and service template",
+                                "待完成 · 合格运行时及服务模板",
+                              ),
+                            ),
+                          ]),
+                          @html.button(
+                            type_="button",
+                            class="primary-button",
+                            disabled=true,
+                            localized(
+                              state.locale,
+                              "Approve for users",
+                              "批准供用户使用",
+                            ),
+                          ),
+                        ])
+                      } else {
+                        @html.div(class="model-import-recovery", [
+                          @html.span(class="danger-copy", value.error_code),
+                          @html.button(
+                            type_="button",
+                            class="secondary-button",
+                            disabled=state.loading,
+                            on_click=command(
+                              emit,
+                              RetryModelImport(value.import_id),
+                            ),
+                            localized(state.locale, "Retry", "重试"),
+                          ),
+                        ])
+                      },
+                    ])
+                  None =>
+                    @html.button(
+                      type_="button",
+                      class="primary-button",
+                      disabled=candidate.private ||
+                        candidate.gated ||
+                        state.loading,
+                      on_click=command(emit, DownloadModelSource(candidate.id)),
+                      localized(state.locale, "Download", "下载"),
+                    )
+                },
+              ])
+            }
+          ],
+        )
+      },
+    ]),
+    if state.models.length() == 0 {
+      @html.div(class="empty-state empty-state-action", [
+        @html.strong(
+          localized(
+            state.locale,
+            "No models registered yet",
+            "尚未登记模型",
+          ),
+        ),
+        @html.p(
+          localized(
+            state.locale,
+            "Search ModelScope above and start a download. Only models that pass signature, evaluation, and explicit approval appear in the user catalog.",
+            "请在上方搜索魔搭并开始下载。只有通过签名、评测与明确批准的模型才会出现在用户模型目录中。",
+          ),
+        ),
+      ])
     } else {
       @html.div(class="table-scroll", [
         @html.table(class="resource-table", [
@@ -3241,6 +3968,11 @@ fn deployments_view(
         ),
       ]),
       if state.deployments.length() == 0 {
+        @html.nothing
+      } else {
+        deployment_placement_graph(state)
+      },
+      if state.deployments.length() == 0 {
         @html.div(class="empty-state empty-state-action", [
           @html.strong(
             localized(
@@ -3361,40 +4093,7 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
         ),
       ),
     ]),
-    @html.dl(class="stats request-stats", [
-      stat(
-        localized(state.locale, "Audited events", "已审计事件"),
-        state.requests.count.to_string(),
-        localized(state.locale, "Bounded receipts", "范围受限的回执"),
-        "neutral",
-      ),
-      stat(
-        localized(state.locale, "Benchmark p95", "基准测试 p95"),
-        "\{state.requests.p95_ms} ms",
-        localized(state.locale, "Latest evidence", "最新证据"),
-        "neutral",
-      ),
-      stat(
-        localized(state.locale, "Throughput", "吞吐量"),
-        "\{state.requests.throughput_per_second}/s",
-        localized(state.locale, "Observed rate", "观测速率"),
-        "ok",
-      ),
-      stat(
-        localized(state.locale, "Failures", "失败"),
-        state.requests.errors.to_string(),
-        if state.requests.errors == 0 {
-          localized(state.locale, "No failures", "无失败")
-        } else {
-          localized(state.locale, "Review receipts", "检查回执")
-        },
-        if state.requests.errors == 0 {
-          "ok"
-        } else {
-          "danger"
-        },
-      ),
-    ]),
+    request_telemetry_chart(state),
     @html.p(
       class="privacy-note",
       localized(
@@ -3675,15 +4374,9 @@ fn alerts_view(
         ),
       ),
     ]),
+    alert_impact_graph(state),
     if state.notifications.length() == 0 {
-      @html.p(
-        class="empty-state",
-        localized(
-          state.locale,
-          "No durable alerts are available.",
-          "暂无持久化告警。",
-        ),
-      )
+      @html.nothing
     } else {
       @html.div(class="table-scroll", [
         @html.table(class="resource-table", [
@@ -3951,6 +4644,11 @@ fn benchmarks_view(state : ConsoleState) -> @rabbita.Html {
         ),
       ]),
       if state.benchmark_evidence.length() == 0 {
+        @html.nothing
+      } else {
+        benchmark_comparison_chart(state)
+      },
+      if state.benchmark_evidence.length() == 0 {
         @html.p(
           class="empty-state",
           localized(
@@ -3960,31 +4658,7 @@ fn benchmarks_view(state : ConsoleState) -> @rabbita.Html {
           ),
         )
       } else {
-        @html.ul(
-          class="evidence-list",
-          [
-            for evidence in state.benchmark_evidence => {
-              @html.li([
-                @html.span(
-                  class="evidence-mark",
-                  attrs=@html.Attrs::build().aria_hidden("true"),
-                  "",
-                ),
-                @html.div([
-                  @html.strong(benchmark_evidence_label(state.locale, evidence)),
-                  @html.span(
-                    class="secondary",
-                    localized(
-                      state.locale,
-                      "Recorded performance profile",
-                      "已记录的性能配置",
-                    ),
-                  ),
-                ]),
-              ])
-            }
-          ],
-        )
+        @html.nothing
       },
     ],
   )
@@ -4419,6 +5093,11 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
         ),
       ),
       if state.cost_centers.length() == 0 {
+        @html.nothing
+      } else {
+        cost_center_hierarchy_graph(state)
+      },
+      if state.cost_centers.length() == 0 {
         @html.p(
           class="empty-state",
           localized(
@@ -4474,7 +5153,11 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
                     @html.td(class="mono", center.organization_id),
                     @html.td(
                       class="mono secondary",
-                      center.parent_cost_center_id,
+                      if center.parent_cost_center_id.trim() == "" {
+                        "—"
+                      } else {
+                        center.parent_cost_center_id
+                      },
                     ),
                     @html.td(center.project_count.to_string()),
                     @html.td(class="mono", center.provisional_spend),
@@ -4535,6 +5218,12 @@ fn agreements_view(
           ),
         ),
       ]),
+      if state.agreements.length() == 0 &&
+        state.enterprise_lease_requests.length() == 0 {
+        @html.nothing
+      } else {
+        agreement_lifecycle_graph(state)
+      },
       if state.agreements.length() == 0 {
         @html.p(
           class="empty-state",
@@ -4887,6 +5576,11 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
         ),
       ),
     ]),
+    if state.audit.length() == 0 {
+      @html.nothing
+    } else {
+      audit_decision_graph(state)
+    },
     if state.audit.length() == 0 {
       @html.p(
         class="empty-state",
@@ -5473,6 +6167,59 @@ fn console_styles() -> String {
     #|.empty-state-action { display: grid; justify-items: center; gap: .55rem; }
     #|.empty-state-action strong { color: var(--ink); font-size: .95rem; }
     #|.empty-state-action p { max-width: 36rem; margin: 0; }
+    #|.cluster-topology { margin-bottom: 1.5rem; overflow: hidden; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface); box-shadow: var(--shadow-sm); }
+    #|.topology-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; padding: 1.2rem 1.3rem; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, var(--surface), var(--surface-subtle)); }
+    #|.topology-heading h2 { font-size: 1.3rem; }
+    #|.topology-heading p:last-child { max-width: 48rem; margin: .35rem 0 0; color: var(--muted); }
+    #|.topology-summary { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+    #|.topology-summary-item { padding: .35rem .55rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: .7rem; white-space: nowrap; }
+    #|.topology-summary-item strong { color: var(--ink); }
+    #|.topology-graph-frame { margin: 0; overflow-x: auto; background-image: linear-gradient(rgba(86, 104, 117, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(86, 104, 117, .05) 1px, transparent 1px); background-size: 24px 24px; }
+    #|.topology-graph { display: grid; grid-template-columns: minmax(8rem, .72fr) minmax(3rem, .28fr) minmax(15rem, 1.15fr) minmax(3.5rem, .34fr) minmax(15rem, 1.3fr); align-items: center; min-width: 44rem; min-height: 24rem; padding: 1.5rem; }
+    #|.topology-graph-frame figcaption { padding: .65rem 1.25rem; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--muted); font-size: .68rem; }
+    #|.graph-node { position: relative; z-index: 2; display: flex; align-items: center; gap: .65rem; min-width: 0; padding: .75rem; border: 1px solid var(--line); border-radius: .58rem; background: var(--surface); box-shadow: 0 .25rem .75rem rgba(15, 23, 42, .07); }
+    #|.graph-node > div { display: grid; min-width: 0; flex: 1; }
+    #|.graph-node h3, .graph-cluster-heading h3 { margin: .05rem 0; font-size: .85rem; }
+    #|.graph-node small, .graph-cluster-heading small { color: var(--muted); font-size: .58rem; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+    #|.graph-node > div > span { color: var(--muted); font-size: .64rem; }
+    #|.graph-node-symbol { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line)); border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: 800 .66rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #|.graph-access-node { align-items: flex-start; flex-direction: column; border-color: color-mix(in srgb, var(--muted) 30%, var(--line)); }
+    #|.graph-control-node { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); box-shadow: 0 0 0 .22rem var(--accent-soft), 0 .4rem 1rem rgba(15, 23, 42, .08); }
+    #|.graph-management-stack { position: relative; display: grid; gap: 3.1rem; }
+    #|.graph-management-stack::after { position: absolute; z-index: 0; top: 4rem; bottom: 4.4rem; left: 50%; width: 2px; background: color-mix(in srgb, var(--accent) 50%, var(--line)); content: ""; }
+    #|.graph-dependency-branch { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
+    #|.graph-dependency-branch::before { position: absolute; top: -1.55rem; left: 25%; right: 25%; height: 1.55rem; border-top: 2px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-left: 2px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-right: 2px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-radius: .35rem .35rem 0 0; content: ""; }
+    #|.graph-dependency-node { padding: .55rem; box-shadow: none; }
+    #|.graph-dependency-node strong { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+    #|.graph-node-symbol-data { border-radius: .4rem; background: var(--surface-subtle); color: var(--muted-strong); }
+    #|.graph-node-symbol-store { border-color: color-mix(in srgb, var(--warning) 40%, var(--line)); border-radius: .4rem; background: var(--warning-soft); color: var(--warning); }
+    #|.graph-edge { position: relative; z-index: 1; height: 2px; background: color-mix(in srgb, var(--muted) 58%, var(--line)); }
+    #|.graph-edge::before { position: absolute; right: -.05rem; top: 50%; width: .55rem; height: .55rem; border-top: 2px solid var(--muted); border-right: 2px solid var(--muted); content: ""; transform: translateY(-50%) rotate(45deg); }
+    #|.graph-edge::after { position: absolute; left: 50%; top: 50%; width: .45rem; height: .45rem; border: 2px solid var(--surface); border-radius: 999px; background: var(--accent); content: ""; transform: translate(-50%, -50%); }
+    #|.graph-edge span { position: absolute; left: 50%; bottom: .65rem; padding: .16rem .32rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--surface); color: var(--muted-strong); font: 700 .58rem ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; transform: translateX(-50%); }
+    #|.graph-compute-cluster { position: relative; z-index: 2; padding: .8rem .8rem .8rem 1rem; border: 1px dashed color-mix(in srgb, var(--success) 42%, var(--line)); border-radius: .65rem; background: color-mix(in srgb, var(--success-soft) 42%, var(--surface)); }
+    #|.graph-cluster-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: .7rem; padding: 0 0 .6rem .35rem; }
+    #|.graph-cluster-heading > div { display: grid; }
+    #|.graph-cluster-heading > span { color: var(--muted); font-size: .64rem; white-space: nowrap; }
+    #|.graph-compute-list { position: relative; display: grid; gap: .45rem; margin: 0; padding: 0 0 0 1.25rem; list-style: none; }
+    #|.graph-compute-list::before { position: absolute; top: 1.5rem; bottom: 1.5rem; left: .28rem; width: 2px; background: color-mix(in srgb, var(--success) 45%, var(--line)); content: ""; }
+    #|.graph-compute-node { min-height: 3.3rem; padding: .5rem .55rem; box-shadow: none; }
+    #|.graph-compute-node::before { position: absolute; top: 50%; right: 100%; width: 1rem; height: 2px; background: color-mix(in srgb, var(--success) 45%, var(--line)); content: ""; }
+    #|.graph-compute-node::after { position: absolute; top: 50%; right: calc(100% + .9rem); width: .45rem; height: .45rem; border: 2px solid var(--surface); border-radius: 999px; background: var(--success); content: ""; transform: translateY(-50%); }
+    #|.graph-compute-node strong { overflow: hidden; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+    #|.graph-compute-node small { color: var(--muted); font-size: .58rem; }
+    #|.graph-node-symbol-compute { width: 1.8rem; height: 1.8rem; border-color: color-mix(in srgb, var(--success) 42%, var(--line)); border-radius: .4rem; background: var(--success-soft); color: var(--success); font-size: .56rem; }
+    #|.graph-compute-missing { margin: .4rem 0 0 1.1rem; }
+    #|.topology-missing { display: grid; gap: .45rem; margin-top: .8rem; padding: .8rem; border: 1px dashed color-mix(in srgb, var(--warning) 50%, var(--line)); border-radius: .48rem; background: var(--warning-soft); }
+    #|.topology-missing strong { font-size: .76rem; }
+    #|.topology-missing span:last-child { color: var(--muted-strong); font-size: .68rem; }
+    #|.topology-relationships { border-top: 1px solid var(--line); background: var(--surface-subtle); }
+    #|.topology-relationships summary { min-height: 44px; padding: .75rem 1.25rem; color: var(--muted-strong); cursor: pointer; font-size: .75rem; font-weight: 720; }
+    #|.topology-relationships dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; margin: 0; padding: 0 1.25rem 1rem; }
+    #|.topology-relationships dl > div { min-width: 0; padding: .75rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); }
+    #|.topology-relationships dt { color: var(--ink); font-size: .7rem; font-weight: 720; }
+    #|.topology-relationships dd { margin: .3rem 0 0; color: var(--muted); font-size: .67rem; }
+    #|.topology-scope-note { margin: 0; padding: 0 1.25rem 1rem; color: var(--muted); font-size: .68rem; }
     #|.node-list { display: grid; gap: .65rem; }
     #|.node-record { overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
     #|.node-record[open] { border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
@@ -5534,6 +6281,27 @@ fn console_styles() -> String {
     #|.deployment-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
     #|.deployment-steps li { display: flex; align-items: center; gap: .5rem; color: var(--muted-strong); font-size: .74rem; }
     #|.deployment-steps li > span { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; flex: none; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 800; }
+    #|.model-onboarding-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    #|.model-source-search { display: grid; grid-template-columns: minmax(12rem, 1fr) auto; gap: .45rem .65rem; align-items: end; margin-top: 1rem; }
+    #|.model-source-search label { grid-column: 1 / -1; color: var(--muted-strong); font-size: .75rem; font-weight: 700; }
+    #|.model-source-search input { width: 100%; min-height: 2.65rem; padding: .55rem .7rem; border: 1px solid var(--line-strong); border-radius: .45rem; background: var(--surface); color: var(--ink); }
+    #|.model-source-hint { display: grid; gap: .25rem; margin-top: 1rem; padding: 1rem; border: 1px dashed var(--line-strong); border-radius: .55rem; background: var(--surface-subtle); }
+    #|.model-source-hint span { color: var(--muted); font-size: .75rem; }
+    #|.model-source-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-top: 1rem; }
+    #|.model-source-card { display: grid; align-content: start; gap: .75rem; min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--surface-subtle); }
+    #|.model-source-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+    #|.model-source-card-heading > div { display: grid; gap: .2rem; min-width: 0; }
+    #|.model-source-card-heading strong { font-size: .94rem; }
+    #|.model-source-facts { display: flex; flex-wrap: wrap; gap: .35rem; }
+    #|.model-source-facts span { padding: .24rem .45rem; border-radius: .35rem; background: var(--surface); color: var(--muted-strong); font-size: .68rem; }
+    #|.model-import-recovery { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
+    #|.model-approval-checklist { display: grid; gap: .28rem; margin: .25rem 0; padding-left: 1.15rem; color: var(--muted-strong); font-size: .72rem; }
+    #|.model-import-status { display: grid; gap: .5rem; padding-top: .7rem; border-top: 1px solid var(--line); }
+    #|.model-import-status > div:first-child { display: flex; justify-content: space-between; gap: .6rem; }
+    #|.model-import-track { height: .42rem; overflow: hidden; border-radius: 999px; background: var(--line); }
+    #|.model-import-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .18s ease; }
+    #|.approval-gate-note { display: grid; gap: .2rem; padding: .65rem; border-left: .2rem solid var(--warning); border-radius: .35rem; background: var(--warning-soft); }
+    #|.approval-gate-note span { color: var(--muted-strong); font-size: .7rem; line-height: 1.45; }
     #|.field-group select { padding: .55rem .65rem; }
     #|.field-group textarea { display: block; min-height: 15rem; padding: .7rem; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.55; }
     #|.operation-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
@@ -5550,6 +6318,7 @@ fn console_styles() -> String {
     #|  .operation-form { grid-template-columns: 1fr; }
     #|  .policy-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #|  .readiness-panel { grid-template-columns: 1fr; }
+    #|  .topology-relationships dl { grid-template-columns: 1fr; }
     #|  .node-summary { grid-template-columns: minmax(11rem, 1.3fr) repeat(3, minmax(7rem, .7fr)) auto; }
     #|  .node-lease-summary { display: none; }
     #|  .node-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -5558,6 +6327,7 @@ fn console_styles() -> String {
     #|  .node-facts > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     #|  .policy-summary > div:nth-child(2) { border-right: 0; }
     #|  .policy-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    #|  .model-source-results { grid-template-columns: 1fr; }
     #|}
     #|@media (max-width: 56rem) {
     #|  .console-root { display: flex; flex-direction: column; }
@@ -5571,6 +6341,8 @@ fn console_styles() -> String {
     #|  .workspace { order: 3; width: 100%; }
     #|  .workspace-topbar { padding: 1.25rem 1rem 1rem; }
     #|  .workspace-main { padding: 1rem 1rem 2.5rem; }
+    #|  .topology-heading { flex-direction: column; }
+    #|  .topology-summary { justify-content: flex-start; }
     #|  .skip-link:focus { left: 1rem; }
     #|  .overview-grid { grid-template-columns: 1fr; }
     #|  .connection-form { grid-template-columns: 1fr; margin-left: 0; }
@@ -5594,6 +6366,9 @@ fn console_styles() -> String {
     #|  .policy-summary > div:last-child { border-bottom: 0; }
     #|  .operation-actions { align-items: stretch; flex-direction: column; }
     #|  .operation-actions button { width: 100%; }
+    #|  .model-onboarding-steps { grid-template-columns: 1fr; }
+    #|  .model-source-search { grid-template-columns: 1fr; }
+    #|  .topology-graph { min-width: 44rem; padding: 1rem; }
     #|  .node-summary { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
     #|  .node-summary-cell { display: none; }
     #|  .node-detail-heading, .node-detail-actions { align-items: stretch; flex-direction: column; }
@@ -5622,7 +6397,7 @@ fn console_view(
     Agreements => agreements_view(state, emit)
     OfflineCommerce => {
       let commerce = { ..state.offline_commerce, locale: state.locale }
-      match emit {
+      let page = match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
             commerce,
@@ -5630,6 +6405,7 @@ fn console_view(
           )
         None => @offline_commerce.view(commerce)
       }
+      @html.div([offline_commerce_lifecycle_graph(state), page])
     }
     ContractDocuments => {
       let documents = { ..state.contract_documents, locale: state.locale }
@@ -5653,7 +6429,13 @@ fn console_view(
     Audit => audit_view(state)
   }
   @html.div(class="app-shell", [
-    @html.style_tag(console_styles()),
+    @html.style_tag(
+      console_styles() +
+      placement_visual_styles() +
+      observability_visual_styles() +
+      governance_visual_styles() +
+      offline_commerce_visual_styles(),
+    ),
     @html.a(
       href="#main",
       class="skip-link",

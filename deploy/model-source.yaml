@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-model-source
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-model-source
+  template:
+    metadata:
+      labels:
+        app: lunanexa-model-source
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: model-source
+    spec:
+      serviceAccountName: lunanexa-model-source
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: model-source
+          image: registry.invalid/lunanexa/model-source@${MODEL_SOURCE_IMAGE_DIGEST}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8090
+          env:
+            - name: LUNANEXA_MODEL_SOURCE_ADDRESS
+              value: 0.0.0.0:8090
+            - name: LUNANEXA_MODEL_SOURCE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-model-source-credentials
+                  key: token
+            - name: LUNANEXA_MODEL_SOURCE_STATE_ROOT
+              value: /var/lib/lunanexa-model-source
+            - name: LUNANEXA_MODEL_STORE_ROOT
+              value: /data/models
+            - name: LUNANEXA_MODEL_SOURCE_MAXIMUM_IMPORT_BYTES
+              value: "214748364800"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/lunanexa-model-source
+            - name: model-store
+              mountPath: /data/models
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: lunanexa-model-source-state
+        - name: model-store
+          hostPath:
+            path: /data/models
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-model-source
+spec:
+  selector:
+    app: lunanexa-model-source
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http

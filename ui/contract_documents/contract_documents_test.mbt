@@ -82,6 +82,49 @@ test "multiple contract packets expose a labelled lifecycle switcher" {
 }
 
 ///|
+test "contract timeline renders recorded events as an accessible fact graph" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let events : Array[@contractdoc.ContractPacketEvent] = [
+    {
+      event_id: "event-created",
+      packet_id: "packet-001",
+      revision: 1L,
+      kind: PacketCreated,
+      actor_ref: "operator-a",
+      changed_field_ids: [],
+      values_sha256: None,
+      artifact_sha256: None,
+      occurred_unix_ms: 1000L,
+    },
+    {
+      event_id: "event-updated",
+      packet_id: "packet-001",
+      revision: 2L,
+      kind: InformationUpdated,
+      actor_ref: "customer-a",
+      changed_field_ids: ["lease.lessee_name"],
+      values_sha256: Some("digest"),
+      artifact_sha256: None,
+      occurred_unix_ms: 2000L,
+    },
+  ]
+  let html = @contract_documents.render({
+    ..@contract_documents.default_state(English),
+    manifest: Some(manifest),
+    packets: [packet(InformationDraft)],
+    selected_packet_id: Some("packet-001"),
+    events,
+  })
+  assert_true(html.contains("contract-timeline-graph"))
+  assert_true(
+    html.contains("Authoritative contract events in chronological order"),
+  )
+  assert_true(html.contains("Draft created"))
+  assert_true(html.contains("Information updated"))
+  assert_true(html.contains("recorded facts only"))
+}
+
+///|
 test "field changes remain local until explicit save" {
   let changed = @contract_documents.default_state(English).update(
     FieldChanged("lease.lessee_name", "Example Organization"),

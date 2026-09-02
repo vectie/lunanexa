@@ -1,7 +1,9 @@
 # Production readiness and adversarial test record
 
 Date: 2026-08-12
-Target topology: one management node, `/data/models`, and four DGX Spark nodes
+Named acceptance-campaign profile: one management placement, `/data/models`,
+and four DGX Spark compute placements. This inventory is evidence scope, not a
+platform node-count or role-co-location invariant.
 
 ## Decision
 
@@ -17,6 +19,24 @@ guard, automatic/offline expiry, early termination and a root-owned reference
 helper are implemented: each deployment must still review its writable-path,
 account/SSH/rootless-container policy and validate destructive cleanup on the
 physical DGX image.
+
+The distinction between a four-node internal pilot, a managed-inference launch,
+a dedicated-workspace launch and later P1/P2 cloud breadth is defined in
+[`FUTURE_EXPANSION_PLAN.md`](FUTURE_EXPANSION_PLAN.md). The present repository
+is ready to enter the physical deployment campaign; it is not yet
+offering-ready.
+
+## Browser acceptance ledger
+
+The detailed browser campaign is recorded in
+[`UI_PRODUCTION_VALIDATION_50_SCENARIOS.md`](UI_PRODUCTION_VALIDATION_50_SCENARIOS.md).
+It contains exactly 50 atomic journeys across the installer, operator console,
+enterprise portal, MoonLeaf contract workspace, machine access, notifications,
+catalog, and workbench. Its current result is 10 real-local passes, 32
+explicitly demo-scoped passes, seven external blockers, and one browser-harness
+blocker. A demo transition, disabled button, or local preview is never treated
+as a production controller, legal, credential, hardware, or sanitization
+receipt.
 
 ## Security and failure model
 

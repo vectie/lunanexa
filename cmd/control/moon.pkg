@@ -27,6 +27,8 @@ import {
   "vectie/lunanexa/telemetry",
   "vectie/lunanexa/technical/store" @technical_store,
   "vectie/lunanexa/workspace/directory",
+  "vectie/lunanexa/workspace/client_handoff",
+  "vectie/lunanexa/workspace/client_handoff/store" @client_handoff_store,
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/async/http",

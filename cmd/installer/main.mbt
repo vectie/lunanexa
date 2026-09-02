@@ -45,6 +45,8 @@ fn process_arguments(
     },
     "--ssh-user",
     request.ssh_user,
+    "--ssh-port",
+    request.ssh_port.to_string(),
     "--ssh-key",
     request.ssh_key_path,
     "--known-hosts",
@@ -59,6 +61,8 @@ fn process_arguments(
     request.kubeconfig_path,
     "--rendered-directory",
     request.rendered_directory,
+    "--management-secret-manifest",
+    request.management_secret_manifest,
     "--secret-directory",
     request.secret_directory,
     "--cli-path",
@@ -70,9 +74,15 @@ fn process_arguments(
     arguments.push("--compute")
     arguments.push("\{target.node_name}=\{target.ssh_host}")
   }
-  if request.local_simulation {
-    arguments.push("--local-simulation")
-  }
+  arguments.push("--deployment-target")
+  arguments.push(
+    match request.deployment_target {
+      ManagementFoundation => "management-foundation"
+      ComputeExpansion => "compute-expansion"
+      ManagementAndCompute => "management-and-compute"
+      LocalSimulation => "local-simulation"
+    },
+  )
   arguments
 }
 
@@ -93,6 +103,12 @@ fn public_line(line : String) -> String {
   let safe = if sensitive { "[redacted sensitive output]" } else { line }
   let bounded = if safe.length() > 4096 { "\{safe[:4096]}…" } else { safe }
   ({ "kind": "line", "text": bounded } : Json).stringify()
+}
+
+///|
+fn ignorable_remote_shell_noise(line : String) -> Bool {
+  line.contains("/.bashrc: line ") &&
+  line.contains("bind: warning: line editing not enabled")
 }
 
 ///|
@@ -132,7 +148,18 @@ async fn stream_install(
       inherit_env=false,
     )
     let mut rows = 0
+    let mut remote_shell_notice_emitted = false
     while reader.read_until("\n") is Some(line) {
+      if ignorable_remote_shell_noise(line) {
+        if !remote_shell_notice_emitted {
+          connection.write_string(
+            "data: \{public_line("[notice] remote shell has non-interactive bind directives; harmless warnings were collapsed")}\n\n",
+          )
+          connection.flush()
+          remote_shell_notice_emitted = true
+        }
+        continue
+      }
       rows += 1
       if rows > 4096 {
         child.cancel()

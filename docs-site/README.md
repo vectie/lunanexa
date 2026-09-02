@@ -6,12 +6,23 @@ It teaches LunaNexa's features, architecture, data flows, use, operation, and
 debugging. It is not the source of truth: the repository documents and typed
 contracts referenced by `coursebook-evidence.json` remain authoritative.
 
+The Operations section also publishes a 50-scenario production UI validation
+page. Its atomic source ledger is
+`docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md`; demo-scoped checks and blocked
+external dependencies remain visibly distinct from real production evidence.
+
 The published default is newcomer-first: overview, quickstart, concepts,
 deployment, operations, troubleshooting, and public reference. Implementation
 status, readiness judgment, repository revision, source provenance, and the
 generation process appear only after the reader explicitly selects **Show
 technical notes** or follows a direct advanced-page link. This is progressive
 disclosure, not a security boundary.
+
+The advanced **P0/P1/P2 expansion and offering launch plan** explains why a
+deployable four-node repository is not yet the same as a managed-inference or
+dedicated-workspace product. It publishes separate physical and external gates,
+code-size ranges, and the recommended order from internal pilot to focused
+private-cloud capabilities.
 
 The normal **Operations** navigation begins with one bilingual daily runbook
 for both sides of the platform. It explains durable operator alerts and tenant

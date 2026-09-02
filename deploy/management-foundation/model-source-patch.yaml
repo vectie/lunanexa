@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-model-source
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: ${CONTROL_UID}
+        runAsGroup: ${CONTROL_GID}
+        fsGroup: ${CONTROL_GID}
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: model-source
+          image: "${MODEL_SOURCE_IMAGE}"
+          imagePullPolicy: Never
+      volumes:
+        - name: model-store
+          hostPath:
+            path: "${MODEL_STORE_ROOT}"
+            type: Directory

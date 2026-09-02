@@ -6,6 +6,14 @@ LunaNexa is a boundary between model consumers and hardware. The boundary is
 more important than the initial four-node topology: application decisions stop
 above it, while placement and runtime decisions start below it.
 
+Management, compute and operator-network ingress are independent concerns.
+Management and compute are logical roles that may be separated for production
+failure isolation or explicitly co-located for a constrained lab profile. A
+bastion/access node is optional operator-network infrastructure, not a
+LunaNexa component, scheduler role or daily-use requirement. Direct routing,
+VPN, private ingress and OpenSSH `ProxyJump` are deployment choices outside the
+node protocol.
+
 ```mermaid
 flowchart TB
     subgraph Consumers["Consumer trust domain"]
@@ -138,6 +146,13 @@ LunaNexa ships two Rabbita browser sites from shared public contracts:
   requests/status, tenant cost/model views and a local-browser WebIDE with
   generic model invocation and approved editor handoffs.
 
+An approved desktop handoff crosses the browser boundary with only a
+short-lived, single-use code in a URL fragment. The local client removes that
+fragment, redeems through an administrator-pinned issuer and keeps the resulting
+lease-scoped API credential in its local provider gateway. LunaNexa stores only
+digests and rechecks lease plus contract authority on every credential use.
+Product-specific translation stays outside LunaNexa's source boundary.
+
 The enterprise portal writes only tenant-scoped intent. It does not accept a
 node ID or raw access secret. The operator console selects one eligible node;
 the controller then creates a credential reference and reserves the existing
@@ -232,6 +247,13 @@ Use durable standard infrastructure through narrow ports:
 Development adapters may be local, but production state must survive controller
 restart and must not live only on a DGX node.
 
+Model catalog discovery and artifact ingestion are handled by a separately
+deployable, least-privilege model-source adapter. The controller proxies only a
+bounded authenticated contract and remains the registry/approval authority; it
+does not gain general Internet egress or write access to the model store. The
+first source profile is ModelScope and is specified in
+[`MODELSCOPE_MODEL_ONBOARDING.md`](MODELSCOPE_MODEL_ONBOARDING.md).
+
 PostgreSQL schema v1 is implemented for enterprise memberships, agreements,
 tenant lease requests, workspace users, grants, leases and admission
 reservations. Each mutation commits a canonical typed snapshot and normalized
@@ -245,10 +267,12 @@ assignment-scoped cache entries. This keeps model transfer out of the management
 process while allowing a selected DGX to start without the serving container
 holding object-store credentials.
 
-## Initial four-node topology
+## Initial four-node acceptance profile
 
-Treat the four DGX Sparks as four schedulable nodes, not as one assumed shared-
-memory machine. Phase one proves single-node serving. Multi-node sharding or
+The first acceptance campaign names four DGX Sparks; that is an explicit test
+inventory, not a platform-wide node-count invariant. Treat those machines as
+independent schedulable nodes, not as one assumed shared-memory machine. Phase
+one proves single-node serving. Multi-node sharding or
 paired high-speed links are enabled only after the actual network, runtime and
 model combination passes a topology-specific benchmark.
 
@@ -257,10 +281,12 @@ identities and runtime endpoints with native processes. It validates protocol,
 placement and recovery behavior but is not an accelerator or performance
 emulator; see `docs/SIMULATION.md`.
 
-The initial controller should run outside the GPU execution nodes when a stable
-management host is available. Losing one GPU node must not destroy desired
-state or the registry. A later highly available controller can be added without
-changing the node protocol.
+Controller placement is a deployment-profile decision. Separation is preferred
+when the profile needs compute-failure isolation; constrained labs may
+explicitly co-locate management and compute. In either case, loss of any node
+covered by the profile's failure claim must not destroy desired state or the
+registry. A later highly available controller can be added without changing
+the node protocol.
 
 ## Model lifecycle
 

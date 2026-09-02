@@ -1,0 +1,173 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-workbench-public-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-workbench-public-gateway
+  template:
+    metadata:
+      labels:
+        app: lunanexa-workbench-public-gateway
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: public-workbench-gateway
+    spec:
+      serviceAccountName: lunanexa-workbench
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: "${WORKBENCH_PUBLIC_IMAGE}"
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: nginx-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /workbench/
+              port: http
+      volumes:
+        - name: nginx-tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-workbench-public
+  annotations:
+    lunanexa.io/exposure: temporary-plain-http
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    app: lunanexa-workbench-public-gateway
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-workbench-public-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-workbench-public-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-control
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-coursebook-public-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-coursebook-public-gateway
+  template:
+    metadata:
+      labels:
+        app: lunanexa-coursebook-public-gateway
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: public-documentation-gateway
+    spec:
+      serviceAccountName: lunanexa-coursebook-public
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: "${COURSEBOOK_PUBLIC_IMAGE}"
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: nginx-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+      volumes:
+        - name: nginx-tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-coursebook-public
+  annotations:
+    lunanexa.io/exposure: temporary-plain-http
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    app: lunanexa-coursebook-public-gateway
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 4173
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-coursebook-public-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-coursebook-public-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress: []

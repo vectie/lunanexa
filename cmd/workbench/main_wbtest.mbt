@@ -14,6 +14,29 @@ test "workbench only sends credentials to an HTTPS or loopback origin" {
 }
 
 ///|
+#warnings("-alert_unstable")
+test "public plain HTTP workbench blocks credential entry before transport" {
+  let model : AppModel = {
+    endpoint: "http://106.39.18.146:3000",
+    scoped_token: "",
+    subject_ref: "",
+    demo_mode: false,
+    connecting: false,
+    clock_generation: 0L,
+    global_policy_generation: 0L,
+    global_max_output_units: 0,
+    workbench: @workbench_ui.default_state(0L),
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("Credential entry is blocked on public plain HTTP"))
+  assert_true(html.contains("id=\"workspace-token\""))
+  assert_true(html.contains("disabled=\"disabled\" type=\"password\""))
+}
+
+///|
 test "workbench builds an ephemeral bounded canonical workload" {
   let envelope = make_workload(@workbench_ui.demo_state(), 2000000000000L)
   assert_eq(envelope.version, @contracts.contract_version)

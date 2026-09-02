@@ -70,7 +70,7 @@ pub fn validate_request(
     "cluster_namespace",
   )
   require_field(
-    if request.local_simulation {
+    if request.deployment_target == LocalSimulation {
       local_operator_path(request.kubeconfig_path)
     } else {
       absolute_operator_path(request.kubeconfig_path)
@@ -78,20 +78,35 @@ pub fn validate_request(
     "kubeconfig_path",
   )
   if request.apply {
-    require_field(request.confirmation == apply_confirmation, "confirmation")
+    require_field(
+      request.confirmation == request.deployment_target.confirmation(),
+      "confirmation",
+    )
   }
-  if request.local_simulation {
+  if request.deployment_target == LocalSimulation {
     return
   }
   require_field(simple_identifier(request.ssh_user), "ssh_user")
+  require_field(request.ssh_port > 0 && request.ssh_port <= 65535, "ssh_port")
   require_field(absolute_operator_path(request.ssh_key_path), "ssh_key_path")
   require_field(
     absolute_operator_path(request.known_hosts_path),
     "known_hosts_path",
   )
-  require_field(simple_identifier(request.management_node), "management_node")
-  require_field(ssh_host(request.management_host), "management_host")
-  require_field(request.compute_nodes.length() == 4, "compute_nodes")
+  if request.deployment_target.installs_management() {
+    require_field(simple_identifier(request.management_node), "management_node")
+    require_field(ssh_host(request.management_host), "management_host")
+  }
+  let compute_count = request.compute_nodes.length()
+  require_field(
+    match request.deployment_target {
+      ManagementFoundation => compute_count == 0
+      ComputeExpansion | ManagementAndCompute =>
+        compute_count > 0 && compute_count <= 256
+      LocalSimulation => true
+    },
+    "compute_nodes",
+  )
   let seen : Map[String, Bool] = Map([])
   for target in request.compute_nodes {
     require_field(simple_identifier(target.node_name), "compute_node_name")
@@ -103,11 +118,19 @@ pub fn validate_request(
     absolute_operator_path(request.rendered_directory),
     "rendered_directory",
   )
-  require_field(
-    absolute_operator_path(request.secret_directory),
-    "secret_directory",
-  )
-  require_field(absolute_operator_path(request.cli_path), "cli_path")
+  if request.deployment_target.installs_management() {
+    require_field(
+      absolute_operator_path(request.management_secret_manifest),
+      "management_secret_manifest",
+    )
+  }
+  if request.deployment_target.installs_compute() {
+    require_field(
+      absolute_operator_path(request.secret_directory),
+      "secret_directory",
+    )
+    require_field(absolute_operator_path(request.cli_path), "cli_path")
+  }
 }
 
 ///|
@@ -130,18 +153,32 @@ pub fn parse_compute_targets(
 }
 
 ///|
-pub fn stage_names() -> Array[String] {
-  [
-    "Validate local paths", "SSH host-key preflight", "Inspect management disk and Kubernetes",
-    "Inspect four DGX GPU workers", "Label management and GPU nodes", "Apply rendered management manifests",
-    "Install protected node material", "Issue one-use enrollment tokens", "Apply node agent and verify heartbeats",
-  ]
-}
-
-///|
-pub fn local_stage_names() -> Array[String] {
-  [
-    "Verify dedicated Colima profile", "Verify Docker and kind tooling", "Inspect or create five Kubernetes nodes",
-    "Apply simulation-only placement probes", "Verify one management and four compute placements",
-  ]
+pub fn stage_names(target : DeploymentTarget) -> Array[String] {
+  match target {
+    ManagementFoundation =>
+      [
+        "Validate operator-side paths", "Inspect selected management host over pinned SSH",
+        "Verify Kubernetes context and preview changes", "Label the selected management node",
+        "Apply reviewed management manifests", "Verify management services",
+      ]
+    ComputeExpansion =>
+      [
+        "Validate operator-side paths", "Inspect selected compute hosts over pinned SSH",
+        "Verify management-plane readiness", "Label selected compute nodes", "Install protected node material",
+        "Issue one-use enrollment tokens", "Apply node agent and verify selected heartbeats",
+      ]
+    ManagementAndCompute =>
+      [
+        "Validate operator-side paths", "Inspect selected management host over pinned SSH",
+        "Inspect selected compute hosts over pinned SSH", "Verify Kubernetes context and preview changes",
+        "Label management and compute nodes", "Apply reviewed management manifests",
+        "Verify management services", "Install protected node material", "Issue one-use enrollment tokens",
+        "Apply node agent and verify heartbeats",
+      ]
+    LocalSimulation =>
+      [
+        "Verify dedicated Colima profile", "Verify Docker and kind tooling", "Inspect or create the simulation topology",
+        "Apply simulation-only placement probes", "Verify simulated management and compute placements",
+      ]
+  }
 }

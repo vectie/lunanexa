@@ -72,22 +72,137 @@ async test "operator-issued API key authorizes model discovery and revocation is
 }
 
 ///|
-async test "scoped API key receives OpenAI-compatible SSE without platform batching" {
+async test "OpenAI chat does not mask a failed canonical workload as empty success" {
+  let directory = @fs.tmpdir(prefix="lunanexa-openai-failure-")
+  let runtime_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      runtime_server.run_forever() <| ((_request, body, connection) => {
+        ignore(body.read_all())
+        connection.send_response(400, "Bad Request", extra_headers={
+          "Content-Type": "application/json",
+        })
+        connection.write_string("{\"error\":{\"type\":\"validation_error\"}}")
+        connection.end_response()
+      })
+    }
+    let durable = @store.FileStore::open("\{directory}/state.json")
+    durable.fence_controller(1L)
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "http://\{runtime_server.addr}/v1/responses",
+      "upstream-secret",
+      "runtime-v1",
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      allow_http_loopback=true,
+    )
+    let service = @api.ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    )
+    let reply = service.handle(
+      Post,
+      "/v1/chat/completions",
+      { "Authorization": "Bearer inference-token" },
+      (
+        {
+          "model": "tiny-bf16",
+          "messages": [{ "role": "user", "content": "Moon pipeline" }],
+        } : Json).stringify(),
+    )
+    assert_eq(reply.status, 502)
+    assert_true(reply.body.contains("RuntimeUnavailable"))
+    assert_false(reply.body.contains("choices"))
+    runtime_server.close()
+  }
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "OpenAI chat bridges LunaFlux streaming Responses to non-stream content" {
+  let directory = @fs.tmpdir(prefix="lunanexa-lunaflux-chat-")
+  let runtime_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      runtime_server.run_forever() <| ((_request, body, connection) => {
+        let encoded = @json.parse(body.read_all().text()).stringify()
+        assert_true(encoded.contains("\"input\":\"Moon pipeline\""))
+        assert_true(encoded.contains("\"stream\":true"))
+        assert_false(encoded.contains("max_output_tokens"))
+        assert_false(encoded.contains("metadata"))
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": "text/event-stream",
+        })
+        connection.write_string(
+          "data: {\"type\":\"response.output_text.delta\",\"delta\":\"MOON\"}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.output_text.delta\",\"delta\":\"_OK\"}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":4,\"output_tokens\":2}}}\n\n",
+        )
+        connection.end_response()
+      })
+    }
+    let durable = @store.FileStore::open("\{directory}/state.json")
+    durable.fence_controller(1L)
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "http://\{runtime_server.addr}/v1/responses",
+      "upstream-secret",
+      "runtime-v1",
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      allow_http_loopback=true,
+    ).with_lunaflux_streaming_responses()
+    let service = @api.ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+    )
+    let reply = service.handle(
+      Post,
+      "/v1/chat/completions",
+      { "Authorization": "Bearer inference-token" },
+      (
+        {
+          "model": "tiny-bf16",
+          "messages": [{ "role": "user", "content": "Moon pipeline" }],
+        } : Json).stringify(),
+    )
+    assert_eq(reply.status, 200)
+    assert_true(reply.body.contains("\"content\":\"MOON_OK\""))
+    assert_true(reply.body.contains("\"completion_tokens\":2"))
+    runtime_server.close()
+  }
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "scoped API key preserves WebIDE tools across the streaming chat bridge" {
   let directory = @fs.tmpdir(prefix="lunanexa-openai-stream-")
   let runtime_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let api_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       runtime_server.run_forever(allow_failure=true) <| ((_, body, connection) => {
-        assert_true(body.read_all().text().contains("\"stream\":true"))
+        let upstream = body.read_all().text()
+        assert_true(upstream.contains("\"stream\":true"))
+        assert_true(upstream.contains("\"name\":\"read_file\""))
+        assert_true(upstream.contains("\"parallel_tool_calls\":false"))
+        assert_false(upstream.contains("\"function\":{\"name\":\"read_file\""))
         connection.send_response(200, "OK", extra_headers={
           "Content-Type": "text/event-stream",
         })
-        connection.write_string("data: {\"delta\":\"hello\"}\n\n")
         connection.write_string(
-          "data: {\"delta\":\" world\",\"usage\":{\"input_tokens\":2,\"output_tokens\":2}}\n\n",
+          "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n",
         )
-        connection.write_string("data: [DONE]\n\n")
+        connection.write_string(
+          "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"item-1\",\"call_id\":\"call-1\",\"name\":\"read_file\",\"arguments\":\"\"}}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":0,\"delta\":\"{\\\"path\\\":\\\"README.md\\\"}\"}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":2,\"output_tokens\":2}}}\n\n",
+        )
         connection.end_response()
       })
     }
@@ -135,6 +250,22 @@ async test "scoped API key receives OpenAI-compatible SSE without platform batch
     let chat : Json = {
       "model": "model-stream",
       "messages": [{ "role": "user", "content": "hello" }],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a workspace file",
+            "parameters": {
+              "type": "object",
+              "properties": { "path": { "type": "string" } },
+              "required": ["path"],
+            },
+          },
+        },
+      ],
+      "tool_choice": "auto",
+      "parallel_tool_calls": false,
       "stream": true,
     }
     client.write(chat)
@@ -148,8 +279,12 @@ async test "scoped API key receives OpenAI-compatible SSE without platform batch
     )
     let stream = client.read_all().text()
     assert_true(stream.contains("chat.completion.chunk"))
-    assert_true(stream.contains("hello"))
-    assert_true(stream.contains(" world"))
+    assert_true(stream.contains("\"content\":\"hello\""))
+    assert_true(stream.contains("\"tool_calls\":["))
+    assert_true(stream.contains("\"name\":\"read_file\""))
+    assert_true(stream.contains("README.md"))
+    assert_true(stream.contains("\"finish_reason\":\"tool_calls\""))
+    assert_false(stream.contains("{\\\"text_delta\\\":\\\"hello\\\"}"))
     assert_true(stream.contains("lunanexa_receipt"))
     assert_true(stream.contains("data: [DONE]"))
     assert_false(stream.contains("WorkloadStreamEvent"))

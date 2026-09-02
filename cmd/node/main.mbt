@@ -391,7 +391,11 @@ async fn ensure_certificate(
     raise Failure::Failure("certificate belongs to a different node identity")
   }
   if current.expires_unix_ms <= @async.now() + renewal_lead_ms {
-    let body : Json = { "node_id": node_id, "public_key_ref": public_key_ref }
+    let body : Json = {
+      "node_id": node_id,
+      "public_key_ref": public_key_ref,
+      "current_serial": current.serial,
+    }
     let (response, response_body) = @http.post(
       endpoint(base, "/v1/enrollment/rotate"),
       body,
@@ -693,14 +697,7 @@ async fn main {
   let certificate_path = @env.get_env_var("LUNANEXA_NODE_CERTIFICATE_PATH").unwrap_or(
     "lunanexa-node-certificate.json",
   )
-  ensure_certificate(
-    base,
-    node_id,
-    token,
-    certificate_path,
-    environment("LUNANEXA_NODE_PUBLIC_KEY_REF"),
-    global_settings.control_timing.node_certificate_renewal_lead_ms,
-  )
+  let public_key_ref = environment("LUNANEXA_NODE_PUBLIC_KEY_REF")
   let inventory : @contracts.NodeInventory = @json.from_json(
     @json.parse(
       @fs.read_file(environment("LUNANEXA_NODE_INVENTORY_PATH")).text(),
@@ -766,25 +763,35 @@ async fn main {
       )
   }
   while true {
-    reconcile_once(
-      base,
-      node_id,
-      token,
-      inventory,
-      agent,
-      verifier,
-      supervisor,
-      materializer,
-      artifact_verifier,
-      state_path,
-      lease_helper,
-      exclusive_leases_enabled,
-      lease_guard,
-      lease_state_path,
-      global_settings.control_timing.materialization_heartbeat_interval_ms,
-      global_settings.control_timing.lease_receipt_stale_after_ms,
-      global_settings.telemetry_safety,
-    ) catch {
+    try {
+      ensure_certificate(
+        base,
+        node_id,
+        token,
+        certificate_path,
+        public_key_ref,
+        global_settings.control_timing.node_certificate_renewal_lead_ms,
+      )
+      reconcile_once(
+        base,
+        node_id,
+        token,
+        inventory,
+        agent,
+        verifier,
+        supervisor,
+        materializer,
+        artifact_verifier,
+        state_path,
+        lease_helper,
+        exclusive_leases_enabled,
+        lease_guard,
+        lease_state_path,
+        global_settings.control_timing.materialization_heartbeat_interval_ms,
+        global_settings.control_timing.lease_receipt_stale_after_ms,
+        global_settings.telemetry_safety,
+      )
+    } catch {
       _ => println("LunaNexa node reconciliation failed; retrying")
     }
     @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)

@@ -77,6 +77,40 @@ workload. `extensions/vscode` provides the first external client: it stores its
 scoped token in VS Code SecretStorage and sends only an explicitly selected
 range under the same provider-neutral policy.
 
+## One-click desktop WebIDE handoff
+
+The enterprise portal now supports one deployment-owned desktop client without
+coupling LunaNexa source to a particular WebIDE product. The production flow is:
+
+1. the portal verifies the enterprise subject, Developer role, effective
+   MasterLease, active workspace lease and approved model aliases;
+2. `POST /v1/portal/self/client-handoffs` creates a 30–300 second, single-use
+   code and a lease-bounded API credential, persisting only their SHA-256
+   digests;
+3. the portal puts only `client_id` and the `lnxc_…` one-time code in the
+   desktop launch URL fragment—never the reusable `lnx_…` API secret;
+4. the local desktop removes the fragment before its first network request and
+   forwards the bounded code over its authenticated loopback control channel;
+5. the desktop runtime redeems the code from its administrator-pinned LunaNexa
+   issuer and installs the returned scoped provider into its local gateway;
+6. MoonCode selects that local gateway provider and sends model traffic to the
+   LunaNexa OpenAI-compatible endpoint.
+
+Redemption reveals the API secret once. A wrong client, expired/revoked code or
+replay fails closed. Every request made with the resulting desktop credential
+rechecks both the workspace lease and effective MasterLease, so early lease
+termination immediately blocks model discovery and inference. The credential
+also remains restricted to the aliases selected at issue time, its request
+quota and the lease expiry.
+
+The local receiver must pin the management origin in deployment configuration;
+it must not accept an issuer URL from the browser fragment or request body. The
+approved MoonDesk/MoonClaw deployment contract uses
+`MOONDESK_LUNANEXA_ISSUER`. MoonGate control authority remains a local secret
+reference and is never returned to the portal. Production readiness requires
+the companion runtime to implement the authenticated redemption/install route;
+the LunaNexa controller never imports that product-specific adapter.
+
 This directory is a LunaNexa authorization adapter, not a production identity
 provider. Production ingress must authenticate the human and assert the mapped
 opaque subject. LunaNexa never stores the upstream password, client
@@ -127,7 +161,8 @@ receipt and never return credential or node material.
    `X-LunaNexa-Subject` only from a proved loopback TCP peer; remote production
    identity must arrive through the verified auth-TLS headers, and direct
    controller access must remain blocked by NetworkPolicy.
-5. Implement editor handoffs with short-lived, least-privilege tokens; never
-   put a reusable bearer token in a URL.
+5. Configure the provider-neutral desktop client launch and public API base,
+   and pin the same LunaNexa issuer in the desktop runtime. Never put a reusable
+   bearer token in a URL.
 6. Validate revoked/expired leases, narrow layouts, keyboard operation and
    built-image isolation before hardware acceptance.

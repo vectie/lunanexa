@@ -99,6 +99,12 @@ pub(all) enum ConsoleMessage {
   DismissConfirmation
   ConfirmAction(DestructiveAction)
   Refresh
+  ModelSourceQueryChanged(String)
+  SearchModelSource
+  DownloadModelSource(String)
+  CancelModelImport(String)
+  RetryModelImport(String)
+  RefreshModelImports
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -150,6 +156,11 @@ pub(all) struct ConsoleState {
   error_message : String?
   success_message : String?
   loading : Bool
+  operator_authenticated : Bool
+  model_source_query : String
+  model_source_results : Array[ModelSourceCatalogRow]
+  model_source_total : Int64
+  model_imports : Array[ModelImportRow]
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -211,6 +222,33 @@ pub(all) struct ExclusiveNodeLeaseRow {
   generation : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct ModelImportRow {
+  import_id : String
+  source : String
+  model_id : String
+  revision : String
+  state : ModelImportState
+  files_total : Int
+  files_completed : Int
+  bytes_total : Int64
+  bytes_completed : Int64
+  manifest_digest : String
+  artifact_uri : String
+  license : String
+  error_code : String
+  cancel_requested : Bool
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ModelImportState {
+  Queued
+  Downloading
+  Verified
+  Failed
+  Cancelled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ModelRow {
   model_id : String
   version : String
@@ -219,6 +257,30 @@ pub(all) struct ModelRow {
   evaluation_status : String
   compatibility : String
   alias_name : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelSourceCatalogPage {
+  models : Array[ModelSourceCatalogRow]
+  total_count : Int64
+  page_number : Int
+  page_size : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelSourceCatalogRow {
+  id : String
+  display_name : String
+  description : String
+  downloads : Int64
+  likes : Int64
+  license : String
+  tasks : Array[String]
+  created_at : String
+  last_modified : String
+  file_size : Int64
+  params : Int64
+  tags : Array[String]
+  private : Bool
+  gated : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct NodeRow {

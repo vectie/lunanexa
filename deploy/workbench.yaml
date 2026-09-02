@@ -31,12 +31,18 @@ spec:
             capabilities:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: nginx-tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               # The workbench image serves the generated bundle below this
               # prefix so ingress can forward /workbench without a rewrite.
               path: /workbench/
               port: http
+      volumes:
+        - name: nginx-tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

@@ -13,6 +13,8 @@ pub fn role_allows(Array[EnterpriseRole], EnterpriseRole) -> Bool
 
 pub let snapshot_schema_version : String
 
+pub fn valid_unix_username(String) -> Bool
+
 pub fn validate_agreement(PortalAgreement) -> Unit raise PortalError
 
 pub fn validate_membership(EnterpriseMembership) -> Unit raise PortalError

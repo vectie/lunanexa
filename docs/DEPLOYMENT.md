@@ -1,14 +1,18 @@
 # LunaNexa deployment guide
 
-This guide deploys LunaNexa on one management node with an 8 TB model disk at
-`/data/models` and four DGX Spark compute nodes. It covers the currently
-implemented managed model-service path and the management-plane portion of
-exclusive node leasing.
+This guide covers the topology-neutral installation workflow and then uses the
+first named acceptance profile—one management placement with an 8 TB model
+disk at `/data/models` and four DGX Spark compute placements—as a concrete
+example. That example is not a node-count, co-location, storage-placement or
+network-ingress requirement. The guide covers the currently implemented
+managed model-service path and the management-plane portion of exclusive node
+leasing.
 
 If this is your first installation, follow **First installation: exact order**
 below before using the detailed reference sections. The most important
-distinction is that the management node is selected through Kubernetes
-placement; only DGX compute nodes perform LunaNexa enrollment.
+distinction is that management placement and LunaNexa compute enrollment are
+separate decisions. A host performs compute enrollment only when it is
+explicitly selected and qualified, even if that host also carries management.
 
 Contract-document packet state is stored in management PostgreSQL. File-mode
 development uses `LUNANEXA_CONTRACT_DOCUMENT_PATH`; the supplied manifest sets
@@ -17,10 +21,10 @@ blocked until the renderer image contains licensed `仿宋_GB2312`, `黑体`, an
 `方正小标宋简体` fonts and passes the 18-page fidelity gate described in
 [`CONTRACT_DOCUMENTS.md`](CONTRACT_DOCUMENTS.md).
 
-## 1. Supported deployment shape
+## 1. Named four-DGX acceptance example
 
-The repository templates assume one Kubernetes cluster containing the
-management node and the four DGX workers:
+The diagram is the first physical acceptance campaign. The installer and node
+protocol accept a different explicitly selected inventory:
 
 ```mermaid
 flowchart TB
@@ -72,7 +76,7 @@ verified and cached locally before its runtime container starts.
 | Durable enterprise signing and lease-request workflow | Implemented | Configure an approved provider and signed callback secret; LunaFide remains test-only |
 | DGX heartbeat, sensor telemetry and assignment reconciliation | Implemented | Deploy one protected agent per DGX with allowlisted `nvidia-smi` |
 | Selected-node model pull and local verification | Implemented | Controller serves only the object bound to the live node assignment from `/data/models` |
-| Batch jobs and autoscaling | Intentionally absent | Capacity is a fixed four-node fleet; operator placement and backpressure are explicit |
+| Batch jobs and autoscaling | Intentionally absent | Capacity is an explicitly inventoried fleet; operator placement and backpressure are explicit |
 | Digest-pinned runtime supervision | Implemented | Requires Podman/Docker, an OCI registry and an approved runtime image |
 | Controller/node transport mTLS termination | External | Provide a trusted service-mesh or loopback proxy; do not expose controller HTTP directly |
 | Exclusive lease reservation and managed-placement fence | Implemented | Safe for control-plane testing |
@@ -121,10 +125,19 @@ There are two different meanings of “register a node” in this deployment:
 
 | Host | Kubernetes registration | LunaNexa enrollment |
 | --- | --- | --- |
-| Management node | Join it to the Kubernetes cluster and label it `lunanexa.io/role=management` | **Do not enroll it.** It must not appear in the LunaNexa compute-node list |
+| Management placement | Join the selected host to Kubernetes and label the selected node `lunanexa.io/role=management` | It is not compute capacity unless the operator separately qualifies and enrolls that same physical host for an explicit test or co-located profile |
 | DGX compute node | Join it as a Kubernetes worker and label it `lunanexa.io/role=gpu` | Enroll it with a one-use bootstrap token and a unique persistent node secret |
 
-The safe first-install sequence is:
+These are logical roles, not an assumed count of physical machines. A lab may
+explicitly co-locate management and temporary compute on one host; the
+production profile may separate them for failure isolation. An access node,
+bastion or jump host is **not** a LunaNexa component and is not required by the
+product. If the operator network requires one, keep it in the operator-owned
+OpenSSH/VPN configuration rather than registering it as management or compute.
+
+For the planned four-DGX acceptance inventory, the safe first-install sequence
+is below. A different explicitly selected inventory ends after its final
+selected compute node; “remaining three” is not a scheduler invariant.
 
 ```text
 management host ready
@@ -141,10 +154,22 @@ management host ready
 ### Assisted deployment UI
 
 The repository includes a guarded installer page and a loopback-only native
-companion for this sequence. It starts at SSH verification; management and DGX
-hosts must already have joined the Kubernetes cluster through the procedure
-owned by your distribution. It does not accept a `kubeadm join` token or an
-arbitrary shell command.
+companion. The page does not infer a topology. Select one explicit scope:
+
+- **Management foundation** installs only the management, database, model-data
+  and storage-facing services. Compute inventory must be empty.
+- **Add compute nodes** enrolls only the selected compute hosts into an
+  existing management plane.
+- **Management + selected compute** installs both logical roles in one reviewed
+  operation using only the hosts explicitly listed by the operator.
+- **Local Colima simulation** reconciles the isolated development topology and
+  makes no production-hardware claim.
+
+Remote modes start at pinned SSH verification. The selected hosts must already
+have joined the Kubernetes cluster through the procedure owned by the chosen
+distribution. The current companion deliberately does not choose or install a
+Kubernetes distribution, accept a `kubeadm join` token, or expose an arbitrary
+shell command. SSH port 22 is only the default and is editable in the form.
 
 Build the browser bundles, serve `_build/browser-dist` on loopback, and start
 the companion from the same trusted operator machine:
@@ -155,18 +180,57 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory _build/browser-dist
 sh scripts/start-deployment-ui.sh
 ```
 
+To keep the ephemeral companion bearer out of terminal scrollback, provide a
+new absolute protected path. The start script refuses to overwrite or follow an
+existing file:
+
+```sh
+LUNANEXA_INSTALLER_TOKEN_FILE=/ABSOLUTE/PROTECTED/session-token \
+  sh scripts/start-deployment-ui.sh
+```
+
 Open `http://127.0.0.1:4173/installer/`. Paste only the session token printed by
 the start script, then enter local paths and host inventory. Never paste an SSH
 private key, Kubernetes credential, node token or bootstrap secret into the
 page. The page stores none of these form fields in browser storage.
 
-The UI always offers **Preview and verify** first. Preview performs pinned-host
-SSH checks, management-disk inspection, GPU/runtime inspection, Kubernetes
-node lookup, local secret-file presence checks and rendered-placeholder scans;
-it does not mutate hosts or Kubernetes. Apply remains disabled until the exact
-phrase `DEPLOY 4 NODES` is entered. Apply runs only the versioned stages in
-`scripts/deploy/`; there is no interactive terminal input or free-form command
-endpoint.
+For a management install, render the non-secret combined manifest and generate
+the protected secret manifest before opening the page:
+
+```sh
+scripts/deploy/render-management-foundation.sh \
+  --output /ABSOLUTE/RENDERED_DIRECTORY \
+  --management-node MANAGEMENT_NODE \
+  --control-image IMMUTABLE_CONTROL_IMAGE \
+  --web-image IMMUTABLE_WEB_IMAGE \
+  --postgres-image IMMUTABLE_POSTGRES_IMAGE \
+  --model-store-root /data/models \
+  --control-uid MODEL_STORE_UID \
+  --control-gid MODEL_STORE_GID \
+  --runtime-endpoint http://127.0.0.1:19090/v1/responses \
+  --public-api-base-url https://gpu.example.com \
+  --controller-epoch 1
+scripts/deploy/generate-management-secrets.sh \
+  /ABSOLUTE/PROTECTED_DIRECTORY/management-secrets.yaml
+```
+
+The management form accepts the **paths** to those two artifacts. Secret values
+never enter the page. The companion requires the secret manifest to be a regular
+non-symlink file with mode `0400` or `0600` and applies it before workloads.
+
+The UI always offers **Preview and verify** first. Preview performs only the
+checks required by the selected scope: pinned-host SSH checks, management-disk
+inspection, accelerator/runtime inspection for selected compute hosts,
+Kubernetes node lookup, local secret-file presence checks and rendered-
+placeholder scans. For management scopes it also runs Kubernetes diff against
+the non-secret rendered manifest and prints only the identities of resources
+that differ. The protected Secret manifest is deliberately excluded from that
+diff, and an unsummarizable or failed diff blocks Preview. Preview does not
+mutate hosts or Kubernetes. Apply remains
+disabled until the scope-specific phrase (`DEPLOY MANAGEMENT`, `ADD COMPUTE`,
+`DEPLOY MANAGEMENT AND COMPUTE`, or `RECONCILE SIMULATION`) is entered. Apply runs only
+the versioned stages in `scripts/deploy/`; there is no interactive terminal
+input or free-form command endpoint.
 
 Prepare the protected local node-material directory in this shape before
 previewing:
@@ -199,7 +263,13 @@ and bounds subprocess output, and streams read-only terminal events. SSH always
 uses `BatchMode=yes`, `IdentitiesOnly=yes` and `StrictHostKeyChecking=yes` with
 the selected pinned `known_hosts` file.
 
-The rendered directory must use these reviewed filenames:
+The recommended management renderer emits one reviewed file:
+
+```text
+management.yaml
+```
+
+The split-manifest compatibility path requires these reviewed filenames:
 
 ```text
 prerequisites.yaml
@@ -207,15 +277,41 @@ postgres.yaml
 controller.yaml
 console.yaml
 enterprise.yaml
+workbench.yaml
 network-policy.yaml
-ingress.yaml
-node-daemonset.yaml
 ```
+
+`ingress.yaml` is optional. When it is absent the installer explicitly retains
+protected port-forward access until a reviewed TLS edge exists. Compute scopes
+default to `node-daemonset.yaml`. A host-agent installation declares the
+alternative explicitly by writing exactly `host-systemd` to
+`node-agent-layout`; it then provides these non-secret rendered artifacts:
+
+```text
+node-agent-layout
+lunanexa-node
+lunanexa-node.service
+admin-settings.json
+```
+
+Each protected per-node directory for that layout additionally contains
+`node.env`, `lunanexa-controller-tunnel.service`, `tunnel-identity`, and
+`tunnel-known-hosts`. The tunnel is a lab-only loopback transport over the
+operator-owned LAN; production still requires the reviewed TLS/mTLS edge.
+The installer does not accept a mutable privileged script from the staging
+directory. `/usr/libexec/lunanexa-install-node-material` must be installed
+root-owned in advance, and the SSH account may receive non-interactive sudo
+only for that fixed helper's exact `--check`, `--start`,
+`--cleanup-bootstrap`, and selected node staging-path invocations.
 
 The private overlay must include management placement selectors and a GPU
 selector in `node-daemonset.yaml`. The installer refuses unresolved template
 variables, `.invalid` endpoints, missing protected inputs, unknown SSH host
-keys, missing GPUs, interactive sudo, or an incomplete four-node inventory.
+keys, missing accelerators on selected compute hosts, interactive sudo, or an
+empty/invalid selected compute inventory.
+The complete management-only UI procedure, incident record and promotion gaps
+are maintained in
+[MANAGEMENT_FOUNDATION_UI_RUNBOOK.md](MANAGEMENT_FOUNDATION_UI_RUNBOOK.md).
 
 ### Minimal local Kubernetes simulation on macOS
 
@@ -249,6 +345,43 @@ To remove the cluster and stop the dedicated Colima profile:
 ```sh
 sh scripts/stop-local-kubernetes-simulation.sh --stop-colima
 ```
+
+### Temporary physical NVIDIA worker qualification
+
+For an explicitly selected NVIDIA worker, join K3s first, then label and taint
+the node so ordinary management workloads cannot drift onto it:
+
+```sh
+kubectl label node NODE_NAME lunanexa.io/role=gpu --overwrite
+kubectl taint node NODE_NAME lunanexa.io/role=gpu:NoSchedule --overwrite
+kubectl apply -f deploy/nvidia-compute/device-plugin.yaml
+kubectl -n kube-system rollout status daemonset/lunanexa-nvidia-device-plugin
+job=$(kubectl create -f deploy/nvidia-compute/cuda-vectoradd-job.yaml -o name)
+kubectl wait --for=condition=complete "$job" --timeout=5m
+kubectl logs "$job"
+```
+
+Require a positive `nvidia.com/gpu` allocatable count and `Test PASSED`. This
+qualifies Kubernetes-to-CUDA plumbing only. It does not enroll the LunaNexa
+node agent or approve an inference runtime. The observed 2026-08-27 campaign,
+LunaFlux diagnostics and remaining AOT-kernel blocker are recorded in
+[LUNAFLUX_RUNTIME_QUALIFICATION.md](LUNAFLUX_RUNTIME_QUALIFICATION.md).
+
+When a staged Linux MoonBit toolchain is used outside the image builder, first
+build its native core bundle on the Linux host:
+
+```sh
+sh scripts/deploy/finalize-moonbit-linux-amd64.sh \
+  /absolute/path/to/moon-linux-amd64
+```
+
+Do not copy a source checkout or compiler onto a managed GPU worker. Compile on
+the trusted build system and deploy only inventoried runtime artifacts.
+`scripts/deploy/build-node-linux-amd64.sh` therefore refuses an emulated Docker
+daemon and requires a native x86_64 builder. Select a reviewed remote/local
+Docker context with `LUNANEXA_AMD64_DOCKER_CONTEXT`; Apple-silicon binfmt/QEMU
+is not an accepted compiler path because the native MoonBit compiler can abort
+under user-mode emulation.
 
 ### Step 0 — Record the non-secret deployment inventory
 
@@ -324,13 +457,15 @@ by these management workloads; do not make GPU workloads tolerate that taint.
 
 Run the repository release gate, build immutable native/browser artifacts, and
 publish deployment-owned controller, console, enterprise/workbench and node
-images. This repository does not contain a turnkey image-building pipeline, so
-image construction and signing belong to your reviewed OCI pipeline:
+images. The repository provides a local management-image pipeline; production
+signing, provenance and registry publication still belong to the reviewed OCI
+pipeline:
 
 ```sh
 sh scripts/release-gate.sh
 moon build cmd/control cmd/node cmd/cli cmd/database cmd/offline-artifact-worker --target native --release
 sh scripts/build-browser-bundles.sh
+sh scripts/deploy/build-management-images.sh RELEASE_TAG
 ```
 
 If offline commerce is enabled, the immutable management image referenced by
@@ -665,15 +800,53 @@ arguments before touching host state. Wildcard sudo argv without this valid
 action capability is not authority.
 
 The management controller also requires independent Secret keys
-`credential-handoff-issuer-secret` and `guide-diagnostics-token`, each at least
-32 bytes and distinct from every authority above. The former derives opaque,
-single-use, subject-bound handoff references; the latter authorizes only the
-aggregate guide route and is not an operator bearer.
+`credential-handoff-issuer-secret`, `client-handoff-issuer-secret` and
+`guide-diagnostics-token`, each at least 32 bytes and distinct from every
+authority above. The first two derive separate opaque, single-use,
+subject-bound machine and desktop handoff capabilities; the latter authorizes
+only the aggregate guide route and is not an operator bearer.
 
 Credential issuer readiness names the exact checked issuer origin. Every
 handoff redirect must use that same scheme, host and port; an operator-provided
 redirect for another HTTPS origin is rejected even while the issuer health
 evidence is current.
+
+### Desktop WebIDE one-click integration
+
+Set these controller values in the production overlay:
+
+```text
+LUNANEXA_CLIENT_HANDOFF_PATH=/var/lib/lunanexa/client-handoffs.json
+LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET=<client-handoff-issuer-secret reference>
+LUNANEXA_CLIENT_ID=desktop-workspace
+LUNANEXA_CLIENT_DISPLAY_NAME=MoonDesk / MoonCode
+LUNANEXA_CLIENT_LAUNCH_URI=http://127.0.0.1:4188/?mode=mooncode
+LUNANEXA_PUBLIC_API_BASE_URL=https://management.example/v1
+LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS=120000
+LUNANEXA_CLIENT_MAXIMUM_REQUESTS=100000
+```
+
+`LUNANEXA_PUBLIC_API_BASE_URL` is the OpenAI-compatible base consumed by the
+local gateway, so include `/v1`. The controller redemption endpoint remains
+`https://management.example/v1/client-handoffs:redeem`. HTTPS is required
+except for exact loopback development URLs. Userinfo, fragments, remote HTTP,
+ambiguous loopback-looking authorities and query-bearing API bases are rejected.
+
+On every enterprise Mac, configure the desktop runtime with:
+
+```text
+MOONDESK_LUNANEXA_ISSUER=https://management.example
+MOONGATE_CONTROL_TOKEN=<local MoonGate control-token reference>
+```
+
+The issuer is deployment-owned and explicitly allowlisted into the clean
+MoonClaw process environment. It is never accepted from a browser. MoonDesk must be able to reach its authenticated
+MoonClaw loopback endpoint, MoonClaw must be able to reach the pinned management
+origin, and MoonGate must publish a validated suite-status manifest. Test the
+full chain after installation: portal click → fragment removed → one-time
+redemption → `lunanexa-lease` provider installed → MoonClaw binding active →
+MoonCode model list available. Then end the lease early and verify both model
+listing and inference fail immediately.
 
 Copy `deploy/lunanexa-node.env.example` to `/etc/lunanexa/node.env`, replace
 every example endpoint/identifier, and install the referenced host credentials
@@ -714,9 +887,13 @@ sh scripts/build-browser-bundles.sh
 ```
 
 Build controller, node, console and workbench images in the deployment-owned
-image pipeline. Bundle the allowlisted Cosign binary in the controller and node
-images. Sign each image, publish it to the private registry, and record its full
-digest.
+image pipeline. `images/Containerfile.control`,
+`images/Containerfile.control-runtime`, and `images/Containerfile.web` cover the
+management artifacts; the runtime-only control file is for a reviewed native-
+amd64 build handoff when an ARM workstation cannot execute the toolchain under
+emulation. Bundle the allowlisted Cosign binary in production controller and
+node images. Sign each image, publish it to the private registry, and record its
+full digest.
 
 The files in `deploy/` intentionally contain values such as
 `${CONTROLLER_IMAGE_DIGEST}` and `registry.invalid`. They are templates and
@@ -915,12 +1092,13 @@ Provision:
 - `lunanexa-ingress-tls` for the public TLS endpoint;
 - `lunanexa-client-ca` for ingress client-certificate validation;
 - `lunanexa-cosign-trust` containing `cosign.pub`;
-- the same read-only artifact verification public key on each DGX.
+- the same read-only artifact verification public key on each selected compute
+  host.
 
 The native controller is designed to sit behind this trusted ingress. Do not
 publish its port directly to an untrusted network.
 
-## 8. Prepare each DGX host
+## 8. Prepare each selected compute host
 
 Create the protected directories and rootless runtime network according to the
 local OS and container-engine policy. Each host must contain:
@@ -994,7 +1172,10 @@ the `lunanexa-admin-settings` ConfigMap. The same read-only document is mounted
 by the controller and all node agents. Enterprise users cannot mutate it; their
 request choices are bounded by it, while locale and editor presentation remain
 browser-local. See [settings authority](SETTINGS_AUTHORITY.md) for the complete
-ownership table and validation limits.
+ownership table and validation limits. Preserve the example's JSON types:
+MoonBit `Int64` fields, including `generation` and deadline/lifetime fields, are
+encoded as decimal strings. The release tests parse the exact deployment file
+to prevent the manifest and control-plane schema from drifting apart.
 
 Keep rendered manifests outside Git if they contain private inventory. Review
 them for unresolved placeholders before applying:
@@ -1010,11 +1191,14 @@ order:
    resources derived from `deploy/prerequisites.yaml`;
 2. PostgreSQL from `deploy/postgres.yaml`, or the approved external PostgreSQL
    service, then run the `cmd/database` migration check;
-3. controller from `deploy/controller.yaml`;
-4. console and enterprise/workbench sites;
-5. network policies;
-6. ingress;
-7. the node-agent DaemonSet after the first DGX has been prepared.
+3. private model-source adapter from `deploy/model-source.yaml`, including its
+   dedicated authority and durable import-state PVC;
+4. controller from `deploy/controller.yaml`;
+5. console, enterprise/workbench and any explicitly reviewed public-site
+   gateways;
+6. network policies;
+7. ingress;
+8. the node-agent DaemonSet after the first DGX has been prepared.
 
 Check the management plane before enrollment:
 
@@ -1048,7 +1232,7 @@ to `https://LUNANEXA_HOST`. Do not point the CLI at an unauthenticated
 controller Service or weaken the ingress. Direct HTTPS diagnostics may use
 `curl --cert ... --key ...` as shown in section 9.
 
-For each DGX, generate a distinct bootstrap secret of at least 20 characters
+For each selected compute host, generate a distinct bootstrap secret of at least 20 characters
 and an expiry no more than 15 minutes in the future. Create a private JSON file:
 
 ```json
@@ -1179,17 +1363,19 @@ bound helper receipt. Any failure leaves it quarantined and unavailable.
 The bundled helper implements the reference Linux account, staged SSH access,
 rootless Podman and dedicated-home policy. Production interactive access is
 still blocked until that policy, writable-path isolation and the destructive
-expiry/early-termination cases pass on every physical DGX host image.
+expiry/early-termination cases pass on every physical compute-host image
+selected by the deployment profile.
 
 ## 13. Acceptance checklist
 
 Before production use, record evidence that:
 
-- all four nodes have distinct credentials and truthful inventory;
+- every node in the named acceptance inventory has a distinct credential and
+  truthful inventory;
 - TLS client identity, controller-to-node authority and heartbeat replay fences
   reject invalid callers;
 - controller state survives restart under a higher fencing epoch;
-- an approved model deploys to exactly one selected DGX;
+- an approved model deploys to exactly one selected compute node;
 - digest/signature failure prevents runtime launch;
 - an unlicensed or failed-evaluation model is blocked before assignment;
 - draining one node prevents new placement there;
@@ -1200,8 +1386,8 @@ Before production use, record evidence that:
 - prompts, outputs, secrets, internal paths and node addresses do not appear in
   public responses or ordinary logs;
 - backup and clean-host restore meet the declared RPO/RTO;
-- measured DGX performance and model-license acceptance have named human
-  approval.
+- measured accelerator performance and model-license acceptance have named
+  human approval for the selected profile.
 
 Run the repository-owned validation before every image promotion:
 
@@ -1218,7 +1404,7 @@ substitutes.
 
 The adversarial corpus, exact commands, evidence interpretation and remaining
 blockers are recorded in `docs/PRODUCTION_READINESS.md`. This gate does not
-replace the physical four-node acceptance campaign.
+replace the named physical-cluster acceptance campaign.
 
 ## 14. Backup, upgrade and rollback
 

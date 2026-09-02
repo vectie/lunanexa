@@ -1,0 +1,9 @@
+ARG BUILD_IMAGE
+FROM ${BUILD_IMAGE} AS build
+
+FROM lunanexa/runtime-base:bookworm-amd64
+COPY --from=build /src/_build/native/release/build/cmd/model-source/model-source.exe /usr/local/bin/lunanexa-model-source
+
+USER 65532:65532
+EXPOSE 8090
+ENTRYPOINT ["/usr/local/bin/lunanexa-model-source"]

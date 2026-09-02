@@ -6,6 +6,7 @@ pub(all) enum EnterpriseRoute {
   Notifications
   Costs
   Models
+  DesktopIde
   MachineAccess
   OfflineCommerce
   ContractDocuments
@@ -18,6 +19,15 @@ pub(all) struct EnterpriseCostCenterRow {
   project_count : Int
   provisional_spend : String
   budget_posture : String
+} derive(Debug, Eq)
+
+///|
+pub(all) struct EnterpriseDesktopClient {
+  client_id : String
+  display_name : String
+  launch_uri : String
+  handoff_lifetime_ms : Int64
+  connected_handoffs : Int
 } derive(Debug, Eq)
 
 ///|
@@ -35,6 +45,7 @@ pub(all) struct EnterpriseState {
   cost_centers : Array[EnterpriseCostCenterRow]
   provisional_spend : String
   model_catalog : Array[@portal.EnterpriseModelSummary]
+  desktop_client : EnterpriseDesktopClient?
   project_id : String
   unix_username : String
   model_ids : String
@@ -56,6 +67,7 @@ pub(all) enum EnterpriseMessage {
   JustificationChanged(String)
   SignAgreement(String)
   SubmitLease
+  LaunchDesktopClient
   MarkNotificationRead(String, Int64)
   SetNotificationEmail(@notifications.NotificationTopic, Bool)
   MachineAccess(@machine_access.MachineAccessMessage)
@@ -94,6 +106,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     cost_centers: [],
     provisional_spend: "—",
     model_catalog: [],
+    desktop_client: None,
     project_id: "",
     unix_username: "",
     model_ids: "",
@@ -421,6 +434,13 @@ pub fn demo_state() -> EnterpriseState {
         minimum_memory_mib: 4096,
       },
     ],
+    desktop_client: Some({
+      client_id: "desktop-workspace",
+      display_name: "Desktop WebIDE",
+      launch_uri: "/workbench/?demo=1",
+      handoff_lifetime_ms: 120000L,
+      connected_handoffs: 0,
+    }),
     project_id: "project-vision-lab",
     unix_username: "alice",
     model_ids: "qwen3-32b, bge-m3",
@@ -454,6 +474,8 @@ pub fn EnterpriseState::update(
       { ..self, loading: true, success_message: None, error_message: None }
     SubmitLease =>
       { ..self, loading: true, success_message: None, error_message: None }
+    LaunchDesktopClient =>
+      { ..self, loading: true, success_message: None, error_message: None }
     MarkNotificationRead(_, _) => self
     SetNotificationEmail(_, _) =>
       { ..self, loading: true, success_message: None, error_message: None }
@@ -471,7 +493,7 @@ pub fn EnterpriseState::update(
 pub fn lease_form_valid(state : EnterpriseState) -> Bool {
   state.membership is Some(_) &&
   state.project_id.trim() != "" &&
-  state.unix_username.trim() != "" &&
+  @portal.valid_unix_username(state.unix_username.trim().to_owned()) &&
   state.model_ids.trim() != "" &&
   state.justification.trim() != "" &&
   state.expires_unix_ms > state.starts_unix_ms &&
@@ -509,6 +531,7 @@ fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
     Notifications => copy(locale, "Notifications", "通知")
     Costs => copy(locale, "Usage & costs", "用量与成本")
     Models => copy(locale, "Model catalog", "模型目录")
+    DesktopIde => copy(locale, "WebIDE", "WebIDE")
     MachineAccess => copy(locale, "My machine", "我的机器")
     OfflineCommerce => copy(locale, "Orders & documents", "订单与材料")
     ContractDocuments => copy(locale, "Contract forms", "合同表单")
@@ -559,6 +582,7 @@ fn navigation(
         Notifications,
         Costs,
         Models,
+        DesktopIde,
       ] => {
       @html.button(
         type_="button",
@@ -579,13 +603,6 @@ fn navigation(
       )
     }
   ]
-  items.push(
-    @html.a(
-      class="nav-item nav-link",
-      href="/workbench/",
-      copy(state.locale, "WebIDE", "WebIDE"),
-    ),
-  )
   @html.aside(class="enterprise-sidebar", [
     @html.a(class="enterprise-brand", href="/enterprise/", [
       @html.span(class="brand-mark", "LN"),
@@ -964,13 +981,34 @@ fn lease_requests_view(
             value=state.unix_username,
             maxlength=32,
             auto_complete=Off,
+            attrs=@html.Attrs::build()
+              .aria_describedby("lease-username-help")
+              .aria_invalid(
+                if state.unix_username.trim() != "" &&
+                  !@portal.valid_unix_username(
+                    state.unix_username.trim().to_owned(),
+                  ) {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
             on_input=text_command(emit, value => UsernameChanged(value)),
           ),
           @html.small(
+            id="lease-username-help",
+            class=if state.unix_username.trim() != "" &&
+              !@portal.valid_unix_username(
+                state.unix_username.trim().to_owned(),
+              ) {
+              "field-error"
+            } else {
+              ""
+            },
             copy(
               state.locale,
-              "Password is not accepted. Access uses a short-lived credential reference.",
-              "不接受密码。访问使用短期凭据引用。",
+              "Password is not accepted. Use a non-reserved lowercase Unix username; access uses a short-lived credential reference.",
+              "请使用非保留的小写 Unix 用户名；不接受密码。访问使用短期凭据引用。",
             ),
           ),
         ]),
@@ -1190,6 +1228,140 @@ fn models_view(state : EnterpriseState) -> @rabbita.Html {
     } else {
       @html.div(class="model-grid", cards)
     },
+  ])
+}
+
+///|
+fn desktop_ide_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  let configured = state.desktop_client is Some(_)
+  let available = configured &&
+    state.model_catalog.length() > 0 &&
+    !state.loading
+  let (name, lifetime, connected) = match state.desktop_client {
+    Some(client) =>
+      (
+        client.display_name,
+        client.handoff_lifetime_ms / 1000L,
+        client.connected_handoffs,
+      )
+    None => (copy(state.locale, "Desktop client", "桌面客户端"), 0L, 0)
+  }
+  @html.div(class="page-stack", [
+    @html.section(class="welcome-panel", [
+      @html.div([
+        @html.p(
+          class="eyebrow",
+          copy(state.locale, "SECURE DESKTOP HANDOFF", "安全桌面交接"),
+        ),
+        @html.h2(
+          copy(
+            state.locale,
+            "Continue your leased workspace in \{name}",
+            "在 \{name} 中继续使用租赁工作区",
+          ),
+        ),
+        @html.p(
+          copy(
+            state.locale,
+            "One click creates a short-lived, single-use connection. The desktop client receives a model-scoped credential; no reusable key is placed in the browser URL or stored by this portal.",
+            "点击一次即可创建短时单次连接。桌面客户端只接收限定模型的凭据；本门户不会把可重复使用的密钥放入浏览器地址或持久化保存。",
+          ),
+        ),
+      ]),
+      @html.button(
+        type_="button",
+        class="primary-action",
+        disabled=!available,
+        on_click=command(emit, LaunchDesktopClient),
+        if state.loading {
+          copy(state.locale, "Connecting…", "正在连接…")
+        } else {
+          copy(state.locale, "Open desktop WebIDE", "打开桌面 WebIDE")
+        },
+      ),
+    ]),
+    @html.section(class="workflow-panel", [
+      @html.h2(
+        copy(
+          state.locale,
+          "What this connection grants",
+          "本次连接授权内容",
+        ),
+      ),
+      @html.ul(class="workflow-steps", [
+        @html.li(class="is-complete", [
+          @html.span("1"),
+          @html.div([
+            @html.strong(copy(state.locale, "Lease checked", "检查租约")),
+            @html.p(
+              copy(
+                state.locale,
+                "Active developer lease and contract are required.",
+                "必须具有有效的开发者租约与合同。",
+              ),
+            ),
+          ]),
+        ]),
+        @html.li(class=if configured { "is-complete" } else { "is-current" }, [
+          @html.span("2"),
+          @html.div([
+            @html.strong(
+              copy(state.locale, "Client selected", "选择客户端"),
+            ),
+            @html.p(
+              if configured {
+                name
+              } else {
+                copy(
+                  state.locale,
+                  "Operator setup required.",
+                  "需要运维配置。",
+                )
+              },
+            ),
+          ]),
+        ]),
+        @html.li(class="is-current", [
+          @html.span("3"),
+          @html.div([
+            @html.strong(copy(state.locale, "One-time handoff", "单次交接")),
+            @html.p(
+              copy(
+                state.locale,
+                "The setup code expires in \{lifetime} seconds.",
+                "设置码将在 \{lifetime} 秒后失效。",
+              ),
+            ),
+          ]),
+        ]),
+        @html.li([
+          @html.span("4"),
+          @html.div([
+            @html.strong(
+              copy(state.locale, "Lease-bound access", "租约绑定访问"),
+            ),
+            @html.p(
+              copy(
+                state.locale,
+                "Expiry or early termination blocks new inference immediately.",
+                "租约到期或提前终止后会立即阻止新的推理请求。",
+              ),
+            ),
+          ]),
+        ]),
+      ]),
+      @html.p(
+        class="request-boundary",
+        copy(
+          state.locale,
+          "Approved models: \{state.model_catalog.length()} · Previous connections: \{connected}",
+          "已批准模型：\{state.model_catalog.length()} · 历史连接：\{connected}",
+        ),
+      ),
+    ]),
   ])
 }
 
@@ -1513,7 +1685,9 @@ fn notifications_view(
                       @html.dt(copy(state.locale, "Received", "接收时间")),
                       @html.dd(
                         class="mono",
-                        record.event.created_unix_ms.to_string(),
+                        @contractdoc.format_unix_ms_utc(
+                          record.event.created_unix_ms,
+                        ),
                       ),
                     ]),
                     @html.div([
@@ -1561,6 +1735,7 @@ fn content(
     Notifications => notifications_view(state, emit)
     Costs => costs_view(state)
     Models => models_view(state)
+    DesktopIde => desktop_ide_view(state, emit)
     MachineAccess => {
       let machine = { ..state.machine_access, locale: state.locale }
       match emit {

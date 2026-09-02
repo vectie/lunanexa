@@ -1,0 +1,133 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/modelsource"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn import_id(String, String) -> String raise ModelSourceError
+
+pub fn valid_model_id(String) -> Bool
+
+pub fn valid_repository_path(String) -> Bool
+
+pub fn valid_revision(String) -> Bool
+
+// Errors
+pub(all) suberror ModelSourceError {
+  InvalidModelId
+  InvalidRevision
+  InvalidRepositoryPath
+  UntrustedOrigin
+  UpstreamRejected
+  InvalidUpstreamResponse
+  ImportAlreadyExists
+  ImportNotFound
+  ImportNotCancelable
+  ImportNotRetryable
+  ImportCancelled
+  ArtifactTooLarge
+  FileDigestMismatch
+  FileSizeMismatch
+  FilesystemRejected
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct CatalogModel {
+  id : String
+  display_name : String
+  description : String
+  downloads : Int64
+  likes : Int64
+  license : String
+  tasks : Array[String]
+  created_at : String
+  last_modified : String
+  file_size : Int64
+  params : Int64
+  tags : Array[String]
+  private : Bool
+  gated : Bool
+} derive(Eq, ToJson, @debug.Debug)
+
+pub(all) struct CatalogPage {
+  models : Array[CatalogModel]
+  total_count : Int64
+  page_number : Int
+  page_size : Int
+} derive(Eq, ToJson, @debug.Debug)
+
+pub struct FileImportStore {
+  path : String
+  operations : Map[String, ImportOperation]
+  mutex : @async.Mutex
+}
+pub async fn FileImportStore::cancel(Self, String, Int64) -> ImportOperation
+pub async fn FileImportStore::create(Self, ImportRequest, String, Int64) -> ImportOperation
+pub async fn FileImportStore::get(Self, String) -> ImportOperation?
+pub async fn FileImportStore::list(Self) -> Array[ImportOperation]
+pub async fn FileImportStore::next_queued(Self) -> ImportOperation?
+pub async fn FileImportStore::open(String) -> Self
+pub async fn FileImportStore::replace(Self, ImportOperation) -> ImportOperation
+pub async fn FileImportStore::retry(Self, String, Int64) -> ImportOperation
+
+pub(all) struct ImportOperation {
+  import_id : String
+  source : String
+  model_id : String
+  revision : String
+  state : ImportState
+  files_total : Int
+  files_completed : Int
+  bytes_total : Int64
+  bytes_completed : Int64
+  manifest_digest : String
+  artifact_uri : String
+  license : String
+  error_code : String
+  cancel_requested : Bool
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ImportRequest {
+  model_id : String
+  revision : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum ImportState {
+  Queued
+  Downloading
+  Verified
+  Failed
+  Cancelled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct ModelScopeClient {
+  origin : String
+}
+pub async fn ModelScopeClient::detail(Self, String) -> CatalogModel
+pub async fn ModelScopeClient::download_file(Self, String, String, ModelScopeFile, String, async (Int64) -> Unit, async () -> Bool) -> Unit
+pub fn ModelScopeClient::new(origin? : String) -> Self raise ModelSourceError
+pub async fn ModelScopeClient::search(Self, String, page_number? : Int, page_size? : Int) -> CatalogPage
+pub async fn ModelScopeClient::tree(Self, String, String) -> ModelScopeTree
+
+pub(all) struct ModelScopeFile {
+  path : String
+  revision : String
+  sha256 : String
+  size : Int64
+  lfs : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelScopeTree {
+  revision : String
+  files : Array[ModelScopeFile]
+} derive(Eq, ToJson, @debug.Debug)
+
+// Type aliases
+
+// Traits

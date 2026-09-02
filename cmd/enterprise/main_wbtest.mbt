@@ -8,6 +8,27 @@ test "enterprise lease model input is trimmed and empty entries are ignored" {
 }
 
 ///|
+test "enterprise demo lease submission never claims an operator mutation" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    token: "",
+    subject_ref: "",
+    connecting: false,
+    demo_mode: true,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let before = model.portal.lease_requests.length()
+  let (submitted, _) = update(model, Portal(SubmitLease), emit)
+  assert_eq(submitted.portal.lease_requests.length(), before)
+  let message = submitted.portal.success_message.unwrap_or("")
+  assert_true(message.contains("Demo preview only"))
+  assert_true(message.contains("no lease request was submitted"))
+}
+
+///|
 test "enterprise contract preview is reactive and generation fenced" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
@@ -92,6 +113,39 @@ test "demo machine termination mirrors the controller cleanup transition" {
   assert_eq(terminated.portal.machine_access.confirmation_lease_ref, None)
   assert_true(
     terminated.portal.success_message.unwrap_or("").contains("verified cleanup"),
+  )
+}
+
+///|
+test "demo credential redemption is explicit and never contains a secret" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    token: "",
+    subject_ref: "",
+    connecting: false,
+    demo_mode: true,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (redeemed, _) = update(
+    model,
+    Portal(MachineAccess(RedeemCredential("exclusive-lease-demo", 5L))),
+    emit,
+  )
+  assert_eq(redeemed.portal.machine_access.redeemed_credentials.length(), 1)
+  let credential = redeemed.portal.machine_access.redeemed_credentials[0]
+  assert_eq(credential.lease_ref, "exclusive-lease-demo")
+  assert_eq(credential.generation, 5L)
+  assert_true(credential.one_time)
+  assert_false(credential.raw_secret_included)
+  assert_true(credential.issuer_redirect_url.contains(".invalid"))
+  assert_false(redeemed.portal.machine_access.loading)
+  assert_true(
+    redeemed.portal.success_message
+    .unwrap_or("")
+    .contains("no credential was issued"),
   )
 }
 

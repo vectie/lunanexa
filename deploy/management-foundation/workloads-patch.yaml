@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: lunanexa-postgres
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      containers:
+        - name: postgres
+          image: "${POSTGRES_IMAGE}"
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-console
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      containers:
+        - name: console
+          image: "${WEB_IMAGE}"
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-enterprise
+spec:
+  replicas: 1
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      containers:
+        - name: enterprise
+          image: "${WEB_IMAGE}"
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-workbench
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      containers:
+        - name: workbench
+          image: "${WEB_IMAGE}"
+          imagePullPolicy: Never

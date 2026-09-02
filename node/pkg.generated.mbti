@@ -26,6 +26,8 @@ pub fn parse_nvidia_smi_csv(String) -> AcceleratorSensorSnapshot raise
 
 pub fn parse_nvidia_smi_csv_with_limits(String, @settings.TelemetrySafetySettings) -> AcceleratorSensorSnapshot raise
 
+pub fn private_runtime_container_address(String) -> String raise RuntimeSupervisorError
+
 // Errors
 pub(all) suberror ArtifactMaterializationError {
   InvalidConfiguration
@@ -46,6 +48,7 @@ pub(all) suberror NodeError {
   StaleGeneration
   LeaseExpired
   InvalidCertificateLifetime
+  InvalidCertificateRenewal
   InvalidStateSchema
 } derive(Eq, @debug.Debug)
 
@@ -109,6 +112,7 @@ pub fn EnrollmentService::authorized(Self, String, String, Int64) -> Bool
 pub fn EnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate raise NodeError
 pub fn EnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
 pub fn EnrollmentService::new() -> Self
+pub fn EnrollmentService::renew(Self, String, String, String, Int64, Int64, certificate_lifetime_ms? : Int64, renewal_grace_ms? : Int64) -> NodeCertificate raise NodeError
 pub fn EnrollmentService::restore(String) -> Self raise
 pub fn EnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate raise NodeError
 pub fn EnrollmentService::snapshot(Self) -> String
@@ -130,6 +134,7 @@ pub async fn FileEnrollmentService::authorized(Self, String, String, Int64) -> B
 pub async fn FileEnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
 pub async fn FileEnrollmentService::open(String) -> Self
+pub async fn FileEnrollmentService::renew(Self, String, String, String, Int64, Int64, certificate_lifetime_ms? : Int64, renewal_grace_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 
 pub struct MaterializedArtifact {
@@ -208,6 +213,7 @@ pub(all) struct RuntimeInstance {
   image_ref : String
   artifact_digest : String
   observed_state : @contracts.DeploymentState
+  container_address : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct SharedSecretAssignmentVerifier {

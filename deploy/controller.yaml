@@ -50,6 +50,20 @@ spec:
               value: "30000"
             - name: LUNANEXA_CREDENTIAL_HANDOFF_PATH
               value: /var/lib/lunanexa/credential-handoffs.json
+            - name: LUNANEXA_CLIENT_HANDOFF_PATH
+              value: /var/lib/lunanexa/client-handoffs.json
+            - name: LUNANEXA_CLIENT_ID
+              value: desktop-workspace
+            - name: LUNANEXA_CLIENT_DISPLAY_NAME
+              value: MoonDesk / MoonCode
+            - name: LUNANEXA_CLIENT_LAUNCH_URI
+              value: http://127.0.0.1:4188/?mode=mooncode
+            - name: LUNANEXA_PUBLIC_API_BASE_URL
+              value: "${LUNANEXA_PUBLIC_API_BASE_URL}"
+            - name: LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS
+              value: "120000"
+            - name: LUNANEXA_CLIENT_MAXIMUM_REQUESTS
+              value: "100000"
             # Optional signed deployment evidence. When absent, external SSH
             # credential issuance stays explicitly pending in /v1/readiness.
             - name: LUNANEXA_CREDENTIAL_ISSUER_READINESS_PATH
@@ -203,6 +217,13 @@ spec:
               value: /var/lib/lunanexa/technical.json
             - name: LUNANEXA_MODEL_STORE_ROOT
               value: /data/models
+            - name: LUNANEXA_MODEL_SOURCE_ADAPTER_ENDPOINT
+              value: http://lunanexa-model-source:8090
+            - name: LUNANEXA_MODEL_SOURCE_ADAPTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-model-source-credentials
+                  key: token
             - name: LUNANEXA_EXCLUSIVE_LEASE_PRICE_PER_SECOND_MINOR
               value: "0"
             - name: LUNANEXA_BILLING_CURRENCY
@@ -305,6 +326,11 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: credential-handoff-issuer-secret
+            - name: LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: client-handoff-issuer-secret
             - name: LUNANEXA_LEASE_HELPER_RECEIPT_SECRET
               valueFrom:
                 secretKeyRef:

@@ -168,6 +168,27 @@ fn offline_transfer_adapter_configuration(
 }
 
 ///|
+fn model_source_adapter_configuration(
+  endpoint : String?,
+  token : String?,
+) -> (String, String)? raise {
+  match (endpoint, token) {
+    (None, None) | (Some(""), None) | (None, Some("")) | (Some(""), Some("")) =>
+      None
+    (Some(endpoint), Some(token)) if endpoint != "" && token != "" => {
+      if token.length() < 32 || token.length() > 4096 {
+        raise Failure::Failure("model-source adapter identity is invalid")
+      }
+      Some((endpoint, token))
+    }
+    _ =>
+      raise Failure::Failure(
+        "model-source adapter endpoint and token must be configured together",
+      )
+  }
+}
+
+///|
 priv struct OfflineReadinessEvidenceDocument {
   schema_version : String
   issued_unix_ms : Int64
@@ -494,6 +515,9 @@ async fn main {
   let credential_handoff_path = @env.get_env_var(
     "LUNANEXA_CREDENTIAL_HANDOFF_PATH",
   ).unwrap_or("lunanexa-credential-handoffs.json")
+  let client_handoff_path = @env.get_env_var("LUNANEXA_CLIENT_HANDOFF_PATH").unwrap_or(
+    "lunanexa-client-handoffs.json",
+  )
   let technical_path = @env.get_env_var("LUNANEXA_TECHNICAL_PATH").unwrap_or(
     "lunanexa-technical.json",
   )
@@ -545,6 +569,13 @@ async fn main {
     global_settings.request_budgets.runtime_stream_event_bytes,
     global_settings.request_budgets.runtime_stream_total_bytes,
   )
+  match @env.get_env_var("LUNANEXA_RUNTIME_PROTOCOL") {
+    Some("lunaflux-responses-sse-v1") =>
+      runtime = runtime.with_lunaflux_streaming_responses()
+    None | Some("") => ()
+    Some(value) =>
+      raise Failure::Failure("unsupported LUNANEXA_RUNTIME_PROTOCOL: \{value}")
+  }
   if @env.get_env_var("LUNANEXA_RUNTIME_ENDPOINTS_PATH") is Some(path) &&
     path != "" {
     runtime = runtime.with_node_endpoints_json(@fs.read_file(path).text())
@@ -552,7 +583,13 @@ async fn main {
   let durable = @store.FileStore::open(state_path)
   durable.fence_controller(
     @string.parse_int64(required_environment("LUNANEXA_CONTROLLER_EPOCH")),
-  )
+  ) catch {
+    @store.DurableStoreError::InvalidState(message) => {
+      println("[startup] controller epoch rejected: \{message}")
+      raise @store.DurableStoreError::InvalidState(message)
+    }
+    error => raise error
+  }
   let registry = @registry.FileRegistry::open(registry_path)
   let enrollment = @node.FileEnrollmentService::open(enrollment_path)
   let scheduler = @scheduler.FileScheduler::open(
@@ -758,6 +795,33 @@ async fn main {
     Some(evidence) => credential_handoff_store.with_issuer_readiness(evidence)
     None => credential_handoff_store
   }
+  let client_handoff_issuer_secret = required_environment(
+    "LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET",
+  )
+  let client_handoff_store = match management_database {
+    Some(database) =>
+      @client_handoff_store.ClientHandoffStore::open_postgres(
+        database, client_handoff_issuer_secret,
+      )
+    None =>
+      @client_handoff_store.ClientHandoffStore::open(
+        client_handoff_path, client_handoff_issuer_secret,
+      )
+  }
+  let client_launch_config : @client_handoff.ClientLaunchConfig = {
+    client_id: required_environment("LUNANEXA_CLIENT_ID"),
+    display_name: required_environment("LUNANEXA_CLIENT_DISPLAY_NAME"),
+    launch_uri: required_environment("LUNANEXA_CLIENT_LAUNCH_URI"),
+    public_api_base_url: required_environment("LUNANEXA_PUBLIC_API_BASE_URL"),
+    handoff_lifetime_ms: @string.parse_int64(
+      @env.get_env_var("LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS").unwrap_or(
+        "120000",
+      ),
+    ),
+    maximum_requests: @string.parse_int64(
+      @env.get_env_var("LUNANEXA_CLIENT_MAXIMUM_REQUESTS").unwrap_or("100000"),
+    ),
+  }
   let technical_operations = match management_database {
     Some(database) => @technical_store.TechnicalStore::open_postgres(database)
     None => @technical_store.TechnicalStore::open(technical_path)
@@ -820,6 +884,10 @@ async fn main {
     @env.get_env_var("LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN"),
     @env.get_env_var("LUNANEXA_OFFLINE_TRANSFER_SESSION_SECRET"),
   )
+  let model_source_adapter = model_source_adapter_configuration(
+    @env.get_env_var("LUNANEXA_MODEL_SOURCE_ADAPTER_ENDPOINT"),
+    @env.get_env_var("LUNANEXA_MODEL_SOURCE_ADAPTER_TOKEN"),
+  )
   let configured_provider_callback_secrets = provider_callback_secrets()
   let operational_secrets = [
     ("LUNANEXA_OPERATOR_TOKEN", operator_token),
@@ -833,6 +901,7 @@ async fn main {
     (
       "LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET", credential_handoff_issuer_secret,
     ),
+    ("LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET", client_handoff_issuer_secret),
     ("LUNANEXA_LEASE_HELPER_RECEIPT_SECRET", lease_helper_receipt_secret),
   ]
   // Multi-operator attribution: when LUNANEXA_OPERATOR_TOKENS is set it
@@ -914,6 +983,13 @@ async fn main {
     }
     None => ()
   }
+  match model_source_adapter {
+    Some(configuration) =>
+      operational_secrets.push(
+        ("LUNANEXA_MODEL_SOURCE_ADAPTER_TOKEN", configuration.1),
+      )
+    None => ()
+  }
   match @env.get_env_var("LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET") {
     Some(secret) if secret != "" =>
       operational_secrets.push(
@@ -972,6 +1048,7 @@ async fn main {
     )
     .with_exclusive_lease_store(exclusive_lease_store)
     .with_credential_handoff_store(credential_handoff_store)
+    .with_client_handoff_store(client_handoff_store, client_launch_config)
     .with_lease_helper_receipt_secret(lease_helper_receipt_secret)
     .with_portal_store(portal_store)
     .with_notification_store(notification_store)
@@ -1017,6 +1094,14 @@ async fn main {
         configuration.2,
       )
     None => initial_service
+  }
+  let configured_service = match model_source_adapter {
+    Some(configuration) =>
+      configured_service.with_model_source_adapter(
+        configuration.0,
+        configuration.1,
+      )
+    None => configured_service
   }
   let configured_service = match contract_document_worker_token {
     Some(token) if token != "" => {

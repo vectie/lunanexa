@@ -206,6 +206,351 @@ reverted, while the independently required compatibility fixes were retained.
 Raw results and `allocation-reuse-performance-gate.json` remain under the
 host's `allocation-v2` experiment directory.
 
+## Single-chip Atlas A2 fixed-shape CFM graph experiment
+
+On 2026-08-25, a separate one-chip A2 host was used to validate the replacement
+for the previously rejected growing-shape CFM graph. The visible device was one
+Ascend 910B4 with 32 GiB HBM. This is a hardware-specific continuation, not a
+replacement for the two-chip 910C evidence above.
+
+The accepted candidate changes the execution architecture that caused the old
+capture churn:
+
+- prompt and tail shapes remain eager;
+- only the repetitive width-50, cache-402 CFM6 path is captured;
+- attention state uses fixed 6-step x 16-block BSH K/V slabs;
+- two graph-output slots are allocated once, so replay returns pooled outputs
+  rather than cloning every graph result;
+- explicit graph-visible attention is startup-gated against the fused BSH
+  reference. The observed cache-402 drift was 3.05175781e-05 maximum and
+  6.89178705e-08 mean.
+
+The benchmark used the same ten Seed-TTS English rows, seed 0, unlimited request
+rate, concurrency 1, temperature 0, and text-plus-audio request body for every
+comparison. Each measured run followed a separate ten-request warm-up. The
+approximately 60-second first-capture cost is therefore excluded from the
+steady serving measurements.
+
+| Variant | Runs | Whole-audio RTF | TTFT | Audio TTFP | Steady chunk RTF | E2E |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A2 canonical control | 1 | 0.35642 | 81.84 ms | 752.01 ms | 0.19897 | 1,538.99 ms |
+| BSH without full CFM graph | 1 | 0.36783 | 77.60 ms | 762.09 ms | 0.20687 | 1,588.53 ms |
+| Fixed-slab CFM graph | 2 | 0.34482 mean | 79.43 ms mean | 766.57 ms mean | 0.17299 mean | 1,489.10 ms mean |
+
+The two fixed-slab CFM graph runs produced RTF 0.34612 and 0.34352. Relative to
+the A2 canonical control, their mean improves whole-audio RTF by 3.26%, steady
+chunk RTF by 13.06%, all-chunk mean RTF by 2.56%, and E2E latency by 3.24%.
+TTFT improves 2.95%, while audio TTFP regresses 1.94%. All measured runs
+completed 10/10 requests with 100% streaming continuity and generated the same
+43.20 seconds of audio.
+
+An additional direct-slab graph-I/O candidate removed the replay-time K/V input
+copy by binding graph execution to a reusable request-slab pool. After fixing a
+short-request two-slot state-machine boundary, it completed two 10/10 runs at
+RTF 0.34790 and 0.34447. Its mean RTF was 0.40% slower, and its steady chunk RTF
+1.38% slower, than the graph-private-buffer version. The likely explanation is
+that task-queue scheduling hid the copy while external buffer binding reduced
+GE memory-planning freedom. The candidate was removed from both code and the
+best profile.
+
+The retained A2 profile is
+`vllm_omni/deploy/minicpmo_4_5_1npu_a2_cfm6_bf16_bsh_cfm_graph_experimental.yaml`.
+Raw results remain on the host under `/tmp/a2-bench-v12`,
+`/tmp/a2-bench-bsh-cfm-measured*`, and
+`/tmp/a2-bench-bsh-cfm-direct-v2-measured*`. These temporary paths are not
+durable evidence storage.
+
+Decision: retain the fixed-slab steady CFM graph as the best measured A2 speed
+candidate. Do not promote it to the competition submission until the official
+Seed-TTS WER and speaker-similarity gates pass on this exact profile.
+
+### A2 Stage-2 trace and BF16 graph-attention screen
+
+A fresh Stage-2-only torch/NPU profile was captured after the fixed-slab graph
+had warmed. The profiled request generated 3.88 seconds of audio. Its kernels
+accounted for 323.553 ms of device compute; the largest operator families were
+Transpose (36.350 ms, 11.24%), TransData (31.477 ms, 9.73%), LayerNormV3
+(29.808 ms, 9.21%), MatMulV2 (29.574 ms, 9.14%), Mul (24.981 ms, 7.72%), Add
+(21.750 ms, 6.72%), Slice (16.064 ms, 4.97%), and FlashAttentionScore
+(13.195 ms, 4.08%). Transpose plus TransData therefore consumed 20.96% of
+device compute, while attention arithmetic alone was not the dominant family.
+
+Shape attribution corrected an initially misleading DiT hypothesis. The 405
+`[512,512,1,3]` NCHW-to-FRACTAL_Z conversions belong to the FP32 HiFT F0
+predictor's five fixed Conv1d layers, not the BF16 DiT causal convolutions.
+They consumed 10.639 ms in this A2 trace. The accepted A2 profile deliberately
+keeps that path eager because the already-tested F0-only and F0-plus-residual
+graphs regressed end-to-end performance by 2.2% and 1.7%, respectively. The
+steady DiT path did use `MinicpmoCausalConvPack` and preflattened Linear
+weights as intended.
+
+The remaining graph-only attention used explicit FP32 BMM/softmax because the
+competition CANN 9.0 image cannot capture fused attention's auxiliary stream.
+An opt-in candidate retained Q/K/V and score accumulation in BF16, removing
+the explicit BF16-to-FP32-to-BF16 round trips. Its loaded-checkpoint startup
+gate passed with maximum/mean drift 0.00048828125/0.0000114208 against fused
+BSH attention, far inside the existing 0.03125/0.003 bounds. Three focused
+CPU tests also passed.
+
+The real A2 speed gate rejected the candidate. Both measurements followed ten
+warm requests and completed 10/10 with 100% streaming continuity. The first
+run had one extra output chunk and measured RTF 0.37857. The structurally
+matched repeat restored the accepted 1,036,800-frame signature but measured
+RTF 0.34939 and steady-chunk RTF 0.17784. Relative to the accepted fixed-slab
+means of 0.34482 and 0.17299, those are 1.33% and 2.80% regressions. The BF16
+BMM/softmax path evidently loses a more favorable A2 operator/format choice
+than its removed casts cost. Its code, tests, and deploy overlay were removed,
+and the FP32 graph-attention profile was restored.
+
+The next screen targeted host-side stage orchestration. The existing loop
+awaits Stage 0, 1, and 2 output queues sequentially with a 1 ms timeout per
+queue, then sleeps another 1 ms when idle. A candidate replaced those repeated
+timeouts with one persistent queue waiter per LLM stage and woke the loop when
+any waiter completed. Its three-waiter lifecycle and cancellation smoke test
+passed in the competition environment, but the serving gate rejected it. The
+first run produced the non-comparable 48-chunk signature and measured RTF
+0.37856; the matched 47-chunk repeat measured RTF 0.34913, TTFP 0.76618 s, and
+steady-chunk RTF 0.17764. Against the accepted 0.34482/0.17299 RTF values, the
+matched repeat regressed overall and steady performance by 1.25% and 2.69%.
+Persistent asyncio task scheduling cost more than the removed polling delay on
+this single-request A2 lane, so the implementation and its test were removed.
+Raw result JSON remains temporarily under
+`/tmp/a2-bench-event-orchestrator-measured{1,2}` on the benchmark host.
+
+Huawei documents `TASK_QUEUE_ENABLE=2` as the higher-throughput binary-mode
+queue path for Host-bound A2 workloads, so it was screened next without any
+model change. The installed torch-npu/CANN stack rejected it during Stage 0
+ACLGraph capture with `ERR00007`: Level 2 is unsupported while capturing an
+NPU graph and the runtime requires Level 1 or 0. This was a startup failure,
+not an OOM or a measured performance result. The accepted service remains on
+Level 1; disabling its valuable Stage 0/1 graphs merely to enable Level 2 is
+not a credible trade.
+
+Global static-kernel compilation was then isolated to the batch-one Stage 1
+Talker decode graph. The compiler did build and install a real static-kernel
+package, and all ten measured requests completed, but the candidate changed
+the generated codec sequence materially: 58 chunks and 54.0 seconds of audio
+versus the accepted 47 chunks and 43.2 seconds. Serving duration also rose to
+17.666 seconds. Its apparent whole-audio RTF of 0.32714 is therefore a larger
+denominator artifact, not an accepted speedup; steady-chunk RTF regressed to
+0.18471 and TTFP to 0.77045 seconds. Because static compilation changed the
+Talker output distribution before any formal quality gate, the candidate was
+rejected after one run, its deploy overlay was removed, and the installed
+static-kernel package was cleaned up. The raw result remains temporarily at
+`/tmp/a2-bench-talker-static-kernel-measured1`.
+
+The next retained candidate enables A2's HF32 Cube execution for FP32 MatMul in
+Stage 2 only. It does not change tensor storage, graph-attention softmax,
+LayerNorm, Euler integration, or HiFT convolution precision. The switch is
+strictly opt-in through `VLLM_OMNI_MINICPMO45_NPU_MATMUL_HF32=1`, is applied
+before CFM graph warm-up, and fails at startup when the installed torch-npu
+does not expose `torch.npu.matmul.allow_hf32`. The activation message was
+observed in the real Stage-2 worker log.
+
+Three structurally matched 10-request runs all completed 10/10, produced the
+accepted 47-chunk/1,036,800-frame/43.2-second signature, and maintained 100%
+streaming continuity. Their means were:
+
+| A2 single-chip metric | Fixed-slab accepted | HF32 MatMul, 3-run mean | Change |
+| --- | ---: | ---: | ---: |
+| Whole-audio RTF (lower is better) | 0.34482 | 0.34117 | 1.06% faster |
+| Audio TTFP (lower is better) | 0.76657 s | 0.75777 s | 1.15% faster |
+| Text TTFT (lower is better) | 79.43 ms | 78.82 ms | 0.77% faster |
+| Steady-chunk RTF (lower is better) | 0.17299 | 0.17285 | 0.08% faster |
+
+An earlier HF32 run produced 48 chunks and was excluded from this comparison.
+The matched raw results remain temporarily under
+`/tmp/a2-bench-hf32-matmul-measured{2,3}` and
+`/tmp/a2-hf32-quality10-offline-v2`. The retained experimental overlay is
+`vllm_omni/deploy/minicpmo_4_5_1npu_a2_cfm6_bf16_bsh_cfm_graph_hf32_matmul_experimental.yaml`.
+
+The official-export path also exposed a benchmark-infrastructure defect: using
+`--seed-tts-official-export-dir` implicitly enabled WER and tried to download
+Whisper after serving had finished. Export-only mode now captures PCM and
+writes official `{utterance_id}.wav` files without initializing ASR; WER and
+SIM still require their explicit flags. The repaired A2 run exported all ten
+WAVs with zero failures. Eleven focused export and precision-policy tests
+passed. Actual Seed-TTS WER and speaker similarity remain unmeasured because
+the required pinned evaluator checkpoints are unavailable on this offline
+host. HF32 therefore passes the speed and structural gates but remains an
+experimental best candidate, not a competition-ready submission.
+
+A clean post-HF32 Stage-2 trace used explicit idle windows before and after
+the captured request. Its 576 `MinicpmoCausalConvPack` calls exactly matched
+the pre-HF32 trace; an earlier 768-call capture was discarded as asynchronous
+spillover from its warm-up request. On the clean trace, total device kernel
+time changed from 323.553 ms to 323.194 ms (-0.11%) and MatMulV2 from
+29.574 ms to 29.170 ms (-1.37%). The remaining largest families were
+Transpose 37.722 ms (11.67%), TransData 30.843 ms (9.54%), LayerNormV3
+30.441 ms (9.42%), MatMulV2 29.170 ms (9.03%), and Mul 25.319 ms (7.83%).
+This confirms that future large gains require eliminating layout and
+normalization boundaries across their producer-consumer chain; HF32 alone is
+a small retained hardware-policy improvement.
+
+The trace also confirmed that A2 BF16 startup had always rejected the
+configured final-AdaLN Addcmul lowering at `0.0078125` maximum drift. A
+guarded candidate tested a grouping-preserving form,
+`addcmul(shift, norm, 1 + scale)`, which reduced synthetic mean drift from
+0.001175 to 0.000889 while keeping the maximum to one BF16 quantization step.
+It was nevertheless rejected by the real serving gate. Its two structurally
+matched runs averaged whole-audio RTF 0.34243, 0.37% slower than the retained
+HF32 mean, despite a 0.45% better steady-chunk RTF. Ten exported waveforms had
+the same filenames and lengths as the HF32 control but only 0.264 mean direct
+sample correlation, demonstrating strong diffusion sensitivity to the
+rounding change. Direct waveform correlation is not an official quality
+metric, but the candidate had neither an end-to-end speed win nor sufficient
+evidence to justify that risk. The tolerance, formula change, tests, and
+overlay were removed; the strict `1e-6` fail-closed behavior remains.
+
+The next A2 trace-driven fix removed a layout discontinuity inside the
+fixed-shape CFM executable itself. Although the accepted fixed slabs already
+stored CNN history as cache-major `[batch, 2, 1024]`, flat NPUGraph capture
+hard-coded the older channel-major Conv/MLP partition. The clean graph model
+therefore spent 5.784 ms per replay on 384 avoidable cache transposes
+(`192 x [2,512,2] -> [2,2,512]` and the reverse), accounting for 8.84% of
+that 65.476 ms executable. Flat capture now selects the same cache-major
+partition as the separately compiled steady-width path; the post-attention
+variant follows the same layout rule.
+
+One 48-chunk run was excluded using the same structural rule as earlier A2
+experiments. Three matched 10-request runs completed 10/10 with zero failures,
+100% streaming continuity, and the accepted 47-chunk / 1,036,800-frame /
+43.2-second signature:
+
+| A2 single-chip metric | HF32 control | Cache-major CFM graph, 3-run mean | Change |
+| --- | ---: | ---: | ---: |
+| Whole-audio RTF (lower is better) | 0.34117 | 0.33852 | 0.78% faster |
+| Audio TTFP (lower is better) | 0.75777 s | 0.75645 s | 0.18% faster |
+| Text TTFT (lower is better) | 78.82 ms | 77.70 ms | 1.43% faster |
+| Steady-chunk RTF (lower is better) | 0.17285 | 0.16915 | 2.18% faster |
+
+Two ten-file official-format exports produced identical filenames and sample
+lengths. Direct PCM correlation is not a usable accuracy proxy here: two
+repeated candidate exports correlated only 0.213 on average, comparable to
+the 0.167 control-to-candidate value. The real Seed-TTS WER/SIM gate remains
+blocked on the offline host's missing pinned evaluator checkpoints, so this
+is retained as the new speed candidate but is not yet competition-ready.
+Raw speed results remain temporarily under
+`/tmp/a2-bench-hf32-cache-major-cfm-measured{2,3,4}` and exports under
+`/tmp/a2-hf32-cache-major-cfm-quality10*`.
+
+A follow-up attempted to remove the remaining BHSD attention layout traffic
+inside that same fixed CFM executable. It combined the installed
+`npu_minicpmo_qkv_pack` operator, planar K/V slabs, and graph-capturable
+explicit FP32 attention, rather than benchmarking the QKV pack as an isolated
+eager operator. The loaded-checkpoint startup gate passed: native QKV compiled
+at width 50, and explicit attention at cache width 402 differed from fused
+SDPA by at most 0.000244140625 with 0.000003592 mean absolute drift. Two CFM
+output slots captured successfully and replayed without request failures.
+
+The serving gate nevertheless rejected the candidate. One 48-chunk run was
+excluded by the established structural rule. Three matched 10-request runs
+all completed 10/10 with zero failures, 100% continuity, and the accepted
+47-chunk / 1,036,800-frame / 43.2-second signature:
+
+| A2 single-chip metric | Retained cache-major CFM | Full-graph QKV/layout candidate | Change |
+| --- | ---: | ---: | ---: |
+| Whole-audio RTF (lower is better) | 0.33852 | 0.34531 | 2.01% slower |
+| Audio TTFP (lower is better) | 0.75645 s | 0.77998 s | 3.11% slower |
+| Text TTFT (lower is better) | 77.70 ms | 79.01 ms | 1.68% slower |
+| Mean E2E latency (lower is better) | 1.46186 s | 1.49123 s | 2.01% slower |
+| Steady-chunk RTF (lower is better) | 0.16915 | 0.16930 | 0.09% slower |
+
+This confirms that the existing ACLNN custom-op boundary remains too opaque
+even when captured by the outer NPUGraph: eliminating visible transpose nodes
+does not guarantee a better producer-consumer schedule on A2. The candidate
+code and deploy overlay were removed, and the retained cache-major BSH + HF32
+profile was restored. Any future QKV/layout fusion must therefore be exposed
+to GE as a graph-visible decomposition/converter or fused across the consuming
+attention and output projection, not reintroduced as the same standalone
+layout boundary. Raw rejected results remain under
+`/tmp/a2-bench-hf32-qkv-full-cfm-measured{1,2,3,4}` on the benchmark host.
+
+A trace refresh was first attempted with the existing Stage-2 torch-profiler
+overlay. It is not compatible with the retained raw NPUGraph executable on
+this CANN 9.0 image: the profiler creates an additional stream before the
+first steady graph capture, and `capture_end` failed with runtime error
+107025, `capture model contains a stream that was not joined to the original
+stream`. The process exited through the intentional fail-closed graph path;
+no profile or performance sample from that attempt was accepted.
+
+External dynamic `msprof` subsequently produced a clean post-capture trace.
+CANN requires `PROFILING_MODE=dynamic` to be present before the target process
+starts; dynamic attach is interactive and cannot be combined with
+`--duration`. The accepted service was therefore relaunched with only that
+diagnostic environment variable, warmed until both fixed CFM slots replayed,
+and then sampled through `start`, one request window, `stop`, and `quit`.
+This did not reproduce error 107025. A source-level regression test now also
+asserts that raw flat capture dispatches the BSH cache path through explicit
+single-stream attention while leaving the ordinary planar path unchanged.
+
+The representative ten-request external trace completed 10/10 requests and
+exposed the next architectural opportunity. Each request executed the same
+three eager CFM shapes before any variable tail: prompt width 302, width 50
+with cache 302, and width 50 with cache 352. The trace counted exactly 960
+FlashAttention block calls for each shape, or ten complete six-step by
+sixteen-block CFM evaluations. Only eight later cache-402 evaluations used
+the fixed outer graph across the ten requests; nine variable-width tails
+remained eager. In total, the host submitted 236,082 kernel launches and the
+largest device families were TransData 310.47 ms, MatMulV2 264.81 ms,
+LayerNormV3 231.97 ms, Transpose 211.70 ms, Mul 199.21 ms, Add 164.69 ms,
+Slice 152.83 ms and FlashAttention 129.77 ms. Profiler overhead makes this
+run invalid as a serving-speed comparison, but the operator counts and fixed
+shape recurrence are valid attribution evidence.
+
+The first trace-driven candidate left prompt and variable tails eager, but
+admitted both fixed width-50 cache-fill shapes to the outer raw NPUGraph. It
+retained one output set for each one-shot fill shape, two ping-pong sets for
+steady cache-402, and a strict three-key graph-cache bound. Capture and replay
+succeeded without error 107025 and peak HBM stayed below 29.5 GiB. The result
+was a useful but unacceptable trade: the two structurally matched runs cut
+mean audio TTFP from 756.45 ms to 667.93 ms (-11.70%), while whole-audio RTF
+regressed from 0.33852 to 0.35471 (+4.78%), mean E2E regressed from 1.46186 s
+to 1.53184 s (+4.79%), and steady-chunk RTF regressed from 0.16915 to 0.18277
+(+8.05%). One 1,048,320-frame run was excluded by the established structural
+rule. The two-shape candidate is rejected.
+
+The follow-up candidate captured only the first-packet width-50/cache-302
+shape and restored cache-352 to eager fused attention. Logs proved the strict
+shape policy: cache-302 captured and replayed in one slot, cache-352 never
+entered a graph, and cache-402 replayed through the existing two slots. Peak
+HBM remained about 29.1 GiB. One 1,040,640-frame run was excluded by the
+established structural rule; four matched runs completed 10/10 with 100%
+continuity and the accepted 1,036,800-frame / 43.2-second signature:
+
+| A2 single-chip metric | Retained cache-major CFM | Cache-302-only graph, 4-run mean | Change |
+| --- | ---: | ---: | ---: |
+| Whole-audio RTF (lower is better) | 0.33852 | 0.33470 | 1.13% faster |
+| Audio TTFP (lower is better) | 0.75645 s | 0.67398 s | 10.90% faster |
+| Text TTFT (lower is better) | 77.70 ms | 76.72 ms | 1.26% faster |
+| Mean E2E latency (lower is better) | 1.46186 s | 1.44539 s | 1.13% faster |
+| Steady-chunk RTF (lower is better) | 0.16915 | 0.18452 | 9.09% slower |
+
+The split recovers first-packet latency and produces a small repeatable
+whole-audio win, but it changes later-chunk scheduling enough to regress the
+steady metric. Positional RTF confirms the effect: mean first-chunk RTF moved
+from 0.90053 to 0.80236, while the next full chunk moved from 0.20246 to
+0.21710. The graph therefore remains a candidate rather than replacing the
+retained profile.
+
+A subsequent revision changed allocation order rather than graph math. It
+captured both frequently replayed cache-402 ping-pong slots before admitting
+the one-shot cache-302 graph. Logs proved the intended order and both phases
+replayed, but two matched 10-request runs measured whole-audio RTF 0.35554 and
+0.35736 (0.35645 mean), mean E2E 1.53539 s and 1.54324 s, and steady-chunk RTF
+0.18862 and 0.18988. TTFP remained fast at 0.66943 s and 0.67477 s. The
+capture-order revision therefore regressed whole-audio RTF by 5.30% versus
+the retained 0.33852 profile and was removed. This closes graph-pool ordering
+as the cause; future cache-fill work must avoid a second persistent raw-graph
+boundary rather than merely move it.
+
+The development-only profiler overlay is
+`vllm_omni/deploy/minicpmo_4_5_1npu_a2_cfm6_bf16_bsh_cfm_graph_profile.yaml`.
+Remote raw artifacts remain under
+`/tmp/vllm-omni-profiles/minicpmo45/a2-fixed-cfm-stage2` and
+`/tmp/a2-bench-bsh-cfm-bf16-attn-measured*`; these temporary paths are not
+durable evidence storage.
+
 ## Competition quality gates
 
 The organizer materials require performance submissions to validate accuracy
@@ -296,3 +641,22 @@ Reasons:
 - [Competition benchmark details](https://qcn9xlavkz5b.feishu.cn/wiki/UzxWwSnofifkxCkFNcAcTIaNnFe)
 - [LunaNexa phased plan](PLAN.md)
 - [LunaNexa architecture](ARCHITECTURE.md)
+
+## A2 full-block graph follow-up
+
+The full BSH DiT block was also compiled as one canonical-Conv TorchAir/GE
+partition on the available single-chip 910B4 host. With real MiniCPM-o 4.5
+weights, isolated block latency fell from 1,096.45 us to 402.44 us (2.72x).
+That isolated gain did not translate uniformly to serving: a matched
+cache-302 run improved audio TTFP from 0.75645 s to 0.67801 s and whole-audio
+RTF from 0.33852 to 0.33707, but regressed steady-chunk RTF from 0.16915 to
+0.18721. The candidate is retained only as an explicit low-TTFP experiment.
+
+Extending the block graph into the cache-402 steady NPUGraph was unsafe on the
+installed stack. GE execution inside the outer capture failed with
+`Unsupport run graph with different stream`. ACLGraph replay was 45.5% slower
+than its eager control, and its static-shape TBE compilation failed before
+producing a binary; the host image also lacks the separate NPUGraphEx package.
+The accepted balanced A2 profile is therefore unchanged. Full-block GE is
+disabled whenever the outer flat-capture path is active, pending a compatible
+CANN/TorchAir/NPUGraphEx runtime and a new matched quality/performance gate.

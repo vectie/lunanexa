@@ -42,8 +42,9 @@ pub async fn FileEnrollmentService::issue_token(
   expires_unix_ms : Int64,
 ) -> BootstrapToken {
   self.mutex.acquire()
+  defer self.mutex.release()
   let token = self.service.issue_token(token_id, secret, expires_unix_ms)
-  self.persist_and_release()
+  write_enrollment(self.path, self.service.snapshot())
   token
 }
 
@@ -59,24 +60,18 @@ pub async fn FileEnrollmentService::enroll(
   certificate_lifetime_ms? : Int64 = 3600000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
-  try {
-    let certificate = self.service.enroll(
-      node_id,
-      token_id,
-      secret,
-      node_auth_secret,
-      public_key_ref,
-      now_unix_ms,
-      certificate_lifetime_ms~,
-    )
-    self.persist_and_release()
-    certificate
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
+  defer self.mutex.release()
+  let certificate = self.service.enroll(
+    node_id,
+    token_id,
+    secret,
+    node_auth_secret,
+    public_key_ref,
+    now_unix_ms,
+    certificate_lifetime_ms~,
+  )
+  write_enrollment(self.path, self.service.snapshot())
+  certificate
 }
 
 ///|
@@ -87,9 +82,35 @@ pub async fn FileEnrollmentService::authorized(
   now_unix_ms : Int64,
 ) -> Bool {
   self.mutex.acquire()
+  defer self.mutex.release()
   let authorized = self.service.authorized(node_id, secret, now_unix_ms)
-  self.mutex.release()
   authorized
+}
+
+///|
+pub async fn FileEnrollmentService::renew(
+  self : FileEnrollmentService,
+  node_id : String,
+  secret : String,
+  public_key_ref : String,
+  current_serial : Int64,
+  now_unix_ms : Int64,
+  certificate_lifetime_ms? : Int64 = 3600000L,
+  renewal_grace_ms? : Int64 = 86400000L,
+) -> NodeCertificate {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  let certificate = self.service.renew(
+    node_id,
+    secret,
+    public_key_ref,
+    current_serial,
+    now_unix_ms,
+    certificate_lifetime_ms~,
+    renewal_grace_ms~,
+  )
+  write_enrollment(self.path, self.service.snapshot())
+  certificate
 }
 
 ///|
@@ -98,8 +119,8 @@ pub async fn FileEnrollmentService::active_node_ids(
   now_unix_ms : Int64,
 ) -> Array[String] {
   self.mutex.acquire()
+  defer self.mutex.release()
   let result = self.service.active_node_ids(now_unix_ms)
-  self.mutex.release()
   result
 }
 
@@ -112,33 +133,13 @@ pub async fn FileEnrollmentService::rotate(
   certificate_lifetime_ms? : Int64 = 3600000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
-  try {
-    let certificate = self.service.rotate(
-      node_id,
-      public_key_ref,
-      now_unix_ms,
-      certificate_lifetime_ms~,
-    )
-    self.persist_and_release()
-    certificate
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-}
-
-///|
-async fn FileEnrollmentService::persist_and_release(
-  self : FileEnrollmentService,
-) -> Unit {
-  try write_enrollment(self.path, self.service.snapshot()) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  defer self.mutex.release()
+  let certificate = self.service.rotate(
+    node_id,
+    public_key_ref,
+    now_unix_ms,
+    certificate_lifetime_ms~,
+  )
+  write_enrollment(self.path, self.service.snapshot())
+  certificate
 }

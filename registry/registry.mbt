@@ -451,13 +451,20 @@ pub fn ModelRegistry::scheduling_target(
     model.state == Approved else {
     return None
   }
+  guard self.evaluations.get(model_key(model.model_id, model.version))
+    is Some(evaluation) &&
+    evaluation.passed else {
+    return None
+  }
   let runtimes = [
     for _, runtime in self.runtimes if runtime.capabilities.any(value => {
       value == capability
     }) &&
+    runtime.version == evaluation.benchmark.runtime_version &&
     runtime.architectures.any(architecture => {
       model.compatible_architectures.any(value => value == architecture)
-    }) => runtime
+    }) &&
+    self.deployment_allowed(model.artifact.digest, runtime) => runtime
   ]
   runtimes.sort_by((left, right) => {
     let by_name = left.name.compare(right.name)

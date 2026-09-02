@@ -5,17 +5,63 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/node",
 }
 
 // Values
+pub fn inspect_lunaflux_candidate(LunaFluxCandidateManifest) -> LunaFluxCandidateReport
+
+pub fn inspect_lunaflux_promotion(LunaFluxPromotionSubmission) -> LunaFluxPromotionReport
+
+pub fn lunaflux_benchmark_approval_digest(LunaFluxCandidateManifest, LunaFluxServingContract, String) -> String
+
+pub fn lunaflux_candidate_manifest_digest(LunaFluxCandidateManifest) -> String
+
+pub fn lunaflux_control_contract_digest(LunaFluxServingContract) -> String
+
+pub fn lunaflux_invocation_approval_digest(LunaFluxCandidateManifest, LunaFluxServingContract) -> String
+
+pub fn lunaflux_physical_serving_approval_digest(LunaFluxCandidateManifest, LunaFluxServingContract) -> String
 
 // Errors
+pub(all) suberror LunaFluxPromotionCatalogError {
+  UnsupportedPromotionAuthoritySchema
+  InvalidPromotionAuthority(LunaFluxPromotionAuthoritySubject)
+  ReusedPromotionAuthorityReceipt(LunaFluxPromotionAuthoritySubject)
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror LunaFluxPromotionVerifierError {
+  UnsupportedPromotionVerifierPolicySchema
+  InvalidPromotionVerifierRolloutDigest
+  InvalidPromotionVerifierKeyId
+  InvalidPromotionVerifierSecret
+  InvalidPromotionVerifierAuthorityCount(Int)
+  MissingPromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
+  DuplicatePromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
+  InvalidPromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
+} derive(Eq, @debug.Debug)
+
+pub suberror LunaFluxRuntimeDiscoveryError {
+  MissingReadyPublication
+  DuplicateReadyPublication
+  MissingDiscoveryField
+  DuplicateDiscoveryField
+  StaleOrLateDiscoveryPublication
+  InvalidRuntimeOrigin
+  InvalidControlOrigin
+  InvalidContainerAddress
+  RuntimeProtocolMismatch
+  InvalidControlProbeTimeout
+  ControlProbeFailed
+} derive(Eq, @debug.Debug)
+
 pub(all) suberror RemoteRuntimeError {
   InsecureEndpoint(String)
   InvalidNodeRouting(String)
   RoutingTargetUnavailable(String)
   UnsupportedCapability
   UpstreamRejected(status~ : Int, body~ : String)
+  UpstreamFailed(code~ : String, retryable~ : Bool)
   InvalidUpstreamResponse(String)
 } derive(Eq, @debug.Debug)
 
@@ -41,6 +87,276 @@ pub fn FakeRuntime::start(Self) -> Unit
 pub fn FakeRuntime::stop(Self) -> Unit
 pub impl RuntimeAdapter for FakeRuntime
 
+pub struct LunaFluxAdapterAuthority {
+  runtime : @contracts.RuntimeSpec
+  candidate_manifest_digest : String
+  model_artifact_digest : String
+  launch_manifest_digest : String
+  build_provenance_digest : String
+  sbom_digest : String
+  license_manifest_digest : String
+  kernel_manifest_digest : String
+  listener_origin : String
+  invocation_path : String
+  health_path : String
+  readiness_path : String
+  drain_path : String
+  target_profile_digest : String
+  listener_contract_digest : String
+  health_readiness_contract_digest : String
+  drain_contract_digest : String
+  invocation_contract_digest : String
+  control_contract_digest : String
+  physical_serving_evidence_digest : String
+  benchmark_evidence_digest : String
+  approval_catalog_digest : String
+} derive(Eq, @debug.Debug)
+pub fn LunaFluxAdapterAuthority::approval_catalog_digest(Self) -> String
+pub fn LunaFluxAdapterAuthority::drain_path(Self) -> String
+pub fn LunaFluxAdapterAuthority::health_path(Self) -> String
+pub fn LunaFluxAdapterAuthority::opaque_adapter(Self) -> LunaFluxOpaqueAdapter
+pub fn LunaFluxAdapterAuthority::openai_text_runtime(Self, String) -> OpenAiTextRuntime raise RemoteRuntimeError
+pub fn LunaFluxAdapterAuthority::readiness_path(Self) -> String
+
+pub(all) struct LunaFluxApprovalClaim {
+  subject : LunaFluxApprovalSubject
+  subject_digest : String
+  approval_receipt_digest : String
+  decision : LunaFluxClaimedDecision
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxApprovalSubject {
+  RuntimeImage
+  PhysicalTarget
+  ListenerContract
+  HealthReadinessContract
+  DrainContract
+  InvocationContract
+  PhysicalServing
+  BenchmarkComparison
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxCandidateBlocker {
+  UnsupportedCandidateSchema
+  InvalidRuntimeIdentity
+  InvalidRuntimeVersion
+  InvalidRuntimeImageDigest
+  InvalidRuntimeArchitecture
+  UnsupportedRuntimeCapability
+  UnqualifiedBatchingClaim
+  UnqualifiedMultiNodeClaim
+  InvalidModelArtifactDigest
+  InvalidLaunchManifestDigest
+  InvalidKernelManifestDigest
+  InvalidBuildProvenanceDigest
+  InvalidSbomDigest
+  InvalidLicenseManifestDigest
+  InvalidPhysicalServingEvidenceDigest
+  ApprovedOciImageMissing
+  PhysicalTargetApprovalMissing
+  ListenerContractUnapproved
+  HealthReadinessContractMissing
+  DrainContractUnapproved
+  InvocationContractUnapproved
+  PhysicalServingEvidenceUnapproved
+  BenchmarkComparisonMissing
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LunaFluxCandidateManifest {
+  schema_version : String
+  runtime : @contracts.RuntimeSpec
+  model_artifact_digest : String
+  launch_manifest_digest : String
+  kernel_manifest_digest : String
+  build_provenance_digest : String
+  sbom_digest : String
+  license_manifest_digest : String
+  physical_serving_evidence_digest : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LunaFluxCandidateReport {
+  manifest_valid : Bool
+  routable : Bool
+  blockers : Array[LunaFluxCandidateBlocker]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxClaimedDecision {
+  Pending
+  Rejected
+  Approved
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxDrainProtocol {
+  DrainUnqualified
+  AuthenticatedInheritedDrainV1
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxHealthProtocol {
+  HealthReadinessUnqualified
+  HttpJsonReadinessV1
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxInvocationProtocol {
+  InvocationUnqualified
+  OpenAiResponsesV1
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct LunaFluxOpaqueAdapter {
+  // private fields
+}
+pub fn LunaFluxOpaqueAdapter::contract_digest(Self) -> String
+pub fn LunaFluxOpaqueAdapter::health_url(Self) -> String
+pub fn LunaFluxOpaqueAdapter::inherited_drain_path(Self) -> String
+pub fn LunaFluxOpaqueAdapter::launch_manifest_digest(Self) -> String
+pub fn LunaFluxOpaqueAdapter::model_artifact_digest(Self) -> String
+pub fn LunaFluxOpaqueAdapter::openai_text_runtime(Self, String) -> OpenAiTextRuntime raise RemoteRuntimeError
+pub fn LunaFluxOpaqueAdapter::parse_private_ready_publication_from_instance(Self, String, @node.RuntimeInstance) -> LunaFluxRuntimeDiscovery raise LunaFluxRuntimeDiscoveryError
+pub fn LunaFluxOpaqueAdapter::parse_ready_publication(Self, String) -> LunaFluxRuntimeDiscovery raise LunaFluxRuntimeDiscoveryError
+pub fn LunaFluxOpaqueAdapter::readiness_url(Self) -> String
+pub fn LunaFluxOpaqueAdapter::runtime(Self) -> @contracts.RuntimeSpec
+pub fn LunaFluxOpaqueAdapter::target_profile_digest(Self) -> String
+
+pub(all) enum LunaFluxPromotionAuthoritySubject {
+  CandidateManifestAuthority
+  OciImageAuthority
+  SbomAuthority
+  BuildProvenanceAuthority
+  LicenseAuthority
+  KernelAuthority
+  PhysicalServingAuthority
+  BenchmarkAuthority
+  ControlContractAuthority
+  InvocationContractAuthority
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum LunaFluxPromotionBlocker {
+  UnsupportedPromotionSchema
+  CandidateManifestInvalid
+  InvalidTargetProfileDigest
+  InvalidTargetArchitecture
+  TargetArchitectureMismatch
+  InvalidListenerContractDigest
+  InvalidHealthReadinessContractDigest
+  InvalidDrainContractDigest
+  InvalidInvocationContractDigest
+  InvalidBenchmarkEvidenceDigest
+  InvalidListenerOrigin
+  InvalidListenerPort
+  InvalidInvocationPath
+  InvocationPathNotOpenAiResponses
+  InvalidHealthPath
+  HealthPathNotHealthz
+  InvalidReadinessPath
+  ReadinessPathNotReadyz
+  InvalidDrainPath
+  InvocationProtocolUnqualified
+  HealthReadinessProtocolUnqualified
+  DrainProtocolUnqualified
+  MissingApprovalClaim(LunaFluxApprovalSubject)
+  DuplicateApprovalClaim(LunaFluxApprovalSubject)
+  PendingApprovalClaim(LunaFluxApprovalSubject)
+  RejectedApprovalClaim(LunaFluxApprovalSubject)
+  ApprovalClaimSubjectMismatch(LunaFluxApprovalSubject)
+  InvalidApprovalClaimReceipt(LunaFluxApprovalSubject)
+  ReusedApprovalClaimReceipt
+  PromotionAuthorityMismatch(LunaFluxPromotionAuthoritySubject)
+  PromotionVerifierClosed
+  InvalidSignedPromotionReceiptCount(Int)
+  MissingSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
+  DuplicateSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
+  InvalidSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
+  SignedPromotionReceiptPolicyMismatch(LunaFluxPromotionAuthoritySubject)
+  ReusedSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
+  SignedPromotionReceiptAuthenticationFailed(LunaFluxPromotionAuthoritySubject)
+  PromotionVerifierCatalogRejected
+  PromotionVerifierUnavailable
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct LunaFluxPromotionCatalog {
+  // private fields
+}
+pub fn LunaFluxPromotionCatalog::digest(Self) -> String
+pub fn LunaFluxPromotionCatalog::verify(Self, LunaFluxPromotionVerificationRequest) -> LunaFluxPromotionReport
+
+pub(all) struct LunaFluxPromotionReport {
+  evidence_well_formed : Bool
+  routable : Bool
+  authority : LunaFluxAdapterAuthority?
+  blockers : Array[LunaFluxPromotionBlocker]
+} derive(@debug.Debug)
+
+pub(all) struct LunaFluxPromotionSubmission {
+  schema_version : String
+  candidate : LunaFluxCandidateManifest
+  serving : LunaFluxServingContract
+  benchmark_evidence_digest : String
+  approval_claims : Array[LunaFluxApprovalClaim]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LunaFluxPromotionVerificationRequest {
+  schema_version : String
+  candidate : LunaFluxCandidateManifest
+  serving : LunaFluxServingContract
+  benchmark_evidence_digest : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct LunaFluxPromotionVerifier {
+  // private fields
+}
+pub fn LunaFluxPromotionVerifier::close(Self) -> Unit
+pub fn LunaFluxPromotionVerifier::new(LunaFluxPromotionVerifierPolicy, BytesView) -> Self raise LunaFluxPromotionVerifierError
+pub fn LunaFluxPromotionVerifier::verify(Self, LunaFluxPromotionVerificationRequest, ArrayView[LunaFluxSignedEvidenceApproval]) -> LunaFluxPromotionReport
+
+pub(all) struct LunaFluxPromotionVerifierAuthority {
+  subject : LunaFluxPromotionAuthoritySubject
+  authority_id : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LunaFluxPromotionVerifierPolicy {
+  schema_version : String
+  rollout_digest : String
+  verifier_key_id : String
+  authorities : Array[LunaFluxPromotionVerifierAuthority]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct LunaFluxRuntimeDiscovery {
+  // private fields
+}
+pub fn LunaFluxRuntimeDiscovery::control_origin(Self) -> String
+pub async fn LunaFluxRuntimeDiscovery::probe_control(Self, timeout_milliseconds? : Int) -> Unit
+pub fn LunaFluxRuntimeDiscovery::runtime_origin(Self) -> String
+pub fn LunaFluxRuntimeDiscovery::runtime_protocol(Self) -> String
+
+pub(all) struct LunaFluxServingContract {
+  target_profile_digest : String
+  target_architecture : String
+  listener_contract_digest : String
+  health_readiness_contract_digest : String
+  drain_contract_digest : String
+  invocation_contract_digest : String
+  listener_origin : String
+  listener_port : Int
+  invocation_path : String
+  health_path : String
+  readiness_path : String
+  drain_path : String
+  invocation_protocol : LunaFluxInvocationProtocol
+  health_protocol : LunaFluxHealthProtocol
+  drain_protocol : LunaFluxDrainProtocol
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct LunaFluxSignedEvidenceApproval {
+  schema_version : String
+  subject : LunaFluxPromotionAuthoritySubject
+  rollout_digest : String
+  evidence_digest : String
+  approval_receipt_digest : String
+  authority_id : String
+  verifier_key_id : String
+  signature : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LunaFluxSignedEvidenceApproval::canonical_signing_bytes(Self, String) -> Bytes
+
 pub(all) struct NodeRuntimeEndpoint {
   node_id : String
   endpoint : String
@@ -57,6 +373,7 @@ pub struct OpenAiTextRuntime {
   artifact_digest : String
   maximum_event_bytes : Int
   maximum_response_bytes : Int
+  lunaflux_streaming_responses : Bool
 }
 pub fn OpenAiTextRuntime::artifact_digest(Self) -> String
 pub fn OpenAiTextRuntime::image_digest(Self) -> String
@@ -67,6 +384,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(Self, @contracts.WorkloadEnvelo
 pub fn OpenAiTextRuntime::new(String, String, String, String, String, allow_http_loopback? : Bool) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::runtime_version(Self) -> String
 pub fn OpenAiTextRuntime::uses_direct_node_routing(Self) -> Bool
+pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(Self) -> Self
 pub fn OpenAiTextRuntime::with_node_endpoints(Self, Array[NodeRuntimeEndpoint]) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::with_node_endpoints_json(Self, String) -> Self raise
 pub fn OpenAiTextRuntime::with_response_budgets(Self, Int, Int) -> Self raise RemoteRuntimeError

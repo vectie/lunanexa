@@ -21,6 +21,9 @@ The browser bundle command produces self-contained static roots at
 serve `/enterprise/` plus `/workbench/` on the enterprise origin. Both origins
 proxy `/v1` to the same controller and default to their page origin unless
 `globalThis.LUNANEXA_API_ENDPOINT` is injected before their module script.
+The build renders each page's module query from the SHA-256 of its emitted
+JavaScript. Do not replace those content-derived versions with a release label:
+an open operator tab must fetch new code after an immutable image rollout.
 
 The console image copies the contents of `browser-dist/console` to its document
 root. The workbench image copies the complete `browser-dist` directory to its
@@ -29,7 +32,9 @@ without an ingress rewrite. Its readiness probe deliberately checks
 `/workbench/`. Keep this path contract when replacing the static server image;
 the release gate verifies the bundle layout, while the deployment pipeline is
 responsible for building and signing the immutable images referenced by the
-templates.
+templates. Public non-loopback HTTP is display-only acceptance transport: both
+the console and workbench disable credential entry until the page is served on
+HTTPS or exact loopback.
 
 The repository gate is necessary but does not replace cluster acceptance.
 

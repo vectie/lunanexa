@@ -2,29 +2,33 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "1c5f976c21668b1914c02623e7de5b7e75f6bb9c",
-    "working_tree": "release-gate-passed",
-    "inspected_at": "2026-08-13T08:34:58Z"
+    "revision": "5e9dd5edc2a2066e2cb3b144fcaa1f639ddefe93",
+    "working_tree": "dirty-deployment-candidate",
+    "inspected_at": "2026-08-27T12:52:43Z"
   },
   "sources": [
-    {"id":"readme","path":"README.mbt.md","digest":"sha256:9bcea9a7bc2e9ffefa5a84e68c9aba83a3f5df09a1df1a858cf01b8062edf858","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:a8037295bd49f8a95cec0065b76f234482916d65b9a9e866b53170717c079af3","kind":"product-contract","public":true},
-    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:87d85dd135c55b92f0b7088c23dfc14a8ae79ce8eac6aaa9bfb3742f03b34ac8","kind":"architecture","public":true},
+    {"id":"readme","path":"README.mbt.md","digest":"sha256:dda3710b4ace952539757e3ac142df6da9675f93fb1a8eca783ba493de56a84f","kind":"overview","public":true},
+    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:48e69376afe36bcc9e17da0483d4439df0d4519d54f301774f8bb1b59bda10f9","kind":"product-contract","public":true},
+    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:4968336075679622efc60123f6fcf7f1738771cb30fd9181ccae99bb0326fce5","kind":"architecture","public":true},
     {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:b95f30b31b2173afc3cec9056f4e565826371cb4875b394c601a82023e52eb45","kind":"readiness","public":true},
-    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:b1c358219b8cee5be0d77c769dc24f5ee5cfa4596f2372a91eacc6342b9d02d7","kind":"deployment","public":true},
-    {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:68ae69ed0b2be5ec9a7257146e3e7320f4f6881b4caa807bc557e7d90f40aa76","kind":"operations","public":true},
+    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:dbf3d2be1174d28aa125218f7c698c880321bc194258237c2eaa042d1765896d","kind":"deployment","public":true},
+    {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:716a36c91304c9e213fd1fe2b8517ccf36c0c76a410275d6c15daac2feb674de","kind":"operations","public":true},
     {"id":"operations-commerce-guide","path":"docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md","digest":"sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6","kind":"operations-and-guide-contract","public":true},
     {"id":"recovery","path":"docs/RECOVERY_RUNBOOK.md","digest":"sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361","kind":"recovery","public":true},
     {"id":"security","path":"docs/SECURITY_OPERATIONS.md","digest":"sha256:6446246bd965f4994adad4c5197813dfe1fc44ee509eaa93db3a8c580b42d73f","kind":"security","public":true},
     {"id":"management-plane","path":"docs/MANAGEMENT_PLANE.md","digest":"sha256:7bc83d7f12387e198b6482fde3919e8467cab0bce0273453972b6a280ce23b43","kind":"model-service-management","public":true},
-    {"id":"workspaces","path":"docs/WORKSPACES.md","digest":"sha256:3aa4ad015579598015d2783f1047f75dee1b202082c4ac255ef2a9fe583f9f99","kind":"workspace-authority","public":true},
+    {"id":"workspaces","path":"docs/WORKSPACES.md","digest":"sha256:91cbc4be0e5d532235a09e5f979a8adb29f0244dc8ff639b9d182184f31b4000","kind":"workspace-authority","public":true},
     {"id":"client-integration","path":"docs/CLIENT_INTEGRATION.md","digest":"sha256:0beb04fb744a301f772ed26e23c3b89529c34f1229a7812880f95b217c4c6e69","kind":"client-contract","public":true},
     {"id":"database","path":"docs/DATABASE.md","digest":"sha256:d6c79faacda36e1873a76dfd2cfe937cd8f00571f0013ed805d1accde1761bd5","kind":"database","public":true},
-    {"id":"production-readiness","path":"docs/PRODUCTION_READINESS.md","digest":"sha256:34dbe44472e75933589cc9794454be93c662cf2bae3ac865f67364bd05a82903","kind":"production-readiness","public":true},
+    {"id":"production-readiness","path":"docs/PRODUCTION_READINESS.md","digest":"sha256:062e7bfd6a7bde9adde8810d42979aea734d0fe93131d0131257e32fa71daec8","kind":"production-readiness","public":true},
+    {"id":"ui-production-validation","path":"docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md","digest":"sha256:387b655f02b99db242f2b32f49ffdea01f5be3d7a079522998ab37bc7c35d4ce","kind":"ui-acceptance-ledger","public":true},
+    {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:01ee6e6b19689428b3d1790a62a4bd99eb0984a2dd48fbfab9ad6b3d66a45d31","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:5ce9c2e5143d5c459346ffbe4dc1f4d27e870547c300e7136c4bcaa564e91cf8","kind":"implementation","public":true},
-    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:fbcd1897f9c27daa89c8d718a6e900cc46843010eeb880bbe4be1972e8d813e7","kind":"acceptance-script","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:a69b0e41abb9ddc7210e325c2c02ea9509b9a84c558294d669cec61f33d9c06e","kind":"implementation","public":true},
+    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:db10aa03a88fae4d95476c1bce928cf0118366b9a90025042feffd100af220ba","kind":"acceptance-script","public":true},
+    {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4","kind":"hardware-qualification","public":true},
+    {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7","kind":"runtime-qualification","public":true},
     {"id":"dgx-qualification","path":"deploy/dgx-spark/README.md","digest":"sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512","kind":"runtime-qualification","public":true}
   ],
   "claims": [
@@ -40,7 +44,8 @@
     {"id":"claim-notifications-observability","statement":"The repository implements durable tenant notifications, actionable operator alerts, bounded structured operational events, low-cardinality metrics and receipt-based audit correlation.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["External email, SMS, webhook, metrics, log and paging destinations remain deployment-owned integrations."]},
     {"id":"claim-offline-commerce","statement":"The repository implements a generation-fenced hybrid online/offline order, document, evidence-review and fulfillment workflow with MoonLeaf OOXML verification and renderer-bound release evidence.","status":"implemented","source_ids":["operations-commerce-guide","deployment"],"limitations":["Legal templates, object storage, malware scanning, rendering authority, payment, invoice, seal and retention procedures require named external owners before production use."]},
     {"id":"claim-machine-access","statement":"The enterprise portal exposes a tenant-safe exclusive-machine lifecycle with opaque credential handoff, coarse reachability, automatic expiry and explicit early termination without exposing physical topology or raw credentials.","status":"implemented","source_ids":["operations-commerce-guide","security"],"limitations":["Production IdP, trusted ingress, SSH certificate authority or broker, node-local watchdog and sanitization rehearsal remain required."]},
-    {"id":"claim-guide-admin-diagnostics","statement":"The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."]}
+    {"id":"claim-guide-admin-diagnostics","statement":"The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."]},
+    {"id":"claim-two-offering-roadmap","statement":"The next major-version roadmap separates managed inference from dedicated GPU workspace access and assigns each an independent evidence-based launch gate.","status":"planned","source_ids":["future-expansion","product-contract","production-readiness"],"limitations":["Neither offering is production-ready until its physical and external acceptance gates pass."]}
   ],
   "open_gaps": [
     "The repository source ledger is current, but production evidence must be refreshed after the physical deployment and external-adapter acceptance run.",

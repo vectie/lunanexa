@@ -2,14 +2,15 @@
 fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
   {
     version: @installer.request_version,
-    local_simulation: false,
+    deployment_target: ManagementAndCompute,
     apply,
     confirmation: if apply {
-      @installer.apply_confirmation
+      @installer.management_and_compute_confirmation
     } else {
       ""
     },
     ssh_user: "cluster-admin",
+    ssh_port: 22,
     ssh_key_path: "/Users/operator/.ssh/lunanexa",
     known_hosts_path: "/Users/operator/.ssh/known_hosts",
     management_node: "management-01",
@@ -23,6 +24,7 @@ fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
     cluster_namespace: "lunanexa",
     kubeconfig_path: "/Users/operator/.kube/config",
     rendered_directory: "/srv/lunanexa/rendered",
+    management_secret_manifest: "/srv/lunanexa/secrets/management.yaml",
     secret_directory: "/srv/lunanexa/secrets",
     cli_path: "/usr/local/bin/lunanexa",
   }
@@ -32,7 +34,8 @@ fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
 test "local simulation requires only its isolated kubeconfig and confirmation" {
   let request = {
     ..valid_request(apply=true),
-    local_simulation: true,
+    deployment_target: LocalSimulation,
+    confirmation: @installer.simulation_confirmation,
     kubeconfig_path: "~/.kube/lunanexa-sim",
     ssh_user: "",
     ssh_key_path: "",
@@ -41,6 +44,7 @@ test "local simulation requires only its isolated kubeconfig and confirmation" {
     management_host: "",
     compute_nodes: [],
     rendered_directory: "",
+    management_secret_manifest: "",
     secret_directory: "",
     cli_path: "",
   }
@@ -51,6 +55,49 @@ test "local simulation requires only its isolated kubeconfig and confirmation" {
 test "valid dry-run and confirmed apply requests" {
   @installer.validate_request(valid_request())
   @installer.validate_request(valid_request(apply=true))
+}
+
+///|
+test "management foundation does not require compute inventory" {
+  @installer.validate_request({
+    ..valid_request(apply=true),
+    deployment_target: ManagementFoundation,
+    confirmation: @installer.management_confirmation,
+    compute_nodes: [],
+    secret_directory: "",
+    cli_path: "",
+  })
+}
+
+///|
+test "compute expansion accepts a selected subset" {
+  @installer.validate_request({
+    ..valid_request(apply=true),
+    deployment_target: ComputeExpansion,
+    confirmation: @installer.compute_confirmation,
+    compute_nodes: [{ node_name: "compute-01", ssh_host: "10.0.0.21" }],
+  })
+}
+
+///|
+test "compute expansion does not require management host identity" {
+  @installer.validate_request({
+    ..valid_request(apply=true),
+    deployment_target: ComputeExpansion,
+    confirmation: @installer.compute_confirmation,
+    management_node: "",
+    management_host: "",
+    compute_nodes: [{ node_name: "compute-01", ssh_host: "10.0.0.21" }],
+    management_secret_manifest: "",
+  })
+}
+
+///|
+test "displayed stage counts match each executable deployment scope" {
+  assert_eq(@installer.stage_names(ManagementFoundation).length(), 6)
+  assert_eq(@installer.stage_names(ComputeExpansion).length(), 7)
+  assert_eq(@installer.stage_names(ManagementAndCompute).length(), 10)
+  assert_eq(@installer.stage_names(LocalSimulation).length(), 5)
 }
 
 ///|
@@ -68,7 +115,7 @@ test "apply fails closed without exact confirmation" {
 }
 
 ///|
-test "inventory requires exactly four unique safe compute targets" {
+test "selected inventory rejects duplicate and unsafe compute targets" {
   try
     @installer.validate_request({
       ..valid_request(),
@@ -84,6 +131,24 @@ test "inventory requires exactly four unique safe compute targets" {
   } noraise {
     _ => fail("expected inventory rejection")
   }
+}
+
+///|
+test "combined deployment accepts non-four inventory and explicit co-location" {
+  @installer.validate_request({
+    ..valid_request(),
+    management_node: "lab-01",
+    management_host: "lab-01.internal",
+    compute_nodes: [{ node_name: "lab-01", ssh_host: "lab-01.internal" }],
+  })
+  @installer.validate_request({
+    ..valid_request(),
+    compute_nodes: [
+      { node_name: "compute-a", ssh_host: "10.0.0.21" },
+      { node_name: "compute-b", ssh_host: "10.0.0.22" },
+      { node_name: "compute-c", ssh_host: "10.0.0.23" },
+    ],
+  })
 }
 
 ///|

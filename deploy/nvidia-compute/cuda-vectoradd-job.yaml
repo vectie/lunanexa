@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: lunanexa-cuda-vectoradd-
+  namespace: default
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lunanexa-cuda-vectoradd
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      nodeSelector:
+        lunanexa.io/role: gpu
+      tolerations:
+        - key: lunanexa.io/role
+          operator: Equal
+          value: gpu
+          effect: NoSchedule
+      containers:
+        - name: vectoradd
+          image: nvcr.io/nvidia/k8s/cuda-sample@sha256:7c7540bdf1f942d4fb6db97069fd6c289471b54ac29e3c7fcdf914cf77af7d41
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              nvidia.com/gpu: "1"

@@ -5,6 +5,7 @@ import {
   "vectie/lunanexa/policy",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/runtimes",
+  "vectie/lunanexa/settings",
   "vectie/lunanexa/store",
   "moonbitlang/async",
   "moonbitlang/async/fs",

@@ -130,10 +130,11 @@ fn request_from_state(
 ) -> @install_contract.InstallRequest raise {
   {
     version: @install_contract.request_version,
-    local_simulation: state.form.local_simulation,
+    deployment_target: state.form.deployment_target,
     apply,
     confirmation: state.form.confirmation,
     ssh_user: state.form.ssh_user.trim().to_owned(),
+    ssh_port: @string.parse_int64(state.form.ssh_port.trim()).to_int(),
     ssh_key_path: state.form.ssh_key_path.trim().to_owned(),
     known_hosts_path: state.form.known_hosts_path.trim().to_owned(),
     management_node: state.form.management_node.trim().to_owned(),
@@ -144,6 +145,9 @@ fn request_from_state(
     cluster_namespace: state.form.cluster_namespace.trim().to_owned(),
     kubeconfig_path: state.form.kubeconfig_path.trim().to_owned(),
     rendered_directory: state.form.rendered_directory.trim().to_owned(),
+    management_secret_manifest: state.form.management_secret_manifest
+    .trim()
+    .to_owned(),
     secret_directory: state.form.secret_directory.trim().to_owned(),
     cli_path: state.form.cli_path.trim().to_owned(),
   }

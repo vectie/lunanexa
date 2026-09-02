@@ -226,3 +226,42 @@ test "deployment requires an approved artifact and exact registered runtime" {
     ),
   )
 }
+
+///|
+test "scheduling binds the promoted model to its evaluated runtime" {
+  let registry = @registry.ModelRegistry::new()
+  make_approvable(registry, "v1")
+  ignore(registry.approve("model.text", "v1", 2L))
+  ignore(
+    registry.promote("text.default", "model.text", "v1", Stable, "operator", 3L),
+  )
+  let stale_runtime : @contracts.RuntimeSpec = {
+    name: "text-runtime",
+    image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    version: "runtime-0",
+    architectures: ["nvidia-gb10"],
+    capabilities: [TextGenerate],
+    supports_batching: false,
+    supports_multi_node: false,
+  }
+  let evaluated_runtime : @contracts.RuntimeSpec = {
+    ..stale_runtime,
+    image_digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    version: "runtime-1",
+  }
+  registry.register_runtime(stale_runtime)
+  registry.register_runtime(evaluated_runtime)
+  for digest in [stale_runtime.image_digest, evaluated_runtime.image_digest] {
+    registry.record_verification({
+      digest,
+      signature_verified: true,
+      provenance_verified: true,
+      verified_unix_ms: 4L,
+      verifier: "cosign-key:test",
+    })
+  }
+  guard registry.scheduling_target("text.default", TextGenerate) is Some(target) else {
+    fail("expected an evaluated scheduling target")
+  }
+  assert_eq(target.runtime, evaluated_runtime)
+}

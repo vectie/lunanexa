@@ -68,15 +68,20 @@ runtime_pids=''
 node_pids=''
 
 cleanup() {
+  status=$?
   for process_id in $node_pids $runtime_pids $control_pid; do
     if [ -n "$process_id" ] && kill -0 "$process_id" 2>/dev/null; then
       kill "$process_id" 2>/dev/null || true
       wait "$process_id" 2>/dev/null || true
     fi
   done
-  if [ "$keep_artifacts" -eq 0 ]; then
+  if [ "$keep_artifacts" -eq 0 ] && [ "$status" -eq 0 ]; then
     rm -rf "$simulation_directory"
+  elif [ "$keep_artifacts" -eq 0 ]; then
+    printf '%s\n' "failed simulation evidence retained at $simulation_directory" >&2
   fi
+  trap - EXIT
+  exit "$status"
 }
 trap cleanup EXIT INT TERM
 
@@ -133,6 +138,7 @@ start_controller() {
     LUNANEXA_OFFLINE_COMMERCE_PATH="$simulation_directory/offline-commerce.json" \
     LUNANEXA_ACCESS_PATH="$simulation_directory/access.json" \
     LUNANEXA_CREDENTIAL_HANDOFF_PATH="$simulation_directory/credential-handoffs.json" \
+    LUNANEXA_CLIENT_HANDOFF_PATH="$simulation_directory/client-handoffs.json" \
     LUNANEXA_TECHNICAL_PATH="$simulation_directory/technical.json" \
     LUNANEXA_WORKSPACE_PATH="$simulation_directory/workspace.json" \
     LUNANEXA_DEPLOYMENT_PATH="$simulation_directory/deployments.json" \
@@ -156,6 +162,11 @@ start_controller() {
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="simulation-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="simulation-api-key-authority-0123456789" \
     LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="simulation-credential-handoff-authority" \
+    LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET="simulation-client-handoff-authority" \
+    LUNANEXA_CLIENT_ID="simulation-desktop" \
+    LUNANEXA_CLIENT_DISPLAY_NAME="Simulation desktop" \
+    LUNANEXA_CLIENT_LAUNCH_URI="lunanexa-client://workspace/handoff" \
+    LUNANEXA_PUBLIC_API_BASE_URL="$base_url" \
     LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="simulation-helper-receipt-authority" \
     LUNANEXA_COSIGN_BINARY='/usr/bin/cosign' \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$simulation_directory/cosign.pub" \
@@ -216,7 +227,7 @@ start_node() {
     LUNANEXA_NODE_CERTIFICATE_PATH="$simulation_directory/$node_id-certificate.json" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="$assignment_secret" \
     LUNANEXA_SIM_RUNTIME_HEALTH_ENDPOINT="http://127.0.0.1:$((base_port + index))/health" \
-    LUNANEXA_SIM_POLL_MS=100 \
+    LUNANEXA_SIM_POLL_MS=250 \
     "$node_binary" >"$simulation_directory/$node_id-node.log" 2>&1 &
   started_node_pid=$!
   node_pids="$node_pids $started_node_pid"
@@ -261,7 +272,7 @@ wait_for_pattern() {
   # controller -> node -> heartbeat reconciliation loop to complete. Poll at a
   # production-like cadence so each read's durable observability event does not
   # create lock pressure that starves the node agents under the complete gate.
-  while [ "$attempts" -lt 600 ]; do
+  while [ "$attempts" -lt 240 ]; do
     curl --fail --silent --max-time 1 \
       --header "Authorization: Bearer $operator_token" \
       "$base_url$path" >"$simulation_directory/poll.json" 2>/dev/null || true
@@ -269,7 +280,7 @@ wait_for_pattern() {
       return 0
     fi
     attempts=$((attempts + 1))
-    sleep 0.1
+    sleep 0.25
   done
   printf '%s\n' "timed out waiting for $pattern at $path" >&2
   tail -n 30 "$simulation_directory"/controller-epoch-*.log >&2 || true
@@ -327,6 +338,7 @@ if rg -q '"node_id":"sim-dgx-[234]"' "$simulation_directory/deployment-plan.json
 fi
 operator_post '/v1/service-deployments' "$deployment_intent" \
   "$simulation_directory/deployment-one-click.json"
+wait_for_pattern '/v1/assignments' 'deployment-one-click-r1'
 wait_for_pattern '/v1/nodes' 'deployment-one-click'
 curl --fail --silent --max-time 2 \
   --header "Authorization: Bearer $operator_token" \

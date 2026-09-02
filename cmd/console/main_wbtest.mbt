@@ -162,6 +162,7 @@ test "exclusive machine termination confirmation binds node user and generation"
     console: state,
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (prepared, _) = update_live(
@@ -213,6 +214,7 @@ test "locale switch is local and preserves operational session state" {
     console: state,
     next_directive_generation: 42L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let switched = switch_app_locale(model, ChineseSimplified)
   assert_eq(switched.console.locale, ChineseSimplified)
@@ -238,6 +240,10 @@ test "loaded controller state keeps the selected route and locale" {
     ..@ui.default_state(),
     locale: ChineseSimplified,
     route: Policies,
+    model_source_query: "MiniCPM",
+    model_source_results: [],
+    model_source_total: 0L,
+    model_imports: [],
     operation_name: "set-quota",
     operation_body: "{\"tenant_ref\":\"team-a\"}",
     quick_deployment_id: "service-1",
@@ -253,12 +259,67 @@ test "loaded controller state keeps the selected route and locale" {
   let merged = merge_loaded_console(current, loaded)
   assert_eq(merged.locale, ChineseSimplified)
   assert_eq(merged.route, Policies)
+  assert_eq(merged.model_source_query, "MiniCPM")
   assert_eq(merged.operation_name, "set-quota")
   assert_eq(merged.operation_body, "{\"tenant_ref\":\"team-a\"}")
   assert_eq(merged.quick_deployment_id, "service-1")
   assert_eq(merged.quick_template, "text-small@v1")
   assert_eq(merged.success_message, Some("配置已提交。"))
   assert_eq(merged.overview.total_nodes, 2)
+}
+
+///|
+test "model source search is edited independently from generic operations" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "operator-secret",
+    audit_credential: "audit-secret",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: {
+      ..@ui.default_state(),
+      route: Models,
+      operation_body: "{\"tenant_ref\":\"team-a\"}",
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (edited, _) = update_live(
+    model,
+    Console(ModelSourceQueryChanged("OpenBMB")),
+    emit,
+  )
+  assert_eq(edited.console.model_source_query, "OpenBMB")
+  assert_eq(edited.console.operation_body, "{\"tenant_ref\":\"team-a\"}")
+}
+
+///|
+test "changing an operator credential clears authenticated UI authority" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "old-operator-secret",
+    audit_credential: "audit-secret",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: { ..@ui.default_state(), operator_authenticated: true },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (changed, _) = update_live(
+    model,
+    CredentialChanged("new-operator-secret"),
+    emit,
+  )
+  assert_eq(changed.credential, "new-operator-secret")
+  assert_false(changed.console.operator_authenticated)
 }
 
 ///|
@@ -315,9 +376,14 @@ test "Simplified Chinese connection drawer localizes security copy" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
-    console: { ..@ui.default_state(), locale: ChineseSimplified },
+    console: {
+      ..@ui.default_state(),
+      locale: ChineseSimplified,
+      operator_authenticated: true,
+    },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -336,6 +402,89 @@ test "Simplified Chinese connection drawer localizes security copy" {
 
 ///|
 #warnings("-alert_unstable")
+test "unauthenticated operator sees login gate instead of console shell" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "",
+    audit_credential: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: { ..@ui.default_state(), locale: English },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("Operator login"))
+  assert_true(html.contains("Operator access starts here."))
+  assert_true(html.contains("login-operator-token"))
+  assert_false(html.contains("Primary navigation"))
+  assert_false(html.contains("Model registry"))
+}
+
+///|
+#warnings("-alert_unstable")
+test "public plain HTTP renders login landing but blocks credential entry" {
+  let model : AppModel = {
+    endpoint: "http://106.39.18.146:4174",
+    credential: "operator-secret",
+    audit_credential: "audit-secret",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: @ui.default_state(),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(
+    html.contains("Administrative login is blocked on public plain HTTP"),
+  )
+  assert_true(html.contains("disabled"))
+  assert_false(html.contains("Model registry"))
+}
+
+///|
+test "logout clears authorities and loaded operator state" {
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "operator-secret",
+    audit_credential: "audit-secret",
+    inference_credential: "inference-secret",
+    inference_subject_ref: "subject-one",
+    commercial_organization: "org-one",
+    demo_mode: false,
+    console: {
+      ..@ui.demo_state(),
+      operator_authenticated: true,
+      locale: ChineseSimplified,
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (logged_out, _) = update_live(model, Logout, emit)
+  assert_eq(logged_out.credential, "")
+  assert_eq(logged_out.audit_credential, "")
+  assert_eq(logged_out.inference_credential, "")
+  assert_eq(logged_out.console.locale, ChineseSimplified)
+  assert_false(logged_out.console.operator_authenticated)
+  assert_eq(logged_out.console.models.length(), 0)
+}
+
+///|
+#warnings("-alert_unstable")
 test "demo mode presents a read-only cluster snapshot" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
@@ -348,6 +497,7 @@ test "demo mode presents a read-only cluster snapshot" {
     console: @ui.demo_state(),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -370,6 +520,7 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     console: { ..@ui.demo_state(), route: Leases },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let lease = model.console.exclusive_node_leases[0]
@@ -408,6 +559,7 @@ test "demo mode previews every destructive node operation without mutation" {
     console: { ..@ui.demo_state(), route: Nodes },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let node_id = model.console.nodes[0].node_id
@@ -439,6 +591,7 @@ test "demo mode exercises one-click preflight without controller mutation" {
     console: { ..@ui.demo_state(), route: Catalog },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (named, _) = update(
@@ -481,6 +634,7 @@ test "navigation clears stale operation notices and confirmation" {
     },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (next, _) = update(model, Console(Navigate(Catalog)), emit)
@@ -503,6 +657,7 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     console: { ..@ui.demo_state(), route: ContractDocuments },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -586,6 +741,7 @@ test "contract approval and governance controls route through the operator shell
     },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (reviewing, _) = update_live(
@@ -632,4 +788,69 @@ test "contract approval and governance controls route through the operator shell
     .unwrap_or("")
     .contains("latest revision"),
   )
+}
+
+///|
+test "model import polling is generation fenced and logout invalidates it" {
+  let downloading : @ui.ModelImportRow = {
+    import_id: "ms-import-1",
+    source: "modelscope",
+    model_id: "OpenBMB/MiniCPM5-1B",
+    revision: "master",
+    state: Downloading,
+    files_total: 11,
+    files_completed: 2,
+    bytes_total: 2171355326L,
+    bytes_completed: 1048576L,
+    manifest_digest: "",
+    artifact_uri: "",
+    license: "apache-2.0",
+    error_code: "",
+    cancel_requested: false,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1100L,
+  }
+  let verified = {
+    ..downloading,
+    state: Verified,
+    files_completed: 11,
+    bytes_completed: downloading.bytes_total,
+    manifest_digest: "sha256:0123456789abcdef",
+    updated_unix_ms: 1200L,
+  }
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "operator-token",
+    audit_credential: "audit-token",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Models,
+      model_imports: [downloading],
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 7L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (stale, _) = update_live(
+    model,
+    Outcome(ModelImportsPolled(6L, [verified])),
+    emit,
+  )
+  assert_eq(stale.console.model_imports[0].state, Downloading)
+  let (current, _) = update_live(
+    model,
+    Outcome(ModelImportsPolled(7L, [verified])),
+    emit,
+  )
+  assert_eq(current.console.model_imports[0].state, Verified)
+  let (logged_out, _) = update_live(model, Logout, emit)
+  assert_eq(logged_out.model_import_poll_generation, 8L)
+  assert_eq(logged_out.credential, "")
+  assert_false(logged_out.console.operator_authenticated)
 }

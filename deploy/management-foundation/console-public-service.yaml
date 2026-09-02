@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-console-public-gateway
+spec:
+  selector:
+    matchLabels:
+      app: lunanexa-console-public-gateway
+  template:
+    metadata:
+      labels:
+        app: lunanexa-console-public-gateway
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: public-console-gateway
+    spec:
+      serviceAccountName: lunanexa-console
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: "${WEB_IMAGE}"
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: nginx-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /console/
+              port: http
+      volumes:
+        - name: nginx-tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-console-public
+  annotations:
+    lunanexa.io/exposure: temporary-plain-http
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    app: lunanexa-console-public-gateway
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 4174
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-console-public-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-console-public-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-control
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

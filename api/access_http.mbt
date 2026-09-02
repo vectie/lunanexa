@@ -14,6 +14,11 @@ priv struct OpenAiChatRequest {
   messages : Array[Json]
   stream : Bool?
   max_tokens : Int?
+  tools : Array[Json]?
+  tool_choice : Json?
+  parallel_tool_calls : Bool?
+  temperature : Double?
+  top_p : Double?
 } derive(FromJson)
 
 ///|
@@ -92,38 +97,88 @@ async fn ApiService::api_key_check(
   model : String?,
   consume : Bool,
 ) -> ApiKeyCheck {
-  guard self.access_store is Some(store) &&
-    bearer_secret(headers) is Some(secret) else {
-    return KeyDenied
+  guard bearer_secret(headers) is Some(secret) else { return KeyDenied }
+  let now = @async.now()
+  match self.access_store {
+    Some(store) =>
+      try {
+        let value = match (tenant_ref, model) {
+          (Some(tenant), Some(selected_model)) =>
+            store.authorize(
+              secret,
+              scope,
+              tenant_ref=tenant,
+              model=selected_model,
+              now,
+              consume,
+            )
+          (Some(tenant), None) =>
+            store.authorize(secret, scope, tenant_ref=tenant, now, consume)
+          (None, Some(selected_model)) =>
+            store.authorize(secret, scope, model=selected_model, now, consume)
+          (None, None) => store.authorize(secret, scope, now, consume)
+        }
+        return KeyAuthorized(value)
+      } catch {
+        @access.AccessError::QuotaExceeded => return KeyQuotaExceeded
+        _ => ()
+      }
+    None => ()
   }
-  try {
-    match (tenant_ref, model) {
-      (Some(tenant), Some(selected_model)) =>
-        store.authorize(
-          secret,
-          scope,
-          tenant_ref=tenant,
-          model=selected_model,
-          @async.now(),
-          consume,
-        )
-      (Some(tenant), None) =>
-        store.authorize(secret, scope, tenant_ref=tenant, @async.now(), consume)
-      (None, Some(selected_model)) =>
-        store.authorize(
-          secret,
-          scope,
-          model=selected_model,
-          @async.now(),
-          consume,
-        )
-      (None, None) => store.authorize(secret, scope, @async.now(), consume)
-    }
-  } catch {
-    @access.AccessError::QuotaExceeded => KeyQuotaExceeded
-    _ => KeyDenied
-  } noraise {
-    value => KeyAuthorized(value)
+  match self.client_handoff_store {
+    Some(store) =>
+      try {
+        let value = match model {
+          Some(selected_model) =>
+            store.authorize(secret, scope, model=selected_model, now, consume)
+          None => store.authorize(secret, scope, now, consume)
+        }
+        if tenant_ref.map(tenant => tenant != value.tenant_ref).unwrap_or(false) {
+          return KeyDenied
+        }
+        // Desktop credentials are lease capabilities, not independent API
+        // keys. Recheck both sources of authority on every request so early
+        // termination also blocks model discovery and other non-inference
+        // endpoints immediately.
+        let workspace_active = match self.workspace_directory {
+          Some(directory) =>
+            try {
+              ignore(
+                directory.authorize_subject_for_tenant(
+                  value.subject_ref,
+                  value.tenant_ref,
+                  Developer,
+                  now,
+                ),
+              )
+              true
+            } catch {
+              _ => false
+            }
+          None => false
+        }
+        let contract_active = match self.contract_document_store {
+          Some(contracts) =>
+            contracts.has_effective_master_lease(
+              value.tenant_ref,
+              value.subject_ref,
+              now,
+            )
+          None => false
+        }
+        if !workspace_active || !contract_active {
+          return KeyDenied
+        }
+        KeyAuthorized({
+          key_id: value.key_id,
+          tenant_ref: value.tenant_ref,
+          subject_ref: value.subject_ref,
+        })
+      } catch {
+        @client_handoff.ClientHandoffError::QuotaExceeded => KeyQuotaExceeded
+        _ => KeyDenied
+      }
+    None => KeyDenied
   }
 }
 
@@ -342,10 +397,39 @@ async fn ApiService::invoke_openai_chat(
         true,
       )
   }
-  let content = match response.output {
-    Some(String(value)) => value
-    Some(value) => value.stringify()
-    None => ""
+  if response.state != Succeeded {
+    guard response.error is Some(error) else {
+      return api_error(
+        502, "InvalidRuntimeResponse", "failed workload omitted its public error",
+        true,
+      )
+    }
+    let (status, code) = match error.code {
+      InvalidRequest => (400, "InvalidRequest")
+      Unauthenticated => (401, "Unauthenticated")
+      Unauthorized => (403, "Unauthorized")
+      QuotaExceeded => (429, "QuotaExceeded")
+      DeadlineExceeded => (504, "DeadlineExceeded")
+      NoPlacement => (503, "NoPlacement")
+      RuntimeUnavailable => (502, "RuntimeUnavailable")
+      CancelledByCaller => (409, "CancelledByCaller")
+      Internal => (500, "Internal")
+    }
+    return api_error(status, code, error.message, error.retryable)
+  }
+  if response.error is Some(_) || response.output is None {
+    return api_error(
+      502, "InvalidRuntimeResponse", "successful workload omitted output or retained an error",
+      true,
+    )
+  }
+  let (content, tool_calls) = openai_chat_message_from_runtime(response.output)
+  let message : Map[String, Json] = {
+    "role": Json::string("assistant"),
+    "content": Json::string(content),
+  }
+  if !tool_calls.is_empty() {
+    message["tool_calls"] = Json::array(tool_calls)
   }
   json_reply(200, {
     "id": "chatcmpl-\{request_digest[:32]}",
@@ -355,8 +439,12 @@ async fn ApiService::invoke_openai_chat(
     "choices": [
       {
         "index": 0,
-        "message": { "role": "assistant", "content": content },
-        "finish_reason": "stop",
+        "message": Json::object(message),
+        "finish_reason": if tool_calls.is_empty() {
+          "stop"
+        } else {
+          "tool_calls"
+        },
       },
     ],
     "usage": {
@@ -366,6 +454,86 @@ async fn ApiService::invoke_openai_chat(
     },
     "lunanexa_receipt": response.audit_receipt,
   })
+}
+
+///|
+fn openai_chat_message_from_runtime(output : Json?) -> (String, Array[Json]) {
+  guard output is Some(value) else { return ("", []) }
+  guard value is Object(fields) else {
+    return (
+      match value {
+        String(text) => text
+        _ => value.stringify()
+      },
+      [],
+    )
+  }
+  let mut content = match fields.get("output_text") {
+    Some(String(text)) => text
+    _ => ""
+  }
+  let tool_calls : Array[Json] = []
+  if fields.get("chunks") is Some(Array(chunks)) {
+    if content == "" {
+      for chunk in chunks {
+        if chunk is Object(chunk_fields) &&
+          chunk_fields.get("text_delta") is Some(String(text)) {
+          content += text
+        }
+      }
+    }
+    return (content, tool_calls)
+  }
+  guard fields.get("output") is Some(Array(items)) else {
+    if content == "" {
+      content = value.stringify()
+    }
+    return (content, tool_calls)
+  }
+  for item in items {
+    guard item is Object(item_fields) else { continue }
+    match item_fields.get("type") {
+      Some(String("message")) =>
+        if item_fields.get("content") is Some(Array(parts)) {
+          for part in parts {
+            if part is Object(part_fields) {
+              match part_fields.get("text") {
+                Some(String(text)) => content += text
+                _ => ()
+              }
+            }
+          }
+        }
+      Some(String("function_call")) => {
+        let name = match item_fields.get("name") {
+          Some(String(value)) => value
+          _ => ""
+        }
+        let arguments = match item_fields.get("arguments") {
+          Some(String(value)) => value
+          Some(value) => value.stringify()
+          None => ""
+        }
+        if name != "" {
+          let call_id = match item_fields.get("call_id") {
+            Some(String(value)) => value
+            _ =>
+              match item_fields.get("id") {
+                Some(String(value)) => value
+                _ => "call-lunanexa-\{tool_calls.length()}"
+              }
+          }
+          tool_calls.push({
+            "id": call_id,
+            "type": "function",
+            "function": { "name": name, "arguments": arguments },
+          })
+        }
+      }
+      _ => ()
+    }
+  }
+  (content, tool_calls)
 }
 
 ///|
@@ -385,6 +553,28 @@ fn openai_workload(
     "openai-\{request_digest[:32]}",
   )
   let workload_id = "openai-\{request_digest[32:64]}"
+  let payload_fields : Map[String, Json] = {
+    "messages": value.messages.to_json(),
+  }
+  if value.tools is Some(tools) {
+    payload_fields["tools"] = tools.to_json()
+  }
+  if value.tool_choice is Some(tool_choice) {
+    payload_fields["tool_choice"] = tool_choice
+  }
+  if value.parallel_tool_calls is Some(parallel_tool_calls) {
+    payload_fields["parallel_tool_calls"] = parallel_tool_calls.to_json()
+  }
+  if value.temperature is Some(temperature) {
+    payload_fields["temperature"] = temperature.to_json()
+  }
+  if value.top_p is Some(top_p) {
+    payload_fields["top_p"] = top_p.to_json()
+  }
+  let payload = Json::object(payload_fields)
+  let input_units = @utf8.encode(payload.stringify())
+    .length()
+    .clamp(min=1, max=budgets.openai_max_input_units)
   let request : @contracts.WorkloadEnvelope = {
     version: @contracts.contract_version,
     idempotency_key: idempotency,
@@ -393,7 +583,7 @@ fn openai_workload(
     credential_scope: "api-key:\{authority.key_id}",
     capability: TextGenerate,
     model_selector: value.model,
-    payload: { "messages": value.messages.to_json() },
+    payload,
     data_policy: {
       classification: Confidential,
       retention: Ephemeral,
@@ -404,7 +594,7 @@ fn openai_workload(
     priority: Interactive,
     latency_class: Realtime,
     resource_ceiling: {
-      max_input_units: budgets.openai_max_input_units,
+      max_input_units: input_units,
       max_output_units: requested_output,
       max_runtime_ms: budgets.openai_default_deadline_ms,
       max_accelerator_memory_mib: budgets.openai_max_accelerator_memory_mib,
@@ -422,6 +612,11 @@ fn body_identity(value : OpenAiChatRequest) -> String {
     "model": value.model,
     "messages": value.messages.to_json(),
     "max_tokens": value.max_tokens.to_json(),
+    "tools": value.tools.to_json(),
+    "tool_choice": value.tool_choice.to_json(),
+    "parallel_tool_calls": value.parallel_tool_calls.to_json(),
+    "temperature": value.temperature.to_json(),
+    "top_p": value.top_p.to_json(),
   }
   identity.stringify()
 }

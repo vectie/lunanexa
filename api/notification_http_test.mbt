@@ -148,6 +148,25 @@ async test "notification HTTP surface isolates tenant inbox and operator alerts"
   assert_eq(delivery_readiness.status, 200)
   assert_true(delivery_readiness.body.contains("AdaptersPending"))
   assert_false(delivery_readiness.body.contains("subject-a"))
+  let deliveries = service.handle(
+    Get,
+    "/v1/notifications/operator/deliveries",
+    operator,
+    "",
+  )
+  assert_eq(deliveries.status, 200)
+  assert_true(deliveries.body.contains("delivery-alert-node-a-in-app"))
+  assert_true(deliveries.body.contains("PendingDelivery"))
+  assert_false(deliveries.body.contains("operator-token"))
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/notifications/operator/deliveries",
+      { "Authorization": "Bearer wrong" },
+      "",
+    ).status,
+    401,
+  )
   let acknowledged = service.handle(
     Post,
     "/v1/notifications/operator/alert-node-a:acknowledge",

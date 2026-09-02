@@ -33,6 +33,11 @@ test "runtime supervisor rejects arbitrary executables and unsafe network names"
       _ => fail("generic container network was accepted")
     }
   }
+  ignore(
+    @node.OciRuntimeSupervisor::new(
+      "/usr/bin/podman", "lunanexa-runtime", "local://",
+    ),
+  )
 }
 
 ///|
@@ -72,5 +77,23 @@ test "runtime inspection requires the assigned image label and healthy state" {
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("runtime image substitution was accepted")
+  }
+}
+
+///|
+test "OCI runtime address accepts one private container address only" {
+  for address in ["10.88.0.14\n", "172.19.0.8", "192.168.80.2"] {
+    assert_eq(
+      @node.private_runtime_container_address(address),
+      address.trim().to_owned(),
+    )
+  }
+  for hostile in ["", "127.0.0.1", "8.8.8.8", "10.bad", "10.1.2.3\n10.1.2.4"] {
+    try @node.private_runtime_container_address(hostile) catch {
+      InvalidAssignmentIdentity(_) => ()
+      error => fail("unexpected address error: \{Repr(error)}")
+    } noraise {
+      _ => fail("hostile OCI container address was accepted")
+    }
   }
 }
