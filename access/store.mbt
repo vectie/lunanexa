@@ -270,6 +270,46 @@ pub async fn AccessStore::revoke(
 }
 
 ///|
+/// Revokes every active personal API credential owned by one durable subject.
+/// This is intentionally one-way: reactivating an account never resurrects a
+/// credential that was invalidated by an account suspension or revocation.
+pub async fn AccessStore::revoke_subject(
+  self : AccessStore,
+  subject_ref : String,
+  now_unix_ms : Int64,
+) -> Int {
+  if !@contracts.valid_identifier(subject_ref) || now_unix_ms <= 0L {
+    raise InvalidInput("invalid API-key subject revocation")
+  }
+  self.mutex.acquire()
+  let previous = self.credentials.copy()
+  try {
+    let mut revoked_count = 0
+    for key_id, credential in self.credentials {
+      if credential.subject_ref == subject_ref &&
+        credential.revoked_unix_ms is None {
+        self.credentials[key_id] = {
+          ..credential,
+          revoked_unix_ms: Some(now_unix_ms),
+        }
+        revoked_count += 1
+      }
+    }
+    if revoked_count > 0 {
+      self.persist()
+    }
+    self.mutex.release()
+    revoked_count
+  } catch {
+    error => {
+      self.credentials = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn AccessStore::authorize(
   self : AccessStore,
   secret : String,
@@ -354,6 +394,26 @@ pub async fn AccessStore::views(self : AccessStore) -> Array[ApiCredentialView] 
     consumed_requests: value.consumed_requests,
     revoked_unix_ms: value.revoked_unix_ms,
   })
+}
+
+///|
+pub fn IssuedApiKey::public_view(self : IssuedApiKey) -> IssuedApiKeyView {
+  {
+    credential: {
+      key_id: self.credential.key_id,
+      tenant_ref: self.credential.tenant_ref,
+      subject_ref: self.credential.subject_ref,
+      display_name: self.credential.display_name,
+      scopes: self.credential.scopes,
+      allowed_models: self.credential.allowed_models,
+      issued_unix_ms: self.credential.issued_unix_ms,
+      expires_unix_ms: self.credential.expires_unix_ms,
+      maximum_requests: self.credential.maximum_requests,
+      consumed_requests: self.credential.consumed_requests,
+      revoked_unix_ms: self.credential.revoked_unix_ms,
+    },
+    secret: self.secret,
+  }
 }
 
 ///|

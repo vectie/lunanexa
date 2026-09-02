@@ -70,6 +70,15 @@ pub(all) struct ApiCredentialView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// One-time issuance response safe for an API or browser. The durable secret
+/// digest is deliberately excluded; callers receive only the public metadata
+/// plus the one-time raw secret.
+pub(all) struct IssuedApiKeyView {
+  credential : ApiCredentialView
+  secret : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) suberror AccessError {
   InvalidInput(String)
   AlreadyExists(String)

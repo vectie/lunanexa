@@ -18,9 +18,9 @@ async test "operator-issued API key authorizes model discovery and revocation is
     "\{directory}/access.json",
     "0123456789abcdef0123456789abcdef",
   )
-  let service = expansion_service("\{directory}/state.json").with_access_store(
-    access,
-  )
+  let service = expansion_service("\{directory}/state.json")
+    .with_access_store(access)
+    .with_legacy_unbound_access_for_local_testing()
   let operator = { "Authorization": "Bearer operator-token" }
   let intent : @access.ApiKeyIssueIntent = {
     key_id: "key-api-test",
@@ -39,7 +39,8 @@ async test "operator-issued API key authorizes model discovery and revocation is
     intent.to_json().stringify(),
   )
   assert_eq(issued_reply.status, 201)
-  let issued : @access.IssuedApiKey = @json.from_json(
+  assert_false(issued_reply.body.contains("secret_sha256"))
+  let issued : @access.IssuedApiKeyView = @json.from_json(
     @json.parse(issued_reply.body),
   )
   assert_eq(
@@ -234,8 +235,10 @@ async test "scoped API key preserves WebIDE tools across the streaming chat brid
       allow_http_loopback=true,
     )
     let service = @api.ApiService::new(
-      durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
-    ).with_access_store(access)
+        durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+      )
+      .with_access_store(access)
+      .with_legacy_unbound_access_for_local_testing()
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       service.serve_on(api_server)
     }

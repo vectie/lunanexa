@@ -27,6 +27,7 @@ pub struct ApiService {
   account_store : @account.AccountStore?
   identity_assertion_secret : String
   access_store : @access.AccessStore?
+  allow_legacy_unbound_access : Bool
   management_database : @database.PostgresDatabase?
   technical_store : @technical_store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
@@ -109,6 +110,7 @@ pub fn ApiService::new(
     account_store: None,
     identity_assertion_secret: "",
     access_store: None,
+    allow_legacy_unbound_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -187,6 +189,7 @@ pub fn ApiService::with_registry(
     account_store: None,
     identity_assertion_secret: "",
     access_store: None,
+    allow_legacy_unbound_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -266,6 +269,7 @@ pub fn ApiService::with_services(
     account_store: None,
     identity_assertion_secret: "",
     access_store: None,
+    allow_legacy_unbound_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -347,6 +351,7 @@ pub fn ApiService::with_control_plane(
     account_store: None,
     identity_assertion_secret: "",
     access_store: None,
+    allow_legacy_unbound_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -460,6 +465,16 @@ pub fn ApiService::with_access_store(
   access_store : @access.AccessStore,
 ) -> ApiService {
   { ..self, access_store: Some(access_store) }
+}
+
+///|
+/// Explicit compatibility escape hatch for isolated localhost tests and
+/// migrations that predate account, membership, and contract authorities.
+/// Production composition must remain fail closed and never enable this.
+pub fn ApiService::with_legacy_unbound_access_for_local_testing(
+  self : ApiService,
+) -> ApiService {
+  { ..self, allow_legacy_unbound_access: true }
 }
 
 ///|
@@ -4505,9 +4520,39 @@ async fn ApiService::handle_with_transport(
   allow_asserted_subject : Bool,
 ) -> HttpReply {
   let started = @async.now()
+  // Resolve the durable human identity before dispatch because the mutation
+  // may revoke or alter its own session. Legacy static tokens keep their
+  // existing route-specific audit behavior.
+  let human_operator = if verb != Get &&
+    bearer_secret(headers)
+    .map(value => value.has_prefix("lnxs_"))
+    .unwrap_or(false) {
+    self.operator_identity(headers)
+  } else {
+    None
+  }
   let reply = self.dispatch_with_transport(
     verb, path, headers, body, allow_asserted_subject,
   )
+  if reply.status >= 200 && reply.status < 300 {
+    match human_operator {
+      Some(actor) => {
+        let verb_label = match verb {
+          Get => "get"
+          Post => "post"
+          Put => "put"
+          Delete => "delete"
+        }
+        self.operator_audit_as(
+          actor,
+          "operator.http.\{verb_label}",
+          path,
+          "http-status:\{reply.status}",
+        )
+      }
+      None => ()
+    }
+  }
   self.record_operational_request(
     verb, path, headers, reply, started, allow_asserted_subject,
   )

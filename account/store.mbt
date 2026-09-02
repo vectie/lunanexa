@@ -131,6 +131,27 @@ fn sorted_sessions(
 }
 
 ///|
+let completed_session_retention_ms : Int64 = 2592000000L
+
+///|
+fn AccountStore::prune_completed_sessions_unlocked(
+  self : AccountStore,
+  now_unix_ms : Int64,
+) -> Unit {
+  let cutoff = now_unix_ms - completed_session_retention_ms
+  let removable = self.sessions
+    .values()
+    .filter(session => {
+      let completed = session.revoked_unix_ms.unwrap_or(session.expires_unix_ms)
+      completed <= cutoff
+    })
+    .map(session => session.session_id)
+  for session_id in removable {
+    ignore(self.sessions.remove(session_id))
+  }
+}
+
+///|
 fn AccountStore::snapshot_unlocked(self : AccountStore) -> AccountSnapshot {
   {
     schema_version: snapshot_schema_version,
@@ -446,6 +467,7 @@ pub async fn AccountStore::issue_session(
   self.mutex.acquire()
   let previous = self.sessions.copy()
   try {
+    self.prune_completed_sessions_unlocked(now_unix_ms)
     guard self.accounts
       .values()
       .find_first(value => {

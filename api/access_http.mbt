@@ -102,7 +102,10 @@ async fn ApiService::api_key_check(
   match self.access_store {
     Some(store) =>
       try {
-        let value = match (tenant_ref, model) {
+        // First validate the credential without consuming quota. Personal API
+        // keys remain derivative of the current account, membership, and
+        // contract authorities; a stale key must not outlive any of them.
+        let preview = match (tenant_ref, model) {
           (Some(tenant), Some(selected_model)) =>
             store.authorize(
               secret,
@@ -110,13 +113,69 @@ async fn ApiService::api_key_check(
               tenant_ref=tenant,
               model=selected_model,
               now,
-              consume,
+              false,
             )
           (Some(tenant), None) =>
-            store.authorize(secret, scope, tenant_ref=tenant, now, consume)
+            store.authorize(secret, scope, tenant_ref=tenant, now, false)
           (None, Some(selected_model)) =>
-            store.authorize(secret, scope, model=selected_model, now, consume)
-          (None, None) => store.authorize(secret, scope, now, consume)
+            store.authorize(secret, scope, model=selected_model, now, false)
+          (None, None) => store.authorize(secret, scope, now, false)
+        }
+        let account_active = match self.account_store {
+          Some(accounts) =>
+            accounts
+            .views()
+            .iter()
+            .any(account => {
+              account.subject_ref == preview.subject_ref &&
+              account.state == Active &&
+              @account.role_allows(account.roles, EnterpriseUser)
+            })
+          None => self.allow_legacy_unbound_access
+        }
+        let membership_active = match self.portal_store {
+          Some(portal) =>
+            try {
+              let view = portal.self_view(preview.subject_ref)
+              view.membership.tenant_ref == preview.tenant_ref &&
+              view.membership.active &&
+              @portal.role_allows(view.membership.roles, Developer)
+            } catch {
+              _ => false
+            }
+          None => self.allow_legacy_unbound_access
+        }
+        let contract_active = match self.contract_document_store {
+          Some(contracts) =>
+            contracts.has_effective_master_lease(
+              preview.tenant_ref,
+              preview.subject_ref,
+              now,
+            )
+          None => self.allow_legacy_unbound_access
+        }
+        if !account_active || !membership_active || !contract_active {
+          return KeyDenied
+        }
+        let value = if consume {
+          match (tenant_ref, model) {
+            (Some(tenant), Some(selected_model)) =>
+              store.authorize(
+                secret,
+                scope,
+                tenant_ref=tenant,
+                model=selected_model,
+                now,
+                true,
+              )
+            (Some(tenant), None) =>
+              store.authorize(secret, scope, tenant_ref=tenant, now, true)
+            (None, Some(selected_model)) =>
+              store.authorize(secret, scope, model=selected_model, now, true)
+            (None, None) => store.authorize(secret, scope, now, true)
+          }
+        } else {
+          preview
         }
         return KeyAuthorized(value)
       } catch {
@@ -244,7 +303,7 @@ async fn ApiService::handle_access_management(
         issued.credential.key_id,
         "api-key:issued",
       )
-      json_reply(201, issued.to_json())
+      json_reply(201, issued.public_view().to_json())
     }
     (Post, _) if path.has_suffix(":revoke") => {
       let prefix = "/v1/access/api-keys/".length()

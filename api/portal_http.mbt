@@ -458,7 +458,7 @@ async fn ApiService::handle_enterprise_portal(
       } noraise {
         value => value
       }
-      json_reply(201, issued.to_json())
+      json_reply(201, issued.public_view().to_json())
     }
     (Post, _) if path.has_prefix("/v1/portal/self/api-keys/") &&
       path.has_suffix(":revoke") => {

@@ -88,3 +88,76 @@ async test "API credentials reject cross-tenant and cross-model use" {
   }
   assert_eq(store.snapshot().credentials[0].consumed_requests, 0L)
 }
+
+///|
+async test "subject revocation invalidates only that account's API keys" {
+  let path = "/tmp/lunanexa-access-subject-revoke-test-\{@async.now()}.json"
+  let store = @access.AccessStore::open(
+    path, "subject-revoke-secret-0123456789abcdef",
+  )
+  let first = store.issue(
+    {
+      key_id: "key-subject-a-first",
+      tenant_ref: "tenant-a",
+      subject_ref: "subject-a",
+      display_name: "First personal key",
+      scopes: [Inference],
+      allowed_models: [],
+      expires_unix_ms: 200000L,
+      maximum_requests: 10L,
+    },
+    100000L,
+  )
+  ignore(
+    store.issue(
+      {
+        key_id: "key-subject-a-second",
+        tenant_ref: "tenant-b",
+        subject_ref: "subject-a",
+        display_name: "Second personal key",
+        scopes: [ModelList],
+        allowed_models: [],
+        expires_unix_ms: 200000L,
+        maximum_requests: 10L,
+      },
+      100001L,
+    ),
+  )
+  let other = store.issue(
+    {
+      key_id: "key-subject-b",
+      tenant_ref: "tenant-a",
+      subject_ref: "subject-b",
+      display_name: "Other account key",
+      scopes: [Inference],
+      allowed_models: [],
+      expires_unix_ms: 200000L,
+      maximum_requests: 10L,
+    },
+    100002L,
+  )
+  assert_eq(store.revoke_subject("subject-a", 100003L), 2)
+  assert_eq(store.revoke_subject("subject-a", 100004L), 0)
+  try
+    store.authorize(
+      first.secret,
+      Inference,
+      tenant_ref="tenant-a",
+      100005L,
+      false,
+    )
+  catch {
+    @access.AccessError::Unauthorized => ()
+    _ => fail("unexpected subject-revocation authorization error")
+  } noraise {
+    _ => fail("revoked account key remained authorized")
+  }
+  let authorization = store.authorize(
+    other.secret,
+    Inference,
+    tenant_ref="tenant-a",
+    100005L,
+    false,
+  )
+  assert_eq(authorization.subject_ref, "subject-b")
+}

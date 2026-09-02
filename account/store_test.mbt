@@ -250,3 +250,49 @@ async test "active sessions are capped and use cannot extend past expiry" {
   assert_true(first.last_used_unix_ms <= first.expires_unix_ms)
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "completed browser sessions are pruned after bounded retention" {
+  let directory = @fs.tmpdir(prefix="lunanexa-account-prune-")
+  let store = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "pruned-account-session-issuer-secret-more-than-32-bytes",
+  )
+  let now = 100000L
+  ignore(
+    store.create(
+      account_fixture(
+        "account-pruned",
+        "account:pruned",
+        "external-pruned",
+        [EnterpriseUser],
+        now,
+      ),
+    ),
+  )
+  let first = store.issue_session(
+    "https://identity.example/realms/lunanexa",
+    "external-pruned",
+    "assertion-pruned-one",
+    30000L,
+    now + 1L,
+  )
+  ignore(
+    store.revoke_session(first.session.session_id, "account-pruned", now + 2L),
+  )
+  ignore(
+    store.issue_session(
+      "https://identity.example/realms/lunanexa",
+      "external-pruned",
+      "assertion-pruned-two",
+      30000L,
+      now + 2L + 2592000000L,
+    ),
+  )
+  let sessions = store.sessions_for_account("account-pruned")
+  assert_eq(sessions.length(), 1)
+  assert_false(
+    sessions.any(session => session.session_id == first.session.session_id),
+  )
+  @fs.rmdir(directory, recursive=true)
+}

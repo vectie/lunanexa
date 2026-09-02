@@ -61,6 +61,13 @@ fn decode_account_roles(body : String) -> AccountRolesIntent? {
 }
 
 ///|
+fn valid_account_roles(roles : Array[@account.AccountRole]) -> Bool {
+  roles.length() > 0 &&
+  roles.length() <= 3 &&
+  roles.all(role => roles.count(role) == 1)
+}
+
+///|
 fn safe_identity_value(value : String, maximum : Int) -> Bool {
   value.trim() != "" &&
   value.length() <= maximum &&
@@ -92,7 +99,7 @@ fn parse_identity_time(value : String) -> Int64? {
 priv struct TrustedIdentityAssertion {
   issuer : String
   subject : String
-  canonical : String
+  replay_key : String
 }
 
 ///|
@@ -139,7 +146,11 @@ fn ApiService::trusted_identity_assertion(
   if !constant_time_identity_equal(signature, expected) {
     return None
   }
-  Some({ issuer, subject, canonical })
+  Some({
+    issuer,
+    subject,
+    replay_key: "lunanexa.identity.nonce.v1\n\{issuer}\n\{nonce}",
+  })
 }
 
 ///|
@@ -224,7 +235,7 @@ async fn ApiService::handle_accounts(
       accounts.issue_session(
         assertion.issuer,
         assertion.subject,
-        assertion.canonical,
+        assertion.replay_key,
         intent.lifetime_ms,
         @async.now(),
       )
@@ -348,9 +359,28 @@ async fn ApiService::handle_accounts(
             is Some(account_id) else {
             return api_error(404, "NotFound", "route was not found", false)
           }
-          let updated = try
-            accounts.set_state(account_id, state, @async.now())
-          catch {
+          let now = @async.now()
+          guard accounts
+            .views()
+            .iter()
+            .find_first(account => account.account_id == account_id)
+            is Some(current_account) else {
+            return account_error(@account.AccountError::NotFound(account_id))
+          }
+          if state == Suspended || state == Revoked {
+            match self.access_store {
+              Some(access) =>
+                ignore(access.revoke_subject(current_account.subject_ref, now)) catch {
+                  _ =>
+                    return api_error(
+                      500, "AccountCredentialRevocationFailed", "account state was not changed because credential revocation failed",
+                      true,
+                    )
+                }
+              None => ()
+            }
+          }
+          let updated = try accounts.set_state(account_id, state, now) catch {
             error => return account_error(error)
           } noraise {
             value => value
@@ -365,12 +395,39 @@ async fn ApiService::handle_accounts(
         }
         None => {
           guard path_identifier(path, "/v1/accounts/", ":set-roles")
-            is Some(account_id) &&
-            decode_account_roles(body) is Some(intent) else {
+            is Some(account_id) else {
             return api_error(404, "NotFound", "route was not found", false)
           }
+          guard decode_account_roles(body) is Some(intent) &&
+            valid_account_roles(intent.roles) else {
+            return api_error(
+              400, "InvalidRequest", "invalid account role intent", false,
+            )
+          }
+          let now = @async.now()
+          guard accounts
+            .views()
+            .iter()
+            .find_first(account => account.account_id == account_id)
+            is Some(current_account) else {
+            return account_error(@account.AccountError::NotFound(account_id))
+          }
+          if @account.role_allows(current_account.roles, EnterpriseUser) &&
+            !@account.role_allows(intent.roles, EnterpriseUser) {
+            match self.access_store {
+              Some(access) =>
+                ignore(access.revoke_subject(current_account.subject_ref, now)) catch {
+                  _ =>
+                    return api_error(
+                      500, "AccountCredentialRevocationFailed", "account roles were not changed because credential revocation failed",
+                      true,
+                    )
+                }
+              None => ()
+            }
+          }
           let updated = try
-            accounts.set_roles(account_id, intent.roles, @async.now())
+            accounts.set_roles(account_id, intent.roles, now)
           catch {
             error => return account_error(error)
           } noraise {

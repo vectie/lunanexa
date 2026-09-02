@@ -43,6 +43,7 @@ pub async fn AccessStore::open(String, String) -> Self
 pub async fn AccessStore::open_postgres(@database.PostgresDatabase, String) -> Self
 pub async fn AccessStore::revoke(Self, String, Int64) -> ApiCredential
 pub async fn AccessStore::revoke_for_subject(Self, String, String, String, Int64) -> ApiCredential
+pub async fn AccessStore::revoke_subject(Self, String, Int64) -> Int
 pub async fn AccessStore::snapshot(Self) -> AccessSnapshot
 pub async fn AccessStore::views(Self) -> Array[ApiCredentialView]
 pub async fn AccessStore::views_for_subject(Self, String, String) -> Array[ApiCredentialView]
@@ -100,6 +101,12 @@ pub(all) enum ApiKeyScope {
 
 pub(all) struct IssuedApiKey {
   credential : ApiCredential
+  secret : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn IssuedApiKey::public_view(Self) -> IssuedApiKeyView
+
+pub(all) struct IssuedApiKeyView {
+  credential : ApiCredentialView
   secret : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
