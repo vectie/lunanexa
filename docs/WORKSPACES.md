@@ -22,6 +22,10 @@ storage, start arbitrary shells, or install editor agents on managed DGX nodes;
 those belong in a separate development-environment plane if the platform later
 adds one.
 
+For the short operator-to-user journey that replaces manual account,
+membership, grant, lease, contract and handoff coordination, see
+[Access onboarding UX](ACCESS_ONBOARDING_UX.md).
+
 ## Trust boundary
 
 A `WorkspaceLease` is an expiring control-plane entitlement. It declares

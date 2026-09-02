@@ -47,6 +47,42 @@ pub(all) struct AccessGrantRow {
   state : @workspace.WorkspaceAccessGrantState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct AccessPackageDraft {
+  identity_issuer : String
+  identity_subject : String
+  display_name : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  lifetime_days : Int
+  identity_verified : Bool
+} derive(Eq)
+
+pub(all) struct AccessPackageView {
+  package_id : String
+  account_id : String
+  subject_ref : String
+  display_name : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  user_id : String?
+  membership_id : String
+  grant_id : String?
+  lease_id : String?
+  lease_state : @workspace.WorkspaceLeaseState?
+  expires_unix_ms : Int64?
+  approved_model_aliases : Array[String]
+  account_ready : Bool
+  membership_ready : Bool
+  contract_ready : Bool
+  workspace_ready : Bool
+  models_ready : Bool
+  ready : Bool
+  can_enable : Bool
+  state : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct AccountInviteDraft {
   account_id : String
   subject_ref : String
@@ -163,6 +199,16 @@ pub(all) enum ConsoleMessage {
   AccountInviteReceiptChanged(String)
   AccountInviteRoleToggled(UiAccountRole)
   SubmitAccountInvite
+  AccessPackageIssuerChanged(String)
+  AccessPackageSubjectChanged(String)
+  AccessPackageDisplayNameChanged(String)
+  AccessPackageEmailChanged(String)
+  AccessPackageOrganizationChanged(String)
+  AccessPackageTenantChanged(String)
+  AccessPackageLifetimeChanged(Int)
+  ToggleAccessPackageIdentityVerified
+  SubmitAccessPackage
+  EnableAccessPackage(String)
   BeginActivateAccount(String)
   BeginSuspendAccount(String)
   BeginRevokeAccount(String)
@@ -192,6 +238,8 @@ pub(all) struct ConsoleState {
   authenticated_account : AccountView?
   account_sessions : Array[BrowserSessionView]
   account_invite : AccountInviteDraft
+  access_package_draft : AccessPackageDraft
+  access_packages : Array[AccessPackageView]
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]

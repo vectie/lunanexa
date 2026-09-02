@@ -15,7 +15,7 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(requests.contains("Password is not accepted"))
   assert_true(requests.contains(">WebIDE</button>"))
   assert_true(desktop.contains("SECURE DESKTOP HANDOFF"))
-  assert_true(desktop.contains("short-lived, single-use connection"))
+  assert_true(desktop.contains("single-use handoff"))
   assert_false(desktop.contains("href=\"/workbench/\""))
   assert_true(models.contains("Shared model catalog"))
   assert_true(models.contains("Managed centrally"))
@@ -23,6 +23,34 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(models.contains("Usage &amp; costs"))
   assert_true(models.contains("aria-current=\"page\""))
   assert_true(models.contains("prefers-reduced-motion:reduce"))
+}
+
+///|
+test "enterprise WebIDE journey exposes one truthful next action" {
+  let state = @enterprise.demo_state()
+  let ready = @enterprise.render({ ..state, route: DesktopIde })
+  assert_true(ready.contains("Your access journey"))
+  assert_true(ready.contains("Everything is ready"))
+  assert_true(ready.contains("text.default"))
+  assert_true(ready.contains("Open desktop WebIDE"))
+  guard state.desktop_client is Some(client) else {
+    fail("demo desktop client is required")
+  }
+  let blocked = @enterprise.render({
+    ..state,
+    route: DesktopIde,
+    desktop_client: Some({
+      ..client,
+      contract_ready: false,
+      workspace_ready: false,
+      ready: false,
+      blocker_codes: ["EffectiveMasterLeaseRequired"],
+    }),
+  })
+  assert_true(blocked.contains("Complete the MasterLease"))
+  assert_true(blocked.contains("Complete MasterLease"))
+  assert_true(blocked.contains("Review and complete the contract template"))
+  assert_false(blocked.contains("disabled>Complete MasterLease"))
 }
 
 ///|
