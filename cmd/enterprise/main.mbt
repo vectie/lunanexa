@@ -126,6 +126,25 @@ priv struct ContractSelfGovernance {
 } derive(FromJson)
 
 ///|
+priv struct DesktopClientResponse {
+  client_id : String
+  display_name : String
+  launch_uri : String
+  handoff_lifetime_ms : Int64
+  handoffs : Array[Json]
+} derive(FromJson)
+
+///|
+priv struct DesktopClientHandoffLaunch {
+  client_id : String
+  display_name : String
+  launch_uri : String
+  handoff_code : String
+  handoff_expires_unix_ms : Int64
+  one_time : Bool
+} derive(FromJson)
+
+///|
 priv enum Outcome {
   Loaded(
     @portal.EnterpriseSelfView,
@@ -140,7 +159,8 @@ priv enum Outcome {
     @contractdoc.ContractTemplateManifest,
     Array[@contractdoc.ContractPacket],
     Array[@contractdoc.ContractPacketEvent],
-    ContractSelfGovernance
+    ContractSelfGovernance,
+    @enterprise_ui.EnterpriseDesktopClient?
   )
   AgreementUpdated(@portal.PortalAgreement)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
@@ -155,6 +175,7 @@ priv enum Outcome {
   ArtifactDownloaded(String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
   ContractApprovalNudged
+  DesktopClientLaunched(String)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
   Failed(@i18n.Locale, String)
@@ -271,6 +292,26 @@ extern "js" fn demo_contract_preview_promise() -> @js.Promise =
 ///|
 extern "js" fn random_identifier(prefix : String) -> String =
   #| prefix => `${prefix}-${crypto.randomUUID()}`
+
+///| The short-lived handoff code is placed only in a URL fragment. Browsers do
+
+///| not send fragments to HTTP servers, and the receiving client removes it
+
+///|
+/// after redemption.
+extern "js" fn open_desktop_client(
+  launch_uri : String,
+  client_id : String,
+  handoff_code : String,
+) -> Unit =
+  #| (launchUri, clientId, handoffCode) => {
+  #|   const fragment = new URLSearchParams({
+  #|     lunanexa_client_id: clientId,
+  #|     lunanexa_handoff: handoffCode,
+  #|   }).toString();
+  #|   const target = `${launchUri}${launchUri.includes("#") ? "&" : "#"}${fragment}`;
+  #|   globalThis.location.assign(target);
+  #| }
 
 ///|
 extern "js" fn request_promise(
@@ -395,6 +436,69 @@ async fn request(
 }
 
 ///|
+async fn launch_desktop_client(model : AppModel) -> String {
+  guard model.portal.desktop_client is Some(client) else {
+    raise Failure("desktop workspace integration is not configured")
+  }
+  let allowed_models : Array[String] = []
+  for entry in model.portal.model_catalog {
+    match entry.alias_name {
+      Some(model_alias) if !allowed_models.contains(model_alias) =>
+        allowed_models.push(model_alias)
+      _ => ()
+    }
+  }
+  if allowed_models.length() == 0 {
+    raise Failure("no approved model alias is available for the desktop client")
+  }
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/portal/self/client-handoffs",
+    model.token,
+    model.subject_ref,
+    body=(
+      {
+        "request_id": random_identifier("desktop-handoff"),
+        "client_id": client.client_id,
+        "allowed_models": allowed_models.to_json(),
+      } : Json).stringify(),
+  )
+  let launch : DesktopClientHandoffLaunch = @json.from_json(
+    @json.parse(response),
+  )
+  if !launch.one_time ||
+    launch.client_id != client.client_id ||
+    launch.handoff_expires_unix_ms <= current_unix_ms() {
+    raise Failure("controller returned an invalid desktop handoff")
+  }
+  open_desktop_client(launch.launch_uri, launch.client_id, launch.handoff_code)
+  launch.display_name
+}
+
+///|
+fn desktop_client_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try launch_desktop_client(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to open the desktop WebIDE: \{Repr(error)}",
+            "无法打开桌面 WebIDE：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      name => DesktopClientLaunched(name)
+    }
+  })
+}
+
+///|
 async fn load_self(
   model : AppModel,
 ) -> (
@@ -411,6 +515,7 @@ async fn load_self(
   Array[@contractdoc.ContractPacket],
   Array[@contractdoc.ContractPacketEvent],
   ContractSelfGovernance,
+  @enterprise_ui.EnterpriseDesktopClient?,
 ) {
   let body = request(
     "GET",
@@ -585,6 +690,31 @@ async fn load_self(
       ),
     ),
   )
+  let desktop_client : @enterprise_ui.EnterpriseDesktopClient? = try {
+    let response : DesktopClientResponse = @json.from_json(
+      @json.parse(
+        request(
+          "GET",
+          model.endpoint,
+          "/v1/portal/self/client",
+          model.token,
+          model.subject_ref,
+        ),
+      ),
+    )
+    let client_view : @enterprise_ui.EnterpriseDesktopClient = {
+      client_id: response.client_id,
+      display_name: response.display_name,
+      launch_uri: response.launch_uri,
+      handoff_lifetime_ms: response.handoff_lifetime_ms,
+      connected_handoffs: response.handoffs.length(),
+    }
+    Some(client_view)
+  } catch {
+    _ => None
+  } noraise {
+    value => value
+  }
   let cost_centers : Array[@enterprise_ui.EnterpriseCostCenterRow] = match
     commercial {
     Some(snapshot) =>
@@ -633,7 +763,7 @@ async fn load_self(
   (
     view, cost_centers, provisional_spend, models, notifications, notification_preferences,
     machines, orders, artifacts, contract_manifest, contract_packets, contract_events,
-    contract_governance,
+    contract_governance, desktop_client,
   )
 }
 
@@ -954,11 +1084,12 @@ fn load_command(
         contract_packets,
         contract_events,
         contract_governance,
+        desktop_client,
       ) =>
         Loaded(
           view, cost_centers, provisional_spend, models, notifications, notification_preferences,
           machines, orders, artifacts, contract_manifest, contract_packets, contract_events,
-          contract_governance,
+          contract_governance, desktop_client,
         )
     }
   })
@@ -1874,8 +2005,8 @@ fn update(
               success_message: Some(
                 portal_copy(
                   next.locale,
-                  "Lease request submitted to the operator queue.",
-                  "租用申请已提交至运维审核队列。",
+                  "Demo preview only; no lease request was submitted to the operator queue.",
+                  "仅为演示预览；未向运维审核队列提交租用申请。",
                 ),
               ),
             },
@@ -1884,6 +2015,35 @@ fn update(
         )
       } else {
         ({ ..model, portal: next }, lease_command(model, emit))
+      }
+    }
+    Portal(LaunchDesktopClient) => {
+      let next = model.portal.update(LaunchDesktopClient)
+      if model.demo_mode {
+        open_desktop_client(
+          "/workbench/?demo=1",
+          "demo-client",
+          "lnxc_" + "d".repeat(64),
+        )
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  next.locale,
+                  "Demo WebIDE opened with a simulated one-time handoff.",
+                  "演示 WebIDE 已通过模拟单次交接打开。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        ({ ..model, portal: next }, desktop_client_command(model, emit))
       }
     }
     Portal(MarkNotificationRead(notification_id, generation)) =>
@@ -2002,7 +2162,41 @@ fn update(
         MachineAccess(RedeemCredential(lease_ref, generation)),
       )
       if model.demo_mode {
-        ({ ..model, portal, }, @rabbita.none)
+        let credential : @credential.CredentialHandoffRedemption = {
+          version: @credential.contract_version,
+          handoff_ref: "handoff-demo-recoverable",
+          lease_ref,
+          generation,
+          issuer_redirect_url: "https://issuer.demo.invalid/redeem",
+          host_alias: "machine.demo.invalid",
+          ssh_port: 22,
+          host_key_fingerprint: "SHA256:demo-host-key-fingerprint",
+          connection_command: "ssh -p 22 alice@machine.demo.invalid",
+          valid_until_unix_ms: current_unix_ms() + 900000L,
+          redemption_receipt: "demo:credential-redemption",
+          one_time: true,
+          raw_secret_included: false,
+        }
+        (
+          {
+            ..model,
+            portal: {
+              ..portal,
+              machine_access: portal.machine_access.with_redeemed_credential(
+                credential,
+              ),
+              success_message: Some(
+                portal_copy(
+                  portal.locale,
+                  "Demo access metadata redeemed; no credential was issued and no controller was contacted.",
+                  "演示模式：已显示访问元数据；未签发凭据，也未连接控制平面。",
+                ),
+              ),
+              error_message: None,
+            },
+          },
+          @rabbita.none,
+        )
       } else {
         (
           { ..model, portal, },
@@ -2321,7 +2515,8 @@ fn update(
         contract_manifest,
         contract_packets,
         contract_events,
-        contract_governance
+        contract_governance,
+        desktop_client
       )
     ) => {
       let next = {
@@ -2336,6 +2531,7 @@ fn update(
           cost_centers,
           provisional_spend,
           model_catalog: models,
+          desktop_client,
           notifications,
           notification_preferences,
           machine_access: {
@@ -2396,6 +2592,25 @@ fn update(
       }
       (next, machine_clock_command(next, emit))
     }
+    Outcome(DesktopClientLaunched(name)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "\{name} received a one-time setup request.",
+                "\{name} 已收到单次设置请求。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
     Outcome(OfflineOrderCreated(order)) =>
       (
         {

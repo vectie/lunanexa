@@ -9,10 +9,11 @@ pub(all) enum RunState {
 
 ///|
 pub(all) struct DeploymentForm {
-  local_simulation : Bool
+  deployment_target : @install_contract.DeploymentTarget
   companion_endpoint : String
   session_token : String
   ssh_user : String
+  ssh_port : String
   ssh_key_path : String
   known_hosts_path : String
   management_node : String
@@ -21,6 +22,7 @@ pub(all) struct DeploymentForm {
   cluster_namespace : String
   kubeconfig_path : String
   rendered_directory : String
+  management_secret_manifest : String
   secret_directory : String
   cli_path : String
   confirmation : String
@@ -43,6 +45,7 @@ pub(all) enum InstallerMessage {
   CompanionEndpointChanged(String)
   SessionTokenChanged(String)
   SshUserChanged(String)
+  SshPortChanged(String)
   SshKeyPathChanged(String)
   KnownHostsPathChanged(String)
   ManagementNodeChanged(String)
@@ -51,6 +54,7 @@ pub(all) enum InstallerMessage {
   ClusterNamespaceChanged(String)
   KubeconfigPathChanged(String)
   RenderedDirectoryChanged(String)
+  ManagementSecretManifestChanged(String)
   SecretDirectoryChanged(String)
   CliPathChanged(String)
   ConfirmationChanged(String)
@@ -76,18 +80,20 @@ pub fn default_state(locale~ : @i18n.Locale) -> InstallerState {
   {
     locale,
     form: {
-      local_simulation: false,
+      deployment_target: ManagementFoundation,
       companion_endpoint: "http://127.0.0.1:4198",
       session_token: "",
       ssh_user: "cluster-admin",
+      ssh_port: "22",
       ssh_key_path: "",
       known_hosts_path: "",
-      management_node: "management-01",
+      management_node: "",
       management_host: "",
-      compute_targets: "dgx-spark-01=\ndgx-spark-02=\ndgx-spark-03=\ndgx-spark-04=",
+      compute_targets: "",
       cluster_namespace: "lunanexa",
       kubeconfig_path: "",
       rendered_directory: "",
+      management_secret_manifest: "",
       secret_directory: "",
       cli_path: "",
       confirmation: "",
@@ -105,25 +111,49 @@ pub fn is_running(state : InstallerState) -> Bool {
 }
 
 ///|
+fn valid_ssh_port(value : String) -> Bool {
+  let parsed = @string.parse_int64(value.trim()) catch { _ => 0L }
+  parsed > 0L && parsed <= 65535L
+}
+
+///|
 pub fn form_complete(state : InstallerState) -> Bool {
   let form = state.form
+  let target = form.deployment_target
+  let compute_count = form.compute_targets
+    .split("\n")
+    .filter(line => line.trim() != "")
+    .count()
   form.companion_endpoint.trim() != "" &&
   form.session_token.length() >= 32 &&
   form.cluster_namespace.trim() != "" &&
   form.kubeconfig_path.trim() != "" &&
   (
-    form.local_simulation ||
+    target == LocalSimulation ||
     (
       form.ssh_user.trim() != "" &&
+      valid_ssh_port(form.ssh_port) &&
       form.ssh_key_path.trim() != "" &&
       form.known_hosts_path.trim() != "" &&
-      form.management_node.trim() != "" &&
-      form.management_host.trim() != "" &&
-      form.compute_targets.split("\n").filter(line => line.trim() != "").count() ==
-      4 &&
+      (
+        !target.installs_management() ||
+        (form.management_node.trim() != "" && form.management_host.trim() != "")
+      ) &&
+      (match target {
+        ManagementFoundation => compute_count == 0
+        ComputeExpansion | ManagementAndCompute =>
+          compute_count > 0 && compute_count <= 256
+        LocalSimulation => true
+      }) &&
       form.rendered_directory.trim() != "" &&
-      form.secret_directory.trim() != "" &&
-      form.cli_path.trim() != ""
+      (
+        !target.installs_management() ||
+        form.management_secret_manifest.trim() != ""
+      ) &&
+      (
+        !target.installs_compute() ||
+        (form.secret_directory.trim() != "" && form.cli_path.trim() != "")
+      )
     )
   )
 }
@@ -135,21 +165,53 @@ pub fn update(
 ) -> InstallerState {
   match message {
     LocaleChanged(locale) => { ..state, locale, error_message: None }
-    DeploymentTargetChanged(value) =>
+    DeploymentTargetChanged(value) => {
+      let target : @install_contract.DeploymentTarget = match value {
+        "compute-expansion" => ComputeExpansion
+        "management-and-compute" => ManagementAndCompute
+        "local-colima" => LocalSimulation
+        _ => ManagementFoundation
+      }
       {
         ..state,
         form: {
           ..state.form,
-          local_simulation: value == "local-colima",
+          deployment_target: target,
+          compute_targets: if target == ManagementFoundation ||
+            target == LocalSimulation {
+            ""
+          } else {
+            state.form.compute_targets
+          },
+          management_node: if target.installs_management() {
+            state.form.management_node
+          } else {
+            ""
+          },
+          management_host: if target.installs_management() {
+            state.form.management_host
+          } else {
+            ""
+          },
           kubeconfig_path: if value == "local-colima" &&
             state.form.kubeconfig_path.trim() == "" {
             "~/.kube/lunanexa-sim"
+          } else if target != LocalSimulation &&
+            state.form.kubeconfig_path == "~/.kube/lunanexa-sim" {
+            ""
           } else {
             state.form.kubeconfig_path
+          },
+          confirmation: "",
+          management_secret_manifest: if target.installs_management() {
+            state.form.management_secret_manifest
+          } else {
+            ""
           },
         },
         preview_verified: false,
       }
+    }
     CompanionEndpointChanged(value) =>
       {
         ..state,
@@ -166,6 +228,12 @@ pub fn update(
       {
         ..state,
         form: { ..state.form, ssh_user: value },
+        preview_verified: false,
+      }
+    SshPortChanged(value) =>
+      {
+        ..state,
+        form: { ..state.form, ssh_port: value },
         preview_verified: false,
       }
     SshKeyPathChanged(value) =>
@@ -214,6 +282,12 @@ pub fn update(
       {
         ..state,
         form: { ..state.form, rendered_directory: value },
+        preview_verified: false,
+      }
+    ManagementSecretManifestChanged(value) =>
+      {
+        ..state,
+        form: { ..state.form, management_secret_manifest: value },
         preview_verified: false,
       }
     SecretDirectoryChanged(value) =>
@@ -299,6 +373,13 @@ pub fn update(
         ..state,
         run_state: Failed,
         preview_verified: false,
+        terminal_lines: [
+          copy(
+            state.locale,
+            "[blocked] companion rejected the request before execution",
+            "[已阻止] 本地伴随程序在执行前拒绝了请求",
+          ),
+        ],
         error_message: Some(message),
       }
     ClearTerminal => { ..state, terminal_lines: [], error_message: None }
@@ -380,32 +461,56 @@ fn stage_label(
   locale : @i18n.Locale,
   index : Int,
   fallback : String,
-  local_simulation : Bool,
+  target : @install_contract.DeploymentTarget,
 ) -> String {
   if !locale.is_chinese() {
     return fallback
   }
-  if local_simulation {
-    return match index {
-      0 => "验证专用 Colima 配置"
-      1 => "验证 Docker 和 kind 工具"
-      2 => "检查或创建五个 Kubernetes 节点"
-      3 => "应用仅用于模拟的放置探针"
-      4 => "验证一个管理节点和四个计算节点"
-      _ => fallback
-    }
-  }
-  match index {
-    0 => "验证本地路径"
-    1 => "SSH 主机密钥预检"
-    2 => "检查管理节点磁盘和 Kubernetes"
-    3 => "检查四台 DGX GPU 工作节点"
-    4 => "标记管理节点和 GPU 节点"
-    5 => "应用已渲染的管理平面清单"
-    6 => "安装受保护的节点材料"
-    7 => "签发一次性注册令牌"
-    8 => "应用节点代理并验证心跳"
-    _ => fallback
+  match target {
+    ManagementFoundation =>
+      match index {
+        0 => "验证运维端路径"
+        1 => "通过固定 SSH 身份检查所选管理主机"
+        2 => "验证 Kubernetes 上下文并预览变更"
+        3 => "标记所选管理节点"
+        4 => "应用已审核的管理清单"
+        5 => "验证管理服务"
+        _ => fallback
+      }
+    ComputeExpansion =>
+      match index {
+        0 => "验证运维端路径"
+        1 => "通过固定 SSH 身份检查所选计算主机"
+        2 => "验证管理平面就绪状态"
+        3 => "标记所选计算节点"
+        4 => "安装受保护的节点材料"
+        5 => "签发一次性注册令牌"
+        6 => "应用节点代理并验证所选节点心跳"
+        _ => fallback
+      }
+    ManagementAndCompute =>
+      match index {
+        0 => "验证运维端路径"
+        1 => "通过固定 SSH 身份检查所选管理主机"
+        2 => "通过固定 SSH 身份检查所选计算主机"
+        3 => "验证 Kubernetes 上下文并预览变更"
+        4 => "标记管理节点和计算节点"
+        5 => "应用已审核的管理清单"
+        6 => "验证管理服务"
+        7 => "安装受保护的节点材料"
+        8 => "签发一次性注册令牌"
+        9 => "应用节点代理并验证心跳"
+        _ => fallback
+      }
+    LocalSimulation =>
+      match index {
+        0 => "验证专用 Colima 配置"
+        1 => "验证 Docker 和 kind 工具"
+        2 => "检查或创建模拟拓扑"
+        3 => "应用仅用于模拟的放置探针"
+        4 => "验证模拟的管理与计算节点放置"
+        _ => fallback
+      }
   }
 }
 
@@ -417,12 +522,12 @@ pub fn interactive_view(
   let running = is_running(state)
   let complete = form_complete(state)
   let locale = state.locale
-  let local_simulation = state.form.local_simulation
-  let stage_names = if local_simulation {
-    @install_contract.local_stage_names()
-  } else {
-    @install_contract.stage_names()
-  }
+  let target = state.form.deployment_target
+  let local_simulation = target == LocalSimulation
+  let show_management = target.installs_management()
+  let show_compute = target.installs_compute()
+  let stage_names = @install_contract.stage_names(target)
+  let confirmation = target.confirmation()
   @html.div(class="installer-shell", [
     @html.style_tag(styles()),
     @html.header(class="install-topbar", [
@@ -459,22 +564,29 @@ pub fn interactive_view(
     @html.main_(class="install-main", [
       @html.div(class="install-intro", [
         @html.div([
-          @html.h1(
-            copy(
-              locale, "Deploy your private DGX cluster", "部署您的私有 DGX 集群",
-            ),
-          ),
+          @html.h1(copy(locale, "Deploy LunaNexa", "部署 LunaNexa")),
           @html.p(
-            if local_simulation {
-              copy(
-                locale, "Preview and reconcile one lightweight management node plus four compute workers inside the dedicated Colima simulation.",
-                "在专用 Colima 模拟中预览并协调一个轻量管理节点和四个计算工作节点。",
-              )
-            } else {
-              copy(
-                locale, "Verify SSH trust, inspect one management node and four DGX workers, preview every stage, then run the reviewed LunaNexa installation with live redacted output.",
-                "验证 SSH 信任，检查一台管理节点和四台 DGX 工作节点，预览每个阶段，然后通过实时脱敏输出执行经过审核的 LunaNexa 安装。",
-              )
+            match target {
+              ManagementFoundation =>
+                copy(
+                  locale, "Install and verify the management, database, model-data and storage foundation. Compute nodes are enrolled separately when they are ready.",
+                  "安装并验证管理、数据库、模型数据与存储基础。计算节点就绪后再单独注册。",
+                )
+              ComputeExpansion =>
+                copy(
+                  locale, "Enroll only the compute hosts listed below into an existing LunaNexa management plane.",
+                  "仅将下方列出的计算主机注册到已有的 LunaNexa 管理平面。",
+                )
+              ManagementAndCompute =>
+                copy(
+                  locale, "Install the management foundation and only the compute hosts explicitly listed below as one reviewed operation.",
+                  "将管理基础和下方明确列出的计算主机作为一次经审核的操作进行安装。",
+                )
+              LocalSimulation =>
+                copy(
+                  locale, "Reconcile the isolated Colima test topology. It does not represent production hardware.",
+                  "协调隔离的 Colima 测试拓扑；它不代表生产硬件。",
+                )
             },
           ),
         ]),
@@ -549,9 +661,21 @@ pub fn interactive_view(
                 }),
                 [
                   @html.option(
-                    value="remote-cluster",
-                    selected=!local_simulation,
-                    copy(locale, "Remote DGX cluster", "远程 DGX 集群"),
+                    value="management-foundation",
+                    selected=target == ManagementFoundation,
+                    copy(locale, "Management foundation", "管理基础"),
+                  ),
+                  @html.option(
+                    value="compute-expansion",
+                    selected=target == ComputeExpansion,
+                    copy(locale, "Add compute nodes", "添加计算节点"),
+                  ),
+                  @html.option(
+                    value="management-and-compute",
+                    selected=target == ManagementAndCompute,
+                    copy(
+                      locale, "Management + selected compute", "管理 + 所选计算节点",
+                    ),
                   ),
                   @html.option(
                     value="local-colima",
@@ -568,8 +692,8 @@ pub fn interactive_view(
             @html.p(
               class="simulation-note",
               copy(
-                locale, "Simulation uses the isolated kind-lunanexa-sim context. SSH, NVIDIA, secrets, production manifests and ingress are skipped.",
-                "模拟仅使用隔离的 kind-lunanexa-sim 上下文。将跳过 SSH、NVIDIA、密钥、生产清单和入口。",
+                locale, "Simulation uses the isolated kind-lunanexa-sim context. SSH, hardware qualification, secrets, production manifests and ingress are skipped.",
+                "模拟仅使用隔离的 kind-lunanexa-sim 上下文。将跳过 SSH、硬件认证、密钥、生产清单和入口。",
               ),
             )
           } else {
@@ -597,6 +721,14 @@ pub fn interactive_view(
                 emit_value(emit, value => SshUserChanged(value)),
               ),
               field(
+                copy(locale, "SSH port", "SSH 端口"),
+                "ssh-port",
+                state.form.ssh_port,
+                "22",
+                running || local_simulation,
+                emit_value(emit, value => SshPortChanged(value)),
+              ),
+              field(
                 copy(locale, "Private key path", "私钥路径"),
                 "ssh-key",
                 state.form.ssh_key_path,
@@ -618,8 +750,8 @@ pub fn interactive_view(
             @html.p(
               class="field-help",
               copy(
-                locale, "StrictHostKeyChecking=yes and BatchMode=yes are always enforced. Password prompts and first-use host-key acceptance are rejected.",
-                "始终强制执行 StrictHostKeyChecking=yes 和 BatchMode=yes。拒绝密码提示和首次使用时接受主机密钥。",
+                locale, "StrictHostKeyChecking=yes and BatchMode=yes are always enforced. Connect directly or use an operator-owned OpenSSH alias/ProxyJump; a bastion is not a LunaNexa node role.",
+                "始终强制执行 StrictHostKeyChecking=yes 和 BatchMode=yes。可直连，也可使用由运维方管理的 OpenSSH 别名/ProxyJump；堡垒机不是 LunaNexa 节点角色。",
               ),
             ),
           ],
@@ -635,41 +767,57 @@ pub fn interactive_view(
               class="section-label",
               copy(locale, "3 · Nodes", "3 · 节点"),
             ),
-            @html.div(class="field-grid", [
-              field(
-                copy(
-                  locale, "Management Kubernetes node", "管理 Kubernetes 节点",
+            @html.div(
+              class=if show_management {
+                "field-grid"
+              } else {
+                "field-grid simulation-hidden"
+              },
+              [
+                field(
+                  copy(
+                    locale, "Management Kubernetes node", "管理 Kubernetes 节点",
+                  ),
+                  "management-node",
+                  state.form.management_node,
+                  "Kubernetes node name",
+                  running || !show_management,
+                  emit_value(emit, value => ManagementNodeChanged(value)),
                 ),
-                "management-node",
-                state.form.management_node,
-                "management-01",
-                running || local_simulation,
-                emit_value(emit, value => ManagementNodeChanged(value)),
-              ),
-              field(
-                copy(locale, "Management SSH host", "管理节点 SSH 主机"),
-                "management-host",
-                state.form.management_host,
-                "10.0.0.10",
-                running || local_simulation,
-                emit_value(emit, value => ManagementHostChanged(value)),
-              ),
-            ]),
-            @html.div(class="install-field", [
-              @html.label(
-                for_="compute-targets",
-                copy(
-                  locale, "Four compute nodes · node-name=ssh-host", "四台计算节点 · 节点名=SSH 主机",
+                field(
+                  copy(locale, "Management SSH host", "管理节点 SSH 主机"),
+                  "management-host",
+                  state.form.management_host,
+                  "SSH host or operator-owned alias",
+                  running || !show_management,
+                  emit_value(emit, value => ManagementHostChanged(value)),
                 ),
-              ),
-              @html.textarea(
-                id="compute-targets",
-                value=state.form.compute_targets,
-                attrs=@html.Attrs::build().disabled(running || local_simulation),
-                on_input=emit_value(emit, value => ComputeTargetsChanged(value)),
-                "",
-              ),
-            ]),
+              ],
+            ),
+            @html.div(
+              class=if show_compute {
+                "install-field"
+              } else {
+                "install-field simulation-hidden"
+              },
+              [
+                @html.label(
+                  for_="compute-targets",
+                  copy(
+                    locale, "Selected compute nodes · node-name=ssh-host", "所选计算节点 · 节点名=SSH 主机",
+                  ),
+                ),
+                @html.textarea(
+                  id="compute-targets",
+                  value=state.form.compute_targets,
+                  attrs=@html.Attrs::build().disabled(running || !show_compute),
+                  on_input=emit_value(emit, value => {
+                    ComputeTargetsChanged(value)
+                  }),
+                  "",
+                ),
+              ],
+            ),
           ],
         ),
         @html.div(class="install-section", [
@@ -709,23 +857,34 @@ pub fn interactive_view(
             ),
             field(
               copy(
+                locale, "Protected management secret manifest", "受保护的管理面密钥清单",
+              ),
+              "management-secret-manifest",
+              state.form.management_secret_manifest,
+              "/srv/lunanexa/secrets/management.yaml",
+              running || !target.installs_management(),
+              emit_value(emit, value => ManagementSecretManifestChanged(value)),
+              hidden=!target.installs_management(),
+            ),
+            field(
+              copy(
                 locale, "Protected node-material directory", "受保护节点材料目录",
               ),
               "secret-directory",
               state.form.secret_directory,
               "/srv/lunanexa/secrets",
-              running || local_simulation,
+              running || !show_compute,
               emit_value(emit, value => SecretDirectoryChanged(value)),
-              hidden=local_simulation,
+              hidden=!show_compute,
             ),
             field(
               copy(locale, "LunaNexa CLI path", "LunaNexa CLI 路径"),
               "cli-path",
               state.form.cli_path,
               "/usr/local/bin/lunanexa",
-              running || local_simulation,
+              running || !show_compute,
               emit_value(emit, value => CliPathChanged(value)),
-              hidden=local_simulation,
+              hidden=!show_compute,
             ),
           ]),
         ]),
@@ -743,7 +902,7 @@ pub fn interactive_view(
                     class="stage-number",
                     "\{index + 1}/\{stage_names.length()}",
                   ),
-                  @html.span(stage_label(locale, index, name, local_simulation)),
+                  @html.span(stage_label(locale, index, name, target)),
                 ])
               }
             ],
@@ -768,34 +927,37 @@ pub fn interactive_view(
           ]),
           @html.div(class="danger-zone", [
             @html.strong(
-              if local_simulation {
-                copy(
-                  locale, "Reconcile the local five-node simulation", "协调本地五节点模拟",
-                )
-              } else {
-                copy(
-                  locale, "Apply changes to five remote machines", "将更改应用到五台远程机器",
-                )
+              match target {
+                ManagementFoundation =>
+                  copy(
+                    locale, "Apply the management foundation", "应用管理基础",
+                  )
+                ComputeExpansion =>
+                  copy(
+                    locale, "Enroll the selected compute nodes", "注册所选计算节点",
+                  )
+                ManagementAndCompute =>
+                  copy(
+                    locale, "Apply management and selected compute", "应用管理与所选计算节点",
+                  )
+                LocalSimulation =>
+                  copy(
+                    locale, "Reconcile the local simulation", "协调本地模拟",
+                  )
               },
             ),
             @html.p(
-              if local_simulation {
-                copy(
-                  locale, "Run preview first. Applying creates or reconciles only the Colima kind topology and tiny placement probes. Type DEPLOY 4 NODES exactly.",
-                  "请先运行预检。应用操作只会创建或协调 Colima kind 拓扑和轻量放置探针。请准确输入 DEPLOY 4 NODES。",
-                )
-              } else {
-                copy(
-                  locale, "Run preview first. Applying labels nodes, installs protected material, applies manifests, and starts enrollment. Type DEPLOY 4 NODES exactly.",
-                  "请先运行预检。应用操作将标记节点、安装受保护材料、应用清单并开始注册。请准确输入 DEPLOY 4 NODES。",
-                )
-              },
+              copy(
+                locale,
+                "Run preview first, review the terminal evidence, then type \"\{confirmation}\" exactly. Only the selected deployment scope is changed.",
+                "请先运行预检并审核终端证据，然后准确输入“\{confirmation}”。只会更改所选部署范围。",
+              ),
             ),
             field(
               copy(locale, "Confirmation phrase", "确认短语"),
               "confirmation",
               state.form.confirmation,
-              @install_contract.apply_confirmation,
+              confirmation,
               running,
               emit_value(emit, value => ConfirmationChanged(value)),
             ),
@@ -805,12 +967,21 @@ pub fn interactive_view(
               disabled=!complete ||
                 !state.preview_verified ||
                 running ||
-                state.form.confirmation != @install_contract.apply_confirmation,
+                state.form.confirmation != confirmation,
               on_click=emit(ApplyRequested),
-              if local_simulation {
-                copy(locale, "Reconcile simulation", "协调模拟")
-              } else {
-                copy(locale, "Deploy cluster", "部署集群")
+              match target {
+                ManagementFoundation =>
+                  copy(
+                    locale, "Deploy management foundation", "部署管理基础",
+                  )
+                ComputeExpansion =>
+                  copy(locale, "Add compute nodes", "添加计算节点")
+                ManagementAndCompute =>
+                  copy(
+                    locale, "Deploy management and compute", "部署管理与计算节点",
+                  )
+                LocalSimulation =>
+                  copy(locale, "Reconcile simulation", "协调模拟")
               },
             ),
           ]),

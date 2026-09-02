@@ -7,15 +7,19 @@ import {
 }
 
 // Values
-pub let apply_confirmation : String
+pub let compute_confirmation : String
 
-pub fn local_stage_names() -> Array[String]
+pub let management_and_compute_confirmation : String
+
+pub let management_confirmation : String
 
 pub fn parse_compute_targets(String) -> Array[ComputeTarget] raise InstallValidationError
 
 pub let request_version : String
 
-pub fn stage_names() -> Array[String]
+pub let simulation_confirmation : String
+
+pub fn stage_names(DeploymentTarget) -> Array[String]
 
 pub fn validate_request(InstallRequest) -> Unit raise InstallValidationError
 
@@ -30,12 +34,24 @@ pub(all) struct ComputeTarget {
   ssh_host : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) enum DeploymentTarget {
+  ManagementFoundation
+  ComputeExpansion
+  ManagementAndCompute
+  LocalSimulation
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DeploymentTarget::confirmation(Self) -> String
+pub fn DeploymentTarget::installs_compute(Self) -> Bool
+pub fn DeploymentTarget::installs_management(Self) -> Bool
+pub fn DeploymentTarget::uses_ssh(Self) -> Bool
+
 pub(all) struct InstallRequest {
   version : String
-  local_simulation : Bool
+  deployment_target : DeploymentTarget
   apply : Bool
   confirmation : String
   ssh_user : String
+  ssh_port : Int
   ssh_key_path : String
   known_hosts_path : String
   management_node : String
@@ -44,6 +60,7 @@ pub(all) struct InstallRequest {
   cluster_namespace : String
   kubeconfig_path : String
   rendered_directory : String
+  management_secret_manifest : String
   secret_directory : String
   cli_path : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)

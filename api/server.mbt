@@ -38,6 +38,8 @@ pub struct ApiService {
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   credential_handoff_store : @credential_store.CredentialHandoffStore?
+  client_handoff_store : @client_handoff_store.ClientHandoffStore?
+  client_launch_config : @client_handoff.ClientLaunchConfig?
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -73,6 +75,8 @@ pub struct ApiService {
   entitlement_authority_callback_token : String?
   offline_transfer_adapter_endpoint : String?
   offline_transfer_adapter_token : String?
+  model_source_adapter_endpoint : String?
+  model_source_adapter_token : String?
   offline_transfer_session_secret : String
   offline_commerce_capabilities : Array[
     @offline.OfflineCommerceCapabilityEvidence,
@@ -112,6 +116,8 @@ pub fn ApiService::new(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    client_handoff_store: None,
+    client_launch_config: None,
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -145,6 +151,8 @@ pub fn ApiService::new(
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
     offline_transfer_adapter_token: None,
+    model_source_adapter_endpoint: None,
+    model_source_adapter_token: None,
     offline_transfer_session_secret: "",
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
@@ -184,6 +192,8 @@ pub fn ApiService::with_registry(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    client_handoff_store: None,
+    client_launch_config: None,
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -217,6 +227,8 @@ pub fn ApiService::with_registry(
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
     offline_transfer_adapter_token: None,
+    model_source_adapter_endpoint: None,
+    model_source_adapter_token: None,
     offline_transfer_session_secret: "",
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
@@ -257,6 +269,8 @@ pub fn ApiService::with_services(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    client_handoff_store: None,
+    client_launch_config: None,
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -290,6 +304,8 @@ pub fn ApiService::with_services(
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
     offline_transfer_adapter_token: None,
+    model_source_adapter_endpoint: None,
+    model_source_adapter_token: None,
     offline_transfer_session_secret: "",
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
@@ -332,6 +348,8 @@ pub fn ApiService::with_control_plane(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    client_handoff_store: None,
+    client_launch_config: None,
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -365,6 +383,8 @@ pub fn ApiService::with_control_plane(
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
     offline_transfer_adapter_token: None,
+    model_source_adapter_endpoint: None,
+    model_source_adapter_token: None,
     offline_transfer_session_secret: "",
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
@@ -652,6 +672,30 @@ pub fn ApiService::with_offline_transfer_adapter(
   }
 }
 
+///|
+pub fn ApiService::with_model_source_adapter(
+  self : ApiService,
+  endpoint : String,
+  token : String,
+) -> ApiService raise Failure {
+  let trusted = endpoint == "http://lunanexa-model-source:8090" ||
+    endpoint.has_prefix("http://127.0.0.1:") ||
+    endpoint.has_prefix("http://localhost:")
+  if !trusted ||
+    endpoint.contains("?") ||
+    endpoint.contains("#") ||
+    endpoint.has_suffix("/") ||
+    token.length() < 32 ||
+    token.length() > 4096 {
+    raise Failure("model-source adapter configuration is invalid")
+  }
+  {
+    ..self,
+    model_source_adapter_endpoint: Some(endpoint),
+    model_source_adapter_token: Some(token),
+  }
+}
+
 ///| Supplies deployment-owned, retained verification evidence. The API never
 
 ///|
@@ -703,6 +747,24 @@ pub fn ApiService::with_credential_handoff_store(
   credential_handoff_store : @credential_store.CredentialHandoffStore,
 ) -> ApiService {
   { ..self, credential_handoff_store: Some(credential_handoff_store) }
+}
+
+///|
+/// Enables provider-neutral desktop workspace handoffs. Product-specific
+/// provider binding remains the responsibility of the local client adapter.
+pub fn ApiService::with_client_handoff_store(
+  self : ApiService,
+  client_handoff_store : @client_handoff_store.ClientHandoffStore,
+  client_launch_config : @client_handoff.ClientLaunchConfig,
+) -> ApiService raise Failure {
+  if !@client_handoff.valid_client_launch_config(client_launch_config) {
+    raise Failure("client launch configuration is invalid")
+  }
+  {
+    ..self,
+    client_handoff_store: Some(client_handoff_store),
+    client_launch_config: Some(client_launch_config),
+  }
 }
 
 ///|
@@ -1014,7 +1076,16 @@ priv struct EnrollmentRequest {
 priv struct RotationRequest {
   node_id : String
   public_key_ref : String
+  current_serial : Int64
 } derive(FromJson)
+
+///|
+fn valid_public_key_ref(value : String) -> Bool {
+  value != "" &&
+  value.length() <= 512 &&
+  !value.contains_char('\r') &&
+  !value.contains_char('\n')
+}
 
 ///|
 priv struct CapacityRequest {
@@ -1351,6 +1422,21 @@ fn score_policy(
 }
 
 ///|
+/// A request's maximum runtime is a safety ceiling, not an execution-time
+/// prediction. Until a scheduling target carries a measured estimate, using
+/// that ceiling as the estimate makes every generated OpenAI deadline
+/// impossible after even one millisecond of admission work.
+fn placement_runtime_estimate_ms(
+  maximum_runtime_ms : Int64,
+  measured_estimate_ms : Int64?,
+) -> Int64 {
+  match measured_estimate_ms {
+    Some(value) => value.max(0L).min(maximum_runtime_ms)
+    None => 0L
+  }
+}
+
+///|
 async fn ApiService::schedule_and_admit(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
@@ -1419,6 +1505,18 @@ async fn ApiService::schedule_and_admit(
       [],
     )
   }
+  if target.model.minimum_memory_mib >
+    request.resource_ceiling.max_accelerator_memory_mib {
+    return (
+      Some(
+        api_error(
+          409, "NoPlacement", "approved model exceeds the request accelerator-memory ceiling",
+          false,
+        ),
+      ),
+      [],
+    )
+  }
   let assignments = self.store.assignments()
   let nodes = [
     for heartbeat in self.store.heartbeats() => {
@@ -1454,14 +1552,18 @@ async fn ApiService::schedule_and_admit(
       workload_id: request.workload_id,
       model_key: target.model_key,
       architecture,
-      memory_mib: target.model.minimum_memory_mib.max(
-        request.resource_ceiling.max_accelerator_memory_mib,
-      ),
+      // The request value is an upper safety ceiling, not memory demand. Once
+      // the model is proven to fit below it, placement needs only the model's
+      // approved minimum resident memory.
+      memory_mib: target.model.minimum_memory_mib,
       runtime: target.runtime.name,
       data_class: request.data_policy.classification,
       deadline_unix_ms: request.deadline_unix_ms,
       now_unix_ms: now,
-      estimated_runtime_ms: request.resource_ceiling.max_runtime_ms,
+      estimated_runtime_ms: placement_runtime_estimate_ms(
+        request.resource_ceiling.max_runtime_ms,
+        None,
+      ),
       multi_node: false,
       topology_profile: None,
     },
@@ -1520,6 +1622,8 @@ fn retryable_runtime_error(error : Error) -> Bool {
   match error {
     @runtimes.RemoteRuntimeError::UpstreamRejected(status~, body=_) =>
       status >= 500
+    @runtimes.RemoteRuntimeError::UpstreamFailed(code=_, retryable~) =>
+      retryable
     @runtimes.RemoteRuntimeError::UnsupportedCapability
     | @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(_)
     | @runtimes.RemoteRuntimeError::InsecureEndpoint(_)
@@ -2056,14 +2160,41 @@ priv struct OpenAiStreamContext {
   id : String
   model : String
   created_unix_seconds : Int64
+  tool_call_seen : Array[Bool]
 }
 
 ///|
-fn streamed_text(output : Json) -> String {
+fn compatible_stream_delta(output : Json) -> Json {
   match output {
-    String(value) => value
-    value => value.stringify()
+    Object(fields) =>
+      match fields.get("text_delta") {
+        Some(String(value)) => Json::object({ "content": Json::string(value) })
+        _ =>
+          match fields.get("tool_call_delta") {
+            Some(value) => Json::object({ "tool_calls": Json::array([value]) })
+            None =>
+              Json::object({ "content": Json::string(output.stringify()) })
+          }
+      }
+    String(value) => Json::object({ "content": Json::string(value) })
+    value => Json::object({ "content": Json::string(value.stringify()) })
   }
+}
+
+///|
+fn compatible_stream_chunks(output : Json?) -> Array[Json] {
+  guard output is Some(Object(fields)) &&
+    fields.get("chunks") is Some(Array(chunks)) else {
+    return []
+  }
+  chunks
+}
+
+///|
+fn compatible_stream_has_tool_calls(output : Json?) -> Bool {
+  compatible_stream_chunks(output).any(chunk => {
+    chunk is Object(fields) && fields.get("tool_call_delta") is Some(_)
+  })
 }
 
 ///|
@@ -2078,7 +2209,13 @@ async fn send_compatible_stream_event(
   }
   match event.kind {
     Chunk => {
-      let content = event.output.map(streamed_text).unwrap_or("")
+      if event.output is Some(Object(fields)) &&
+        fields.get("tool_call_delta") is Some(_) {
+        context.tool_call_seen[0] = true
+      }
+      let delta = event.output
+        .map(compatible_stream_delta)
+        .unwrap_or(Json::object({}))
       let payload : Json = {
         "id": context.id,
         "object": "chat.completion.chunk",
@@ -2087,7 +2224,7 @@ async fn send_compatible_stream_event(
         "choices": [
           {
             "index": 0,
-            "delta": { "content": content },
+            "delta": delta,
             "finish_reason": (None : String?).to_json(),
           },
         ],
@@ -2095,21 +2232,27 @@ async fn send_compatible_stream_event(
       connection.write_string("data: \{payload.stringify()}\n\n")
     }
     Completed => {
-      if event.response is Some(response) && response.output is Some(output) {
-        let replay_payload : Json = {
-          "id": context.id,
-          "object": "chat.completion.chunk",
-          "created": context.created_unix_seconds.to_json(),
-          "model": context.model,
-          "choices": [
-            {
-              "index": 0,
-              "delta": { "content": streamed_text(output) },
-              "finish_reason": (None : String?).to_json(),
-            },
-          ],
+      let completed_output = match event.response {
+        Some(response) => response.output
+        None => None
+      }
+      if event.sequence == 1 {
+        for chunk in compatible_stream_chunks(completed_output) {
+          let replay_payload : Json = {
+            "id": context.id,
+            "object": "chat.completion.chunk",
+            "created": context.created_unix_seconds.to_json(),
+            "model": context.model,
+            "choices": [
+              {
+                "index": 0,
+                "delta": compatible_stream_delta(chunk),
+                "finish_reason": (None : String?).to_json(),
+              },
+            ],
+          }
+          connection.write_string("data: \{replay_payload.stringify()}\n\n")
         }
-        connection.write_string("data: \{replay_payload.stringify()}\n\n")
       }
       let receipt = event.response
         .map(response => response.audit_receipt)
@@ -2120,7 +2263,16 @@ async fn send_compatible_stream_event(
         "created": context.created_unix_seconds.to_json(),
         "model": context.model,
         "choices": [
-          { "index": 0, "delta": ({} : Json), "finish_reason": "stop" },
+          {
+            "index": 0,
+            "delta": ({} : Json),
+            "finish_reason": if context.tool_call_seen[0] ||
+              compatible_stream_has_tool_calls(completed_output) {
+              "tool_calls"
+            } else {
+              "stop"
+            },
+          },
         ],
         "lunanexa_receipt": receipt,
       }
@@ -2477,11 +2629,19 @@ async fn ApiService::dispatch_with_transport(
   if deployment_management_path(path) {
     return self.handle_deployment_management(verb, path, headers, body)
   }
+  if model_source_path(path) {
+    return self.handle_model_source(verb, path, headers, body)
+  }
   if access_management_path(path) {
     return self.handle_access_management(verb, path, headers, body)
   }
   if openai_compatibility_path(path) {
     return self.handle_openai_compatibility(verb, path, headers, body)
+  }
+  if client_handoff_path(path) {
+    return self.handle_client_handoff(
+      verb, path, headers, body, allow_asserted_subject,
+    )
   }
   if enterprise_portal_path(path) {
     return self.handle_enterprise_portal(
@@ -3268,8 +3428,7 @@ async fn ApiService::dispatch_with_transport(
       }
       if !@contracts.valid_identifier(request.node_id, maximum_length=128) ||
         request.node_auth_secret.length() < 20 ||
-        request.public_key_ref == "" ||
-        request.public_key_ref.contains_char('\n') {
+        !valid_public_key_ref(request.public_key_ref) {
         return api_error(
           400, "InvalidRequest", "node identity or authority is invalid", false,
         )
@@ -3310,17 +3469,28 @@ async fn ApiService::dispatch_with_transport(
           400, "InvalidRequest", "invalid rotation request", false,
         )
       }
-      if !self.node_authorized(headers, request.node_id) {
+      guard header(headers, "X-LunaNexa-Node-Id") == Some(request.node_id) &&
+        node_credential(headers) is Some(credential) &&
+        credential != "" else {
         return api_error(
           401, "Unauthenticated", "valid node authority is required", false,
         )
       }
+      if !valid_public_key_ref(request.public_key_ref) ||
+        request.current_serial <= 0L {
+        return api_error(
+          400, "InvalidRequest", "certificate rotation request is invalid", false,
+        )
+      }
       let certificate = try
-        enrollment.rotate(
+        enrollment.renew(
           request.node_id,
+          credential,
           request.public_key_ref,
+          request.current_serial,
           @async.now(),
           certificate_lifetime_ms=self.global_settings.control_timing.node_certificate_lifetime_ms,
+          renewal_grace_ms=86400000L,
         )
       catch {
         _ =>
@@ -4540,6 +4710,7 @@ pub async fn ApiService::serve_on(
             id: "chatcmpl-\{request_digest[:32]}",
             model: value.model,
             created_unix_seconds: now / 1000L,
+            tool_call_seen: [false],
           }),
         )
       catch {

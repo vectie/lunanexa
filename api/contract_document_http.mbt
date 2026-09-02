@@ -403,6 +403,11 @@ async fn ApiService::handle_contract_documents(
     )
   }
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  if verb == Get &&
+    path == "/v1/contract-documents/manifest" &&
+    self.operator_authorized(headers) {
+    return json_reply(200, manifest.to_json())
+  }
   if path == "/v1/contract-documents/operator/snapshot" ||
     path == "/v1/contract-documents/operator/packets" ||
     path.has_prefix("/v1/contract-documents/operator/packets/") {

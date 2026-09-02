@@ -302,3 +302,140 @@ async test "approved text adapter rejects a truncated SSE stream" {
     server.close()
   }
 }
+
+///|
+async test "LunaFlux Responses mode sends the qualified shape and aggregates SSE" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever() <| ((request, body, connection) => {
+        assert_eq(request.headers.get("accept"), Some("text/event-stream"))
+        let encoded = @json.parse(body.read_all().text()).stringify()
+        assert_true(encoded.contains("\"model\":\"tiny-bf16\""))
+        assert_true(encoded.contains("\"input\":\"Moon pipeline\""))
+        assert_true(encoded.contains("\"stream\":true"))
+        assert_false(encoded.contains("max_output_tokens"))
+        assert_false(encoded.contains("metadata"))
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": "text/event-stream",
+        })
+        connection.write_string(
+          "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_test\",\"status\":\"in_progress\"}}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.output_text.delta\",\"delta\":\"MOON\"}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.output_text.delta\",\"delta\":\"_OK\"}\n\n",
+        )
+        connection.write_string(
+          "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":4,\"output_tokens\":2}}}\n\n",
+        )
+        connection.write_string("data: [DONE]\n\n")
+        connection.end_response()
+      })
+    }
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "http://\{server.addr}/v1/responses",
+      "runtime-credential",
+      "qualified-runtime",
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      allow_http_loopback=true,
+    ).with_lunaflux_streaming_responses()
+    let request = {
+      ..remote_request(),
+      model_selector: "tiny-bf16",
+      payload: { "messages": [{ "role": "user", "content": "Moon pipeline" }] },
+    }
+    let result = runtime.invoke(request)
+    assert_true(
+      result.output.stringify().contains("\"output_text\":\"MOON_OK\""),
+    )
+    assert_eq(result.input_units, 4)
+    assert_eq(result.output_units, 2)
+    server.close()
+  }
+}
+
+///|
+async test "LunaFlux Responses mode fails closed on unsupported chat shapes" {
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-credential",
+    "qualified-runtime",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  ).with_lunaflux_streaming_responses()
+  let cases : Array[Json] = [
+    {
+      "messages": [
+        { "role": "system", "content": "system" },
+        { "role": "user", "content": "user" },
+      ],
+    },
+    {
+      "messages": [{ "role": "user", "content": "user" }],
+      "tools": [{ "type": "function" }],
+    },
+  ]
+  for payload in cases {
+    try runtime.invoke({ ..remote_request(), payload, }) catch {
+      @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(_)
+      | @runtimes.RemoteRuntimeError::UnsupportedCapability => ()
+      error => fail("unexpected error: \{Repr(error)}")
+    } noraise {
+      _ => fail("unsupported LunaFlux request reached the network")
+    }
+  }
+}
+
+///|
+async test "LunaFlux Responses mode rejects failed and incomplete streams" {
+  for failure_case in ["failed", "done-only"] {
+    let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+    @async.with_task_group <| group => {
+      group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+        server.run_forever() <| ((_request, body, connection) => {
+          ignore(body.read_all())
+          connection.send_response(200, "OK", extra_headers={
+            "Content-Type": "text/event-stream",
+          })
+          if failure_case == "failed" {
+            connection.write_string(
+              "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"capacity-full\",\"retryable\":true}}}\n\n",
+            )
+          }
+          connection.write_string("data: [DONE]\n\n")
+          connection.end_response()
+        })
+      }
+      let runtime = @runtimes.OpenAiTextRuntime::new(
+        "http://\{server.addr}/v1/responses",
+        "runtime-credential",
+        "qualified-runtime",
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        allow_http_loopback=true,
+      ).with_lunaflux_streaming_responses()
+      try
+        runtime.invoke({ ..remote_request(), payload: { "prompt": "test" } })
+      catch {
+        @runtimes.RemoteRuntimeError::UpstreamFailed(code~, retryable~) => {
+          assert_eq(failure_case, "failed")
+          assert_eq(code, "capacity-full")
+          assert_true(retryable)
+        }
+        @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(message) => {
+          assert_eq(failure_case, "done-only")
+          assert_true(message.contains("completion marker"))
+        }
+        error => fail("unexpected error: \{Repr(error)}")
+      } noraise {
+        _ => fail("invalid LunaFlux stream was accepted")
+      }
+      server.close()
+    }
+  }
+}

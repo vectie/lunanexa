@@ -9,7 +9,7 @@ fn safe_text(value : String, maximum_length : Int) -> Bool {
 }
 
 ///|
-fn valid_unix_username(value : String) -> Bool {
+pub fn valid_unix_username(value : String) -> Bool {
   value.length() > 0 &&
   value.length() <= 32 &&
   value != "root" &&

@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/workspace/client_handoff/store"
+
+import {
+  "moonbitlang/async",
+  "vectie/lunanexa/access",
+  "vectie/lunanexa/database",
+  "vectie/lunanexa/workspace/client_handoff",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+type ClientHandoffPersistence
+
+pub struct ClientHandoffStore {
+  persistence : ClientHandoffPersistence
+  issuer_secret : String
+  mut handoffs : Map[String, @client_handoff.ClientHandoffRecord]
+  mut credentials : Map[String, @client_handoff.ClientCredential]
+  mutex : @async.Mutex
+}
+pub async fn ClientHandoffStore::authorize(Self, String, @access.ApiKeyScope, model? : String, Int64, Bool) -> @client_handoff.ClientAuthorization
+pub async fn ClientHandoffStore::issue(Self, @client_handoff.ClientHandoffIssueIntent, Int64) -> @client_handoff.IssuedClientHandoff
+pub async fn ClientHandoffStore::open(String, String) -> Self
+pub async fn ClientHandoffStore::open_postgres(@database.PostgresDatabase, String) -> Self
+pub async fn ClientHandoffStore::redeem(Self, String, String, Int64) -> @client_handoff.ClientHandoffRedemption
+pub async fn ClientHandoffStore::revoke_for_subject(Self, String, String, String, Int64) -> @client_handoff.ClientHandoffView
+pub async fn ClientHandoffStore::snapshot(Self) -> @client_handoff.ClientHandoffSnapshot
+pub async fn ClientHandoffStore::views_for_subject(Self, String, String) -> Array[@client_handoff.ClientHandoffView]
+
+// Type aliases
+
+// Traits

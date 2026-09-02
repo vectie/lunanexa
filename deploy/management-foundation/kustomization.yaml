@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - prerequisites.yaml
+  - postgres.yaml
+  - controller.yaml
+  - console.yaml
+  - enterprise.yaml
+  - workbench.yaml
+  - model-source.yaml
+  - network-policy.yaml
+  - console-public-service.yaml
+  - public-sites.yaml
+patches:
+  - path: prerequisites-patch.yaml
+  - path: controller-patch.yaml
+  - path: workloads-patch.yaml
+  - path: model-source-patch.yaml

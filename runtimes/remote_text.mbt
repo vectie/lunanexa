@@ -5,6 +5,7 @@ pub(all) suberror RemoteRuntimeError {
   RoutingTargetUnavailable(String)
   UnsupportedCapability
   UpstreamRejected(status~ : Int, body~ : String)
+  UpstreamFailed(code~ : String, retryable~ : Bool)
   InvalidUpstreamResponse(String)
 } derive(Debug, Eq)
 
@@ -29,6 +30,7 @@ pub struct OpenAiTextRuntime {
   artifact_digest : String
   maximum_event_bytes : Int
   maximum_response_bytes : Int
+  lunaflux_streaming_responses : Bool
 }
 
 ///|
@@ -50,8 +52,6 @@ priv struct UpstreamEnvelope {
 
 ///|
 priv struct UpstreamStreamEnvelope {
-  delta : String?
-  output_text : String?
   usage : UpstreamUsage?
 } derive(FromJson)
 
@@ -92,7 +92,17 @@ pub fn OpenAiTextRuntime::new(
     artifact_digest,
     maximum_event_bytes: 1048576,
     maximum_response_bytes: 16777216,
+    lunaflux_streaming_responses: false,
   }
+}
+
+///|
+/// Selects LunaFlux's bounded Responses profile: streaming transport, string
+/// input, and a fail-closed request field set.
+pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(
+  self : OpenAiTextRuntime,
+) -> OpenAiTextRuntime {
+  { ..self, lunaflux_streaming_responses: true }
 }
 
 ///|
@@ -181,6 +191,169 @@ fn responses_input(payload : Json) -> Json raise RemoteRuntimeError {
 }
 
 ///|
+fn lunaflux_responses_input(input : Json) -> Json raise RemoteRuntimeError {
+  match input {
+    String(value) if value != "" => Json::string(value)
+    Array([Object(fields)]) if fields.get("role") is Some(String("user")) &&
+      fields.get("content") is Some(String(content)) &&
+      content != "" => Json::string(content)
+    _ =>
+      raise InvalidUpstreamResponse(
+        "LunaFlux Responses accepts text or one non-empty user message",
+      )
+  }
+}
+
+///|
+fn responses_tool_from_chat(tool : Json) -> Json {
+  guard tool is Object(fields) &&
+    fields.get("type") is Some(String("function")) &&
+    fields.get("function") is Some(Object(function)) else {
+    return tool
+  }
+  let result : Map[String, Json] = { "type": Json::string("function") }
+  for key in ["name", "description", "parameters", "strict"] {
+    if function.get(key) is Some(value) {
+      result[key] = value
+    }
+  }
+  Json::object(result)
+}
+
+///|
+fn responses_tool_choice_from_chat(choice : Json) -> Json {
+  guard choice is Object(fields) &&
+    fields.get("type") is Some(String("function")) &&
+    fields.get("function") is Some(Object(function)) else {
+    return choice
+  }
+  let result : Map[String, Json] = { "type": Json::string("function") }
+  if function.get("name") is Some(name) {
+    result["name"] = name
+  }
+  Json::object(result)
+}
+
+///|
+fn responses_upstream_request(
+  request : @contracts.WorkloadEnvelope,
+  input : Json,
+  stream : Bool,
+  lunaflux_streaming_responses : Bool,
+) -> Json raise RemoteRuntimeError {
+  let fields : Map[String, Json] = {
+    "model": Json::string(request.model_selector),
+    "input": if lunaflux_streaming_responses {
+      lunaflux_responses_input(input)
+    } else {
+      input
+    },
+    "stream": Json::boolean(
+      if lunaflux_streaming_responses {
+        true
+      } else {
+        stream
+      },
+    ),
+  }
+  if lunaflux_streaming_responses {
+    if request.payload is Object(payload) {
+      if payload.get("tools") is Some(Array(tools)) && !tools.is_empty() {
+        raise UnsupportedCapability
+      }
+      for key in ["temperature", "top_p"] {
+        if payload.get(key) is Some(value) {
+          fields[key] = value
+        }
+      }
+    }
+  } else {
+    fields["max_output_tokens"] = request.resource_ceiling.max_output_units.to_json()
+    fields["metadata"] = Json::object({
+      "workload_id": Json::string(request.workload_id),
+      "trace_token": Json::string(request.trace_token),
+    })
+    if request.payload is Object(payload) {
+      if payload.get("tools") is Some(Array(tools)) {
+        let converted : Array[Json] = []
+        for tool in tools {
+          converted.push(responses_tool_from_chat(tool))
+        }
+        fields["tools"] = Json::array(converted)
+      }
+      if payload.get("tool_choice") is Some(choice) {
+        fields["tool_choice"] = responses_tool_choice_from_chat(choice)
+      }
+      for key in ["parallel_tool_calls", "temperature", "top_p"] {
+        if payload.get(key) is Some(value) {
+          fields[key] = value
+        }
+      }
+    }
+  }
+  Json::object(fields)
+}
+
+///|
+fn normalized_responses_stream_chunk(event : Json) -> Json? {
+  guard event is Object(fields) else { return None }
+  let event_type = match fields.get("type") {
+    Some(String(value)) => value
+    _ => ""
+  }
+  if event_type == "response.output_text.delta" || event_type == "" {
+    let text = match fields.get("delta") {
+      Some(String(value)) => Some(value)
+      _ =>
+        match fields.get("output_text") {
+          Some(String(value)) => Some(value)
+          _ => None
+        }
+    }
+    return text.map(value => ({ "text_delta": value } : Json))
+  }
+  if event_type == "response.output_item.added" &&
+    fields.get("item") is Some(Object(item)) &&
+    item.get("type") is Some(String("function_call")) {
+    let index = fields.get("output_index").unwrap_or(Json::number(0.0))
+    let id = match item.get("call_id") {
+      Some(String(value)) => value
+      _ =>
+        match item.get("id") {
+          Some(String(value)) => value
+          _ => "call-lunanexa"
+        }
+    }
+    let name = match item.get("name") {
+      Some(String(value)) => value
+      _ => ""
+    }
+    return Some({
+      "tool_call_delta": {
+        "index": index,
+        "id": id,
+        "type": "function",
+        "function": { "name": name, "arguments": "" },
+      },
+    })
+  }
+  if event_type == "response.function_call_arguments.delta" {
+    let index = fields.get("output_index").unwrap_or(Json::number(0.0))
+    let arguments = match fields.get("delta") {
+      Some(String(value)) => value
+      _ => ""
+    }
+    return Some({
+      "tool_call_delta": {
+        "index": index,
+        "function": { "arguments": arguments },
+      },
+    })
+  }
+  None
+}
+
+///|
 fn responses_event_completed(event : Json) -> UpstreamUsage?? {
   guard event is Object(fields) &&
     fields.get("type") is Some(String("response.completed")) else {
@@ -194,6 +367,28 @@ fn responses_event_completed(event : Json) -> UpstreamUsage?? {
     None => None
   }
   Some(usage)
+}
+
+///|
+fn responses_event_failed(event : Json) -> (String, Bool)? {
+  guard event is Object(fields) &&
+    fields.get("type") is Some(String("response.failed")) else {
+    return None
+  }
+  let mut code = "runtime-failed"
+  let mut retryable = false
+  if fields.get("response") is Some(Object(response)) &&
+    response.get("error") is Some(Object(error)) {
+    if error.get("code") is Some(String(value)) {
+      code = value
+    }
+    match error.get("retryable") {
+      Some(True) => retryable = true
+      Some(False) => retryable = false
+      _ => ()
+    }
+  }
+  Some((code, retryable))
 }
 
 ///|
@@ -277,6 +472,9 @@ pub async fn OpenAiTextRuntime::invoke_at(
   request : @contracts.WorkloadEnvelope,
   node_id : String,
 ) -> RuntimeInvocationResult {
+  if self.lunaflux_streaming_responses {
+    return self.invoke_stream_at(request, node_id, _ => ())
+  }
   if request.capability != TextGenerate {
     raise UnsupportedCapability
   }
@@ -292,16 +490,12 @@ pub async fn OpenAiTextRuntime::invoke_at(
   if node_id != "" {
     headers["X-LunaNexa-Target-Node"] = node_id
   }
-  let upstream_request : Json = {
-    "model": request.model_selector,
-    "input": input,
-    "stream": false,
-    "max_output_tokens": request.resource_ceiling.max_output_units,
-    "metadata": {
-      "workload_id": request.workload_id,
-      "trace_token": request.trace_token,
-    },
-  }
+  let upstream_request = responses_upstream_request(
+    request,
+    input,
+    false,
+    self.lunaflux_streaming_responses,
+  )
   let endpoint = self.endpoint_for(node_id)
   let (response, body) = @http.post(endpoint, upstream_request, headers~)
   let body_text = body.text()
@@ -359,16 +553,12 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
   if node_id != "" {
     headers["X-LunaNexa-Target-Node"] = node_id
   }
-  let upstream_request : Json = {
-    "model": request.model_selector,
-    "input": input,
-    "stream": true,
-    "max_output_tokens": request.resource_ceiling.max_output_units,
-    "metadata": {
-      "workload_id": request.workload_id,
-      "trace_token": request.trace_token,
-    },
-  }
+  let upstream_request = responses_upstream_request(
+    request,
+    input,
+    true,
+    self.lunaflux_streaming_responses,
+  )
   let endpoint = self.endpoint_for(node_id)
   let stream = @http.post_stream(endpoint, headers~)
   defer stream.close()
@@ -383,6 +573,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
   let mut sequence = 0
   let mut total_output_bytes = 0
   let mut saw_done = false
+  let output_text : Array[String] = []
   while stream.read_until("\n") is Some(line) {
     let trimmed = line.trim()
     if !trimmed.has_prefix("data:") {
@@ -395,7 +586,9 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       )
     }
     if data == "[DONE]" {
-      saw_done = true
+      if !self.lunaflux_streaming_responses {
+        saw_done = true
+      }
       break
     }
     let event_json = @json.parse(data) catch {
@@ -409,19 +602,22 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       saw_done = true
       break
     }
+    if responses_event_failed(event_json) is Some((code, retryable)) {
+      raise UpstreamFailed(code~, retryable~)
+    }
     let event : UpstreamStreamEnvelope = @json.from_json(event_json) catch {
-      _ => { delta: None, output_text: None, usage: None }
+      _ => { usage: None }
     }
     if event.usage is Some(usage) {
       input_units = usage.input_tokens
       output_units = usage.output_tokens
     }
-    let text = match event.delta {
-      Some(value) => Some(value)
-      None => event.output_text
-    }
-    if text is Some(value) {
-      total_output_bytes += value.length()
+    if normalized_responses_stream_chunk(event_json) is Some(chunk) {
+      if chunk is Object(fields) &&
+        fields.get("text_delta") is Some(String(value)) {
+        output_text.push(value)
+      }
+      total_output_bytes += chunk.stringify().length()
       if total_output_bytes > self.maximum_response_bytes {
         raise InvalidUpstreamResponse(
           "upstream stream exceeded the configured limit",
@@ -431,7 +627,6 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       if sequence > request.resource_ceiling.max_output_units {
         raise InvalidUpstreamResponse("stream exceeded output event ceiling")
       }
-      let chunk : Json = { "text_delta": value }
       chunks.push(chunk)
       on_chunk(chunk)
     }
@@ -442,7 +637,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     )
   }
   {
-    output: { "chunks": chunks },
+    output: { "output_text": output_text.join(""), "chunks": chunks },
     artifact_digest: self.artifact_digest,
     runtime_version: self.runtime_version,
     input_units,

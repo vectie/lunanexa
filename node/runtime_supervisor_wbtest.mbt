@@ -51,6 +51,14 @@ fn supervisor_assignment() -> @contracts.DesiredAssignment {
 }
 
 ///|
+test "local Podman mode does not inject a remote engine socket" {
+  let supervisor = OciRuntimeSupervisor::new(
+    "/usr/bin/podman", "lunanexa-runtime", "local://",
+  )
+  assert_eq(supervisor.engine_environment().length(), 0)
+}
+
+///|
 test "runtime arguments mount only the verified local model" {
   let assignment = supervisor_assignment()
   let artifact : MaterializedArtifact = {

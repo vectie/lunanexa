@@ -12,6 +12,7 @@ pub(all) struct RuntimeInstance {
   image_ref : String
   artifact_digest : String
   observed_state : @contracts.DeploymentState
+  container_address : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -20,6 +21,29 @@ pub struct OciRuntimeSupervisor {
   network : String
   engine_endpoint : String
   pid_limit : Int
+}
+
+///|
+pub fn private_runtime_container_address(
+  inspection : String,
+) -> String raise RuntimeSupervisorError {
+  let address = inspection.trim().to_owned()
+  let private_ipv4 = address.has_prefix("10.") ||
+    address.has_prefix("192.168.") ||
+    [
+      "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
+      "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
+      "172.30.", "172.31.",
+    ].any(prefix => address.has_prefix(prefix))
+  let private_ipv6 = address.has_prefix("fc") || address.has_prefix("fd")
+  if !private_ipv4 && !private_ipv6 {
+    raise InvalidAssignmentIdentity("container-address")
+  }
+  let authority = if private_ipv6 { "[\{address}]:1" } else { "\{address}:1" }
+  let _ = @socket.Addr::parse(authority) catch {
+    _ => raise InvalidAssignmentIdentity("container-address")
+  }
+  address
 }
 
 ///|
@@ -38,7 +62,10 @@ pub fn OciRuntimeSupervisor::new(
   if !safe_identity(network) || !network.has_prefix("lunanexa-") {
     raise RuntimeSupervisorError::InvalidAssignmentIdentity(network)
   }
-  if !engine_endpoint.has_prefix("unix:///run/") ||
+  if (
+      engine_endpoint != "local://" &&
+      !engine_endpoint.has_prefix("unix:///run/")
+    ) ||
     engine_endpoint.contains("..") {
     raise RuntimeSupervisorError::InvalidAssignmentIdentity(engine_endpoint)
   }
@@ -52,6 +79,9 @@ pub fn OciRuntimeSupervisor::new(
 fn OciRuntimeSupervisor::engine_environment(
   self : OciRuntimeSupervisor,
 ) -> Map[String, String] {
+  if self.engine_endpoint == "local://" {
+    return Map([])
+  }
   {
     "CONTAINER_HOST": self.engine_endpoint,
     "DOCKER_HOST": self.engine_endpoint,
@@ -289,12 +319,28 @@ pub async fn OciRuntimeSupervisor::ensure_started(
     assignment.assignment_id,
     assignment.artifact.digest,
   )
+  let (address_status, address_output, _) = @process.collect_output(
+    self.engine,
+    [
+      "container", "inspect", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+      name,
+    ],
+    extra_env=self.engine_environment(),
+    inherit_env=false,
+  )
+  if address_status != 0 {
+    raise RuntimeCommandFailed(assignment.assignment_id)
+  }
+  let container_address = private_runtime_container_address(
+    address_output.text(),
+  )
   {
     assignment_id: assignment.assignment_id,
     container_name: name,
     image_ref,
     artifact_digest: assignment.artifact.digest,
     observed_state,
+    container_address,
   }
 }
 

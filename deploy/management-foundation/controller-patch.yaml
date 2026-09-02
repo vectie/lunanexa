@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-control
+spec:
+  template:
+    metadata:
+      annotations:
+        lunanexa.io/management-config-digest: "${MANAGEMENT_CONFIG_DIGEST}"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "${MANAGEMENT_NODE}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: ${CONTROL_UID}
+        runAsGroup: ${CONTROL_GID}
+        fsGroup: ${CONTROL_GID}
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: control
+          image: "${CONTROL_IMAGE}"
+          imagePullPolicy: Never
+          env:
+            - name: LUNANEXA_ALLOW_HTTP_LOOPBACK
+              value: "1"
+            - name: LUNANEXA_MACHINE_HELPER_NODE_SCOPE
+              value: "temporary-ascend-qualification"
+            - name: LUNANEXA_RUNTIME_ENDPOINTS_PATH
+              $patch: delete
+            - name: LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH
+              $patch: delete
+            - name: LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET
+              $patch: delete
+            - name: LUNANEXA_ENABLE_GUIDE_MONITOR
+              value: "0"
+            - name: LUNANEXA_GUIDE_ORIGIN
+              value: "http://127.0.0.1:4390"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+      volumes:
+        - name: model-store
+          hostPath:
+            path: "${MODEL_STORE_ROOT}"
+            type: Directory

@@ -14,6 +14,7 @@
 # Runtime state never belongs in source control.
 /state/
 /artifacts/
+/_artifacts/
 /benchmarks/results/
 /deploy/local/
 /lunanexa-*.json

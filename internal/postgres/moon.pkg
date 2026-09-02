@@ -12,7 +12,7 @@ options(
   link: {
     "native": {
       "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq",
-      "stub-cc-flags": "-I/usr/include/postgresql -I/opt/homebrew/include/postgresql@17",
+      "stub-cc-flags": "-O2 -I/usr/include/postgresql -I/opt/homebrew/include/postgresql@17",
     },
   },
 )

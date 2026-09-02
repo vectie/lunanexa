@@ -31,6 +31,8 @@ import {
   "vectie/lunanexa/portal/store" @portal_store,
   "vectie/lunanexa/store",
   "vectie/lunanexa/workspace",
+  "vectie/lunanexa/workspace/client_handoff",
+  "vectie/lunanexa/workspace/client_handoff/store" @client_handoff_store,
   "vectie/lunanexa/workspace/directory",
   "moonbitlang/async",
   "moonbitlang/async/fs",

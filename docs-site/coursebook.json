@@ -15,10 +15,10 @@
     {"id":"quickstart","label":"Quickstart","page_ids":["local-quickstart","operator-console","developer-workbench","client-api"]},
     {"id":"concepts","label":"How it works","page_ids":["architecture","request-flow","deployment-flow","enrollment-flow","access-flow","state-ownership"]},
     {"id":"deployment","label":"Deployment","page_ids":["tomorrow-deployment","dgx-runtimes"]},
-    {"id":"operations","label":"Operations","page_ids":["daily-operations","ui-end-to-end-sop","observability-recovery"]},
+    {"id":"operations","label":"Operations","page_ids":["daily-operations","ui-end-to-end-sop","production-ui-validation","observability-recovery"]},
     {"id":"troubleshooting","label":"Troubleshooting","page_ids":["debug-controller","debug-node-runtime","debug-access-database"]},
     {"id":"reference","label":"Reference","page_ids":["configuration","error-reference"]},
-    {"id":"advanced","label":"Technical notes","visibility":"advanced","page_ids":["readiness","source-ledger"]}
+    {"id":"advanced","label":"Technical notes","visibility":"advanced","page_ids":["readiness","future-expansion","source-ledger"]}
   ],
   "pages": [
     {
@@ -56,7 +56,7 @@
       "group_id":"advanced",
       "visibility":"advanced",
       "title":"What works now—and what still needs proof?",
-      "summary":"The software baseline is broad and tested, but production readiness remains conditional on the real four-node cluster and external trust infrastructure. Read this page before interpreting any green local test as a production guarantee.",
+      "summary":"The software baseline is broad and tested, but production readiness remains conditional on the named physical acceptance profile—currently four DGX Spark nodes—and external trust infrastructure. That inventory is evidence scope, not a platform topology rule.",
       "audience":"Release owner and deployment reviewer",
       "estimated_minutes":8,
       "status":"documented",
@@ -69,12 +69,13 @@
           "Native controller, node agent, scheduler, client/CLI, durable state, PostgreSQL management adapter, and recovery tooling.",
           "Rabbita management console, enterprise portal, developer workbench, and a scoped VS Code extension.",
           "Signed assignments, digest and Cosign checks, strict per-node runtime routing, bounded admission, cancellation, and receipt-bearing failures.",
-          "Four-node functional simulation, restart drills, isolation scans, secret scans, response-leak checks, and browser tests."
+          "Four-node functional simulation, restart drills, isolation scans, secret scans, response-leak checks, and browser tests.",
+          "A live two-node pilot: one management host and one NVIDIA worker, with all current LunaNexa Pods ready at the observed checkpoint, zero restarts, and ModelScope search available through the protected controller path."
         ]},
         {"kind":"heading","level":2,"id":"external-gates","text":"External acceptance gates"},
         {"kind":"table","columns":["Gate","Current evidence","Required before production claim"],"rows":[
           ["Four DGX Spark nodes","Functional simulator only","Enroll all physical nodes and exercise real heartbeats, scheduling, drain, restart, and failover."],
-          ["Model serving","Adapter and qualification templates","Select a licensed model and signed ARM64 runtime image; qualify vLLM or SGLang on the actual DGX."],
+          ["Model serving","Live ModelSource plus NVIDIA capacity and CUDA primitive evidence; no complete model service","Select a licensed model, satisfy signature/evaluation gates, and qualify a digest-pinned runtime rollout through real inference, cancellation, restart and soak tests."],
           ["Identity and transport","Fail-closed application boundary","Configure and verify CA/mTLS termination, subject mapping, scoped credentials, rotation, and network isolation."],
           ["Persistence","PostgreSQL adapter and file/PVC stores","Deploy HA or managed PostgreSQL, encrypted backups, storage classes, and tested restoration."],
           ["Performance","Benchmark driver and evidence schema","Measure cold start, long stream, concurrency, saturation, memory, thermal, drain, and failure on hardware."],
@@ -136,7 +137,7 @@
       "id":"architecture",
       "group_id":"concepts",
       "title":"Understand the architecture",
-      "summary":"The architecture separates consumer intent, management authority, node reconciliation, and inference traffic. The management node owns durable control state; each DGX is an independently schedulable execution node.",
+      "summary":"The architecture separates consumer intent, management authority, node reconciliation, and inference traffic. Management and compute are explicit logical roles; each enrolled compute node is independently schedulable.",
       "audience":"Platform engineer or reviewer",
       "estimated_minutes":10,
       "status":"implemented",
@@ -146,11 +147,11 @@
         {"kind":"flow","title":"Trust-domain overview","steps":[
           {"title":"Consumers","text":"MoonGate or another authorized client sends the generic LunaNexa contract."},
           {"title":"Management domain","text":"API, scheduler, controller, registry, stores, PostgreSQL, console, enterprise portal, and workbench govern intent."},
-          {"title":"Node domain","text":"One protected node agent per DGX reconciles signed assignments and supervises approved OCI runtimes."},
+          {"title":"Node domain","text":"One protected node agent per explicitly enrolled compute node reconciles signed assignments and supervises approved OCI runtimes."},
           {"title":"Inference result","text":"The selected ready adapter produces bounded output and evidence through the control plane."}
         ]},
         {"kind":"heading","level":2,"id":"management-components","text":"Management components"},
-        {"kind":"table","columns":["Component","Primary responsibility","Runs on DGX"],"rows":[
+        {"kind":"table","columns":["Component","Primary responsibility","Runs in compute role"],"rows":[
           ["API","Authentication, validation, admission, status, cancellation, and streaming","No"],
           ["Controller","Desired state, reconciliation, deployment operations, recovery fencing","No"],
           ["Scheduler","Eligibility, deterministic scoring, quotas, queues, capacity, and failover","No"],
@@ -160,9 +161,9 @@
           ["Node agent","Inventory, artifact materialization, assignment reconciliation, runtime supervision","Yes"],
           ["Runtime adapter","Approved model-server lifecycle and invocation","Yes"]
         ]},
-        {"kind":"heading","level":2,"id":"four-node-topology","text":"Initial four-node topology"},
-        {"kind":"paragraph","text":"Treat the four Sparks as four independent nodes. Single-node serving is the first acceptance target. Multi-node sharding is disabled until the real network, runtime, model, and topology pass a named benchmark."},
-        {"kind":"callout","tone":"warning","title":"The management node is not a compute node","text":"It joins Kubernetes and receives the management placement label, but it must not enroll into the LunaNexa compute-node inventory."}
+        {"kind":"heading","level":2,"id":"deployment-profile-topology","text":"Topology is explicit deployment-profile data"},
+        {"kind":"paragraph","text":"The planned four-Spark campaign is one named acceptance inventory, not a product node-count rule. Single-node serving is the first target. Multi-node sharding stays disabled until the selected network, runtime, model, and topology pass a named benchmark."},
+        {"kind":"callout","tone":"warning","title":"Roles are selected, not inferred","text":"Management and compute may be separate or explicitly co-located. A management label, accelerator, network interface, or SSH route never enrolls compute capacity by itself; a bastion is optional operator networking, not a LunaNexa role."}
       ]
     },
     {
@@ -261,7 +262,7 @@
       "id":"enrollment-flow",
       "group_id":"concepts",
       "title":"Trace node enrollment and reconciliation",
-      "summary":"Kubernetes registration and LunaNexa enrollment are separate. The management node joins and receives a management label; each DGX joins as a worker, receives the GPU label, then enrolls with one-use bootstrap material and a unique persistent node credential.",
+      "summary":"Kubernetes registration and LunaNexa enrollment are separate. Each selected placement joins Kubernetes and receives explicit role labels; each selected compute placement then enrolls with one-use bootstrap material and a unique persistent node credential.",
       "audience":"Cluster installer",
       "estimated_minutes":12,
       "status":"documented",
@@ -269,8 +270,8 @@
       "source_ids":["deployment","operations","product-contract"],
       "blocks":[
         {"kind":"table","columns":["Host","Kubernetes action","LunaNexa action"],"rows":[
-          ["Management node","Join control plane; label lunanexa.io/role=management","Do not enroll as compute"],
-          ["DGX compute node","Join worker; label lunanexa.io/role=gpu","Enroll once with bootstrap token; retain unique node credential"]
+          ["Management placement","Join the selected Kubernetes distribution; label lunanexa.io/role=management","No compute enrollment unless the same host is separately selected and qualified"],
+          ["Compute placement","Join the selected Kubernetes distribution; label lunanexa.io/role=gpu","Enroll once with bootstrap token; retain unique node credential"]
         ]},
         {"kind":"flow","title":"DGX identity lifecycle","steps":[
           {"title":"Prepare host","text":"Verify stable node name, architecture, GPU inventory, runtime engine, trust files, and protected state paths."},
@@ -422,30 +423,40 @@
     {
       "id":"tomorrow-deployment",
       "group_id":"deployment",
-      "title":"Deploy the management node and first DGX safely",
-      "summary":"Tomorrow's safe order is management host, Kubernetes placement, management plane, health and ingress, then one DGX at a time. Do not enroll the management node and do not start with all four workers simultaneously.",
+      "title":"Deploy management first, then explicitly selected compute",
+      "summary":"Management, model-data/storage and compute are logical roles. Install and verify the management foundation through the guarded UI first; qualify and enroll only explicitly selected compute afterward. A lab host may carry temporary compute, while a bastion remains optional operator networking rather than a LunaNexa role.",
       "audience":"Named deployment operator",
       "estimated_minutes":16,
       "status":"documented",
       "tags":["deployment","management node","compute node","kubernetes","tomorrow"],
-      "source_ids":["deployment","operations","database","security"],
+      "source_ids":["deployment","ascend-temporary-compute","operations","database","security"],
       "blocks":[
         {"kind":"flow","title":"First installation order","steps":[
-          {"title":"Prepare management host","text":"Join Kubernetes, identify the real node name, mount /data/models, and label management placement."},
-          {"title":"Render management plane","text":"Build immutable artifacts; substitute images, hosts, storage, certificates, routes, and secret references in a private overlay."},
-          {"title":"Migrate and start","text":"Apply prerequisites, PostgreSQL, controller, console, enterprise/workbench, network policy, and ingress; run database migration with owner authority."},
-          {"title":"Verify boundary","text":"Require controller and site readiness, trusted TLS ingress, blocked direct controller access, management placement, and protected /metrics."},
-          {"title":"Enroll DGX 1","text":"Join worker, label GPU role, verify NVIDIA/runtime/trust material, issue one-use bootstrap, enroll, remove bootstrap material, and observe heartbeat."},
-          {"title":"Repeat deliberately","text":"Only after DGX 1 is truthful and stable, enroll DGX 2–4 one at a time."}
+          {"title":"Prepare the selected host","text":"Join the chosen Kubernetes distribution, identify its real node name, prepare /data/models, pin SSH host identity, and record whether storage is dedicated or temporary."},
+          {"title":"Render management artifacts","text":"Build immutable images, render management.yaml, and generate a separate mode-0600 management secret manifest. Secret values never enter the browser."},
+          {"title":"Preview in the UI","text":"Select Management foundation, enter only host and local artifact references, then run Preview. It must prove SSH, storage, Kubernetes, CoreDNS, metrics and placeholder checks without mutation, then list the identities of non-secret Kubernetes resources that differ. The protected Secret manifest is never diffed."},
+          {"title":"Confirm and apply","text":"After reviewing Preview, enter the exact management confirmation. Apply labels only the selected management placement and reconciles the reviewed manifests."},
+          {"title":"Verify every service","text":"Require PostgreSQL, controller, console, enterprise and workbench rollouts plus ready Service endpoints. Use protected port-forwarding until the TLS edge is reviewed."},
+          {"title":"Qualify selected compute separately","text":"An Ascend host may enter an explicit temporary-compute qualification profile. Future DGX Spark hosts are enrolled only after their own accelerator, runtime, trust and heartbeat evidence passes."}
         ]},
-        {"kind":"code","language":"sh","label":"Management placement and model disk","code":"kubectl get nodes -o wide\nkubectl label node MANAGEMENT_NODE lunanexa.io/role=management --overwrite\nkubectl get node MANAGEMENT_NODE -L lunanexa.io/role\nfindmnt /data/models\ndf -h /data/models"},
-        {"kind":"code","language":"sh","label":"Fail unresolved render before apply","code":"rg '\\$\\{[A-Z0-9_]+\\}|registry\\.invalid|lunanexa\\.invalid' RENDERED_DIRECTORY\n# This command must print nothing."},
-        {"kind":"heading","level":2,"id":"apply-order","text":"Management resource apply order"},
-        {"kind":"code","language":"sh","label":"Apply rendered resources","code":"kubectl -n lunanexa apply -f RENDERED_PREREQUISITES\nkubectl -n lunanexa apply -f RENDERED_POSTGRES\nkubectl -n lunanexa apply -f RENDERED_CONTROLLER\nkubectl -n lunanexa apply -f RENDERED_CONSOLE\nkubectl -n lunanexa apply -f RENDERED_ENTERPRISE\nkubectl -n lunanexa apply -f RENDERED_NETWORK_POLICIES\nkubectl -n lunanexa apply -f RENDERED_INGRESS"},
-        {"kind":"code","language":"sh","label":"Open the guarded deployment UI (two terminals)","code":"# Terminal 1: build and serve the browser UI\nsh scripts/build-browser-bundles.sh\npython3 -m http.server 4173 --bind 127.0.0.1 --directory _build/browser-dist\n\n# Terminal 2: start the loopback-only native companion\nsh scripts/start-deployment-ui.sh\n# Then open http://127.0.0.1:4173/installer/"},
-        {"kind":"code","language":"sh","label":"Copy-paste real-host preview (edit the non-secret values first)","code":"export SSH_USER=ubuntu\nexport MANAGEMENT_NODE=management-01\nexport MANAGEMENT_HOST=management.example\nexport KUBECONFIG_PATH=\"$HOME/.kube/config\"\nexport RENDERED_DIR=\"$PWD/private-rendered\"\nexport SECRET_DIR=\"$PWD/private-node-material\"\nexport CLI_PATH=\"$PWD/_build/native/release/build/cmd/cli/cli.exe\"\n\nsh scripts/deploy/run-cluster-install.sh --mode preview \\\n  --ssh-user \"$SSH_USER\" --ssh-key \"$HOME/.ssh/lunanexa_deploy\" \\\n  --known-hosts \"$HOME/.ssh/lunanexa_known_hosts\" \\\n  --management-node \"$MANAGEMENT_NODE\" --management-host \"$MANAGEMENT_HOST\" \\\n  --namespace lunanexa --kubeconfig \"$KUBECONFIG_PATH\" \\\n  --rendered-directory \"$RENDERED_DIR\" --secret-directory \"$SECRET_DIR\" \\\n  --cli-path \"$CLI_PATH\" \\\n  --compute dgx-spark-01=dgx1.example --compute dgx-spark-02=dgx2.example \\\n  --compute dgx-spark-03=dgx3.example --compute dgx-spark-04=dgx4.example"},
-        {"kind":"callout","tone":"danger","title":"Private overlay is mandatory","text":"Base manifests contain placeholders and do not fully enforce management versus GPU placement. Do not apply them unchanged to a real cluster."},
-        {"kind":"callout","tone":"warning","title":"Use the installer UI within its boundary","text":"The assisted UI begins with pinned-host SSH verification after hosts have already joined Kubernetes. It does not accept arbitrary shell commands, SSH keys, kubeadm join tokens, or browser-stored secrets."}
+        {"kind":"code","language":"sh","label":"Render the non-secret management manifest","code":"scripts/deploy/render-management-foundation.sh \\\n  --output /ABSOLUTE/RENDERED_DIRECTORY \\\n  --management-node KUBERNETES_NODE_NAME \\\n  --control-image IMMUTABLE_CONTROL_IMAGE \\\n  --web-image IMMUTABLE_WEB_IMAGE \\\n  --postgres-image IMMUTABLE_POSTGRES_IMAGE \\\n  --model-store-root /data/models \\\n  --control-uid MODEL_STORE_UID --control-gid MODEL_STORE_GID \\\n  --runtime-endpoint http://127.0.0.1:19090/v1/responses \\\n  --controller-epoch 1"},
+        {"kind":"code","language":"sh","label":"Generate the protected management secret manifest","code":"scripts/deploy/generate-management-secrets.sh \\\n  /ABSOLUTE/PROTECTED/management-secrets.yaml\n# The generator creates mode 0600 and refuses overwrite."},
+        {"kind":"heading","level":2,"id":"apply-order","text":"Run the guarded UI workflow"},
+        {"kind":"code","language":"sh","label":"Open the installer without printing its bearer","code":"# Terminal 1\nsh scripts/build-browser-bundles.sh\npython3 -m http.server 4173 --bind 127.0.0.1 --directory _build/browser-dist\n\n# Terminal 2: choose a new protected path\nLUNANEXA_INSTALLER_TOKEN_FILE=/ABSOLUTE/PROTECTED/session-token \\\n  sh scripts/start-deployment-ui.sh\n# Open http://127.0.0.1:4173/installer/"},
+        {"kind":"code","language":"text","label":"Management UI fields (references only)","code":"Deployment target: Management foundation\nSSH user and port: selected host login\nPrivate key / known_hosts: absolute operator-machine paths\nManagement Kubernetes node: exact kubectl node name\nManagement SSH host: direct host or operator-owned OpenSSH alias\nKubeconfig / rendered directory: absolute operator-machine paths\nProtected management secret manifest: absolute mode-0600 file path\nConfirmation: leave empty until Preview succeeds"},
+        {"kind":"callout","tone":"info","title":"No access-node assumption","text":"Connect directly or use an operator-owned VPN/OpenSSH ProxyJump. A bastion is not registered as management or compute and is not required for daily browser, API or node-agent traffic."},
+        {"kind":"callout","tone":"danger","title":"Roles are explicit, never inferred","text":"Accelerator presence does not silently make a management host schedulable. Co-located temporary compute requires a separate qualification and enrollment decision; the planned four-DGX campaign is an explicit acceptance inventory, not a platform node-count invariant."},
+        {"kind":"callout","tone":"danger","title":"Current Ascend 310P3 is not compute-ready","text":"The host device is healthy, but Kubernetes exposes no huawei.com/Ascend resource and LunaNexa telemetry/runtime supervision is still NVIDIA-specific. Compute Preview now fails closed. Do not upgrade CANN or enroll the host until the reviewed runtime, device plugin, LunaNexa adapters, reboot recovery and model evidence all pass."},
+        {"kind":"callout","tone":"warning","title":"Use the installer UI within its boundary","text":"The UI starts after hosts join Kubernetes. Preview is read-only and shows only a bounded non-secret resource change plan; a failed or unsummarizable diff blocks Apply. Apply requires the scope-specific phrase. The companion accepts no arbitrary shell, browser-pasted private key, kubeadm join token or secret value."},
+        {"kind":"heading","level":2,"id":"modelsource-onboarding","text":"Onboard ModelScope models from the protected console"},
+        {"kind":"steps","items":[
+          "Open the deployed console through localhost port-forwarding or reviewed HTTPS. Public plaintext HTTP deliberately disables credential entry.",
+          "Sign in with separate operator and audit authorities. Search the ModelScope catalog by model name; do not paste registry JSON.",
+          "Open the exact owner/repository row and inspect revision, license, task and declared size before selecting Download.",
+          "Watch the automatically refreshed durable import. A retry resumes verified files or the remaining byte range and never publishes partial bytes.",
+          "After source checksums pass, inspect license, signature, evaluation and runtime-template gates separately. Approve for users remains disabled until all four are backed by real evidence."
+        ]},
+        {"kind":"callout","tone":"info","title":"Current MiniCPM pilot state","text":"OpenBMB/MiniCPM5-1B is a public, Apache-2.0 candidate of roughly 2.17 GB. A manual staging directory is not a catalog approval. The first protected UI import must retain the observed revision and per-file hashes, then remain non-user-visible until artifact packaging, signature, evaluation and a qualified serving template exist."}
       ]
     },
     {
@@ -457,7 +468,7 @@
       "estimated_minutes":13,
       "status":"documented",
       "tags":["vllm","sglang","dgx spark","runtime qualification","arm64"],
-      "source_ids":["dgx-qualification","deployment","implementation-status"],
+      "source_ids":["dgx-qualification","lunaflux-qualification","deployment","implementation-status"],
       "blocks":[
         {"kind":"heading","level":2,"id":"prerequisites","text":"Prerequisites"},
         {"kind":"bullets","items":[
@@ -473,6 +484,7 @@
         ]},
         {"kind":"code","language":"sh","label":"Qualification sequence","code":"kubectl apply -f deploy/dgx-spark/runtime-qualification-prerequisites.yaml\nkubectl apply -f RENDERED_VLLM.yaml\nkubectl -n lunanexa-runtime-qualification rollout status deployment/vllm-dgx-spark --timeout=30m\nkubectl -n lunanexa-runtime-qualification logs deployment/vllm-dgx-spark --tail=200"},
         {"kind":"callout","tone":"danger","title":"Current packaging gap","text":"The LunaNexa materializer currently publishes one verified artifact file, while vLLM/SGLang normally consume a multi-file Hugging Face directory. Production promotion needs a reviewed assignment-bound packaging/extraction adapter that reverifies output before mounting it."},
+        {"kind":"callout","tone":"warning","title":"LunaFlux is a future DGX candidate, not a current runtime","text":"LunaFlux passed physical CUDA inventory and several isolated primitive/kernel fixtures on the temporary RTX 5060 Ti, but it has no promoted Linux/CUDA image digest or complete model/kernel rollout unit. MiniCPM schema compatibility and individual kernel numerics are not end-to-end inference proof. Add a LunaNexa template only after the exact image, launch/model/policy roots, listener, live readiness, model correctness and soak evidence are retained."},
         {"kind":"heading","level":2,"id":"qualification-evidence","text":"Evidence to retain"},
         {"kind":"bullets","items":[
           "Exact runtime image, model tree/archive, and detached-signature digests.",
@@ -584,10 +596,10 @@
         {"kind":"steps","items":[
           "Open Cluster installer and choose Local Colima simulation.",
           "Enter the test-only installer token supplied by the local companion process. Never reuse an operator, inference, monitoring, callback, or production token.",
-          "Click Preview and validate. Confirm the embedded terminal says the dedicated Colima profile is ready or will start during apply, the required tools are installed, and the five-node topology is ready or will be created.",
-          "Enter the exact confirmation DEPLOY 4 NODES.",
-          "Click Coordinate simulation. Keep the page open while the embedded terminal streams progress.",
-          "Accept only when the terminal reports one management placement, four compute placements, all five placement probes running, context kind-lunanexa-sim, and command exited successfully."
+          "Click Preview and verify. Confirm the embedded terminal says the dedicated Colima profile is ready or will start during apply and the required tools are installed. The simulator's fixed one-plus-four inventory is a test fixture, not a production topology default.",
+          "Enter the exact confirmation RECONCILE SIMULATION.",
+          "Click Reconcile simulation. Keep the page open while the embedded terminal streams progress.",
+          "For this simulator fixture only, accept when the terminal reports its management and compute placements, all placement probes running, context kind-lunanexa-sim, and command exited successfully."
         ]},
         {"kind":"callout","tone":"success","title":"Verified recovery behavior","text":"The installer now starts a stopped dedicated Colima profile during apply and recreates an unhealthy existing lunanexa-sim topology. Preview remains read-only. If either repair fails, the terminal stays failed and the operator must not continue."},
         {"kind":"heading","level":2,"id":"operator-tour","text":"2. Walk every operator-console page"},
@@ -671,13 +683,67 @@
         {"kind":"heading","level":2,"id":"stop-conditions","text":"Stop conditions and recovery"},
         {"kind":"table","columns":["Observed condition","Stop rule","Recovery"],"rows":[
           ["Preview cannot validate Colima","Do not apply","Start or repair the dedicated profile, then preview again"],
-          ["Existing simulation has missing nodes","Do not trust stale topology","Use Coordinate simulation; the installer recreates only the dedicated lunanexa-sim cluster"],
+          ["Existing simulation has missing nodes","Do not trust stale topology","Use Reconcile simulation; the installer recreates only the dedicated lunanexa-sim cluster"],
           ["MoonLeaf preview fails, loses Chinese, or shows the wrong form","Do not generate or approve documents","Keep the exact template and values, repair rendering/fonts, switch tabs, and compare again"],
           ["Termination remains Active or credential remains Available","Do not assume access ended","Retry only with the current generation; inspect controller, broker, helper, and notification evidence"],
           ["Cleanup or sanitization fails","Never return the node to managed service","Quarantine, alert, preserve evidence, and run the approved recovery procedure"],
           ["Production readiness has blockers","Do not release","Open the protected readiness details and close every named external or internal gate"]
         ]},
-        {"kind":"checkpoint","question":"What is the final acceptance condition?","answer":"Every visited page renders without an owned UI error; each consequential action reaches its documented next state; MoonLeaf preserves the selected template, Chinese text, spacing, and field ownership; the installer reports one management plus four compute placements; and production release remains blocked until protected readiness and external evidence are green.","revisit_after_days":1}
+        {"kind":"checkpoint","question":"What is the final acceptance condition?","answer":"Every visited page renders without an owned UI error; each consequential action reaches its documented next state; MoonLeaf preserves the selected template, Chinese text, spacing, and field ownership; the installer reconciles exactly the explicitly selected deployment scope; and production release remains blocked until protected readiness and external evidence are green.","revisit_after_days":1}
+      ]
+    },
+    {
+      "id":"production-ui-validation",
+      "group_id":"operations",
+      "title":"50-scenario production UI validation",
+      "summary":"An evidence ledger for 50 atomic UI journeys across the installer, operator console, enterprise portal, MoonLeaf contracts, machine access, notifications, catalog, and workbench. It separates demonstrated behavior from demo-only behavior and external blockers.",
+      "audience":"Release owner, acceptance tester, platform operator, and risk reviewer",
+      "estimated_minutes":18,
+      "status":"documented",
+      "tags":["UI validation","adversarial","lifecycle","production gaps","AWS comparison"],
+      "source_ids":["ui-production-validation","production-readiness","operations","deployment"],
+      "blocks":[
+        {"kind":"heading","level":2,"id":"result","text":"Result without manufactured evidence"},
+        {"kind":"callout","tone":"warning","title":"42 scoped passes; 8 production observations still blocked","text":"Ten journeys exercised a real local boundary and 32 exercised explicitly labelled demo-state UI behavior. Seven journeys remain blocked on real infrastructure and one responsive observation is blocked by the browser harness. No demo action, disabled button, Colima preview, or synthetic credential was promoted into a real-cluster claim."},
+        {"kind":"table","columns":["Evidence class","Count","Meaning"],"rows":[
+          ["UI-LOCAL-PASS","10","The browser exercised a real local boundary such as the native installer companion, persistent locale, validation, or fail-closed client behavior."],
+          ["UI-DEMO-PASS","32","The browser exercised Rabbita rendering, state transitions, confirmations, role separation, and guards against an explicitly labelled non-authoritative snapshot."],
+          ["UI-BLOCKED-EXTERNAL","7","The UI journey is defined, but physical hardware or an external authority was unavailable. This is not a pass."],
+          ["UI-BLOCKED-HARNESS","1","The controlled browser did not apply the requested responsive viewport reliably. Automated CSS checks are not substituted for the missing observation."]
+        ]},
+        {"kind":"heading","level":2,"id":"coverage","text":"What the 50 scenarios cover"},
+        {"kind":"table","columns":["Area","Atomic checks"],"rows":[
+          ["Operator console","All 17 routes; 4/4 machines and nine-model demo provenance; destructive confirmations; users, leases, catalog, deployment, requests, audit, model evidence, injection and length boundaries."],
+          ["Enterprise portal","All nine routes; tenant boundary; contract ownership; renewal; obligations; notifications; credential redemption; exact-phrase early termination; cleanup presentation."],
+          ["Installer","Incomplete-input gate; local-mode reduction; real native dry-run preview; wrong-token terminal reset; exact confirmation phrase. Apply was deliberately not clicked because it mutates the local system."],
+          ["MoonLeaf contracts","All seven source forms and 18 physical pages; Chinese rendering; operator/customer field separation; automatic preview refresh; approval evidence and rejection reason."],
+          ["Workbench","Missing-token gate; insecure-origin rejection; bounded failure with no token leakage; production invoke/stream/cancel, rate-limit, and expiry paths retained as external blockers."],
+          ["Adversarial lifecycle","Script text, identifier boundary, stale output, exact destructive phrases, hidden credentials, demo non-mutation, renewal predecessor retention, and blocked physical reclaim proof."]
+        ]},
+        {"kind":"heading","level":2,"id":"bugs-fixed","text":"Bugs found by the campaign and fixed"},
+        {"kind":"bullets","items":[
+          "A rejected installer run no longer leaves an old success transcript visible.",
+          "Demo credential redemption now terminates with an explicit synthetic, secret-free handoff instead of spinning forever.",
+          "The customer lease form now rejects reserved Unix usernames with the same shared rule as the backend.",
+          "Notification timestamps now use a readable UTC date rather than raw epoch milliseconds."
+        ]},
+        {"kind":"heading","level":2,"id":"blocked","text":"Production blockers that remain real"},
+        {"kind":"bullets","items":[
+          "A physical four-DGX enrollment, NVIDIA/ARM64 runtime, saturation, drain, thermal, long-stream, and failure exercise.",
+          "Production identity/mTLS, two real operators, credential issuer or SSH CA, root helper, exact-generation revocation, sanitization, quarantine, and physical reclaim evidence.",
+          "HA PostgreSQL, encrypted backup and restore with measured RPO/RTO, external notification delivery, telemetry export, object storage, scanner, renderer/font baseline, legal/finance approvals, and entitlement authority.",
+          "A production workbench workload proving admission ownership, streaming, cancellation, rate-limit recovery, and lease expiry against real serving adapters.",
+          "A real 390 px and 200% zoom browser run retained with screenshots; the current controlled viewport observation was inconclusive."
+        ]},
+        {"kind":"heading","level":2,"id":"cloud-gap","text":"Broader GPU-cloud operating gap"},
+        {"kind":"paragraph","text":"The credible near-term goal is a well-operated private GPU cloud, not immediate AWS feature parity. Close physical acceptance, HA authority, identity, networking, storage, metering, billing, incident ownership, and support operations before adding regions, spot capacity, training, or a marketplace."},
+        {"kind":"table","columns":["Priority","Required outcome"],"rows":[
+          ["P0","Repeatable physical-cluster acceptance; production trust and destructive reclaim; HA data restore; real external adapters; named 24×7 operations and release authority."],
+          ["P1","Tenant-visible quotas and reservations; pricing and immutable usage; invoices/refunds/disputes; network/storage/image lifecycle; stable API/CLI/SDK; search, tags, support cases, and audit export."],
+          ["P2","Multi-site failure domains, autoscaling, spot/preemptible supply, training, marketplace, organization federation, and advanced FinOps only after P0/P1 are repeatable."]
+        ]},
+        {"kind":"callout","tone":"info","title":"Read the atomic ledger","text":"The authoritative repository page docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md records every click sequence, expected result, observed result, evidence class, all eight blockers, the four fixes, and the AWS-like capability comparison."},
+        {"kind":"checkpoint","question":"When may a blocked scenario become a pass?","answer":"Only after the same UI journey is repeated against the actual dependency and the resulting operator identity, timestamps, audit receipts, runtime and artifact digests, cluster revision, screenshots, and external evidence are retained together.","revisit_after_days":1}
       ]
     },
     {
@@ -810,6 +876,58 @@
           ["CancelledByCaller","The authenticated owner cancelled the workload","No runtime-failure escalation unless cancellation was unexpected."]
         ]},
         {"kind":"callout","tone":"info","title":"Public errors are intentionally bounded","text":"They do not contain node addresses, filesystem paths, container IDs, provider credentials, stack traces, or internal topology. Operators use correlated audit and protected logs for deeper diagnosis."}
+      ]
+    },
+    {
+      "id":"future-expansion",
+      "group_id":"advanced",
+      "visibility":"advanced",
+      "title":"P0/P1/P2 expansion and offering launch plan",
+      "summary":"Separate a deployable four-node repository from an internal pilot, a managed-inference launch, a dedicated-workspace launch, and later private-cloud breadth. Each phase has explicit external evidence and a code-size planning range.",
+      "audience":"Product owner, engineering lead, deployment owner, security reviewer, and release board",
+      "estimated_minutes":16,
+      "status":"planned",
+      "tags":["roadmap","P0","P1","P2","managed inference","dedicated workspace"],
+      "source_ids":["future-expansion","product-contract","architecture","implementation-status","production-readiness"],
+      "blocks":[
+        {"kind":"heading","level":2,"id":"verdict","text":"The current four-node verdict"},
+        {"kind":"callout","tone":"warning","title":"Ready to begin deployment acceptance; not ready to sell either offering","text":"The repository, local release gate, simulations and UI projections form a deployment candidate. Internal-pilot readiness still requires the four physical DGX nodes, production identity and transport, a licensed runtime/model, live performance and recovery, external providers, and named human acceptance."},
+        {"kind":"table","columns":["Milestone","Current state","Missing proof"],"rows":[
+          ["Repository-ready","Yes","Keep strict release, isolation, restart, browser and evidence gates green."],
+          ["Four-node internal pilot","Not yet","Physical enrollment, runtime qualification, saturation/failure, clean restore and named acceptance."],
+          ["Managed inference offering","Not yet; nearer","Production identity, real runtime measurements, quota/metering/support, HA authority and customer acceptance."],
+          ["Dedicated GPU workspace","Not yet","SSH CA/broker, host policy, independent revocation, destructive sanitization, quarantine and physical reclaim proof."]
+        ]},
+        {"kind":"heading","level":2,"id":"offerings","text":"Two offerings, two different access boundaries"},
+        {"kind":"table","columns":["Offering","Customer receives","Customer never receives","Launch-critical evidence"],"rows":[
+          ["Managed inference","Approved model endpoints under scoped workspace admission","DGX login, node address, model-store credential or arbitrary runtime control","Real streaming/cancellation/limits, measured SLO, tenant isolation, usage reconciliation and support"],
+          ["Dedicated GPU workspace","One time-bounded non-root whole-machine account","Management credentials, another tenant's state or simultaneous managed placement","Issuer recovery, expiry while controller is unavailable, revocation, sanitization, quarantine and reclaim"]
+        ]},
+        {"kind":"heading","level":2,"id":"size","text":"How much expansion code"},
+        {"kind":"table","columns":["Scope","Net-new lines including tests","Expected repository size"],"rows":[
+          ["P0 foundations and two offering launch work","50k–100k","170k–220k"],
+          ["Focused P1 private cloud for 4–100 machines","another 60k–120k","230k–340k"],
+          ["Selective P2 programs","another 300k–700k+","530k–1M+"]
+        ]},
+        {"kind":"paragraph","text":"About 30–40% of expansion should be tests, fault injection, recovery and retained acceptance evidence. Most production growth belongs in durable capacity/quota/network/storage/image controllers, identity and policy, metering and billing, external adapters and operations. UI and clients should remain a smaller projection layer."},
+        {"kind":"heading","level":2,"id":"phases","text":"Recommended phase order"},
+        {"kind":"flow","title":"From repository baseline to private GPU cloud","steps":[
+          {"title":"Phase 0 · Preserve baseline","text":"Keep typed boundaries, release tests, simulation, leak scans and the honest 50-scenario UI ledger green."},
+          {"title":"Phase 1 · Four-node internal pilot","text":"Deploy the physical fleet, qualify real runtimes, exercise failures and restore, and obtain named internal acceptance."},
+          {"title":"Phase 2 · Shared production foundations","text":"Complete production SSO/MFA, authority separation, HA data, live delivery/export, quotas, SLOs and incident ownership."},
+          {"title":"Phase 3 · Managed inference launch","text":"Prove real customer invocation, streaming, cancellation, metering, pricing, capacity and support under production identity."},
+          {"title":"Phase 4 · Dedicated workspace launch","text":"Prove credential issuance, offline expiry, revocation, destructive sanitization, quarantine and machine reclaim on the exact host image."},
+          {"title":"Phase 5 · Focused P1","text":"Add only the required IAM, reservations, network/storage profiles, image lifecycle, billing, SDK and support resources."},
+          {"title":"Phase 6 · Selective P2","text":"Treat multi-site, autoscaling, spot, training, marketplace and advanced FinOps as independent programs after demand and operations are proven."}
+        ]},
+        {"kind":"heading","level":2,"id":"buy-build","text":"Integrate infrastructure; build GPU authority"},
+        {"kind":"bullets","items":[
+          "Use Kubernetes for workload orchestration and established providers for identity, secrets, networking, storage, PostgreSQL, telemetry, payment, invoice and signature.",
+          "LunaNexa owns GPU-specific desired state, model/runtime governance, capacity admission, lease policy, exclusive access fencing, evidence and reconciliation.",
+          "Do not turn LunaNexa into an identity provider, object store, virtual-network implementation, payment gateway, container engine or metrics database."
+        ]},
+        {"kind":"callout","tone":"danger","title":"Commercial wording follows evidence","text":"Until managed-inference Phase 3 is accepted, call LunaNexa an internal platform or deployment candidate. Until dedicated-workspace Phase 4 is accepted, do not issue customer machine credentials. A contract, invoice or UI state cannot override an operational blocker."},
+        {"kind":"checkpoint","question":"What is the next real milestone?","answer":"Complete the physical four-node internal-pilot campaign. It converts repository and simulation evidence into environment-specific enrollment, runtime, performance, failure, restore and named-human acceptance without yet promising a customer SLA.","revisit_after_days":1}
       ]
     },
     {

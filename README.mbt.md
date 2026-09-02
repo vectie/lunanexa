@@ -4,7 +4,7 @@
 > controller, durable registry/scheduler/enrollment/telemetry/workspace state, a native
 > node reconciler and OCI supervisor, a provider-neutral client and CLI, a live
 > Rabbita console, and release evidence tooling. Production acceptance still
-> requires the private runtime, CA/identity, four-node cluster, measurements,
+> requires a named physical-cluster profile, private runtime, CA/identity, measurements,
 > and named human approvals in [the phased plan](docs/PLAN.md).
 
 LunaNexa is a MoonBit-native model-as-a-service and hardware-cluster control
@@ -20,7 +20,7 @@ flowchart LR
     G -->|"generic provider contract"| N["LunaNexa<br/>model and cluster plane"]
     X["Other authorized clients"] -->|"same generic contract"| N
     N --> A["LunaNexa node agent"]
-    A --> D["Four DGX Spark nodes<br/>model runtimes only"]
+    A --> D["Explicitly enrolled accelerator nodes<br/>model runtimes only"]
     G --> P["External model providers"]
 ```
 
@@ -35,7 +35,7 @@ LunaNexa owns:
 - runtime adapters for approved model servers;
 - evaluation, performance baselines, quotas, metering and audit events;
 - deterministic prewarm, probe, cache, backpressure and transfer-grant policy
-  decisions for an operator-sized fixed fleet;
+  decisions for an explicitly inventoried, operator-managed fleet;
 - organizations, cost centers, projects, budgets, quotas, capacity commitments,
   rated usage, ledger evidence and versioned digital agreements;
 - one Rabbita operator console for models, deployments, nodes, commercial
@@ -76,14 +76,15 @@ default, and retained only when an explicit policy permits it.
   used by the API.
 - Runtime boundary: pinned OCI images for vLLM, SGLang, TensorRT-LLM,
   llama.cpp or media runtimes as separately approved adapters.
-- Persistent infrastructure: the management-node `/data/models` source disk,
-  standard OCI registry, PostgreSQL and Prometheus-compatible telemetry rather
-  than new Luna products.
+- Persistent infrastructure: a deployment-selected model source (the first
+  profile uses `/data/models`), standard OCI registry, PostgreSQL and
+  Prometheus-compatible telemetry rather than new Luna products.
 
-The production profile deliberately has no batch-job subsystem and no
-autoscaling. One exclusive lease names exactly one user and exactly one DGX;
-the management plane copies only the assigned model to that node through a
-short-lived, assignment-bound download and leaves the other DGX caches alone.
+The initial production profile deliberately has no batch-job subsystem and no
+autoscaling. One exclusive lease names exactly one subject and one explicitly
+selected compute node; the management plane copies only the assigned model to
+that node through a short-lived, assignment-bound download and leaves other
+node caches alone.
 
 ## Local validation
 
@@ -95,8 +96,8 @@ sh scripts/release-gate.sh
 
 It formats and checks native packages, runs the native suite, checks the
 JavaScript console, and scans dependencies, deployment images, secrets,
-contracts, and public responses. It deliberately does not claim the real
-four-node or human release gate.
+contracts, and public responses. It deliberately does not claim any physical
+deployment profile or named-human release gate.
 
 For local four-node behavior without DGX hardware, run
 `sh scripts/four-node-simulation.sh`. It exercises isolated node identities,
@@ -113,8 +114,9 @@ Native executables live in `cmd/control`, `cmd/node`, `cmd/lease-helper`,
 `cmd/lease-helper-client`, `cmd/cli`, `cmd/benchmark`, `cmd/evidence`, and
 `cmd/recovery`. The Rabbita operator site
 lives in `cmd/console`; the enterprise portal lives in `cmd/enterprise`, with
-the same-site WebIDE in `cmd/workbench`. Both sites consume one central API and
-shared provider-neutral contracts. See the
+the same-site WebIDE in `cmd/workbench` and a one-click, provider-neutral
+handoff into an administrator-approved desktop WebIDE. All surfaces consume one
+central API and shared contracts. See the
 [enterprise portal guide](docs/ENTERPRISE_PORTAL.md) and
 [workspace guide](docs/WORKSPACES.md). Lepusa packages the same centrally
 hosted interfaces as two downloadable macOS apps—Operator and Enterprise—using
@@ -139,14 +141,17 @@ signature, payment or tax-invoice providers.
 - [PostgreSQL management database](docs/DATABASE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Phased implementation plan](docs/PLAN.md)
+- [Future P0/P1/P2 expansion and offering launch plan](docs/FUTURE_EXPANSION_PLAN.md)
 - [Architecture decisions](docs/DECISIONS.md)
 - [Four-node functional simulation](docs/SIMULATION.md)
 - [MiniCPM-o 4.5 Ascend 910C benchmark](docs/MINICPMO45_910C_BENCHMARK.md)
+- [Ascend 310P3 temporary-compute qualification](docs/ASCEND_310P3_TEMPORARY_COMPUTE.md)
+- [LunaFlux runtime qualification for LunaNexa](docs/LUNAFLUX_RUNTIME_QUALIFICATION.md)
 - [Developer workspaces and integrations](docs/WORKSPACES.md)
 - [Management plane and one-click model services](docs/MANAGEMENT_PLANE.md)
 - [Exclusive DGX node leases](docs/EXCLUSIVE_NODE_LEASES.md)
 - [Exclusive lease production use-case matrix](docs/EXCLUSIVE_LEASE_USE_CASES.md)
-- [Management node and four-DGX deployment guide](docs/DEPLOYMENT.md)
+- [Topology-neutral deployment guide and named hardware profiles](docs/DEPLOYMENT.md)
 - [Production readiness and adversarial test record](docs/PRODUCTION_READINESS.md)
 - [Administrator, enterprise, local and fixed settings authority](docs/SETTINGS_AUTHORITY.md)
 - [Suanli documentation research and applicability review](docs/research/suanli/README.md)

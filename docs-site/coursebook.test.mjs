@@ -55,6 +55,16 @@ function invokeWithoutListener(server, { method = "GET", url = "/", host = "127.
   });
 }
 
+async function closeServerIfListening(server) {
+  if (!server.listening) return;
+  await new Promise((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) rejectClose(error);
+      else resolveClose();
+    });
+  });
+}
+
 test("coursebook has a complete unique navigation graph", () => {
   assert.equal(book.contract_version, "moonbook.repository-coursebook.v1");
   assert.equal(pageById.size, book.pages.length);
@@ -125,7 +135,7 @@ test("UI-only acceptance SOP records every surface and consequential journey", (
     "/installer/", "/console/?demo=1", "/enterprise/?demo=1", "/workbench/",
   ]) assert.ok(published.includes(surface), surface);
   for (const action of [
-    "Preview and validate", "Coordinate simulation", "Cordon", "Drain",
+    "Preview and verify", "Reconcile simulation", "Cordon", "Drain",
     "Review and sign", "Submit lease request", "Save data", "End access early",
     "Terminate access", "Request renewal", "Connect / refresh",
   ]) assert.match(published, new RegExp(action.replaceAll("/", "\\/"), "i"), action);
@@ -133,6 +143,60 @@ test("UI-only acceptance SOP records every surface and consequential journey", (
     "demo records", "production controller", "physical sanitization", "external receipts",
   ]) assert.match(published, new RegExp(boundary, "i"), boundary);
   assert.match(JSON.stringify(zhBook.pages[page.id]), /预览并验证|协调模拟|提前结束访问|终止访问|保存资料/u);
+});
+
+test("production UI validation publishes exactly 50 honest scenarios and blockers", async () => {
+  const page = pageById.get("production-ui-validation");
+  assert.ok(page);
+  assert.equal(page.group_id, "operations");
+  const published = JSON.stringify(page);
+  for (const marker of [
+    "UI-LOCAL-PASS", "UI-DEMO-PASS", "UI-BLOCKED-EXTERNAL",
+    "UI-BLOCKED-HARNESS", "42 scoped passes", "8 production observations",
+  ]) assert.match(published, new RegExp(marker), marker);
+  assert.match(published, /physical four-DGX|HA PostgreSQL|24×7|AWS feature parity/i);
+  const ledger = await readFile(resolve(root, "docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md"), "utf8");
+  assert.equal(ledger.match(/^### \d+\. /gm)?.length, 50);
+  const results = [...ledger.matchAll(/^- \*\*Result:\*\* `(UI-[A-Z-]+)`/gm)]
+    .map((match) => match[1]);
+  assert.equal(results.length, 50);
+  assert.equal(results.filter((value) => value === "UI-LOCAL-PASS").length, 10);
+  assert.equal(results.filter((value) => value === "UI-DEMO-PASS").length, 32);
+  assert.equal(results.filter((value) => value === "UI-BLOCKED-EXTERNAL").length, 7);
+  assert.equal(results.filter((value) => value === "UI-BLOCKED-HARNESS").length, 1);
+  assert.match(ledger, /42 UI observations passed/);
+  assert.match(ledger, /8 production observations remain blocked/);
+  assert.match(JSON.stringify(zhBook.pages[page.id]), /50 个生产级界面场景|42 项|8 项|私有 GPU 云/u);
+});
+
+test("future expansion plan separates deployment, offerings, and cloud breadth", async () => {
+  const page = pageById.get("future-expansion");
+  assert.ok(page);
+  assert.equal(page.group_id, "advanced");
+  assert.equal(page.visibility, "advanced");
+  assert.equal(page.status, "planned");
+  const published = JSON.stringify(page);
+  for (const marker of [
+    "Ready to begin deployment acceptance", "Managed inference",
+    "Dedicated GPU workspace", "50k–100k", "230k–340k",
+    "physical reclaim proof", "Phase 6 · Selective P2",
+  ]) assert.match(published, new RegExp(marker.replaceAll("+", "\\+"), "i"), marker);
+  const roadmap = await readFile(resolve(root, "docs/FUTURE_EXPANSION_PLAN.md"), "utf8");
+  for (const heading of [
+    "Phase 0 — Preserve the repository baseline",
+    "Phase 1 — Prove the four-node internal pilot",
+    "Phase 2 — Complete shared production foundations",
+    "Phase 3 — Launch managed inference",
+    "Phase 4 — Launch dedicated GPU workspace",
+    "Phase 5 — Complete focused P1 private-cloud capabilities",
+    "Phase 6 — Selective P2, not a single release",
+  ]) assert.ok(roadmap.includes(heading), heading);
+  assert.match(roadmap, /not\s+yet evidence that the cluster is safe to sell/i);
+  assert.match(
+    roadmap,
+    /A contract, invoice or UI\s+status cannot override these operational gates/i,
+  );
+  assert.match(JSON.stringify(zhBook.pages[page.id]), /可以开始部署验收|托管推理|独占 GPU 工作区|实体四节点内部试运行/u);
 });
 
 test("Simplified Chinese localization covers every page without rewriting code", () => {
@@ -224,6 +288,7 @@ test("administrator diagnostics deny public callers and return only bounded aggr
     auth: process.env.COURSEBOOK_ADMIN_AUTH_KEY,
     token: process.env.LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN,
     audit: process.env.COURSEBOOK_ADMIN_AUDIT_PATH,
+    maximumAge: process.env.COURSEBOOK_KNOWLEDGE_MAX_AGE_MS,
   };
   const originalFetch = globalThis.fetch;
   const originalWrite = process.stdout.write;
@@ -237,6 +302,7 @@ test("administrator diagnostics deny public callers and return only bounded aggr
     process.env.COURSEBOOK_ADMIN_AUTH_KEY = key;
     process.env.LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN = "guide-readonly-test-value-more-than-32-bytes";
     process.env.COURSEBOOK_ADMIN_AUDIT_PATH = auditPath;
+    process.env.COURSEBOOK_KNOWLEDGE_MAX_AGE_MS = String(31 * 24 * 60 * 60 * 1000);
     delete process.env.COURSEBOOK_ALLOW_HTTPS_CONTROLLER;
     globalThis.fetch = async (url, options = {}) => {
       const path = new URL(url).pathname;
@@ -329,7 +395,7 @@ test("administrator diagnostics deny public callers and return only bounded aggr
     process.env.COURSEBOOK_ADMIN_AUDIT_PATH = auditPath;
     const auditRecovered = await invokeWithoutListener(server, { url: "/ready" });
     assert.equal(auditRecovered.status, 200);
-    server.close();
+    await closeServerIfListening(server);
   } finally {
     globalThis.fetch = originalFetch;
     process.stdout.write = originalWrite;
@@ -340,6 +406,7 @@ test("administrator diagnostics deny public callers and return only bounded aggr
       COURSEBOOK_ADMIN_AUTH_KEY: previous.auth,
       LUNANEXA_GUIDE_DIAGNOSTICS_TOKEN: previous.token,
       COURSEBOOK_ADMIN_AUDIT_PATH: previous.audit,
+      COURSEBOOK_KNOWLEDGE_MAX_AGE_MS: previous.maximumAge,
     })) {
       if (value === undefined) delete process.env[keyName];
       else process.env[keyName] = value;
@@ -387,7 +454,10 @@ test("newcomer mode keeps repository process and readiness judgment opt-in", asy
   const advancedGroups = book.navigation.filter((group) => group.visibility === "advanced");
   const advancedPages = book.pages.filter((page) => page.visibility === "advanced");
   assert.deepEqual(advancedGroups.map((group) => group.id), ["advanced"]);
-  assert.deepEqual(advancedPages.map((page) => page.id).sort(), ["readiness", "source-ledger"]);
+  assert.deepEqual(
+    advancedPages.map((page) => page.id).sort(),
+    ["future-expansion", "readiness", "source-ledger"],
+  );
   assert.ok(book.navigation.find((group) => group.id === "overview")?.page_ids.includes("welcome"));
   assert.ok(book.navigation.find((group) => group.id === "quickstart")?.page_ids.includes("local-quickstart"));
   assert.ok(book.navigation.find((group) => group.id === "troubleshooting")?.page_ids.includes("debug-controller"));
@@ -491,7 +561,7 @@ test("HTTP contract stays healthy without the optional pet and fails closed on h
   assert.equal(privateManifest.status, 404);
   const disabledAdmin = await invokeWithoutListener(server, { url: "/api/coursebook/admin/diagnostics?category=overview" });
   assert.equal(disabledAdmin.status, 404);
-  server.close();
+  await closeServerIfListening(server);
 });
 
 test("enabled pet completes a typed MoonClaw Cowork round trip from public knowledge only", async () => {
@@ -553,7 +623,7 @@ test("enabled pet completes a typed MoonClaw Cowork round trip from public knowl
     assert.match(gatewayRequest.content, /PUBLIC COURSEBOOK DATA/);
     assert.match(gatewayRequest.content, /Do not call tools or inspect files/);
     assert.doesNotMatch(gatewayRequest.content, /server\.mjs/);
-    server.close();
+    await closeServerIfListening(server);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries({

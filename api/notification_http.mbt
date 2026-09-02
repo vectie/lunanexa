@@ -1047,6 +1047,19 @@ async fn ApiService::handle_notifications(
       .to_json(),
     )
   }
+  if path == "/v1/notifications/operator/deliveries" {
+    if !self.operator_authorized(headers) {
+      return api_error(
+        401, "Unauthorized", "operator authorization is required", false,
+      )
+    }
+    if verb != Get {
+      return api_error(
+        405, "MethodNotAllowed", "notification delivery listing requires GET", false,
+      )
+    }
+    return json_reply(200, store.snapshot().deliveries.to_json())
+  }
   if path == "/v1/notifications/operator" {
     if !self.operator_authorized(headers) {
       return api_error(

@@ -30,7 +30,14 @@ node -e 'const fs=require("fs"); JSON.parse(fs.readFileSync("extensions/vscode/p
 node --test docs-site/coursebook.test.mjs docs-site/guide-diagnostics.test.mjs
 sh scripts/contract-preview-scene-test.sh
 sh scripts/contract-font-bundle-test.sh
-sh -n scripts/start-deployment-ui.sh scripts/start-local-kubernetes-simulation.sh scripts/stop-local-kubernetes-simulation.sh scripts/deploy/preflight-host.sh scripts/deploy/install-node-material.sh scripts/deploy/remove-bootstrap-material.sh scripts/deploy/run-cluster-install.sh
+sh -n scripts/start-deployment-ui.sh scripts/start-deployment-ui-test.sh scripts/start-local-kubernetes-simulation.sh scripts/stop-local-kubernetes-simulation.sh scripts/deploy/preflight-host.sh scripts/deploy/preflight-host-test.sh scripts/deploy/install-node-material.sh scripts/deploy/install-node-material-test.sh scripts/deploy/remove-bootstrap-material.sh scripts/deploy/run-cluster-install.sh scripts/deploy/run-cluster-install-test.sh scripts/deploy/render-management-foundation.sh scripts/deploy/render-management-foundation-test.sh scripts/deploy/generate-management-secrets.sh scripts/deploy/generate-management-secrets-test.sh scripts/deploy/stage-moonbit-linux-amd64.sh scripts/deploy/stage-zig-linux-amd64.sh scripts/deploy/build-node-linux-amd64.sh
+sh scripts/start-deployment-ui-test.sh
+sh scripts/deploy/run-cluster-install-test.sh
+sh scripts/deploy/preflight-host-test.sh
+sh scripts/deploy/install-node-material-test.sh
+sh scripts/deploy/stage-minicpm5-1b-test.sh
+sh scripts/deploy/render-management-foundation-test.sh
+sh scripts/deploy/generate-management-secrets-test.sh
 sh scripts/build-browser-bundles.sh
 
 printf '%s\n' 'repository release gate passed; real-cluster and human acceptance remain required'

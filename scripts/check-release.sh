@@ -5,6 +5,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
 sh scripts/check-isolation.sh
+sh scripts/validate-lunaflux-promotion-boundary.sh
 
 if rg -n 'image:[[:space:]]+[^@[:space:]]+:(latest|main|master)' deploy >/dev/null; then
   printf '%s\n' 'image scan failed: mutable runtime image tag found' >&2

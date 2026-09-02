@@ -1,0 +1,33 @@
+FROM mirror.gcr.io/library/debian:bookworm-slim AS build-deps
+
+ARG HTTPS_PROXY
+ARG https_proxy
+ARG HTTP_PROXY
+ARG http_proxy
+RUN apt-get -o Acquire::Retries=6 -o Acquire::Queue-Mode=host update \
+    && apt-get -o Acquire::Retries=6 -o Acquire::Queue-Mode=host install -y --no-install-recommends \
+      ca-certificates curl gcc git libc6-dev libpq-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.moon/bin:${PATH}"
+
+FROM build-deps AS build
+COPY _artifacts/moon-linux-amd64 /root/.moon
+RUN chmod +x /root/.moon/bin/* /root/.moon/bin/internal/tcc \
+    && ln -sfn moon /root/.moon/bin/moonx \
+    && moon -C /root/.moon/lib/core bundle --warn-list -a --target native
+COPY _artifacts/zig-linux-amd64 /root/zig
+COPY images/zig-cc images/zig-ar /usr/local/bin/
+RUN chmod +x /usr/local/bin/zig-cc /usr/local/bin/zig-ar
+ENV MOON_CC=/usr/local/bin/zig-cc
+ENV MOON_AR=/usr/local/bin/zig-ar
+
+WORKDIR /src
+COPY . .
+RUN moon build cmd/node --target native --release --jobs 1 \
+    && install -D -m 0755 \
+      /src/_build/native/release/build/cmd/node/node.exe \
+      /out/lunanexa-node
+
+FROM scratch AS artifact
+COPY --from=build /out/lunanexa-node /lunanexa-node

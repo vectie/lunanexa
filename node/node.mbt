@@ -12,6 +12,7 @@ pub(all) suberror NodeError {
   StaleGeneration
   LeaseExpired
   InvalidCertificateLifetime
+  InvalidCertificateRenewal
   InvalidStateSchema
 } derive(Debug, Eq)
 
@@ -169,6 +170,42 @@ pub fn EnrollmentService::authorized(
   authority.secret_digest == secret_digest(secret) &&
   self.certificates.get(node_id) is Some(certificate) &&
   certificate.expires_unix_ms > now_unix_ms
+}
+
+///|
+/// Atomically renews an existing certificate from the durable node authority.
+/// Ordinary node authorization still rejects expiry; only this bounded
+/// renewal operation accepts a recently expired certificate.
+pub fn EnrollmentService::renew(
+  self : EnrollmentService,
+  node_id : String,
+  secret : String,
+  public_key_ref : String,
+  current_serial : Int64,
+  now_unix_ms : Int64,
+  certificate_lifetime_ms? : Int64 = 3600000L,
+  renewal_grace_ms? : Int64 = 86400000L,
+) -> NodeCertificate raise NodeError {
+  if certificate_lifetime_ms <= 0L ||
+    certificate_lifetime_ms > 86400000L ||
+    renewal_grace_ms <= 0L ||
+    renewal_grace_ms > 86400000L {
+    raise InvalidCertificateLifetime
+  }
+  guard self.authorities.get(node_id) is Some(authority) &&
+    authority.secret_digest == secret_digest(secret) &&
+    self.certificates.get(node_id) is Some(current) else {
+    raise InvalidCertificateRenewal
+  }
+  if current.serial == current_serial + 1L &&
+    current.public_key_ref == public_key_ref {
+    return current
+  }
+  if current.serial != current_serial ||
+    current.expires_unix_ms + renewal_grace_ms <= now_unix_ms {
+    raise InvalidCertificateRenewal
+  }
+  self.rotate(node_id, public_key_ref, now_unix_ms, certificate_lifetime_ms~)
 }
 
 ///| Returns the bounded set of nodes whose enrollment certificate and node

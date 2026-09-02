@@ -4,6 +4,7 @@ test "enterprise portal separates customer requests from operator assignment" {
   let agreements = @enterprise.render({ ..state, route: Agreements })
   let requests = @enterprise.render({ ..state, route: LeaseRequests })
   let models = @enterprise.render({ ..state, route: Models })
+  let desktop = @enterprise.render({ ..state, route: DesktopIde })
   assert_true(agreements.contains("Enterprise capacity framework"))
   assert_true(agreements.contains("Review &amp; sign"))
   assert_true(requests.contains("Submit lease request"))
@@ -12,7 +13,10 @@ test "enterprise portal separates customer requests from operator assignment" {
     requests.contains("operators select and prepare the assigned DGX node"),
   )
   assert_true(requests.contains("Password is not accepted"))
-  assert_true(requests.contains("href=\"/workbench/\""))
+  assert_true(requests.contains(">WebIDE</button>"))
+  assert_true(desktop.contains("SECURE DESKTOP HANDOFF"))
+  assert_true(desktop.contains("short-lived, single-use connection"))
+  assert_false(desktop.contains("href=\"/workbench/\""))
   assert_true(models.contains("Shared model catalog"))
   assert_true(models.contains("Managed centrally"))
   assert_false(models.contains("/data/models"))
@@ -45,6 +49,8 @@ test "customer notification inbox is bilingual and keeps opaque receipts" {
   assert_true(english.contains("Disable email"))
   assert_true(english.contains("In-app delivery always remains enabled"))
   assert_true(english.contains("exclusive-lease:demo:5"))
+  assert_true(english.contains("2026-08-09 23:30:00 UTC"))
+  assert_false(english.contains(">1786318200000<"))
   let chinese = @enterprise.render({
     ..state,
     route: Notifications,
@@ -85,8 +91,19 @@ test "lease form requires every bounded field" {
   let state = @enterprise.demo_state()
   assert_true(@enterprise.lease_form_valid(state))
   assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "" }))
+  assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "root" }))
+  assert_false(
+    @enterprise.lease_form_valid({ ..state, unix_username: "Alice" }),
+  )
   assert_false(@enterprise.lease_form_valid({ ..state, model_ids: "" }))
   assert_false(@enterprise.lease_form_valid({ ..state, loading: true }))
+  let invalid = @enterprise.render({
+    ..state,
+    route: LeaseRequests,
+    unix_username: "root",
+  })
+  assert_true(invalid.contains("aria-invalid=\"true\""))
+  assert_true(invalid.contains("non-reserved lowercase Unix username"))
 }
 
 ///|

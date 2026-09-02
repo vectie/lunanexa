@@ -72,6 +72,7 @@ start_controller() {
     LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
     LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
     LUNANEXA_CREDENTIAL_HANDOFF_PATH="$test_directory/credential-handoffs.json" \
+    LUNANEXA_CLIENT_HANDOFF_PATH="$test_directory/client-handoffs.json" \
     LUNANEXA_TECHNICAL_PATH="$test_directory/technical.json" \
     LUNANEXA_WORKSPACE_PATH="$test_directory/workspace.json" \
     LUNANEXA_DEPLOYMENT_PATH="$test_directory/deployments.json" \
@@ -93,6 +94,11 @@ start_controller() {
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
     LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="process-test-credential-handoff-authority" \
+    LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET="process-test-client-handoff-authority" \
+    LUNANEXA_CLIENT_ID="process-test-desktop" \
+    LUNANEXA_CLIENT_DISPLAY_NAME="Process test desktop" \
+    LUNANEXA_CLIENT_LAUNCH_URI="lunanexa-client://workspace/handoff" \
+    LUNANEXA_PUBLIC_API_BASE_URL="$base_url" \
     LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="process-test-helper-receipt-authority" \
     LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
@@ -213,6 +219,7 @@ env \
   LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
   LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
   LUNANEXA_CREDENTIAL_HANDOFF_PATH="$test_directory/credential-handoffs.json" \
+  LUNANEXA_CLIENT_HANDOFF_PATH="$test_directory/client-handoffs.json" \
   LUNANEXA_TECHNICAL_PATH="$test_directory/technical.json" \
   LUNANEXA_WORKSPACE_PATH="$test_directory/workspace.json" \
   LUNANEXA_DEPLOYMENT_PATH="$test_directory/deployments.json" \
@@ -234,6 +241,11 @@ env \
   LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
   LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
   LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="process-test-credential-handoff-authority" \
+  LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET="process-test-client-handoff-authority" \
+  LUNANEXA_CLIENT_ID="process-test-desktop" \
+  LUNANEXA_CLIENT_DISPLAY_NAME="Process test desktop" \
+  LUNANEXA_CLIENT_LAUNCH_URI="lunanexa-client://workspace/handoff" \
+  LUNANEXA_PUBLIC_API_BASE_URL="$base_url" \
   LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="process-test-helper-receipt-authority" \
   LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
   LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \

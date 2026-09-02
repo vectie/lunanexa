@@ -251,6 +251,48 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
       "X-LunaNexa-Node-Id": "node-1",
       "Content-Type": "application/json",
     }
+    let rotation_body : Json = {
+      "node_id": "node-1",
+      "public_key_ref": "host-ref:node-1-key-rotated",
+      "current_serial": certificate.serial,
+    }
+    let (forged_rotation, _) = @http.post(
+      "http://\{api_server.addr}/v1/enrollment/rotate",
+      rotation_body,
+      headers=forged_headers,
+    )
+    assert_eq(forged_rotation.code, 401)
+    let invalid_rotation_body : Json = {
+      "node_id": "node-1",
+      "public_key_ref": "host-ref:node-1\ninvalid",
+      "current_serial": certificate.serial,
+    }
+    let (invalid_rotation, _) = @http.post(
+      "http://\{api_server.addr}/v1/enrollment/rotate",
+      invalid_rotation_body,
+      headers=node_headers,
+    )
+    assert_eq(invalid_rotation.code, 400)
+    let (rotation_response, rotation_response_body) = @http.post(
+      "http://\{api_server.addr}/v1/enrollment/rotate",
+      rotation_body,
+      headers=node_headers,
+    )
+    assert_eq(rotation_response.code, 200)
+    let rotated_certificate : @node.NodeCertificate = @json.from_json(
+      @json.parse(rotation_response_body.text()),
+    )
+    assert_eq(rotated_certificate.serial, certificate.serial + 1L)
+    let (replayed_rotation, replayed_rotation_body) = @http.post(
+      "http://\{api_server.addr}/v1/enrollment/rotate",
+      rotation_body,
+      headers=node_headers,
+    )
+    assert_eq(replayed_rotation.code, 200)
+    let replayed_certificate : @node.NodeCertificate = @json.from_json(
+      @json.parse(replayed_rotation_body.text()),
+    )
+    assert_eq(replayed_certificate.serial, rotated_certificate.serial)
     let (heartbeat_response, _) = @http.put(
       "http://\{api_server.addr}/v1/nodes/heartbeat",
       {
@@ -952,7 +994,7 @@ fn schedulable_heartbeat(
 }
 
 ///|
-async test "live control plane rejects drained placement before launch then admits active node" {
+async test "placement treats accelerator memory as a ceiling instead of node demand" {
   let directory = @fs.tmpdir(prefix="lunanexa-scheduled-api-")
   let runtime_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let calls = [0]
@@ -1020,11 +1062,38 @@ async test "live control plane rejects drained placement before launch then admi
     assert_true(rejected.body.contains("NoPlacement"))
     assert_eq(calls[0], 0)
     store.put_heartbeat(schedulable_heartbeat(Active))
+    let below_model_ceiling = {
+      ..api_request(),
+      resource_ceiling: {
+        ..api_request().resource_ceiling,
+        max_accelerator_memory_mib: 999,
+      },
+    }
+    let model_exceeds_ceiling = service.handle(
+      Post,
+      "/v1/workloads",
+      headers,
+      below_model_ceiling.to_json().stringify(),
+    )
+    assert_eq(model_exceeds_ceiling.status, 409)
+    assert_true(
+      model_exceeds_ceiling.body.contains(
+        "model exceeds the request accelerator-memory ceiling",
+      ),
+    )
+    assert_eq(calls[0], 0)
+    let policy_maximum_ceiling = {
+      ..api_request(),
+      resource_ceiling: {
+        ..api_request().resource_ceiling,
+        max_accelerator_memory_mib: 1048576,
+      },
+    }
     let accepted = service.handle(
       Post,
       "/v1/workloads",
       headers,
-      api_request().to_json().stringify(),
+      policy_maximum_ceiling.to_json().stringify(),
     )
     assert_eq(accepted.status, 200)
     assert_eq(calls[0], 1)

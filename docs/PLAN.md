@@ -6,6 +6,13 @@ diagnostics is [Operations, offline commerce, machine access and guide
 diagnostics](OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md). Those phases are release
 requirements; external providers and physical-DGX checks remain explicit gates.
 
+The forward-looking P0/P1/P2 program, code-size model, named physical-pilot gate and
+separate launch criteria for managed inference and dedicated GPU workspaces are
+defined in [the future expansion plan](FUTURE_EXPANSION_PLAN.md). The phases
+below remain the implementation history and repository acceptance contract;
+the expansion plan prevents that repository evidence from being mistaken for
+physical or commercial launch readiness.
+
 ## Working policy
 
 Implement a meaningful phase, then run its phase gate. Avoid repeatedly running
@@ -49,7 +56,7 @@ Deliver:
 - heartbeats, inventory, labels, taints, cordon and drain;
 - signed desired-state assignments with generation and lease;
 - one deterministic fake runtime adapter plus one real approved text runtime;
-- register → deploy → ready → invoke → stop flow on one DGX.
+- register → deploy → ready → invoke → stop flow on one selected compute node.
 
 Gate:
 
@@ -66,6 +73,8 @@ Deliver:
 - evaluation suite and benchmark profile records;
 - versioned aliases, canary rollout, promotion, rollback and immutable receipts;
 - OCI image adapters and the management-node `/data/models` artifact gateway;
+- a least-privilege ModelScope adapter and the browse → download → verify →
+  approve workflow defined in `MODELSCOPE_MODEL_ONBOARDING.md`;
 - explicit payload retention and evaluation-capture consent.
 
 Gate:
@@ -74,7 +83,7 @@ Gate:
 - approved artifact promotes through canary and rolls back deterministically;
 - controller restart preserves registry and desired state.
 
-## Phase 3 — Four-node scheduler and traffic management
+## Phase 3 — Multi-node scheduler and traffic management
 
 Deliver:
 
@@ -88,7 +97,8 @@ Deliver:
 
 Gate:
 
-- all four nodes appear with truthful capacity and health;
+- every node in the named acceptance inventory appears with truthful capacity
+  and health;
 - the same snapshot and policy produce the same placement explanation;
 - draining a node stops new assignments and moves eligible subsequent traffic;
 - impossible workloads are rejected before runtime launch with a typed reason.
@@ -197,7 +207,8 @@ Deliver:
 
 Final UI-to-UI scenario:
 
-1. Start from a clean controller and four enrolled DGX nodes.
+1. Start from a clean controller and every node in the named acceptance
+   inventory; a failover-claiming profile includes at least two eligible nodes.
 2. Register a digest-pinned, licensed model and its runtime.
 3. Run evaluation and approve a versioned alias.
 4. Deploy canary, inspect placement, promote and invoke through MoonGate.
@@ -211,7 +222,7 @@ Final UI-to-UI scenario:
 
 Release gate:
 
-- the complete scenario passes once on the real four-node cluster;
+- the complete scenario passes once on the named physical cluster profile;
 - no structural-isolation violation is found;
 - measured service objectives are published as evidence, not promises;
 - a named human accepts security, operational and model-license reports.
@@ -276,7 +287,7 @@ Gate:
 - runtime arguments contain only a fixed read-only local model mount and never
   the artifact URI or artifact-store credential.
 
-## Phase 10 — Exclusive DGX node leases
+## Phase 10 — Exclusive compute-node leases
 
 Deliver:
 
@@ -291,8 +302,8 @@ Deliver:
 
 Gate:
 
-- assigning user A to DGX 2 neither provisions nor transfers artifacts to any
-  other DGX;
+- assigning subject A to one named compute node neither provisions nor
+  transfers artifacts to any other node;
 - a reserved or active exclusive node cannot receive managed placements even
   before its next heartbeat;
 - no raw password, private key, node credential, model-store credential or
@@ -360,10 +371,11 @@ Production gate still required:
 
 - crash-test the implemented transactional commercial/integration snapshot
   adapter against the selected production PostgreSQL failover system;
-- physically validate the implemented prewarm/nonce persistence and fixed-fleet
-  one-lease-one-machine behavior against the four DGX nodes;
+- physically validate the implemented prewarm/nonce persistence and
+  one-lease-one-machine behavior against the named acceptance inventory;
 - connect node probe/cache telemetry and approved digest-pinned sidecar catalog;
 - replace LunaFide with approved production identity, signature, payment and
   invoice providers and validate their real webhook trust and retention rules;
-- pass real ingress, database, four-DGX, security, finance, legal and operations
-  acceptance. Repository tests do not waive these external gates.
+- pass real ingress, database, accelerator-fleet, security, finance, legal and
+  operations acceptance for the selected deployment profile. Repository tests
+  do not waive these external gates.

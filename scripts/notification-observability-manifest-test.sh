@@ -44,6 +44,16 @@ if ! sed -n '/  ingress:/,/  egress:/p' "$network_policy" |
   exit 1
 fi
 
+# Both public UI gateways proxy bounded controller routes. Their egress rules
+# are insufficient unless the controller independently admits each gateway.
+control_ingress="$(sed -n '1,/^  egress:/p' "$network_policy")"
+for gateway in lunanexa-console-public-gateway lunanexa-workbench-public-gateway; do
+  if ! printf '%s\n' "$control_ingress" | grep -q "app: $gateway"; then
+    echo "controller ingress does not admit $gateway" >&2
+    exit 1
+  fi
+done
+
 if grep -q '# TYPE lunanexa_operational_request_duration_ms histogram' "$observability"; then
   echo "legacy non-monotonic histogram declaration remains" >&2
   exit 1

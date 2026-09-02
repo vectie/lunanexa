@@ -164,6 +164,9 @@ extern "js" fn demo_mode() -> Bool =
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
 
 ///|
+extern "js" fn model_import_poll_promise() -> @js.Promise = "() => new Promise(resolve => setTimeout(resolve, 1500))"
+
+///|
 extern "js" fn random_identifier(prefix : String) -> String =
   #| prefix => `${prefix}-${crypto.randomUUID()}`
 
@@ -797,6 +800,13 @@ async fn load_console(
   let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/service-deployments", token)),
   )
+  let model_imports : Array[@ui.ModelImportRow] = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/model-sources/modelscope/imports", token),
+    ),
+  ) catch {
+    _ => []
+  }
   let exclusive_leases : Array[@nodelease.ExclusiveNodeLease] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/exclusive-node-leases", token)),
   )
@@ -807,7 +817,13 @@ async fn load_console(
     @json.parse(
       request("GET", endpoint, "/v1/notifications/operator/deliveries", token),
     ),
-  )
+  ) catch {
+    // Compatibility with the immediately preceding controller release, which
+    // has notification records but not the operator delivery-list route.
+    // Treating only this supplemental view as empty keeps authentication and
+    // the rest of the console usable while the controller is upgraded.
+    _ => []
+  }
   // This snapshot carries release and fulfillment authority. Loading failures
   // must be visible and must never masquerade as an empty commerce queue.
   let offline_snapshot : @offline.OfflineCommerceSnapshot = @json.from_json(
@@ -815,11 +831,10 @@ async fn load_console(
       request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
     ),
   )
-  let contract_manifest : @contractdoc.ContractTemplateManifest = @json.from_json(
-    @json.parse(
-      request("GET", endpoint, "/v1/contract-documents/manifest", token),
-    ),
-  )
+  // The manifest is a public, versioned product artifact compiled into the
+  // console. Using the same source of truth here also keeps the web client
+  // compatible with controllers that expose it only to the customer portal.
+  let contract_manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let contract_snapshot : @contractdoc.ContractDocumentSnapshot = @json.from_json(
     @json.parse(
       request(
@@ -1345,6 +1360,11 @@ async fn load_console(
     error_message: None,
     success_message: None,
     loading: false,
+    operator_authenticated: true,
+    model_source_query: "MiniCPM",
+    model_source_results: [],
+    model_source_total: 0L,
+    model_imports,
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -1360,6 +1380,10 @@ priv enum LoadOutcome {
   Loaded(@ui.ConsoleState)
   LoadFailed(@i18n.Locale, String)
   ActionComplete(@i18n.Locale, String)
+  ModelSourceSearchLoaded(@i18n.Locale, @ui.ModelSourceCatalogPage)
+  ModelImportsLoaded(@i18n.Locale, Array[@ui.ModelImportRow], String?)
+  ModelImportsPolled(Int64, Array[@ui.ModelImportRow])
+  ModelImportPollFailed(Int64, @i18n.Locale)
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
@@ -1384,6 +1408,7 @@ priv struct AppModel {
   console : @ui.ConsoleState
   next_directive_generation : Int64
   contract_preview_generation : Int64
+  model_import_poll_generation : Int64
 } derive(Eq)
 
 ///|
@@ -1394,8 +1419,10 @@ priv enum AppMessage {
   InferenceSubjectChanged(String)
   CommercialOrganizationChanged(String)
   Connect
+  Logout
   Console(@ui.ConsoleMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
+  ModelImportPollDue(Int64)
   Outcome(LoadOutcome)
 }
 
@@ -1408,6 +1435,10 @@ fn merge_loaded_console(
     ..loaded,
     locale: current.locale,
     route: current.route,
+    model_source_query: current.model_source_query,
+    model_source_results: current.model_source_results,
+    model_source_total: current.model_source_total,
+    model_imports: loaded.model_imports,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
     quick_deployment_id: current.quick_deployment_id,
@@ -2124,13 +2155,66 @@ fn load_command(
 }
 
 ///|
+fn model_imports_active(imports : Array[@ui.ModelImportRow]) -> Bool {
+  imports.any(value => value.state == Queued || value.state == Downloading)
+}
+
+///|
+fn model_import_poll_delay_command(
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(message => emit(message), async fn() noraise {
+    try model_import_poll_promise().wait() catch {
+      _ => ModelImportPollDue(generation)
+    } noraise {
+      _ => ModelImportPollDue(generation)
+    }
+  })
+}
+
+///|
+fn model_import_poll_request_command(
+  model : AppModel,
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let imports : Array[@ui.ModelImportRow] = @json.from_json(
+        @json.parse(
+          request(
+            "GET",
+            model.endpoint,
+            "/v1/model-sources/modelscope/imports",
+            model.credential,
+          ),
+        ),
+      )
+      ModelImportsPolled(generation, imports)
+    } catch {
+      _ => ModelImportPollFailed(generation, model.console.locale)
+    }
+  })
+}
+
+///|
 fn update_live(
   model : AppModel,
   message : AppMessage,
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
-    CredentialChanged(value) => ({ ..model, credential: value }, @rabbita.none)
+    CredentialChanged(value) =>
+      (
+        {
+          ..model,
+          credential: value,
+          model_import_poll_generation: model.model_import_poll_generation + 1L,
+          console: { ..model.console, operator_authenticated: false },
+        },
+        @rabbita.none,
+      )
     AuditCredentialChanged(value) =>
       ({ ..model, audit_credential: value }, @rabbita.none)
     InferenceCredentialChanged(value) =>
@@ -2139,6 +2223,32 @@ fn update_live(
       ({ ..model, inference_subject_ref: value }, @rabbita.none)
     CommercialOrganizationChanged(value) =>
       ({ ..model, commercial_organization: value }, @rabbita.none)
+    Logout =>
+      (
+        {
+          ..model,
+          credential: "",
+          audit_credential: "",
+          inference_credential: "",
+          inference_subject_ref: "",
+          commercial_organization: "",
+          model_import_poll_generation: model.model_import_poll_generation + 1L,
+          console: {
+            ..@ui.default_state(),
+            locale: model.console.locale,
+            route: Overview,
+            offline_commerce: {
+              ..@ui.default_state().offline_commerce,
+              locale: model.console.locale,
+            },
+            contract_documents: {
+              ..@ui.default_state().contract_documents,
+              locale: model.console.locale,
+            },
+          },
+        },
+        @rabbita.none,
+      )
     Console(LocaleChanged(locale)) => {
       apply_console_locale(locale)
       (switch_app_locale(model, locale), @rabbita.none)
@@ -2163,6 +2273,14 @@ fn update_live(
             )
           _ => (model, @rabbita.none)
         }
+      }
+    ModelImportPollDue(generation) =>
+      if generation != model.model_import_poll_generation ||
+        !model.console.operator_authenticated ||
+        !model_imports_active(model.console.model_imports) {
+        (model, @rabbita.none)
+      } else {
+        (model, model_import_poll_request_command(model, generation, emit))
       }
     Connect => {
       if !commercial_organization_is_valid(model.commercial_organization) {
@@ -2189,11 +2307,22 @@ fn update_live(
       }
       (next, load_command(next, emit))
     }
-    Outcome(Loaded(state)) =>
+    Outcome(Loaded(state)) => {
+      let generation = model.model_import_poll_generation + 1L
+      let next = {
+        ..model,
+        console: merge_loaded_console(model.console, state),
+        model_import_poll_generation: generation,
+      }
       (
-        { ..model, console: merge_loaded_console(model.console, state) },
-        @rabbita.none,
+        next,
+        if model_imports_active(next.console.model_imports) {
+          model_import_poll_delay_command(generation, emit)
+        } else {
+          @rabbita.none
+        },
       )
+    }
     Outcome(LoadFailed(dispatched_locale, message)) =>
       (
         {
@@ -2201,6 +2330,7 @@ fn update_live(
           console: {
             ..model.console,
             loading: false,
+            operator_authenticated: false,
             error_message: Some(
               locale_fenced_notice(
                 model.console.locale,
@@ -2235,6 +2365,110 @@ fn update_live(
       }
       (next, load_command(next, emit))
     }
+    Outcome(ModelSourceSearchLoaded(dispatched_locale, page)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_source_results: page.models,
+            model_source_total: page.total_count,
+            loading: false,
+            error_message: None,
+            success_message: Some(
+              locale_fenced_notice(
+                model.console.locale,
+                dispatched_locale,
+                "Found \{page.total_count} matching ModelScope models.",
+                "ModelScope search completed.",
+                "魔搭搜索已完成。",
+              ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ModelImportsLoaded(dispatched_locale, imports, notice)) => {
+      let generation = model.model_import_poll_generation + 1L
+      let next = {
+        ..model,
+        model_import_poll_generation: generation,
+        console: {
+          ..model.console,
+          model_imports: imports,
+          loading: false,
+          error_message: None,
+          success_message: notice.map(message => {
+            locale_fenced_notice(
+              model.console.locale,
+              dispatched_locale,
+              message,
+              "Model import status updated.",
+              "模型导入状态已更新。",
+            )
+          }),
+        },
+      }
+      (
+        next,
+        if model_imports_active(imports) {
+          model_import_poll_delay_command(generation, emit)
+        } else {
+          @rabbita.none
+        },
+      )
+    }
+    Outcome(ModelImportsPolled(generation, imports)) =>
+      if generation != model.model_import_poll_generation ||
+        !model.console.operator_authenticated {
+        (model, @rabbita.none)
+      } else {
+        let next = {
+          ..model,
+          console: {
+            ..model.console,
+            model_imports: imports,
+            error_message: None,
+            success_message: model.console.success_message,
+          },
+        }
+        (
+          next,
+          if model_imports_active(imports) {
+            model_import_poll_delay_command(generation, emit)
+          } else {
+            @rabbita.none
+          },
+        )
+      }
+    Outcome(ModelImportPollFailed(generation, dispatched_locale)) =>
+      if generation != model.model_import_poll_generation ||
+        !model.console.operator_authenticated {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: Some(
+                locale_fenced_notice(
+                  model.console.locale,
+                  dispatched_locale,
+                  "Automatic download status refresh failed; retrying.",
+                  "Automatic model import refresh failed.",
+                  "模型下载状态自动刷新失败，正在重试。",
+                ),
+              ),
+            },
+          },
+          if model_imports_active(model.console.model_imports) {
+            model_import_poll_delay_command(generation, emit)
+          } else {
+            @rabbita.none
+          },
+        )
+      }
     Outcome(StreamComplete(events)) =>
       (
         {
@@ -2976,6 +3210,234 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(Refresh) => (model, load_command(model, emit))
+    Console(ModelSourceQueryChanged(value)) =>
+      (
+        { ..model, console: { ..model.console, model_source_query: value } },
+        @rabbita.none,
+      )
+    Console(SearchModelSource) => {
+      let query = model.console.model_source_query.trim().to_owned()
+      if query == "" {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Enter a ModelScope search term.",
+                  "请输入魔搭搜索关键词。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let body = {
+          "query": query.to_json(),
+          "page_number": Json::number(1.0),
+          "page_size": Json::number(12.0),
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let page : @ui.ModelSourceCatalogPage = @json.from_json(
+            @json.parse(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/model-sources/modelscope/search",
+                model.credential,
+                body~,
+              ),
+            ),
+          )
+          ModelSourceSearchLoaded(model.console.locale, page)
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "ModelScope search is unavailable. Check the model-source adapter and its egress policy.",
+                "魔搭搜索不可用。请检查模型源适配器及其出口网络策略。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(DownloadModelSource(model_id)) => {
+      let body = { "model_id": model_id, "revision": "master" }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let created : @ui.ModelImportRow = @json.from_json(
+            @json.parse(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/model-sources/modelscope/imports",
+                model.credential,
+                body~,
+              ),
+            ),
+          )
+          let imports = model.console.model_imports.filter(value => {
+            value.import_id != created.import_id
+          })
+          imports.push(created)
+          ModelImportsLoaded(
+            model.console.locale,
+            imports,
+            Some(
+              console_copy(
+                model.console.locale,
+                "Model download queued. Progress survives controller restarts.",
+                "模型下载已排队；控制器重启后进度状态仍会保留。",
+              ),
+            ),
+          )
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The model download could not be queued.",
+                "无法将模型下载加入队列。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(CancelModelImport(import_id)) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/model-sources/modelscope/imports/\{import_id}/cancel",
+              model.credential,
+              body="{}",
+            ),
+          )
+          let imports : Array[@ui.ModelImportRow] = @json.from_json(
+            @json.parse(
+              request(
+                "GET",
+                model.endpoint,
+                "/v1/model-sources/modelscope/imports",
+                model.credential,
+              ),
+            ),
+          )
+          ModelImportsLoaded(
+            model.console.locale,
+            imports,
+            Some(
+              console_copy(
+                model.console.locale,
+                "Cancellation requested.",
+                "已请求取消。",
+              ),
+            ),
+          )
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The import could not be cancelled.",
+                "无法取消导入任务。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(RetryModelImport(import_id)) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/model-sources/modelscope/imports/\{import_id}/retry",
+              model.credential,
+              body="{}",
+            ),
+          )
+          let imports : Array[@ui.ModelImportRow] = @json.from_json(
+            @json.parse(
+              request(
+                "GET",
+                model.endpoint,
+                "/v1/model-sources/modelscope/imports",
+                model.credential,
+              ),
+            ),
+          )
+          ModelImportsLoaded(
+            model.console.locale,
+            imports,
+            Some(
+              console_copy(
+                model.console.locale,
+                "The import was requeued and will reuse verified partial files.",
+                "导入任务已重新排队，并将复用已验证的部分文件。",
+              ),
+            ),
+          )
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The import could not be retried.",
+                "无法重试导入任务。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(RefreshModelImports) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let imports : Array[@ui.ModelImportRow] = @json.from_json(
+            @json.parse(
+              request(
+                "GET",
+                model.endpoint,
+                "/v1/model-sources/modelscope/imports",
+                model.credential,
+              ),
+            ),
+          )
+          ModelImportsLoaded(model.console.locale, imports, None)
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Download status is unavailable.",
+                "下载状态不可用。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
     Console(OperationChanged(value)) =>
       (
         { ..model, console: { ..model.console, operation_name: value } },
@@ -4275,6 +4737,7 @@ fn update(
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
       | Console(PortalNodeChanged(_))
+      | Console(ModelSourceQueryChanged(_))
       | Console(OperationChanged(_))
       | Console(OperationBodyChanged(_))
       | Console(BeginDrain(_))
@@ -4343,6 +4806,11 @@ fn update(
       Console(PromoteServiceDeployment(_))
       | Console(ActivateUser(_))
       | Console(ActivateComputeLease(_))
+      | Console(SearchModelSource)
+      | Console(DownloadModelSource(_))
+      | Console(CancelModelImport(_))
+      | Console(RetryModelImport(_))
+      | Console(RefreshModelImports)
       | Console(SubmitOperation) =>
         (
           {
@@ -4449,6 +4917,9 @@ fn app_view(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Html {
   let locale = model.console.locale
+  if !model.demo_mode && !model.console.operator_authenticated {
+    return login_view(model, emit)
+  }
   @html.div(class="console-root", [
     @html.details(
       class="connection-panel",
@@ -4582,6 +5053,12 @@ fn app_view(
               on_click=emit(Connect),
               console_copy(locale, "Connect and refresh", "连接并刷新"),
             ),
+            @html.button(
+              type_="button",
+              class="danger-secondary",
+              on_click=emit(Logout),
+              console_copy(locale, "Log out", "退出登录"),
+            ),
           ]),
         ]),
       ],
@@ -4603,6 +5080,178 @@ fn app_view(
       @html.nothing
     },
     @ui.interactive_view(model.console, emit.map(message => Console(message))),
+  ])
+}
+
+///|
+fn login_transport_allowed(endpoint : String) -> Bool {
+  endpoint.has_prefix("https://") ||
+  endpoint.has_prefix("http://127.0.0.1:") ||
+  endpoint.has_prefix("http://localhost:")
+}
+
+///|
+fn login_styles() -> String {
+  (
+    #|*{box-sizing:border-box}html,body,#app{min-height:100%;margin:0}body{background:#f4f6fa;color:#152033;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-shell{min-height:100vh;display:grid;grid-template-columns:minmax(18rem,.8fr) minmax(28rem,1.2fr);background:radial-gradient(circle at 15% 15%,rgba(69,105,233,.2),transparent 28rem),#f4f6fa}.login-context{padding:clamp(2rem,6vw,6rem);display:flex;flex-direction:column;justify-content:space-between;background:#0b1324;color:#f7f9ff}.login-brand{display:flex;align-items:center;gap:.8rem}.login-mark{width:2.7rem;height:2.7rem;border-radius:.75rem;background:#fff;color:#111a2d;display:grid;place-items:center;font-weight:900}.login-context h1{max-width:14ch;margin:.4rem 0 1rem;font-size:clamp(2rem,4vw,4.2rem);line-height:1.02}.login-context p{max-width:42rem;color:#b8c3db}.login-boundary{padding:1rem;border:1px solid #2c3d5d;border-radius:.8rem;background:rgba(255,255,255,.04)}.login-boundary strong,.login-boundary span{display:block}.login-boundary span{margin-top:.35rem;color:#aab8d3}.login-main{padding:clamp(1.5rem,6vw,6rem);display:grid;place-items:center}.login-card{width:min(34rem,100%);padding:clamp(1.4rem,3vw,2.3rem);border:1px solid #d8deea;border-radius:1rem;background:#fff;box-shadow:0 1.5rem 5rem rgba(24,39,75,.12)}.login-card-header{display:flex;justify-content:space-between;gap:1rem;align-items:start}.login-card h2{margin:.15rem 0;font-size:1.75rem}.login-card-header p{margin:.45rem 0 0;color:#63708a}.login-locale{display:grid;gap:.3rem;color:#63708a;font-size:.75rem}.login-locale select,.login-field input{min-height:44px;border:1px solid #b9c4d6;border-radius:.55rem;background:#fff;color:#152033;font:inherit}.login-locale select{padding:.5rem 1.9rem .5rem .65rem}.login-form{display:grid;gap:1rem;margin-top:1.6rem}.login-field label{display:block;margin-bottom:.35rem;font-weight:750}.login-field input{width:100%;padding:.65rem .75rem}.login-help{display:block;margin-top:.3rem;color:#63708a;font-size:.75rem}.login-endpoint{padding:.65rem .75rem;border-radius:.55rem;background:#f0f3f8;color:#53617b;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.login-alert{padding:.75rem .85rem;border:1px solid #db8f8f;border-radius:.55rem;background:#fff3f3;color:#9a2424}.login-transport-warning{padding:.8rem;border-left:3px solid #c17a00;background:#fff8e8;color:#775000}.login-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.4rem}.login-actions button{min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font:inherit;font-weight:800;cursor:pointer}.login-actions button:disabled{opacity:.45;cursor:not-allowed}.login-actions span{color:#63708a;font-size:.75rem}@media(max-width:52rem){.login-shell{grid-template-columns:1fr}.login-context{min-height:18rem;padding:2rem}.login-context h1{font-size:2.2rem}.login-main{padding:1rem}.login-card-header{display:grid}.login-locale{justify-self:start}.login-actions{align-items:stretch;flex-direction:column}.login-actions button{width:100%}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  )
+}
+
+///|
+fn login_view(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Html {
+  let locale = model.console.locale
+  let transport_allowed = login_transport_allowed(model.endpoint)
+  @html.main_(class="login-shell", [
+    @html.style_tag(login_styles()),
+    @html.section(class="login-context", [
+      @html.div(class="login-brand", [
+        @html.span(class="login-mark", "LN"),
+        @html.strong("LunaNexa"),
+      ]),
+      @html.div([
+        @html.p(
+          console_copy(
+            locale, "Private GPU infrastructure", "私有 GPU 基础设施",
+          ),
+        ),
+        @html.h1(
+          console_copy(
+            locale, "Operator access starts here.", "运维访问从这里开始。",
+          ),
+        ),
+        @html.p(
+          console_copy(
+            locale, "Cluster inventory, model governance, leases, contracts, and audit evidence stay hidden until the controller authenticates this session.",
+            "在控制器验证本次会话之前，集群清单、模型治理、租约、合同和审计证据均保持隐藏。",
+          ),
+        ),
+      ]),
+      @html.div(class="login-boundary", [
+        @html.strong(
+          console_copy(locale, "Management boundary", "管理边界"),
+        ),
+        @html.span(
+          console_copy(
+            locale, "Credentials remain in browser memory and are cleared on logout or reload.",
+            "凭据仅保留在浏览器内存中，并在退出或重新加载时清除。",
+          ),
+        ),
+      ]),
+    ]),
+    @html.section(class="login-main", [
+      @html.div(class="login-card", [
+        @html.div(class="login-card-header", [
+          @html.div([
+            @html.h2(console_copy(locale, "Operator login", "运维登录")),
+            @html.p(
+              console_copy(
+                locale, "Authenticate against the LunaNexa controller.", "通过 LunaNexa 控制器进行身份验证。",
+              ),
+            ),
+          ]),
+          @html.div(class="login-locale", [
+            @html.label(
+              for_="login-locale",
+              console_copy(locale, "Language", "语言"),
+            ),
+            @html.select(
+              id="login-locale",
+              on_change=emit.map(value => {
+                Console(LocaleChanged(@i18n.parse_locale(value)))
+              }),
+              [
+                @html.option(
+                  value=@i18n.English.storage_value(),
+                  selected=locale == English,
+                  @i18n.English.label(),
+                ),
+                @html.option(
+                  value=@i18n.ChineseSimplified.storage_value(),
+                  selected=locale == ChineseSimplified,
+                  @i18n.ChineseSimplified.label(),
+                ),
+              ],
+            ),
+          ]),
+        ]),
+        @html.p(class="login-endpoint", model.endpoint),
+        if !transport_allowed {
+          @html.p(
+            class="login-transport-warning",
+            console_copy(
+              locale, "Administrative login is blocked on public plain HTTP. Use the protected localhost URL or install TLS first.",
+              "公共明文 HTTP 已禁止运维登录。请使用受保护的本机地址，或先部署 TLS。",
+            ),
+          )
+        } else {
+          @html.nothing
+        },
+        match model.console.error_message {
+          Some(message) => @html.p(class="login-alert", message)
+          None => @html.nothing
+        },
+        @html.div(class="login-form", [
+          @html.div(class="login-field", [
+            @html.label(
+              for_="login-operator-token",
+              console_copy(locale, "Operator authority", "运维权限凭据"),
+            ),
+            @html.input(
+              id="login-operator-token",
+              input_type=Password,
+              value=model.credential,
+              auto_complete=Off,
+              attrs=@html.Attrs::build().disabled(!transport_allowed),
+              on_input=emit.map(value => CredentialChanged(value)),
+            ),
+          ]),
+          @html.div(class="login-field", [
+            @html.label(
+              for_="login-audit-token",
+              console_copy(locale, "Audit authority", "审计权限凭据"),
+            ),
+            @html.input(
+              id="login-audit-token",
+              input_type=Password,
+              value=model.audit_credential,
+              auto_complete=Off,
+              attrs=@html.Attrs::build().disabled(!transport_allowed),
+              on_input=emit.map(value => AuditCredentialChanged(value)),
+            ),
+            @html.span(
+              class="login-help",
+              console_copy(
+                locale, "Both authorities are required; neither is persisted.", "两项权限凭据均为必填，且都不会持久化。",
+              ),
+            ),
+          ]),
+          @html.div(class="login-actions", [
+            @html.span(
+              console_copy(
+                locale, "The console appears only after a successful authenticated load.",
+                "仅在身份验证并成功加载后显示控制台。",
+              ),
+            ),
+            @html.button(
+              type_="button",
+              disabled=!transport_allowed ||
+                model.credential == "" ||
+                model.audit_credential == "" ||
+                model.console.loading,
+              on_click=emit(Connect),
+              if model.console.loading {
+                console_copy(locale, "Signing in…", "正在登录…")
+              } else {
+                console_copy(locale, "Sign in", "登录")
+              },
+            ),
+          ]),
+        ]),
+      ]),
+    ]),
   ])
 }
 
@@ -4635,6 +5284,7 @@ fn main {
       },
       next_directive_generation: 1L,
       contract_preview_generation: 0L,
+      model_import_poll_generation: 0L,
     },
     view=app_view,
     update~,

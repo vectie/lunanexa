@@ -1,6 +1,6 @@
 [Unit]
-Description=LunaNexa DGX node agent
-After=network-online.target podman.service
+Description=LunaNexa GPU node agent
+After=network-online.target lunanexa-controller-tunnel.service
 Wants=network-online.target
 
 [Service]

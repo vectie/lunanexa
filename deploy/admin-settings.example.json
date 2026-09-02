@@ -1,25 +1,25 @@
 {
   "schema_version": "lunanexa.settings.v1",
-  "generation": 1,
+  "generation": "1",
   "control_timing": {
-    "heartbeat_timeout_ms": 15000,
-    "heartbeat_replay_window_ms": 60000,
-    "provider_callback_replay_window_ms": 300000,
-    "lease_observation_replay_window_ms": 60000,
-    "artifact_transfer_grant_lifetime_ms": 300000,
-    "bootstrap_token_max_lifetime_ms": 900000,
-    "node_certificate_lifetime_ms": 3600000,
-    "node_certificate_renewal_lead_ms": 300000,
+    "heartbeat_timeout_ms": "15000",
+    "heartbeat_replay_window_ms": "60000",
+    "provider_callback_replay_window_ms": "300000",
+    "lease_observation_replay_window_ms": "60000",
+    "artifact_transfer_grant_lifetime_ms": "300000",
+    "bootstrap_token_max_lifetime_ms": "900000",
+    "node_certificate_lifetime_ms": "3600000",
+    "node_certificate_renewal_lead_ms": "300000",
     "node_reconcile_interval_ms": 5000,
     "materialization_heartbeat_interval_ms": 3000,
-    "lease_receipt_stale_after_ms": 45000,
-    "workspace_reservation_max_lifetime_ms": 86400000
+    "lease_receipt_stale_after_ms": "45000",
+    "workspace_reservation_max_lifetime_ms": "86400000"
   },
   "request_budgets": {
     "maximum_request_body_bytes": 1048576,
     "response_cache_entries": 1024,
-    "openai_default_deadline_ms": 120000,
-    "openai_max_deadline_ms": 120000,
+    "openai_default_deadline_ms": "120000",
+    "openai_max_deadline_ms": "120000",
     "openai_default_output_units": 1024,
     "openai_max_output_units": 131072,
     "openai_max_input_units": 1048576,
@@ -47,7 +47,7 @@
   "node_runtime": {
     "container_pid_limit": 512,
     "artifact_io_chunk_bytes": 1048576,
-    "signature_artifact_maximum_bytes": 1048576
+    "signature_artifact_maximum_bytes": "1048576"
   },
   "telemetry_safety": {
     "maximum_sensor_rows": 1024,

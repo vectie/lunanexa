@@ -25,10 +25,11 @@ pub fn update(InstallerState, InstallerMessage) -> InstallerState
 
 // Types and methods
 pub(all) struct DeploymentForm {
-  local_simulation : Bool
+  deployment_target : @vectie/lunanexa/installer.DeploymentTarget
   companion_endpoint : String
   session_token : String
   ssh_user : String
+  ssh_port : String
   ssh_key_path : String
   known_hosts_path : String
   management_node : String
@@ -37,6 +38,7 @@ pub(all) struct DeploymentForm {
   cluster_namespace : String
   kubeconfig_path : String
   rendered_directory : String
+  management_secret_manifest : String
   secret_directory : String
   cli_path : String
   confirmation : String
@@ -48,6 +50,7 @@ pub(all) enum InstallerMessage {
   CompanionEndpointChanged(String)
   SessionTokenChanged(String)
   SshUserChanged(String)
+  SshPortChanged(String)
   SshKeyPathChanged(String)
   KnownHostsPathChanged(String)
   ManagementNodeChanged(String)
@@ -56,6 +59,7 @@ pub(all) enum InstallerMessage {
   ClusterNamespaceChanged(String)
   KubeconfigPathChanged(String)
   RenderedDirectoryChanged(String)
+  ManagementSecretManifestChanged(String)
   SecretDirectoryChanged(String)
   CliPathChanged(String)
   ConfirmationChanged(String)

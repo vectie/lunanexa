@@ -224,6 +224,11 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     error_message: None,
     success_message: None,
     loading: false,
+    operator_authenticated: true,
+    model_source_query: "MiniCPM",
+    model_source_results: [],
+    model_source_total: 0L,
+    model_imports: [],
     operation_name: "register-model",
     operation_body: "{}",
     quick_deployment_id: "",
@@ -400,6 +405,17 @@ test "demo snapshot presents the four-node nine-model fleet" {
 test "node management exposes expandable telemetry and exclusive lease evidence" {
   let state = console_state(Nodes)
   let html = @ui.render({ ..state, confirmation: None })
+  assert_true(html.contains("Cluster topology"))
+  assert_true(html.contains("Operator access"))
+  assert_true(html.contains("Management plane"))
+  assert_true(html.contains("Compute plane"))
+  assert_true(html.contains("class=\"topology-graph\""))
+  assert_true(html.contains("class=\"graph-edge graph-edge-https\""))
+  assert_true(html.contains("mTLS + heartbeat"))
+  assert_true(html.contains("PostgreSQL"))
+  assert_true(html.contains("Model storage"))
+  assert_true(html.contains("Management plane ↔ Compute nodes"))
+  assert_true(html.contains("node-1"))
   assert_true(html.contains("class=\"node-record\""))
   assert_true(html.contains("Resource telemetry"))
   assert_true(html.contains("GPU utilization"))
@@ -408,6 +424,41 @@ test "node management exposes expandable telemetry and exclusive lease evidence"
   assert_true(html.contains("One lease · one machine"))
   assert_true(html.contains("Last heartbeat · Just now"))
   assert_true(html.contains("<progress"))
+}
+
+///|
+test "node topology states missing compute links without inventing a healthy fleet" {
+  let state = console_state(Nodes)
+  let html = @ui.render({
+    ..state,
+    nodes: [],
+    overview: { ..state.overview, active_nodes: 0, total_nodes: 0 },
+    confirmation: None,
+  })
+  assert_true(html.contains("Cluster topology"))
+  assert_true(html.contains("No compute link established"))
+  assert_true(html.contains("Enrollment required"))
+  assert_true(html.contains("No nodes enrolled"))
+  assert_true(html.contains(">0</strong>"))
+  assert_true(html.contains(" compute nodes"))
+  assert_false(html.contains("node-1"))
+}
+
+///|
+test "node topology is fully localized in Chinese" {
+  let state = console_state(Nodes)
+  let html = @ui.render({
+    ..state,
+    locale: ChineseSimplified,
+    confirmation: None,
+  })
+  for
+    label in [
+      "集群拓扑", "运维访问", "管理平面", "计算平面", "连接清单与信任边界",
+    ] {
+    assert_true(html.contains(label))
+  }
+  assert_false(html.contains(">Cluster topology<"))
 }
 
 ///|
@@ -806,7 +857,7 @@ test "Simplified Chinese maps known semantic codes and preserves unknown values"
     ],
     confirmation: None,
   })
-  assert_true(benchmark_html.contains("失败率 2‰"))
+  assert_true(benchmark_html.contains("failures 2‰"))
   assert_true(benchmark_html.contains("profile.raw"))
   assert_true(benchmark_html.contains("run.raw-1"))
   let nodes = console_state(Nodes)
@@ -1071,6 +1122,115 @@ test "policies route exposes keyboard-accessible typed operations" {
   assert_true(html.contains("operation-body"))
   assert_true(html.contains("Publish assignment for controller signing"))
   assert_true(html.contains("Validate and submit"))
+}
+
+///|
+test "models route exposes ModelScope browse and import workflow" {
+  let html = @ui.render(console_state(Models))
+  assert_true(html.contains("Find and import a model"))
+  assert_true(html.contains("model-source-query"))
+  assert_true(html.contains("Search ModelScope"))
+  assert_false(html.contains("Candidate registration manifest (JSON)"))
+}
+
+///|
+test "model source search stays disabled until operator authentication succeeds" {
+  let disconnected = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: false,
+  })
+  let connected = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+  })
+  assert_true(
+    disconnected.contains(
+      "Sign in with operator authority to browse and import models.",
+    ),
+  )
+  assert_true(disconnected.contains("disabled"))
+  assert_true(
+    connected.contains(
+      "Downloads are durable; checksum verification is not signature approval.",
+    ),
+  )
+}
+
+///|
+test "failed model import exposes an operator retry action" {
+  let failed : ModelImportRow = {
+    import_id: "ms-failed-1",
+    source: "modelscope",
+    model_id: "OpenBMB/MiniCPM5-1B",
+    revision: "master",
+    state: Failed,
+    files_total: 11,
+    files_completed: 3,
+    bytes_total: 2171355326L,
+    bytes_completed: 67108864L,
+    manifest_digest: "",
+    artifact_uri: "",
+    license: "apache-2.0",
+    error_code: "upstream-rejected",
+    cancel_requested: false,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1100L,
+  }
+  let candidate : ModelSourceCatalogRow = {
+    id: failed.model_id,
+    display_name: "MiniCPM5-1B",
+    description: "small model",
+    downloads: 1L,
+    likes: 1L,
+    license: failed.license,
+    tasks: ["text-generation"],
+    created_at: "",
+    last_modified: "",
+    file_size: failed.bytes_total,
+    params: 1080632832L,
+    tags: [],
+    private: false,
+    gated: false,
+  }
+  let html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [failed],
+  })
+  assert_true(html.contains("upstream-rejected"))
+  assert_true(html.contains(">Retry</button>"))
+  let verified_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [
+      {
+        ..failed,
+        state: Verified,
+        files_completed: failed.files_total,
+        bytes_completed: failed.bytes_total,
+        manifest_digest: "sha256:0123456789abcdef",
+        artifact_uri: "modelstore://modelscope/ms-failed-1",
+        error_code: "",
+      },
+    ],
+  })
+  assert_true(
+    verified_html.contains("Passed · ModelScope file sizes and SHA-256"),
+  )
+  assert_true(
+    verified_html.contains("Pending · Deployable package and signature"),
+  )
+  assert_true(verified_html.contains("Approve for users"))
+  assert_true(verified_html.contains("disabled"))
+}
+
+///|
+test "empty model registry points to governed ModelScope onboarding" {
+  let html = @ui.render({ ..console_state(Models), models: [] })
+  assert_true(html.contains("No models registered yet"))
+  assert_true(html.contains("Search ModelScope above and start a download"))
 }
 
 ///|

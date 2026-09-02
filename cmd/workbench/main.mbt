@@ -1053,6 +1053,7 @@ fn app_view(
 ) -> @rabbita.Html {
   let ready = @workbench_ui.lease_ready(model.workbench)
   let locale = model.workbench.locale
+  let transport_allowed = endpoint_is_safe(model.endpoint.trim().to_owned())
   @html.div(class="workbench-app", [
     @html.style_tag(
       (
@@ -1081,8 +1082,9 @@ fn app_view(
         #|.connection-advanced>summary:after{content:" +";color:var(--muted,#91a0b7)}
         #|.connection-advanced[open]>summary:after{content:" −"}
         #|.advanced-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;padding-top:.55rem}
-        #|.connection-security,.connection-loading{margin:.75rem 0 0;padding:.68rem .75rem;border:1px solid var(--line,#253248);border-radius:.5rem;background:rgba(255,255,255,.018);color:var(--muted,#91a0b7);font-size:.68rem;line-height:1.5}
+        #|.connection-security,.connection-loading,.connection-transport-warning{margin:.75rem 0 0;padding:.68rem .75rem;border:1px solid var(--line,#253248);border-radius:.5rem;background:rgba(255,255,255,.018);color:var(--muted,#91a0b7);font-size:.68rem;line-height:1.5}
         #|.connection-loading{border-color:rgba(117,230,182,.35);color:var(--accent,#75e6b6)}
+        #|.connection-transport-warning{border-color:rgba(255,184,77,.52);background:rgba(255,184,77,.08);color:#ffd18a}
         #|.connection-panel.is-gated{position:absolute;z-index:20;top:7rem;right:max(2rem,calc((100vw - 76rem)/2));width:24rem;border:1px solid var(--line-strong,#33445f);border-radius:.85rem;overflow:hidden;background:var(--panel,#101824);box-shadow:var(--shadow,0 24px 70px rgba(0,0,0,.34))}
         #|.connection-panel.is-gated>.connection-summary{display:none}
         #|.connection-panel.is-gated .connection-body{padding:1.25rem;border-bottom:0}
@@ -1161,7 +1163,9 @@ fn app_view(
                 ),
                 auto_complete=Off,
                 attrs=@html.Attrs::build().disabled(
-                  model.connecting || model.workbench.loading,
+                  !transport_allowed ||
+                  model.connecting ||
+                  model.workbench.loading,
                 ),
                 on_input=emit.map(value => TokenChanged(value)),
               ),
@@ -1169,6 +1173,7 @@ fn app_view(
             @html.button(
               type_="button",
               disabled=model.endpoint.trim() == "" ||
+                !transport_allowed ||
                 model.scoped_token == "" ||
                 model.connecting ||
                 model.workbench.loading,
@@ -1176,6 +1181,18 @@ fn app_view(
               app_copy(locale, "Connect / refresh", "连接 / 刷新"),
             ),
           ]),
+          if !transport_allowed {
+            @html.p(
+              class="connection-transport-warning",
+              attrs=@html.Attrs::build().role("alert"),
+              app_copy(
+                locale, "Credential entry is blocked on public plain HTTP. Use HTTPS, or a localhost-only acceptance tunnel.",
+                "公共明文 HTTP 已禁止输入凭据。请使用 HTTPS，或仅限本机回环的验收隧道。",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
           @html.details(class="connection-advanced", [
             @html.summary(
               app_copy(

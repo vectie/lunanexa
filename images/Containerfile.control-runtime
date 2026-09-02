@@ -1,0 +1,8 @@
+FROM lunanexa/runtime-base:bookworm-amd64
+
+COPY _artifacts/lunanexa-control-linux-amd64 /usr/local/bin/lunanexa-control
+COPY assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx /usr/share/lunanexa/contracts/youthpolicy/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx
+
+USER 65532:65532
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/lunanexa-control"]

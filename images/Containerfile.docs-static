@@ -1,0 +1,9 @@
+FROM mirror.gcr.io/nginxinc/nginx-unprivileged:1.27-alpine
+
+COPY images/nginx.docs.conf /etc/nginx/conf.d/default.conf
+COPY docs-site/index.html docs-site/styles.css docs-site/app.js /usr/share/nginx/html/
+COPY docs-site/admin.html docs-site/admin.js docs-site/admin.css /usr/share/nginx/html/
+COPY docs-site/coursebook.json docs-site/coursebook.zh-CN.json docs-site/coursebook-evidence.json /usr/share/nginx/html/
+COPY docs-site/images/ /usr/share/nginx/html/images/
+
+EXPOSE 8080

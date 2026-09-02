@@ -22,6 +22,7 @@ import {
   "vectie/lunanexa/scheduler",
   "vectie/lunanexa/settings",
   "vectie/lunanexa/telemetry",
+  "vectie/lunanexa/workspace/client_handoff",
   "vectie/lunanexa/workspace/directory",
 }
 
@@ -59,6 +60,8 @@ pub struct ApiService {
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
   credential_handoff_store : @vectie/lunanexa/nodelease/credential/store.CredentialHandoffStore?
+  client_handoff_store : @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore?
+  client_launch_config : @client_handoff.ClientLaunchConfig?
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -92,6 +95,8 @@ pub struct ApiService {
   entitlement_authority_callback_token : String?
   offline_transfer_adapter_endpoint : String?
   offline_transfer_adapter_token : String?
+  model_source_adapter_endpoint : String?
+  model_source_adapter_token : String?
   offline_transfer_session_secret : String
   offline_commerce_capabilities : Array[@offline.OfflineCommerceCapabilityEvidence]
   offline_commerce_capabilities_expires_unix_ms : Int64
@@ -125,6 +130,7 @@ pub async fn ApiService::trusted_operational_tenant_hash(Self, Map[String, Strin
 pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
+pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig) -> Self raise Failure
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_contract_approval_threshold(Self, Int64) -> Self
 pub fn ApiService::with_contract_document_store(Self, @vectie/lunanexa/contractdoc/store.ContractDocumentStore) -> Self
@@ -141,6 +147,7 @@ pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSetting
 pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure
 pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
+pub fn ApiService::with_model_source_adapter(Self, String, String) -> Self raise Failure
 pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
 pub fn ApiService::with_observability_store(Self, @observability.ObservabilityStore) -> Self

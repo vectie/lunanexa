@@ -2,9 +2,11 @@
 
 ## 1. Purpose
 
-LunaNexa turns a small heterogeneous GPU fleet into a governed model provider.
-Its first target is the owner's four-DGX-Spark cluster. The architecture must
-continue to work when nodes, accelerators, serving runtimes and tenants change.
+LunaNexa turns an explicitly inventoried accelerator fleet into a governed
+model provider. The first named acceptance profile contains the owner's four
+DGX Spark nodes, but that inventory is test input rather than product topology.
+The architecture must continue to work when node count, placement,
+accelerators, serving runtimes and tenants change.
 
 LunaNexa is an infrastructure product, not a MoonSuite pack and not an agent
 runtime. MoonSuite is an initial consumer, not part of LunaNexa's execution
@@ -26,12 +28,13 @@ MoonGate.
 
 The initial distribution may produce several binaries or services:
 
-| Component | Responsibility | Runs on GPU nodes? |
+| Component | Responsibility | Runs in the compute role? |
 |---|---|---:|
 | API | Authentication, validation, admission and streaming | No |
 | Controller | Desired state, reconciliation, rollout and recovery | No |
 | Scheduler | Placement, queues, capacity and failover | No |
 | Registry | Models, artifacts, runtimes, licenses and evaluations | No |
+| Model-source adapter | Reviewed catalog discovery and durable artifact import | No |
 | Metering | Usage, quotas, timing and infrastructure audit | No |
 | Commercial control | Organizations, cost centers, rating, ledger, budgets, commitments and agreements | No |
 | Technical policy | Prewarm, probes, cache reconciliation, backpressure and transfer grants | No |
@@ -47,12 +50,35 @@ The initial distribution may produce several binaries or services:
 These components share one product contract, release train, operator console
 and version. Do not brand them as separate products.
 
-The two browser sites have different authorities. The management console is
+The model-source adapter never approves a model. It supplies bounded catalog
+metadata and verified import evidence to the controller, which remains the
+license, evaluation, signature and publication authority.
+
+The browser sites have different authorities. The management console is
 for cluster operators and administrators. The enterprise site is for customer
 administrators, legal signers, lease requesters, billing viewers and developers;
 it includes the WebIDE. Both sites read one authoritative management API.
-Neither site runs on a managed GPU node, and enterprise users cannot select or
-activate a DGX node.
+The sites run in the management role. A constrained profile may explicitly
+co-locate that role with compute, but co-location never makes management
+services compute capacity. Enterprise users cannot select or activate a
+hardware node.
+
+### Topology contract
+
+Management placement, compute enrollment, operator-network ingress, database
+placement and model storage are independent deployment inputs. LunaNexa does
+not infer any of them from accelerator presence, a network interface, a
+hostname or another selected role.
+
+- A management and compute role may use separate machines or be explicitly
+  co-located after the operator accepts the resource and failure-domain risk.
+- A bastion, access node, VPN or `ProxyJump` may solve operator reachability,
+  but is not a LunaNexa role and is never required by the node protocol.
+- Node count, accelerator vendor, Kubernetes distribution, public ingress and
+  external-Internet availability belong to a named deployment profile, not the
+  product contract.
+- Every mutating workflow acts only on the roles and hosts explicitly selected
+  in that request. Detection and convenience defaults never enroll a node.
 
 Commercial control is infrastructure governance, not application billing
 logic. It accepts opaque organization, project, actor and provider references;
@@ -160,8 +186,9 @@ references, incompatible data classes, or insufficient capacity create typed
 preflight blockers rather than partially launching a runtime.
 
 The v1 one-click materialization contract keeps stable `s3://bucket/object`
-logical references, but the production profile resolves them inside the
-management-node artifact gateway rooted at `/data/models`. A detached
+logical references. The first deployment profile resolves them through an
+artifact gateway rooted at `/data/models` on its selected storage placement;
+other profiles may use another reviewed deployment-owned gateway. A detached
 signature may have its own reference; an opaque Cosign evidence reference
 resolves to the sibling `<model-object>.sig` object. OCI remains the
 digest-pinned runtime-image transport. Artifact transfer is pull-based by the
@@ -171,15 +198,15 @@ opens an SSH, copy or arbitrary shell channel.
 ## 7. Explicit non-goals for v1
 
 - Building a new container orchestrator, object store or metrics engine.
-- Transparent shared memory or mandatory distributed inference across all four
-  DGX machines.
+- Transparent shared memory or mandatory distributed inference across an
+  entire selected fleet.
 - Autonomous model promotion or policy mutation.
 - A general workflow, pack or agent system.
 - MoonSuite-specific dashboards on cluster nodes.
 - Public multi-tenant hosting before the private cluster passes its operational
   and security gates.
 - Batch jobs, task groups, spot queues, and an autonomous autoscaler. Capacity
-  changes are explicit operator actions in the four-node fixed fleet.
+  changes are explicit operator actions against the selected inventory.
 - Hosting source repositories, arbitrary development containers or IDE agent
   runtimes while a node is in managed-service mode. An exclusive lessee may run
   their own development workload inside the separately governed lease boundary.
@@ -188,12 +215,14 @@ opens an SSH, copy or arbitrary shell channel.
 
 The first usable release must demonstrate through the operator UI and APIs:
 
-1. enroll four nodes without installing a MoonSuite application on any node;
+1. enroll every compute node in the named acceptance inventory without
+   installing a MoonSuite application on any node;
 2. register and verify a licensed model artifact;
 3. deploy it to a selected node and obtain a healthy readiness state;
 4. route a generic request through MoonGate to LunaNexa and stream the result;
 5. meter the request and return a replayable receipt;
-6. drain or stop one node and route subsequent eligible work elsewhere;
+6. for a profile that claims failover, drain or stop one node and route
+   subsequent eligible work to another explicitly eligible node;
 7. restart the controller and reconcile durable desired state;
 8. prove that public responses and node assignments contain no forbidden
    MoonSuite identifiers or internal secrets.

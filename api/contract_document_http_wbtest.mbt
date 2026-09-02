@@ -61,6 +61,18 @@ async test "contract document API is subject scoped and rejects offline secret f
   assert_true(
     manifest.body.contains("youthpolicy-dgx-spark-remote-lease-revised"),
   )
+  let operator_manifest = service.handle(
+    Get,
+    "/v1/contract-documents/manifest",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_eq(operator_manifest.status, 200)
+  assert_true(
+    operator_manifest.body.contains(
+      "youthpolicy-dgx-spark-remote-lease-revised",
+    ),
+  )
   let created = service.handle(
     Post,
     "/v1/contract-documents/self",

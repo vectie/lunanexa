@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-control-config
+data:
+  controller-epoch: "${CONTROLLER_EPOCH}"
+  runtime-endpoint: "${RUNTIME_ENDPOINT}"
+  runtime-version: "pending-runtime"
+  runtime-image-digest: "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+  model-artifact-digest: "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-runtime-endpoints
+data:
+  endpoints.json: "[]"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-node-config
+data:
+  controller-endpoint: "${CONTROLLER_ENDPOINT}"
+  artifact-endpoint: "${ARTIFACT_ENDPOINT}"
