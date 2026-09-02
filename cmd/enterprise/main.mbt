@@ -161,6 +161,12 @@ priv struct DesktopClientResponse {
   display_name : String
   launch_uri : String
   handoff_lifetime_ms : Int64
+  contract_ready : Bool
+  workspace_ready : Bool
+  models_ready : Bool
+  ready : Bool
+  blocker_codes : Array[String]
+  approved_model_aliases : Array[String]
   handoffs : Array[Json]
 } derive(FromJson)
 
@@ -839,6 +845,12 @@ async fn load_self(
       launch_uri: response.launch_uri,
       handoff_lifetime_ms: response.handoff_lifetime_ms,
       connected_handoffs: response.handoffs.length(),
+      contract_ready: response.contract_ready,
+      workspace_ready: response.workspace_ready,
+      models_ready: response.models_ready,
+      ready: response.ready,
+      blocker_codes: response.blocker_codes,
+      approved_model_aliases: response.approved_model_aliases,
     }
     Some(client_view)
   } catch {

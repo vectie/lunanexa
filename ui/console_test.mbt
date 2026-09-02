@@ -151,6 +151,17 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       identity_receipt: "",
       roles: [EnterpriseUser],
     },
+    access_package_draft: {
+      identity_issuer: "https://identity.example.test",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      organization_id: "org-1",
+      tenant_ref: "tenant-1",
+      lifetime_days: 30,
+      identity_verified: false,
+    },
+    access_packages: [],
     users: [
       {
         user_id: "user-1",
@@ -550,6 +561,37 @@ test "demo snapshot covers operational routes with representative records" {
   assert_true(state.users.length() > 0)
   assert_true(state.access_grants.length() > 0)
   assert_true(state.compute_leases.length() > 0)
+}
+
+///|
+test "operator WebIDE onboarding compresses setup into guided milestones" {
+  let state = @ui.demo_state()
+  let item = {
+    ..state.access_packages[0],
+    lease_state: Some(Requested),
+    ready: false,
+    can_enable: true,
+    state: "ReadyToEnable",
+  }
+  let html = @ui.render({
+    ..state,
+    route: Users,
+    access_packages: [item],
+    confirmation: None,
+  })
+  assert_true(html.contains("Create WebIDE access"))
+  assert_true(html.contains("Person &amp; organization"))
+  assert_true(html.contains("Scope review"))
+  assert_true(html.contains("Enterprise user + Developer"))
+  assert_true(html.contains("100 requests/hour"))
+  assert_true(html.contains("Identity"))
+  assert_true(html.contains("Organization"))
+  assert_true(html.contains("MasterLease"))
+  assert_true(html.contains("Workspace &amp; models"))
+  assert_true(html.contains("Enable WebIDE"))
+  assert_true(html.contains("Technical evidence"))
+  assert_true(html.contains("Open audit log"))
+  assert_true(html.contains("Advanced: create account only"))
 }
 
 ///|
@@ -1058,7 +1100,7 @@ test "users route manages external accounts without exposing identity digests or
   let html = @ui.render(state)
   assert_true(html.contains("Signed-in account"))
   assert_true(html.contains("External identity mappings"))
-  assert_true(html.contains("Invite an external identity"))
+  assert_true(html.contains("Advanced: create account only"))
   assert_true(html.contains("account-provider-subject"))
   assert_true(html.contains("type=\"password\""))
   assert_true(html.contains("Platform operator"))

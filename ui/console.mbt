@@ -234,6 +234,44 @@ pub(all) struct AccountInviteDraft {
 } derive(Eq)
 
 ///|
+pub(all) struct AccessPackageDraft {
+  identity_issuer : String
+  identity_subject : String
+  display_name : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  lifetime_days : Int
+  identity_verified : Bool
+} derive(Eq)
+
+///|
+pub(all) struct AccessPackageView {
+  package_id : String
+  account_id : String
+  subject_ref : String
+  display_name : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  user_id : String?
+  membership_id : String
+  grant_id : String?
+  lease_id : String?
+  lease_state : @workspace.WorkspaceLeaseState?
+  expires_unix_ms : Int64?
+  approved_model_aliases : Array[String]
+  account_ready : Bool
+  membership_ready : Bool
+  contract_ready : Bool
+  workspace_ready : Bool
+  models_ready : Bool
+  ready : Bool
+  can_enable : Bool
+  state : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct AccessGrantRow {
   grant_id : String
   user_id : String
@@ -368,6 +406,8 @@ pub(all) struct ConsoleState {
   authenticated_account : AccountView?
   account_sessions : Array[BrowserSessionView]
   account_invite : AccountInviteDraft
+  access_package_draft : AccessPackageDraft
+  access_packages : Array[AccessPackageView]
   users : Array[UserAccessRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
@@ -445,6 +485,16 @@ pub(all) enum ConsoleMessage {
   AccountInviteReceiptChanged(String)
   AccountInviteRoleToggled(UiAccountRole)
   SubmitAccountInvite
+  AccessPackageIssuerChanged(String)
+  AccessPackageSubjectChanged(String)
+  AccessPackageDisplayNameChanged(String)
+  AccessPackageEmailChanged(String)
+  AccessPackageOrganizationChanged(String)
+  AccessPackageTenantChanged(String)
+  AccessPackageLifetimeChanged(Int)
+  ToggleAccessPackageIdentityVerified
+  SubmitAccessPackage
+  EnableAccessPackage(String)
   BeginActivateAccount(String)
   BeginSuspendAccount(String)
   BeginRevokeAccount(String)
@@ -510,6 +560,17 @@ pub fn default_state() -> ConsoleState {
       identity_receipt: "",
       roles: [EnterpriseUser],
     },
+    access_package_draft: {
+      identity_issuer: "",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      organization_id: "",
+      tenant_ref: "",
+      lifetime_days: 30,
+      identity_verified: false,
+    },
+    access_packages: [],
     users: [],
     access_grants: [],
     compute_leases: [],
@@ -1025,6 +1086,42 @@ pub fn demo_state() -> ConsoleState {
       identity_receipt: "",
       roles: [EnterpriseUser],
     },
+    access_package_draft: {
+      identity_issuer: "https://identity.example.test",
+      identity_subject: "provider-subject-new-developer",
+      display_name: "New WebIDE Developer",
+      email: "developer@example.test",
+      organization_id: "org-northstar",
+      tenant_ref: "tenant-northstar",
+      lifetime_days: 30,
+      identity_verified: true,
+    },
+    access_packages: [
+      {
+        package_id: "access-account-alice",
+        account_id: "account-alice",
+        subject_ref: "subject-alice",
+        display_name: "Alice Chen",
+        email: "alice@example.test",
+        organization_id: "org-northstar",
+        tenant_ref: "tenant-northstar",
+        user_id: Some("user-alice"),
+        membership_id: "membership-alice",
+        grant_id: Some("grant-alice-research"),
+        lease_id: Some("workspace-lease-alice"),
+        lease_state: Some(Active),
+        expires_unix_ms: Some(1786557600000L),
+        approved_model_aliases: ["text.default"],
+        account_ready: true,
+        membership_ready: true,
+        contract_ready: true,
+        workspace_ready: true,
+        models_ready: true,
+        ready: true,
+        can_enable: false,
+        state: "Ready",
+      },
+    ],
     users: [
       {
         user_id: "user-alice",
@@ -2303,6 +2400,192 @@ fn account_invite_role_controls(
 }
 
 ///|
+fn access_package_draft_ready(draft : AccessPackageDraft) -> Bool {
+  draft.identity_issuer.trim() != "" &&
+  draft.identity_subject.trim() != "" &&
+  draft.display_name.trim() != "" &&
+  draft.email.trim() != "" &&
+  draft.organization_id.trim() != "" &&
+  draft.tenant_ref.trim() != "" &&
+  draft.identity_verified
+}
+
+///|
+fn access_package_milestone(
+  locale : @i18n.Locale,
+  label : String,
+  ready : Bool,
+  current : Bool,
+) -> @rabbita.Html {
+  @html.li(
+    class=if ready {
+      "complete"
+    } else if current {
+      "current"
+    } else {
+      "pending"
+    },
+    [
+      @html.span(
+        class="access-milestone-mark",
+        if ready {
+          "✓"
+        } else {
+          "·"
+        },
+      ),
+      @html.span(label),
+      @html.span(
+        class="sr-only",
+        if ready {
+          localized(locale, "complete", "已完成")
+        } else if current {
+          localized(locale, "next", "下一步")
+        } else {
+          localized(locale, "pending", "待完成")
+        },
+      ),
+    ],
+  )
+}
+
+///|
+fn access_package_card(
+  state : ConsoleState,
+  item : AccessPackageView,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let workspace_and_models_ready = item.workspace_ready && item.models_ready
+  let user_id = item.user_id.unwrap_or("pending")
+  let grant_id = item.grant_id.unwrap_or("pending")
+  let lease_id = item.lease_id.unwrap_or("pending")
+  @html.article(class="access-package-card", [
+    @html.div(class="access-package-card-heading", [
+      @html.div([
+        @html.strong(item.display_name),
+        @html.span(class="secondary", item.email),
+        @html.span(
+          class="secondary",
+          "\{item.organization_id} · \{item.tenant_ref}",
+        ),
+      ]),
+      status_badge(
+        item.state,
+        if item.ready {
+          "ok"
+        } else if item.can_enable {
+          "pending"
+        } else {
+          "warning"
+        },
+      ),
+    ]),
+    @html.ol(class="access-package-milestones", [
+      access_package_milestone(
+        state.locale,
+        localized(state.locale, "Identity", "身份"),
+        item.account_ready,
+        !item.account_ready,
+      ),
+      access_package_milestone(
+        state.locale,
+        localized(state.locale, "Organization", "组织"),
+        item.membership_ready,
+        item.account_ready && !item.membership_ready,
+      ),
+      access_package_milestone(
+        state.locale,
+        localized(state.locale, "MasterLease", "主租约"),
+        item.contract_ready,
+        item.membership_ready && !item.contract_ready,
+      ),
+      access_package_milestone(
+        state.locale,
+        localized(state.locale, "Workspace & models", "工作区与模型"),
+        workspace_and_models_ready,
+        item.contract_ready && !workspace_and_models_ready,
+      ),
+      access_package_milestone(
+        state.locale,
+        localized(state.locale, "WebIDE", "WebIDE"),
+        item.ready,
+        item.can_enable,
+      ),
+    ]),
+    @html.div(class="access-package-next", [
+      if item.can_enable {
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=state.loading,
+          on_click=command(emit, EnableAccessPackage(item.account_id)),
+          localized(state.locale, "Enable WebIDE", "启用 WebIDE"),
+        )
+      } else if !item.contract_ready {
+        @html.button(
+          type_="button",
+          disabled=state.loading,
+          on_click=command(emit, Navigate(ContractDocuments)),
+          localized(state.locale, "Complete MasterLease", "完成主租约"),
+        )
+      } else if !item.models_ready {
+        @html.button(
+          type_="button",
+          disabled=state.loading,
+          on_click=command(emit, Navigate(Models)),
+          localized(state.locale, "Approve a model alias", "批准模型别名"),
+        )
+      } else if item.ready {
+        @html.span(
+          class="access-package-ready",
+          localized(state.locale, "Ready for WebIDE", "WebIDE 已就绪"),
+        )
+      } else {
+        @html.span(
+          class="secondary",
+          localized(
+            state.locale,
+            "Review the incomplete milestone above.",
+            "请检查上方未完成的里程碑。",
+          ),
+        )
+      },
+      @html.details(class="access-package-evidence", [
+        @html.summary(
+          localized(state.locale, "Technical evidence", "技术证据"),
+        ),
+        @html.dl([
+          @html.dt("Package"),
+          @html.dd(class="mono", item.package_id),
+          @html.dt("Account / subject"),
+          @html.dd(class="mono", "\{item.account_id} / \{item.subject_ref}"),
+          @html.dt("Membership"),
+          @html.dd(class="mono", item.membership_id),
+          @html.dt("Workspace user / grant / lease"),
+          @html.dd(class="mono", "\{user_id} / \{grant_id} / \{lease_id}"),
+          @html.dt(
+            localized(state.locale, "Approved aliases", "已批准别名"),
+          ),
+          @html.dd(
+            class="mono",
+            if item.approved_model_aliases.length() == 0 {
+              localized(state.locale, "none", "无")
+            } else {
+              item.approved_model_aliases.join(", ")
+            },
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          on_click=command(emit, Navigate(Audit)),
+          localized(state.locale, "Open audit log", "打开审计日志"),
+        ),
+      ]),
+    ]),
+  ])
+}
+
+///|
 fn users_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -2460,12 +2743,298 @@ fn users_view(
           ),
         )
     },
+    @html.section(
+      class="access-package-panel",
+      attrs=@html.Attrs::build().aria_labelledby("access-package-title"),
+      [
+        @html.div(class="access-package-intro", [
+          @html.p(
+            class="eyebrow",
+            localized(state.locale, "Guided setup", "引导式设置"),
+          ),
+          @html.h3(
+            id="access-package-title",
+            localized(
+              state.locale,
+              "Create WebIDE access",
+              "创建 WebIDE 访问",
+            ),
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Enter the person and organization once. LunaNexa prepares the account, membership, workspace profile, Developer grant, and requested compute lease as one resumable package.",
+              "只需输入一次人员与组织信息。LunaNexa 会将账户、成员关系、工作区档案、开发者授权和计算租约请求准备为一个可恢复的软件包。",
+            ),
+          ),
+        ]),
+        @html.ol(class="access-package-steps", [
+          @html.li([
+            @html.strong("1"),
+            @html.span(
+              localized(
+                state.locale,
+                "Person & organization",
+                "人员与组织",
+              ),
+            ),
+          ]),
+          @html.li([
+            @html.strong("2"),
+            @html.span(localized(state.locale, "Review access", "检查权限")),
+          ]),
+          @html.li([
+            @html.strong("3"),
+            @html.span(localized(state.locale, "MasterLease", "主租约")),
+          ]),
+          @html.li([
+            @html.strong("4"),
+            @html.span(
+              localized(state.locale, "Enable WebIDE", "启用 WebIDE"),
+            ),
+          ]),
+        ]),
+        @html.div(class="access-package-form-grid", [
+          @html.div(class="field-group", [
+            @html.label(
+              for_="access-display-name",
+              localized(state.locale, "Display name", "显示名称"),
+            ),
+            @html.input(
+              id="access-display-name",
+              value=state.access_package_draft.display_name,
+              maxlength=128,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccessPackageDisplayNameChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="access-email",
+              localized(state.locale, "Work email", "工作邮箱"),
+            ),
+            @html.input(
+              id="access-email",
+              input_type=Email,
+              value=state.access_package_draft.email,
+              maxlength=320,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccessPackageEmailChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="access-organization",
+              localized(state.locale, "Organization", "组织"),
+            ),
+            @html.input(
+              id="access-organization",
+              value=state.access_package_draft.organization_id,
+              maxlength=128,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccessPackageOrganizationChanged(value)
+              }),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="access-tenant",
+              localized(state.locale, "Tenant", "租户"),
+            ),
+            @html.input(
+              id="access-tenant",
+              value=state.access_package_draft.tenant_ref,
+              maxlength=128,
+              auto_complete=Off,
+              on_input=text_command(emit, value => {
+                AccessPackageTenantChanged(value)
+              }),
+            ),
+          ]),
+        ]),
+        @html.details(class="access-provider-details", [
+          @html.summary(
+            localized(
+              state.locale,
+              "Identity provider details",
+              "身份提供商详情",
+            ),
+          ),
+          @html.div(class="access-package-form-grid", [
+            @html.div(class="field-group", [
+              @html.label(
+                for_="access-issuer",
+                localized(state.locale, "Identity issuer", "身份签发方"),
+              ),
+              @html.input(
+                id="access-issuer",
+                value=state.access_package_draft.identity_issuer,
+                maxlength=512,
+                auto_complete=Off,
+                placeholder="https://id.example.com",
+                on_input=text_command(emit, value => {
+                  AccessPackageIssuerChanged(value)
+                }),
+              ),
+            ]),
+            @html.div(class="field-group", [
+              @html.label(
+                for_="access-provider-subject",
+                localized(state.locale, "Provider subject", "提供商主体"),
+              ),
+              @html.input(
+                id="access-provider-subject",
+                input_type=Password,
+                value=state.access_package_draft.identity_subject,
+                maxlength=1024,
+                auto_complete=Off,
+                on_input=text_command(emit, value => {
+                  AccessPackageSubjectChanged(value)
+                }),
+              ),
+            ]),
+          ]),
+        ]),
+        @html.div(class="access-package-review", [
+          @html.div([
+            @html.p(
+              class="eyebrow",
+              localized(state.locale, "Scope review", "范围检查"),
+            ),
+            @html.h4(
+              localized(state.locale, "WebIDE developer", "WebIDE 开发者"),
+            ),
+            @html.p(
+              class="section-copy",
+              localized(
+                state.locale,
+                "Enterprise user + Developer · Text generation · 2 concurrent requests · 100 requests/hour",
+                "企业用户 + 开发者 · 文本生成 · 2 个并发请求 · 每小时 100 个请求",
+              ),
+            ),
+          ]),
+          @html.div(class="access-lifetime", [
+            @html.span(
+              localized(state.locale, "Access duration", "访问期限"),
+            ),
+            @html.button(
+              type_="button",
+              class=if state.access_package_draft.lifetime_days == 7 {
+                "role-toggle selected"
+              } else {
+                "role-toggle"
+              },
+              disabled=state.loading,
+              attrs=@html.Attrs::build().aria_pressed(
+                if state.access_package_draft.lifetime_days == 7 {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=command(emit, AccessPackageLifetimeChanged(7)),
+              "7d",
+            ),
+            @html.button(
+              type_="button",
+              class=if state.access_package_draft.lifetime_days == 30 {
+                "role-toggle selected"
+              } else {
+                "role-toggle"
+              },
+              disabled=state.loading,
+              attrs=@html.Attrs::build().aria_pressed(
+                if state.access_package_draft.lifetime_days == 30 {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=command(emit, AccessPackageLifetimeChanged(30)),
+              "30d",
+            ),
+            @html.button(
+              type_="button",
+              class=if state.access_package_draft.lifetime_days == 90 {
+                "role-toggle selected"
+              } else {
+                "role-toggle"
+              },
+              disabled=state.loading,
+              attrs=@html.Attrs::build().aria_pressed(
+                if state.access_package_draft.lifetime_days == 90 {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=command(emit, AccessPackageLifetimeChanged(90)),
+              "90d",
+            ),
+          ]),
+        ]),
+        @html.div(class="access-package-submit", [
+          @html.button(
+            type_="button",
+            class=if state.access_package_draft.identity_verified {
+              "verification-toggle selected"
+            } else {
+              "verification-toggle"
+            },
+            disabled=state.loading,
+            attrs=@html.Attrs::build().aria_pressed(
+              if state.access_package_draft.identity_verified {
+                "true"
+              } else {
+                "false"
+              },
+            ),
+            on_click=command(emit, ToggleAccessPackageIdentityVerified),
+            localized(state.locale, "Identity verified", "身份已验证"),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=state.loading ||
+              !access_package_draft_ready(state.access_package_draft),
+            on_click=command(emit, SubmitAccessPackage),
+            localized(state.locale, "Prepare access", "准备访问"),
+          ),
+        ]),
+        @html.div(class="access-package-list", [
+          if state.access_packages.length() == 0 {
+            @html.p(
+              class="empty-state compact",
+              localized(
+                state.locale,
+                "No WebIDE access packages yet.",
+                "尚无 WebIDE 访问软件包。",
+              ),
+            )
+          } else {
+            @html.fragment(
+              [
+                for item in state.access_packages => {
+                  access_package_card(state, item, emit)
+                }
+              ],
+            )
+          },
+        ]),
+      ],
+    ),
     @html.details(class="account-invite-panel", [
       @html.summary(
         localized(
           state.locale,
-          "Invite an external identity",
-          "邀请外部身份",
+          "Advanced: create account only",
+          "高级：仅创建账户",
         ),
       ),
       @html.div(class="account-invite-content", [
@@ -6910,6 +7479,38 @@ fn console_styles() -> String {
     #|.account-session-evidence { width: 100%; border-top: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line)); }
     #|.account-session-evidence summary { min-height: 44px; padding: .65rem 0; cursor: pointer; color: var(--muted-strong); font-weight: 700; }
     #|.account-session-evidence .resource-table { min-width: 38rem; }
+    #|.access-package-panel { margin-bottom: 1.2rem; padding: 1.1rem; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: .8rem; background: linear-gradient(145deg, var(--surface), var(--accent-soft)); box-shadow: var(--shadow-sm); }
+    #|.access-package-intro h3 { margin: 0; font-size: 1.15rem; }
+    #|.access-package-intro .section-copy { max-width: 55rem; }
+    #|.access-package-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; margin: 1rem 0; padding: 0; list-style: none; }
+    #|.access-package-steps li { display: flex; align-items: center; gap: .5rem; min-height: 3rem; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); color: var(--muted-strong); }
+    #|.access-package-steps strong { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; flex: none; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .72rem; }
+    #|.access-package-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1rem; }
+    #|.access-provider-details { margin-top: .75rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); }
+    #|.access-provider-details summary { min-height: 44px; padding: .65rem .8rem; cursor: pointer; color: var(--muted-strong); font-weight: 700; }
+    #|.access-provider-details .access-package-form-grid { padding: 0 .8rem .8rem; }
+    #|.access-package-review { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .85rem; padding: .85rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); }
+    #|.access-package-review h4 { margin: 0; }
+    #|.access-package-review .section-copy { margin-top: .2rem; }
+    #|.access-lifetime { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .35rem; }
+    #|.access-lifetime > span { width: 100%; color: var(--muted); font-size: .7rem; font-weight: 700; text-align: right; }
+    #|.access-package-submit { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; }
+    #|.verification-toggle.selected { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+    #|.access-package-list { display: grid; gap: .75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    #|.access-package-card { padding: .9rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); }
+    #|.access-package-card-heading, .access-package-next { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+    #|.access-package-card-heading > div > span { display: block; }
+    #|.access-package-milestones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .35rem; margin: .8rem 0; padding: 0; list-style: none; }
+    #|.access-package-milestones li { display: flex; align-items: center; gap: .35rem; min-height: 2.4rem; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: .45rem; color: var(--muted); font-size: .72rem; }
+    #|.access-package-milestones li.complete { border-color: color-mix(in srgb, var(--success) 32%, var(--line)); background: var(--success-soft); color: var(--success); }
+    #|.access-package-milestones li.current { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+    #|.access-milestone-mark { font-weight: 800; }
+    #|.access-package-ready { color: var(--success); font-weight: 750; }
+    #|.access-package-evidence { max-width: 34rem; }
+    #|.access-package-evidence summary { min-height: 44px; padding: .55rem 0; cursor: pointer; color: var(--muted-strong); font-weight: 700; }
+    #|.access-package-evidence dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem .7rem; margin: 0 0 .7rem; }
+    #|.access-package-evidence dt { color: var(--muted); font-size: .68rem; font-weight: 700; }
+    #|.access-package-evidence dd { margin: 0; overflow-wrap: anywhere; }
     #|.account-invite-panel { margin-bottom: 1.2rem; overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
     #|.account-invite-panel summary { min-height: 44px; padding: .8rem 1rem; cursor: pointer; color: var(--ink); font-weight: 760; }
     #|.account-invite-panel[open] summary { border-bottom: 1px solid var(--line); background: var(--surface-subtle); }
@@ -7121,6 +7722,7 @@ fn console_styles() -> String {
     #|  .node-summary { grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, .7fr) minmax(7rem, .7fr) auto; }
     #|  .node-memory-summary { display: none; }
     #|  .account-invite-grid { grid-template-columns: 1fr; }
+    #|  .access-package-steps, .access-package-milestones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #|}
     #|@media (max-width: 40rem) {
     #|  .connection-endpoint { display: none; }
@@ -7141,6 +7743,12 @@ fn console_styles() -> String {
     #|  .account-self, .account-invite-actions { align-items: stretch; flex-direction: column; }
     #|  .account-self-evidence { justify-content: flex-start; }
     #|  .account-invite-actions button { width: 100%; }
+    #|  .access-package-form-grid, .access-package-steps, .access-package-milestones { grid-template-columns: 1fr; }
+    #|  .access-package-review, .access-package-card-heading, .access-package-next { align-items: stretch; flex-direction: column; }
+    #|  .access-lifetime { justify-content: flex-start; }
+    #|  .access-lifetime > span { text-align: left; }
+    #|  .access-package-submit { display: grid; }
+    #|  .access-package-evidence { max-width: none; }
     #|  .model-onboarding-steps { grid-template-columns: 1fr; }
     #|  .model-source-search { grid-template-columns: 1fr; }
     #|  .topology-graph { min-width: 44rem; padding: 1rem; }

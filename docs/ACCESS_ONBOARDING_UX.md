@@ -1,0 +1,68 @@
+# Access onboarding UX
+
+The complete LunaNexa access procedure remains a useful operational and audit
+runbook, but it is not the product journey. Human users should not copy opaque
+identifiers between account, portal, contract, workspace, credential and
+desktop forms.
+
+## Product journey
+
+### Operator
+
+1. Open **Users & access** and choose **Create WebIDE access**.
+2. Enter the verified identity-provider subject, person, organization and
+   tenant. Select the reviewed WebIDE developer template and an access period.
+3. Review the derived scope and create the package. LunaNexa derives stable
+   identifiers and creates the account, enterprise membership, workspace user,
+   Developer grant and requested workspace lease as one resumable intent.
+4. When the customer's MasterLease is effective, choose **Enable WebIDE**.
+
+### Enterprise user
+
+1. Sign in with the organization's identity provider.
+2. Complete the MasterLease only when the readiness page identifies it as the
+   remaining gate.
+3. Open **Desktop IDE**, review the granted tenant, models and expiry, and
+   choose **Open desktop WebIDE**.
+4. Work in MoonCode. The one-time handoff installs a lease-scoped
+   `lunanexa-lease` provider in MoonGate without exposing its reusable secret to
+   the browser.
+
+## What remains automated and logged
+
+The guided flow does not weaken the underlying controls. It records the same
+account, membership, workspace, grant, lease, contract, handoff and inference
+events with their resource references and operator identity. The ordinary view
+shows five milestones:
+
+1. identity;
+2. organization access;
+3. contract;
+4. workspace and models;
+5. desktop connection.
+
+The operator can expand **Technical evidence** to see the derived identifiers,
+per-resource state, correlation receipts and recovery guidance. Existing
+granular mutation routes remain available under advanced operations for
+exception repair and migration; they are not the default onboarding journey.
+
+## Safety boundaries
+
+- The identity provider still owns passwords, MFA and recovery.
+- A human must verify the external identity before the access package is
+  created.
+- LunaNexa never fabricates an effective MasterLease or a model approval.
+- WebIDE access is enabled only when account, Developer membership, active
+  grant, effective MasterLease, requested lease and approved model alias agree.
+- Model prompts travel through MoonGate. OIDC, contract and handoff control
+  traffic remains on its separate authenticated control path.
+- Ending a lease, closing the MasterLease, removing EnterpriseUser authority or
+  suspending the account continues to fail closed.
+
+## Journey acceptance
+
+The common operator path should require no opaque identifier entry and no raw
+JSON editing. It should fit in one form, one scope review and one later enable
+action. The enterprise path should show one blocking action at a time and one
+dominant launch action when ready. Partial orchestration must be safe to retry
+without creating duplicate records.

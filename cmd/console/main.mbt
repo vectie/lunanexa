@@ -162,6 +162,22 @@ priv struct AccountCreateIntent {
 extend AccountCreateIntent with ToJson::{to_json}
 
 ///|
+priv struct AccessPackageIntent {
+  identity_issuer : String
+  identity_subject : String
+  display_name : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  template_id : String
+  lifetime_days : Int
+  identity_verified : Bool
+} derive(ToJson)
+
+///|
+extend AccessPackageIntent with ToJson::{to_json}
+
+///|
 priv struct AccountRolesIntent {
   roles : Array[@ui.UiAccountRole]
 } derive(ToJson)
@@ -892,6 +908,11 @@ async fn load_console(
   let accounts : Array[@ui.AccountView] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/accounts", token)),
   )
+  let access_packages : Array[@ui.AccessPackageView] = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/onboarding/access-packages", token),
+    ),
+  )
   let authenticated_account : @ui.AccountView? = if token.has_prefix("lnxs_") {
     Some(
       @json.from_json(
@@ -1424,6 +1445,19 @@ async fn load_console(
       identity_receipt: "",
       roles: [EnterpriseUser],
     },
+    access_package_draft: {
+      identity_issuer: authenticated_account
+      .map(account => account.identity_issuer)
+      .unwrap_or(""),
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      organization_id: commercial_organization,
+      tenant_ref: "",
+      lifetime_days: 30,
+      identity_verified: false,
+    },
+    access_packages,
     users,
     access_grants,
     compute_leases,
@@ -1575,6 +1609,19 @@ fn merge_loaded_console(
     model_imports: loaded.model_imports,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
+    access_package_draft: {
+      ..current.access_package_draft,
+      identity_issuer: if current.access_package_draft.identity_issuer == "" {
+        loaded.access_package_draft.identity_issuer
+      } else {
+        current.access_package_draft.identity_issuer
+      },
+      organization_id: if current.access_package_draft.organization_id == "" {
+        loaded.access_package_draft.organization_id
+      } else {
+        current.access_package_draft.organization_id
+      },
+    },
     quick_deployment_id: current.quick_deployment_id,
     quick_template: if current.quick_template == "" {
       loaded.quick_template
@@ -2566,6 +2613,232 @@ fn update_live(
                 model.console.locale,
                 "Account \{draft.account_id} was invited.",
                 "账户 \{draft.account_id} 已邀请。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(AccessPackageIssuerChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              identity_issuer: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccessPackageSubjectChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              identity_subject: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccessPackageDisplayNameChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              display_name: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccessPackageEmailChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              email: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccessPackageOrganizationChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              organization_id: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccessPackageTenantChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              tenant_ref: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccessPackageLifetimeChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              lifetime_days: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ToggleAccessPackageIdentityVerified) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..model.console.access_package_draft,
+              identity_verified: !model.console.access_package_draft.identity_verified,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitAccessPackage) => {
+      let draft = model.console.access_package_draft
+      let body = AccessPackageIntent::{
+          identity_issuer: draft.identity_issuer.trim().to_owned(),
+          identity_subject: draft.identity_subject,
+          display_name: draft.display_name.trim().to_owned(),
+          email: draft.email.trim().to_owned(),
+          organization_id: draft.organization_id.trim().to_owned(),
+          tenant_ref: draft.tenant_ref.trim().to_owned(),
+          template_id: "webide-developer",
+          lifetime_days: draft.lifetime_days,
+          identity_verified: draft.identity_verified,
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/onboarding/access-packages",
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The WebIDE access package was rejected. Review the identity and organization fields.",
+                "WebIDE 访问软件包被拒绝。请检查身份与组织字段。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "WebIDE access was prepared. The next incomplete milestone is shown below.",
+                "WebIDE 访问已准备。下方会显示下一个未完成的里程碑。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            access_package_draft: {
+              ..draft,
+              identity_subject: "",
+              display_name: "",
+              email: "",
+              identity_verified: false,
+            },
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(EnableAccessPackage(account_id)) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/onboarding/access-packages/\{account_id}:enable",
+              model.credential,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "WebIDE access is not ready to enable. Complete the highlighted milestone first.",
+                "WebIDE 访问尚不能启用。请先完成突出显示的里程碑。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "WebIDE access is enabled.",
+                "WebIDE 访问已启用。",
               ),
             )
         }

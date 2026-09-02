@@ -29,6 +29,12 @@ pub(all) struct EnterpriseDesktopClient {
   launch_uri : String
   handoff_lifetime_ms : Int64
   connected_handoffs : Int
+  contract_ready : Bool
+  workspace_ready : Bool
+  models_ready : Bool
+  ready : Bool
+  blocker_codes : Array[String]
+  approved_model_aliases : Array[String]
 } derive(Debug, Eq)
 
 ///|
@@ -611,6 +617,12 @@ pub fn demo_state() -> EnterpriseState {
       launch_uri: "/workbench/?demo=1",
       handoff_lifetime_ms: 120000L,
       connected_handoffs: 0,
+      contract_ready: true,
+      workspace_ready: true,
+      models_ready: true,
+      ready: true,
+      blocker_codes: [],
+      approved_model_aliases: ["text.default"],
     }),
     project_id: "project-vision-lab",
     unix_username: "alice",
@@ -2209,18 +2221,70 @@ fn desktop_ide_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  let configured = state.desktop_client is Some(_)
-  let available = configured &&
-    state.model_catalog.length() > 0 &&
-    !state.loading
-  let (name, lifetime, connected) = match state.desktop_client {
+  let (
+    name,
+    lifetime,
+    connected,
+    contract_ready,
+    workspace_ready,
+    models_ready,
+    ready,
+    aliases,
+  ) = match state.desktop_client {
     Some(client) =>
       (
         client.display_name,
         client.handoff_lifetime_ms / 1000L,
         client.connected_handoffs,
+        client.contract_ready,
+        client.workspace_ready,
+        client.models_ready,
+        client.ready,
+        client.approved_model_aliases,
       )
-    None => (copy(state.locale, "Desktop client", "桌面客户端"), 0L, 0)
+    None =>
+      (
+        copy(state.locale, "Desktop client", "桌面客户端"),
+        0L,
+        0,
+        false,
+        false,
+        false,
+        false,
+        [],
+      )
+  }
+  let available = ready && !state.loading
+  let next_action = if state.desktop_client is None {
+    copy(
+      state.locale,
+      "Your operator must finish desktop integration setup.",
+      "需要运维人员完成桌面集成设置。",
+    )
+  } else if !contract_ready {
+    copy(
+      state.locale,
+      "Complete the MasterLease. Everything else stays saved.",
+      "请完成主租约，其余设置会保留。",
+    )
+  } else if !workspace_ready {
+    copy(
+      state.locale,
+      "Your operator needs to enable the prepared workspace lease.",
+      "需要运维人员启用已准备的工作区租约。",
+    )
+  } else if !models_ready {
+    copy(
+      state.locale,
+      "Your operator needs to approve at least one model alias.",
+      "需要运维人员批准至少一个模型别名。",
+    )
+  } else {
+    copy(
+      state.locale,
+      "Everything is ready. Open the desktop and start working.",
+      "所有项目均已就绪。打开桌面并开始工作。",
+    )
   }
   @html.div(class="page-stack", [
     @html.section(class="welcome-panel", [
@@ -2236,91 +2300,138 @@ fn desktop_ide_view(
             "在 \{name} 中继续使用租赁工作区",
           ),
         ),
-        @html.p(
-          copy(
-            state.locale,
-            "One click creates a short-lived, single-use connection. The desktop client receives a model-scoped credential; no reusable key is placed in the browser URL or stored by this portal.",
-            "点击一次即可创建短时单次连接。桌面客户端只接收限定模型的凭据；本门户不会把可重复使用的密钥放入浏览器地址或持久化保存。",
-          ),
-        ),
+        @html.p(next_action),
       ]),
-      @html.button(
-        type_="button",
-        class="primary-action",
-        disabled=!available,
-        on_click=command(emit, LaunchDesktopClient),
-        if state.loading {
-          copy(state.locale, "Connecting…", "正在连接…")
-        } else {
-          copy(state.locale, "Open desktop WebIDE", "打开桌面 WebIDE")
-        },
-      ),
+      if !contract_ready && state.desktop_client is Some(_) {
+        @html.button(
+          type_="button",
+          class="primary-action",
+          on_click=command(emit, Navigate(ContractDocuments)),
+          copy(state.locale, "Complete MasterLease", "完成主租约"),
+        )
+      } else {
+        @html.button(
+          type_="button",
+          class="primary-action",
+          disabled=!available,
+          on_click=command(emit, LaunchDesktopClient),
+          if state.loading {
+            copy(state.locale, "Connecting…", "正在连接…")
+          } else {
+            copy(state.locale, "Open desktop WebIDE", "打开桌面 WebIDE")
+          },
+        )
+      },
     ]),
     @html.section(class="workflow-panel", [
-      @html.h2(
-        copy(
-          state.locale,
-          "What this connection grants",
-          "本次连接授权内容",
-        ),
-      ),
+      @html.h2(copy(state.locale, "Your access journey", "您的访问流程")),
       @html.ul(class="workflow-steps", [
         @html.li(class="is-complete", [
           @html.span("1"),
           @html.div([
-            @html.strong(copy(state.locale, "Lease checked", "检查租约")),
+            @html.strong(copy(state.locale, "Signed in", "已登录")),
             @html.p(
               copy(
                 state.locale,
-                "Active developer lease and contract are required.",
-                "必须具有有效的开发者租约与合同。",
+                "Your identity and Developer membership are verified.",
+                "您的身份和开发者成员资格已验证。",
               ),
             ),
           ]),
         ]),
-        @html.li(class=if configured { "is-complete" } else { "is-current" }, [
-          @html.span("2"),
-          @html.div([
-            @html.strong(
-              copy(state.locale, "Client selected", "选择客户端"),
-            ),
-            @html.p(
-              if configured {
-                name
-              } else {
-                copy(
-                  state.locale,
-                  "Operator setup required.",
-                  "需要运维配置。",
-                )
-              },
-            ),
-          ]),
-        ]),
-        @html.li(class="is-current", [
-          @html.span("3"),
-          @html.div([
-            @html.strong(copy(state.locale, "One-time handoff", "单次交接")),
-            @html.p(
-              copy(
-                state.locale,
-                "The setup code expires in \{lifetime} seconds.",
-                "设置码将在 \{lifetime} 秒后失效。",
+        @html.li(
+          class=if contract_ready { "is-complete" } else { "is-current" },
+          [
+            @html.span("2"),
+            @html.div([
+              @html.strong(copy(state.locale, "MasterLease", "主租约")),
+              @html.p(
+                if contract_ready {
+                  copy(
+                    state.locale,
+                    "Contract is effective.",
+                    "合同已生效。",
+                  )
+                } else {
+                  copy(
+                    state.locale,
+                    "Review and complete the contract template.",
+                    "查看并完成合同模板。",
+                  )
+                },
               ),
-            ),
-          ]),
-        ]),
-        @html.li([
-          @html.span("4"),
+            ]),
+          ],
+        ),
+        @html.li(
+          class=if workspace_ready {
+            "is-complete"
+          } else if contract_ready {
+            "is-current"
+          } else {
+            ""
+          },
+          [
+            @html.span("3"),
+            @html.div([
+              @html.strong(
+                copy(state.locale, "Workspace access", "工作区访问"),
+              ),
+              @html.p(
+                if workspace_ready {
+                  copy(
+                    state.locale,
+                    "Developer lease is active.",
+                    "开发者租约已生效。",
+                  )
+                } else {
+                  copy(
+                    state.locale,
+                    "Waiting for operator enablement.",
+                    "等待运维人员启用。",
+                  )
+                },
+              ),
+            ]),
+          ],
+        ),
+        @html.li(
+          class=if models_ready {
+            "is-complete"
+          } else if contract_ready && workspace_ready {
+            "is-current"
+          } else {
+            ""
+          },
+          [
+            @html.span("4"),
+            @html.div([
+              @html.strong(
+                copy(state.locale, "Approved models", "已批准模型"),
+              ),
+              @html.p(
+                if models_ready {
+                  aliases.join(", ")
+                } else {
+                  copy(
+                    state.locale,
+                    "No model alias is ready yet.",
+                    "尚无可用模型别名。",
+                  )
+                },
+              ),
+            ]),
+          ],
+        ),
+        @html.li(class=if ready { "is-current" } else { "" }, [
+          @html.span("5"),
           @html.div([
-            @html.strong(
-              copy(state.locale, "Lease-bound access", "租约绑定访问"),
-            ),
+            @html.strong(copy(state.locale, "Open WebIDE", "打开 WebIDE")),
             @html.p(
               copy(
                 state.locale,
-                "Expiry or early termination blocks new inference immediately.",
-                "租约到期或提前终止后会立即阻止新的推理请求。",
+                "One click opens \{name} with a \{lifetime}-second single-use handoff.",
+                "点击一次即可通过 \{lifetime} 秒有效的单次交接打开 \{name}。",
               ),
             ),
           ]),
@@ -2330,8 +2441,8 @@ fn desktop_ide_view(
         class="request-boundary",
         copy(
           state.locale,
-          "Approved models: \{state.model_catalog.length()} · Previous connections: \{connected}",
-          "已批准模型：\{state.model_catalog.length()} · 历史连接：\{connected}",
+          "Approved models: \{aliases.length()} · Previous connections: \{connected} · Access remains lease-bound",
+          "已批准模型：\{aliases.length()} · 历史连接：\{connected} · 访问权限仍受租约约束",
         ),
       ),
     ]),
