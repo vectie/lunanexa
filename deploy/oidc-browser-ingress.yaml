@@ -1,254 +1,38 @@
-# Optional production browser identity profile.
-#
-# This manifest deliberately contains no Secret object and no credential
-# value. Before applying it, provision `lunanexa-identity-ingress-credentials`
-# through the deployment's secret manager with the exact keys referenced
-# below, substitute the non-secret `${...}` deployment inputs, and provide a
-# reviewed gateway image implementing the contract in docs/IDENTITY_INGRESS.md.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: lunanexa-identity-gateway
-automountServiceAccountToken: false
----
+# Optional production browser identity resources. The gateway container itself
+# is injected into the controller pod by oidc-browser-ingress-controller-patch.yaml
+# so signed session exchange reaches the native listener over proven loopback.
+# No Secret or credential value belongs in this manifest.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: lunanexa-identity-ingress-config
 data:
-  oidc-provider-ref: "${LUNANEXA_OIDC_PROVIDER_REF}"
-  oidc-issuer-url: "${LUNANEXA_OIDC_ISSUER_URL}"
-  operator-redirect-uri: "https://${LUNANEXA_OPERATOR_HOST}/auth/oidc/callback"
-  enterprise-redirect-uri: "https://${LUNANEXA_ENTERPRISE_HOST}/auth/oidc/callback"
-  operator-origin: "https://${LUNANEXA_OPERATOR_HOST}"
-  enterprise-origin: "https://${LUNANEXA_ENTERPRISE_HOST}"
-  controller-endpoint: "http://lunanexa-control:8080"
-  operator-upstream: "http://lunanexa-console:8080"
-  enterprise-upstream: "http://lunanexa-enterprise:8080"
-  workbench-upstream: "http://lunanexa-workbench:8080"
-  oidc-scopes: "openid profile email"
-  oidc-pkce-method: "S256"
-  oidc-require-state: "1"
-  oidc-require-nonce: "1"
-  browser-cookie-secure: "1"
-  browser-cookie-http-only: "1"
-  browser-cookie-same-site: "Lax"
-  operator-cookie-name: "__Host-lunanexa_operator_oidc"
-  enterprise-cookie-name: "__Host-lunanexa_enterprise_oidc"
-  csrf-header-name: "X-LunaNexa-CSRF"
-  session-idle-timeout-seconds: "1800"
-  session-absolute-timeout-seconds: "28800"
-  identity-assertion-maximum-seconds: "30"
-  identity-exchange-path: "/v1/auth/session:exchange"
-  strip-request-headers: "X-LunaNexa-Subject,SSL-Client-Verify,SSL-Client-Subject-DN,X-LunaNexa-Identity-Issuer,X-LunaNexa-Identity-Subject,X-LunaNexa-Identity-Issued-At,X-LunaNexa-Identity-Expires-At,X-LunaNexa-Identity-Nonce,X-LunaNexa-Identity-Signature"
-  allowed-browser-bearer-prefixes: "lnxs_,lnx_"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: lunanexa-identity-gateway
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: lunanexa-identity-gateway
-  template:
-    metadata:
-      labels:
-        app: lunanexa-identity-gateway
-        app.kubernetes.io/part-of: lunanexa
-        lunanexa.io/plane: browser-identity
-    spec:
-      serviceAccountName: lunanexa-identity-gateway
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: gateway
-          image: "${OIDC_IDENTITY_GATEWAY_IMAGE}"
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: http
-              containerPort: 8080
-          env:
-            - name: LUNANEXA_OIDC_PROVIDER_REF
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: oidc-provider-ref
-            - name: LUNANEXA_OIDC_ISSUER_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: oidc-issuer-url
-            - name: LUNANEXA_OIDC_OPERATOR_REDIRECT_URI
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: operator-redirect-uri
-            - name: LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: enterprise-redirect-uri
-            - name: LUNANEXA_OIDC_ALLOWED_ORIGINS
-              value: "https://${LUNANEXA_OPERATOR_HOST},https://${LUNANEXA_ENTERPRISE_HOST}"
-            - name: LUNANEXA_OIDC_SCOPES
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: oidc-scopes
-            - name: LUNANEXA_OIDC_PKCE_METHOD
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: oidc-pkce-method
-            - name: LUNANEXA_OIDC_REQUIRE_STATE
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: oidc-require-state
-            - name: LUNANEXA_OIDC_REQUIRE_NONCE
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: oidc-require-nonce
-            - name: LUNANEXA_BROWSER_COOKIE_SECURE
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: browser-cookie-secure
-            - name: LUNANEXA_BROWSER_COOKIE_HTTP_ONLY
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: browser-cookie-http-only
-            - name: LUNANEXA_BROWSER_COOKIE_SAME_SITE
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: browser-cookie-same-site
-            - name: LUNANEXA_OIDC_OPERATOR_COOKIE_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: operator-cookie-name
-            - name: LUNANEXA_OIDC_ENTERPRISE_COOKIE_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: enterprise-cookie-name
-            - name: LUNANEXA_CSRF_HEADER_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: csrf-header-name
-            - name: LUNANEXA_SESSION_IDLE_TIMEOUT_SECONDS
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: session-idle-timeout-seconds
-            - name: LUNANEXA_SESSION_ABSOLUTE_TIMEOUT_SECONDS
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: session-absolute-timeout-seconds
-            - name: LUNANEXA_IDENTITY_ASSERTION_MAXIMUM_SECONDS
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: identity-assertion-maximum-seconds
-            - name: LUNANEXA_IDENTITY_EXCHANGE_PATH
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: identity-exchange-path
-            - name: LUNANEXA_STRIP_REQUEST_HEADERS
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: strip-request-headers
-            - name: LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: allowed-browser-bearer-prefixes
-            - name: LUNANEXA_CONTROL_ENDPOINT
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: controller-endpoint
-            - name: LUNANEXA_OPERATOR_UPSTREAM
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: operator-upstream
-            - name: LUNANEXA_ENTERPRISE_UPSTREAM
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: enterprise-upstream
-            - name: LUNANEXA_WORKBENCH_UPSTREAM
-              valueFrom:
-                configMapKeyRef:
-                  name: lunanexa-identity-ingress-config
-                  key: workbench-upstream
-            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: operator-client-id
-            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: operator-client-secret
-            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: enterprise-client-id
-            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: enterprise-client-secret
-            - name: LUNANEXA_OIDC_OPERATOR_COOKIE_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: operator-cookie-secret
-            - name: LUNANEXA_OIDC_ENTERPRISE_COOKIE_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: enterprise-cookie-secret
-            - name: LUNANEXA_IDENTITY_ASSERTION_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: lunanexa-identity-ingress-credentials
-                  key: identity-assertion-secret
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-            readOnlyRootFilesystem: true
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-      volumes:
-        - name: tmp
-          emptyDir: {}
+  LUNANEXA_OIDC_PROVIDER_REF: "${LUNANEXA_OIDC_PROVIDER_REF}"
+  LUNANEXA_OIDC_ISSUER_URL: "${LUNANEXA_OIDC_ISSUER_URL}"
+  LUNANEXA_OIDC_OPERATOR_REDIRECT_URI: "https://${LUNANEXA_OPERATOR_HOST}/auth/oidc/callback"
+  LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI: "https://${LUNANEXA_ENTERPRISE_HOST}/auth/oidc/callback"
+  LUNANEXA_OIDC_ALLOWED_ORIGINS: "https://${LUNANEXA_OPERATOR_HOST},https://${LUNANEXA_ENTERPRISE_HOST}"
+  LUNANEXA_LISTEN_ADDRESS: "0.0.0.0:8081"
+  LUNANEXA_CONTROL_ENDPOINT: "http://127.0.0.1:8080"
+  LUNANEXA_OPERATOR_UPSTREAM: "http://lunanexa-console:8080"
+  LUNANEXA_ENTERPRISE_UPSTREAM: "http://lunanexa-enterprise:8080"
+  LUNANEXA_WORKBENCH_UPSTREAM: "http://lunanexa-workbench:8080"
+  LUNANEXA_OIDC_SCOPES: "openid profile email"
+  LUNANEXA_OIDC_PKCE_METHOD: "S256"
+  LUNANEXA_OIDC_REQUIRE_STATE: "1"
+  LUNANEXA_OIDC_REQUIRE_NONCE: "1"
+  LUNANEXA_BROWSER_COOKIE_SECURE: "1"
+  LUNANEXA_BROWSER_COOKIE_HTTP_ONLY: "1"
+  LUNANEXA_BROWSER_COOKIE_SAME_SITE: "Lax"
+  LUNANEXA_OIDC_OPERATOR_COOKIE_NAME: "__Host-lunanexa_operator_oidc"
+  LUNANEXA_OIDC_ENTERPRISE_COOKIE_NAME: "__Host-lunanexa_enterprise_oidc"
+  LUNANEXA_CSRF_HEADER_NAME: "X-LunaNexa-CSRF"
+  LUNANEXA_SESSION_IDLE_TIMEOUT_SECONDS: "1800"
+  LUNANEXA_SESSION_ABSOLUTE_TIMEOUT_SECONDS: "28800"
+  LUNANEXA_IDENTITY_ASSERTION_MAXIMUM_SECONDS: "30"
+  LUNANEXA_IDENTITY_EXCHANGE_PATH: "/v1/auth/session:exchange"
+  LUNANEXA_STRIP_REQUEST_HEADERS: "X-LunaNexa-Subject,SSL-Client-Verify,SSL-Client-Subject-DN,X-LunaNexa-Identity-Issuer,X-LunaNexa-Identity-Subject,X-LunaNexa-Identity-Issued-At,X-LunaNexa-Identity-Expires-At,X-LunaNexa-Identity-Nonce,X-LunaNexa-Identity-Signature"
+  LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES: "lnxs_,lnx_"
 ---
 apiVersion: v1
 kind: Service
@@ -256,21 +40,25 @@ metadata:
   name: lunanexa-identity-gateway
 spec:
   selector:
-    app: lunanexa-identity-gateway
+    app: lunanexa-control
+    lunanexa.io/browser-identity-sidecar: enabled
   ports:
-    - name: http
+    - name: identity-http
       protocol: TCP
-      port: 8080
-      targetPort: http
+      port: 8081
+      targetPort: identity-http
 ---
+# Kubernetes policy is pod-scoped, so this overlay grants only the sidecar's
+# distinct ingress port and the exact upstreams required by the gateway.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: lunanexa-identity-gateway
+  name: lunanexa-identity-gateway-sidecar
 spec:
   podSelector:
     matchLabels:
-      app: lunanexa-identity-gateway
+      app: lunanexa-control
+      lunanexa.io/browser-identity-sidecar: enabled
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -282,12 +70,9 @@ spec:
               app.kubernetes.io/name: ingress-nginx
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8081
   egress:
     - to:
-        - podSelector:
-            matchLabels:
-              app: lunanexa-control
         - podSelector:
             matchLabels:
               app.kubernetes.io/part-of: lunanexa
@@ -347,7 +132,7 @@ spec:
               service:
                 name: lunanexa-identity-gateway
                 port:
-                  number: 8080
+                  number: 8081
     - host: "${LUNANEXA_ENTERPRISE_HOST}"
       http:
         paths:
@@ -357,4 +142,4 @@ spec:
               service:
                 name: lunanexa-identity-gateway
                 port:
-                  number: 8080
+                  number: 8081
