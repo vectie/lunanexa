@@ -2,8 +2,10 @@
 priv struct AppModel {
   endpoint : String
   token : String
+  csrf_token : String
   subject_ref : String
   connecting : Bool
+  bootstrap_started : Bool
   demo_mode : Bool
   session_generation : Int64
   session_expires_unix_ms : Int64?
@@ -11,6 +13,13 @@ priv struct AppModel {
   contract_preview_generation : Int64
   portal : @enterprise_ui.EnterpriseState
 } derive(Eq)
+
+///|
+priv struct GatewayBrowserBootstrap {
+  session_token : String
+  csrf_token : String
+  expires_unix_ms : Int64
+} derive(FromJson)
 
 ///|
 priv struct PortalApiKeyIssueIntent {
@@ -215,6 +224,9 @@ priv enum AppMessage {
   TokenChanged(String)
   SubjectChanged(String)
   Connect
+  Bootstrap
+  BootstrapReady(Int64, GatewayBrowserBootstrap)
+  BootstrapUnavailable(Int64)
   Logout
   LogoutCompleted(Int64)
   Portal(@enterprise_ui.EnterpriseMessage)
@@ -382,6 +394,38 @@ extern "js" fn request_promise(
   #|     throw new Error(message);
   #|   }
   #|   return text;
+  #| }
+
+///|
+extern "js" fn gateway_session_promise() -> @js.Promise =
+  #| async () => {
+  #|   const response = await fetch("/auth/session", {
+  #|     method: "GET",
+  #|     headers: { "Accept": "application/json" },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error",
+  #|   });
+  #|   if (!response.ok) throw new Error(`gateway session HTTP ${response.status}`);
+  #|   return await response.text();
+  #| }
+
+///|
+extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
+  #| async csrfToken => {
+  #|   const response = await fetch("/auth/logout", {
+  #|     method: "POST",
+  #|     headers: {
+  #|       "Accept": "application/json",
+  #|       "Content-Type": "application/json",
+  #|       "X-LunaNexa-CSRF": csrfToken,
+  #|     },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error",
+  #|     body: "{}",
+  #|   });
+  #|   if (!response.ok) throw new Error(`gateway logout HTTP ${response.status}`);
   #| }
 
 ///| The raw one-time capability lives only in this browser operation. It is
@@ -1255,6 +1299,28 @@ fn copy_api_key_secret_command(
 }
 
 ///|
+fn bootstrap_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let generation = model.session_generation
+  @rabbita.perform(result => emit(result), async fn() noraise {
+    try {
+      let body : String = gateway_session_promise().wait().cast()
+      let session : GatewayBrowserBootstrap = @json.from_json(@json.parse(body))
+      if !session.session_token.has_prefix("lnxs_") ||
+        session.csrf_token == "" ||
+        session.expires_unix_ms <= current_unix_ms() {
+        raise Failure("gateway returned an invalid or expired browser session")
+      }
+      BootstrapReady(generation, session)
+    } catch {
+      _ => BootstrapUnavailable(generation)
+    }
+  })
+}
+
+///|
 fn logout_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
@@ -1272,11 +1338,23 @@ fn logout_command(
           body="{}",
         ),
       )
+      if model.csrf_token != "" {
+        ignore(gateway_logout_promise(model.csrf_token).wait())
+      }
       generation
     } catch {
       // Local secret erasure is immediate even if remote revocation cannot be
       // confirmed. The gateway's short expiry remains the fail-safe.
-      _ => generation
+      _ => {
+        try {
+          if model.csrf_token != "" {
+            ignore(gateway_logout_promise(model.csrf_token).wait())
+          }
+        } catch {
+          _ => ()
+        }
+        generation
+      }
     }
   })
 }
@@ -2132,6 +2210,7 @@ fn signed_out_model(model : AppModel) -> AppModel {
   {
     ..model,
     token: "",
+    csrf_token: "",
     subject_ref: "",
     connecting: false,
     session_generation: model.session_generation + 1L,
@@ -2189,9 +2268,40 @@ fn update(
         let next = {
           ..model,
           connecting: true,
+          csrf_token: "",
+          session_expires_unix_ms: None,
           session_generation: model.session_generation + 1L,
         }
         (next, load_command(next, emit))
+      }
+    Bootstrap =>
+      if model.demo_mode || model.bootstrap_started {
+        (model, @rabbita.none)
+      } else {
+        let next = { ..model, bootstrap_started: true, connecting: true }
+        (next, bootstrap_command(next, emit))
+      }
+    BootstrapReady(generation, browser_session) =>
+      if generation != model.session_generation ||
+        browser_session.expires_unix_ms <= current_unix_ms() {
+        (model, @rabbita.none)
+      } else {
+        let next = {
+          ..model,
+          token: browser_session.session_token,
+          csrf_token: browser_session.csrf_token,
+          subject_ref: "",
+          connecting: true,
+          session_generation: model.session_generation + 1L,
+          session_expires_unix_ms: Some(browser_session.expires_unix_ms),
+        }
+        (next, load_command(next, emit))
+      }
+    BootstrapUnavailable(generation) =>
+      if generation == model.session_generation {
+        ({ ..model, connecting: false }, @rabbita.none)
+      } else {
+        (model, @rabbita.none)
       }
     Logout => {
       let command = if model.token.has_prefix("lnxs_") {
@@ -3454,7 +3564,7 @@ fn app_view(
   let locale = model.portal.locale
   let transport_allowed = development_transport_allowed(model.endpoint)
   let shell_styles =
-    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:38rem){.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:38rem){.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
   if model.demo_mode {
     return @html.div([
       @html.style_tag(shell_styles),
@@ -3497,6 +3607,24 @@ fn app_view(
               "生产环境登录使用企业 SSO 和入口管理的多因素认证。LunaNexa 不会在此接收账户密码。",
             ),
           ),
+          @html.a(
+            class="sso-start",
+            href="/auth/oidc/start?audience=enterprise",
+            portal_copy(
+              locale, "Sign in with enterprise SSO", "使用企业 SSO 登录",
+            ),
+          ),
+          if model.connecting {
+            @html.p(
+              class="bootstrap-status",
+              attrs=@html.Attrs::build().role("status").aria_live("polite"),
+              portal_copy(
+                locale, "Checking for an existing secure browser session…", "正在检查现有安全浏览器会话…",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
           match model.portal.error_message {
             Some(message) =>
               @html.p(
@@ -3620,6 +3748,18 @@ fn app_view(
 }
 
 ///|
+fn subscriptions(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @sub.Sub {
+  if !model.demo_mode && !model.bootstrap_started {
+    @sub.every(1, emit(Bootstrap))
+  } else {
+    @sub.none
+  }
+}
+
+///|
 fn main {
   let is_demo = demo_mode()
   let initial_locale = @i18n.parse_locale(stored_locale_preference())
@@ -3628,8 +3768,10 @@ fn main {
     model={
       endpoint: configured_endpoint(),
       token: "",
+      csrf_token: "",
       subject_ref: "",
       connecting: false,
+      bootstrap_started: is_demo,
       demo_mode: is_demo,
       session_generation: 0L,
       session_expires_unix_ms: None,
@@ -3673,5 +3815,6 @@ fn main {
     },
     view=app_view,
     update~,
+    subscriptions~,
   ).mount("app")
 }
