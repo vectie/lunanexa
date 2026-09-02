@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-control
+spec:
+  template:
+    metadata:
+      labels:
+        lunanexa.io/browser-identity-sidecar: enabled
+    spec:
+      containers:
+        - name: identity-gateway
+          image: "${OIDC_IDENTITY_GATEWAY_IMAGE}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: identity-http
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: lunanexa-identity-ingress-config
+          env:
+            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: operator-client-id
+            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: operator-client-secret
+            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: enterprise-client-id
+            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: enterprise-client-secret
+            - name: LUNANEXA_OIDC_OPERATOR_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: operator-cookie-secret
+            - name: LUNANEXA_OIDC_ENTERPRISE_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: enterprise-cookie-secret
+            - name: LUNANEXA_IDENTITY_ASSERTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: identity-assertion-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: identity-gateway-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: identity-http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: identity-http
+      volumes:
+        - name: identity-gateway-tmp
+          emptyDir: {}

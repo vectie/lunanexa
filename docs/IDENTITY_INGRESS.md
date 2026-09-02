@@ -21,11 +21,15 @@ short-lived sessions and API keys. A contract binds the stable LunaNexa
 `subject_ref`; it never binds an email address, OIDC cookie, client
 certificate DN, or bearer token.
 
-The optional deployment profile is `deploy/oidc-browser-ingress.yaml`. It is a
-contract for a reviewed, deployment-supplied OIDC identity-gateway image, not a
-bundled identity provider. It can be connected to an enterprise IdP or a
-separately operated self-hosted IdP without changing LunaNexa account or
-contract records.
+The optional deployment profile combines
+`deploy/oidc-browser-ingress.yaml` with
+`deploy/oidc-browser-ingress-controller-patch.yaml`. It is a contract for a
+reviewed, deployment-supplied OIDC identity-gateway image, not a bundled
+identity provider. The patch runs that gateway as a sidecar in every
+`lunanexa-control` pod. This placement is a security boundary: session exchange
+calls `http://127.0.0.1:8080`, and the controller accepts proxy identity only
+from a proven loopback peer. A separate gateway Deployment cannot satisfy that
+proof and must not be substituted based on NetworkPolicy alone.
 
 ## Required OIDC behavior
 
@@ -172,11 +176,13 @@ Provision the following keys in a Secret named
 
 Provision `lunanexa-oidc-ingress-tls` separately. Render the non-secret
 provider reference, issuer URL, two public hostnames, and immutable
-digest-pinned identity-gateway image before applying the result:
+digest-pinned identity-gateway image on top of an already rendered management
+manifest before applying the result:
 
 ```sh
 scripts/deploy/render-oidc-browser-ingress.sh \
-  --output /ABSOLUTE/PROTECTED/oidc-browser-ingress.yaml \
+  --output /ABSOLUTE/PROTECTED/management-with-oidc.yaml \
+  --management-manifest /ABSOLUTE/PROTECTED/management.yaml \
   --provider-ref CORP_OIDC \
   --issuer-url https://IDP_HOST/REALM_PATH \
   --operator-host OPERATOR_HOST \
@@ -184,9 +190,13 @@ scripts/deploy/render-oidc-browser-ingress.sh \
   --gateway-image REGISTRY/IDENTITY_GATEWAY@sha256:EXACT_64_HEX_DIGEST
 ```
 
-The renderer rejects non-HTTPS issuers, malformed or equal browser hosts,
+The renderer verifies the existing management manifest has no unresolved or
+invalid deployment placeholders, injects the sidecar into its named controller
+Deployment, and includes the identity ConfigMap, Service, NetworkPolicy, and
+Ingress. It rejects non-HTTPS issuers, malformed or equal browser hosts,
 mutable images, unsafe substitution characters, and unresolved inputs. It
-writes the rendered file with mode `0600`. Do not use a mutable image tag.
+writes the combined rendered file with mode `0600`. Apply the combined file;
+do not apply the source patch directly or use a mutable image tag.
 
 The controller's required `lunanexa-control-credentials` Secret must also
 contain an independent `account-session-issuer-secret`. The standard
@@ -201,11 +211,15 @@ external DNS name; an external provider therefore needs a reviewed static-IP
 or CNI FQDN-policy overlay. Do not replace that fail-closed rule with arbitrary
 Internet egress.
 
-The base controller policy admits the identity gateway and only label-locked
-ingress-nginx pods from the explicitly trusted ingress namespace. The OIDC
-Ingress sends both browser hosts exclusively to the identity gateway. No
-public console, enterprise, or workbench gateway may connect directly to the
-controller in this profile.
+The base controller policy does not admit ingress-nginx or a separate identity
+pod to native controller port 8080. The OIDC overlay creates a Service selecting
+the controller pods but targeting only the sidecar's distinct `identity-http`
+port 8081. Its policy admits only label-locked ingress-nginx pods from the
+explicitly trusted ingress namespace to 8081, plus the sidecar's bounded UI,
+DNS, and IdP egress. Kubernetes NetworkPolicy is pod-scoped, so the controller
+container technically shares those overlay egress grants; the sidecar and
+controller still have separate credentials and filesystem mounts. No public
+console, enterprise, or workbench gateway may connect directly to port 8080.
 
 `LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` resides on the existing
 controller state PVC. Back it up and restore it with the workspace, portal,

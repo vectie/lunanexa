@@ -1101,12 +1101,14 @@ The native controller is designed to sit behind this trusted ingress. Do not
 publish its port directly to an untrusted network.
 
 For interactive human accounts, use the opt-in
-`deploy/oidc-browser-ingress.yaml` profile and follow
+`deploy/oidc-browser-ingress.yaml` plus its controller-sidecar patch and follow
 [`IDENTITY_INGRESS.md`](IDENTITY_INGRESS.md). It keeps password/MFA and the
 upstream browser login with an approved OIDC provider, maps the verified
 issuer/subject to a stable LunaNexa account, and routes both browser hosts
-through the identity gateway. The static-token path remains only for CLI,
-automation, localhost, and the explicitly local development foundation.
+through the identity sidecar on port 8081. The sidecar exchanges signed
+identity only with `127.0.0.1:8080`; a separate gateway pod is not trusted by
+the controller. The static-token path remains only for CLI, automation,
+localhost, and the explicitly local development foundation.
 
 ## 8. Prepare each selected compute host
 
