@@ -7,6 +7,7 @@ controller_patch=$repo_root/deploy/oidc-browser-ingress-controller-patch.yaml
 base_policy=$repo_root/deploy/network-policy.yaml
 controller_manifest=$repo_root/deploy/controller.yaml
 dev_patch=$repo_root/deploy/management-foundation/network-policy-dev-browser-patch.yaml
+enterprise_source=$repo_root/cmd/enterprise/main.mbt
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-oidc-ingress-test.XXXXXX")
 cleanup() { rm -rf "$test_directory"; }
 trap cleanup EXIT HUP INT TERM
@@ -29,27 +30,60 @@ for required in \
   'LUNANEXA_BROWSER_COOKIE_HTTP_ONLY: "1"' \
   'LUNANEXA_BROWSER_COOKIE_SAME_SITE: "Lax"' \
   'LUNANEXA_CSRF_HEADER_NAME: "X-LunaNexa-CSRF"' \
-  'LUNANEXA_CONTROL_ENDPOINT: "http://127.0.0.1:8080"' \
+  'LUNANEXA_IDENTITY_RELAY_ENDPOINT: "http://lunanexa-identity-relay:8081"' \
+  'LUNANEXA_CONTROL_BEARER_ENDPOINT: "http://lunanexa-control:8080"' \
+  'LUNANEXA_CONTROL_BEARER_PATH_PREFIX: "/v1/"' \
   'LUNANEXA_IDENTITY_EXCHANGE_PATH: "/v1/auth/session:exchange"' \
+  'LUNANEXA_BROWSER_OIDC_START_PATH: "/auth/oidc/start"' \
+  'LUNANEXA_BROWSER_SESSION_PATH: "/auth/session"' \
+  'LUNANEXA_BROWSER_LOGOUT_PATH: "/auth/logout"' \
+  'LUNANEXA_BROWSER_AUDIENCES: "operator,enterprise"' \
+  'LUNANEXA_BROWSER_SESSION_RESPONSE_FIELDS: "session_token,csrf_token,expires_unix_ms"' \
+  'LUNANEXA_REUSE_COOKIE_BOUND_SESSION: "1"' \
+  'LUNANEXA_REQUIRE_SESSION_COOKIE_BEARER_BINDING: "1"' \
+  'LUNANEXA_REVOKE_SESSION_ON_LOGOUT: "1"' \
+  'LUNANEXA_REJECT_NONCANONICAL_API_PATHS: "1"' \
+  'LUNANEXA_OPERATOR_API_PATH_PREFIXES: "/v1/"' \
+  'LUNANEXA_ENTERPRISE_API_PATH_PREFIXES: "/v1/auth/,/v1/portal/self,/v1/portal/signature-requests,/v1/portal/lease-requests,' \
+  'LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES: "lnxs_"' \
   'X-LunaNexa-Identity-Signature' \
   'app.kubernetes.io/name: ingress-nginx'; do
   rg -q "$required" "$manifest"
 done
+if rg -q 'LUNANEXA_ENTERPRISE_API_PATH_PREFIXES:.*\/v1\/portal\/,' "$manifest"; then
+  printf '%s\n' 'enterprise browser policy includes operator portal routes' >&2
+  exit 1
+fi
+logout_source=$test_directory/enterprise-gateway-logout.mbt
+sed -n '/extern "js" fn gateway_logout_promise/,/^\/\/\/|/p' \
+  "$enterprise_source" > "$logout_source"
+if rg -q 'body:|Content-Type' "$logout_source"; then
+  printf '%s\n' 'enterprise gateway logout violates the empty-body contract' >&2
+  exit 1
+fi
+for destination in console enterprise workbench; do
+  rg -q "name: lunanexa-identity-gateway-to-$destination" "$manifest"
+done
 for required in \
   'name: lunanexa-control' \
-  'name: identity-gateway' \
+  'name: identity-relay' \
   'name: identity-http' \
   'containerPort: 8081' \
-  'name: LUNANEXA_OIDC_OPERATOR_CLIENT_ID' \
-  'name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_ID' \
-  'name: LUNANEXA_OIDC_OPERATOR_COOKIE_SECRET' \
-  'name: LUNANEXA_OIDC_ENTERPRISE_COOKIE_SECRET' \
-  'name: LUNANEXA_IDENTITY_ASSERTION_SECRET' \
-  'key: identity-assertion-secret'; do
+  'name: LUNANEXA_IDENTITY_GATEWAY_MODE' \
+  'value: relay' \
+  'name: LUNANEXA_CONTROL_ENDPOINT' \
+  'value: http://127.0.0.1:8080' \
+  'name: LUNANEXA_RELAY_ALLOWED_METHOD' \
+  'value: POST' \
+  'name: LUNANEXA_RELAY_MAXIMUM_BODY_BYTES' \
+  'value: "256"' \
+  'name: LUNANEXA_RELAY_REQUIRED_CONTENT_TYPE' \
+  'value: application/json'; do
   rg -q "$required" "$controller_patch"
 done
-if rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$manifest"; then
-  printf '%s\n' 'identity gateway must not run in a separate pod' >&2
+rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$manifest"
+if rg -q 'LUNANEXA_(OIDC_.*CLIENT|OIDC_.*COOKIE|IDENTITY_ASSERTION_SECRET)' "$controller_patch"; then
+  printf '%s\n' 'minimal identity relay must not mount OIDC or assertion secrets' >&2
   exit 1
 fi
 
@@ -65,7 +99,7 @@ if rg -q 'name: lunanexa-(control|console|enterprise|workbench)$' "$ingress_docu
 fi
 
 # The production controller port is not reachable from ingress or a separate
-# identity pod. The OIDC overlay admits ingress-nginx only to sidecar port 8081.
+# identity pod. The OIDC overlay admits the gateway only to relay port 8081.
 base_controller_policy=$test_directory/base-controller-policy.yaml
 sed -n '1,/^---$/p' "$base_policy" > "$base_controller_policy"
 if rg -q 'app: lunanexa-identity-gateway|app.kubernetes.io/name: ingress-nginx' \
@@ -73,7 +107,15 @@ if rg -q 'app: lunanexa-identity-gateway|app.kubernetes.io/name: ingress-nginx' 
   printf '%s\n' 'base controller policy exposes the native listener to browser ingress' >&2
   exit 1
 fi
-rg -q 'port: 8081' "$manifest"
+rg -U -q 'name: lunanexa-identity-relay(.|\n)*egress: \[\]' "$manifest"
+rg -U -q 'app: lunanexa-identity-gateway(.|\n)*port: 8081' "$manifest"
+rg -U -q 'app: lunanexa-identity-gateway(.|\n)*port: 8080' "$manifest"
+relay_policy=$test_directory/identity-relay-policy.yaml
+sed -n '/^  name: lunanexa-identity-relay$/,/^---$/p' "$manifest" > "$relay_policy"
+if rg -q 'port: 443' "$relay_policy"; then
+  printf '%s\n' 'controller relay policy grants external egress' >&2
+  exit 1
+fi
 if rg -q 'lunanexa-(console|workbench)-public-gateway' "$base_controller_policy"; then
   printf '%s\n' 'production controller policy admits a plain browser gateway' >&2
   exit 1
@@ -123,13 +165,12 @@ if rg -q '\$\{[A-Z0-9_]+\}' "$rendered"; then
   printf '%s\n' 'OIDC ingress render retained a deployment placeholder' >&2
   exit 1
 fi
-rg -U -q 'name: lunanexa-control(.|\n)*name: control(.|\n)*name: identity-gateway' "$rendered"
+rg -U -q 'name: lunanexa-control(.|\n)*name: control(.|\n)*name: identity-relay' "$rendered"
 rg -q 'http://127.0.0.1:8080' "$rendered"
 rg -q 'containerPort: 8081' "$rendered"
-if rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$rendered"; then
-  printf '%s\n' 'rendered profile retained a separate identity Deployment' >&2
-  exit 1
-fi
+rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$rendered"
+rg -q 'http://lunanexa-identity-relay:8081' "$rendered"
+rg -q 'http://lunanexa-control:8080' "$rendered"
 test "$(stat -f '%Lp' "$rendered" 2>/dev/null || stat -c '%a' "$rendered")" = 600
 
 set +e

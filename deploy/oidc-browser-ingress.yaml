@@ -1,6 +1,6 @@
-# Optional production browser identity resources. The gateway container itself
-# is injected into the controller pod by oidc-browser-ingress-controller-patch.yaml
-# so signed session exchange reaches the native listener over proven loopback.
+# Optional production browser identity resources. The public OIDC gateway is a
+# separate pod. A minimal relay injected by the controller patch forwards only
+# signed session exchange to the native listener over proven loopback.
 # No Secret or credential value belongs in this manifest.
 apiVersion: v1
 kind: ConfigMap
@@ -12,8 +12,11 @@ data:
   LUNANEXA_OIDC_OPERATOR_REDIRECT_URI: "https://${LUNANEXA_OPERATOR_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI: "https://${LUNANEXA_ENTERPRISE_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ALLOWED_ORIGINS: "https://${LUNANEXA_OPERATOR_HOST},https://${LUNANEXA_ENTERPRISE_HOST}"
-  LUNANEXA_LISTEN_ADDRESS: "0.0.0.0:8081"
-  LUNANEXA_CONTROL_ENDPOINT: "http://127.0.0.1:8080"
+  LUNANEXA_IDENTITY_GATEWAY_MODE: "proxy"
+  LUNANEXA_LISTEN_ADDRESS: "0.0.0.0:8080"
+  LUNANEXA_IDENTITY_RELAY_ENDPOINT: "http://lunanexa-identity-relay:8081"
+  LUNANEXA_CONTROL_BEARER_ENDPOINT: "http://lunanexa-control:8080"
+  LUNANEXA_CONTROL_BEARER_PATH_PREFIX: "/v1/"
   LUNANEXA_OPERATOR_UPSTREAM: "http://lunanexa-console:8080"
   LUNANEXA_ENTERPRISE_UPSTREAM: "http://lunanexa-enterprise:8080"
   LUNANEXA_WORKBENCH_UPSTREAM: "http://lunanexa-workbench:8080"
@@ -31,8 +34,100 @@ data:
   LUNANEXA_SESSION_ABSOLUTE_TIMEOUT_SECONDS: "28800"
   LUNANEXA_IDENTITY_ASSERTION_MAXIMUM_SECONDS: "30"
   LUNANEXA_IDENTITY_EXCHANGE_PATH: "/v1/auth/session:exchange"
+  LUNANEXA_BROWSER_OIDC_START_PATH: "/auth/oidc/start"
+  LUNANEXA_BROWSER_SESSION_PATH: "/auth/session"
+  LUNANEXA_BROWSER_LOGOUT_PATH: "/auth/logout"
+  LUNANEXA_BROWSER_AUDIENCES: "operator,enterprise"
+  LUNANEXA_BROWSER_SESSION_RESPONSE_FIELDS: "session_token,csrf_token,expires_unix_ms"
+  LUNANEXA_REUSE_COOKIE_BOUND_SESSION: "1"
+  LUNANEXA_REQUIRE_SESSION_COOKIE_BEARER_BINDING: "1"
+  LUNANEXA_REVOKE_SESSION_ON_LOGOUT: "1"
+  LUNANEXA_REJECT_NONCANONICAL_API_PATHS: "1"
+  LUNANEXA_OPERATOR_API_PATH_PREFIXES: "/v1/"
+  LUNANEXA_ENTERPRISE_API_PATH_PREFIXES: "/v1/auth/,/v1/portal/self,/v1/portal/signature-requests,/v1/portal/lease-requests,/v1/notifications/self,/v1/contract-documents/self,/v1/contract-documents/manifest,/v1/offline-commerce/self,/v1/machine-access/self"
   LUNANEXA_STRIP_REQUEST_HEADERS: "X-LunaNexa-Subject,SSL-Client-Verify,SSL-Client-Subject-DN,X-LunaNexa-Identity-Issuer,X-LunaNexa-Identity-Subject,X-LunaNexa-Identity-Issued-At,X-LunaNexa-Identity-Expires-At,X-LunaNexa-Identity-Nonce,X-LunaNexa-Identity-Signature"
-  LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES: "lnxs_,lnx_"
+  LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES: "lnxs_"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-identity-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lunanexa-identity-gateway
+  template:
+    metadata:
+      labels:
+        app: lunanexa-identity-gateway
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: identity-ingress
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: identity-gateway
+          image: "${OIDC_IDENTITY_GATEWAY_IMAGE}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: identity-http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: lunanexa-identity-ingress-config
+          env:
+            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: operator-client-id
+            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: operator-client-secret
+            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: enterprise-client-id
+            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: enterprise-client-secret
+            - name: LUNANEXA_OIDC_OPERATOR_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: operator-cookie-secret
+            - name: LUNANEXA_OIDC_ENTERPRISE_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: enterprise-cookie-secret
+            - name: LUNANEXA_IDENTITY_ASSERTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-identity-ingress-credentials
+                  key: identity-assertion-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: identity-http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: identity-http
 ---
 apiVersion: v1
 kind: Service
@@ -40,25 +135,61 @@ metadata:
   name: lunanexa-identity-gateway
 spec:
   selector:
-    app: lunanexa-control
-    lunanexa.io/browser-identity-sidecar: enabled
+    app: lunanexa-identity-gateway
   ports:
     - name: identity-http
       protocol: TCP
       port: 8081
       targetPort: identity-http
 ---
-# Kubernetes policy is pod-scoped, so this overlay grants only the sidecar's
-# distinct ingress port and the exact upstreams required by the gateway.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-identity-relay
+spec:
+  selector:
+    app: lunanexa-control
+    lunanexa.io/browser-identity-sidecar: enabled
+  ports:
+    - name: identity-relay
+      protocol: TCP
+      port: 8081
+      targetPort: identity-http
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: lunanexa-identity-gateway-sidecar
+  name: lunanexa-identity-relay
 spec:
   podSelector:
     matchLabels:
       app: lunanexa-control
       lunanexa.io/browser-identity-sidecar: enabled
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-identity-gateway
+      ports:
+        - protocol: TCP
+          port: 8081
+        # The gateway may proxy its cookie-bound lnxs_ bearer requests directly
+        # to the controller. Non-loopback asserted identity still fails closed.
+        - protocol: TCP
+          port: 8080
+  # The relay reaches the controller only through pod loopback, which is not
+  # governed by NetworkPolicy. No external relay egress is permitted.
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-identity-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-identity-gateway
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -70,8 +201,18 @@ spec:
               app.kubernetes.io/name: ingress-nginx
       ports:
         - protocol: TCP
-          port: 8081
+          port: 8080
   egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-control
+              lunanexa.io/browser-identity-sidecar: enabled
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 8080
     - to:
         - podSelector:
             matchLabels:
@@ -104,6 +245,63 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-identity-gateway-to-console
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: console
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-identity-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-identity-gateway-to-enterprise
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: enterprise
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-identity-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-identity-gateway-to-workbench
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: lunanexa
+      lunanexa.io/plane: workbench
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-identity-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
