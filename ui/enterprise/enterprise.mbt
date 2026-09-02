@@ -1,6 +1,7 @@
 ///|
 pub(all) enum EnterpriseRoute {
   Overview
+  AccountAccess
   Agreements
   LeaseRequests
   Notifications
@@ -31,10 +32,102 @@ pub(all) struct EnterpriseDesktopClient {
 } derive(Debug, Eq)
 
 ///|
+pub(all) struct ApiKeyIssueDraft {
+  display_name : String
+  model_list_scope : Bool
+  inference_scope : Bool
+  allowed_models : String
+  lifetime_days : Int
+  maximum_requests : Int64
+} derive(Debug, Eq)
+
+///|
+pub(all) struct OneTimeApiKeySecret {
+  key_id : String
+  display_name : String
+  secret : String
+} derive(Debug, Eq)
+
+///|
+/// Browser-portable account API scope. This deliberately mirrors the portal
+/// JSON contract without importing the native access store into the JS UI.
+pub(all) enum ApiKeyScope {
+  ModelList
+  Inference
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ApiCredentialView {
+  key_id : String
+  tenant_ref : String
+  subject_ref : String
+  display_name : String
+  scopes : Array[ApiKeyScope]
+  allowed_models : Array[String]
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+  maximum_requests : Int64
+  consumed_requests : Int64
+  revoked_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct IssuedApiKeyView {
+  credential : ApiCredentialView
+  secret : String
+} derive(Debug, Eq, FromJson)
+
+///|
+pub(all) enum AccountRole {
+  PlatformOperator
+  AuditReader
+  EnterpriseUser
+} derive(Debug, Eq, FromJson)
+
+///|
+pub(all) enum AccountState {
+  Invited
+  Active
+  Suspended
+  Revoked
+} derive(Debug, Eq, FromJson)
+
+///|
+pub(all) struct AccountView {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[AccountRole]
+  state : AccountState
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Debug, Eq, FromJson)
+
+///|
+pub(all) struct BrowserSessionView {
+  session_id : String
+  account_id : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  last_used_unix_ms : Int64
+  revoked_unix_ms : Int64?
+} derive(Debug, Eq, FromJson)
+
+///|
 pub(all) struct EnterpriseState {
   route : EnterpriseRoute
   locale : @i18n.Locale
   membership : @portal.EnterpriseMembership?
+  account : AccountView?
+  browser_sessions : Array[BrowserSessionView]
+  api_keys : Array[ApiCredentialView]
+  api_key_issue_draft : ApiKeyIssueDraft
+  api_key_issue_open : Bool
+  api_key_revoke_id : String?
+  one_time_api_key_secret : OneTimeApiKeySecret?
   agreements : Array[@portal.PortalAgreement]
   lease_requests : Array[@portal.EnterpriseLeaseRequest]
   notifications : Array[@notifications.NotificationRecord]
@@ -61,6 +154,20 @@ pub(all) struct EnterpriseState {
 pub(all) enum EnterpriseMessage {
   Navigate(EnterpriseRoute)
   LocaleChanged(@i18n.Locale)
+  OpenApiKeyIssue
+  CancelApiKeyIssue
+  ApiKeyDisplayNameChanged(String)
+  ToggleApiKeyModelListScope
+  ToggleApiKeyInferenceScope
+  ApiKeyAllowedModelsChanged(String)
+  ApiKeyLifetimeChanged(Int)
+  ApiKeyMaximumRequestsChanged(Int64)
+  SubmitApiKeyIssue
+  CopyOneTimeApiKeySecret
+  DismissOneTimeApiKeySecret
+  BeginRevokeApiKey(String)
+  CancelRevokeApiKey
+  ConfirmRevokeApiKey(String)
   ProjectChanged(String)
   UsernameChanged(String)
   ModelsChanged(String)
@@ -91,6 +198,20 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     route: Overview,
     locale: @i18n.default_locale(),
     membership: None,
+    account: None,
+    browser_sessions: [],
+    api_keys: [],
+    api_key_issue_draft: {
+      display_name: "",
+      model_list_scope: true,
+      inference_scope: true,
+      allowed_models: "",
+      lifetime_days: 30,
+      maximum_requests: 10000L,
+    },
+    api_key_issue_open: false,
+    api_key_revoke_id: None,
+    one_time_api_key_secret: None,
     agreements: [],
     lease_requests: [],
     notifications: [],
@@ -233,6 +354,56 @@ pub fn demo_state() -> EnterpriseState {
       active: true,
       created_unix_ms: now - 2592000000L,
     }),
+    account: Some({
+      account_id: "account-alice",
+      subject_ref: "subject-alice",
+      identity_issuer: "https://identity.demo.invalid",
+      display_name: "Alice Chen",
+      email: "alice@example.invalid",
+      identity_receipt: "identity:demo",
+      roles: [EnterpriseUser],
+      state: Active,
+      created_unix_ms: now - 2592000000L,
+      updated_unix_ms: now - 86400000L,
+    }),
+    browser_sessions: [
+      {
+        session_id: "session-demo-current",
+        account_id: "account-alice",
+        created_unix_ms: now - 3600000L,
+        expires_unix_ms: now + 3600000L,
+        last_used_unix_ms: now - 60000L,
+        revoked_unix_ms: None,
+      },
+    ],
+    api_keys: [
+      {
+        key_id: "key-notebook-active",
+        tenant_ref: "tenant-northstar",
+        subject_ref: "subject-alice",
+        display_name: "Research notebook",
+        scopes: [ModelList, Inference],
+        allowed_models: ["qwen3-32b"],
+        issued_unix_ms: now - 86400000L,
+        expires_unix_ms: now + 2505600000L,
+        maximum_requests: 10000L,
+        consumed_requests: 184L,
+        revoked_unix_ms: None,
+      },
+      {
+        key_id: "key-ci-revoked",
+        tenant_ref: "tenant-northstar",
+        subject_ref: "subject-alice",
+        display_name: "Retired CI client",
+        scopes: [Inference],
+        allowed_models: ["qwen3-32b", "bge-m3"],
+        issued_unix_ms: now - 2592000000L,
+        expires_unix_ms: now + 86400000L,
+        maximum_requests: 1000L,
+        consumed_requests: 612L,
+        revoked_unix_ms: Some(now - 3600000L),
+      },
+    ],
     agreements: [
       {
         agreement_id: "agreement-framework-2026",
@@ -466,6 +637,78 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
+    OpenApiKeyIssue =>
+      {
+        ..self,
+        api_key_issue_open: true,
+        api_key_revoke_id: None,
+        one_time_api_key_secret: None,
+        success_message: None,
+        error_message: None,
+      }
+    CancelApiKeyIssue =>
+      { ..self, api_key_issue_open: false, error_message: None }
+    ApiKeyDisplayNameChanged(value) =>
+      {
+        ..self,
+        api_key_issue_draft: { ..self.api_key_issue_draft, display_name: value },
+      }
+    ToggleApiKeyModelListScope =>
+      {
+        ..self,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          model_list_scope: !self.api_key_issue_draft.model_list_scope,
+        },
+      }
+    ToggleApiKeyInferenceScope =>
+      {
+        ..self,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          inference_scope: !self.api_key_issue_draft.inference_scope,
+        },
+      }
+    ApiKeyAllowedModelsChanged(value) =>
+      {
+        ..self,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          allowed_models: value,
+        },
+      }
+    ApiKeyLifetimeChanged(value) =>
+      {
+        ..self,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          lifetime_days: value,
+        },
+      }
+    ApiKeyMaximumRequestsChanged(value) =>
+      {
+        ..self,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          maximum_requests: value,
+        },
+      }
+    SubmitApiKeyIssue =>
+      { ..self, loading: true, success_message: None, error_message: None }
+    CopyOneTimeApiKeySecret => self
+    DismissOneTimeApiKeySecret => { ..self, one_time_api_key_secret: None }
+    BeginRevokeApiKey(key_id) =>
+      {
+        ..self,
+        api_key_issue_open: false,
+        api_key_revoke_id: Some(key_id),
+        one_time_api_key_secret: None,
+        success_message: None,
+        error_message: None,
+      }
+    CancelRevokeApiKey => { ..self, api_key_revoke_id: None }
+    ConfirmRevokeApiKey(_) =>
+      { ..self, loading: true, success_message: None, error_message: None }
     ProjectChanged(value) => { ..self, project_id: value }
     UsernameChanged(value) => { ..self, unix_username: value }
     ModelsChanged(value) => { ..self, model_ids: value }
@@ -487,6 +730,48 @@ pub fn EnterpriseState::update(
       { ..self, contract_documents: self.contract_documents.update(message) }
     ClearNotice => { ..self, success_message: None, error_message: None }
   }
+}
+
+///|
+pub fn api_key_issue_valid(state : EnterpriseState) -> Bool {
+  guard state.membership is Some(membership) else { return false }
+  let draft = state.api_key_issue_draft
+  membership.active &&
+  @portal.role_allows(membership.roles, Developer) &&
+  draft.display_name.trim() != "" &&
+  draft.display_name.length() <= 128 &&
+  (draft.model_list_scope || draft.inference_scope) &&
+  (
+    draft.lifetime_days == 1 ||
+    draft.lifetime_days == 7 ||
+    draft.lifetime_days == 30 ||
+    draft.lifetime_days == 90 ||
+    draft.lifetime_days == 365
+  ) &&
+  draft.maximum_requests > 0L &&
+  draft.maximum_requests <= 1000000000L &&
+  !state.loading
+}
+
+///|
+pub fn api_key_scopes(state : EnterpriseState) -> Array[ApiKeyScope] {
+  let scopes : Array[ApiKeyScope] = []
+  if state.api_key_issue_draft.model_list_scope {
+    scopes.push(ModelList)
+  }
+  if state.api_key_issue_draft.inference_scope {
+    scopes.push(Inference)
+  }
+  scopes
+}
+
+///|
+pub fn api_key_allowed_models(state : EnterpriseState) -> Array[String] {
+  state.api_key_issue_draft.allowed_models
+  .split(",")
+  .map(value => value.trim().to_owned())
+  .filter(value => value != "")
+  .to_array()
 }
 
 ///|
@@ -526,6 +811,7 @@ fn text_command(
 fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
   match route {
     Overview => copy(locale, "Overview", "概览")
+    AccountAccess => copy(locale, "Account & API keys", "账户与 API 密钥")
     Agreements => copy(locale, "Agreements", "协议")
     LeaseRequests => copy(locale, "Lease requests", "租用申请")
     Notifications => copy(locale, "Notifications", "通知")
@@ -574,6 +860,7 @@ fn navigation(
     for
       route in [
         Overview,
+        AccountAccess,
         Agreements,
         LeaseRequests,
         MachineAccess,
@@ -839,6 +1126,692 @@ fn overview_view(
         ]),
       ]),
     ]),
+  ])
+}
+
+///|
+fn enterprise_role_label(
+  locale : @i18n.Locale,
+  role : @portal.EnterpriseRole,
+) -> String {
+  match role {
+    OrganizationAdministrator =>
+      copy(locale, "Organization administrator", "组织管理员")
+    LegalSigner => copy(locale, "Legal signer", "法定签署人")
+    LeaseRequester => copy(locale, "Lease requester", "租用申请人")
+    BillingViewer => copy(locale, "Billing viewer", "账单查看者")
+    Developer => copy(locale, "Developer", "开发者")
+  }
+}
+
+///|
+fn account_role_label(locale : @i18n.Locale, role : AccountRole) -> String {
+  match role {
+    PlatformOperator => copy(locale, "Platform operator", "平台运维人员")
+    AuditReader => copy(locale, "Audit reader", "审计查看者")
+    EnterpriseUser => copy(locale, "Enterprise user", "企业用户")
+  }
+}
+
+///|
+fn account_state_label(locale : @i18n.Locale, state : AccountState) -> String {
+  match state {
+    Invited => copy(locale, "Invited", "已邀请")
+    Active => copy(locale, "Active", "有效")
+    Suspended => copy(locale, "Suspended", "已暂停")
+    Revoked => copy(locale, "Revoked", "已撤销")
+  }
+}
+
+///|
+fn api_key_scope_label(locale : @i18n.Locale, scope : ApiKeyScope) -> String {
+  match scope {
+    ModelList => copy(locale, "Model list", "模型列表")
+    Inference => copy(locale, "Inference", "推理")
+  }
+}
+
+///|
+fn api_key_state(
+  locale : @i18n.Locale,
+  key : ApiCredentialView,
+  now_unix_ms : Int64,
+) -> (String, String) {
+  if key.revoked_unix_ms is Some(_) {
+    (copy(locale, "Revoked", "已撤销"), "revoked")
+  } else if key.expires_unix_ms <= now_unix_ms {
+    (copy(locale, "Expired", "已过期"), "expired")
+  } else if key.consumed_requests >= key.maximum_requests {
+    (copy(locale, "Quota exhausted", "配额已用尽"), "expired")
+  } else {
+    (copy(locale, "Active", "有效"), "active")
+  }
+}
+
+///|
+fn api_key_issue_dialog(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  if !state.api_key_issue_open {
+    return @html.nothing
+  }
+  let draft = state.api_key_issue_draft
+  @html.div(class="modal-backdrop", [
+    @html.section(
+      class="confirmation-dialog account-dialog",
+      attrs=@html.Attrs::build()
+        .role("dialog")
+        .aria_modal("true")
+        .aria_labelledby("api-key-issue-title")
+        .aria_describedby("api-key-issue-description"),
+      [
+        @html.h2(
+          id="api-key-issue-title",
+          copy(state.locale, "Create API key", "创建 API 密钥"),
+        ),
+        @html.p(
+          id="api-key-issue-description",
+          copy(
+            state.locale,
+            "The secret is shown once. Issuance also requires an effective MasterLease and Developer role.",
+            "密钥仅显示一次。签发还要求有效的主租约和开发者角色。",
+          ),
+        ),
+        @html.div(class="account-form", [
+          @html.div(class="field", [
+            @html.label(
+              for_="api-key-display-name",
+              copy(state.locale, "Key name", "密钥名称"),
+            ),
+            @html.input(
+              id="api-key-display-name",
+              value=draft.display_name,
+              maxlength=128,
+              required=true,
+              on_input=text_command(emit, value => {
+                ApiKeyDisplayNameChanged(value)
+              }),
+            ),
+          ]),
+          @html.fieldset(class="scope-picker", [
+            @html.legend(copy(state.locale, "Scopes", "权限范围")),
+            @html.button(
+              type_="button",
+              class=if draft.model_list_scope {
+                "scope-toggle is-selected"
+              } else {
+                "scope-toggle"
+              },
+              attrs=@html.Attrs::build().aria_pressed(
+                if draft.model_list_scope {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=command(emit, ToggleApiKeyModelListScope),
+              copy(state.locale, "Model list", "模型列表"),
+            ),
+            @html.button(
+              type_="button",
+              class=if draft.inference_scope {
+                "scope-toggle is-selected"
+              } else {
+                "scope-toggle"
+              },
+              attrs=@html.Attrs::build().aria_pressed(
+                if draft.inference_scope {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=command(emit, ToggleApiKeyInferenceScope),
+              copy(state.locale, "Inference", "推理"),
+            ),
+          ]),
+          @html.div(class="field", [
+            @html.label(
+              for_="api-key-models",
+              copy(state.locale, "Allowed models", "允许的模型"),
+            ),
+            @html.input(
+              id="api-key-models",
+              value=draft.allowed_models,
+              placeholder=copy(
+                state.locale,
+                "Optional, comma-separated aliases",
+                "可选，使用英文逗号分隔别名",
+              ),
+              on_input=text_command(emit, value => {
+                ApiKeyAllowedModelsChanged(value)
+              }),
+            ),
+            @html.small(
+              copy(
+                state.locale,
+                "Leave empty to allow every model granted by the account contract.",
+                "留空表示允许账户合同授予的所有模型。",
+              ),
+            ),
+          ]),
+          @html.div(class="account-form-grid", [
+            @html.div(class="field", [
+              @html.label(
+                for_="api-key-lifetime",
+                copy(state.locale, "Lifetime", "有效期"),
+              ),
+              @html.select(
+                id="api-key-lifetime",
+                on_change=text_command(emit, value => {
+                  ApiKeyLifetimeChanged(
+                    match value {
+                      "1" => 1
+                      "7" => 7
+                      "90" => 90
+                      "365" => 365
+                      _ => 30
+                    },
+                  )
+                }),
+                [
+                  @html.option(
+                    value="1",
+                    selected=draft.lifetime_days == 1,
+                    copy(state.locale, "1 day", "1 天"),
+                  ),
+                  @html.option(
+                    value="7",
+                    selected=draft.lifetime_days == 7,
+                    copy(state.locale, "7 days", "7 天"),
+                  ),
+                  @html.option(
+                    value="30",
+                    selected=draft.lifetime_days == 30,
+                    copy(state.locale, "30 days", "30 天"),
+                  ),
+                  @html.option(
+                    value="90",
+                    selected=draft.lifetime_days == 90,
+                    copy(state.locale, "90 days", "90 天"),
+                  ),
+                  @html.option(
+                    value="365",
+                    selected=draft.lifetime_days == 365,
+                    copy(state.locale, "1 year", "1 年"),
+                  ),
+                ],
+              ),
+            ]),
+            @html.div(class="field", [
+              @html.label(
+                for_="api-key-maximum-requests",
+                copy(state.locale, "Request quota", "请求配额"),
+              ),
+              @html.select(
+                id="api-key-maximum-requests",
+                on_change=text_command(emit, value => {
+                  ApiKeyMaximumRequestsChanged(
+                    match value {
+                      "100" => 100L
+                      "1000" => 1000L
+                      "100000" => 100000L
+                      _ => 10000L
+                    },
+                  )
+                }),
+                [
+                  @html.option(
+                    value="100",
+                    selected=draft.maximum_requests == 100L,
+                    "100",
+                  ),
+                  @html.option(
+                    value="1000",
+                    selected=draft.maximum_requests == 1000L,
+                    "1,000",
+                  ),
+                  @html.option(
+                    value="10000",
+                    selected=draft.maximum_requests == 10000L,
+                    "10,000",
+                  ),
+                  @html.option(
+                    value="100000",
+                    selected=draft.maximum_requests == 100000L,
+                    "100,000",
+                  ),
+                ],
+              ),
+            ]),
+          ]),
+        ]),
+        @html.div(class="dialog-actions", [
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            disabled=state.loading,
+            on_click=command(emit, CancelApiKeyIssue),
+            copy(state.locale, "Cancel", "取消"),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=!api_key_issue_valid(state),
+            on_click=command(emit, SubmitApiKeyIssue),
+            if state.loading {
+              copy(state.locale, "Creating…", "正在创建…")
+            } else {
+              copy(state.locale, "Create key", "创建密钥")
+            },
+          ),
+        ]),
+      ],
+    ),
+  ])
+}
+
+///|
+fn one_time_secret_dialog(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  guard state.one_time_api_key_secret is Some(value) else {
+    return @html.nothing
+  }
+  @html.div(class="modal-backdrop", [
+    @html.section(
+      class="confirmation-dialog account-dialog",
+      attrs=@html.Attrs::build()
+        .role("alertdialog")
+        .aria_modal("true")
+        .aria_labelledby("api-key-secret-title")
+        .aria_describedby("api-key-secret-description"),
+      [
+        @html.h2(
+          id="api-key-secret-title",
+          copy(state.locale, "Save this secret now", "请立即保存此密钥"),
+        ),
+        @html.p(
+          id="api-key-secret-description",
+          copy(
+            state.locale,
+            "LunaNexa stores only its hash. This secret cannot be retrieved after you close this dialog.",
+            "LunaNexa 仅存储其哈希值。关闭此对话框后将无法再次获取该密钥。",
+          ),
+        ),
+        @html.dl(class="account-facts", [
+          @html.div([
+            @html.dt(copy(state.locale, "Name", "名称")),
+            @html.dd(value.display_name),
+          ]),
+          @html.div([
+            @html.dt(copy(state.locale, "Key ID", "密钥 ID")),
+            @html.dd(class="mono", value.key_id),
+          ]),
+        ]),
+        @html.pre(class="one-time-secret", value.secret),
+        @html.div(class="dialog-actions", [
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            on_click=command(emit, CopyOneTimeApiKeySecret),
+            copy(state.locale, "Copy secret", "复制密钥"),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            on_click=command(emit, DismissOneTimeApiKeySecret),
+            copy(
+              state.locale,
+              "I saved it — clear secret",
+              "我已保存 — 清除密钥",
+            ),
+          ),
+        ]),
+      ],
+    ),
+  ])
+}
+
+///|
+fn revoke_api_key_dialog(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  guard state.api_key_revoke_id is Some(key_id) else { return @html.nothing }
+  let key = state.api_keys.iter().find_first(value => value.key_id == key_id)
+  let scope = key
+    .map(value => {
+      "\{value.display_name} · \{value.scopes.map(item => api_key_scope_label(state.locale, item)).join(", ")}"
+    })
+    .unwrap_or(key_id)
+  @html.div(class="modal-backdrop", [
+    @html.section(
+      class="confirmation-dialog account-dialog",
+      attrs=@html.Attrs::build()
+        .role("alertdialog")
+        .aria_modal("true")
+        .aria_labelledby("api-key-revoke-title")
+        .aria_describedby("api-key-revoke-description"),
+      [
+        @html.h2(
+          id="api-key-revoke-title",
+          copy(state.locale, "Revoke API key?", "撤销 API 密钥？"),
+        ),
+        @html.p(
+          id="api-key-revoke-description",
+          copy(
+            state.locale,
+            "Requests using this key will fail immediately. This action cannot be undone.",
+            "使用此密钥的请求将立即失败。此操作无法撤销。",
+          ),
+        ),
+        @html.p(class="confirmation-scope mono", scope),
+        @html.div(class="dialog-actions", [
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            disabled=state.loading,
+            on_click=command(emit, CancelRevokeApiKey),
+            copy(state.locale, "Cancel", "取消"),
+          ),
+          @html.button(
+            type_="button",
+            class="danger-button",
+            disabled=state.loading,
+            on_click=command(emit, ConfirmRevokeApiKey(key_id)),
+            if state.loading {
+              copy(state.locale, "Revoking…", "正在撤销…")
+            } else {
+              copy(state.locale, "Revoke key", "撤销密钥")
+            },
+          ),
+        ]),
+      ],
+    ),
+  ])
+}
+
+///|
+fn account_access_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  guard state.membership is Some(membership) else {
+    return @html.p(
+      class="empty-state",
+      copy(
+        state.locale,
+        "Account identity is unavailable.",
+        "账户身份不可用。",
+      ),
+    )
+  }
+  let can_issue = membership.active &&
+    @portal.role_allows(membership.roles, Developer)
+  let browser_session_rows = [
+    for browser_session in state.browser_sessions => {
+      @html.div(class="browser-session-row", [
+        @html.span(class="mono", browser_session.session_id),
+        @html.span(
+          "\{copy(state.locale, "Expires", "到期时间")} · \{@contractdoc.format_unix_ms_utc(browser_session.expires_unix_ms)}",
+        ),
+      ])
+    }
+  ]
+  @html.div(class="page-stack account-access-page", [
+    @html.section(class="account-identity", [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            copy(state.locale, "AUTHENTICATED ACCOUNT", "已认证账户"),
+          ),
+          @html.h2(
+            copy(state.locale, "Identity & membership", "身份与成员资格"),
+          ),
+          @html.p(
+            copy(
+              state.locale,
+              "Authentication is supplied by the trusted ingress. LunaNexa stores only the opaque subject and authorization records.",
+              "身份验证由受信任入口提供。LunaNexa 仅存储不透明主体和授权记录。",
+            ),
+          ),
+        ]),
+        @html.span(
+          class=if membership.active {
+            "state-pill account-state-active"
+          } else {
+            "state-pill account-state-inactive"
+          },
+          if membership.active {
+            copy(state.locale, "Active membership", "有效成员资格")
+          } else {
+            copy(state.locale, "Inactive membership", "成员资格已停用")
+          },
+        ),
+      ]),
+      match state.account {
+        Some(account) =>
+          @html.div([
+            @html.dl(class="account-facts", [
+              @html.div([
+                @html.dt(copy(state.locale, "Account", "账户")),
+                @html.dd(account.display_name),
+              ]),
+              @html.div([
+                @html.dt(copy(state.locale, "Email", "电子邮箱")),
+                @html.dd(account.email),
+              ]),
+              @html.div([
+                @html.dt(copy(state.locale, "Account ID", "账户 ID")),
+                @html.dd(class="mono", account.account_id),
+              ]),
+              @html.div([
+                @html.dt(copy(state.locale, "Account state", "账户状态")),
+                @html.dd(account_state_label(state.locale, account.state)),
+              ]),
+            ]),
+            @html.div(
+              class="role-list",
+              [
+                for role in account.roles => {
+                  @html.span(
+                    class="role-pill",
+                    account_role_label(state.locale, role),
+                  )
+                }
+              ],
+            ),
+          ])
+        None =>
+          @html.p(
+            class="development-warning",
+            copy(
+              state.locale,
+              "Development fallback: the gateway account profile is unavailable; only portal membership is shown.",
+              "开发后备方式：网关账户资料不可用；仅显示门户成员资格。",
+            ),
+          )
+      },
+      @html.dl(class="account-facts", [
+        @html.div([
+          @html.dt(copy(state.locale, "Organization", "组织")),
+          @html.dd(class="mono", membership.organization_id),
+        ]),
+        @html.div([
+          @html.dt(copy(state.locale, "Tenant", "租户")),
+          @html.dd(class="mono", membership.tenant_ref),
+        ]),
+        @html.div([
+          @html.dt(copy(state.locale, "Subject", "主体")),
+          @html.dd(class="mono", membership.subject_ref),
+        ]),
+        @html.div([
+          @html.dt(copy(state.locale, "Browser session", "浏览器会话")),
+          @html.dd(
+            copy(
+              state.locale,
+              "Ends on logout or reload",
+              "退出登录或重新加载时结束",
+            ),
+          ),
+        ]),
+      ]),
+      @html.div(
+        class="role-list",
+        [
+          for role in membership.roles => {
+            @html.span(
+              class="role-pill",
+              enterprise_role_label(state.locale, role),
+            )
+          }
+        ],
+      ),
+      if state.browser_sessions.length() == 0 {
+        @html.nothing
+      } else {
+        @html.div(
+          class="browser-session-list",
+          [
+            @html.h3(copy(state.locale, "Browser sessions", "浏览器会话")),
+            ..browser_session_rows,
+          ],
+        )
+      },
+    ]),
+    @html.section(class="api-key-panel", [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.h2(copy(state.locale, "API keys", "API 密钥")),
+          @html.p(
+            copy(
+              state.locale,
+              "Keys are subject-bound, expiring, model-scoped credentials for API clients.",
+              "密钥是绑定主体、具有有效期并限定模型范围的 API 客户端凭据。",
+            ),
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=!can_issue || state.loading,
+          title=if can_issue {
+            copy(
+              state.locale,
+              "Create a scoped API key",
+              "创建限定范围的 API 密钥",
+            )
+          } else {
+            copy(
+              state.locale,
+              "An active Developer membership is required",
+              "需要有效的开发者成员资格",
+            )
+          },
+          on_click=command(emit, OpenApiKeyIssue),
+          copy(state.locale, "Create API key", "创建 API 密钥"),
+        ),
+      ]),
+      @html.p(class="rotation-note", [
+        @html.strong(copy(state.locale, "Rotation", "轮换")),
+        @html.span(
+          copy(
+            state.locale,
+            "Atomic rotation is not available yet. Create a replacement, update the client, then revoke the old key.",
+            "原子轮换暂不可用。请先创建替代密钥、更新客户端，再撤销旧密钥。",
+          ),
+        ),
+      ]),
+      if state.api_keys.length() == 0 {
+        @html.p(
+          class="empty-state",
+          copy(
+            state.locale,
+            "No API keys exist for this account.",
+            "此账户尚无 API 密钥。",
+          ),
+        )
+      } else {
+        @html.div(
+          class="api-key-list",
+          [
+            for key in state.api_keys => {
+              let (status, status_class) = api_key_state(
+                state.locale,
+                key,
+                state.machine_access.now_unix_ms,
+              )
+              @html.article(class="api-key-card", [
+                @html.div(class="api-key-card-heading", [
+                  @html.div([
+                    @html.h3(key.display_name),
+                    @html.span(class="mono secondary", key.key_id),
+                  ]),
+                  @html.span(
+                    class="state-pill api-key-state-\{status_class}",
+                    status,
+                  ),
+                ]),
+                @html.dl(class="account-facts api-key-facts", [
+                  @html.div([
+                    @html.dt(copy(state.locale, "Scopes", "权限范围")),
+                    @html.dd(
+                      key.scopes
+                      .map(scope => api_key_scope_label(state.locale, scope))
+                      .join(", "),
+                    ),
+                  ]),
+                  @html.div([
+                    @html.dt(copy(state.locale, "Models", "模型")),
+                    @html.dd(
+                      if key.allowed_models.length() == 0 {
+                        copy(
+                          state.locale,
+                          "All entitled models",
+                          "所有已授权模型",
+                        )
+                      } else {
+                        key.allowed_models.join(", ")
+                      },
+                    ),
+                  ]),
+                  @html.div([
+                    @html.dt(copy(state.locale, "Expires", "到期时间")),
+                    @html.dd(
+                      @contractdoc.format_unix_ms_utc(key.expires_unix_ms),
+                    ),
+                  ]),
+                  @html.div([
+                    @html.dt(copy(state.locale, "Requests", "请求数")),
+                    @html.dd(
+                      "\{key.consumed_requests} / \{key.maximum_requests}",
+                    ),
+                  ]),
+                ]),
+                @html.div(class="api-key-actions", [
+                  @html.button(
+                    type_="button",
+                    class="danger-button",
+                    disabled=key.revoked_unix_ms is Some(_) ||
+                      key.expires_unix_ms <= state.machine_access.now_unix_ms ||
+                      state.loading,
+                    on_click=command(emit, BeginRevokeApiKey(key.key_id)),
+                    copy(state.locale, "Revoke…", "撤销…"),
+                  ),
+                ]),
+              ])
+            }
+          ],
+        )
+      },
+    ]),
+    api_key_issue_dialog(state, emit),
+    one_time_secret_dialog(state, emit),
+    revoke_api_key_dialog(state, emit),
   ])
 }
 
@@ -1730,6 +2703,7 @@ fn content(
 ) -> @rabbita.Html {
   match state.route {
     Overview => overview_view(state, emit)
+    AccountAccess => account_access_view(state, emit)
     Agreements => agreements_view(state, emit)
     LeaseRequests => lease_requests_view(state, emit)
     Notifications => notifications_view(state, emit)
@@ -1779,6 +2753,8 @@ fn enterprise_view(
 ) -> @rabbita.Html {
   let stylesheet =
     #|:root{color-scheme:dark;--bg:#071016;--panel:#0d1820;--panel2:#111f29;--line:#223743;--ink:#ecf5f2;--muted:#91a7ad;--mint:#7ee0bd;--mint2:#35bd8d;--amber:#f1c66c}*{box-sizing:border-box}html{background:var(--bg);scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,rgba(53,189,141,.12),transparent 30rem),var(--bg);color:var(--ink);font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.skip-link{position:fixed;left:1rem;top:-5rem;z-index:100;padding:.65rem .9rem;background:var(--mint);color:#04251a}.skip-link:focus{top:1rem}.enterprise-root{min-height:100vh;display:grid;grid-template-columns:16rem minmax(0,1fr)}.enterprise-sidebar{position:sticky;top:0;height:100vh;padding:1.25rem 1rem;border-right:1px solid var(--line);background:rgba(7,16,22,.92);display:flex;flex-direction:column}.enterprise-brand{display:flex;gap:.75rem;align-items:center;padding:.5rem;color:var(--ink);text-decoration:none}.brand-mark{width:2.2rem;height:2.2rem;border-radius:.65rem;background:var(--mint);color:#08251c;display:grid;place-items:center;font-weight:900}.enterprise-brand span:last-child{display:flex;flex-direction:column}.enterprise-brand small{color:var(--muted)}.enterprise-sidebar nav{display:grid;gap:.3rem;margin-top:2rem}.nav-item{min-height:2.75rem;padding:.65rem .8rem;border:1px solid transparent;border-radius:.55rem;background:transparent;color:var(--muted);text-align:left;font:inherit;font-weight:700;cursor:pointer}.nav-item:hover,.nav-item:focus-visible{border-color:var(--line);color:var(--ink)}.nav-item.is-active{background:rgba(126,224,189,.1);border-color:rgba(126,224,189,.25);color:var(--mint)}.nav-link{display:flex;align-items:center;text-decoration:none}.trust-note{margin-top:auto;padding:.85rem;border:1px solid var(--line);border-radius:.7rem;background:var(--panel)}.trust-note strong{font-size:.75rem}.trust-note p{margin:.35rem 0 0;color:var(--muted);font-size:.72rem}.enterprise-main{min-width:0}.enterprise-topbar{min-height:6rem;padding:1.25rem 2rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:1rem}.eyebrow{margin:0 0 .2rem;color:var(--mint);font-size:.66rem;font-weight:850;letter-spacing:.12em}.enterprise-topbar h1{margin:0;font-size:1.65rem}.topbar-actions,.topbar-meta{display:flex;align-items:center;gap:.75rem}.topbar-meta{color:var(--muted)}.locale-control{display:flex;align-items:center;gap:.4rem}.locale-control label{color:var(--muted);font-size:.7rem}.locale-control select{min-height:44px;padding:.5rem 1.8rem .5rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#09151c;color:var(--ink);font:inherit}.status-dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--mint2)}.role-pill,.count-pill,.state-pill,.entitled{padding:.28rem .5rem;border:1px solid var(--line);border-radius:999px;font-size:.67rem}.enterprise-content{max-width:90rem;margin:0 auto;padding:2rem}.page-stack{display:grid;gap:1.25rem}.welcome-panel,.workflow-panel,.request-form,.request-history,.data-table-panel{border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96));padding:1.35rem}.welcome-panel{display:flex;justify-content:space-between;gap:2rem;align-items:end}.welcome-panel h2{max-width:50rem;margin:.2rem 0 .5rem;font-size:clamp(1.6rem,3vw,2.6rem);line-height:1.1}.welcome-panel p:last-child{max-width:48rem;margin:0;color:var(--muted)}.primary-action,.primary-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--mint2);border-radius:.55rem;background:var(--mint);color:#06251a;font:inherit;font-weight:850;cursor:pointer}.primary-action:disabled,.primary-button:disabled,.quiet-button:disabled{opacity:.42;cursor:not-allowed}.quiet-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--line);border-radius:.55rem;background:var(--panel2);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.metric{min-height:8rem;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.metric span,.metric small{display:block;color:var(--muted)}.metric strong{display:block;margin:.45rem 0;font-size:1.8rem}.workflow-panel h2,.section-heading h2,.request-form h2,.request-history h2{margin:0}.workflow-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;padding:0;list-style:none}.workflow-steps li{display:flex;gap:.7rem}.workflow-steps>li>span{flex:0 0 2rem;height:2rem;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--muted);font-weight:800}.workflow-steps .is-complete>span{background:var(--mint);color:#06251a}.workflow-steps .is-current>span{border-color:var(--amber);color:var(--amber)}.workflow-steps p{margin:.25rem 0 0;color:var(--muted);font-size:.75rem}.section-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}.section-heading p{margin:.3rem 0 0;color:var(--muted)}.record-list{display:grid;gap:.75rem}.record-card{display:flex;justify-content:space-between;gap:1.5rem;padding:1.1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.record-main{min-width:0}.record-title{display:flex;align-items:center;gap:.7rem}.record-title h3{margin:0}.record-card p{color:var(--muted)}.state-pill{color:var(--amber)}.record-meta{display:flex;flex-wrap:wrap;gap:1rem;margin:0}.record-meta div{min-width:9rem}.record-meta dt{color:var(--muted);font-size:.65rem}.record-meta dd{margin:.15rem 0 0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.record-actions{max-width:16rem;display:flex;flex-direction:column;align-items:flex-end;gap:.5rem}.record-actions small{color:var(--muted);text-align:right}.lease-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(20rem,.65fr);gap:1rem}.request-form>p{color:var(--muted)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;margin:1.25rem 0}.field-wide{grid-column:1/-1}.field label{display:block;margin-bottom:.35rem;font-weight:750}.field input,.field textarea{width:100%;min-height:2.8rem;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.field textarea{min-height:7rem;resize:vertical}.field small{display:block;margin-top:.3rem;color:var(--muted)}.request-boundary{margin:1rem 0;padding:.8rem;border-left:3px solid var(--mint);background:rgba(126,224,189,.06)}.request-boundary p{margin:.25rem 0 0}.request-history .record-card{display:block}.compact .record-meta{display:grid;gap:.5rem}.empty{color:var(--muted)}.data-table-panel{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{padding:.75rem;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-size:.7rem}.model-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.model-card{position:relative;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.model-card h3{margin:.8rem 0 .2rem}.model-card p{margin:0;color:var(--muted)}.model-card dl div{display:flex;justify-content:space-between;gap:.5rem}.model-card dt{color:var(--muted)}.model-card dd{margin:0}.model-icon{width:2.5rem;height:2.5rem;border-radius:.6rem;background:rgba(126,224,189,.13);display:grid;place-items:center;color:var(--mint);font-weight:900}.entitled{position:absolute;right:1rem;top:1rem;color:var(--mint)}.notice{margin:0 2rem;padding:.75rem 1rem;border:1px solid rgba(126,224,189,.35);border-radius:.6rem;background:rgba(126,224,189,.08);color:var(--mint)}.notice.is-error,.notice.error{border-color:rgba(241,111,111,.4);background:rgba(241,111,111,.08);color:#f5a0a0}.contract-documents{display:grid;gap:1rem}.contract-documents-header{display:flex;justify-content:space-between;align-items:end;gap:2rem;padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.contract-documents-header h1{margin:.15rem 0 .45rem}.contract-documents-header p:last-child{max-width:55rem;margin:0;color:var(--muted)}.contract-workspace{border:1px solid var(--line);border-radius:.85rem;background:var(--panel);overflow:hidden}.contract-progress{display:flex;flex-wrap:wrap;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--line);color:var(--muted)}.contract-progress strong{color:var(--mint);margin-right:auto}.contract-editor-layout{display:grid;grid-template-columns:minmax(15rem,.32fr) minmax(0,1fr)}.contract-form-nav{padding:.8rem;border-right:1px solid var(--line);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:var(--ink);font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading{max-width:48rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-offline-field{padding:.8rem;border:1px dashed #51636d;border-radius:.5rem;background:rgba(145,167,173,.05)}.contract-offline-field p{margin:.25rem 0 0;color:var(--muted)}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line)}.modal-backdrop{position:fixed;inset:0;z-index:50;padding:1rem;background:rgba(0,0,0,.7);display:grid;place-items:center}.confirmation-dialog{width:min(36rem,100%);padding:1.4rem;border:1px solid #416454;border-radius:.8rem;background:#0d1820;box-shadow:0 1.5rem 5rem rgba(0,0,0,.5)}.confirmation-dialog h2{margin-top:0}.confirmation-dialog p{color:var(--muted)}.dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}.empty-state{padding:2rem;border:1px dashed var(--line);border-radius:.8rem;color:var(--muted)}html[lang^=zh] .eyebrow{letter-spacing:.04em}@media(max-width:74rem){.metric-grid,.model-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workflow-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.lease-layout{grid-template-columns:1fr}}@media(max-width:52rem){.enterprise-root{display:block}.enterprise-sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}.enterprise-sidebar nav{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:1rem}.trust-note{margin-top:1rem}.enterprise-topbar{padding:1rem;align-items:flex-start}.topbar-actions{align-items:flex-end;flex-direction:column}.topbar-meta{display:none}.enterprise-content{padding:1rem}.welcome-panel,.record-card,.contract-documents-header{align-items:stretch;flex-direction:column}.metric-grid,.model-grid,.workflow-steps,.form-grid,.contract-field-grid{grid-template-columns:1fr}.contract-editor-layout{grid-template-columns:1fr}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line)}.field-wide{grid-column:auto}.record-actions{max-width:none;align-items:stretch}.record-actions small{text-align:left}}@media(max-width:32rem){.enterprise-sidebar nav{grid-template-columns:1fr 1fr}.enterprise-topbar{flex-wrap:wrap}.enterprise-topbar h1{font-size:1.35rem}.topbar-actions,.locale-control{width:100%;align-items:stretch}.locale-control{display:grid}.locale-control select{width:100%}.dialog-actions{display:grid}.contract-actions>*{width:100%}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+  let account_styles =
+    #|.danger-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid #7f4148;border-radius:.55rem;background:#27151a;color:#ffb2b8;font:inherit;font-weight:750;cursor:pointer}.danger-button:disabled{opacity:.42;cursor:not-allowed}.account-identity,.api-key-panel{padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.account-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin:1.1rem 0}.account-facts>div{min-width:0;padding:.7rem;border:1px solid var(--line);border-radius:.55rem;background:rgba(7,16,22,.5)}.account-facts dt{color:var(--muted);font-size:.68rem}.account-facts dd{margin:.2rem 0 0}.role-list,.api-key-actions{display:flex;flex-wrap:wrap;gap:.5rem}.account-state-active,.api-key-state-active{color:var(--mint)}.account-state-inactive,.api-key-state-expired{color:var(--amber)}.api-key-state-revoked{color:#ffadb3}.rotation-note{display:flex;gap:.65rem;padding:.8rem;border-left:3px solid var(--amber);background:rgba(241,198,108,.06);color:var(--muted)}.rotation-note strong{color:var(--amber)}.api-key-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.api-key-card{padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.api-key-card-heading{display:flex;justify-content:space-between;gap:1rem}.api-key-card h3{margin:0}.secondary{color:var(--muted);font-size:.7rem}.api-key-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.api-key-actions{justify-content:flex-end}.account-dialog{max-height:calc(100vh - 2rem);overflow:auto}.account-form{display:grid;gap:.8rem}.account-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.account-form .field select{width:100%;min-height:44px;padding:.6rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.scope-picker{display:flex;flex-wrap:wrap;gap:.5rem;border:1px solid var(--line);border-radius:.55rem;padding:.75rem}.scope-picker legend{padding:0 .35rem;color:var(--muted)}.scope-toggle{min-height:44px;padding:.55rem .75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--panel2);color:var(--ink);font:inherit}.scope-toggle.is-selected{border-color:var(--mint2);background:rgba(126,224,189,.1);color:var(--mint)}.one-time-secret{padding:1rem;border:1px solid var(--mint2);border-radius:.55rem;background:#06100d;color:#a8f4d5;white-space:pre-wrap;overflow-wrap:anywhere}.confirmation-scope{padding:.7rem;border:1px solid var(--line);border-radius:.5rem}@media(max-width:52rem){.account-facts,.api-key-list,.account-form-grid{grid-template-columns:1fr}.account-access-page .section-heading{align-items:stretch;flex-direction:column}.api-key-actions>*{width:100%}}@media(max-width:32rem){.account-dialog .dialog-actions>*{width:100%}}
   let success_notice = match state.success_message {
     Some(value) =>
       @html.p(
@@ -1799,6 +2775,7 @@ fn enterprise_view(
   }
   @html.div(class="enterprise-root", [
     @html.style_tag(stylesheet),
+    @html.style_tag(account_styles),
     @html.a(
       class="skip-link",
       href="#enterprise-main",

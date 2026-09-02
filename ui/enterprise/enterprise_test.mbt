@@ -143,3 +143,97 @@ test "tenant-provided content is escaped" {
   assert_false(html.contains("<img src=x onerror=alert(1)>"))
   assert_true(html.contains("&lt;img src=x onerror=alert(1)&gt;"))
 }
+
+///|
+test "account route presents identity membership sessions and key lifecycle" {
+  let state = @enterprise.demo_state()
+  let expired : @enterprise.ApiCredentialView = {
+    ..state.api_keys[0],
+    key_id: "key-expired",
+    display_name: "Expired integration",
+    expires_unix_ms: state.machine_access.now_unix_ms - 1L,
+  }
+  let html = @enterprise.render({
+    ..state,
+    route: AccountAccess,
+    api_keys: [..state.api_keys, expired],
+  })
+  assert_true(html.contains("Account &amp; API keys"))
+  assert_true(html.contains("Alice Chen"))
+  assert_true(html.contains("alice@example.invalid"))
+  assert_true(html.contains("Organization administrator"))
+  assert_true(html.contains("session-demo-current"))
+  assert_true(html.contains("Research notebook"))
+  assert_true(html.contains("Active"))
+  assert_true(html.contains("Revoked"))
+  assert_true(html.contains("Expired"))
+  assert_true(html.contains("Atomic rotation is not available yet"))
+  assert_false(html.contains("secret_sha256"))
+}
+
+///|
+test "API key dialogs expose accessible semantics and one-time erasure" {
+  let state = @enterprise.demo_state()
+  let issue = @enterprise.render({
+    ..state.update(OpenApiKeyIssue),
+    route: AccountAccess,
+  })
+  assert_true(issue.contains("role=\"dialog\""))
+  assert_true(issue.contains("aria-modal=\"true\""))
+  assert_true(issue.contains("Copy secret") == false)
+  let with_secret = {
+    ..state,
+    route: AccountAccess,
+    one_time_api_key_secret: Some({
+      key_id: "key-new",
+      display_name: "New integration",
+      secret: "lnx_example_one_time_secret",
+    }),
+  }
+  let revealed = @enterprise.render(with_secret)
+  assert_true(revealed.contains("role=\"alertdialog\""))
+  assert_true(revealed.contains("Copy secret"))
+  assert_true(revealed.contains("lnx_example_one_time_secret"))
+  let erased = with_secret.update(DismissOneTimeApiKeySecret)
+  assert_false(
+    @enterprise.render(erased).contains("lnx_example_one_time_secret"),
+  )
+  let revoke = @enterprise.render({
+    ..state.update(BeginRevokeApiKey("key-notebook-active")),
+    route: AccountAccess,
+  })
+  assert_true(revoke.contains("Requests using this key will fail immediately"))
+  assert_true(revoke.contains("role=\"alertdialog\""))
+}
+
+///|
+test "account route is bilingual and API key issue validation is bounded" {
+  let state = @enterprise.demo_state()
+  let ready = {
+    ..state,
+    api_key_issue_draft: {
+      ..state.api_key_issue_draft,
+      display_name: "Notebook client",
+    },
+  }
+  assert_true(@enterprise.api_key_issue_valid(ready))
+  assert_false(
+    @enterprise.api_key_issue_valid({
+      ..ready,
+      api_key_issue_draft: {
+        ..ready.api_key_issue_draft,
+        model_list_scope: false,
+        inference_scope: false,
+      },
+    }),
+  )
+  let chinese = @enterprise.render({
+    ..state,
+    route: AccountAccess,
+    locale: ChineseSimplified,
+  })
+  assert_true(chinese.contains("身份与成员资格"))
+  assert_true(chinese.contains("浏览器会话"))
+  assert_true(chinese.contains("创建 API 密钥"))
+  assert_true(chinese.contains("原子轮换暂不可用"))
+}
