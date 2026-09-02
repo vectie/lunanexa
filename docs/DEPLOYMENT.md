@@ -1105,10 +1105,11 @@ For interactive human accounts, use the opt-in
 [`IDENTITY_INGRESS.md`](IDENTITY_INGRESS.md). It keeps password/MFA and the
 upstream browser login with an approved OIDC provider, maps the verified
 issuer/subject to a stable LunaNexa account, and routes both browser hosts
-through the identity sidecar on port 8081. The sidecar exchanges signed
-identity only with `127.0.0.1:8080`; a separate gateway pod is not trusted by
-the controller. The static-token path remains only for CLI, automation,
-localhost, and the explicitly local development foundation.
+through a separate identity-gateway Deployment. A secretless, exchange-only
+relay sidecar on port 8081 forwards signed identity to `127.0.0.1:8080`, while
+ordinary `lnxs_` and `lnx_` bearer calls use the stripped direct API path. The
+static-token path remains only for CLI, automation, localhost, and the
+explicitly local development foundation.
 
 ## 8. Prepare each selected compute host
 

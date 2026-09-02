@@ -25,11 +25,13 @@ The optional deployment profile combines
 `deploy/oidc-browser-ingress.yaml` with
 `deploy/oidc-browser-ingress-controller-patch.yaml`. It is a contract for a
 reviewed, deployment-supplied OIDC identity-gateway image, not a bundled
-identity provider. The patch runs that gateway as a sidecar in every
-`lunanexa-control` pod. This placement is a security boundary: session exchange
-calls `http://127.0.0.1:8080`, and the controller accepts proxy identity only
-from a proven loopback peer. A separate gateway Deployment cannot satisfy that
-proof and must not be substituted based on NetworkPolicy alone.
+identity provider. The public gateway runs in a separate Deployment with only
+OIDC, UI, DNS, and identity-relay egress. The patch runs the same immutable
+image in `relay` mode as a minimal sidecar in every `lunanexa-control` pod. The
+relay admits only the signed session-exchange request and forwards it to
+`http://127.0.0.1:8080`; it has no Secret mount and no permitted egress. This
+split preserves the controller's proven-loopback identity boundary without
+granting the controller pod the public gateway's IdP or UI egress.
 
 ## Required OIDC behavior
 
@@ -109,9 +111,75 @@ in memory and sends it as an `Authorization: Bearer` header. LunaNexa persists
 only its digest. LunaNexa derives that secret with the separate required
 `LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET`; the identity assertion key must never
 be reused for session issuance. Reload intentionally loses this LunaNexa
-bearer; the still valid OIDC gateway session may perform a fresh, state-bound
-exchange. Long-lived automation uses separately issued `lnx_...` API keys, not
-the browser session.
+bearer from UI memory; the still valid encrypted OIDC gateway session returns
+its existing, host-bound bearer without a new exchange. Long-lived automation
+uses separately issued `lnx_...` API keys, not the browser session.
+
+## Public browser route contract
+
+The gateway must implement these same-origin routes exactly. These are public
+gateway routes; the controller does not implement them and they must never be
+sent directly to native port 8080.
+
+- `GET /auth/oidc/start?audience=operator` on the configured operator host and
+  `GET /auth/oidc/start?audience=enterprise` on the configured enterprise host
+  start Authorization Code + PKCE login. The host and audience must agree.
+  Unknown, missing, or cross-host audiences fail with `400`; the gateway must
+  not accept a caller-selected return URL.
+- `GET /auth/session` uses the current host-specific HttpOnly gateway cookie.
+  A signed-out or expired session returns `401` and no credential. On the
+  first call after OIDC login, the gateway performs one signed loopback
+  exchange and binds the resulting LunaNexa bearer to the encrypted gateway
+  session, exact host, and `operator` or `enterprise` audience. Later calls and
+  page reloads return that same still-valid bearer; they must not create
+  another LunaNexa session. A valid request returns status `200`,
+  content type `application/json`, and exactly
+  `{"session_token":"lnxs_...","csrf_token":"...","expires_unix_ms":123}`.
+  `expires_unix_ms` is an integer in the future. Both tokens are opaque and
+  bounded; neither may appear in a URL, redirect, HTML, or log. The LunaNexa
+  bearer may exist only inside the authenticated-and-encrypted HttpOnly
+  gateway session and the UI's memory. The response must include `Cache-Control: no-store`,
+  `Pragma: no-cache`, and `Vary: Cookie`.
+- `POST /auth/logout` accepts no body and requires the host-specific gateway
+  cookie plus its synchronizer token in `X-LunaNexa-CSRF`. Success returns
+  `204` with no body only after the gateway uses its bound bearer to revoke the
+  LunaNexa session, invalidates the gateway session, and expires the matching
+  cookie. Cookie cleanup still occurs if the already-expired LunaNexa bearer
+  returns `401`. Other controller failures return an error after local gateway
+  invalidation. Missing, stale, cross-session, cross-host, or incorrectly
+  sized CSRF values fail closed. The UI separately calls controller
+  `POST /v1/auth/logout` with the in-memory LunaNexa bearer before this route;
+  it erases both in-memory values even if either network call fails. That UI
+  call is a latency optimization only; the gateway remains responsible for
+  server-side LunaNexa revocation.
+
+All three routes require the exact configured `Host`, HTTPS, and same-origin
+Fetch Metadata. They emit no permissive CORS headers. `/auth/session` is the
+only cookie-authenticated credential bootstrap that does not already have a
+CSRF token; it is a same-origin, non-navigational `GET`, and its secret response
+is unreadable cross-origin. OIDC `state` and `nonce`, `SameSite=Lax`, exact-host
+validation, the fetch-metadata check, and the no-store response are all
+required. No other cookie-authenticated unsafe operation has this exception.
+
+For same-origin `/v1/*` application calls, the gateway accepts only the exact
+`Authorization: Bearer lnxs_...` value bound to the current encrypted gateway
+session, host, and audience. A bearer without that matching cookie state, or a
+bearer copied between operator and enterprise hosts, is rejected. The
+enterprise host additionally allows only `/v1/auth/`, `/v1/portal/self`,
+`/v1/portal/signature-requests`, `/v1/portal/lease-requests`,
+`/v1/notifications/self`, `/v1/contract-documents/self`,
+`/v1/contract-documents/manifest`, `/v1/offline-commerce/self`, and
+`/v1/machine-access/self`; the operator host admits the controller `/v1/`
+surface after role authorization. The gateway removes the ambient cookie and
+every identity/auth-TLS header before proxying to
+`http://lunanexa-control:8080`. Static tokens and `lnx_` API keys are rejected
+at this browser boundary; API keys use the separate authenticated API ingress.
+The controller also refuses asserted identity on this non-loopback connection,
+so the direct path cannot perform session exchange; only the relay path can do
+so. Allowlist matching uses the decoded canonical path. The gateway rejects
+dot segments, NULs, backslashes, encoded `/` or `\\`, repeated decoding, and
+any path whose canonical form differs from the request target; it never
+normalizes a hostile path into an allowed prefix.
 
 ## Cookies, CSRF, and origins
 
@@ -129,8 +197,8 @@ gateway session server-side or in an authenticated, encrypted cookie no larger
 than the gateway's reviewed limit; never place provider tokens in browser-
 readable storage.
 
-For every cookie-authenticated unsafe request, including session exchange,
-refresh, linking, and logout, the gateway must require:
+For every cookie-authenticated unsafe request, including refresh, linking, and
+logout, the gateway must require:
 
 1. an exact `Origin` match for the current operator or enterprise HTTPS host;
 2. a cryptographically random synchronizer token bound to the gateway session,
@@ -138,10 +206,10 @@ refresh, linking, and logout, the gateway must require:
 3. a content type and method accepted by the exact route.
 
 `SameSite=Lax` is defense in depth, not the CSRF check. Do not enable wildcard
-CORS or credentialed cross-origin requests. Ordinary LunaNexa `lnxs_` and
-`lnx_` bearer calls are non-ambient, but the gateway still admits them only
-from the two configured origins and must not forward legacy static operator,
-audit, or inference tokens through the production browser route.
+CORS or credentialed cross-origin requests. The gateway admits only its
+cookie-, host-, and audience-bound `lnxs_` bearer and must not forward `lnx_`
+API keys or legacy static operator, audit, or inference tokens through the
+production browser route.
 
 ## Logout and revocation
 
@@ -211,15 +279,17 @@ external DNS name; an external provider therefore needs a reviewed static-IP
 or CNI FQDN-policy overlay. Do not replace that fail-closed rule with arbitrary
 Internet egress.
 
-The base controller policy does not admit ingress-nginx or a separate identity
-pod to native controller port 8080. The OIDC overlay creates a Service selecting
-the controller pods but targeting only the sidecar's distinct `identity-http`
-port 8081. Its policy admits only label-locked ingress-nginx pods from the
-explicitly trusted ingress namespace to 8081, plus the sidecar's bounded UI,
-DNS, and IdP egress. Kubernetes NetworkPolicy is pod-scoped, so the controller
-container technically shares those overlay egress grants; the sidecar and
-controller still have separate credentials and filesystem mounts. No public
-console, enterprise, or workbench gateway may connect directly to port 8080.
+The base controller policy does not admit ingress-nginx to native controller
+port 8080. The OIDC overlay exposes the separate
+gateway Deployment to ingress-nginx and lets it reach only the UI services,
+the relay Service on 8081, the controller's ordinary bearer API on 8080, DNS,
+and the selected IdP. A second Service selects
+the controller pods but targets only the relay sidecar's distinct
+`identity-http` port 8081. The controller-pod overlay admits the identity
+gateway on ports 8081 and 8080 and adds no egress. Only stripped, cookie-bound
+`lnxs_` requests may use the 8080 route; asserted identity still requires the
+exchange-only relay and loopback hop. No public console, enterprise, or
+workbench pod may connect directly to controller port 8080.
 
 `LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` resides on the existing
 controller state PVC. Back it up and restore it with the workspace, portal,
@@ -238,8 +308,9 @@ must never be copied into a public TLS deployment.
 
 Static `LUNANEXA_OPERATOR_TOKEN`, `LUNANEXA_AUDIT_TOKEN`, and
 `LUNANEXA_INFERENCE_TOKEN` remain available to native CLI, automation, and
-local acceptance. The production browser gateway forwards only scoped
-`lnxs_...` browser sessions and `lnx_...` API keys.
+local acceptance. The production browser gateway forwards only its host- and
+cookie-bound `lnxs_...` browser session. `lnx_...` API keys use the
+non-browser API ingress.
 
 ## Acceptance checks
 
