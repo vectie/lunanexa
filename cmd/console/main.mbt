@@ -146,6 +146,39 @@ priv struct ContractGovernanceTenantRequest {
 extend ContractGovernanceTenantRequest with ToJson::{to_json}
 
 ///|
+priv struct AccountCreateIntent {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  identity_subject : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[@ui.UiAccountRole]
+  state : @ui.UiAccountState
+} derive(ToJson)
+
+///|
+extend AccountCreateIntent with ToJson::{to_json}
+
+///|
+priv struct AccountRolesIntent {
+  roles : Array[@ui.UiAccountRole]
+} derive(ToJson)
+
+///|
+extend AccountRolesIntent with ToJson::{to_json}
+
+///|
+/// One-time same-origin handoff from the external identity gateway. Both
+/// secrets remain in the Elm model only and are never put in a URL or storage.
+priv struct GatewayBrowserSession {
+  session_token : String
+  csrf_token : String
+  expires_unix_ms : Int64
+} derive(FromJson)
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -311,6 +344,37 @@ extern "js" fn request_promise(
   #|     throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
   #|   }
   #|   return text;
+  #| }
+
+///|
+extern "js" fn gateway_session_promise() -> @js.Promise =
+  #| async () => {
+  #|   const response = await fetch("/auth/session", {
+  #|     method: "GET",
+  #|     headers: { "Accept": "application/json" },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error"
+  #|   });
+  #|   if (response.status === 401 || response.status === 404) return "";
+  #|   if (!response.ok) throw new Error(`gateway session HTTP ${response.status}`);
+  #|   const text = await response.text();
+  #|   if (text.length > 4096) throw new Error("gateway session response exceeds its bound");
+  #|   return text;
+  #| }
+
+///|
+extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
+  #| async csrf => {
+  #|   if (!csrf) return;
+  #|   const response = await fetch("/auth/logout", {
+  #|     method: "POST",
+  #|     headers: { "Accept": "application/json", "X-LunaNexa-CSRF": csrf },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error"
+  #|   });
+  #|   if (!response.ok && response.status !== 401) throw new Error(`gateway logout HTTP ${response.status}`);
   #| }
 
 ///|
@@ -764,6 +828,37 @@ fn prepare_user_confirmation(
 }
 
 ///|
+fn account_confirmation_scope(
+  accounts : Array[@ui.AccountView],
+  account_id : String,
+) -> String {
+  accounts
+  .iter()
+  .find_first(account => account.account_id == account_id)
+  .map(account => {
+    "\{account.account_id} · \{account.display_name} · \{account.email} · \{account.identity_issuer}"
+  })
+  .unwrap_or(account_id)
+}
+
+///|
+fn prepare_account_confirmation(
+  state : @ui.ConsoleState,
+  account_id : String,
+  action : @ui.DestructiveAction,
+) -> @ui.ConsoleState {
+  {
+    ..state,
+    confirmation: Some(
+      @ui.confirmation_receipt(
+        action,
+        account_confirmation_scope(state.accounts, account_id),
+      ),
+    ),
+  }
+}
+
+///|
 async fn load_console(
   endpoint : String,
   token : String,
@@ -794,6 +889,27 @@ async fn load_console(
   let workspace : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/workspace", token)),
   )
+  let accounts : Array[@ui.AccountView] = @json.from_json(
+    @json.parse(request("GET", endpoint, "/v1/accounts", token)),
+  )
+  let authenticated_account : @ui.AccountView? = if token.has_prefix("lnxs_") {
+    Some(
+      @json.from_json(
+        @json.parse(request("GET", endpoint, "/v1/auth/self", token)),
+      ),
+    )
+  } else {
+    None
+  }
+  let account_sessions : Array[@ui.BrowserSessionView] = if token.has_prefix(
+      "lnxs_",
+    ) {
+    @json.from_json(
+      @json.parse(request("GET", endpoint, "/v1/auth/sessions", token)),
+    )
+  } else {
+    []
+  }
   let catalog_templates : Array[@deployment.ModelServiceTemplate] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/catalog/templates", token)),
   )
@@ -1295,6 +1411,19 @@ async fn load_console(
     ],
     notifications,
     notification_deliveries,
+    accounts,
+    authenticated_account,
+    account_sessions,
+    account_invite: {
+      account_id: "",
+      subject_ref: "",
+      identity_issuer: "",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      identity_receipt: "",
+      roles: [EnterpriseUser],
+    },
     users,
     access_grants,
     compute_leases,
@@ -1401,6 +1530,7 @@ priv struct AppModel {
   endpoint : String
   credential : String
   audit_credential : String
+  csrf_token : String
   inference_credential : String
   inference_subject_ref : String
   commercial_organization : String
@@ -1413,6 +1543,9 @@ priv struct AppModel {
 
 ///|
 priv enum AppMessage {
+  GatewaySessionLoaded(GatewayBrowserSession)
+  GatewaySessionUnavailable
+  AccountSessionChanged(String)
   CredentialChanged(String)
   AuditCredentialChanged(String)
   InferenceCredentialChanged(String)
@@ -1420,6 +1553,7 @@ priv enum AppMessage {
   CommercialOrganizationChanged(String)
   Connect
   Logout
+  SessionLogoutFinished
   Console(@ui.ConsoleMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
   ModelImportPollDue(Int64)
@@ -2155,6 +2289,31 @@ fn load_command(
 }
 
 ///|
+fn gateway_session_bootstrap_command(
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(message => emit(message), async fn() noraise {
+    try {
+      let text : String = gateway_session_promise().wait().cast()
+      if text == "" {
+        GatewaySessionUnavailable
+      } else {
+        let session : GatewayBrowserSession = @json.from_json(@json.parse(text))
+        if !session.session_token.has_prefix("lnxs_") ||
+          session.csrf_token.trim() == "" ||
+          session.expires_unix_ms <= current_unix_ms() {
+          GatewaySessionUnavailable
+        } else {
+          GatewaySessionLoaded(session)
+        }
+      }
+    } catch {
+      _ => GatewaySessionUnavailable
+    }
+  })
+}
+
+///|
 fn model_imports_active(imports : Array[@ui.ModelImportRow]) -> Bool {
   imports.any(value => value.state == Queued || value.state == Downloading)
 }
@@ -2205,11 +2364,40 @@ fn update_live(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
+    GatewaySessionLoaded(session) => {
+      let next = {
+        ..model,
+        credential: session.session_token,
+        audit_credential: session.session_token,
+        csrf_token: session.csrf_token,
+        console: {
+          ..model.console,
+          loading: true,
+          error_message: None,
+          success_message: None,
+        },
+      }
+      (next, load_command(next, emit))
+    }
+    GatewaySessionUnavailable => (model, @rabbita.none)
+    AccountSessionChanged(value) =>
+      (
+        {
+          ..model,
+          credential: value,
+          audit_credential: value,
+          csrf_token: "",
+          model_import_poll_generation: model.model_import_poll_generation + 1L,
+          console: { ..model.console, operator_authenticated: false },
+        },
+        @rabbita.none,
+      )
     CredentialChanged(value) =>
       (
         {
           ..model,
           credential: value,
+          csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           console: { ..model.console, operator_authenticated: false },
         },
@@ -2223,12 +2411,247 @@ fn update_live(
       ({ ..model, inference_subject_ref: value }, @rabbita.none)
     CommercialOrganizationChanged(value) =>
       ({ ..model, commercial_organization: value }, @rabbita.none)
-    Logout =>
+    Console(AccountInviteIdChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: {
+              ..model.console.account_invite,
+              account_id: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteSubjectRefChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: {
+              ..model.console.account_invite,
+              subject_ref: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteIssuerChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: {
+              ..model.console.account_invite,
+              identity_issuer: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteProviderSubjectChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: {
+              ..model.console.account_invite,
+              identity_subject: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteDisplayNameChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: {
+              ..model.console.account_invite,
+              display_name: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteEmailChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: { ..model.console.account_invite, email: value },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteReceiptChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: {
+              ..model.console.account_invite,
+              identity_receipt: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AccountInviteRoleToggled(role)) => {
+      let roles = @ui.account_roles_after_toggle(
+        model.console.account_invite.roles,
+        role,
+      )
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            account_invite: { ..model.console.account_invite, roles, },
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Console(SubmitAccountInvite) => {
+      let draft = model.console.account_invite
+      let body = AccountCreateIntent::{
+          account_id: draft.account_id.trim().to_owned(),
+          subject_ref: draft.subject_ref.trim().to_owned(),
+          identity_issuer: draft.identity_issuer.trim().to_owned(),
+          identity_subject: draft.identity_subject,
+          display_name: draft.display_name.trim().to_owned(),
+          email: draft.email.trim().to_owned(),
+          identity_receipt: draft.identity_receipt.trim().to_owned(),
+          roles: draft.roles,
+          state: Invited,
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/accounts",
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The external identity invitation was rejected.",
+                "外部身份邀请被拒绝。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Account \{draft.account_id} was invited.",
+                "账户 \{draft.account_id} 已邀请。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(BeginActivateAccount(account_id)) =>
+      (
+        {
+          ..model,
+          console: prepare_account_confirmation(
+            model.console,
+            account_id,
+            ActivateAccount(account_id),
+          ),
+        },
+        @rabbita.none,
+      )
+    Console(BeginSuspendAccount(account_id)) =>
+      (
+        {
+          ..model,
+          console: prepare_account_confirmation(
+            model.console,
+            account_id,
+            SuspendAccount(account_id),
+          ),
+        },
+        @rabbita.none,
+      )
+    Console(BeginRevokeAccount(account_id)) =>
+      (
+        {
+          ..model,
+          console: prepare_account_confirmation(
+            model.console,
+            account_id,
+            RevokeAccount(account_id),
+          ),
+        },
+        @rabbita.none,
+      )
+    Console(BeginSetAccountRoles(account_id, roles)) =>
+      (
+        {
+          ..model,
+          console: prepare_account_confirmation(
+            model.console,
+            account_id,
+            SetAccountRoles(account_id, roles),
+          ),
+        },
+        @rabbita.none,
+      )
+    Logout => {
+      let logout_command = if model.credential.has_prefix("lnxs_") {
+        @rabbita.perform(_ => emit(SessionLogoutFinished), async fn() noraise {
+          ignore(
+            request("POST", model.endpoint, "/v1/auth/logout", model.credential),
+          ) catch {
+            _ => ()
+          }
+          ignore(gateway_logout_promise(model.csrf_token).wait()) catch {
+            _ => ()
+          }
+        })
+      } else {
+        @rabbita.none
+      }
       (
         {
           ..model,
           credential: "",
           audit_credential: "",
+          csrf_token: "",
           inference_credential: "",
           inference_subject_ref: "",
           commercial_organization: "",
@@ -2247,8 +2670,10 @@ fn update_live(
             },
           },
         },
-        @rabbita.none,
+        logout_command,
       )
+    }
+    SessionLogoutFinished => (model, @rabbita.none)
     Console(LocaleChanged(locale)) => {
       apply_console_locale(locale)
       (switch_app_locale(model, locale), @rabbita.none)
@@ -3987,6 +4412,148 @@ fn update_live(
       })
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
+    Console(ConfirmAction(ActivateAccount(account_id))) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/accounts/\{account_id}:activate",
+              model.credential,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The account could not be activated.",
+                "无法激活该账户。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Account \{account_id} was activated.",
+                "账户 \{account_id} 已激活。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(ConfirmAction(SuspendAccount(account_id))) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/accounts/\{account_id}:suspend",
+              model.credential,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The account could not be suspended.",
+                "无法暂停该账户。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Account \{account_id} was suspended and its sessions were revoked.",
+                "账户 \{account_id} 已暂停，其会话已撤销。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(ConfirmAction(RevokeAccount(account_id))) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/accounts/\{account_id}:revoke",
+              model.credential,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The account could not be revoked.",
+                "无法撤销该账户。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Account \{account_id} was revoked and its sessions were revoked.",
+                "账户 \{account_id} 已撤销，其会话已撤销。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(ConfirmAction(SetAccountRoles(account_id, roles))) => {
+      let body = AccountRolesIntent::{ roles, }.to_json().stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/accounts/\{account_id}:set-roles",
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The account roles could not be changed.",
+                "无法更改账户角色。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Account \{account_id} roles were changed.",
+                "账户 \{account_id} 的角色已更改。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
     Console(ConfirmAction(SuspendUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
@@ -4934,8 +5501,14 @@ fn app_view(
             } else {
               "connection-state connection-state-needed"
             },
-            if model.credential != "" && model.audit_credential != "" {
-              console_copy(locale, "Credentials configured", "凭据已配置")
+            if model.credential.has_prefix("lnxs_") {
+              console_copy(
+                locale, "Account session active", "账户会话有效",
+              )
+            } else if model.credential != "" && model.audit_credential != "" {
+              console_copy(
+                locale, "Local fallback active", "本地回退有效",
+              )
             } else {
               console_copy(locale, "Credentials required", "需要凭据")
             },
@@ -4949,15 +5522,26 @@ fn app_view(
         @html.div(class="connection-form", [
           @html.div(class="connection-field", [
             @html.label(
-              for_="operator-token",
-              console_copy(locale, "Operator token", "运维令牌"),
+              for_="account-session",
+              console_copy(locale, "Account session", "账户会话"),
             ),
             @html.input(
-              id="operator-token",
+              id="account-session",
               input_type=Password,
-              value=model.credential,
+              value=if model.credential.has_prefix("lnxs_") {
+                model.credential
+              } else {
+                ""
+              },
               auto_complete=Off,
-              on_input=emit.map(value => CredentialChanged(value)),
+              on_input=emit.map(value => AccountSessionChanged(value)),
+            ),
+            @html.span(
+              class="connection-help",
+              console_copy(
+                locale, "One lnxs_ PlatformOperator session authorizes operator and audit APIs.",
+                "一个 lnxs_ PlatformOperator 会话同时授权运维和审计 API。",
+              ),
             ),
           ]),
           @html.div(class="connection-field", [
@@ -4982,19 +5566,59 @@ fn app_view(
               ),
             ),
           ]),
-          @html.div(class="connection-field", [
-            @html.label(
-              for_="audit-token",
-              console_copy(locale, "Audit token", "审计令牌"),
-            ),
-            @html.input(
-              id="audit-token",
-              input_type=Password,
-              value=model.audit_credential,
-              auto_complete=Off,
-              on_input=emit.map(value => AuditCredentialChanged(value)),
-            ),
-          ]),
+          if localhost_dev_fallback_allowed(model.endpoint) {
+            @html.div(class="connection-field", [
+              @html.label(
+                for_="operator-token",
+                console_copy(
+                  locale, "Local static operator token", "本地静态运维令牌",
+                ),
+              ),
+              @html.input(
+                id="operator-token",
+                input_type=Password,
+                value=if model.credential.has_prefix("lnxs_") {
+                  ""
+                } else {
+                  model.credential
+                },
+                auto_complete=Off,
+                on_input=emit.map(value => CredentialChanged(value)),
+              ),
+              @html.span(
+                class="connection-help",
+                console_copy(
+                  locale, "Development bootstrap only; unavailable on remote endpoints.",
+                  "仅用于开发引导；远程端点不可用。",
+                ),
+              ),
+            ])
+          } else {
+            @html.nothing
+          },
+          if localhost_dev_fallback_allowed(model.endpoint) {
+            @html.div(class="connection-field", [
+              @html.label(
+                for_="audit-token",
+                console_copy(
+                  locale, "Local static audit token", "本地静态审计令牌",
+                ),
+              ),
+              @html.input(
+                id="audit-token",
+                input_type=Password,
+                value=if model.audit_credential.has_prefix("lnxs_") {
+                  ""
+                } else {
+                  model.audit_credential
+                },
+                auto_complete=Off,
+                on_input=emit.map(value => AuditCredentialChanged(value)),
+              ),
+            ])
+          } else {
+            @html.nothing
+          },
           @html.div(class="connection-field", [
             @html.label(
               for_="inference-token",
@@ -5040,15 +5664,21 @@ fn app_view(
             @html.span(
               class="secondary",
               console_copy(
-                locale, "Credentials stay in browser memory and are never written into cluster metadata.",
-                "凭据仅保存在浏览器内存中，绝不会写入集群元数据。",
+                locale, "Account sessions stay in browser memory and are revoked through the controller on logout.",
+                "账户会话仅保存在浏览器内存中，并在退出时通过控制器撤销。",
               ),
             ),
             @html.button(
               type_="button",
               class="primary-button",
-              disabled=model.credential == "" ||
-                model.audit_credential == "" ||
+              disabled=(
+                  !model.credential.has_prefix("lnxs_") &&
+                  (
+                    !localhost_dev_fallback_allowed(model.endpoint) ||
+                    model.credential == "" ||
+                    model.audit_credential == ""
+                  )
+                ) ||
                 model.console.loading,
               on_click=emit(Connect),
               console_copy(locale, "Connect and refresh", "连接并刷新"),
@@ -5091,9 +5721,17 @@ fn login_transport_allowed(endpoint : String) -> Bool {
 }
 
 ///|
+fn localhost_dev_fallback_allowed(endpoint : String) -> Bool {
+  endpoint.has_prefix("http://127.0.0.1:") ||
+  endpoint.has_prefix("http://localhost:") ||
+  endpoint.has_prefix("https://127.0.0.1:") ||
+  endpoint.has_prefix("https://localhost:")
+}
+
+///|
 fn login_styles() -> String {
   (
-    #|*{box-sizing:border-box}html,body,#app{min-height:100%;margin:0}body{background:#f4f6fa;color:#152033;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-shell{min-height:100vh;display:grid;grid-template-columns:minmax(18rem,.8fr) minmax(28rem,1.2fr);background:radial-gradient(circle at 15% 15%,rgba(69,105,233,.2),transparent 28rem),#f4f6fa}.login-context{padding:clamp(2rem,6vw,6rem);display:flex;flex-direction:column;justify-content:space-between;background:#0b1324;color:#f7f9ff}.login-brand{display:flex;align-items:center;gap:.8rem}.login-mark{width:2.7rem;height:2.7rem;border-radius:.75rem;background:#fff;color:#111a2d;display:grid;place-items:center;font-weight:900}.login-context h1{max-width:14ch;margin:.4rem 0 1rem;font-size:clamp(2rem,4vw,4.2rem);line-height:1.02}.login-context p{max-width:42rem;color:#b8c3db}.login-boundary{padding:1rem;border:1px solid #2c3d5d;border-radius:.8rem;background:rgba(255,255,255,.04)}.login-boundary strong,.login-boundary span{display:block}.login-boundary span{margin-top:.35rem;color:#aab8d3}.login-main{padding:clamp(1.5rem,6vw,6rem);display:grid;place-items:center}.login-card{width:min(34rem,100%);padding:clamp(1.4rem,3vw,2.3rem);border:1px solid #d8deea;border-radius:1rem;background:#fff;box-shadow:0 1.5rem 5rem rgba(24,39,75,.12)}.login-card-header{display:flex;justify-content:space-between;gap:1rem;align-items:start}.login-card h2{margin:.15rem 0;font-size:1.75rem}.login-card-header p{margin:.45rem 0 0;color:#63708a}.login-locale{display:grid;gap:.3rem;color:#63708a;font-size:.75rem}.login-locale select,.login-field input{min-height:44px;border:1px solid #b9c4d6;border-radius:.55rem;background:#fff;color:#152033;font:inherit}.login-locale select{padding:.5rem 1.9rem .5rem .65rem}.login-form{display:grid;gap:1rem;margin-top:1.6rem}.login-field label{display:block;margin-bottom:.35rem;font-weight:750}.login-field input{width:100%;padding:.65rem .75rem}.login-help{display:block;margin-top:.3rem;color:#63708a;font-size:.75rem}.login-endpoint{padding:.65rem .75rem;border-radius:.55rem;background:#f0f3f8;color:#53617b;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.login-alert{padding:.75rem .85rem;border:1px solid #db8f8f;border-radius:.55rem;background:#fff3f3;color:#9a2424}.login-transport-warning{padding:.8rem;border-left:3px solid #c17a00;background:#fff8e8;color:#775000}.login-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.4rem}.login-actions button{min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font:inherit;font-weight:800;cursor:pointer}.login-actions button:disabled{opacity:.45;cursor:not-allowed}.login-actions span{color:#63708a;font-size:.75rem}@media(max-width:52rem){.login-shell{grid-template-columns:1fr}.login-context{min-height:18rem;padding:2rem}.login-context h1{font-size:2.2rem}.login-main{padding:1rem}.login-card-header{display:grid}.login-locale{justify-self:start}.login-actions{align-items:stretch;flex-direction:column}.login-actions button{width:100%}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+    #|*{box-sizing:border-box}html,body,#app{min-height:100%;margin:0}body{background:#f4f6fa;color:#152033;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-shell{min-height:100vh;display:grid;grid-template-columns:minmax(18rem,.8fr) minmax(28rem,1.2fr);background:radial-gradient(circle at 15% 15%,rgba(69,105,233,.2),transparent 28rem),#f4f6fa}.login-context{padding:clamp(2rem,6vw,6rem);display:flex;flex-direction:column;justify-content:space-between;background:#0b1324;color:#f7f9ff}.login-brand{display:flex;align-items:center;gap:.8rem}.login-mark{width:2.7rem;height:2.7rem;border-radius:.75rem;background:#fff;color:#111a2d;display:grid;place-items:center;font-weight:900}.login-context h1{max-width:14ch;margin:.4rem 0 1rem;font-size:clamp(2rem,4vw,4.2rem);line-height:1.02}.login-context p{max-width:42rem;color:#b8c3db}.login-boundary{padding:1rem;border:1px solid #2c3d5d;border-radius:.8rem;background:rgba(255,255,255,.04)}.login-boundary strong,.login-boundary span{display:block}.login-boundary span{margin-top:.35rem;color:#aab8d3}.login-main{padding:clamp(1.5rem,6vw,6rem);display:grid;place-items:center}.login-card{width:min(34rem,100%);padding:clamp(1.4rem,3vw,2.3rem);border:1px solid #d8deea;border-radius:1rem;background:#fff;box-shadow:0 1.5rem 5rem rgba(24,39,75,.12)}.login-card-header{display:flex;justify-content:space-between;gap:1rem;align-items:start}.login-card h2{margin:.15rem 0;font-size:1.75rem}.login-card-header p{margin:.45rem 0 0;color:#63708a}.login-locale{display:grid;gap:.3rem;color:#63708a;font-size:.75rem}.login-locale select,.login-field input{min-height:44px;border:1px solid #b9c4d6;border-radius:.55rem;background:#fff;color:#152033;font:inherit}.login-locale select{padding:.5rem 1.9rem .5rem .65rem}.login-form{display:grid;gap:1rem;margin-top:1.6rem}.login-field label{display:block;margin-bottom:.35rem;font-weight:750}.login-field input{width:100%;padding:.65rem .75rem}.login-help{display:block;margin-top:.3rem;color:#63708a;font-size:.75rem}.login-endpoint{padding:.65rem .75rem;border-radius:.55rem;background:#f0f3f8;color:#53617b;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.login-alert{padding:.75rem .85rem;border:1px solid #db8f8f;border-radius:.55rem;background:#fff3f3;color:#9a2424}.login-transport-warning{padding:.8rem;border-left:3px solid #c17a00;background:#fff8e8;color:#775000}.login-sso-link{display:flex;align-items:center;justify-content:center;min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font-weight:800;text-decoration:none}.login-sso-link:hover{background:#345de0}.login-sso-link:focus-visible{outline:3px solid #152f85;outline-offset:2px}.login-divider{display:flex;align-items:center;gap:.6rem;color:#63708a;font-size:.72rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#d8deea;content:""}.login-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.4rem}.login-actions button{min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font:inherit;font-weight:800;cursor:pointer}.login-actions button:disabled{opacity:.45;cursor:not-allowed}.login-actions span{color:#63708a;font-size:.75rem}.login-dev-fallback{border:1px solid #d8deea;border-radius:.6rem;background:#f8fafc}.login-dev-fallback summary{min-height:44px;padding:.7rem .8rem;cursor:pointer;color:#53617b;font-weight:750}.login-dev-fields{display:grid;gap:.8rem;padding:.8rem;border-top:1px solid #d8deea}.login-dev-warning{margin:0;color:#8a4b00;font-size:.75rem}@media(max-width:52rem){.login-shell{grid-template-columns:1fr}.login-context{min-height:18rem;padding:2rem}.login-context h1{font-size:2.2rem}.login-main{padding:1rem}.login-card-header{display:grid}.login-locale{justify-self:start}.login-actions{align-items:stretch;flex-direction:column}.login-actions button{width:100%}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
   )
 }
 
@@ -5190,41 +5828,59 @@ fn login_view(
           @html.nothing
         },
         match model.console.error_message {
-          Some(message) => @html.p(class="login-alert", message)
+          Some(message) =>
+            @html.p(
+              class="login-alert",
+              attrs=@html.Attrs::build().role("alert"),
+              message,
+            )
           None => @html.nothing
         },
         @html.div(class="login-form", [
+          if transport_allowed {
+            @html.a(
+              href="/auth/oidc/start?audience=operator",
+              class="login-sso-link",
+              console_copy(
+                locale, "Continue with organization sign-in", "使用组织账户继续",
+              ),
+            )
+          } else {
+            @html.span(
+              class="login-sso-link",
+              attrs=@html.Attrs::build().aria_disabled("true"),
+              console_copy(
+                locale, "Organization sign-in requires HTTPS", "组织登录需要 HTTPS",
+              ),
+            )
+          },
+          @html.div(
+            class="login-divider",
+            console_copy(
+              locale, "or use an issued session", "或使用已签发会话",
+            ),
+          ),
           @html.div(class="login-field", [
             @html.label(
-              for_="login-operator-token",
-              console_copy(locale, "Operator authority", "运维权限凭据"),
+              for_="login-account-session",
+              console_copy(locale, "Account session", "账户会话"),
             ),
             @html.input(
-              id="login-operator-token",
+              id="login-account-session",
               input_type=Password,
               value=model.credential,
               auto_complete=Off,
-              attrs=@html.Attrs::build().disabled(!transport_allowed),
-              on_input=emit.map(value => CredentialChanged(value)),
-            ),
-          ]),
-          @html.div(class="login-field", [
-            @html.label(
-              for_="login-audit-token",
-              console_copy(locale, "Audit authority", "审计权限凭据"),
-            ),
-            @html.input(
-              id="login-audit-token",
-              input_type=Password,
-              value=model.audit_credential,
-              auto_complete=Off,
-              attrs=@html.Attrs::build().disabled(!transport_allowed),
-              on_input=emit.map(value => AuditCredentialChanged(value)),
+              attrs=@html.Attrs::build()
+                .disabled(!transport_allowed)
+                .aria_describedby("login-account-session-help"),
+              on_input=emit.map(value => AccountSessionChanged(value)),
             ),
             @html.span(
+              id="login-account-session-help",
               class="login-help",
               console_copy(
-                locale, "Both authorities are required; neither is persisted.", "两项权限凭据均为必填，且都不会持久化。",
+                locale, "Use the short-lived lnxs_ session issued after organization sign-in. One PlatformOperator session authorizes both operations and audit reads.",
+                "使用组织登录后签发的短期 lnxs_ 会话。一个 PlatformOperator 会话同时授权运维操作和审计读取。",
               ),
             ),
           ]),
@@ -5238,8 +5894,7 @@ fn login_view(
             @html.button(
               type_="button",
               disabled=!transport_allowed ||
-                model.credential == "" ||
-                model.audit_credential == "" ||
+                !model.credential.has_prefix("lnxs_") ||
                 model.console.loading,
               on_click=emit(Connect),
               if model.console.loading {
@@ -5249,6 +5904,81 @@ fn login_view(
               },
             ),
           ]),
+          if localhost_dev_fallback_allowed(model.endpoint) {
+            @html.details(class="login-dev-fallback", [
+              @html.summary(
+                console_copy(
+                  locale, "Local development token fallback", "本地开发令牌回退",
+                ),
+              ),
+              @html.div(class="login-dev-fields", [
+                @html.p(
+                  class="login-dev-warning",
+                  console_copy(
+                    locale, "For localhost bootstrap only. Production browsers must use an external identity-provider account session.",
+                    "仅用于本机引导。生产环境浏览器必须使用外部身份提供商账户会话。",
+                  ),
+                ),
+                @html.div(class="login-field", [
+                  @html.label(
+                    for_="login-operator-token",
+                    console_copy(
+                      locale, "Static operator token", "静态运维令牌",
+                    ),
+                  ),
+                  @html.input(
+                    id="login-operator-token",
+                    input_type=Password,
+                    value=if model.credential.has_prefix("lnxs_") {
+                      ""
+                    } else {
+                      model.credential
+                    },
+                    auto_complete=Off,
+                    on_input=emit.map(value => CredentialChanged(value)),
+                  ),
+                ]),
+                @html.div(class="login-field", [
+                  @html.label(
+                    for_="login-audit-token",
+                    console_copy(
+                      locale, "Static audit token", "静态审计令牌",
+                    ),
+                  ),
+                  @html.input(
+                    id="login-audit-token",
+                    input_type=Password,
+                    value=if model.audit_credential.has_prefix("lnxs_") {
+                      ""
+                    } else {
+                      model.audit_credential
+                    },
+                    auto_complete=Off,
+                    on_input=emit.map(value => AuditCredentialChanged(value)),
+                  ),
+                ]),
+                @html.div(class="login-actions", [
+                  @html.span(
+                    console_copy(
+                      locale, "Static tokens are never stored.", "静态令牌不会被存储。",
+                    ),
+                  ),
+                  @html.button(
+                    type_="button",
+                    disabled=model.credential == "" ||
+                      model.audit_credential == "" ||
+                      model.console.loading,
+                    on_click=emit(Connect),
+                    console_copy(
+                      locale, "Use local fallback", "使用本地回退",
+                    ),
+                  ),
+                ]),
+              ]),
+            ])
+          } else {
+            @html.nothing
+          },
         ]),
       ]),
     ]),
@@ -5260,33 +5990,46 @@ fn main {
   let locale = @i18n.parse_locale(stored_locale_preference())
   let is_demo = demo_mode()
   apply_console_locale(locale)
-  @rabbita.elmish(
-    model={
-      endpoint: configured_endpoint(),
-      credential: "",
-      audit_credential: "",
-      inference_credential: "",
-      inference_subject_ref: "",
-      commercial_organization: "",
-      demo_mode: is_demo,
-      console: if is_demo {
-        {
-          ..@ui.demo_state(),
-          locale,
-          offline_commerce: { ..@ui.demo_state().offline_commerce, locale, },
-        }
-      } else {
-        {
-          ..@ui.default_state(),
-          locale,
-          offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
-        }
-      },
-      next_directive_generation: 1L,
-      contract_preview_generation: 0L,
-      model_import_poll_generation: 0L,
+  let initial_model : AppModel = {
+    endpoint: configured_endpoint(),
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: is_demo,
+    console: if is_demo {
+      {
+        ..@ui.demo_state(),
+        locale,
+        offline_commerce: { ..@ui.demo_state().offline_commerce, locale, },
+      }
+    } else {
+      {
+        ..@ui.default_state(),
+        locale,
+        offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
+      }
     },
-    view=app_view,
-    update~,
-  ).mount("app")
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  @rabbita.new(fn() {
+    let (model, emit) = @rabbita.create_state_with_init(
+      init=fn(emit) {
+        (
+          initial_model,
+          if is_demo {
+            @rabbita.none
+          } else {
+            gateway_session_bootstrap_command(emit)
+          },
+        )
+      },
+      update~,
+    )
+    model.map(model => app_view(model, emit))
+  }).mount("app")
 }
