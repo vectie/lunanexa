@@ -123,11 +123,15 @@ fn portal_error_reply(error : Error) -> HttpReply {
 }
 
 ///|
-fn ApiService::portal_subject(
+async fn ApiService::portal_subject(
   self : ApiService,
   headers : Map[String, String],
   allow_asserted_subject : Bool,
 ) -> String? {
+  match self.enterprise_session_subject(headers) {
+    Some(subject_ref) => return Some(subject_ref)
+    None => ()
+  }
   if !bearer_authorized(headers, self.inference_token) {
     return None
   }

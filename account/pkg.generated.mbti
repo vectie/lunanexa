@@ -1,0 +1,135 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/account"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/database",
+}
+
+// Values
+pub let contract_version : String
+
+pub fn identity_subject_digest(String, String) -> String
+
+pub fn role_allows(Array[AccountRole], AccountRole) -> Bool
+
+pub let snapshot_schema_version : String
+
+pub fn validate_account(HumanAccount) -> Unit raise AccountError
+
+// Errors
+pub(all) suberror AccountError {
+  InvalidInput(String)
+  AlreadyExists(String)
+  NotFound(String)
+  InvalidTransition(String)
+  Unauthorized
+  AssertionReplayed
+  InvalidSnapshot(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct AccountAuthorization {
+  session_id : String
+  account : AccountView
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type AccountPersistence
+
+pub(all) enum AccountRole {
+  PlatformOperator
+  AuditReader
+  EnterpriseUser
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AccountSnapshot {
+  schema_version : String
+  accounts : Array[HumanAccount]
+  sessions : Array[BrowserSession]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AccountState {
+  Invited
+  Active
+  Suspended
+  Revoked
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct AccountStore {
+  persistence : AccountPersistence
+  issuer_secret : String
+  mut accounts : Map[String, HumanAccount]
+  mut sessions : Map[String, BrowserSession]
+  mutex : @async.Mutex
+}
+pub async fn AccountStore::authorize(Self, String, Int64, required_role? : AccountRole) -> AccountAuthorization
+pub async fn AccountStore::create(Self, HumanAccount) -> AccountView
+pub async fn AccountStore::issue_session(Self, String, String, String, Int64, Int64) -> IssuedBrowserSession
+pub async fn AccountStore::open(String, String) -> Self
+pub async fn AccountStore::open_postgres(@database.PostgresDatabase, String) -> Self
+pub async fn AccountStore::revoke_all_sessions(Self, String, Int64) -> Int
+pub async fn AccountStore::revoke_session(Self, String, String, Int64) -> BrowserSessionView
+pub async fn AccountStore::sessions_for_account(Self, String) -> Array[BrowserSessionView]
+pub async fn AccountStore::set_roles(Self, String, Array[AccountRole], Int64) -> AccountView
+pub async fn AccountStore::set_state(Self, String, AccountState, Int64) -> AccountView
+pub async fn AccountStore::snapshot(Self) -> AccountSnapshot
+pub async fn AccountStore::views(Self) -> Array[AccountView]
+
+pub(all) struct AccountView {
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[AccountRole]
+  state : AccountState
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BrowserSession {
+  session_id : String
+  account_id : String
+  secret_sha256 : String
+  source_assertion_sha256 : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  last_used_unix_ms : Int64
+  revoked_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BrowserSessionView {
+  session_id : String
+  account_id : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  last_used_unix_ms : Int64
+  revoked_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct HumanAccount {
+  version : String
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  identity_subject_sha256 : String
+  display_name : String
+  email : String
+  identity_receipt : String
+  roles : Array[AccountRole]
+  state : AccountState
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct IssuedBrowserSession {
+  session : BrowserSessionView
+  secret : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+// Type aliases
+
+// Traits

@@ -8,6 +8,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/access",
+  "vectie/lunanexa/account",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations",
   "vectie/lunanexa/commercial/offline",
@@ -48,6 +49,8 @@ pub(all) enum ApiMethod {
 pub struct ApiService {
   global_settings : @settings.GlobalAdminSettings
   store : @vectie/lunanexa/store.FileStore
+  account_store : @account.AccountStore?
+  identity_assertion_secret : String
   access_store : @access.AccessStore?
   management_database : @database.PostgresDatabase?
   technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
@@ -128,6 +131,7 @@ pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
 pub async fn ApiService::trusted_operational_tenant_hash(Self, Map[String, String], Bool) -> String?
 pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
+pub fn ApiService::with_account_store(Self, @account.AccountStore, String) -> Self
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig) -> Self raise Failure

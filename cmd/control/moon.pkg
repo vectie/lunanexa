@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/account",
   "vectie/lunanexa/access",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations" @commercial_integrations,

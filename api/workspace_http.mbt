@@ -9,6 +9,9 @@ fn trusted_workspace_subject(
   headers : Map[String, String],
   allow_asserted_subject : Bool,
 ) -> String? {
+  if !allow_asserted_subject {
+    return None
+  }
   match header(headers, "ssl-client-verify") {
     Some(value) if value == "SUCCESS" => {
       guard header(headers, "ssl-client-subject-dn") is Some(raw_dn) &&
@@ -19,9 +22,6 @@ fn trusted_workspace_subject(
     }
     Some(_) => return None
     None => ()
-  }
-  if !allow_asserted_subject {
-    return None
   }
   guard header(headers, "X-LunaNexa-Subject") is Some(asserted_subject) else {
     return None

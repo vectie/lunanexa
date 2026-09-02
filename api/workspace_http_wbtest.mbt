@@ -6,7 +6,7 @@ test "asserted workspace subject is refused without transport proof" {
 }
 
 ///|
-test "verified ingress identity remains available to non-loopback dispatch" {
+test "verified ingress identity is available only after transport proof" {
   let raw_dn = "CN=developer,O=LunaNexa"
   let expected = "mtls:sha256:\{digest_hex(raw_dn)}"
   assert_eq(
@@ -17,6 +17,17 @@ test "verified ingress identity remains available to non-loopback dispatch" {
         "X-LunaNexa-Subject": "forged-fallback",
       },
       false,
+    ),
+    None,
+  )
+  assert_eq(
+    trusted_workspace_subject(
+      {
+        "ssl-client-verify": "SUCCESS",
+        "ssl-client-subject-dn": raw_dn,
+        "X-LunaNexa-Subject": "forged-fallback",
+      },
+      true,
     ),
     Some(expected),
   )
