@@ -2,50 +2,368 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "5e9dd5edc2a2066e2cb3b144fcaa1f639ddefe93",
-    "working_tree": "dirty-deployment-candidate",
-    "inspected_at": "2026-08-27T12:52:43Z"
+    "revision": "254542461543727721ff8f6c8863687f757c9ae3",
+    "working_tree": "dirty-docs-refresh",
+    "inspected_at": "2026-09-03T11:53:07.849Z"
   },
   "sources": [
-    {"id":"readme","path":"README.mbt.md","digest":"sha256:dda3710b4ace952539757e3ac142df6da9675f93fb1a8eca783ba493de56a84f","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:48e69376afe36bcc9e17da0483d4439df0d4519d54f301774f8bb1b59bda10f9","kind":"product-contract","public":true},
-    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:4968336075679622efc60123f6fcf7f1738771cb30fd9181ccae99bb0326fce5","kind":"architecture","public":true},
-    {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:b95f30b31b2173afc3cec9056f4e565826371cb4875b394c601a82023e52eb45","kind":"readiness","public":true},
-    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:dbf3d2be1174d28aa125218f7c698c880321bc194258237c2eaa042d1765896d","kind":"deployment","public":true},
-    {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:716a36c91304c9e213fd1fe2b8517ccf36c0c76a410275d6c15daac2feb674de","kind":"operations","public":true},
-    {"id":"operations-commerce-guide","path":"docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md","digest":"sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6","kind":"operations-and-guide-contract","public":true},
-    {"id":"recovery","path":"docs/RECOVERY_RUNBOOK.md","digest":"sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361","kind":"recovery","public":true},
-    {"id":"security","path":"docs/SECURITY_OPERATIONS.md","digest":"sha256:6446246bd965f4994adad4c5197813dfe1fc44ee509eaa93db3a8c580b42d73f","kind":"security","public":true},
-    {"id":"management-plane","path":"docs/MANAGEMENT_PLANE.md","digest":"sha256:7bc83d7f12387e198b6482fde3919e8467cab0bce0273453972b6a280ce23b43","kind":"model-service-management","public":true},
-    {"id":"workspaces","path":"docs/WORKSPACES.md","digest":"sha256:91cbc4be0e5d532235a09e5f979a8adb29f0244dc8ff639b9d182184f31b4000","kind":"workspace-authority","public":true},
-    {"id":"client-integration","path":"docs/CLIENT_INTEGRATION.md","digest":"sha256:0beb04fb744a301f772ed26e23c3b89529c34f1229a7812880f95b217c4c6e69","kind":"client-contract","public":true},
-    {"id":"database","path":"docs/DATABASE.md","digest":"sha256:d6c79faacda36e1873a76dfd2cfe937cd8f00571f0013ed805d1accde1761bd5","kind":"database","public":true},
-    {"id":"production-readiness","path":"docs/PRODUCTION_READINESS.md","digest":"sha256:062e7bfd6a7bde9adde8810d42979aea734d0fe93131d0131257e32fa71daec8","kind":"production-readiness","public":true},
-    {"id":"ui-production-validation","path":"docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md","digest":"sha256:387b655f02b99db242f2b32f49ffdea01f5be3d7a079522998ab37bc7c35d4ce","kind":"ui-acceptance-ledger","public":true},
-    {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
-    {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
-    {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:01ee6e6b19689428b3d1790a62a4bd99eb0984a2dd48fbfab9ad6b3d66a45d31","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:a69b0e41abb9ddc7210e325c2c02ea9509b9a84c558294d669cec61f33d9c06e","kind":"implementation","public":true},
-    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:db10aa03a88fae4d95476c1bce928cf0118366b9a90025042feffd100af220ba","kind":"acceptance-script","public":true},
-    {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4","kind":"hardware-qualification","public":true},
-    {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7","kind":"runtime-qualification","public":true},
-    {"id":"dgx-qualification","path":"deploy/dgx-spark/README.md","digest":"sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512","kind":"runtime-qualification","public":true}
+    {
+      "id": "readme",
+      "path": "README.mbt.md",
+      "digest": "sha256:79204302f736ee410dc9c3cb90266e86bec6c2e9f0aaeac0405be2a50b8dc5e4",
+      "kind": "overview",
+      "public": true
+    },
+    {
+      "id": "product-contract",
+      "path": "docs/PRODUCT_CONTRACT.md",
+      "digest": "sha256:48e69376afe36bcc9e17da0483d4439df0d4519d54f301774f8bb1b59bda10f9",
+      "kind": "product-contract",
+      "public": true
+    },
+    {
+      "id": "architecture",
+      "path": "docs/ARCHITECTURE.md",
+      "digest": "sha256:4968336075679622efc60123f6fcf7f1738771cb30fd9181ccae99bb0326fce5",
+      "kind": "architecture",
+      "public": true
+    },
+    {
+      "id": "implementation-status",
+      "path": "docs/IMPLEMENTATION_STATUS.md",
+      "digest": "sha256:b95f30b31b2173afc3cec9056f4e565826371cb4875b394c601a82023e52eb45",
+      "kind": "readiness",
+      "public": true
+    },
+    {
+      "id": "deployment",
+      "path": "docs/DEPLOYMENT.md",
+      "digest": "sha256:c8d878fece5d6c3db7cc030f8e7e294812b734cd3fcc5cec88ec45257e9bacd1",
+      "kind": "deployment",
+      "public": true
+    },
+    {
+      "id": "operations",
+      "path": "docs/OPERATIONS.md",
+      "digest": "sha256:716a36c91304c9e213fd1fe2b8517ccf36c0c76a410275d6c15daac2feb674de",
+      "kind": "operations",
+      "public": true
+    },
+    {
+      "id": "operations-commerce-guide",
+      "path": "docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md",
+      "digest": "sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6",
+      "kind": "operations-and-guide-contract",
+      "public": true
+    },
+    {
+      "id": "recovery",
+      "path": "docs/RECOVERY_RUNBOOK.md",
+      "digest": "sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361",
+      "kind": "recovery",
+      "public": true
+    },
+    {
+      "id": "security",
+      "path": "docs/SECURITY_OPERATIONS.md",
+      "digest": "sha256:6446246bd965f4994adad4c5197813dfe1fc44ee509eaa93db3a8c580b42d73f",
+      "kind": "security",
+      "public": true
+    },
+    {
+      "id": "management-plane",
+      "path": "docs/MANAGEMENT_PLANE.md",
+      "digest": "sha256:7bc83d7f12387e198b6482fde3919e8467cab0bce0273453972b6a280ce23b43",
+      "kind": "model-service-management",
+      "public": true
+    },
+    {
+      "id": "workspaces",
+      "path": "docs/WORKSPACES.md",
+      "digest": "sha256:8f3630affb53749303a2b184c9eb2d28daa09e18d88b7720d881b03fc81880d0",
+      "kind": "workspace-authority",
+      "public": true
+    },
+    {
+      "id": "client-integration",
+      "path": "docs/CLIENT_INTEGRATION.md",
+      "digest": "sha256:0beb04fb744a301f772ed26e23c3b89529c34f1229a7812880f95b217c4c6e69",
+      "kind": "client-contract",
+      "public": true
+    },
+    {
+      "id": "database",
+      "path": "docs/DATABASE.md",
+      "digest": "sha256:d6c79faacda36e1873a76dfd2cfe937cd8f00571f0013ed805d1accde1761bd5",
+      "kind": "database",
+      "public": true
+    },
+    {
+      "id": "production-readiness",
+      "path": "docs/PRODUCTION_READINESS.md",
+      "digest": "sha256:062e7bfd6a7bde9adde8810d42979aea734d0fe93131d0131257e32fa71daec8",
+      "kind": "production-readiness",
+      "public": true
+    },
+    {
+      "id": "ui-production-validation",
+      "path": "docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md",
+      "digest": "sha256:387b655f02b99db242f2b32f49ffdea01f5be3d7a079522998ab37bc7c35d4ce",
+      "kind": "ui-acceptance-ledger",
+      "public": true
+    },
+    {
+      "id": "future-expansion",
+      "path": "docs/FUTURE_EXPANSION_PLAN.md",
+      "digest": "sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484",
+      "kind": "product-roadmap",
+      "public": true
+    },
+    {
+      "id": "simulation",
+      "path": "docs/SIMULATION.md",
+      "digest": "sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045",
+      "kind": "simulation",
+      "public": true
+    },
+    {
+      "id": "workspace-http",
+      "path": "api/workspace_http.mbt",
+      "digest": "sha256:8cb8c5c56271b12ca834a4db3cdcd29648873bada77c641211c2ce6c49874bef",
+      "kind": "implementation",
+      "public": true
+    },
+    {
+      "id": "api-server",
+      "path": "api/server.mbt",
+      "digest": "sha256:f0921270f20c58d805cc84b416b43eda785704541f17f0c67cd6d2c5e1086767",
+      "kind": "implementation",
+      "public": true
+    },
+    {
+      "id": "release-gate",
+      "path": "scripts/release-gate.sh",
+      "digest": "sha256:db10aa03a88fae4d95476c1bce928cf0118366b9a90025042feffd100af220ba",
+      "kind": "acceptance-script",
+      "public": true
+    },
+    {
+      "id": "ascend-temporary-compute",
+      "path": "docs/ASCEND_310P3_TEMPORARY_COMPUTE.md",
+      "digest": "sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4",
+      "kind": "hardware-qualification",
+      "public": true
+    },
+    {
+      "id": "lunaflux-qualification",
+      "path": "docs/LUNAFLUX_RUNTIME_QUALIFICATION.md",
+      "digest": "sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7",
+      "kind": "runtime-qualification",
+      "public": true
+    },
+    {
+      "id": "dgx-qualification",
+      "path": "deploy/dgx-spark/README.md",
+      "digest": "sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512",
+      "kind": "runtime-qualification",
+      "public": true
+    },
+    {
+      "id": "identity-ingress",
+      "path": "docs/IDENTITY_INGRESS.md",
+      "digest": "sha256:87e175a986f227161d7d4138a32961a81bb029ebbd731c482e448bc96e790323",
+      "kind": "identity-ingress",
+      "public": true
+    },
+    {
+      "id": "access-onboarding-ux",
+      "path": "docs/ACCESS_ONBOARDING_UX.md",
+      "digest": "sha256:6b137c71bc8a6fc2a223c3cf37bdae216dfe175e8a386f38efefae65df93a8a7",
+      "kind": "access-onboarding",
+      "public": true
+    }
   ],
   "claims": [
-    {"id":"claim-provider-neutral-plane","statement":"LunaNexa is a provider-neutral model and GPU-cluster control plane, not a MoonSuite application or agent runtime.","status":"implemented","source_ids":["product-contract","architecture"],"limitations":[]},
-    {"id":"claim-managed-node-boundary","statement":"Managed GPU nodes receive the LunaNexa node agent, approved runtime containers, signed model artifacts, and bounded telemetry—not application repositories or product credentials.","status":"implemented","source_ids":["product-contract","security"],"limitations":["Live image and runtime-environment scans remain part of physical-cluster acceptance."]},
-    {"id":"claim-control-baseline","statement":"The repository implements controller, scheduling, enrollment, registry, workspace authority, deployment operations, Rabbita sites, client transport, and recovery evidence baselines.","status":"implemented","source_ids":["implementation-status"],"limitations":["Implementation is not equivalent to real four-node production acceptance."]},
-    {"id":"claim-four-node-production","statement":"The four physical DGX Spark fleet has passed complete production acceptance.","status":"planned","source_ids":["implementation-status","production-readiness"],"limitations":["Physical enrollment, real serving, measured performance, live security scans, and named human acceptance are still required."]},
-    {"id":"claim-simulation","statement":"The local four-node simulator exercises placement, routing, drain, queueing, restart, and leak-check behavior.","status":"simulated","source_ids":["simulation","implementation-status"],"limitations":["It does not validate NVIDIA hardware, thermal behavior, network topology, container runtime, or service objectives."]},
-    {"id":"claim-postgres","statement":"PostgreSQL is the production system of record for enterprise and workspace authority, with other control-plane stores still using signed file/PVC adapters.","status":"implemented","source_ids":["database","architecture"],"limitations":["The reference PostgreSQL StatefulSet is single-instance and not highly available."]},
-    {"id":"claim-workbench","statement":"The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.","status":"implemented","source_ids":["workspaces","client-integration"],"limitations":["Third-party editor handoffs are typed integration points, not bundled vendor runtimes."]},
-    {"id":"claim-one-click","statement":"A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.","status":"implemented","source_ids":["management-plane","implementation-status"],"limitations":["Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."]},
-    {"id":"claim-vllm-sglang","statement":"The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.","status":"documented","source_ids":["dgx-qualification","deployment"],"limitations":["They require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."]},
-    {"id":"claim-notifications-observability","statement":"The repository implements durable tenant notifications, actionable operator alerts, bounded structured operational events, low-cardinality metrics and receipt-based audit correlation.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["External email, SMS, webhook, metrics, log and paging destinations remain deployment-owned integrations."]},
-    {"id":"claim-offline-commerce","statement":"The repository implements a generation-fenced hybrid online/offline order, document, evidence-review and fulfillment workflow with MoonLeaf OOXML verification and renderer-bound release evidence.","status":"implemented","source_ids":["operations-commerce-guide","deployment"],"limitations":["Legal templates, object storage, malware scanning, rendering authority, payment, invoice, seal and retention procedures require named external owners before production use."]},
-    {"id":"claim-machine-access","statement":"The enterprise portal exposes a tenant-safe exclusive-machine lifecycle with opaque credential handoff, coarse reachability, automatic expiry and explicit early termination without exposing physical topology or raw credentials.","status":"implemented","source_ids":["operations-commerce-guide","security"],"limitations":["Production IdP, trusted ingress, SSH certificate authority or broker, node-local watchdog and sanitization rehearsal remain required."]},
-    {"id":"claim-guide-admin-diagnostics","statement":"The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."]},
-    {"id":"claim-two-offering-roadmap","statement":"The next major-version roadmap separates managed inference from dedicated GPU workspace access and assigns each an independent evidence-based launch gate.","status":"planned","source_ids":["future-expansion","product-contract","production-readiness"],"limitations":["Neither offering is production-ready until its physical and external acceptance gates pass."]}
+    {
+      "id": "claim-provider-neutral-plane",
+      "statement": "LunaNexa is a provider-neutral model and GPU-cluster control plane, not a MoonSuite application or agent runtime.",
+      "status": "implemented",
+      "source_ids": [
+        "product-contract",
+        "architecture"
+      ],
+      "limitations": []
+    },
+    {
+      "id": "claim-managed-node-boundary",
+      "statement": "Managed GPU nodes receive the LunaNexa node agent, approved runtime containers, signed model artifacts, and bounded telemetry—not application repositories or product credentials.",
+      "status": "implemented",
+      "source_ids": [
+        "product-contract",
+        "security"
+      ],
+      "limitations": [
+        "Live image and runtime-environment scans remain part of physical-cluster acceptance."
+      ]
+    },
+    {
+      "id": "claim-control-baseline",
+      "statement": "The repository implements controller, scheduling, enrollment, registry, workspace authority, deployment operations, Rabbita sites, client transport, and recovery evidence baselines.",
+      "status": "implemented",
+      "source_ids": [
+        "implementation-status"
+      ],
+      "limitations": [
+        "Implementation is not equivalent to real four-node production acceptance."
+      ]
+    },
+    {
+      "id": "claim-four-node-production",
+      "statement": "The four physical DGX Spark fleet has passed complete production acceptance.",
+      "status": "planned",
+      "source_ids": [
+        "implementation-status",
+        "production-readiness"
+      ],
+      "limitations": [
+        "Physical enrollment, real serving, measured performance, live security scans, and named human acceptance are still required."
+      ]
+    },
+    {
+      "id": "claim-simulation",
+      "statement": "The local four-node simulator exercises placement, routing, drain, queueing, restart, and leak-check behavior.",
+      "status": "simulated",
+      "source_ids": [
+        "simulation",
+        "implementation-status"
+      ],
+      "limitations": [
+        "It does not validate NVIDIA hardware, thermal behavior, network topology, container runtime, or service objectives."
+      ]
+    },
+    {
+      "id": "claim-postgres",
+      "statement": "PostgreSQL is the production system of record for enterprise and workspace authority, with other control-plane stores still using signed file/PVC adapters.",
+      "status": "implemented",
+      "source_ids": [
+        "database",
+        "architecture"
+      ],
+      "limitations": [
+        "The reference PostgreSQL StatefulSet is single-instance and not highly available."
+      ]
+    },
+    {
+      "id": "claim-workbench",
+      "statement": "The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.",
+      "status": "implemented",
+      "source_ids": [
+        "workspaces",
+        "client-integration"
+      ],
+      "limitations": [
+        "Third-party editor handoffs are typed integration points, not bundled vendor runtimes."
+      ]
+    },
+    {
+      "id": "claim-one-click",
+      "statement": "A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.",
+      "status": "implemented",
+      "source_ids": [
+        "management-plane",
+        "implementation-status"
+      ],
+      "limitations": [
+        "Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."
+      ]
+    },
+    {
+      "id": "claim-vllm-sglang",
+      "statement": "The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.",
+      "status": "documented",
+      "source_ids": [
+        "dgx-qualification",
+        "deployment"
+      ],
+      "limitations": [
+        "They require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."
+      ]
+    },
+    {
+      "id": "claim-notifications-observability",
+      "statement": "The repository implements durable tenant notifications, actionable operator alerts, bounded structured operational events, low-cardinality metrics and receipt-based audit correlation.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "operations"
+      ],
+      "limitations": [
+        "External email, SMS, webhook, metrics, log and paging destinations remain deployment-owned integrations."
+      ]
+    },
+    {
+      "id": "claim-offline-commerce",
+      "statement": "The repository implements a generation-fenced hybrid online/offline order, document, evidence-review and fulfillment workflow with MoonLeaf OOXML verification and renderer-bound release evidence.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "deployment"
+      ],
+      "limitations": [
+        "Legal templates, object storage, malware scanning, rendering authority, payment, invoice, seal and retention procedures require named external owners before production use."
+      ]
+    },
+    {
+      "id": "claim-machine-access",
+      "statement": "The enterprise portal exposes a tenant-safe exclusive-machine lifecycle with opaque credential handoff, coarse reachability, automatic expiry and explicit early termination without exposing physical topology or raw credentials.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "security"
+      ],
+      "limitations": [
+        "Production IdP, trusted ingress, SSH certificate authority or broker, node-local watchdog and sanitization rehearsal remain required."
+      ]
+    },
+    {
+      "id": "claim-guide-admin-diagnostics",
+      "statement": "The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "operations"
+      ],
+      "limitations": [
+        "Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."
+      ]
+    },
+    {
+      "id": "claim-human-accounts",
+      "statement": "The repository implements durable human accounts with OIDC browser sign-in, operator account and role management, account-bound API keys, and a guided account-to-WebIDE onboarding journey; the OIDC identity-gateway image itself remains a reviewed, deployment-supplied component.",
+      "status": "implemented",
+      "source_ids": [
+        "identity-ingress",
+        "access-onboarding-ux",
+        "workspaces"
+      ],
+      "limitations": [
+        "The OIDC identity-gateway image and production identity provider are external deployment inputs.",
+        "Account storage is an atomic file on the controller state volume; highly available account storage requires the future database profile."
+      ]
+    },
+    {
+      "id": "claim-two-offering-roadmap",
+      "statement": "The next major-version roadmap separates managed inference from dedicated GPU workspace access and assigns each an independent evidence-based launch gate.",
+      "status": "planned",
+      "source_ids": [
+        "future-expansion",
+        "product-contract",
+        "production-readiness"
+      ],
+      "limitations": [
+        "Neither offering is production-ready until its physical and external acceptance gates pass."
+      ]
+    }
   ],
   "open_gaps": [
     "The repository source ledger is current, but production evidence must be refreshed after the physical deployment and external-adapter acceptance run.",
