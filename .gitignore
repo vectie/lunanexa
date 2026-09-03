@@ -1,6 +1,7 @@
 /_build/
 /.mooncakes/
 /.repos/
+/submissions/
 /.moonserve-staging/
 /.DS_Store
 *.log
