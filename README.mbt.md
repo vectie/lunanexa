@@ -144,7 +144,6 @@ signature, payment or tax-invoice providers.
 - [Future P0/P1/P2 expansion and offering launch plan](docs/FUTURE_EXPANSION_PLAN.md)
 - [Architecture decisions](docs/DECISIONS.md)
 - [Four-node functional simulation](docs/SIMULATION.md)
-- [MiniCPM-o 4.5 Ascend 910C benchmark](docs/MINICPMO45_910C_BENCHMARK.md)
 - [Ascend 310P3 temporary-compute qualification](docs/ASCEND_310P3_TEMPORARY_COMPUTE.md)
 - [LunaFlux runtime qualification for LunaNexa](docs/LUNAFLUX_RUNTIME_QUALIFICATION.md)
 - [Developer workspaces and integrations](docs/WORKSPACES.md)
