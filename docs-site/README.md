@@ -41,11 +41,12 @@ paths, protocol IDs, model names, and other copy-sensitive technical values.
 Real product screenshots live below `images/` and state exactly which live UI
 condition was captured.
 
-The current reviewed repository projection records clean commit
-`b314f4a6234281a53cb245b587f3526dcbc95fe6`. This freshness label covers the
-published source ledger and local acceptance evidence only; it does not replace
-tomorrow's physical-cluster, external-adapter, legal, finance, security, or
-named-human acceptance.
+The current reviewed repository projection records commit
+`254542461543727721ff8f6c8863687f757c9ae3`, including the human-account, OIDC
+browser sign-in, API key, and guided WebIDE onboarding work. This freshness
+label covers the published source ledger and local acceptance evidence only;
+it does not replace tomorrow's physical-cluster, external-adapter, legal,
+finance, security, or named-human acceptance.
 
 ## Validate
 
