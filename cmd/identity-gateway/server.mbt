@@ -160,7 +160,9 @@ async fn handle_oidc_start(
   guard query.get("audience") == Some(audience.name()) && query.length() == 1 else {
     return send_error(connection, 400, "invalid-oidc-audience")
   }
-  let discovery = discover(config)
+  let discovery = discover(config) catch {
+    _ => return send_error(connection, 503, "oidc-discovery-unavailable")
+  }
   let state = random_token(32)
   let nonce = random_token(32)
   let verifier = random_token(48)
@@ -185,7 +187,9 @@ async fn handle_oidc_start(
     last_used_unix_ms: now,
     expires_unix_ms: now + FlowLifetimeMs,
   }
-  let flow_id = store.create(flow)
+  let flow_id = store.create(flow) catch {
+    _ => return send_error(connection, 503, "identity-session-unavailable")
+  }
   let cookie_reference = encode_cookie_reference(
     flow_id,
     config.cookie_secret(audience),
