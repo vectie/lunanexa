@@ -176,6 +176,14 @@ pub(all) enum ConsoleMessage {
   CancelModelImport(String)
   RetryModelImport(String)
   RefreshModelImports
+  BeginModelAdoption(String)
+  DismissModelAdoption
+  ModelAdoptionIdChanged(String)
+  ModelAdoptionVersionChanged(String)
+  ModelAdoptionLicenseChanged(String)
+  ModelAdoptionArchitecturesChanged(String)
+  ModelAdoptionMemoryChanged(String)
+  SubmitModelAdoption
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -261,6 +269,8 @@ pub(all) struct ConsoleState {
   model_source_results : Array[ModelSourceCatalogRow]
   model_source_total : Int64
   model_imports : Array[ModelImportRow]
+  model_adoption_draft : ModelAdoptionDraft
+  model_adopted_imports : Array[String]
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -325,6 +335,15 @@ pub(all) struct ExclusiveNodeLeaseRow {
   state : String
   generation : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelAdoptionDraft {
+  import_id : String
+  model_id : String
+  version : String
+  license_id : String
+  compatible_architectures : String
+  minimum_memory_mib : String
+} derive(Eq, @debug.Debug)
 
 pub(all) struct ModelImportRow {
   import_id : String

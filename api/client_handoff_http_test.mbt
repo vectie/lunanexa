@@ -235,6 +235,7 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     {
       "request_id": "desktop-request-1",
       "client_id": "desktop-client",
+      "project_id": "project-client",
       "allowed_models": ["text.default"],
     } : Json).stringify()
   assert_eq(

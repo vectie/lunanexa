@@ -318,6 +318,19 @@ async fn ApiService::handle_commercial_management(
   headers : Map[String, String],
   body : String,
 ) -> HttpReply {
+  self.commercial_mutex.acquire()
+  defer self.commercial_mutex.release()
+  self.handle_commercial_management_unlocked(verb, path, headers, body)
+}
+
+///|
+async fn ApiService::handle_commercial_management_unlocked(
+  self : ApiService,
+  verb : ApiMethod,
+  path : String,
+  headers : Map[String, String],
+  body : String,
+) -> HttpReply {
   if !self.operator_authorized(headers) {
     return api_error(
       401, "Unauthenticated", "valid operator authority is required", false,

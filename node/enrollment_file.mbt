@@ -1,6 +1,12 @@
 ///|
+enum EnrollmentPersistence {
+  EnrollmentFile(String)
+  EnrollmentPostgres(@database.PostgresDatabase)
+}
+
+///|
 pub struct FileEnrollmentService {
-  path : String
+  persistence : EnrollmentPersistence
   service : EnrollmentService
   mutex : @async.Mutex
 }
@@ -27,11 +33,50 @@ pub async fn FileEnrollmentService::open(
   } else {
     EnrollmentService::new()
   }
-  let durable = { path, service, mutex: Mutex() }
+  let durable = { persistence: EnrollmentFile(path), service, mutex: Mutex() }
   if !@fs.exists(path) {
     write_enrollment(path, service.snapshot())
   }
   durable
+}
+
+///|
+pub async fn FileEnrollmentService::open_postgres(
+  database : @database.PostgresDatabase,
+) -> FileEnrollmentService {
+  let payload = database.load_snapshot(
+    "node_enrollment", "lunanexa.enrollment.v2",
+  )
+  let service = match payload {
+    Some(snapshot) => EnrollmentService::restore(snapshot)
+    None => EnrollmentService::new()
+  }
+  let durable = {
+    persistence: EnrollmentPostgres(database),
+    service,
+    mutex: Mutex(),
+  }
+  if payload is None {
+    database.save_opaque_snapshot(
+      "node_enrollment",
+      "lunanexa.enrollment.v2",
+      service.snapshot(),
+    )
+  }
+  durable
+}
+
+///|
+async fn FileEnrollmentService::persist(self : FileEnrollmentService) -> Unit {
+  match self.persistence {
+    EnrollmentFile(path) => write_enrollment(path, self.service.snapshot())
+    EnrollmentPostgres(database) =>
+      database.save_opaque_snapshot(
+        "node_enrollment",
+        "lunanexa.enrollment.v2",
+        self.service.snapshot(),
+      )
+  }
 }
 
 ///|
@@ -44,7 +89,7 @@ pub async fn FileEnrollmentService::issue_token(
   self.mutex.acquire()
   defer self.mutex.release()
   let token = self.service.issue_token(token_id, secret, expires_unix_ms)
-  write_enrollment(self.path, self.service.snapshot())
+  self.persist()
   token
 }
 
@@ -70,7 +115,7 @@ pub async fn FileEnrollmentService::enroll(
     now_unix_ms,
     certificate_lifetime_ms~,
   )
-  write_enrollment(self.path, self.service.snapshot())
+  self.persist()
   certificate
 }
 
@@ -109,7 +154,7 @@ pub async fn FileEnrollmentService::renew(
     certificate_lifetime_ms~,
     renewal_grace_ms~,
   )
-  write_enrollment(self.path, self.service.snapshot())
+  self.persist()
   certificate
 }
 
@@ -122,6 +167,16 @@ pub async fn FileEnrollmentService::active_node_ids(
   defer self.mutex.release()
   let result = self.service.active_node_ids(now_unix_ms)
   result
+}
+
+///|
+pub async fn FileEnrollmentService::snapshot(
+  self : FileEnrollmentService,
+) -> String {
+  self.mutex.acquire()
+  let snapshot = self.service.snapshot()
+  self.mutex.release()
+  snapshot
 }
 
 ///|
@@ -140,6 +195,6 @@ pub async fn FileEnrollmentService::rotate(
     now_unix_ms,
     certificate_lifetime_ms~,
   )
-  write_enrollment(self.path, self.service.snapshot())
+  self.persist()
   certificate
 }

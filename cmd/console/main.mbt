@@ -178,6 +178,18 @@ priv struct AccessPackageIntent {
 extend AccessPackageIntent with ToJson::{to_json}
 
 ///|
+priv struct ModelAdoptionIntent {
+  model_id : String
+  version : String
+  license_id : String
+  compatible_architectures : Array[String]
+  minimum_memory_mib : Int
+} derive(ToJson)
+
+///|
+extend ModelAdoptionIntent with ToJson::{to_json}
+
+///|
 priv struct AccountRolesIntent {
   roles : Array[@ui.UiAccountRole]
 } derive(ToJson)
@@ -1528,6 +1540,15 @@ async fn load_console(
     model_source_results: [],
     model_source_total: 0L,
     model_imports,
+    model_adoption_draft: {
+      import_id: "",
+      model_id: "",
+      version: "",
+      license_id: "",
+      compatible_architectures: "",
+      minimum_memory_mib: "",
+    },
+    model_adopted_imports: [],
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -1547,6 +1568,7 @@ priv enum LoadOutcome {
   ModelImportsLoaded(@i18n.Locale, Array[@ui.ModelImportRow], String?)
   ModelImportsPolled(Int64, Array[@ui.ModelImportRow])
   ModelImportPollFailed(Int64, @i18n.Locale)
+  ModelAdopted(@i18n.Locale, String, String)
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
@@ -1607,6 +1629,8 @@ fn merge_loaded_console(
     model_source_results: current.model_source_results,
     model_source_total: current.model_source_total,
     model_imports: loaded.model_imports,
+    model_adoption_draft: current.model_adoption_draft,
+    model_adopted_imports: current.model_adopted_imports,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
     access_package_draft: {
@@ -2363,6 +2387,86 @@ fn gateway_session_bootstrap_command(
 ///|
 fn model_imports_active(imports : Array[@ui.ModelImportRow]) -> Bool {
   imports.any(value => value.state == Queued || value.state == Downloading)
+}
+
+///|
+fn empty_model_adoption_draft() -> @ui.ModelAdoptionDraft {
+  {
+    import_id: "",
+    model_id: "",
+    version: "",
+    license_id: "",
+    compatible_architectures: "",
+    minimum_memory_mib: "",
+  }
+}
+
+///|
+fn model_import_adoptable(import_ : @ui.ModelImportRow) -> Bool {
+  import_.source == "modelscope" &&
+  @contracts.valid_identifier(import_.import_id, maximum_length=128) &&
+  import_.state == Verified &&
+  import_.files_total > 0 &&
+  import_.files_completed == import_.files_total &&
+  import_.bytes_total > 0L &&
+  import_.bytes_completed == import_.bytes_total &&
+  import_.artifact_uri.has_prefix("s3://") &&
+  @contracts.valid_sha256_digest(import_.manifest_digest) &&
+  import_.license.trim() != ""
+}
+
+///|
+fn model_adoption_path(import_id : String) -> String {
+  "/v1/model-sources/modelscope/imports/\{import_id}:adopt"
+}
+
+///|
+fn model_adoption_architectures(value : String) -> Array[String]? {
+  let architectures : Array[String] = []
+  for part in value.split(",") {
+    let architecture = part.trim().to_owned()
+    if !@contracts.valid_identifier(architecture, maximum_length=128) {
+      return None
+    }
+    architectures.push(architecture)
+    if architectures.length() > 16 {
+      return None
+    }
+  }
+  if architectures.length() == 0 {
+    None
+  } else {
+    Some(architectures)
+  }
+}
+
+///|
+fn model_adoption_intent(
+  draft : @ui.ModelAdoptionDraft,
+) -> ModelAdoptionIntent? {
+  let model_id = draft.model_id.trim().to_owned()
+  let version = draft.version.trim().to_owned()
+  let license_id = draft.license_id.trim().to_owned()
+  guard @contracts.valid_identifier(model_id) &&
+    @contracts.valid_identifier(version) &&
+    @contracts.valid_identifier(license_id) &&
+    model_adoption_architectures(draft.compatible_architectures)
+    is Some(compatible_architectures) else {
+    return None
+  }
+  let minimum_memory_mib = @string.parse_int(draft.minimum_memory_mib.trim()) catch {
+    _ => return None
+  }
+  if minimum_memory_mib <= 0 {
+    return None
+  }
+  Some({
+    model_id,
+    version,
+    license_id,
+    compatible_architectures,
+    minimum_memory_mib,
+  })
 }
 
 ///|
@@ -3167,6 +3271,32 @@ fn update_live(
           },
         )
       }
+    Outcome(ModelAdopted(dispatched_locale, import_id, message)) => {
+      let adopted_imports = model.console.model_adopted_imports.filter(value => {
+        value != import_id
+      })
+      adopted_imports.push(import_id)
+      let next = {
+        ..model,
+        console: {
+          ..model.console,
+          model_adoption_draft: empty_model_adoption_draft(),
+          model_adopted_imports: adopted_imports,
+          loading: true,
+          error_message: None,
+          success_message: Some(
+            locale_fenced_notice(
+              model.console.locale,
+              dispatched_locale,
+              message,
+              "Model candidate registered.",
+              "候选模型已登记。",
+            ),
+          ),
+        },
+      }
+      (next, load_command(next, emit))
+    }
     Outcome(StreamComplete(events)) =>
       (
         {
@@ -4135,6 +4265,201 @@ fn update_live(
         }
       })
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(BeginModelAdoption(import_id)) => {
+      guard model.console.operator_authenticated &&
+        model.console.model_imports
+        .iter()
+        .find_first(import_ => {
+          import_.import_id == import_id && model_import_adoptable(import_)
+        })
+        is Some(_) else {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Only a complete, checksum-verified import published to an immutable s3:// URI can be adopted.",
+                  "只有完整、通过校验并发布到不可变 s3:// URI 的导入才能登记。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: { ..empty_model_adoption_draft(), import_id, },
+            error_message: None,
+            success_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Console(DismissModelAdoption) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: empty_model_adoption_draft(),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelAdoptionIdChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: {
+              ..model.console.model_adoption_draft,
+              model_id: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelAdoptionVersionChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: {
+              ..model.console.model_adoption_draft,
+              version: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelAdoptionLicenseChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: {
+              ..model.console.model_adoption_draft,
+              license_id: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelAdoptionArchitecturesChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: {
+              ..model.console.model_adoption_draft,
+              compatible_architectures: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelAdoptionMemoryChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_adoption_draft: {
+              ..model.console.model_adoption_draft,
+              minimum_memory_mib: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitModelAdoption) => {
+      let draft = model.console.model_adoption_draft
+      guard model.console.operator_authenticated &&
+        model.console.model_imports
+        .iter()
+        .find_first(import_ => {
+          import_.import_id == draft.import_id &&
+          model_import_adoptable(import_)
+        })
+        is Some(_) &&
+        model_adoption_intent(draft) is Some(intent) else {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Complete every valid registry field and confirm the import is still checksum-verified at an immutable s3:// URI.",
+                  "请填写全部有效的注册表字段，并确认导入仍已通过校验且位于不可变 s3:// URI。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let body = intent.to_json().stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              model_adoption_path(draft.import_id),
+              model.credential,
+              body~,
+            ),
+          )
+          ModelAdopted(
+            model.console.locale,
+            draft.import_id,
+            console_copy(
+              model.console.locale,
+              "The verified S3 artifact was registered as a Candidate. License, signature, evaluation, and explicit approval are still required.",
+              "已将验证过的 S3 制品登记为候选模型；仍需完成许可证、签名、评测与明确批准。",
+            ),
+          )
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The import could not be adopted. Refresh it and check for a registry identity conflict.",
+                "无法登记该导入。请刷新状态并检查注册表身份冲突。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
     }
     Console(OperationChanged(value)) =>
       (
@@ -5578,6 +5903,13 @@ fn update(
       | Console(QuickTemplateChanged(_))
       | Console(PortalNodeChanged(_))
       | Console(ModelSourceQueryChanged(_))
+      | Console(BeginModelAdoption(_))
+      | Console(DismissModelAdoption)
+      | Console(ModelAdoptionIdChanged(_))
+      | Console(ModelAdoptionVersionChanged(_))
+      | Console(ModelAdoptionLicenseChanged(_))
+      | Console(ModelAdoptionArchitecturesChanged(_))
+      | Console(ModelAdoptionMemoryChanged(_))
       | Console(OperationChanged(_))
       | Console(OperationBodyChanged(_))
       | Console(BeginDrain(_))
@@ -5651,6 +5983,7 @@ fn update(
       | Console(CancelModelImport(_))
       | Console(RetryModelImport(_))
       | Console(RefreshModelImports)
+      | Console(SubmitModelAdoption)
       | Console(SubmitOperation) =>
         (
           {

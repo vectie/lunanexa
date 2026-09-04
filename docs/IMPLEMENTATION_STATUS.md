@@ -11,8 +11,8 @@ The repository now implements the deployable LunaNexa baseline:
   normalization and truncated-stream rejection;
 - atomic durable state for controller, registry, enrollment, scheduler and
   telemetry snapshots, each with an explicit schema version;
-- model/license/evaluation/alias lifecycle enforcement, management-node digest
-  streaming,
+- model/license/evaluation/alias lifecycle enforcement, direct resumable
+  SigV4 model transfer through the configured Moongate S3 origin,
   fixed-command Cosign verification adapters and digest-pinned OCI supervision;
 - controller-signed model-service catalog templates, deterministic one-click
   deployment plans and restart-safe operations, plus selected-node resumable

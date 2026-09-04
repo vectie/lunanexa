@@ -3,6 +3,7 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 network_policy="$repository_root/deploy/network-policy.yaml"
+management_network_patch="$repository_root/deploy/management-foundation/network-policy-dev-browser-patch.yaml"
 observability="$repository_root/deploy/observability.yaml"
 controller="$repository_root/deploy/controller.yaml"
 
@@ -44,12 +45,12 @@ if ! sed -n '/  ingress:/,/  egress:/p' "$network_policy" |
   exit 1
 fi
 
-# Both public UI gateways proxy bounded controller routes. Their egress rules
-# are insufficient unless the controller independently admits each gateway.
-control_ingress="$(sed -n '1,/^  egress:/p' "$network_policy")"
+# Both public UI gateways proxy bounded controller routes. Production keeps the
+# reusable base policy closed; the management-foundation overlay admits only
+# the two co-located gateway pod identities.
 for gateway in lunanexa-console-public-gateway lunanexa-workbench-public-gateway; do
-  if ! printf '%s\n' "$control_ingress" | grep -q "app: $gateway"; then
-    echo "controller ingress does not admit $gateway" >&2
+  if ! grep -q "app: $gateway" "$management_network_patch"; then
+    echo "management controller ingress does not admit $gateway" >&2
     exit 1
   fi
 done

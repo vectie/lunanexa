@@ -80,6 +80,7 @@ metadata:
 data:
   controller-endpoint: "${CONTROLLER_ENDPOINT}"
   artifact-endpoint: "${ARTIFACT_ENDPOINT}"
+  s3-region: "${S3_REGION}"
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -219,6 +219,9 @@ async test "management readiness is protected, fail-closed, and component explic
     .with_observability_store(operational)
     .with_external_observability_collector_configured(true)
     .with_credential_handoff_store(credentials)
+    .with_credential_issuer_adapter_token(
+      "readiness-credential-issuer-adapter-token-more-than-32-bytes",
+    )
     .with_exclusive_lease_store(leases)
     .with_offline_commerce_store(offline)
     .with_lease_helper_receipt_secret("helper-readiness-secret-123456789012345")
@@ -228,6 +231,13 @@ async test "management readiness is protected, fail-closed, and component explic
     )
     .with_entitlement_authority_callback_token(
       "readiness-entitlement-authority-token-more-than-32-bytes",
+    )
+    .with_provider_callback_secrets({
+      "provider-a|production": "readiness-provider-callback-secret-more-than-32-bytes",
+    })
+    .with_commercial_provider_adapter(
+      "readiness-provider-adapter-token-more-than-32-bytes", "provider-a", "production",
+      "https://provider.example",
     )
     .with_offline_transfer_adapter(
       "https://object-transfer.example/v1/offline-transfers", "readiness-transfer-adapter-token-more-than-32-bytes",

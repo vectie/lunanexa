@@ -238,9 +238,8 @@ Use durable standard infrastructure through narrow ports:
 - transactional metadata store for desired state, generations, leases and
   audit events;
 - OCI registry for runtime images;
-- the management-node `/data/models` disk and assignment-scoped artifact
-  gateway for model artifacts, with optional external storage only behind a
-  reviewed source adapter;
+- an S3-compatible object store reached through the reviewed Moongate endpoint,
+  with node-local scoped SigV4 credentials and assignment-bound direct pull;
 - Prometheus-compatible metrics and an established log backend;
 - deployment-owned secret storage.
 

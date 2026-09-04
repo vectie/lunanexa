@@ -78,6 +78,8 @@ scripts/deploy/render-management-foundation.sh \
   --control-gid HOST_MODEL_STORE_GID \
   --runtime-endpoint http://127.0.0.1:19090/v1/responses \
   --public-api-base-url https://gpu.example.com \
+  --commercial-provider-action-origin https://provider.example \
+  --s3-region cn-east-1 \
   --controller-epoch 1
 ```
 
@@ -212,7 +214,14 @@ kubectl --kubeconfig /ABSOLUTE/KUBECONFIG -n lunanexa get pods,svc,pvc
 kubectl --kubeconfig /ABSOLUTE/KUBECONFIG -n lunanexa \
   rollout status statefulset/lunanexa-postgres --timeout=5m
 kubectl --kubeconfig /ABSOLUTE/KUBECONFIG -n lunanexa \
-  rollout status deployment/lunanexa-control --timeout=5m
+  wait --for=jsonpath='{.status.updatedReplicas}'=3 \
+  deployment/lunanexa-control --timeout=5m
+kubectl --kubeconfig /ABSOLUTE/KUBECONFIG -n lunanexa \
+  wait --for=jsonpath='{.status.replicas}'=3 \
+  deployment/lunanexa-control --timeout=5m
+kubectl --kubeconfig /ABSOLUTE/KUBECONFIG -n lunanexa \
+  wait --for=jsonpath='{.status.availableReplicas}'=1 \
+  deployment/lunanexa-control --timeout=5m
 kubectl --kubeconfig /ABSOLUTE/KUBECONFIG -n lunanexa \
   rollout status deployment/lunanexa-model-source --timeout=5m
 curl --fail http://127.0.0.1:4174/health

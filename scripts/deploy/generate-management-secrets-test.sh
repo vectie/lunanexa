@@ -14,7 +14,7 @@ test "$(rg -c '^kind: Secret$' "$manifest")" -eq 5
 for name in lunanexa-control-credentials lunanexa-database lunanexa-cosign-trust lunanexa-offline-commerce-readiness lunanexa-model-source-credentials; do
   rg -q "^  name: $name$" "$manifest"
 done
-for key in runtime-token operator-token inference-token audit-token monitoring-token assignment-signing-secret catalog-signing-secret exclusive-lease-signing-secret credential-handoff-issuer-secret client-handoff-issuer-secret lease-helper-receipt-secret guide-diagnostics-token api-key-issuer-secret account-session-issuer-secret provider-callback-secret artifact-worker-callback-token artifact-scanner-callback-token entitlement-authority-callback-token guide-admin-auth-key guide-observation-secret; do
+for key in runtime-token operator-token inference-token audit-token monitoring-token assignment-signing-secret catalog-signing-secret exclusive-lease-signing-secret credential-handoff-issuer-secret credential-issuer-adapter-token client-handoff-issuer-secret lease-helper-receipt-secret guide-diagnostics-token api-key-issuer-secret account-session-issuer-secret provider-callback-secret commercial-provider-adapter-token artifact-worker-callback-token artifact-scanner-callback-token entitlement-authority-callback-token guide-admin-auth-key guide-observation-secret; do
   rg -q "^  $key: " "$manifest"
 done
 if rg -q 'postgresql://|BEGIN (EC )?PRIVATE KEY|BEGIN PUBLIC KEY' "$manifest"; then
@@ -33,7 +33,7 @@ control_unique_count=$(awk '
   /^(kind|metadata):$/ { in_data = 0 }
   in_data && /^  [A-Za-z0-9._-]+: / { print $2 }
 ' "$manifest" | sort -u | wc -l | tr -d ' ')
-test "$control_value_count" -eq 20
+test "$control_value_count" -eq 22
 test "$control_unique_count" -eq "$control_value_count"
 awk '
   /^---$/ { exit }

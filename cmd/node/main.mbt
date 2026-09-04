@@ -24,6 +24,28 @@ async fn host_secret(
 }
 
 ///|
+async fn optional_host_secret(
+  environment_name : String,
+  path_environment_name : String,
+  default_path : String,
+) -> String? {
+  match @env.get_env_var(environment_name) {
+    Some(value) if value != "" => return Some(value)
+    _ => ()
+  }
+  let path = @env.get_env_var(path_environment_name).unwrap_or(default_path)
+  if !@fs.exists(path) {
+    return None
+  }
+  let value = @fs.read_file(path).text().trim().to_owned()
+  if value == "" {
+    None
+  } else {
+    Some(value)
+  }
+}
+
+///|
 fn endpoint(base : String, path : String) -> String {
   if base.has_suffix("/") {
     "\{base[:-1]}\{path}"
@@ -727,21 +749,55 @@ async fn main {
     )
     .map(value => @string.parse_int64(value))
     .unwrap_or(1099511627776L)
-  let materializer = @node_agent.ArtifactMaterializer::open(
-    @env.get_env_var("LUNANEXA_MODEL_CACHE_PATH").unwrap_or(
-      "/var/lib/lunanexa/models",
-    ),
-    environment("LUNANEXA_ARTIFACT_ENDPOINT"),
-    host_secret(
-      "LUNANEXA_ARTIFACT_CREDENTIAL", "LUNANEXA_ARTIFACT_CREDENTIAL_PATH", "/etc/lunanexa/artifact-credential",
-    ),
-    node_id~,
-    maximum_artifact_size_bytes~,
-    io_chunk_bytes=global_settings.node_runtime.artifact_io_chunk_bytes,
-    signature_maximum_bytes=global_settings.node_runtime.signature_artifact_maximum_bytes,
-    allow_http_loopback=@env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") ==
-      Some("1"),
+  let model_cache_path = @env.get_env_var("LUNANEXA_MODEL_CACHE_PATH").unwrap_or(
+    "/var/lib/lunanexa/models",
   )
+  let artifact_endpoint = environment("LUNANEXA_ARTIFACT_ENDPOINT")
+  let allow_http_loopback = @env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") ==
+    Some("1")
+  let materializer = match
+    @env.get_env_var("LUNANEXA_ARTIFACT_TRANSPORT").unwrap_or(
+      "controller-gateway",
+    ) {
+    "controller-gateway" =>
+      @node_agent.ArtifactMaterializer::open(
+        model_cache_path,
+        artifact_endpoint,
+        host_secret(
+          "LUNANEXA_ARTIFACT_CREDENTIAL", "LUNANEXA_ARTIFACT_CREDENTIAL_PATH", "/etc/lunanexa/artifact-credential",
+        ),
+        node_id~,
+        maximum_artifact_size_bytes~,
+        io_chunk_bytes=global_settings.node_runtime.artifact_io_chunk_bytes,
+        signature_maximum_bytes=global_settings.node_runtime.signature_artifact_maximum_bytes,
+        allow_http_loopback~,
+      )
+    "s3-sigv4" =>
+      @node_agent.ArtifactMaterializer::open_s3(
+        model_cache_path,
+        artifact_endpoint,
+        node_id,
+        host_secret(
+          "LUNANEXA_S3_ACCESS_KEY_ID", "LUNANEXA_S3_ACCESS_KEY_ID_PATH", "/etc/lunanexa/s3-access-key-id",
+        ),
+        host_secret(
+          "LUNANEXA_S3_SECRET_ACCESS_KEY", "LUNANEXA_S3_SECRET_ACCESS_KEY_PATH",
+          "/etc/lunanexa/s3-secret-access-key",
+        ),
+        environment("LUNANEXA_S3_REGION"),
+        optional_host_secret(
+          "LUNANEXA_S3_SESSION_TOKEN", "LUNANEXA_S3_SESSION_TOKEN_PATH", "/etc/lunanexa/s3-session-token",
+        ),
+        maximum_artifact_size_bytes~,
+        io_chunk_bytes=global_settings.node_runtime.artifact_io_chunk_bytes,
+        signature_maximum_bytes=global_settings.node_runtime.signature_artifact_maximum_bytes,
+        allow_http_loopback~,
+      )
+    value =>
+      raise Failure::Failure(
+        "unsupported LUNANEXA_ARTIFACT_TRANSPORT: \{value}",
+      )
+  }
   let artifact_verifier = @node_agent.CosignArtifactSignatureVerifier::new(
     environment("LUNANEXA_COSIGN_BINARY"),
     environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),

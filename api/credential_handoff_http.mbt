@@ -1,10 +1,18 @@
 ///|
 fn credential_handoff_path(path : String) -> Bool {
   path.has_prefix("/v1/machine-credentials/") ||
+  path == "/internal/v1/credential-issuer/requests" ||
+  path == "/internal/v1/credential-issuer/dispatch-receipts" ||
   (
     path.has_prefix("/v1/machine-access/self/") &&
     (path.has_suffix("/credential") || path.has_suffix("/credential:redeem"))
   )
+}
+
+///|
+fn credential_issuer_adapter_path(path : String) -> Bool {
+  path == "/internal/v1/credential-issuer/requests" ||
+  path == "/internal/v1/credential-issuer/dispatch-receipts"
 }
 
 ///|
@@ -105,7 +113,117 @@ async fn ApiService::handle_credential_handoff(
       true,
     )
   }
+  if credential_issuer_adapter_path(path) {
+    guard self.credential_issuer_adapter_token is Some(token) &&
+      bearer_authorized(headers, token) else {
+      return api_error(
+        401, "Unauthenticated", "valid credential issuer adapter authority is required",
+        false,
+      )
+    }
+    if !credentials.issuer_adapter_ready(@async.now()) {
+      return api_error(
+        503, "CredentialIssuerNotReady", "external credential issuer evidence is unavailable or expired",
+        true,
+      )
+    }
+    match (verb, path) {
+      (Get, "/internal/v1/credential-issuer/requests") =>
+        return json_reply(
+          200,
+          credentials.pending_issuer_requests(@async.now()).to_json(),
+        )
+      (Post, "/internal/v1/credential-issuer/dispatch-receipts") => {
+        let receipt : @credential.CredentialIssuerDispatchReceipt? = try
+          @json.from_json(@json.parse(body))
+        catch {
+          _ => None
+        } noraise {
+          value => Some(value)
+        }
+        guard receipt is Some(value) &&
+          credentials.issuer_request(value.request_id) is Some(request) &&
+          leases.lease(request.lease_id) is Some(lease) else {
+          return api_error(
+            404, "NotFound", "credential issuer request was not found", false,
+          )
+        }
+        let (_, record) = try
+          credentials.accept_issuer_dispatch(value, lease)
+        catch {
+          error => return credential_error_reply(error)
+        } noraise {
+          accepted => accepted
+        }
+        self.operator_audit(
+          "credential-issuer.dispatch.accept",
+          request.lease_id,
+          "credential-issuer:\{request.request_id}",
+        )
+        return json_reply(
+          200,
+          @credential.customer_view(
+            record,
+            lease.intent.subject_ref,
+            @async.now(),
+          ).to_json(),
+        )
+      }
+      _ =>
+        return api_error(
+          405, "MethodNotAllowed", "unsupported credential issuer adapter method",
+          false,
+        )
+    }
+  }
   let operator_prefix = "/v1/machine-credentials/"
+  if credential_lease_id(path, operator_prefix, ":request") is Some(lease_id) {
+    if verb != Post {
+      return api_error(405, "MethodNotAllowed", "POST required", false)
+    }
+    if !self.operator_authorized(headers) {
+      return api_error(
+        401, "Unauthenticated", "valid operator authority is required", false,
+      )
+    }
+    if self.credential_issuer_adapter_token is None ||
+      !credentials.issuer_adapter_ready(@async.now()) {
+      return api_error(
+        503, "CredentialIssuerNotReady", "credential issuer adapter authority or readiness evidence is unavailable",
+        true,
+      )
+    }
+    guard leases.lease(lease_id) is Some(lease) else {
+      return api_error(
+        404, "NotFound", "exclusive machine lease was not found", false,
+      )
+    }
+    let intent : @credential.CredentialIssuerRequestIntent? = try
+      @json.from_json(@json.parse(body))
+    catch {
+      _ => None
+    } noraise {
+      value => Some(value)
+    }
+    guard intent is Some(value) && value.lease_id == lease_id else {
+      return api_error(
+        400, "InvalidRequest", "credential issuer request is invalid", false,
+      )
+    }
+    let queued = try
+      credentials.queue_issuer_request(value, lease, @async.now())
+    catch {
+      error => return credential_error_reply(error)
+    } noraise {
+      accepted => accepted
+    }
+    self.operator_audit(
+      "credential-issuer.request.queue",
+      lease_id,
+      "credential-issuer:\{queued.request_id}",
+    )
+    return json_reply(202, queued.to_json())
+  }
   if credential_lease_id(path, operator_prefix, ":issue") is Some(lease_id) {
     if verb != Post {
       return api_error(405, "MethodNotAllowed", "POST required", false)
@@ -113,6 +231,12 @@ async fn ApiService::handle_credential_handoff(
     if !self.operator_authorized(headers) {
       return api_error(
         401, "Unauthenticated", "valid operator authority is required", false,
+      )
+    }
+    if self.credential_issuer_adapter_token is Some(_) {
+      return api_error(
+        409, "CredentialIssuerAdapterRequired", "queue the credential issuer request; direct operator redirect injection is disabled",
+        false,
       )
     }
     if !credentials.issuer_adapter_ready(@async.now()) {

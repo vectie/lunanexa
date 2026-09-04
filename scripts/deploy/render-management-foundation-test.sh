@@ -21,6 +21,8 @@ render() {
     --control-gid 1000 \
     --runtime-endpoint http://127.0.0.1:19090/v1/responses \
     --public-api-base-url http://127.0.0.1:4174 \
+    --commercial-provider-action-origin https://provider.example \
+    --s3-region cn-east-1 \
     --controller-epoch 7
 }
 
@@ -73,6 +75,8 @@ set +e
   --control-uid 1000 --control-gid 1000 \
   --runtime-endpoint http://127.0.0.1:19090/v1/responses \
   --public-api-base-url http://127.0.0.1:4174 \
+  --commercial-provider-action-origin https://provider.example \
+  --s3-region cn-east-1 \
   --controller-epoch 1 >/dev/null 2>&1
 unsafe_image_status=$?
 "$repo_root/scripts/deploy/render-management-foundation.sh" \
@@ -85,6 +89,8 @@ unsafe_image_status=$?
   --control-uid 1000 --control-gid 1000 \
   --runtime-endpoint https://runtime.example/v1/responses \
   --public-api-base-url http://127.0.0.1:4174 \
+  --commercial-provider-action-origin https://provider.example \
+  --s3-region cn-east-1 \
   --controller-epoch 1 >/dev/null 2>&1
 unsafe_endpoint_status=$?
 set -e

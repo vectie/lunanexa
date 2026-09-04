@@ -32,6 +32,30 @@ fn readiness_document_json(document : OfflineReadinessEvidenceDocument) -> Json 
 }
 
 ///|
+test "external HA PostgreSQL URL requires one exact TLS identity parameter" {
+  assert_true(
+    valid_external_ha_postgres_url(
+      "postgresql://lunanexa@postgres-ha.example/lunanexa?sslmode=verify-full",
+    ),
+  )
+  assert_true(
+    valid_external_ha_postgres_url(
+      "postgres://lunanexa@postgres-ha.example/lunanexa?connect_timeout=5&sslmode=verify-full",
+    ),
+  )
+  for
+    rejected in [
+      "postgresql://postgres-ha.example/lunanexa", "postgresql://postgres-ha.example/lunanexa?sslmode=disable&application_name=sslmode=verify-full",
+      "postgresql://postgres-ha.example/lunanexa?sslmode=verify-full&sslmode=disable",
+      "postgresql://postgres-ha.example/lunanexa?sslmode=verify-full#sslmode=disable",
+      "postgresql://postgres-ha.example/lunanexa?sslmode=verify-full%00disable",
+      " postgres://postgres-ha.example/lunanexa?sslmode=verify-full",
+    ] {
+    assert_false(valid_external_ha_postgres_url(rejected))
+  }
+}
+
+///|
 async test "signed offline readiness document is bounded and fail closed" {
   let now = @async.now()
   assert_eq(load_offline_readiness_evidence(None, None, now), ([], 0L))

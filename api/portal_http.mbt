@@ -72,6 +72,7 @@ fn decode_lease_review(body : String) -> @portal.LeaseReview? {
 ///|
 priv struct PortalApiKeyIntent {
   key_id : String
+  project_id : String
   display_name : String
   scopes : Array[@access.ApiKeyScope]
   allowed_models : Array[String]
@@ -416,21 +417,46 @@ async fn ApiService::handle_enterprise_portal(
           403, "PortalAccessDenied", "developer role is required", false,
         )
       }
-      // Contract governance is the access authority for customer-issued keys.
-      // Keep this check on the portal path as well as the operator path so a
-      // developer membership cannot bypass an absent, expired, or superseded
-      // master lease.
-      guard self.contract_document_store is Some(contract_store) else {
+      if self.management_database is Some(_) &&
+        !self.commercial_project_exists(
+          view.membership.organization_id,
+          intent.project_id,
+        ) {
         return api_error(
-          503, "ContractStoreUnavailable", "an effective master lease could not be verified",
-          true,
+          409, "CommercialProjectRequired", "a project owned by the enterprise organization is required",
+          false,
         )
       }
-      if !contract_store.has_effective_master_lease(
-          view.membership.tenant_ref,
-          subject_ref,
-          @async.now(),
-        ) {
+      let now = @async.now()
+      let contract_active = match self.contract_document_store {
+        Some(contract_store) =>
+          contract_store.has_effective_master_lease(
+            view.membership.tenant_ref,
+            subject_ref,
+            now,
+          )
+        None => false
+      }
+      let trial = match self.account_store {
+        Some(accounts) => accounts.active_trial_for_subject(subject_ref, now)
+        None => None
+      }
+      let trial_active = match trial {
+        Some(value) =>
+          value.tenant_ref == view.membership.tenant_ref &&
+          value.organization_id == view.membership.organization_id &&
+          value.project_id == intent.project_id &&
+          value.api_key_id is None &&
+          intent.expires_unix_ms <= value.expires_unix_ms &&
+          intent.maximum_requests <= value.maximum_requests &&
+          intent.scopes.all(scope => scope == ModelList || scope == Inference) &&
+          intent.allowed_models.length() > 0 &&
+          intent.allowed_models.all(model => {
+            value.allowed_models.contains(model)
+          })
+        None => false
+      }
+      if !contract_active && !trial_active {
         return api_error(
           409, "MasterLeaseRequired", "an effective master lease is required before issuing an API key",
           false,
@@ -442,13 +468,15 @@ async fn ApiService::handle_enterprise_portal(
             key_id: intent.key_id,
             tenant_ref: view.membership.tenant_ref,
             subject_ref,
+            organization_id: view.membership.organization_id,
+            project_id: intent.project_id,
             display_name: intent.display_name,
             scopes: intent.scopes,
             allowed_models: intent.allowed_models,
             expires_unix_ms: intent.expires_unix_ms,
             maximum_requests: intent.maximum_requests,
           },
-          @async.now(),
+          now,
         )
       catch {
         _ =>
@@ -457,6 +485,38 @@ async fn ApiService::handle_enterprise_portal(
           )
       } noraise {
         value => value
+      }
+      match trial {
+        Some(value) if !contract_active =>
+          match self.account_store {
+            Some(accounts) =>
+              ignore(
+                accounts.bind_trial_api_key(
+                  value.trial_id,
+                  issued.credential.key_id,
+                  now,
+                ),
+              ) catch {
+                _ => {
+                  ignore(
+                    access.revoke_for_subject(
+                      issued.credential.key_id,
+                      view.membership.tenant_ref,
+                      subject_ref,
+                      now,
+                    ),
+                  ) catch {
+                    _ => ()
+                  }
+                  return api_error(
+                    409, "TrialApiKeyRejected", "the one-time trial API key was already issued",
+                    false,
+                  )
+                }
+              }
+            None => ()
+          }
+        _ => ()
       }
       json_reply(201, issued.public_view().to_json())
     }
@@ -519,6 +579,62 @@ async fn ApiService::handle_enterprise_portal(
       }
       json_reply(200, snapshot.to_json())
     }
+    (Get, "/v1/portal/self/provider-requests") => {
+      let view = try portal.self_view(subject_ref) catch {
+        error => return portal_error_reply(error)
+      } noraise {
+        value => value
+      }
+      self.commercial_mutex.acquire()
+      defer self.commercial_mutex.release()
+      let snapshot = self.commercial_integrations.snapshot(
+        view.membership.organization_id,
+      )
+      let records = snapshot.records.filter(record => {
+        match record.kind {
+          Payment | TaxInvoice =>
+            @portal.role_allows(view.membership.roles, BillingViewer)
+          IdentityVerification =>
+            view.membership.roles.contains(OrganizationAdministrator)
+          QualifiedSignature =>
+            if !@portal.role_allows(view.membership.roles, LegalSigner) {
+              false
+            } else {
+              match
+                self.commercial_integrations.record_by_id(record.record_id) {
+                Some(raw) =>
+                  match raw.entitlement_transaction_ref {
+                    Some(link) if link.has_prefix("portal-agreement:") => {
+                      let agreement_id = link["portal-agreement:".length():].to_owned()
+                      view.agreements.any(agreement => {
+                        agreement.agreement_id == agreement_id &&
+                        agreement.signer_subject_ref == Some(subject_ref)
+                      })
+                    }
+                    _ => false
+                  }
+                None => false
+              }
+            }
+        }
+      })
+      json_reply(200, { ..snapshot, records, }.to_json())
+    }
+    (Post, "/v1/portal/payment-checkouts") => {
+      let intent : ProviderPaymentCheckoutIntent? = try
+        @json.from_json(@json.parse(body))
+      catch {
+        _ => None
+      } noraise {
+        value => Some(value)
+      }
+      guard intent is Some(value) else {
+        return api_error(
+          400, "InvalidRequest", "invalid payment checkout intent", false,
+        )
+      }
+      self.create_payment_checkout(subject_ref, value)
+    }
     (Get, "/v1/portal/self/models") => {
       ignore(
         try portal.self_view(subject_ref) catch {
@@ -559,13 +675,74 @@ async fn ApiService::handle_enterprise_portal(
           400, "InvalidRequest", "invalid signature request", false,
         )
       }
-      let persisted = try
-        portal.request_signature(subject_ref, request, @async.now())
-      catch {
+      if !@contracts.valid_identifier(request.idempotency_key) {
+        return api_error(
+          400, "InvalidRequest", "invalid signature request idempotency key", false,
+        )
+      }
+      if !self.commercial_provider_adapter_ready() {
+        return api_error(
+          503, "CommercialProviderUnavailable", "qualified-signature provider adapter is not ready",
+          true,
+        )
+      }
+      let self_view = try portal.self_view(subject_ref) catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
       }
+      let existing = self_view.agreements
+        .iter()
+        .find_first(value => value.agreement_id == request.agreement_id)
+      // Forward-repair a crash after the portal transition but before the
+      // integration outbox commit. A same signer can safely requeue the stable
+      // agreement generation even if the browser generated a new retry key.
+      let persisted = match existing {
+        Some(value) if value.state == SignatureRequested &&
+          value.signer_subject_ref == Some(subject_ref) => value
+        _ =>
+          try
+            portal.request_signature(subject_ref, request, @async.now())
+          catch {
+            error => return portal_error_reply(error)
+          } noraise {
+            value => value
+          }
+      }
+      let stable_request_key = "\{persisted.agreement_id}:\{persisted.generation}:\{persisted.rendered_document_hash}"
+      let digest = provider_request_digest(
+        persisted.organization_id,
+        stable_request_key,
+      )
+      let queued = try
+        self.queue_provider_record({
+          record_id: "signature-\{digest}",
+          organization_id: persisted.organization_id,
+          kind: QualifiedSignature,
+          provider: self.commercial_provider_name.unwrap_or(""),
+          environment: self.commercial_provider_environment.unwrap_or(""),
+          external_ref: "envelope-\{digest}",
+          state: Pending,
+          expected_amount_minor: None,
+          currency: None,
+          money_scale: None,
+          expected_document_hash: Some(persisted.rendered_document_hash),
+          entitlement_transaction_ref: Some(
+            "portal-agreement:\{persisted.agreement_id}",
+          ),
+          created_unix_ms: persisted.updated_unix_ms,
+          updated_unix_ms: persisted.updated_unix_ms,
+        })
+      catch {
+        _ =>
+          return api_error(
+            503, "CommercialPersistenceFailed", "signature request was retained but provider dispatch could not be queued",
+            true,
+          )
+      } noraise {
+        value => value
+      }
+      ignore(queued)
       json_reply(202, persisted.to_json())
     }
     (Post, "/v1/portal/lease-requests") => {

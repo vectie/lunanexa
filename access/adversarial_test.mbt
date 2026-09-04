@@ -4,6 +4,8 @@ fn valid_intent() -> @access.ApiKeyIssueIntent {
     key_id: "key-fuzz",
     tenant_ref: "tenant-fuzz",
     subject_ref: "subject-fuzz",
+    organization_id: "organization-fuzz",
+    project_id: "project-fuzz",
     display_name: "Fuzz key",
     scopes: [ModelList, Inference],
     allowed_models: ["model-fuzz"],

@@ -119,6 +119,7 @@ pub fn ControlPlane::invoke(
     usage: { input_units: 1, output_units: 2, accelerator_ms: 4L, queue_ms: 0L },
     artifact_digest: "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     runtime_version: self.version,
+    execution_node_id: None,
     timing: {
       accepted_unix_ms,
       started_unix_ms: accepted_unix_ms,

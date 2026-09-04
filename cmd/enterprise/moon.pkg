@@ -1,5 +1,6 @@
 import {
   "vectie/lunanexa/commercial",
+  "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/notifications",
@@ -16,7 +17,9 @@ import {
   "moonbit-community/rabbita/js",
   "moonbit-community/rabbita/sub",
   "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/string",
+  "moonbitlang/x/crypto",
 }
 
 supported_targets = "js"

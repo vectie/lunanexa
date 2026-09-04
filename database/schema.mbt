@@ -1,5 +1,5 @@
 ///|
-pub let schema_version : Int = 2
+pub let schema_version : Int = 3
 
 ///|
 pub let schema_sql : String =
@@ -15,6 +15,13 @@ pub let schema_sql : String =
   #|  revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
   #|  payload jsonb NOT NULL,
   #|  updated_at timestamptz NOT NULL DEFAULT now()
+  #|);
+  #|CREATE TABLE IF NOT EXISTS lunanexa.controller_leadership (
+  #|  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  #|  fencing_token bigint NOT NULL CHECK (fencing_token > 0),
+  #|  holder_id text NOT NULL CHECK (length(holder_id) BETWEEN 1 AND 256),
+  #|  backend_pid integer NOT NULL CHECK (backend_pid > 0),
+  #|  acquired_at timestamptz NOT NULL DEFAULT now()
   #|);
   #|CREATE TABLE IF NOT EXISTS lunanexa.enterprise_memberships (
   #|  membership_id text PRIMARY KEY,
@@ -94,6 +101,8 @@ pub let schema_sql : String =
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (1)
   #|ON CONFLICT (version) DO NOTHING;
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (2)
+  #|ON CONFLICT (version) DO NOTHING;
+  #|INSERT INTO lunanexa.schema_migrations(version) VALUES (3)
   #|ON CONFLICT (version) DO NOTHING;
   #|COMMIT;
 

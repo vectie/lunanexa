@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
 }
 
 // Values
@@ -72,7 +73,7 @@ pub(all) struct CapacityForecast {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct FileScheduler {
-  path : String
+  persistence : SchedulerPersistence
   mut capacity : Int
   decision_history_limit : Int
   background_capacity_percent : Int
@@ -89,6 +90,7 @@ pub async fn FileScheduler::cancel(Self, String) -> Bool
 pub async fn FileScheduler::complete(Self, String, Int64) -> Unit
 pub async fn FileScheduler::mark_started(Self, String, Int64) -> Unit
 pub async fn FileScheduler::open(String, Int, decision_history_limit? : Int, background_capacity_percent? : Int, normal_capacity_percent? : Int) -> Self
+pub async fn FileScheduler::open_postgres(@database.PostgresDatabase, Int, decision_history_limit? : Int, background_capacity_percent? : Int, normal_capacity_percent? : Int) -> Self
 pub async fn FileScheduler::place(Self, Array[NodeSnapshot], PlacementRequirements, ScorePolicy) -> PlacementDecision
 pub async fn FileScheduler::set_quota(Self, TenantQuota) -> Unit
 pub async fn FileScheduler::snapshot(Self) -> SchedulerSnapshot
@@ -148,6 +150,8 @@ pub(all) enum RejectionReason {
   DeadlineImpossible
   WorkloadAlreadyActive
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type SchedulerPersistence
 
 pub(all) struct SchedulerSnapshot {
   schema_version : String

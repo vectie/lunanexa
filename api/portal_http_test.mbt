@@ -25,6 +25,13 @@ async test "enterprise user signs, requests, and operator assigns exactly one no
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_portal_store(portal_store)
+    .with_provider_callback_secrets({
+      "provider-a|sandbox": "provider-callback-secret-more-than-32-bytes",
+    })
+    .with_commercial_provider_adapter(
+      "provider-adapter-machine-token-more-than-32-bytes", "provider-a", "sandbox",
+      "https://provider.example",
+    )
     .with_exclusive_lease_store(exclusive_store)
   let operator = { "Authorization": "Bearer operator-token" }
   let tenant = {
@@ -192,13 +199,21 @@ async test "enterprise portal denies cross-tenant and non-signer actions" {
     "\{directory}/portal.json",
   )
   let service = @api.ApiService::new(
-    @store.FileStore::open("\{directory}/state.json"),
-    runtime,
-    "operator-token",
-    "inference-token",
-    "node-token",
-    "0.1.0",
-  ).with_portal_store(portal_store)
+      @store.FileStore::open("\{directory}/state.json"),
+      runtime,
+      "operator-token",
+      "inference-token",
+      "node-token",
+      "0.1.0",
+    )
+    .with_portal_store(portal_store)
+    .with_provider_callback_secrets({
+      "provider-a|sandbox": "provider-callback-secret-more-than-32-bytes",
+    })
+    .with_commercial_provider_adapter(
+      "provider-adapter-machine-token-more-than-32-bytes", "provider-a", "sandbox",
+      "https://provider.example",
+    )
   let operator = { "Authorization": "Bearer operator-token" }
   let now = @async.now()
   ignore(

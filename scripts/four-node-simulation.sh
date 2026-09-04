@@ -137,6 +137,8 @@ start_controller() {
     LUNANEXA_OBSERVABILITY_PATH="$simulation_directory/observability.json" \
     LUNANEXA_OFFLINE_COMMERCE_PATH="$simulation_directory/offline-commerce.json" \
     LUNANEXA_ACCESS_PATH="$simulation_directory/access.json" \
+    LUNANEXA_ACCOUNT_PATH="$simulation_directory/accounts.json" \
+    LUNANEXA_ACCESS_ONBOARDING_PATH="$simulation_directory/access-onboarding.json" \
     LUNANEXA_CREDENTIAL_HANDOFF_PATH="$simulation_directory/credential-handoffs.json" \
     LUNANEXA_CLIENT_HANDOFF_PATH="$simulation_directory/client-handoffs.json" \
     LUNANEXA_TECHNICAL_PATH="$simulation_directory/technical.json" \
@@ -161,6 +163,7 @@ start_controller() {
     LUNANEXA_CATALOG_SIGNING_SECRET="simulation-catalog-authority-012345" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="simulation-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="simulation-api-key-authority-0123456789" \
+    LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET="simulation-account-session-authority" \
     LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="simulation-credential-handoff-authority" \
     LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET="simulation-client-handoff-authority" \
     LUNANEXA_CLIENT_ID="simulation-desktop" \

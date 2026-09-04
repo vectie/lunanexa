@@ -8,6 +8,10 @@ import {
   "moonbitlang/x/crypto",
 }
 
+import {
+  "moonbitlang/core/env",
+} for "test"
+
 supported_targets = "native"
 
 options(

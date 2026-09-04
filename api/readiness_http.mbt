@@ -13,6 +13,7 @@ pub(all) struct ManagementReadiness {
   notification_delivery : @notifications.NotificationDeliveryReadiness?
   observability : @observability.ObservabilityReadiness?
   offline_commerce : @offline.OfflineCommerceReadiness
+  commercial_provider_adapter_configured : Bool
   credential_broker_configured : Bool
   machine_helper_receipt_verifier_configured : Bool
   machine_helper_adapter_verified : Bool
@@ -90,8 +91,11 @@ pub async fn ApiService::management_readiness(
     None => None
   }
   let offline_commerce = self.offline_readiness(now_unix_ms)
+  let commercial_provider_adapter_configured = self.commercial_provider_adapter_ready()
   let credential_broker_configured = match self.credential_handoff_store {
-    Some(store) => store.issuer_adapter_ready(now_unix_ms)
+    Some(store) =>
+      self.credential_issuer_adapter_token is Some(_) &&
+      store.issuer_adapter_ready(now_unix_ms)
     None => false
   }
   let machine_helper_receipt_verifier_configured = self.lease_helper_receipt_secret.length() >=
@@ -181,6 +185,9 @@ pub async fn ApiService::management_readiness(
   if offline_commerce.status != OfflineCommerceReady {
     blockers.push("OfflineCommerceNotReady")
   }
+  if !commercial_provider_adapter_configured {
+    blockers.push("CommercialProviderAdapterUnavailable")
+  }
   if !credential_broker_configured {
     blockers.push("CredentialBrokerUnavailable")
   }
@@ -209,6 +216,7 @@ pub async fn ApiService::management_readiness(
     notification_delivery,
     observability,
     offline_commerce,
+    commercial_provider_adapter_configured,
     credential_broker_configured,
     machine_helper_receipt_verifier_configured,
     machine_helper_adapter_verified,
