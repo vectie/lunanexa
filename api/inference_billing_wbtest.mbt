@@ -13,6 +13,7 @@ async test "durable inference receipt is rated exactly once" {
     display_name: "Inference billing organization",
     state: Active,
     verification_ref: Some("verification-inference-billing"),
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   commercial.add_cost_center({

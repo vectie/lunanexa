@@ -153,6 +153,11 @@ async fn ApiService::handle_provider_callback(
   defer self.commercial_mutex.release()
   let before_commercial = self.commercial_store.durable_snapshot()
   let before_integrations = self.commercial_integrations.durable_snapshot()
+  let before_machine = match self.machine_commerce_store {
+    Some(machine_store) => Some(machine_store.snapshot())
+    None => None
+  }
+  let mut machine_transition_applied = false
   let (record, result) = try
     self.commercial_integrations.reconcile_callback(callback)
   catch {
@@ -183,6 +188,67 @@ async fn ApiService::handle_provider_callback(
       }
     } noraise {
       _ => ()
+    }
+  }
+  if record.kind == Payment &&
+    record.state == Settled &&
+    record.entitlement_transaction_ref is Some(link) &&
+    link.has_prefix("machine-order:") {
+    guard self.machine_commerce_store is Some(machine_store) else {
+      ignore(
+        self.commercial_integrations.replace_from_durable_snapshot(
+          before_integrations,
+        ),
+      )
+      return commercial_rejected(
+        "payment targets an unavailable machine-commerce authority",
+      )
+    }
+    let order_id = link["machine-order:".length():].to_owned()
+    guard machine_store.order(order_id) is Some(order) &&
+      order.organization_id == record.organization_id &&
+      record.expected_amount_minor is Some(amount_minor) &&
+      record.currency is Some(currency) &&
+      record.money_scale is Some(scale) else {
+      ignore(
+        self.commercial_integrations.replace_from_durable_snapshot(
+          before_integrations,
+        ),
+      )
+      return commercial_rejected(
+        "settled payment does not match a machine order",
+      )
+    }
+    let settled_amount : @commercial.FixedMoney = {
+      minor_units: amount_minor,
+      currency,
+      scale,
+    }
+    try
+      ignore(
+        machine_store.activate_settled_payment(
+          order_id,
+          {
+            provider_event_id: event_id,
+            payment_ref: "provider:\{provider}:\{record.external_ref}",
+            settled_amount,
+          },
+          event_unix_ms,
+        ),
+      )
+    catch {
+      _ => {
+        ignore(
+          self.commercial_integrations.replace_from_durable_snapshot(
+            before_integrations,
+          ),
+        )
+        return commercial_rejected(
+          "settled payment could not activate the machine order",
+        )
+      }
+    } noraise {
+      _ => machine_transition_applied = true
     }
   }
   if record.kind == QualifiedSignature &&
@@ -267,6 +333,15 @@ async fn ApiService::handle_provider_callback(
           before_integrations,
         ),
       )
+      if machine_transition_applied {
+        match (self.machine_commerce_store, before_machine) {
+          (Some(machine_store), Some(snapshot)) =>
+            ignore(machine_store.replace_from_snapshot(snapshot)) catch {
+              _ => ()
+            }
+          _ => ()
+        }
+      }
       return api_error(
         503, "CommercialPersistenceFailed", "provider callback was rolled back because durable commit failed",
         true,

@@ -152,6 +152,8 @@ spec:
                   optional: true
             - name: LUNANEXA_OFFLINE_COMMERCE_PATH
               value: /var/lib/lunanexa/offline-commerce.json
+            - name: LUNANEXA_MACHINE_COMMERCE_PATH
+              value: /var/lib/lunanexa/machine-commerce.json
             - name: LUNANEXA_CONTRACT_DOCUMENT_PATH
               value: /var/lib/lunanexa/contract-documents.json
             - name: LUNANEXA_CONTRACT_TEMPLATE_PATH
@@ -372,6 +374,11 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: catalog-signing-secret
+            - name: LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: machine-commerce-signing-secret
             - name: LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET
               valueFrom:
                 secretKeyRef:

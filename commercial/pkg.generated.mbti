@@ -98,6 +98,7 @@ pub(all) struct AgreementTemplate {
   locale : String
   effective_unix_ms : Int64
   rendered_document_hash : String
+  document_uri : String?
   state : AgreementTemplateState
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
@@ -106,6 +107,12 @@ pub(all) enum AgreementTemplateState {
   DraftTemplate
   ReadyTemplate
   SupersededTemplate
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct BillingContact {
+  display_name : String
+  email : String
+  phone : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct Budget {
@@ -355,7 +362,18 @@ pub(all) struct Organization {
   display_name : String
   state : OrganizationState
   verification_ref : String?
+  legal_profile : OrganizationLegalProfile?
   created_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OrganizationLegalProfile {
+  subject_kind : OrganizationSubjectKind
+  legal_name : String
+  country_code : String
+  registration_number : String?
+  tax_identifier : String?
+  registered_address : String
+  billing_contact : BillingContact
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum OrganizationRole {
@@ -371,10 +389,17 @@ pub(all) enum OrganizationRole {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum OrganizationState {
+  Draft
   PendingVerification
   Active
+  Rejected
   Suspended
   Closed
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum OrganizationSubjectKind {
+  Individual
+  Company
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct Project {
