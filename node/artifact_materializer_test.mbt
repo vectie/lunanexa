@@ -156,6 +156,68 @@ async test "assigned node materializes verifies reuses and prunes its model" {
 }
 
 ///|
+async test "direct S3 mode signs exact assigned objects without exposing secret" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  let signed_requests = Ref(0)
+  let secret_exposed = Ref(false)
+  let session_seen = Ref(false)
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever() <| ((request, _, connection) => {
+        let authorization = request_header(request.headers, "Authorization").unwrap_or(
+          "",
+        )
+        if authorization.has_prefix("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/") &&
+          authorization.contains("/test-region-1/s3/aws4_request") &&
+          authorization.contains(
+            "SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token",
+          ) &&
+          request_header(request.headers, "X-Amz-Content-Sha256") ==
+          Some("UNSIGNED-PAYLOAD") &&
+          request_header(request.headers, "X-Amz-Date").map_or(false, value => {
+            value.length() == 16 && value.has_suffix("Z")
+          }) {
+          signed_requests.val += 1
+        }
+        secret_exposed.val = secret_exposed.val ||
+          authorization.contains("very-secret-signing-key")
+        session_seen.val = session_seen.val ||
+          request_header(request.headers, "X-Amz-Security-Token") ==
+          Some("short-lived-session-token")
+        connection.send_response(200, "OK")
+        if request.path.has_suffix(".sig") {
+          connection.write_string("detached-signature")
+        } else {
+          connection.write_string("artifact-bytes")
+        }
+        connection.end_response()
+      })
+    }
+    let directory = @fs.tmpdir(prefix="lunanexa-direct-s3-")
+    let materializer = @node.ArtifactMaterializer::open_s3(
+      directory,
+      "http://\{server.addr}",
+      "node-a",
+      "AKIDEXAMPLE",
+      "very-secret-signing-key",
+      "test-region-1",
+      Some("short-lived-session-token"),
+      maximum_artifact_size_bytes=1024L,
+      allow_http_loopback=true,
+    )
+    let artifact = materializer.materialize(materialization_assignment(), {
+      calls: 0,
+    })
+    assert_true(@fs.exists(artifact.host_path()))
+    assert_eq(signed_requests.val, 2)
+    assert_true(session_seen.val)
+    assert_false(secret_exposed.val)
+    @fs.rmdir(directory, recursive=true)
+    server.close()
+  }
+}
+
+///|
 async test "digest mismatch quarantines the selected node download" {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   @async.with_task_group <| group => {

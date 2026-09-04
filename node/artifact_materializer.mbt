@@ -49,6 +49,14 @@ pub struct CosignArtifactSignatureVerifier {
 }
 
 ///|
+struct S3SigV4Configuration {
+  access_key_id : String
+  secret_access_key : String
+  region : String
+  session_token : String?
+}
+
+///|
 pub fn CosignArtifactSignatureVerifier::new(
   binary : String,
   public_key_path : String,
@@ -98,6 +106,8 @@ pub struct ArtifactMaterializer {
   maximum_artifact_size_bytes : Int64
   io_chunk_bytes : Int
   signature_maximum_bytes : Int64
+  allow_http_loopback : Bool
+  s3_sigv4 : S3SigV4Configuration?
   verified : Map[String, Bool]
 }
 
@@ -114,6 +124,24 @@ fn safe_transport_credential(value : String) -> Bool {
   value.length() > 0 &&
   value.length() <= 4096 &&
   value.all(character => character >= '!' && character <= '~')
+}
+
+///|
+fn safe_s3_credential(value : String, maximum_length : Int) -> Bool {
+  value.length() > 0 &&
+  value.length() <= maximum_length &&
+  value.all(character => character >= '!' && character <= '~')
+}
+
+///|
+fn safe_s3_region(value : String) -> Bool {
+  value.length() >= 3 &&
+  value.length() <= 64 &&
+  value.all(character => {
+    character.is_ascii_alphabetic() ||
+    character.is_ascii_digit() ||
+    character == '-'
+  })
 }
 
 ///|
@@ -231,8 +259,157 @@ pub async fn ArtifactMaterializer::open(
     maximum_artifact_size_bytes,
     io_chunk_bytes,
     signature_maximum_bytes,
+    allow_http_loopback,
+    s3_sigv4: None,
     verified: Map([]),
   }
+}
+
+///|
+/// Opens a direct S3-compatible materializer. Credentials stay in the node
+/// agent and are used only to sign the exact object referenced by its current
+/// controller-signed assignment; they are never passed to the model runtime.
+pub async fn ArtifactMaterializer::open_s3(
+  cache_root : String,
+  endpoint : String,
+  node_id : String,
+  access_key_id : String,
+  secret_access_key : String,
+  region : String,
+  session_token : String?,
+  maximum_artifact_size_bytes? : Int64 = 1099511627776L,
+  io_chunk_bytes? : Int = 1048576,
+  signature_maximum_bytes? : Int64 = 1048576L,
+  allow_http_loopback? : Bool = false,
+) -> ArtifactMaterializer {
+  if !@contracts.valid_identifier(node_id, maximum_length=128) ||
+    !safe_s3_credential(access_key_id, 128) ||
+    !safe_s3_credential(secret_access_key, 256) ||
+    !safe_s3_region(region) ||
+    session_token.map_or(false, token => !safe_s3_credential(token, 4096)) {
+    raise ArtifactMaterializationError::InvalidConfiguration
+  }
+  let base = ArtifactMaterializer::open(
+    cache_root,
+    endpoint,
+    "",
+    maximum_artifact_size_bytes~,
+    io_chunk_bytes~,
+    signature_maximum_bytes~,
+    allow_http_loopback~,
+  )
+  {
+    ..base,
+    node_id,
+    s3_sigv4: Some({ access_key_id, secret_access_key, region, session_token }),
+  }
+}
+
+///|
+fn decimal(value : Int, width : Int) -> String {
+  let raw = value.to_string()
+  if raw.length() >= width {
+    raw
+  } else {
+    "0".repeat(width - raw.length()) + raw
+  }
+}
+
+///|
+fn sigv4_timestamp(
+  now_unix_ms : Int64,
+) -> (String, String) raise ArtifactMaterializationError {
+  let instant = @time.ZonedDateTime::from_unix_second(
+    now_unix_ms / 1000L,
+    zone=@time.utc_zone,
+  ) catch {
+    _ => raise InvalidConfiguration
+  }
+  let date = "\{decimal(instant.year(), 4)}\{decimal(instant.month(), 2)}\{decimal(instant.day(), 2)}"
+  let timestamp = "\{date}T\{decimal(instant.hour(), 2)}\{decimal(instant.minute(), 2)}\{decimal(instant.second(), 2)}Z"
+  (date, timestamp)
+}
+
+///|
+fn sha256_hex(value : String) -> String {
+  @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(value)))
+}
+
+///|
+fn hmac_sha256(key : FixedArray[Byte], value : String) -> FixedArray[Byte] {
+  @crypto.hmac(
+    @crypto.SHA256::new(),
+    Bytes::from_array(key.view()).view(),
+    @utf8.encode(value).view(),
+  )
+}
+
+///|
+fn endpoint_host(
+  endpoint : String,
+) -> String raise ArtifactMaterializationError {
+  let remainder = if endpoint.has_prefix("https://") {
+    endpoint["https://".length():].to_owned()
+  } else if endpoint.has_prefix("http://") {
+    endpoint["http://".length():].to_owned()
+  } else {
+    raise InvalidConfiguration
+  }
+  if remainder == "" ||
+    remainder.contains_char('/') ||
+    remainder.contains_char('@') ||
+    remainder.contains_char('?') ||
+    remainder.contains_char('#') {
+    raise InvalidConfiguration
+  }
+  remainder.to_lower()
+}
+
+///|
+fn ArtifactMaterializer::s3_headers(
+  self : ArtifactMaterializer,
+  uri : String,
+  now_unix_ms : Int64,
+) -> Map[String, String] raise ArtifactMaterializationError {
+  guard self.s3_sigv4 is Some(config) else { return Map([]) }
+  if !self.endpoint.has_prefix("https://") && !self.allow_http_loopback {
+    raise InvalidConfiguration
+  }
+  let host = endpoint_host(self.endpoint)
+  let canonical_uri = "/\{s3_object_key(uri)}"
+  let (date, timestamp) = sigv4_timestamp(now_unix_ms)
+  let payload_hash = "UNSIGNED-PAYLOAD"
+  let mut canonical_headers = "host:\{host}\nx-amz-content-sha256:\{payload_hash}\nx-amz-date:\{timestamp}\n"
+  let mut signed_headers = "host;x-amz-content-sha256;x-amz-date"
+  let headers : Map[String, String] = {
+    "Accept": "application/octet-stream",
+    "Host": host,
+    "X-Amz-Content-Sha256": payload_hash,
+    "X-Amz-Date": timestamp,
+  }
+  match config.session_token {
+    Some(token) => {
+      canonical_headers = canonical_headers + "x-amz-security-token:\{token}\n"
+      signed_headers = signed_headers + ";x-amz-security-token"
+      headers["X-Amz-Security-Token"] = token
+    }
+    None => ()
+  }
+  let canonical_request = "GET\n\{canonical_uri}\n\n\{canonical_headers}\n\{signed_headers}\n\{payload_hash}"
+  let scope = "\{date}/\{config.region}/s3/aws4_request"
+  let string_to_sign = "AWS4-HMAC-SHA256\n\{timestamp}\n\{scope}\n\{sha256_hex(canonical_request)}"
+  let date_key = hmac_sha256(
+    @utf8.encode("AWS4\{config.secret_access_key}").to_fixedarray(),
+    date,
+  )
+  let region_key = hmac_sha256(date_key, config.region)
+  let service_key = hmac_sha256(region_key, "s3")
+  let signing_key = hmac_sha256(service_key, "aws4_request")
+  let signature = @crypto.bytes_to_hex_string(
+    hmac_sha256(signing_key, string_to_sign),
+  )
+  headers["Authorization"] = "AWS4-HMAC-SHA256 Credential=\{config.access_key_id}/\{scope}, SignedHeaders=\{signed_headers}, Signature=\{signature}"
+  headers
 }
 
 ///|
@@ -326,8 +503,8 @@ async fn ArtifactMaterializer::download(
       remove_if_present(partial_path)
     }
   }
-  let headers : Map[String, String] = { "Accept": "application/octet-stream" }
-  if self.credential != "" {
+  let headers : Map[String, String] = self.s3_headers(uri, @async.now())
+  if self.s3_sigv4 is None && self.credential != "" {
     if self.node_id == "" {
       headers["Authorization"] = "Bearer \{self.credential}"
     } else {

@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
   "vectie/lunanexa/settings",
 }
 
@@ -82,10 +83,13 @@ pub struct ArtifactMaterializer {
   maximum_artifact_size_bytes : Int64
   io_chunk_bytes : Int
   signature_maximum_bytes : Int64
+  allow_http_loopback : Bool
+  s3_sigv4 : S3SigV4Configuration?
   verified : Map[String, Bool]
 }
 pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(Self, @contracts.DesiredAssignment, V) -> MaterializedArtifact
 pub async fn ArtifactMaterializer::open(String, String, String, node_id? : String, maximum_artifact_size_bytes? : Int64, io_chunk_bytes? : Int, signature_maximum_bytes? : Int64, allow_http_loopback? : Bool) -> Self
+pub async fn ArtifactMaterializer::open_s3(String, String, String, String, String, String, String?, maximum_artifact_size_bytes? : Int64, io_chunk_bytes? : Int, signature_maximum_bytes? : Int64, allow_http_loopback? : Bool) -> Self
 pub async fn ArtifactMaterializer::prune_unassigned(Self, Array[String]) -> Unit
 
 pub(all) struct BootstrapToken {
@@ -101,6 +105,8 @@ pub struct CosignArtifactSignatureVerifier {
 }
 pub fn CosignArtifactSignatureVerifier::new(String, String) -> Self raise ArtifactMaterializationError
 pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier
+
+type EnrollmentPersistence
 
 pub struct EnrollmentService {
   tokens : Map[String, BootstrapToken]
@@ -125,7 +131,7 @@ pub(all) struct EnrollmentSnapshot {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct FileEnrollmentService {
-  path : String
+  persistence : EnrollmentPersistence
   service : EnrollmentService
   mutex : @async.Mutex
 }
@@ -134,6 +140,7 @@ pub async fn FileEnrollmentService::authorized(Self, String, String, Int64) -> B
 pub async fn FileEnrollmentService::enroll(Self, String, String, String, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::issue_token(Self, String, String, Int64) -> BootstrapToken
 pub async fn FileEnrollmentService::open(String) -> Self
+pub async fn FileEnrollmentService::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn FileEnrollmentService::renew(Self, String, String, String, Int64, Int64, certificate_lifetime_ms? : Int64, renewal_grace_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 
@@ -215,6 +222,8 @@ pub(all) struct RuntimeInstance {
   observed_state : @contracts.DeploymentState
   container_address : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type S3SigV4Configuration
 
 pub struct SharedSecretAssignmentVerifier {
   secret : String
