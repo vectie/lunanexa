@@ -242,7 +242,8 @@ test "signed-out enterprise gate hides application navigation and actions" {
   let html = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(app_view(model, emit))
   })
-  assert_true(html.contains("Production sign-in uses enterprise SSO"))
+  assert_true(html.contains("Sign in or create an account"))
+  assert_true(html.contains("bounded trial when trials are enabled"))
   assert_true(html.contains("href=\"/auth/oidc/start?audience=enterprise\""))
   assert_true(html.contains("Development credential fallback"))
   assert_false(html.contains("session_token="))
@@ -367,4 +368,128 @@ test "matching browser-session expiry clears the local session" {
   assert_eq(expired.token, "")
   assert_eq(expired.portal.membership, None)
   assert_eq(expired.portal.api_keys, [])
+}
+
+///|
+test "enterprise checkout quote is stable and selects the latest finalized period" {
+  let entry : @commercial.LedgerEntry = {
+    entry_id: "entry-one",
+    organization_id: "org-one",
+    cost_center_id: "cost-one",
+    project_id: "project-one",
+    organization_name_snapshot: "One",
+    cost_center_name_snapshot: "Research",
+    project_name_snapshot: "Inference",
+    source_event_id: "usage-one",
+    linked_entry_id: None,
+    kind: Charge,
+    meter: "tokens",
+    quantity: 10L,
+    unit: "token",
+    amount: { minor_units: 12345L, currency: "CNY", scale: 2 },
+    rate_card_id: "rate-one",
+    rate_card_version: "v1",
+    service_started_unix_ms: 1000L,
+    service_ended_unix_ms: 2000L,
+    recorded_unix_ms: 3000L,
+    reason: "metered usage",
+  }
+  let snapshot : @commercial.CommercialSnapshot = {
+    schema_version: @commercial.snapshot_schema_version,
+    organizations: [],
+    cost_centers: [],
+    projects: [],
+    usage_observations: [],
+    ledger_entries: [
+      entry,
+      {
+        ..entry,
+        entry_id: "entry-two",
+        amount: { ..entry.amount, minor_units: 55L },
+        recorded_unix_ms: 4000L,
+      },
+    ],
+    finalized_periods: [
+      {
+        period_id: "period-one",
+        organization_id: "org-one",
+        started_unix_ms: 1000L,
+        ended_unix_ms: 2000L,
+        billing_timezone: "UTC",
+        entry_ids: ["entry-one", "entry-two"],
+        total: { minor_units: 12400L, currency: "CNY", scale: 2 },
+        finalized_unix_ms: 4000L,
+        finalized_by: "billing-operator",
+      },
+    ],
+    budgets: [],
+    quotas: [],
+    commitments: [],
+    consumptions: [],
+    agreement_templates: [],
+    clickwrap_acceptances: [],
+    agreements: [],
+    role_grants: [],
+  }
+  guard derive_payment_checkout_quote(Some(snapshot)) is Some(quote) else {
+    fail("expected checkout quote")
+  }
+  assert_eq(quote.expected_amount_minor, 12400L)
+  assert_eq(quote.period_id, "period-one")
+  assert_eq(quote.display_amount, "CNY 124.00")
+  assert_eq(quote.money_scale, 2)
+  assert_eq(quote.ledger_entry_count, 2)
+  assert_eq(quote.ledger_revision_unix_ms, 4000L)
+  assert_true(quote.entitlement_transaction_ref_sha256.has_prefix("sha256:"))
+  assert_true(quote.idempotency_key.has_prefix("checkout-"))
+  assert_eq(quote.idempotency_key.length(), "checkout-".length() + 64)
+  assert_eq(derive_payment_checkout_quote(Some(snapshot)), Some(quote))
+  let newer = {
+    ..snapshot,
+    finalized_periods: [
+      ..snapshot.finalized_periods,
+      {
+        ..snapshot.finalized_periods[0],
+        period_id: "period-two",
+        total: { minor_units: 2500L, currency: "USD", scale: 2 },
+        finalized_unix_ms: 5000L,
+      },
+    ],
+  }
+  guard derive_payment_checkout_quote(Some(newer)) is Some(latest) else {
+    fail("expected latest checkout quote")
+  }
+  assert_eq(latest.period_id, "period-two")
+  assert_eq(latest.expected_amount_minor, 2500L)
+}
+
+///|
+test "enterprise demo checkout requires an explicit provider-link click" {
+  let portal = @enterprise_ui.demo_state()
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    token: "",
+    csrf_token: "",
+    subject_ref: "",
+    connecting: false,
+    bootstrap_started: true,
+    demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: { ..portal, route: Costs },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (submitted, _) = update(model, Portal(SubmitPaymentCheckout), emit)
+  assert_false(submitted.portal.payment_checkout_loading)
+  let checkout = submitted.portal.provider_requests
+    .iter()
+    .find_first(record => record.record_id == "payment-demo-checkout")
+  guard checkout is Some(record) else { fail("expected demo checkout") }
+  assert_eq(record.state, Submitted)
+  assert_true(record.action_url.unwrap_or("").has_prefix("https://"))
+  let html = @enterprise_ui.render(submitted.portal)
+  assert_true(html.contains("Continue with payment provider"))
+  assert_false(html.contains("location.assign"))
 }

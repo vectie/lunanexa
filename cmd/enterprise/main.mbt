@@ -42,6 +42,15 @@ priv struct PortalApiKeyRevokeView {
 } derive(FromJson)
 
 ///|
+priv struct PaymentCheckoutIntent {
+  idempotency_key : String
+  period_id : String
+} derive(ToJson)
+
+///|
+extend PaymentCheckoutIntent with ToJson::{to_json}
+
+///|
 priv struct OfflineOrderIntent {
   order_id : String
   idempotency_key : String
@@ -202,9 +211,16 @@ priv enum Outcome {
     Array[@contractdoc.ContractPacketEvent],
     ContractSelfGovernance,
     @enterprise_ui.EnterpriseDesktopClient?,
-    Array[@enterprise_ui.ApiCredentialView]
+    Array[@enterprise_ui.ApiCredentialView],
+    Array[@commercial_integrations.ExternalRecordView],
+    @enterprise_ui.PaymentCheckoutQuote?
   )
-  AgreementUpdated(@portal.PortalAgreement)
+  AgreementUpdated(
+    @portal.PortalAgreement,
+    Array[@commercial_integrations.ExternalRecordView]
+  )
+  ProviderRequestsLoaded(Array[@commercial_integrations.ExternalRecordView])
+  PaymentCheckoutCreated(@commercial_integrations.ExternalRecordView)
   LeaseCreated(@portal.EnterpriseLeaseRequest)
   NotificationRead(@notifications.NotificationRecord)
   NotificationPreferenceUpdated(@notifications.NotificationPreferenceView)
@@ -589,6 +605,67 @@ fn desktop_client_command(
 }
 
 ///|
+fn derive_payment_checkout_quote(
+  commercial : @commercial.CommercialSnapshot?,
+) -> @enterprise_ui.PaymentCheckoutQuote? {
+  guard commercial is Some(snapshot) && snapshot.finalized_periods.length() > 0 else {
+    return None
+  }
+  let mut selected : @commercial.FinalizedPeriod? = None
+  for period in snapshot.finalized_periods {
+    if period.total.minor_units > 0L &&
+      (match selected {
+        Some(current) => period.finalized_unix_ms > current.finalized_unix_ms
+        None => true
+      }) {
+      selected = Some(period)
+    }
+  }
+  guard selected is Some(period) &&
+    period.total.scale >= 0 &&
+    period.total.scale <= 9 else {
+    return None
+  }
+  let total = period.total
+  let entitlement_digest = @crypto.bytes_to_hex_string(
+    @crypto.sha256(@utf8.encode("billing-period:\{period.period_id}")),
+  )
+  Some({
+    period_id: period.period_id,
+    expected_amount_minor: total.minor_units,
+    currency: total.currency,
+    money_scale: total.scale,
+    display_amount: if total.currency == "CNY" && total.scale == 2 {
+      "CNY \{@contractdoc.format_cny_minor_units(total.minor_units)}"
+    } else {
+      "\{total.currency} \{total.minor_units} minor units · scale \{total.scale}"
+    },
+    idempotency_key: "checkout-\{entitlement_digest}",
+    entitlement_transaction_ref_sha256: "sha256:\{entitlement_digest}",
+    ledger_entry_count: period.entry_ids.length(),
+    ledger_revision_unix_ms: period.finalized_unix_ms,
+  })
+}
+
+///|
+async fn request_provider_requests(
+  model : AppModel,
+) -> Array[@commercial_integrations.ExternalRecordView] {
+  let snapshot : @commercial_integrations.IntegrationSnapshot = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/portal/self/provider-requests",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  snapshot.records
+}
+
+///|
 async fn load_self(
   model : AppModel,
 ) -> (
@@ -610,6 +687,8 @@ async fn load_self(
   ContractSelfGovernance,
   @enterprise_ui.EnterpriseDesktopClient?,
   Array[@enterprise_ui.ApiCredentialView],
+  Array[@commercial_integrations.ExternalRecordView],
+  @enterprise_ui.PaymentCheckoutQuote?,
 ) {
   let body = request(
     "GET",
@@ -702,6 +781,8 @@ async fn load_self(
   } noraise {
     value => value
   }
+  let provider_requests = request_provider_requests(model)
+  let payment_checkout_quote = derive_payment_checkout_quote(commercial)
   let models : Array[@portal.EnterpriseModelSummary] = try
     @json.from_json(
       @json.parse(
@@ -928,6 +1009,7 @@ async fn load_self(
     view, account, trial, browser_sessions, cost_centers, provisional_spend, models,
     notifications, notification_preferences, machines, orders, artifacts, contract_manifest,
     contract_packets, contract_events, contract_governance, desktop_client, api_keys,
+    provider_requests, payment_checkout_quote,
   )
 }
 
@@ -935,7 +1017,10 @@ async fn load_self(
 async fn request_signature(
   model : AppModel,
   agreement_id : String,
-) -> @portal.PortalAgreement {
+) -> (
+  @portal.PortalAgreement,
+  Array[@commercial_integrations.ExternalRecordView],
+) {
   let mut selected : @portal.PortalAgreement? = None
   for value in model.portal.agreements {
     if value.agreement_id == agreement_id {
@@ -954,6 +1039,33 @@ async fn request_signature(
     "POST",
     model.endpoint,
     "/v1/portal/signature-requests",
+    model.token,
+    model.subject_ref,
+    body~,
+  )
+  let agreement : @portal.PortalAgreement = @json.from_json(
+    @json.parse(response),
+  )
+  (agreement, request_provider_requests(model))
+}
+
+///|
+async fn request_payment_checkout(
+  model : AppModel,
+) -> @commercial_integrations.ExternalRecordView {
+  guard model.portal.payment_checkout_quote is Some(quote) else {
+    fail("payment checkout quote is unavailable")
+  }
+  let body = PaymentCheckoutIntent::{
+      idempotency_key: quote.idempotency_key,
+      period_id: quote.period_id,
+    }
+    .to_json()
+    .stringify()
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/portal/payment-checkouts",
     model.token,
     model.subject_ref,
     body~,
@@ -1433,6 +1545,8 @@ fn load_command(
         contract_governance,
         desktop_client,
         api_keys,
+        provider_requests,
+        payment_checkout_quote,
       ) =>
         Loaded(
           model.session_generation,
@@ -1454,6 +1568,8 @@ fn load_command(
           contract_governance,
           desktop_client,
           api_keys,
+          provider_requests,
+          payment_checkout_quote,
         )
     }
   })
@@ -1771,7 +1887,52 @@ fn signature_command(
           ),
         )
     } noraise {
-      value => AgreementUpdated(value)
+      (agreement, provider_requests) =>
+        AgreementUpdated(agreement, provider_requests)
+    }
+  })
+}
+
+///|
+fn provider_requests_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try request_provider_requests(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Provider status could not be refreshed: \{Repr(error)}",
+            "无法刷新服务商状态：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      records => ProviderRequestsLoaded(records)
+    }
+  })
+}
+
+///|
+fn payment_checkout_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try request_payment_checkout(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Checkout request was rejected: \{Repr(error)}",
+            "支付请求被拒绝：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      record => PaymentCheckoutCreated(record)
     }
   })
 }
@@ -2245,6 +2406,26 @@ fn replace_agreement(
 }
 
 ///|
+fn upsert_provider_request(
+  values : Array[@commercial_integrations.ExternalRecordView],
+  updated : @commercial_integrations.ExternalRecordView,
+) -> Array[@commercial_integrations.ExternalRecordView] {
+  let mut found = false
+  let next = values.map(value => {
+    if value.record_id == updated.record_id {
+      found = true
+      updated
+    } else {
+      value
+    }
+  })
+  if !found {
+    next.push(updated)
+  }
+  next
+}
+
+///|
 fn signed_out_model(model : AppModel) -> AppModel {
   let locale = model.portal.locale
   {
@@ -2497,6 +2678,100 @@ fn update(
           { ..model, portal: next },
           signature_command(model, agreement_id, emit),
         )
+      }
+    }
+    Portal(RefreshProviderRequests) => {
+      let next = model.portal.update(RefreshProviderRequests)
+      if model.demo_mode {
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              provider_requests_loading: false,
+              success_message: Some(
+                portal_copy(
+                  next.locale,
+                  "Provider status refreshed.",
+                  "服务商状态已刷新。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        ({ ..model, portal: next }, provider_requests_command(model, emit))
+      }
+    }
+    Portal(SubmitPaymentCheckout) => {
+      let next = model.portal.update(SubmitPaymentCheckout)
+      if model.demo_mode {
+        guard next.payment_checkout_quote is Some(quote) else {
+          return (
+            {
+              ..model,
+              portal: {
+                ..next,
+                payment_checkout_loading: false,
+                error_message: Some(
+                  portal_copy(
+                    next.locale,
+                    "No payable ledger balance is available.",
+                    "当前没有可支付的台账余额。",
+                  ),
+                ),
+              },
+            },
+            @rabbita.none,
+          )
+        }
+        let record : @commercial_integrations.ExternalRecordView = {
+          record_id: "payment-demo-checkout",
+          organization_id: next.membership
+          .map(value => value.organization_id)
+          .unwrap_or("org-demo"),
+          kind: Payment,
+          provider: "qualified-services-demo",
+          environment: "test",
+          external_ref_sha256: "sha256:payment-demo-checkout",
+          state: Submitted,
+          expected_amount_minor: Some(quote.expected_amount_minor),
+          currency: Some(quote.currency),
+          money_scale: Some(quote.money_scale),
+          expected_document_hash: None,
+          entitlement_transaction_ref_sha256: Some(
+            quote.entitlement_transaction_ref_sha256,
+          ),
+          action_url: Some("https://pay.example.invalid/checkout/demo"),
+          action_expires_unix_ms: Some(
+            next.machine_access.now_unix_ms + 900000L,
+          ),
+          updated_unix_ms: next.machine_access.now_unix_ms,
+        }
+        (
+          {
+            ..model,
+            portal: {
+              ..next,
+              provider_requests: upsert_provider_request(
+                next.provider_requests,
+                record,
+              ),
+              payment_checkout_loading: false,
+              success_message: Some(
+                portal_copy(
+                  next.locale,
+                  "Secure checkout is ready. Open it explicitly when you are ready to pay.",
+                  "安全支付链接已就绪。准备付款时请手动打开。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        ({ ..model, portal: next }, payment_checkout_command(model, emit))
       }
     }
     Portal(SubmitLease) => {
@@ -3121,7 +3396,9 @@ fn update(
         contract_events,
         contract_governance,
         desktop_client,
-        api_keys
+        api_keys,
+        provider_requests,
+        payment_checkout_quote
       )
     ) => {
       if dispatched_session_generation != model.session_generation {
@@ -3157,6 +3434,10 @@ fn update(
           lease_requests: view.lease_requests,
           cost_centers,
           provisional_spend,
+          payment_checkout_quote,
+          provider_requests,
+          provider_requests_loading: false,
+          payment_checkout_loading: false,
           model_catalog: models,
           desktop_client,
           project_id: match active_trial {
@@ -3395,19 +3676,64 @@ fn update(
         },
         @rabbita.none,
       )
-    Outcome(AgreementUpdated(agreement)) =>
+    Outcome(AgreementUpdated(agreement, provider_requests)) =>
       (
         {
           ..model,
           portal: {
             ..model.portal,
             agreements: replace_agreement(model.portal.agreements, agreement),
+            provider_requests,
+            provider_requests_loading: false,
             loading: false,
             success_message: Some(
               portal_copy(
                 model.portal.locale,
                 "Signature ceremony requested. Execution waits for verified provider evidence.",
                 "已发起签署流程。协议将在验证提供商证据后执行。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(ProviderRequestsLoaded(provider_requests)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            provider_requests,
+            provider_requests_loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Provider status refreshed.",
+                "服务商状态已刷新。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(PaymentCheckoutCreated(record)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            provider_requests: upsert_provider_request(
+              model.portal.provider_requests,
+              record,
+            ),
+            payment_checkout_loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Checkout request created. Open the provider link only when it appears below.",
+                "支付请求已创建。服务商链接在下方出现后，请手动打开。",
               ),
             ),
             error_message: None,
@@ -3588,6 +3914,8 @@ fn update(
               ),
             },
             loading: false,
+            provider_requests_loading: false,
+            payment_checkout_loading: false,
             success_message: None,
             error_message: Some(
               if dispatched_locale == model.portal.locale {
@@ -3625,7 +3953,7 @@ fn app_view(
   let locale = model.portal.locale
   let transport_allowed = development_transport_allowed(model.endpoint)
   let shell_styles =
-    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{box-sizing:border-box;width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:38rem){.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{box-sizing:border-box;width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:38rem){.demo-flag{position:absolute}.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
   if model.demo_mode {
     return @html.div([
       @html.style_tag(shell_styles),
@@ -3657,22 +3985,22 @@ fn app_view(
           ),
           @html.p(
             portal_copy(
-              locale, "Your account, organization membership and roles are established by the trusted identity ingress.",
-              "您的账户、组织成员资格和角色由受信任的身份入口建立。",
+              locale, "Sign in with an existing identity or register a new account through the trusted identity ingress.",
+              "使用现有身份登录，或通过受信任的身份入口注册新账户。",
             ),
           ),
           @html.p(
             class="login-sso-note",
             portal_copy(
-              locale, "Production sign-in uses enterprise SSO and ingress-managed MFA. LunaNexa never accepts an account password here.",
-              "生产环境登录使用企业 SSO 和入口管理的多因素认证。LunaNexa 不会在此接收账户密码。",
+              locale, "Production access uses ingress-managed authentication and MFA. An eligible first sign-in creates the account and a bounded trial when trials are enabled. LunaNexa never accepts an account password here.",
+              "生产访问使用入口管理的身份认证和多因素认证。首次登录的合格用户会创建账户；平台启用体验时还会获得受限体验。LunaNexa 不会在此接收账户密码。",
             ),
           ),
           @html.a(
             class="sso-start",
             href="/auth/oidc/start?audience=enterprise",
             portal_copy(
-              locale, "Sign in with enterprise SSO", "使用企业 SSO 登录",
+              locale, "Sign in or create an account", "登录或创建账户",
             ),
           ),
           if model.connecting {

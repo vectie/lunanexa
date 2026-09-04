@@ -23,6 +23,21 @@ pub(all) struct EnterpriseCostCenterRow {
 } derive(Debug, Eq)
 
 ///|
+/// An immutable checkout quote derived from a finalized billing period. The
+/// browser never asks the user to retype authoritative money fields.
+pub(all) struct PaymentCheckoutQuote {
+  period_id : String
+  expected_amount_minor : Int64
+  currency : String
+  money_scale : Int
+  display_amount : String
+  idempotency_key : String
+  entitlement_transaction_ref_sha256 : String
+  ledger_entry_count : Int
+  ledger_revision_unix_ms : Int64
+} derive(Debug, Eq)
+
+///|
 pub(all) struct EnterpriseDesktopClient {
   client_id : String
   display_name : String
@@ -160,6 +175,10 @@ pub(all) struct EnterpriseState {
   contract_documents : @contract_documents.ContractDocumentsState
   cost_centers : Array[EnterpriseCostCenterRow]
   provisional_spend : String
+  payment_checkout_quote : PaymentCheckoutQuote?
+  provider_requests : Array[@commercial_integrations.ExternalRecordView]
+  provider_requests_loading : Bool
+  payment_checkout_loading : Bool
   model_catalog : Array[@portal.EnterpriseModelSummary]
   desktop_client : EnterpriseDesktopClient?
   project_id : String
@@ -196,6 +215,8 @@ pub(all) enum EnterpriseMessage {
   ModelsChanged(String)
   JustificationChanged(String)
   SignAgreement(String)
+  RefreshProviderRequests
+  SubmitPaymentCheckout
   SubmitLease
   LaunchDesktopClient
   MarkNotificationRead(String, Int64)
@@ -250,6 +271,10 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     ),
     cost_centers: [],
     provisional_spend: "—",
+    payment_checkout_quote: None,
+    provider_requests: [],
+    provider_requests_loading: false,
+    payment_checkout_loading: false,
     model_catalog: [],
     desktop_client: None,
     project_id: "",
@@ -617,6 +642,55 @@ pub fn demo_state() -> EnterpriseState {
       },
     ],
     provisional_spend: "CNY 18,420.00",
+    payment_checkout_quote: Some({
+      period_id: "period-2026-08",
+      expected_amount_minor: 1842000L,
+      currency: "CNY",
+      money_scale: 2,
+      display_amount: "CNY 18,420.00",
+      idempotency_key: "checkout-period-period-2026-08",
+      entitlement_transaction_ref_sha256: "sha256:40ad9defdemo",
+      ledger_entry_count: 3,
+      ledger_revision_unix_ms: now - 86400000L,
+    }),
+    provider_requests: [
+      {
+        record_id: "payment-demo-settled",
+        organization_id: "org-northstar",
+        kind: Payment,
+        provider: "qualified-services-demo",
+        environment: "test",
+        external_ref_sha256: "sha256:payment-demo",
+        state: Settled,
+        expected_amount_minor: Some(920000L),
+        currency: Some("CNY"),
+        money_scale: Some(2),
+        expected_document_hash: None,
+        entitlement_transaction_ref_sha256: None,
+        action_url: None,
+        action_expires_unix_ms: None,
+        updated_unix_ms: now - 30000L,
+      },
+      {
+        record_id: "signature-demo-submitted",
+        organization_id: "org-northstar",
+        kind: QualifiedSignature,
+        provider: "qualified-services-demo",
+        environment: "test",
+        external_ref_sha256: "sha256:signature-demo",
+        state: Submitted,
+        expected_amount_minor: None,
+        currency: None,
+        money_scale: None,
+        expected_document_hash: Some("sha256:4f94d8f0a2"),
+        entitlement_transaction_ref_sha256: Some("sha256:agreement-demo"),
+        action_url: Some("https://sign.example.invalid/ceremony/demo"),
+        action_expires_unix_ms: Some(now + 900000L),
+        updated_unix_ms: now - 10000L,
+      },
+    ],
+    provider_requests_loading: false,
+    payment_checkout_loading: false,
     model_catalog: [
       {
         model_id: "qwen3-32b",
@@ -749,6 +823,20 @@ pub fn EnterpriseState::update(
     JustificationChanged(value) => { ..self, justification: value }
     SignAgreement(_) =>
       { ..self, loading: true, success_message: None, error_message: None }
+    RefreshProviderRequests =>
+      {
+        ..self,
+        provider_requests_loading: true,
+        success_message: None,
+        error_message: None,
+      }
+    SubmitPaymentCheckout =>
+      {
+        ..self,
+        payment_checkout_loading: true,
+        success_message: None,
+        error_message: None,
+      }
     SubmitLease =>
       { ..self, loading: true, success_message: None, error_message: None }
     LaunchDesktopClient =>
@@ -871,6 +959,162 @@ fn state_label(
     Declined => copy(locale, "Declined", "已拒绝")
     Superseded => copy(locale, "Superseded", "已替代")
   }
+}
+
+///|
+fn provider_state_label(
+  locale : @i18n.Locale,
+  state : @commercial_integrations.ExternalRecordState,
+) -> String {
+  match state {
+    Pending => copy(locale, "Preparing secure link", "正在准备安全链接")
+    Submitted => copy(locale, "Ready to continue", "可继续办理")
+    Verified => copy(locale, "Verified", "已验证")
+    Authorized => copy(locale, "Authorized", "已授权")
+    Settled => copy(locale, "Paid", "已支付")
+    Issued => copy(locale, "Issued", "已开具")
+    Failed => copy(locale, "Failed", "失败")
+    Expired => copy(locale, "Expired", "已过期")
+    Voided => copy(locale, "Voided", "已作废")
+    Credited => copy(locale, "Credited", "已贷记")
+    Refunded => copy(locale, "Refunded", "已退款")
+  }
+}
+
+///|
+fn provider_state_class(
+  state : @commercial_integrations.ExternalRecordState,
+) -> String {
+  match state {
+    Settled | Verified | Issued => "state-pill provider-state-success"
+    Failed | Expired | Voided => "state-pill provider-state-error"
+    Pending => "state-pill provider-state-pending"
+    _ => "state-pill provider-state-active"
+  }
+}
+
+///|
+pub fn valid_provider_action_url(value : String) -> Bool {
+  if !value.has_prefix("https://") ||
+    value.length() <= "https://".length() ||
+    value.length() > 2048 ||
+    value.contains("#") ||
+    value.contains("\\") ||
+    value.any(character => character.is_whitespace()) {
+    return false
+  }
+  let authority = value["https://".length():]
+    .split("/")
+    .next()
+    .map(part => part.to_owned())
+    .unwrap_or("")
+  authority != "" && !authority.contains("@")
+}
+
+///|
+fn usable_provider_action(
+  record : @commercial_integrations.ExternalRecordView,
+  now_unix_ms : Int64,
+) -> String? {
+  guard record.action_url is Some(action_url) &&
+    record.action_expires_unix_ms is Some(expires_unix_ms) &&
+    expires_unix_ms > now_unix_ms &&
+    valid_provider_action_url(action_url) else {
+    return None
+  }
+  Some(action_url)
+}
+
+///|
+fn provider_action_expired(
+  record : @commercial_integrations.ExternalRecordView,
+  now_unix_ms : Int64,
+) -> Bool {
+  record.state == Expired ||
+  record.action_expires_unix_ms
+  .map(expires => expires <= now_unix_ms)
+  .unwrap_or(false)
+}
+
+///|
+fn signature_provider_request(
+  state : EnterpriseState,
+  agreement : @portal.PortalAgreement,
+) -> @commercial_integrations.ExternalRecordView? {
+  state.provider_requests
+  .iter()
+  .filter(record => {
+    record.kind == QualifiedSignature &&
+    record.expected_document_hash == Some(agreement.rendered_document_hash)
+  })
+  .last()
+}
+
+///|
+fn payment_request_matches_quote(
+  record : @commercial_integrations.ExternalRecordView,
+  quote : PaymentCheckoutQuote,
+) -> Bool {
+  record.kind == Payment &&
+  record.entitlement_transaction_ref_sha256 ==
+  Some(quote.entitlement_transaction_ref_sha256) &&
+  record.expected_amount_minor == Some(quote.expected_amount_minor) &&
+  record.currency == Some(quote.currency) &&
+  record.money_scale == Some(quote.money_scale)
+}
+
+///|
+fn payment_request_in_progress(state : EnterpriseState) -> Bool {
+  guard state.payment_checkout_quote is Some(quote) else { return false }
+  state.provider_requests.any(record => {
+    payment_request_matches_quote(record, quote) &&
+    (match record.state {
+      Pending | Authorized => true
+      Submitted =>
+        !provider_action_expired(record, state.machine_access.now_unix_ms)
+      _ => false
+    })
+  })
+}
+
+///|
+fn payment_request_for_quote(
+  state : EnterpriseState,
+) -> @commercial_integrations.ExternalRecordView? {
+  guard state.payment_checkout_quote is Some(quote) else { return None }
+  state.provider_requests
+  .iter()
+  .filter(record => payment_request_matches_quote(record, quote))
+  .last()
+}
+
+///|
+fn payment_checkout_terminal(state : EnterpriseState) -> Bool {
+  guard payment_request_for_quote(state) is Some(record) else { return false }
+  match record.state {
+    Settled | Failed | Expired | Voided | Refunded => true
+    _ => false
+  }
+}
+
+///|
+pub fn payment_checkout_available(state : EnterpriseState) -> Bool {
+  guard state.membership is Some(membership) &&
+    state.payment_checkout_quote is Some(quote) else {
+    return false
+  }
+  membership.active &&
+  (
+    @portal.role_allows(membership.roles, BillingViewer) ||
+    @portal.role_allows(membership.roles, OrganizationAdministrator)
+  ) &&
+  quote.expected_amount_minor > 0L &&
+  quote.currency.length() == 3 &&
+  quote.money_scale >= 0 &&
+  quote.money_scale <= 9 &&
+  !state.payment_checkout_loading &&
+  !payment_request_in_progress(state) &&
+  !payment_checkout_terminal(state)
 }
 
 ///|
@@ -1962,7 +2206,7 @@ fn agreements_view(
     for agreement in state.agreements => agreement_card(state, emit, agreement)
   ]
   @html.div(class="page-stack", [
-    @html.section(class="section-heading", [
+    @html.section(class="section-heading provider-section-heading", [
       @html.div([
         @html.h2(
           copy(
@@ -1979,7 +2223,20 @@ fn agreements_view(
           ),
         ),
       ]),
-      @html.span(class="count-pill", "\{state.agreements.length()}"),
+      @html.div(class="section-actions", [
+        @html.span(class="count-pill", "\{state.agreements.length()}"),
+        @html.button(
+          type_="button",
+          class="quiet-button compact-button",
+          disabled=state.provider_requests_loading,
+          on_click=command(emit, RefreshProviderRequests),
+          if state.provider_requests_loading {
+            copy(state.locale, "Refreshing…", "正在刷新…")
+          } else {
+            copy(state.locale, "Refresh status", "刷新状态")
+          },
+        ),
+      ]),
     ]),
     @html.div(class="record-list", records),
   ])
@@ -1991,25 +2248,128 @@ fn agreement_card(
   emit : @rabbita.Emit[EnterpriseMessage]?,
   agreement : @portal.PortalAgreement,
 ) -> @rabbita.Html {
-  let action = if agreement.state == ReviewRequired {
-    @html.div(class="record-actions", [
-      @html.button(
-        type_="button",
-        class="primary-action",
-        disabled=state.loading,
-        on_click=command(emit, SignAgreement(agreement.agreement_id)),
-        copy(state.locale, "Review & sign", "审阅并签署"),
-      ),
-      @html.small(
-        copy(
-          state.locale,
-          "Requests a handoff from the configured signature provider; LunaNexa never collects signing credentials.",
-          "向已配置的电子签名服务请求交接；LunaNexa 不收集签署凭据。",
+  let provider_request = signature_provider_request(state, agreement)
+  let action = match agreement.state {
+    ReviewRequired =>
+      @html.div(class="record-actions", [
+        @html.button(
+          type_="button",
+          class="primary-action",
+          disabled=state.loading,
+          on_click=command(emit, SignAgreement(agreement.agreement_id)),
+          if state.loading {
+            copy(state.locale, "Requesting…", "正在发起…")
+          } else {
+            copy(state.locale, "Review & sign", "审阅并签署")
+          },
         ),
-      ),
-    ])
-  } else {
-    @html.nothing
+        @html.small(
+          copy(
+            state.locale,
+            "LunaNexa requests a provider handoff and never collects signing credentials.",
+            "LunaNexa 仅请求服务商交接，不会收集签署凭据。",
+          ),
+        ),
+      ])
+    SignatureRequested =>
+      match provider_request {
+        Some(record) => {
+          let action_url = usable_provider_action(
+            record,
+            state.machine_access.now_unix_ms,
+          )
+          let expired = provider_action_expired(
+            record,
+            state.machine_access.now_unix_ms,
+          )
+          @html.div(class="record-actions provider-actions", [
+            @html.span(
+              class=provider_state_class(record.state),
+              attrs=@html.Attrs::build().role("status").aria_live("polite"),
+              if expired {
+                copy(
+                  state.locale,
+                  "Signing link expired",
+                  "签署链接已过期",
+                )
+              } else {
+                provider_state_label(state.locale, record.state)
+              },
+            ),
+            match action_url {
+              Some(url) =>
+                @html.a(
+                  class="primary-action external-action",
+                  href=url,
+                  target=Blank,
+                  rel="noopener noreferrer",
+                  escape=true,
+                  copy(
+                    state.locale,
+                    "Continue with signature provider",
+                    "前往签署服务商继续办理",
+                  ),
+                )
+              None if record.state == Submitted && expired =>
+                @html.button(
+                  type_="button",
+                  class="primary-action",
+                  disabled=state.loading,
+                  on_click=command(emit, SignAgreement(agreement.agreement_id)),
+                  copy(
+                    state.locale,
+                    "Renew signing session",
+                    "重新发起签署会话",
+                  ),
+                )
+              None =>
+                @html.small(
+                  if record.action_url is Some(_) {
+                    copy(
+                      state.locale,
+                      "The provider link was blocked because it is not a valid, unexpired HTTPS action.",
+                      "服务商链接不是有效且未过期的 HTTPS 操作地址，已被 LunaNexa 阻止。",
+                    )
+                  } else if expired {
+                    copy(
+                      state.locale,
+                      "The provider link is no longer usable. Refresh until the provider marks it expired, then renew the session.",
+                      "服务商链接已不可用。请刷新；服务商标记过期后即可重新发起会话。",
+                    )
+                  } else {
+                    copy(
+                      state.locale,
+                      "The provider is preparing a secure HTTPS link. Refresh in a moment.",
+                      "服务商正在准备安全 HTTPS 链接，请稍后刷新。",
+                    )
+                  },
+                )
+            },
+            @html.small(
+              "\{record.provider} · \{record.environment} · \{record.record_id}",
+            ),
+          ])
+        }
+        None =>
+          @html.div(class="record-actions provider-actions", [
+            @html.span(
+              class="state-pill provider-state-pending",
+              copy(
+                state.locale,
+                "Provider request missing",
+                "缺少服务商请求",
+              ),
+            ),
+            @html.button(
+              type_="button",
+              class="primary-action",
+              disabled=state.loading || state.provider_requests_loading,
+              on_click=command(emit, SignAgreement(agreement.agreement_id)),
+              copy(state.locale, "Repair signing session", "修复签署会话"),
+            ),
+          ])
+      }
+    _ => @html.nothing
   }
   @html.article(class="record-card", [
     @html.div(class="record-main", [
@@ -2225,7 +2585,108 @@ fn lease_requests_view(
 }
 
 ///|
-fn costs_view(state : EnterpriseState) -> @rabbita.Html {
+fn payment_provider_record(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+  record : @commercial_integrations.ExternalRecordView,
+) -> @rabbita.Html {
+  let action_url = usable_provider_action(
+    record,
+    state.machine_access.now_unix_ms,
+  )
+  let expired = provider_action_expired(
+    record,
+    state.machine_access.now_unix_ms,
+  )
+  @html.article(class="provider-request-row", [
+    @html.div(class="provider-request-heading", [
+      @html.div([
+        @html.strong(
+          record.expected_amount_minor.map_or(
+            copy(state.locale, "Payment request", "支付请求"),
+            amount => {
+              "\{record.currency.unwrap_or("—")} \{amount} · scale \{record.money_scale.unwrap_or(0)}"
+            },
+          ),
+        ),
+        @html.span(class="mono secondary", record.record_id),
+      ]),
+      @html.span(
+        class=provider_state_class(record.state),
+        attrs=@html.Attrs::build().role("status").aria_live("polite"),
+        if expired {
+          copy(state.locale, "Checkout link expired", "支付链接已过期")
+        } else {
+          provider_state_label(state.locale, record.state)
+        },
+      ),
+    ]),
+    @html.p(
+      "\{record.provider} · \{record.environment} · \{copy(state.locale, "Updated", "更新时间")} \{@contractdoc.format_unix_ms_utc(record.updated_unix_ms)}",
+    ),
+    match action_url {
+      Some(url) =>
+        @html.a(
+          class="primary-action external-action",
+          href=url,
+          target=Blank,
+          rel="noopener noreferrer",
+          escape=true,
+          copy(
+            state.locale,
+            "Continue with payment provider",
+            "前往支付服务商继续办理",
+          ),
+        )
+      None if record.state == Submitted && expired =>
+        @html.button(
+          type_="button",
+          class="primary-action",
+          disabled=state.payment_checkout_loading,
+          on_click=command(emit, SubmitPaymentCheckout),
+          copy(
+            state.locale,
+            "Renew secure checkout",
+            "续期安全支付会话",
+          ),
+        )
+      None =>
+        @html.small(
+          if record.action_url is Some(_) {
+            copy(
+              state.locale,
+              "The provider link was blocked because it is not a valid, unexpired HTTPS action.",
+              "服务商链接不是有效且未过期的 HTTPS 操作地址，已被 LunaNexa 阻止。",
+            )
+          } else if expired {
+            copy(
+              state.locale,
+              "This link cannot be opened. Refresh before creating a replacement checkout.",
+              "此链接无法继续使用。请先刷新状态，再创建新的支付请求。",
+            )
+          } else if record.state == Pending {
+            copy(
+              state.locale,
+              "A secure HTTPS checkout link is being prepared.",
+              "正在准备安全 HTTPS 支付链接。",
+            )
+          } else {
+            copy(
+              state.locale,
+              "No browser action is required for this state.",
+              "当前状态无需浏览器操作。",
+            )
+          },
+        )
+    },
+  ])
+}
+
+///|
+fn costs_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
   let rows = [
     for center in state.cost_centers => {
       @html.tr([
@@ -2239,6 +2700,11 @@ fn costs_view(state : EnterpriseState) -> @rabbita.Html {
       ])
     }
   ]
+  let payment_records = state.provider_requests.filter(record => {
+    record.kind == Payment
+  })
+  let checkout_in_progress = payment_request_in_progress(state)
+  let checkout_record = payment_request_for_quote(state)
   @html.div(class="page-stack", [
     @html.section(class="section-heading", [
       @html.div([
@@ -2271,6 +2737,190 @@ fn costs_view(state : EnterpriseState) -> @rabbita.Html {
         @html.strong(state.cost_centers.length().to_string()),
         @html.small(copy(state.locale, "Tenant scoped", "限定租户范围")),
       ]),
+    ]),
+    @html.section(class="checkout-panel", [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            copy(state.locale, "ONLINE PAYMENT", "在线支付"),
+          ),
+          @html.h3(
+            copy(
+              state.locale,
+              "Pay a finalized billing period",
+              "支付已结算账期",
+            ),
+          ),
+          @html.p(
+            copy(
+              state.locale,
+              "Amount, currency, scale and retry-safe idempotency are derived from the finalized billing period. You confirm before leaving LunaNexa.",
+              "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生。离开 LunaNexa 前由您确认。",
+            ),
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          class="quiet-button compact-button",
+          disabled=state.provider_requests_loading,
+          on_click=command(emit, RefreshProviderRequests),
+          if state.provider_requests_loading {
+            copy(state.locale, "Refreshing…", "正在刷新…")
+          } else {
+            copy(state.locale, "Refresh payment status", "刷新支付状态")
+          },
+        ),
+      ]),
+      match state.payment_checkout_quote {
+        Some(quote) =>
+          @html.div(class="checkout-summary", [
+            @html.dl(class="checkout-facts", [
+              @html.div([
+                @html.dt(copy(state.locale, "Checkout total", "支付金额")),
+                @html.dd(class="checkout-total", quote.display_amount),
+              ]),
+              @html.div([
+                @html.dt(copy(state.locale, "Billing period", "账期")),
+                @html.dd(class="mono", quote.period_id),
+              ]),
+              @html.div([
+                @html.dt(
+                  copy(state.locale, "Authoritative amount", "权威金额"),
+                ),
+                @html.dd(
+                  class="mono",
+                  "\{quote.expected_amount_minor} \{copy(state.locale, "minor units", "最小货币单位")}",
+                ),
+              ]),
+              @html.div([
+                @html.dt(
+                  copy(state.locale, "Currency / scale", "币种 / 精度"),
+                ),
+                @html.dd(
+                  class="mono",
+                  "\{quote.currency} / \{quote.money_scale}",
+                ),
+              ]),
+              @html.div([
+                @html.dt(copy(state.locale, "Ledger revision", "台账版本")),
+                @html.dd(
+                  "\{quote.ledger_entry_count} \{copy(state.locale, "entries", "条记录")} · \{@contractdoc.format_unix_ms_utc(quote.ledger_revision_unix_ms)}",
+                ),
+              ]),
+            ]),
+            @html.div(class="checkout-action", [
+              @html.button(
+                type_="button",
+                class="primary-action",
+                disabled=!payment_checkout_available(state),
+                attrs=@html.Attrs::build().aria_describedby(
+                  "checkout-action-help",
+                ),
+                on_click=command(emit, SubmitPaymentCheckout),
+                if state.payment_checkout_loading {
+                  copy(
+                    state.locale,
+                    "Creating secure checkout…",
+                    "正在创建安全支付请求…",
+                  )
+                } else if checkout_in_progress {
+                  copy(
+                    state.locale,
+                    "Checkout already in progress",
+                    "支付请求正在处理中",
+                  )
+                } else if payment_checkout_terminal(state) {
+                  match checkout_record {
+                    Some(record) if record.state == Settled =>
+                      copy(
+                        state.locale,
+                        "Billing period paid",
+                        "该账期已支付",
+                      )
+                    _ =>
+                      copy(
+                        state.locale,
+                        "Checkout is not renewable",
+                        "支付请求不可续期",
+                      )
+                  }
+                } else if checkout_record
+                  .map(record => {
+                    record.state == Submitted &&
+                    provider_action_expired(
+                      record,
+                      state.machine_access.now_unix_ms,
+                    )
+                  })
+                  .unwrap_or(false) {
+                  copy(
+                    state.locale,
+                    "Renew secure checkout",
+                    "续期安全支付会话",
+                  )
+                } else {
+                  copy(
+                    state.locale,
+                    "Create secure checkout",
+                    "创建安全支付请求",
+                  )
+                },
+              ),
+              @html.small(
+                id="checkout-action-help",
+                copy(
+                  state.locale,
+                  "Creating a checkout does not charge funds. Payment completes only after independently verified provider evidence.",
+                  "创建支付请求不会直接扣款；仅在服务商独立验证证据后才会完成支付。",
+                ),
+              ),
+            ]),
+          ])
+        None =>
+          @html.p(
+            class="empty-state",
+            copy(
+              state.locale,
+              "No positive finalized billing period is available for online checkout.",
+              "当前没有可用于在线支付的正数已结算账期。",
+            ),
+          )
+      },
+    ]),
+    @html.section(class="provider-history", [
+      @html.h3(
+        copy(state.locale, "Online payment activity", "在线支付记录"),
+      ),
+      if state.provider_requests_loading {
+        @html.p(
+          class="provider-loading",
+          attrs=@html.Attrs::build().role("status").aria_live("polite"),
+          copy(
+            state.locale,
+            "Loading provider status…",
+            "正在加载服务商状态…",
+          ),
+        )
+      } else if payment_records.length() == 0 {
+        @html.p(
+          class="empty",
+          copy(
+            state.locale,
+            "No online payment requests yet.",
+            "暂无在线支付请求。",
+          ),
+        )
+      } else {
+        @html.div(
+          class="provider-request-list",
+          [
+            for record in payment_records => {
+              payment_provider_record(state, emit, record)
+            }
+          ],
+        )
+      },
     ]),
     if rows.length() == 0 {
       @html.p(
@@ -2944,7 +3594,7 @@ fn content(
     Agreements => agreements_view(state, emit)
     LeaseRequests => lease_requests_view(state, emit)
     Notifications => notifications_view(state, emit)
-    Costs => costs_view(state)
+    Costs => costs_view(state, emit)
     Models => models_view(state)
     DesktopIde => desktop_ide_view(state, emit)
     MachineAccess => {
@@ -2992,6 +3642,8 @@ fn enterprise_view(
     #|:root{color-scheme:dark;--bg:#071016;--panel:#0d1820;--panel2:#111f29;--line:#223743;--ink:#ecf5f2;--muted:#91a7ad;--mint:#7ee0bd;--mint2:#35bd8d;--amber:#f1c66c}*{box-sizing:border-box}html{background:var(--bg);scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,rgba(53,189,141,.12),transparent 30rem),var(--bg);color:var(--ink);font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.skip-link{position:fixed;left:1rem;top:-5rem;z-index:100;padding:.65rem .9rem;background:var(--mint);color:#04251a}.skip-link:focus{top:1rem}.enterprise-root{min-height:100vh;display:grid;grid-template-columns:16rem minmax(0,1fr)}.enterprise-sidebar{position:sticky;top:0;height:100vh;padding:1.25rem 1rem;border-right:1px solid var(--line);background:rgba(7,16,22,.92);display:flex;flex-direction:column}.enterprise-brand{display:flex;gap:.75rem;align-items:center;padding:.5rem;color:var(--ink);text-decoration:none}.brand-mark{width:2.2rem;height:2.2rem;border-radius:.65rem;background:var(--mint);color:#08251c;display:grid;place-items:center;font-weight:900}.enterprise-brand span:last-child{display:flex;flex-direction:column}.enterprise-brand small{color:var(--muted)}.enterprise-sidebar nav{display:grid;gap:.3rem;margin-top:2rem}.nav-item{min-height:2.75rem;padding:.65rem .8rem;border:1px solid transparent;border-radius:.55rem;background:transparent;color:var(--muted);text-align:left;font:inherit;font-weight:700;cursor:pointer}.nav-item:hover,.nav-item:focus-visible{border-color:var(--line);color:var(--ink)}.nav-item.is-active{background:rgba(126,224,189,.1);border-color:rgba(126,224,189,.25);color:var(--mint)}.nav-link{display:flex;align-items:center;text-decoration:none}.trust-note{margin-top:auto;padding:.85rem;border:1px solid var(--line);border-radius:.7rem;background:var(--panel)}.trust-note strong{font-size:.75rem}.trust-note p{margin:.35rem 0 0;color:var(--muted);font-size:.72rem}.enterprise-main{min-width:0}.enterprise-topbar{min-height:6rem;padding:1.25rem 2rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:1rem}.eyebrow{margin:0 0 .2rem;color:var(--mint);font-size:.66rem;font-weight:850;letter-spacing:.12em}.enterprise-topbar h1{margin:0;font-size:1.65rem}.topbar-actions,.topbar-meta{display:flex;align-items:center;gap:.75rem}.topbar-meta{color:var(--muted)}.locale-control{display:flex;align-items:center;gap:.4rem}.locale-control label{color:var(--muted);font-size:.7rem}.locale-control select{min-height:44px;padding:.5rem 1.8rem .5rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#09151c;color:var(--ink);font:inherit}.status-dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--mint2)}.role-pill,.count-pill,.state-pill,.entitled{padding:.28rem .5rem;border:1px solid var(--line);border-radius:999px;font-size:.67rem}.enterprise-content{max-width:90rem;margin:0 auto;padding:2rem}.page-stack{display:grid;gap:1.25rem}.welcome-panel,.workflow-panel,.request-form,.request-history,.data-table-panel{border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96));padding:1.35rem}.welcome-panel{display:flex;justify-content:space-between;gap:2rem;align-items:end}.welcome-panel h2{max-width:50rem;margin:.2rem 0 .5rem;font-size:clamp(1.6rem,3vw,2.6rem);line-height:1.1}.welcome-panel p:last-child{max-width:48rem;margin:0;color:var(--muted)}.primary-action,.primary-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--mint2);border-radius:.55rem;background:var(--mint);color:#06251a;font:inherit;font-weight:850;cursor:pointer}.primary-action:disabled,.primary-button:disabled,.quiet-button:disabled{opacity:.42;cursor:not-allowed}.quiet-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--line);border-radius:.55rem;background:var(--panel2);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.metric{min-height:8rem;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.metric span,.metric small{display:block;color:var(--muted)}.metric strong{display:block;margin:.45rem 0;font-size:1.8rem}.workflow-panel h2,.section-heading h2,.request-form h2,.request-history h2{margin:0}.workflow-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;padding:0;list-style:none}.workflow-steps li{display:flex;gap:.7rem}.workflow-steps>li>span{flex:0 0 2rem;height:2rem;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--muted);font-weight:800}.workflow-steps .is-complete>span{background:var(--mint);color:#06251a}.workflow-steps .is-current>span{border-color:var(--amber);color:var(--amber)}.workflow-steps p{margin:.25rem 0 0;color:var(--muted);font-size:.75rem}.section-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}.section-heading p{margin:.3rem 0 0;color:var(--muted)}.record-list{display:grid;gap:.75rem}.record-card{display:flex;justify-content:space-between;gap:1.5rem;padding:1.1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.record-main{min-width:0}.record-title{display:flex;align-items:center;gap:.7rem}.record-title h3{margin:0}.record-card p{color:var(--muted)}.state-pill{color:var(--amber)}.record-meta{display:flex;flex-wrap:wrap;gap:1rem;margin:0}.record-meta div{min-width:9rem}.record-meta dt{color:var(--muted);font-size:.65rem}.record-meta dd{margin:.15rem 0 0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.record-actions{max-width:16rem;display:flex;flex-direction:column;align-items:flex-end;gap:.5rem}.record-actions small{color:var(--muted);text-align:right}.lease-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(20rem,.65fr);gap:1rem}.request-form>p{color:var(--muted)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;margin:1.25rem 0}.field-wide{grid-column:1/-1}.field label{display:block;margin-bottom:.35rem;font-weight:750}.field input,.field textarea{width:100%;min-height:2.8rem;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.field textarea{min-height:7rem;resize:vertical}.field small{display:block;margin-top:.3rem;color:var(--muted)}.request-boundary{margin:1rem 0;padding:.8rem;border-left:3px solid var(--mint);background:rgba(126,224,189,.06)}.request-boundary p{margin:.25rem 0 0}.request-history .record-card{display:block}.compact .record-meta{display:grid;gap:.5rem}.empty{color:var(--muted)}.data-table-panel{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{padding:.75rem;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-size:.7rem}.model-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.model-card{position:relative;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.model-card h3{margin:.8rem 0 .2rem}.model-card p{margin:0;color:var(--muted)}.model-card dl div{display:flex;justify-content:space-between;gap:.5rem}.model-card dt{color:var(--muted)}.model-card dd{margin:0}.model-icon{width:2.5rem;height:2.5rem;border-radius:.6rem;background:rgba(126,224,189,.13);display:grid;place-items:center;color:var(--mint);font-weight:900}.entitled{position:absolute;right:1rem;top:1rem;color:var(--mint)}.notice{margin:0 2rem;padding:.75rem 1rem;border:1px solid rgba(126,224,189,.35);border-radius:.6rem;background:rgba(126,224,189,.08);color:var(--mint)}.notice.is-error,.notice.error{border-color:rgba(241,111,111,.4);background:rgba(241,111,111,.08);color:#f5a0a0}.contract-documents{display:grid;gap:1rem}.contract-documents-header{display:flex;justify-content:space-between;align-items:end;gap:2rem;padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.contract-documents-header h1{margin:.15rem 0 .45rem}.contract-documents-header p:last-child{max-width:55rem;margin:0;color:var(--muted)}.contract-workspace{border:1px solid var(--line);border-radius:.85rem;background:var(--panel);overflow:hidden}.contract-progress{display:flex;flex-wrap:wrap;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--line);color:var(--muted)}.contract-progress strong{color:var(--mint);margin-right:auto}.contract-editor-layout{display:grid;grid-template-columns:minmax(15rem,.32fr) minmax(0,1fr)}.contract-form-nav{padding:.8rem;border-right:1px solid var(--line);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:var(--ink);font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading{max-width:48rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-offline-field{padding:.8rem;border:1px dashed #51636d;border-radius:.5rem;background:rgba(145,167,173,.05)}.contract-offline-field p{margin:.25rem 0 0;color:var(--muted)}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line)}.modal-backdrop{position:fixed;inset:0;z-index:50;padding:1rem;background:rgba(0,0,0,.7);display:grid;place-items:center}.confirmation-dialog{width:min(36rem,100%);padding:1.4rem;border:1px solid #416454;border-radius:.8rem;background:#0d1820;box-shadow:0 1.5rem 5rem rgba(0,0,0,.5)}.confirmation-dialog h2{margin-top:0}.confirmation-dialog p{color:var(--muted)}.dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}.empty-state{padding:2rem;border:1px dashed var(--line);border-radius:.8rem;color:var(--muted)}html[lang^=zh] .eyebrow{letter-spacing:.04em}@media(max-width:74rem){.metric-grid,.model-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workflow-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.lease-layout{grid-template-columns:1fr}}@media(max-width:52rem){.enterprise-root{display:block}.enterprise-sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}.enterprise-sidebar nav{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:1rem}.trust-note{margin-top:1rem}.enterprise-topbar{padding:1rem;align-items:flex-start}.topbar-actions{align-items:flex-end;flex-direction:column}.topbar-meta{display:none}.enterprise-content{padding:1rem}.welcome-panel,.record-card,.contract-documents-header{align-items:stretch;flex-direction:column}.metric-grid,.model-grid,.workflow-steps,.form-grid,.contract-field-grid{grid-template-columns:1fr}.contract-editor-layout{grid-template-columns:1fr}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line)}.field-wide{grid-column:auto}.record-actions{max-width:none;align-items:stretch}.record-actions small{text-align:left}}@media(max-width:32rem){.enterprise-sidebar nav{grid-template-columns:1fr 1fr}.enterprise-topbar{flex-wrap:wrap}.enterprise-topbar h1{font-size:1.35rem}.topbar-actions,.locale-control{width:100%;align-items:stretch}.locale-control{display:grid}.locale-control select{width:100%}.dialog-actions{display:grid}.contract-actions>*{width:100%}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
   let account_styles =
     #|.danger-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid #7f4148;border-radius:.55rem;background:#27151a;color:#ffb2b8;font:inherit;font-weight:750;cursor:pointer}.danger-button:disabled{opacity:.42;cursor:not-allowed}.account-identity,.api-key-panel{padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.account-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin:1.1rem 0}.account-facts>div{min-width:0;padding:.7rem;border:1px solid var(--line);border-radius:.55rem;background:rgba(7,16,22,.5)}.account-facts dt{color:var(--muted);font-size:.68rem}.account-facts dd{margin:.2rem 0 0}.role-list,.api-key-actions{display:flex;flex-wrap:wrap;gap:.5rem}.account-state-active,.api-key-state-active{color:var(--mint)}.account-state-inactive,.api-key-state-expired{color:var(--amber)}.api-key-state-revoked{color:#ffadb3}.rotation-note{display:flex;gap:.65rem;padding:.8rem;border-left:3px solid var(--amber);background:rgba(241,198,108,.06);color:var(--muted)}.rotation-note strong{color:var(--amber)}.api-key-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.api-key-card{padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.api-key-card-heading{display:flex;justify-content:space-between;gap:1rem}.api-key-card h3{margin:0}.secondary{color:var(--muted);font-size:.7rem}.api-key-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.api-key-actions{justify-content:flex-end}.account-dialog{max-height:calc(100vh - 2rem);overflow:auto}.account-form{display:grid;gap:.8rem}.account-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.account-form .field select{width:100%;min-height:44px;padding:.6rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.scope-picker{display:flex;flex-wrap:wrap;gap:.5rem;border:1px solid var(--line);border-radius:.55rem;padding:.75rem}.scope-picker legend{padding:0 .35rem;color:var(--muted)}.scope-toggle{min-height:44px;padding:.55rem .75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--panel2);color:var(--ink);font:inherit}.scope-toggle.is-selected{border-color:var(--mint2);background:rgba(126,224,189,.1);color:var(--mint)}.one-time-secret{padding:1rem;border:1px solid var(--mint2);border-radius:.55rem;background:#06100d;color:#a8f4d5;white-space:pre-wrap;overflow-wrap:anywhere}.confirmation-scope{padding:.7rem;border:1px solid var(--line);border-radius:.5rem}@media(max-width:52rem){.account-facts,.api-key-list,.account-form-grid{grid-template-columns:1fr}.account-access-page .section-heading{align-items:stretch;flex-direction:column}.api-key-actions>*{width:100%}}@media(max-width:32rem){.account-dialog .dialog-actions>*{width:100%}}
+  let provider_styles =
+    #|.section-actions{display:flex;align-items:center;gap:.55rem}.compact-button{min-height:44px;padding:.5rem .75rem}.external-action{display:inline-flex;align-items:center;justify-content:center;text-align:center;text-decoration:none}.provider-actions{min-width:min(18rem,100%)}.provider-state-success{color:var(--mint)}.provider-state-error{color:#ffadb3}.provider-state-pending{color:var(--amber)}.provider-state-active{color:#a9d8ff}.checkout-panel,.provider-history{padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.checkout-panel h3,.provider-history h3{margin:0}.checkout-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(15rem,.38fr);gap:1rem;margin-top:1rem;padding:1rem;border:1px solid rgba(126,224,189,.25);border-radius:.75rem;background:rgba(126,224,189,.04)}.checkout-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:0}.checkout-facts>div{min-width:0}.checkout-facts dt{color:var(--muted);font-size:.68rem}.checkout-facts dd{margin:.2rem 0 0}.checkout-total{font-size:1.45rem;font-weight:850;color:var(--mint)}.checkout-action{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:.5rem}.checkout-action small,.provider-request-row p,.provider-request-row>small,.provider-loading{color:var(--muted)}.provider-request-list{display:grid;gap:.7rem;margin-top:1rem}.provider-request-row{display:grid;gap:.65rem;padding:1rem;border:1px solid var(--line);border-radius:.7rem;background:var(--panel)}.provider-request-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}.provider-request-heading strong,.provider-request-heading span{display:block}.provider-request-row p{margin:0}.provider-request-row .external-action{justify-self:start}@media(max-width:52rem){.provider-section-heading,.section-actions,.checkout-panel .section-heading,.provider-request-heading{align-items:stretch;flex-direction:column}.checkout-summary,.checkout-facts{grid-template-columns:1fr}.provider-actions{min-width:0}.provider-request-row .external-action{justify-self:stretch}}@media(max-width:32rem){.section-actions>*{width:100%}}
   let success_notice = match state.success_message {
     Some(value) =>
       @html.p(
@@ -3013,6 +3665,7 @@ fn enterprise_view(
   @html.div(class="enterprise-root", [
     @html.style_tag(stylesheet),
     @html.style_tag(account_styles),
+    @html.style_tag(provider_styles),
     @html.a(
       class="skip-link",
       href="#enterprise-main",

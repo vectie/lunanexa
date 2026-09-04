@@ -286,6 +286,15 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     model_source_results: [],
     model_source_total: 0L,
     model_imports: [],
+    model_adoption_draft: {
+      import_id: "",
+      model_id: "",
+      version: "",
+      license_id: "",
+      compatible_architectures: "",
+      minimum_memory_mib: "",
+    },
+    model_adopted_imports: [],
     operation_name: "register-model",
     operation_body: "{}",
     quick_deployment_id: "",
@@ -1327,7 +1336,7 @@ test "model source search stays disabled until operator authentication succeeds"
 }
 
 ///|
-test "failed model import exposes an operator retry action" {
+test "model import recovery and adoption preserve every safety gate" {
   let failed : ModelImportRow = {
     import_id: "ms-failed-1",
     source: "modelscope",
@@ -1370,30 +1379,89 @@ test "failed model import exposes an operator retry action" {
   })
   assert_true(html.contains("upstream-rejected"))
   assert_true(html.contains(">Retry</button>"))
+  let verified_local = {
+    ..failed,
+    state: Verified,
+    files_completed: failed.files_total,
+    bytes_completed: failed.bytes_total,
+    manifest_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    artifact_uri: "modelstore://modelscope/ms-failed-1",
+    error_code: "",
+  }
   let verified_html = @ui.render({
     ..console_state(Models),
     operator_authenticated: true,
     model_source_results: [candidate],
-    model_imports: [
-      {
-        ..failed,
-        state: Verified,
-        files_completed: failed.files_total,
-        bytes_completed: failed.bytes_total,
-        manifest_digest: "sha256:0123456789abcdef",
-        artifact_uri: "modelstore://modelscope/ms-failed-1",
-        error_code: "",
-      },
-    ],
+    model_imports: [verified_local],
   })
   assert_true(
-    verified_html.contains("Passed · ModelScope file sizes and SHA-256"),
+    verified_html.contains("Checksum passed; four safety gates remain"),
   )
   assert_true(
-    verified_html.contains("Pending · Deployable package and signature"),
+    verified_html.contains("Pending · Artifact signature and provenance"),
   )
-  assert_true(verified_html.contains("Approve for users"))
-  assert_true(verified_html.contains("disabled"))
+  assert_true(verified_html.contains("Pending · License acceptance"))
+  assert_true(
+    verified_html.contains("Pending · Evaluation for this exact digest"),
+  )
+  assert_true(verified_html.contains("Pending · Explicit operator approval"))
+  assert_true(verified_html.contains("Not ready for registry adoption"))
+  assert_false(verified_html.contains("Adopt as Candidate"))
+  let verified_s3 = {
+    ..verified_local,
+    artifact_uri: "s3://models/modelscope/ms-failed-1",
+  }
+  let adoptable_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [verified_s3],
+  })
+  assert_true(adoptable_html.contains("Adopt as Candidate"))
+  assert_false(adoptable_html.contains("model-adoption-id"))
+  let form_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [verified_s3],
+    model_adoption_draft: {
+      import_id: verified_s3.import_id,
+      model_id: "model.minicpm5-1b",
+      version: "modelscope-main",
+      license_id: "license.minicpm5-apache",
+      compatible_architectures: "nvidia-gb10, nvidia-ampere",
+      minimum_memory_mib: "8192",
+    },
+  })
+  for
+    id in [
+      "model-adoption-id", "model-adoption-version", "model-adoption-license", "model-adoption-architectures",
+      "model-adoption-memory",
+    ] {
+    assert_true(form_html.contains(id))
+  }
+  assert_true(form_html.contains("Register Candidate"))
+  assert_true(form_html.contains("Creates Candidate + pending license only"))
+  let detached_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [],
+    model_imports: [verified_s3],
+  })
+  assert_true(detached_html.contains("Imports awaiting a next action"))
+  assert_true(detached_html.contains("Visible after refresh or sign-in"))
+  assert_true(detached_html.contains("Adopt as Candidate"))
+  let chinese_html = @ui.render({
+    ..console_state(Models),
+    locale: ChineseSimplified,
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [verified_s3],
+  })
+  assert_true(
+    chinese_html.contains("校验已通过；仍保留四个安全门"),
+  )
+  assert_true(chinese_html.contains("登记为候选模型"))
 }
 
 ///|
