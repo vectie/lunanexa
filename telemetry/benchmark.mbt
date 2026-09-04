@@ -154,9 +154,20 @@ pub(all) struct EvidenceBundle {
   benchmark_summaries : Array[BenchmarkSummary]
   scenario_passed : Bool
   isolation_scan_passed : Bool
+  physical_cluster_passed : Bool
+  postgres_failover_passed : Bool
+  object_store_transfer_passed : Bool
+  inference_billing_passed : Bool
+  provider_integration_passed : Bool
+  browser_acceptance_passed : Bool
   security_report_ref : String
   operations_report_ref : String
   license_report_ref : String
+  ha_report_ref : String
+  object_store_report_ref : String
+  provider_report_ref : String
+  sanitization_report_ref : String
+  browser_report_ref : String
   accepted_by : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -165,9 +176,20 @@ pub(all) struct EvidenceBundleInput {
   release_version : String
   scenario_passed : Bool
   isolation_scan_passed : Bool
+  physical_cluster_passed : Bool
+  postgres_failover_passed : Bool
+  object_store_transfer_passed : Bool
+  inference_billing_passed : Bool
+  provider_integration_passed : Bool
+  browser_acceptance_passed : Bool
   security_report_ref : String
   operations_report_ref : String
   license_report_ref : String
+  ha_report_ref : String
+  object_store_report_ref : String
+  provider_report_ref : String
+  sanitization_report_ref : String
+  browser_report_ref : String
   accepted_by : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -181,9 +203,20 @@ pub fn build_evidence_bundle(
     benchmark_summaries: summaries,
     scenario_passed: input.scenario_passed,
     isolation_scan_passed: input.isolation_scan_passed,
+    physical_cluster_passed: input.physical_cluster_passed,
+    postgres_failover_passed: input.postgres_failover_passed,
+    object_store_transfer_passed: input.object_store_transfer_passed,
+    inference_billing_passed: input.inference_billing_passed,
+    provider_integration_passed: input.provider_integration_passed,
+    browser_acceptance_passed: input.browser_acceptance_passed,
     security_report_ref: input.security_report_ref,
     operations_report_ref: input.operations_report_ref,
     license_report_ref: input.license_report_ref,
+    ha_report_ref: input.ha_report_ref,
+    object_store_report_ref: input.object_store_report_ref,
+    provider_report_ref: input.provider_report_ref,
+    sanitization_report_ref: input.sanitization_report_ref,
+    browser_report_ref: input.browser_report_ref,
     accepted_by: input.accepted_by,
   }
 }
@@ -243,9 +276,20 @@ pub fn EvidenceBundle::release_ready(self : EvidenceBundle) -> Bool {
   self.benchmark_summaries.length() > 0 &&
   self.scenario_passed &&
   self.isolation_scan_passed &&
+  self.physical_cluster_passed &&
+  self.postgres_failover_passed &&
+  self.object_store_transfer_passed &&
+  self.inference_billing_passed &&
+  self.provider_integration_passed &&
+  self.browser_acceptance_passed &&
   self.security_report_ref != "" &&
   self.operations_report_ref != "" &&
   self.license_report_ref != "" &&
+  self.ha_report_ref != "" &&
+  self.object_store_report_ref != "" &&
+  self.provider_report_ref != "" &&
+  self.sanitization_report_ref != "" &&
+  self.browser_report_ref != "" &&
   self.accepted_by is Some(name) &&
   name != ""
 }
