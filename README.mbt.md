@@ -38,7 +38,8 @@ LunaNexa owns:
   decisions for an explicitly inventoried, operator-managed fleet;
 - organizations, cost centers, projects, budgets, quotas, capacity commitments,
   rated usage, ledger evidence and versioned digital agreements;
-- public account onboarding through a deployment-approved identity provider,
+- public account onboarding through a LunaNexa-operated, open-registration
+  Keycloak profile or a deployment-approved enterprise identity provider,
   self-service individual/company customer records, and organization switching;
 - prepaid self-service bare-machine and dedicated-endpoint offers with live
   capacity, signed quotes, payment settlement, provisioning and compensation;
@@ -52,6 +53,11 @@ LunaNexa does **not** own:
 - MoonGate's provider selection, client compatibility or product authority;
 - MoonDesk orchestration or MoonTown scheduling;
 - a home-grown model server, object store, container engine or metrics database.
+
+The platform identity profile is documented in
+[`docs/PLATFORM_IDENTITY.md`](docs/PLATFORM_IDENTITY.md). It self-hosts the
+password, verified-email, recovery and MFA authority without moving those
+secrets into the LunaNexa controller.
 
 It is one product with multiple deployable components. The controller, API,
 scheduler, registry, node agent, runtime adapters and console are components,

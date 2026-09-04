@@ -55,8 +55,9 @@ revocation, sanitization, budget or release gates.
 Before exposing the journey, an operator must:
 
 1. deploy the PostgreSQL production profile and leader fencing;
-2. deploy an approved OIDC gateway and either a public-sign-up-capable platform
-   IdP or enterprise federation;
+2. deploy an approved OIDC gateway and either the LunaNexa-operated public
+   identity profile in [`PLATFORM_IDENTITY.md`](PLATFORM_IDENTITY.md) or an
+   approved enterprise federation;
 3. configure identity-verification, payment and signature adapters, callback
    trust, action origins and durable outbox polling;
 4. publish exactly one current `ReadyTemplate` whose `agreement_type` is

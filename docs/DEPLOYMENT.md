@@ -1176,6 +1176,14 @@ ordinary `lnxs_` and `lnx_` bearer calls use the stripped direct API path. The
 static-token path remains only for CLI, automation, localhost, and the
 explicitly local development foundation.
 
+For users without a corporate directory, deploy the LunaNexa-operated Keycloak
+26.7.3 profile described in
+[`PLATFORM_IDENTITY.md`](PLATFORM_IDENTITY.md). The profile provisions open
+registration, verified email, recovery, TOTP and the exact operator/enterprise
+OIDC clients on a separate identity namespace. It requires a digest-pinned
+Keycloak image, external HA PostgreSQL, SMTP, TLS and a reviewed identity
+gateway; none of those external runtime checks is replaced by manifest tests.
+
 ## 8. Prepare each selected compute host
 
 Create the protected directories and rootless runtime network according to the

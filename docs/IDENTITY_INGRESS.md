@@ -57,8 +57,11 @@ The gateway must:
 - keep client secrets and cookie/assertion keys in the deployment secret
   manager, never a ConfigMap, manifest, URL, browser bundle, or log.
 
-The upstream IdP may be a platform-operated public identity service with open
-sign-up, or a customer's federated enterprise IdP. A person does not need a
+The repository includes a platform-operated public identity profile in
+`deploy/platform-identity.yaml`; see
+[`PLATFORM_IDENTITY.md`](PLATFORM_IDENTITY.md). It uses Keycloak 26.7.3 with
+open registration, verified email, password recovery and TOTP, or a deployment
+may use a customer's federated enterprise IdP. A person does not need a
 corporate directory to use the public profile: they create an identity at the
 platform IdP, then the first verified sign-in creates the LunaNexa account.
 Account creation alone grants only the bounded trial policy, when enabled; it
@@ -260,6 +263,12 @@ an explicit revoke action. API secrets are shown only once at issue time and
 remain stored as digests.
 
 ## Deployment
+
+For the LunaNexa-operated issuer, use
+`scripts/deploy/render-platform-identity.sh`. It renders the resources below
+together with the dedicated Keycloak namespace, realm, exact clients,
+restricted Ingress and network path. Use the generic renderer only for an
+approved enterprise issuer or another reviewed platform IdP.
 
 Provision the following keys in a Secret named
 `lunanexa-identity-ingress-credentials` using the deployment's secret manager:

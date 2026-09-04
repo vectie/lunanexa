@@ -400,7 +400,10 @@ Production gate still required:
 - prepaid usage is recorded as evidence without creating a second payable
   ledger charge.
 
-The remaining production work is operational rather than hidden product logic:
-deploy a public-sign-up-capable IdP or approved enterprise federation, configure
+The repository includes a LunaNexa-operated Keycloak 26.7.3 public identity
+profile with open registration, verified email, recovery, TOTP, exact PKCE
+clients, external PostgreSQL and restricted ingress. The remaining production
+work is operational rather than hidden product logic: deploy and smoke-test that
+profile or an approved enterprise federation, configure
 identity/payment/signature adapters, publish legally approved immutable terms,
 seed approved SKUs, and complete the physical-cluster release evidence gate.
