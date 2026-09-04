@@ -34,13 +34,13 @@ fn GatewaySessionStore::close(self : GatewaySessionStore) -> Unit {
 ///|
 async fn GatewaySessionStore::ping(self : GatewaySessionStore) -> Bool {
   self.mutex.acquire()
+  defer self.mutex.release()
   let healthy = try {
     let result = self.connection.execute("SELECT 1")
     result.row_count() == 1 && result.value(0, 0) == Some("1")
   } catch {
     _ => false
   }
-  self.mutex.release()
   healthy
 }
 
@@ -51,34 +51,27 @@ async fn GatewaySessionStore::create(
 ) -> String {
   let id = random_token(32)
   self.mutex.acquire()
-  try {
-    let insert_sql =
-      #|INSERT INTO lunanexa.identity_gateway_sessions
-      #|  (session_id, audience, browser_host, expires_unix_ms, payload)
-      #|VALUES ($1, $2, $3, $4::bigint, $5::jsonb)
-    ignore(
-      self.connection.execute(insert_sql, parameters=[
-        Some(id),
-        Some(value.audience),
-        Some(value.host),
-        Some(value.expires_unix_ms.to_string()),
-        Some(value.to_json().stringify()),
-      ]),
-    )
-    ignore(
-      self.connection.execute(
-        "DELETE FROM lunanexa.identity_gateway_sessions WHERE expires_unix_ms <= $1::bigint",
-        parameters=[Some(@async.now().to_string())],
-      ),
-    )
-    self.mutex.release()
-    id
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
+  defer self.mutex.release()
+  let insert_sql =
+    #|INSERT INTO lunanexa.identity_gateway_sessions
+    #|  (session_id, audience, browser_host, expires_unix_ms, payload)
+    #|VALUES ($1, $2, $3, $4::bigint, $5::jsonb)
+  ignore(
+    self.connection.execute(insert_sql, parameters=[
+      Some(id),
+      Some(value.audience),
+      Some(value.host),
+      Some(value.expires_unix_ms.to_string()),
+      Some(value.to_json().stringify()),
+    ]),
+  )
+  ignore(
+    self.connection.execute(
+      "DELETE FROM lunanexa.identity_gateway_sessions WHERE expires_unix_ms <= $1::bigint",
+      parameters=[Some(@async.now().to_string())],
+    ),
+  )
+  id
 }
 
 ///|
@@ -87,7 +80,8 @@ async fn GatewaySessionStore::load(
   id : String,
 ) -> GatewayCookie? {
   self.mutex.acquire()
-  let result = try {
+  defer self.mutex.release()
+  let result = {
     let select_sql =
       #|SELECT payload::text
       #|FROM lunanexa.identity_gateway_sessions
@@ -101,13 +95,7 @@ async fn GatewaySessionStore::load(
     } else {
       None
     }
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
   }
-  self.mutex.release()
   result
 }
 
@@ -118,28 +106,21 @@ async fn GatewaySessionStore::replace(
   value : GatewayCookie,
 ) -> Unit {
   self.mutex.acquire()
-  try {
-    let update_sql =
-      #|UPDATE lunanexa.identity_gateway_sessions
-      #|SET audience = $2, browser_host = $3, expires_unix_ms = $4::bigint,
-      #|    payload = $5::jsonb
-      #|WHERE session_id = $1
-    let updated = self.connection.execute(update_sql, parameters=[
-      Some(id),
-      Some(value.audience),
-      Some(value.host),
-      Some(value.expires_unix_ms.to_string()),
-      Some(value.to_json().stringify()),
-    ])
-    guard updated.affected_rows() == 1L else {
-      raise Failure("identity-gateway session disappeared")
-    }
-    self.mutex.release()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let update_sql =
+    #|UPDATE lunanexa.identity_gateway_sessions
+    #|SET audience = $2, browser_host = $3, expires_unix_ms = $4::bigint,
+    #|    payload = $5::jsonb
+    #|WHERE session_id = $1
+  let updated = self.connection.execute(update_sql, parameters=[
+    Some(id),
+    Some(value.audience),
+    Some(value.host),
+    Some(value.expires_unix_ms.to_string()),
+    Some(value.to_json().stringify()),
+  ])
+  guard updated.affected_rows() == 1L else {
+    raise Failure("identity-gateway session disappeared")
   }
 }
 
@@ -149,18 +130,13 @@ async fn GatewaySessionStore::delete(
   id : String,
 ) -> Bool {
   self.mutex.acquire()
-  let deleted = try {
+  defer self.mutex.release()
+  let deleted = {
     let result = self.connection.execute(
       "DELETE FROM lunanexa.identity_gateway_sessions WHERE session_id = $1",
       parameters=[Some(id)],
     )
     result.affected_rows() == 1L
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
   }
-  self.mutex.release()
   deleted
 }

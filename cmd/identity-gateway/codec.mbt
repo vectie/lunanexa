@@ -31,7 +31,7 @@ fn hex_digit(value : Int) -> Char {
 
 ///|
 fn form_encode(value : String) -> String {
-  let output = StringBuilder::new()
+  let output = StringBuilder()
   for byte in @utf8.encode(value) {
     let value = byte.to_int()
     if (value >= 'a' && value <= 'z') ||
