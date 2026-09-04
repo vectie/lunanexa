@@ -11,4 +11,15 @@ test "model-source retry route is narrow and maps to the private adapter" {
       "/v1/model-sources/modelscope/imports/ms-0123456789abcdef/delete",
     ),
   )
+  assert_true(
+    model_source_path(
+      "/v1/model-sources/modelscope/imports/ms-0123456789abcdef:adopt",
+    ),
+  )
+  assert_eq(
+    adopted_import_id(
+      "/v1/model-sources/modelscope/imports/ms-0123456789abcdef:adopt",
+    ),
+    Some("ms-0123456789abcdef"),
+  )
 }

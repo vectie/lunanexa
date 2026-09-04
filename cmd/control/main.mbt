@@ -100,6 +100,38 @@ fn provider_callback_secrets() -> Map[String, String] raise {
   secrets
 }
 
+///|
+/// The provider adapter pulls durable intents from LunaNexa; there is no
+/// controller-side URL and therefore no request-controlled SSRF surface.
+fn commercial_provider_adapter_configuration(
+  token : String?,
+  callback_secrets : Map[String, String],
+) -> (String, String, String, String)? raise {
+  match token {
+    None | Some("") => None
+    Some(value) => {
+      if value.length() < 32 || value.length() > 4096 {
+        raise Failure::Failure(
+          "LUNANEXA_COMMERCIAL_PROVIDER_ADAPTER_TOKEN must contain 32 to 4096 bytes",
+        )
+      }
+      let provider = required_environment("LUNANEXA_PROVIDER_CALLBACK_NAME")
+      let environment = required_environment(
+        "LUNANEXA_PROVIDER_CALLBACK_ENVIRONMENT",
+      )
+      let action_origin = required_environment(
+        "LUNANEXA_COMMERCIAL_PROVIDER_ACTION_ORIGIN",
+      )
+      if callback_secrets.get("\{provider}|\{environment}") is None {
+        raise Failure::Failure(
+          "commercial provider adapter requires the matching callback authority",
+        )
+      }
+      Some((value, provider, environment, action_origin))
+    }
+  }
+}
+
 ///| Both machine callback identities are optional as one fail-closed feature,
 
 ///|
@@ -447,6 +479,111 @@ async fn run_contract_governance_reconciler(service : @api.ApiService) -> Unit {
 }
 
 ///|
+/// Forward-recovers persisted cross-store WebIDE onboarding operations. The
+/// first pass runs immediately after startup; subsequent passes heal transient
+/// dependency failures without requiring the original browser request.
+async fn run_access_onboarding_reconciler(service : @api.ApiService) -> Unit {
+  for ;; {
+    ignore(service.reconcile_access_onboarding(@async.now()))
+    @async.sleep(30000)
+  }
+}
+
+///|
+fn valid_external_ha_postgres_url(database_url : String) -> Bool {
+  let value = database_url.trim()
+  let secure_scheme = value.has_prefix("postgresql://") ||
+    value.has_prefix("postgres://")
+  let mut sslmode_count = 0
+  let mut sslmode_valid = true
+  match value.find("?") {
+    Some(query_start) =>
+      for parameter in value[query_start + 1:].split("&") {
+        if parameter.has_prefix("sslmode=") {
+          sslmode_count += 1
+          if parameter != "sslmode=verify-full" {
+            sslmode_valid = false
+          }
+        }
+      }
+    None => ()
+  }
+  value == database_url &&
+  secure_scheme &&
+  !value.contains("#") &&
+  !value.contains("\\") &&
+  !value.contains_char('\n') &&
+  !value.contains_char('\r') &&
+  sslmode_count == 1 &&
+  sslmode_valid
+}
+
+///|
+fn validate_external_ha_postgres(database_url : String) -> Unit raise {
+  match @env.get_env_var("LUNANEXA_DATABASE_HA_MODE") {
+    Some("external-managed") =>
+      if !valid_external_ha_postgres_url(database_url) {
+        raise Failure::Failure(
+          "HA PostgreSQL requires a PostgreSQL URL with exactly one sslmode=verify-full query parameter",
+        )
+      }
+    Some("development-single-instance") =>
+      if @env.get_env_var("LUNANEXA_ALLOW_HTTP_LOOPBACK") != Some("1") {
+        raise Failure::Failure(
+          "development-single-instance PostgreSQL is allowed only in the explicit loopback development profile",
+        )
+      }
+    _ =>
+      raise Failure::Failure(
+        "PostgreSQL mode requires an explicit LUNANEXA_DATABASE_HA_MODE; use external-managed in production",
+      )
+  }
+}
+
+///|
+async fn await_controller_leadership(
+  database : @database.PostgresDatabase,
+  holder_id : String,
+  retry_ms : Int,
+) -> Int64 {
+  if holder_id.trim() == "" || holder_id.length() > 256 {
+    raise Failure::Failure(
+      "LUNANEXA_CONTROLLER_INSTANCE_ID must contain 1 to 256 bytes",
+    )
+  }
+  if retry_ms < 100 || retry_ms > 60000 {
+    raise Failure::Failure(
+      "LUNANEXA_LEADER_RETRY_MS must be between 100 and 60000",
+    )
+  }
+  for ;; {
+    match database.try_acquire_controller_leadership(holder_id) {
+      Some(token) => {
+        println("[startup] acquired PostgreSQL controller leadership")
+        return token
+      }
+      None => @async.sleep(retry_ms)
+    }
+  }
+}
+
+///|
+async fn monitor_controller_leadership(
+  database : @database.PostgresDatabase,
+  holder_id : String,
+  fencing_token : Int64,
+) -> Unit {
+  for ;; {
+    @async.sleep(2000)
+    if !database.controller_leadership_is_current(holder_id, fencing_token) {
+      raise Failure::Failure(
+        "PostgreSQL controller leadership was lost; terminating fenced replica",
+      )
+    }
+  }
+}
+
+///|
 async fn main {
   let global_settings = load_global_admin_settings()
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
@@ -515,6 +652,9 @@ async fn main {
   let account_path = @env.get_env_var("LUNANEXA_ACCOUNT_PATH").unwrap_or(
     "lunanexa-accounts.json",
   )
+  let access_onboarding_path = @env.get_env_var(
+    "LUNANEXA_ACCESS_ONBOARDING_PATH",
+  ).unwrap_or("lunanexa-access-onboarding.json")
   let credential_handoff_path = @env.get_env_var(
     "LUNANEXA_CREDENTIAL_HANDOFF_PATH",
   ).unwrap_or("lunanexa-credential-handoffs.json")
@@ -548,16 +688,29 @@ async fn main {
   let management_database : @database.PostgresDatabase? = match
     persistence_backend {
     "file" => None
-    "postgres" =>
-      Some(
-        @database.PostgresDatabase::open(
-          required_environment("LUNANEXA_DATABASE_URL"),
-        ),
-      )
+    "postgres" => {
+      let database_url = required_environment("LUNANEXA_DATABASE_URL")
+      validate_external_ha_postgres(database_url)
+      Some(@database.PostgresDatabase::open(database_url))
+    }
     _ =>
       raise Failure::Failure(
         "LUNANEXA_PERSISTENCE_BACKEND must be 'postgres' or 'file'",
       )
+  }
+  let controller_leadership : (String, Int64)? = match management_database {
+    Some(database) => {
+      let holder_id = required_environment("LUNANEXA_CONTROLLER_INSTANCE_ID")
+      let token = await_controller_leadership(
+        database,
+        holder_id,
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_LEADER_RETRY_MS").unwrap_or("1000"),
+        ).to_int(),
+      )
+      Some((holder_id, token))
+    }
+    None => None
   }
   let runtime_endpoint = required_environment("LUNANEXA_RUNTIME_ENDPOINT")
   let mut runtime = @runtimes.OpenAiTextRuntime::new(
@@ -583,31 +736,67 @@ async fn main {
     path != "" {
     runtime = runtime.with_node_endpoints_json(@fs.read_file(path).text())
   }
-  let durable = @store.FileStore::open(state_path)
-  durable.fence_controller(
-    @string.parse_int64(required_environment("LUNANEXA_CONTROLLER_EPOCH")),
-  ) catch {
+  let durable = match (management_database, controller_leadership) {
+    (Some(database), Some((holder_id, token))) =>
+      @store.FileStore::open_postgres(database, holder_id, token)
+    (None, None) => @store.FileStore::open(state_path)
+    _ =>
+      raise Failure::Failure("controller leadership configuration is invalid")
+  }
+  let controller_epoch = match controller_leadership {
+    Some((_, token)) => token
+    None =>
+      @string.parse_int64(required_environment("LUNANEXA_CONTROLLER_EPOCH"))
+  }
+  durable.fence_controller(controller_epoch) catch {
     @store.DurableStoreError::InvalidState(message) => {
       println("[startup] controller epoch rejected: \{message}")
       raise @store.DurableStoreError::InvalidState(message)
     }
     error => raise error
   }
-  let registry = @registry.FileRegistry::open(registry_path)
-  let enrollment = @node.FileEnrollmentService::open(enrollment_path)
-  let scheduler = @scheduler.FileScheduler::open(
-    scheduler_path,
-    global_settings.scheduler.admission_capacity,
-    decision_history_limit=global_settings.retention.scheduler_decision_entries,
-    background_capacity_percent=global_settings.scheduler.background_capacity_percent,
-    normal_capacity_percent=global_settings.scheduler.normal_capacity_percent,
-  )
-  let telemetry = @telemetry.FileTelemetry::open(
-    telemetry_path,
-    sample_history_limit=global_settings.retention.telemetry_sample_entries,
-    benchmark_history_limit=global_settings.retention.benchmark_run_entries,
-    safety_limits=global_settings.telemetry_safety,
-  )
+  let registry = match management_database {
+    Some(database) => @registry.FileRegistry::open_postgres(database)
+    None => @registry.FileRegistry::open(registry_path)
+  }
+  let enrollment = match management_database {
+    Some(database) => @node.FileEnrollmentService::open_postgres(database)
+    None => @node.FileEnrollmentService::open(enrollment_path)
+  }
+  let scheduler = match management_database {
+    Some(database) =>
+      @scheduler.FileScheduler::open_postgres(
+        database,
+        global_settings.scheduler.admission_capacity,
+        decision_history_limit=global_settings.retention.scheduler_decision_entries,
+        background_capacity_percent=global_settings.scheduler.background_capacity_percent,
+        normal_capacity_percent=global_settings.scheduler.normal_capacity_percent,
+      )
+    None =>
+      @scheduler.FileScheduler::open(
+        scheduler_path,
+        global_settings.scheduler.admission_capacity,
+        decision_history_limit=global_settings.retention.scheduler_decision_entries,
+        background_capacity_percent=global_settings.scheduler.background_capacity_percent,
+        normal_capacity_percent=global_settings.scheduler.normal_capacity_percent,
+      )
+  }
+  let telemetry = match management_database {
+    Some(database) =>
+      @telemetry.FileTelemetry::open_postgres(
+        database,
+        sample_history_limit=global_settings.retention.telemetry_sample_entries,
+        benchmark_history_limit=global_settings.retention.benchmark_run_entries,
+        safety_limits=global_settings.telemetry_safety,
+      )
+    None =>
+      @telemetry.FileTelemetry::open(
+        telemetry_path,
+        sample_history_limit=global_settings.retention.telemetry_sample_entries,
+        benchmark_history_limit=global_settings.retention.benchmark_run_entries,
+        safety_limits=global_settings.telemetry_safety,
+      )
+  }
   let workspace_directory = match management_database {
     Some(database) => @directory.FileWorkspaceDirectory::open_postgres(database)
     None => @directory.FileWorkspaceDirectory::open(workspace_path)
@@ -618,9 +807,16 @@ async fn main {
   let catalog_signing_secret = required_environment(
     "LUNANEXA_CATALOG_SIGNING_SECRET",
   )
-  let deployment_store = @deployment_store.FileDeploymentStore::open(
-    deployment_path, catalog_signing_secret,
-  )
+  let deployment_store = match management_database {
+    Some(database) =>
+      @deployment_store.FileDeploymentStore::open_postgres(
+        database, catalog_signing_secret,
+      )
+    None =>
+      @deployment_store.FileDeploymentStore::open(
+        deployment_path, catalog_signing_secret,
+      )
+  }
   let exclusive_lease_signing_secret = required_environment(
     "LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET",
   )
@@ -790,6 +986,10 @@ async fn main {
     None =>
       @account.AccountStore::open(account_path, account_session_issuer_secret)
   }
+  let access_onboarding_store = match management_database {
+    Some(database) => @onboarding.AccessOnboardingStore::open_postgres(database)
+    None => @onboarding.AccessOnboardingStore::open(access_onboarding_path)
+  }
   let credential_handoff_issuer_secret = required_environment(
     "LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET",
   )
@@ -906,6 +1106,22 @@ async fn main {
     @env.get_env_var("LUNANEXA_MODEL_SOURCE_ADAPTER_TOKEN"),
   )
   let configured_provider_callback_secrets = provider_callback_secrets()
+  let commercial_provider_adapter = commercial_provider_adapter_configuration(
+    @env.get_env_var("LUNANEXA_COMMERCIAL_PROVIDER_ADAPTER_TOKEN"),
+    configured_provider_callback_secrets,
+  )
+  let credential_issuer_adapter_token = match
+    @env.get_env_var("LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN") {
+    Some(value) if value != "" => {
+      if value.length() < 32 || value.length() > 4096 {
+        raise Failure::Failure(
+          "LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN must contain 32 to 4096 bytes",
+        )
+      }
+      Some(value)
+    }
+    _ => None
+  }
   let operational_secrets = [
     ("LUNANEXA_OPERATOR_TOKEN", operator_token),
     ("LUNANEXA_INFERENCE_TOKEN", inference_token),
@@ -926,6 +1142,20 @@ async fn main {
     operational_secrets.push(
       ("LUNANEXA_IDENTITY_ASSERTION_SECRET", identity_assertion_secret),
     )
+  }
+  match commercial_provider_adapter {
+    Some(configuration) =>
+      operational_secrets.push(
+        ("LUNANEXA_COMMERCIAL_PROVIDER_ADAPTER_TOKEN", configuration.0),
+      )
+    None => ()
+  }
+  match credential_issuer_adapter_token {
+    Some(token) =>
+      operational_secrets.push(
+        ("LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN", token),
+      )
+    None => ()
   }
   // Multi-operator attribution: when LUNANEXA_OPERATOR_TOKENS is set it
   // replaces the legacy single operator token on the contract-document
@@ -1065,6 +1295,7 @@ async fn main {
     )
     .with_access_store(access_store)
     .with_account_store(account_store, identity_assertion_secret)
+    .with_access_onboarding_store(access_onboarding_store)
     .with_open_registration_trial(
       @string.parse_int64(
         @env.get_env_var("LUNANEXA_OPEN_TRIAL_HOURS").unwrap_or("24"),
@@ -1154,14 +1385,28 @@ async fn main {
     })
     .with_provider_callback_secrets(configured_provider_callback_secrets)
     .with_global_admin_settings(global_settings)
+  let issuer_service = match credential_issuer_adapter_token {
+    Some(token) => initial_service.with_credential_issuer_adapter_token(token)
+    None => initial_service
+  }
+  let provider_service = match commercial_provider_adapter {
+    Some(configuration) =>
+      issuer_service.with_commercial_provider_adapter(
+        configuration.0,
+        configuration.1,
+        configuration.2,
+        configuration.3,
+      )
+    None => issuer_service
+  }
   let configured_service = match offline_transfer_adapter {
     Some(configuration) =>
-      initial_service.with_offline_transfer_adapter(
+      provider_service.with_offline_transfer_adapter(
         configuration.0,
         configuration.1,
         configuration.2,
       )
-    None => initial_service
+    None => provider_service
   }
   let configured_service = match model_source_adapter {
     Some(configuration) =>
@@ -1222,6 +1467,13 @@ async fn main {
   }
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   @async.with_task_group <| group => {
+    match (management_database, controller_leadership) {
+      (Some(database), Some((holder_id, token))) =>
+        group.spawn_bg(allow_failure=false) <| () => {
+          monitor_controller_leadership(database, holder_id, token)
+        }
+      _ => ()
+    }
     group.spawn_bg(allow_failure=false) <| () => {
       service.run_notification_reconciler_forever(
         @string.parse_int64(
@@ -1239,6 +1491,9 @@ async fn main {
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_contract_governance_reconciler(service)
+    }
+    group.spawn_bg(allow_failure=false) <| () => {
+      run_access_onboarding_reconciler(service)
     }
     group.spawn_bg(allow_failure=false) <| () => {
       service.run_exclusive_lease_expiry_reconciler_forever(

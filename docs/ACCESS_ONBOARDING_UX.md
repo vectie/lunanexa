@@ -27,7 +27,7 @@ desktop forms.
    tenant. Select the reviewed WebIDE developer template and an access period.
 3. Review the derived scope and create the package. LunaNexa derives stable
    identifiers and creates the account, enterprise membership, workspace user,
-   Developer grant and requested workspace lease as one resumable intent.
+   Developer grant and requested workspace lease as one durable saga.
 4. When the customer's MasterLease is effective, choose **Enable WebIDE**.
 
 ### Enterprise user
@@ -59,6 +59,17 @@ per-resource state, correlation receipts and recovery guidance. Existing
 granular mutation routes remain available under advanced operations for
 exception repair and migration; they are not the default onboarding journey.
 
+The saga commits a redacted intent before creating any cross-store resource.
+It checkpoints `AccountReady`, `MembershipReady`, `WorkspaceUserReady`,
+`GrantReady`, `LeaseReady` and `Prepared`. If the controller stops after a
+resource commit but before its checkpoint, deterministic identifiers let the
+next controller verify that resource and continue without duplication. A
+background reconciler runs immediately after startup and every 30 seconds.
+Transient failures remain `RecoverableFailure` with a bounded error and
+attempt count; authoritative mismatches become `Conflicted` for explicit
+operator recovery. `GET /v1/onboarding/access-packages/operations` exposes
+this evidence. The journal stores the OIDC subject digest, not the raw subject.
+
 ## Safety boundaries
 
 - The identity provider still owns passwords, MFA and recovery.
@@ -83,4 +94,6 @@ The common operator path should require no opaque identifier entry and no raw
 JSON editing. It should fit in one form, one scope review and one later enable
 action. The enterprise path should show one blocking action at a time and one
 dominant launch action when ready. Partial orchestration must be safe to retry
-without creating duplicate records.
+without creating duplicate records. No partial resource may exist without a
+durable operation naming its expected owner, last confirmed step and recovery
+disposition.

@@ -3,7 +3,12 @@ kind: Deployment
 metadata:
   name: lunanexa-control
 spec:
-  replicas: 1
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: lunanexa-control
@@ -16,6 +21,15 @@ spec:
     spec:
       serviceAccountName: lunanexa-control
       automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: lunanexa-control
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -77,6 +91,12 @@ spec:
                 secretKeyRef:
                   name: lunanexa-machine-readiness
                   key: credential-issuer-readiness-secret
+                  optional: true
+            - name: LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: credential-issuer-adapter-token
                   optional: true
             - name: LUNANEXA_MACHINE_HELPER_READINESS_PATH
               valueFrom:
@@ -215,10 +235,10 @@ spec:
               value: /var/lib/lunanexa/access.json
             - name: LUNANEXA_ACCOUNT_PATH
               value: /var/lib/lunanexa/accounts.json
+            - name: LUNANEXA_ACCESS_ONBOARDING_PATH
+              value: /var/lib/lunanexa/access-onboarding.json
             - name: LUNANEXA_TECHNICAL_PATH
               value: /var/lib/lunanexa/technical.json
-            - name: LUNANEXA_MODEL_STORE_ROOT
-              value: /data/models
             - name: LUNANEXA_MODEL_SOURCE_ADAPTER_ENDPOINT
               value: http://lunanexa-model-source:8090
             - name: LUNANEXA_MODEL_SOURCE_ADAPTER_TOKEN
@@ -251,13 +271,35 @@ spec:
                 secretKeyRef:
                   name: lunanexa-control-credentials
                   key: provider-callback-secret
+            # Machine-only pull authority for payment/signature/identity
+            # intents. When absent, management readiness remains red and the
+            # customer routes fail closed; the controller never calls a
+            # user-supplied provider URL.
+            - name: LUNANEXA_COMMERCIAL_PROVIDER_ADAPTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-control-credentials
+                  key: commercial-provider-adapter-token
+                  optional: true
+            - name: LUNANEXA_COMMERCIAL_PROVIDER_ACTION_ORIGIN
+              value: "${COMMERCIAL_PROVIDER_ACTION_ORIGIN}"
             - name: LUNANEXA_PERSISTENCE_BACKEND
               value: postgres
+            # Production fail-closes unless the supplied endpoint is an
+            # independently operated HA PostgreSQL service with verified TLS.
+            - name: LUNANEXA_DATABASE_HA_MODE
+              value: external-managed
             - name: LUNANEXA_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: lunanexa-database
                   key: url
+            - name: LUNANEXA_CONTROLLER_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: LUNANEXA_LEADER_RETRY_MS
+              value: "1000"
             - name: LUNANEXA_AVAILABLE_SECRET_REFS
               value: "runtime-token"
             - name: LUNANEXA_REQUIRE_WORKSPACE_LEASE
@@ -382,10 +424,6 @@ spec:
             httpGet:
               path: /ready
               port: http
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -409,13 +447,12 @@ spec:
             - name: machine-readiness
               mountPath: /etc/lunanexa/machine-readiness
               readOnly: true
-            - name: model-store
-              mountPath: /data/models
-              readOnly: true
       volumes:
         - name: state
-          persistentVolumeClaim:
-            claimName: lunanexa-control-state
+          # File paths are development/scratch compatibility only in the
+          # PostgreSQL profile. Every authoritative control-plane domain is in
+          # PostgreSQL, so replicas never share a ReadWriteOnce PVC.
+          emptyDir: {}
         - name: cosign-trust
           secret:
             secretName: lunanexa-cosign-trust
@@ -434,10 +471,6 @@ spec:
             secretName: lunanexa-machine-readiness
             optional: true
             defaultMode: 0400
-        - name: model-store
-          hostPath:
-            path: /data/models
-            type: Directory
 ---
 apiVersion: v1
 kind: Service

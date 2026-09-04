@@ -33,12 +33,20 @@ started=1
 psql "$database_url" -v ON_ERROR_STOP=1 \
   -f database/migrations/001_management.sql >/dev/null
 LUNANEXA_DATABASE_URL="$database_url" moon run cmd/database --target native
-test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "2"
+test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "3"
+case "${LUNANEXA_POSTGRES_TEST_SCOPE:-full}" in
+  ha)
+    test_packages='database store registry node scheduler telemetry deployment/store'
+    ;;
+  full)
+    test_packages='internal/postgres database account portal/store workspace/directory notifications/store observability commercial/offline/store nodelease/store nodelease/credential/store store registry node scheduler telemetry deployment/store api'
+    ;;
+  *)
+    printf '%s\n' 'LUNANEXA_POSTGRES_TEST_SCOPE must be full or ha' >&2
+    exit 1
+    ;;
+esac
 LUNANEXA_TEST_DATABASE_URL="$database_url" \
-  moon test internal/postgres database account portal/store workspace/directory \
-    notifications/store observability commercial/offline/store \
-    nodelease/store nodelease/credential/store \
-    api \
-    --target native --deny-warn
+  moon test $test_packages --target native --deny-warn
 
-printf '%s\n' 'PostgreSQL injection, migration, projection, rollback, and restart tests passed'
+printf '%s\n' 'PostgreSQL migration, leadership, HA snapshot, projection, rollback, and restart tests passed'

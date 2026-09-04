@@ -132,6 +132,21 @@ pub fn validate_issue_intent(
 }
 
 ///|
+pub fn validate_issuer_request_intent(
+  intent : CredentialIssuerRequestIntent,
+) -> Unit raise CredentialHandoffError {
+  if !@contracts.valid_identifier(intent.request_id) ||
+    !@contracts.valid_identifier(intent.lease_id) ||
+    intent.expected_generation <= 0L ||
+    !safe_host_alias(intent.host_alias) ||
+    intent.ssh_port <= 0 ||
+    intent.ssh_port > 65535 ||
+    !safe_host_fingerprint(intent.host_key_fingerprint) {
+    raise InvalidInput("credential issuer request is invalid")
+  }
+}
+
+///|
 pub fn connection_command(
   username : String,
   host_alias : String,

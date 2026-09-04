@@ -25,6 +25,8 @@ pub struct ApiService {
   global_settings : @settings.GlobalAdminSettings
   store : @store.FileStore
   account_store : @account.AccountStore?
+  access_onboarding_store : @onboarding.AccessOnboardingStore?
+  access_onboarding_fail_after_step : @onboarding.AccessOnboardingStep?
   identity_assertion_secret : String
   open_trial_lifetime_ms : Int64
   open_trial_maximum_requests : Int64
@@ -46,6 +48,7 @@ pub struct ApiService {
   deployment_store : @deployment_store.FileDeploymentStore?
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   credential_handoff_store : @credential_store.CredentialHandoffStore?
+  credential_issuer_adapter_token : String?
   client_handoff_store : @client_handoff_store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
   lease_helper_receipt_secret : String
@@ -79,6 +82,10 @@ pub struct ApiService {
   artifact_root : String?
   exclusive_lease_unit_price : @commercial.FixedMoney
   provider_callback_secrets : Map[String, String]
+  commercial_provider_adapter_token : String?
+  commercial_provider_name : String?
+  commercial_provider_environment : String?
+  commercial_provider_action_origin : String?
   artifact_worker_callback_token : String?
   artifact_scanner_callback_token : String?
   entitlement_authority_callback_token : String?
@@ -114,6 +121,8 @@ pub fn ApiService::new(
     global_settings: @settings.default_global_admin_settings(),
     store,
     account_store: None,
+    access_onboarding_store: None,
+    access_onboarding_fail_after_step: None,
     identity_assertion_secret: "",
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
@@ -133,6 +142,7 @@ pub fn ApiService::new(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
     lease_helper_receipt_secret: "",
@@ -164,6 +174,10 @@ pub fn ApiService::new(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    commercial_provider_adapter_token: None,
+    commercial_provider_name: None,
+    commercial_provider_environment: None,
+    commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
@@ -199,6 +213,8 @@ pub fn ApiService::with_registry(
     global_settings: @settings.default_global_admin_settings(),
     store,
     account_store: None,
+    access_onboarding_store: None,
+    access_onboarding_fail_after_step: None,
     identity_assertion_secret: "",
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
@@ -218,6 +234,7 @@ pub fn ApiService::with_registry(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
     lease_helper_receipt_secret: "",
@@ -249,6 +266,10 @@ pub fn ApiService::with_registry(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    commercial_provider_adapter_token: None,
+    commercial_provider_name: None,
+    commercial_provider_environment: None,
+    commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
@@ -285,6 +306,8 @@ pub fn ApiService::with_services(
     global_settings: @settings.default_global_admin_settings(),
     store,
     account_store: None,
+    access_onboarding_store: None,
+    access_onboarding_fail_after_step: None,
     identity_assertion_secret: "",
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
@@ -304,6 +327,7 @@ pub fn ApiService::with_services(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
     lease_helper_receipt_secret: "",
@@ -335,6 +359,10 @@ pub fn ApiService::with_services(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    commercial_provider_adapter_token: None,
+    commercial_provider_name: None,
+    commercial_provider_environment: None,
+    commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
@@ -373,6 +401,8 @@ pub fn ApiService::with_control_plane(
     global_settings: @settings.default_global_admin_settings(),
     store,
     account_store: None,
+    access_onboarding_store: None,
+    access_onboarding_fail_after_step: None,
     identity_assertion_secret: "",
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
@@ -392,6 +422,7 @@ pub fn ApiService::with_control_plane(
     deployment_store: None,
     exclusive_lease_store: None,
     credential_handoff_store: None,
+    credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
     lease_helper_receipt_secret: "",
@@ -423,6 +454,10 @@ pub fn ApiService::with_control_plane(
     artifact_root: None,
     exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
     provider_callback_secrets: Map([]),
+    commercial_provider_adapter_token: None,
+    commercial_provider_name: None,
+    commercial_provider_environment: None,
+    commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
@@ -484,6 +519,16 @@ pub fn ApiService::with_account_store(
   identity_assertion_secret : String,
 ) -> ApiService {
   { ..self, account_store: Some(account_store), identity_assertion_secret }
+}
+
+///|
+/// Installs the durable journal that makes cross-store access onboarding
+/// observable and restart-recoverable.
+pub fn ApiService::with_access_onboarding_store(
+  self : ApiService,
+  store : @onboarding.AccessOnboardingStore,
+) -> ApiService {
+  { ..self, access_onboarding_store: Some(store) }
 }
 
 ///|
@@ -871,6 +916,21 @@ pub fn ApiService::with_credential_handoff_store(
 }
 
 ///|
+/// Installs the independent machine identity used by the external credential
+/// issuer to pull and acknowledge durable lease-bound requests.
+pub fn ApiService::with_credential_issuer_adapter_token(
+  self : ApiService,
+  token : String,
+) -> ApiService raise Failure {
+  if token.length() < 32 || token.length() > 4096 {
+    raise Failure(
+      "credential issuer adapter token must contain 32 to 4096 bytes",
+    )
+  }
+  { ..self, credential_issuer_adapter_token: Some(token) }
+}
+
+///|
 /// Enables provider-neutral desktop workspace handoffs. Product-specific
 /// provider binding remains the responsibility of the local client adapter.
 pub fn ApiService::with_client_handoff_store(
@@ -1154,6 +1214,15 @@ async fn ApiService::cache_result(
     ignore(self.response_cache.remove(oldest))
   }
   self.active_mutex.release()
+}
+
+///|
+/// Keeps the execution target in the durable internal receipt for metering and
+/// reconciliation while removing topology from every customer-facing reply.
+fn topology_free_workload_response(
+  response : @contracts.WorkloadResponse,
+) -> @contracts.WorkloadResponse {
+  { ..response, execution_node_id: None }
 }
 
 ///|
@@ -2146,7 +2215,10 @@ async fn ApiService::invoke_workload(
       if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
         return reply
       }
-      return json_reply(200, response.to_json())
+      return json_reply(
+        200,
+        topology_free_workload_response(response).to_json(),
+      )
     }
     None => ()
   }
@@ -2155,7 +2227,10 @@ async fn ApiService::invoke_workload(
       if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
         return reply
       }
-      return json_reply(200, response.to_json())
+      return json_reply(
+        200,
+        topology_free_workload_response(response).to_json(),
+      )
     }
     None => ()
   }
@@ -2305,7 +2380,10 @@ async fn ApiService::invoke_workload(
       if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
         return reply
       }
-      return json_reply(200, response.to_json())
+      return json_reply(
+        200,
+        topology_free_workload_response(response).to_json(),
+      )
     }
   } noraise {
     value => value
@@ -2359,7 +2437,7 @@ async fn ApiService::invoke_workload(
   if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
     return reply
   }
-  json_reply(200, response.to_json())
+  json_reply(200, topology_free_workload_response(response).to_json())
 }
 
 ///|
@@ -2566,7 +2644,7 @@ async fn ApiService::stream_workload(
         sequence: 1,
         kind: Completed,
         output: None,
-        response: Some(response),
+        response: Some(topology_free_workload_response(response)),
       },
       openai,
     )
@@ -2764,7 +2842,7 @@ async fn ApiService::stream_workload(
             Failed
           },
           output: None,
-          response: Some(response),
+          response: Some(topology_free_workload_response(response)),
         },
         openai,
       ) catch {
@@ -2837,7 +2915,10 @@ async fn ApiService::stream_workload(
       sequence,
       kind: Completed,
       output: None,
-      response: Some({ ..response, output: None }),
+      response: Some({
+        ..topology_free_workload_response(response),
+        output: None,
+      }),
     },
     openai,
   )
@@ -2942,6 +3023,9 @@ async fn ApiService::dispatch_with_transport(
   }
   if contract_governance_path(path) {
     return self.handle_contract_governance(verb, path, headers, body)
+  }
+  if commercial_provider_adapter_path(path) {
+    return self.handle_commercial_provider_adapter(verb, path, headers, body)
   }
   if commercial_management_path(path) {
     return self.handle_commercial_management(verb, path, headers, body)
@@ -4415,7 +4499,8 @@ async fn ApiService::dispatch_with_transport(
         return reply
       }
       match self.store.workload_result(workload_id) {
-        Some(response) => json_reply(200, response.to_json())
+        Some(response) =>
+          json_reply(200, topology_free_workload_response(response).to_json())
         None => {
           let admission = match self.scheduler {
             Some(scheduler) => scheduler.admission(workload_id)

@@ -18,6 +18,7 @@ import {
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/notifications",
   "vectie/lunanexa/observability",
+  "vectie/lunanexa/onboarding",
   "vectie/lunanexa/registry",
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/scheduler",
@@ -50,6 +51,8 @@ pub struct ApiService {
   global_settings : @settings.GlobalAdminSettings
   store : @vectie/lunanexa/store.FileStore
   account_store : @account.AccountStore?
+  access_onboarding_store : @onboarding.AccessOnboardingStore?
+  access_onboarding_fail_after_step : @onboarding.AccessOnboardingStep?
   identity_assertion_secret : String
   open_trial_lifetime_ms : Int64
   open_trial_maximum_requests : Int64
@@ -69,6 +72,7 @@ pub struct ApiService {
   deployment_store : @vectie/lunanexa/deployment/store.FileDeploymentStore?
   exclusive_lease_store : @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore?
   credential_handoff_store : @vectie/lunanexa/nodelease/credential/store.CredentialHandoffStore?
+  credential_issuer_adapter_token : String?
   client_handoff_store : @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
   lease_helper_receipt_secret : String
@@ -100,6 +104,10 @@ pub struct ApiService {
   artifact_root : String?
   exclusive_lease_unit_price : @commercial.FixedMoney
   provider_callback_secrets : Map[String, String]
+  commercial_provider_adapter_token : String?
+  commercial_provider_name : String?
+  commercial_provider_environment : String?
+  commercial_provider_action_origin : String?
   artifact_worker_callback_token : String?
   artifact_scanner_callback_token : String?
   entitlement_authority_callback_token : String?
@@ -124,6 +132,7 @@ pub async fn ApiService::internal_component_ready(Self) -> Bool
 pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadiness
 pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub async fn ApiService::observability_readiness(Self, now_unix_ms? : Int64) -> @observability.ObservabilityReadiness?
+pub async fn ApiService::reconcile_access_onboarding(Self, Int64) -> Int
 pub async fn ApiService::reconcile_contract_governance(Self, Int64) -> Unit
 pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
 pub async fn ApiService::reconcile_expiring_contracts(Self, Int64, Int64) -> Unit
@@ -137,17 +146,20 @@ pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit 
 pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
 pub async fn ApiService::trusted_operational_tenant_hash(Self, Map[String, String], Bool) -> String?
+pub fn ApiService::with_access_onboarding_store(Self, @onboarding.AccessOnboardingStore) -> Self
 pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
 pub fn ApiService::with_account_store(Self, @account.AccountStore, String) -> Self
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig) -> Self raise Failure
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
+pub fn ApiService::with_commercial_provider_adapter(Self, String, String, String, String) -> Self raise Failure
 pub fn ApiService::with_contract_approval_threshold(Self, Int64) -> Self
 pub fn ApiService::with_contract_document_store(Self, @vectie/lunanexa/contractdoc/store.ContractDocumentStore) -> Self
 pub fn ApiService::with_contract_document_worker_token(Self, String) -> Self
 pub fn ApiService::with_control_plane(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @scheduler.FileScheduler, @telemetry.FileTelemetry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_credential_handoff_store(Self, @vectie/lunanexa/nodelease/credential/store.CredentialHandoffStore) -> Self
+pub fn ApiService::with_credential_issuer_adapter_token(Self, String) -> Self raise Failure
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
 pub fn ApiService::with_entitlement_authority_callback_token(Self, String) -> Self
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
@@ -201,6 +213,7 @@ pub(all) struct ManagementReadiness {
   notification_delivery : @notifications.NotificationDeliveryReadiness?
   observability : @observability.ObservabilityReadiness?
   offline_commerce : @offline.OfflineCommerceReadiness
+  commercial_provider_adapter_configured : Bool
   credential_broker_configured : Bool
   machine_helper_receipt_verifier_configured : Bool
   machine_helper_adapter_verified : Bool

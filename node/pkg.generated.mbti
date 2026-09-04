@@ -143,6 +143,7 @@ pub async fn FileEnrollmentService::open(String) -> Self
 pub async fn FileEnrollmentService::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn FileEnrollmentService::renew(Self, String, String, String, Int64, Int64, certificate_lifetime_ms? : Int64, renewal_grace_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
+pub async fn FileEnrollmentService::snapshot(Self) -> String
 
 pub struct MaterializedArtifact {
   digest : String

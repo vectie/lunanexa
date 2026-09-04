@@ -26,6 +26,14 @@ For the short operator-to-user journey that replaces manual account,
 membership, grant, lease, contract and handoff coordination, see
 [Access onboarding UX](ACCESS_ONBOARDING_UX.md).
 
+Access-package creation is a persisted forward-recovery saga, not an impossible
+transaction spanning independent authorities. Its `access_onboarding`
+PostgreSQL snapshot (or `0600` development file) is committed before the first
+resource and after every verified step. Startup reconciliation resumes
+non-terminal work. A crash between a resource write and its checkpoint is
+repaired by validating the deterministically named resource; failures and
+conflicts remain visible rather than becoming silent orphan state.
+
 ## Trust boundary
 
 A `WorkspaceLease` is an expiring control-plane entitlement. It declares

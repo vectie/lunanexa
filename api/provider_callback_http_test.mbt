@@ -22,6 +22,10 @@ async test "provider callback requires signed bound replay-safe transport" {
       "0.1.0",
     )
     .with_provider_callback_secrets({ "provider-a|sandbox": secret })
+    .with_commercial_provider_adapter(
+      "provider-adapter-machine-token-more-than-32-bytes", "provider-a", "sandbox",
+      "https://provider.example",
+    )
     .with_portal_store(portal_store)
   let now = @async.now()
   let operator = { "Authorization": "Bearer operator-token" }

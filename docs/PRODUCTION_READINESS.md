@@ -349,9 +349,10 @@ immutable evidence reference:
   physical DGX validation and deployment-specific writable-path/SSH/container
   isolation remain required.
 - LunaNexa relies on an external mTLS proxy/service mesh, OCI registry,
-  certificate authority, secret manager and metrics backend. The artifact
-  gateway itself is built in and still requires protected `/data/models`
-  storage and backup.
+  certificate authority, secret manager, metrics backend and HA S3-compatible
+  object store. Production model transfer uses the reviewed Moongate S3 origin;
+  bucket policy, credential rotation, replication and restore evidence remain
+  deployment gates.
 - The base deployment templates contain placeholders and are not production
   overlays.
 - The node supervisor does not publish the production inference gateway; the
