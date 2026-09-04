@@ -77,12 +77,30 @@ test "release evidence requires named human acceptance" {
     benchmark_summaries: [summary],
     scenario_passed: true,
     isolation_scan_passed: true,
+    physical_cluster_passed: true,
+    postgres_failover_passed: true,
+    object_store_transfer_passed: true,
+    inference_billing_passed: true,
+    provider_integration_passed: true,
+    browser_acceptance_passed: true,
     security_report_ref: "report:security",
     operations_report_ref: "report:operations",
     license_report_ref: "report:license",
+    ha_report_ref: "report:ha",
+    object_store_report_ref: "report:object-store",
+    provider_report_ref: "report:providers",
+    sanitization_report_ref: "report:sanitization",
+    browser_report_ref: "report:browser",
     accepted_by: None,
   }
   assert_false(evidence.release_ready())
+  assert_false(
+    {
+      ..evidence,
+      accepted_by: Some("named-operator"),
+      object_store_transfer_passed: false,
+    }.release_ready(),
+  )
   assert_true(
     { ..evidence, accepted_by: Some("named-operator") }.release_ready(),
   )
@@ -90,9 +108,20 @@ test "release evidence requires named human acceptance" {
     release_version: "0.1.0",
     scenario_passed: true,
     isolation_scan_passed: true,
+    physical_cluster_passed: true,
+    postgres_failover_passed: true,
+    object_store_transfer_passed: true,
+    inference_billing_passed: true,
+    provider_integration_passed: true,
+    browser_acceptance_passed: true,
     security_report_ref: "report:security",
     operations_report_ref: "report:operations",
     license_report_ref: "report:license",
+    ha_report_ref: "report:ha",
+    object_store_report_ref: "report:object-store",
+    provider_report_ref: "report:providers",
+    sanitization_report_ref: "report:sanitization",
+    browser_report_ref: "report:browser",
     accepted_by: Some("named-operator"),
   })
   assert_true(built.release_ready())

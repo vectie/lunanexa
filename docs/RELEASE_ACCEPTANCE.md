@@ -15,6 +15,14 @@ Before `EvidenceBundle.release_ready()` may be accepted, attach:
 - security, operations, and license report references;
 - the name of the human accepting the evidence.
 
+The typed gate is fail-closed. In addition to the repository scenario and
+isolation flags, it requires explicit passing evidence for the physical GPU
+cluster, PostgreSQL failover, direct object-store transfer and resume,
+inference-to-ledger charging, configured payment/signature providers, and real
+browser acceptance. Separate HA, object-store, provider, sanitization and
+browser report references are mandatory. A local simulation cannot populate
+these fields truthfully.
+
 For the contract-governance slice, attach evidence for each dependency stage:
 
 - two distinct mapped operator identities, including an audit receipt and an
