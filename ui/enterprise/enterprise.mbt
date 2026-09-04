@@ -67,6 +67,8 @@ pub(all) struct ApiCredentialView {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
+  project_id : String?
   display_name : String
   scopes : Array[ApiKeyScope]
   allowed_models : Array[String]
@@ -752,6 +754,7 @@ pub fn api_key_issue_valid(state : EnterpriseState) -> Bool {
   @portal.role_allows(membership.roles, Developer) &&
   draft.display_name.trim() != "" &&
   draft.display_name.length() <= 128 &&
+  state.project_id.trim() != "" &&
   (draft.model_list_scope || draft.inference_scope) &&
   (
     draft.lifetime_days == 1 ||
@@ -1231,6 +1234,19 @@ fn api_key_issue_dialog(
           ),
         ),
         @html.div(class="account-form", [
+          @html.div(class="field", [
+            @html.label(
+              for_="api-key-project-id",
+              copy(state.locale, "Billing project", "计费项目"),
+            ),
+            @html.input(
+              id="api-key-project-id",
+              value=state.project_id,
+              maxlength=256,
+              required=true,
+              on_input=text_command(emit, value => ProjectChanged(value)),
+            ),
+          ]),
           @html.div(class="field", [
             @html.label(
               for_="api-key-display-name",

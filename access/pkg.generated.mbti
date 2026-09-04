@@ -52,12 +52,16 @@ pub(all) struct ApiAuthorization {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ApiCredential {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
+  project_id : String?
   display_name : String
   secret_sha256 : String
   scopes : Array[ApiKeyScope]
@@ -73,6 +77,8 @@ pub(all) struct ApiCredentialView {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
+  project_id : String?
   display_name : String
   scopes : Array[ApiKeyScope]
   allowed_models : Array[String]
@@ -87,6 +93,8 @@ pub(all) struct ApiKeyIssueIntent {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
   display_name : String
   scopes : Array[ApiKeyScope]
   allowed_models : Array[String]

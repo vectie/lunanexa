@@ -57,6 +57,8 @@ pub struct ApiService {
   technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @integrations.IntegrationStore
+  commercial_mutex : @async.Mutex
+  inference_rate_card : @commercial.RateCard?
   offline_commerce_store : @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore?
   contract_document_store : @vectie/lunanexa/contractdoc/store.ContractDocumentStore?
   contract_document_worker_token : String
@@ -150,6 +152,7 @@ pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure
+pub fn ApiService::with_inference_rate_card(Self, @commercial.RateCard) -> Self raise Failure
 pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
 pub fn ApiService::with_legacy_unbound_access_for_local_testing(Self) -> Self
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure

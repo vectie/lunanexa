@@ -1108,6 +1108,27 @@ async fn main {
         ).to_int(),
       ),
     )
+    .with_inference_rate_card({
+      rate_card_id: "inference-accelerator-second",
+      version: @env.get_env_var("LUNANEXA_INFERENCE_RATE_VERSION").unwrap_or(
+        "deployment-v1",
+      ),
+      meter: "accelerator-second",
+      unit: "second",
+      unit_price: @commercial.money(
+        @string.parse_int64(
+          @env.get_env_var(
+            "LUNANEXA_INFERENCE_PRICE_PER_ACCELERATOR_SECOND_MINOR",
+          ).unwrap_or("0"),
+        ),
+        @env.get_env_var("LUNANEXA_BILLING_CURRENCY").unwrap_or("CNY"),
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_BILLING_SCALE").unwrap_or("2"),
+        ).to_int(),
+      ),
+      effective_from_unix_ms: 1L,
+      effective_until_unix_ms: 9223372036854775806L,
+    })
     .with_provider_callback_secrets(configured_provider_callback_secrets)
     .with_global_admin_settings(global_settings)
   let configured_service = match offline_transfer_adapter {

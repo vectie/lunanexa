@@ -32,6 +32,8 @@ pub struct ApiService {
   technical_store : @technical_store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
   commercial_integrations : @commercial_integrations.IntegrationStore
+  commercial_mutex : @async.Mutex
+  inference_rate_card : @commercial.RateCard?
   offline_commerce_store : @offline_store.OfflineCommerceStore?
   contract_document_store : @contractdoc_store.ContractDocumentStore?
   contract_document_worker_token : String
@@ -87,7 +89,7 @@ pub struct ApiService {
   offline_commerce_capabilities_expires_unix_ms : Int64
   node_token : String
   version : String
-  active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
+  active : Map[String, @async.Task[(@runtimes.RuntimeInvocationResult, String)]]
   active_mutex : @async.Mutex
   response_cache : Map[String, @contracts.WorkloadResponse]
   response_cache_order : Array[String]
@@ -115,6 +117,8 @@ pub fn ApiService::new(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    commercial_mutex: Mutex(),
+    inference_rate_card: None,
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
@@ -194,6 +198,8 @@ pub fn ApiService::with_registry(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    commercial_mutex: Mutex(),
+    inference_rate_card: None,
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
@@ -274,6 +280,8 @@ pub fn ApiService::with_services(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    commercial_mutex: Mutex(),
+    inference_rate_card: None,
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
@@ -356,6 +364,8 @@ pub fn ApiService::with_control_plane(
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
     commercial_integrations: @commercial_integrations.IntegrationStore::new(),
+    commercial_mutex: Mutex(),
+    inference_rate_card: None,
     offline_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
@@ -492,6 +502,23 @@ pub fn ApiService::with_commercial_persistence(
     commercial_integrations,
     management_database: Some(management_database),
   }
+}
+
+///|
+/// Installs the immutable deployment rate used to turn every completed
+/// inference receipt into an exactly-once commercial ledger entry.
+pub fn ApiService::with_inference_rate_card(
+  self : ApiService,
+  rate_card : @commercial.RateCard,
+) -> ApiService raise Failure {
+  if rate_card.meter != "accelerator-second" ||
+    rate_card.unit != "second" ||
+    rate_card.unit_price.minor_units < 0L ||
+    rate_card.effective_from_unix_ms <= 0L ||
+    rate_card.effective_until_unix_ms <= rate_card.effective_from_unix_ms {
+    raise Failure("invalid inference rate card")
+  }
+  { ..self, inference_rate_card: Some(rate_card) }
 }
 
 ///|
@@ -1716,10 +1743,12 @@ async fn ApiService::invoke_with_bounded_retry(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
   routing_nodes : Array[String],
-) -> @runtimes.RuntimeInvocationResult {
+) -> (@runtimes.RuntimeInvocationResult, String) {
   let primary = routing_nodes.get(0).unwrap_or("")
   let alternate = routing_nodes.get(1).unwrap_or(primary)
-  self.runtime.invoke_at(request, primary) catch {
+  let primary_id = if primary == "" { "runtime-default" } else { primary }
+  let alternate_id = if alternate == "" { "runtime-default" } else { alternate }
+  try self.runtime.invoke_at(request, primary) catch {
     error => {
       if @async.is_cancellation_error(error) ||
         !retryable_runtime_error(error) ||
@@ -1731,8 +1760,10 @@ async fn ApiService::invoke_with_bounded_retry(
         ) {
         raise error
       }
-      self.runtime.invoke_at(request, alternate)
+      (self.runtime.invoke_at(request, alternate), alternate_id)
     }
+  } noraise {
+    result => (result, primary_id)
   }
 }
 
@@ -1742,14 +1773,16 @@ async fn ApiService::invoke_stream_with_bounded_retry(
   request : @contracts.WorkloadEnvelope,
   routing_nodes : Array[String],
   on_chunk : async (Json) -> Unit,
-) -> @runtimes.RuntimeInvocationResult {
+) -> (@runtimes.RuntimeInvocationResult, String) {
   let primary = routing_nodes.get(0).unwrap_or("")
   let alternate = routing_nodes.get(1).unwrap_or(primary)
+  let primary_id = if primary == "" { "runtime-default" } else { primary }
+  let alternate_id = if alternate == "" { "runtime-default" } else { alternate }
   let mut emitted = false
-  self.runtime.invoke_stream_at(request, primary, output => {
-    emitted = true
-    on_chunk(output)
-  }) catch {
+  try self.runtime.invoke_stream_at(request, primary, output => {
+      emitted = true
+      on_chunk(output)
+    }) catch {
     error => {
       if @async.is_cancellation_error(error) ||
         !retryable_runtime_error(error) ||
@@ -1761,11 +1794,16 @@ async fn ApiService::invoke_stream_with_bounded_retry(
         ) {
         raise error
       }
-      self.runtime.invoke_stream_at(request, alternate, output => {
-        emitted = true
-        on_chunk(output)
-      })
+      (
+        self.runtime.invoke_stream_at(request, alternate, output => {
+          emitted = true
+          on_chunk(output)
+        }),
+        alternate_id,
+      )
     }
+  } noraise {
+    result => (result, primary_id)
   }
 }
 
@@ -2020,14 +2058,28 @@ async fn ApiService::stop_assignment(
 async fn ApiService::invoke_workload(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
+  authority : @access.ApiAuthorization,
 ) -> HttpReply {
+  if self.inference_billing_preflight(authority, @async.now()) is Some(reply) {
+    return reply
+  }
   let idempotency_key = idempotency_scope(request)
   match self.cached_result(idempotency_key) {
-    Some(response) => return json_reply(200, response.to_json())
+    Some(response) => {
+      if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+        return reply
+      }
+      return json_reply(200, response.to_json())
+    }
     None => ()
   }
   match self.store.idempotent_result(idempotency_key) {
-    Some(response) => return json_reply(200, response.to_json())
+    Some(response) => {
+      if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+        return reply
+      }
+      return json_reply(200, response.to_json())
+    }
     None => ()
   }
   let (admission_error, routing_nodes) = self.schedule_and_admit(request)
@@ -2036,7 +2088,7 @@ async fn ApiService::invoke_workload(
   }
   let accepted = @async.now()
   let mut started = 0L
-  let runtime_result = try
+  let (runtime_result, execution_node_id) = try
     @async.with_task_group(group => {
       self.active_mutex.acquire()
       if self.active.contains(request.workload_id) {
@@ -2127,6 +2179,7 @@ async fn ApiService::invoke_workload(
         },
         artifact_digest: self.runtime.artifact_digest(),
         runtime_version: self.runtime.runtime_version(),
+        execution_node_id: routing_nodes.get(0),
         timing: {
           accepted_unix_ms: accepted,
           started_unix_ms: effective_started,
@@ -2172,6 +2225,9 @@ async fn ApiService::invoke_workload(
         request.workload_id,
         completed - effective_started,
       )
+      if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+        return reply
+      }
       return json_reply(200, response.to_json())
     }
   } noraise {
@@ -2194,6 +2250,7 @@ async fn ApiService::invoke_workload(
     },
     artifact_digest: runtime_result.artifact_digest,
     runtime_version: runtime_result.runtime_version,
+    execution_node_id: Some(execution_node_id),
     timing: {
       accepted_unix_ms: accepted,
       started_unix_ms: effective_started,
@@ -2222,6 +2279,9 @@ async fn ApiService::invoke_workload(
     )
   })
   self.complete_admission(request.workload_id, completed - effective_started)
+  if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+    return reply
+  }
   json_reply(200, response.to_json())
 }
 
@@ -2390,14 +2450,33 @@ async fn ApiService::stream_workload(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
   connection : @http.ServerConnection,
+  authority : @access.ApiAuthorization,
   openai? : OpenAiStreamContext? = None,
 ) -> Unit {
+  if self.inference_billing_preflight(authority, @async.now()) is Some(reply) {
+    connection.send_response(reply.status, reason(reply.status), extra_headers={
+      "Content-Type": reply.content_type,
+      "Cache-Control": "no-store",
+    })
+    connection.write_string(reply.body)
+    connection.end_response()
+    return
+  }
   let idempotency_key = idempotency_scope(request)
   let replay = match self.cached_result(idempotency_key) {
     Some(response) => Some(response)
     None => self.store.idempotent_result(idempotency_key)
   }
   if replay is Some(response) {
+    if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+      connection.send_response(reply.status, reason(reply.status), extra_headers={
+        "Content-Type": reply.content_type,
+        "Cache-Control": "no-store",
+      })
+      connection.write_string(reply.body)
+      connection.end_response()
+      return
+    }
     connection.send_response(200, "OK", extra_headers={
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-store",
@@ -2436,7 +2515,7 @@ async fn ApiService::stream_workload(
   let mut started = 0L
   let mut sequence = 0
   let mut first_output = 0L
-  let runtime_result = try
+  let (runtime_result, execution_node_id) = try
     @async.with_task_group(group => {
       self.active_mutex.acquire()
       if self.active.contains(request.workload_id) {
@@ -2545,6 +2624,7 @@ async fn ApiService::stream_workload(
         },
         artifact_digest: self.runtime.artifact_digest(),
         runtime_version: self.runtime.runtime_version(),
+        execution_node_id: routing_nodes.get(0),
         timing: {
           accepted_unix_ms: accepted,
           started_unix_ms: effective_started,
@@ -2586,6 +2666,15 @@ async fn ApiService::stream_workload(
         request.workload_id,
         completed - effective_started,
       )
+      if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+        connection.write_string("data: \{reply.body}\n\n") catch {
+          _ => ()
+        }
+        connection.end_response() catch {
+          _ => ()
+        }
+        return
+      }
       sequence += 1
       send_compatible_stream_event(
         connection,
@@ -2629,6 +2718,7 @@ async fn ApiService::stream_workload(
     },
     artifact_digest: runtime_result.artifact_digest,
     runtime_version: runtime_result.runtime_version,
+    execution_node_id: Some(execution_node_id),
     timing: {
       accepted_unix_ms: accepted,
       started_unix_ms: effective_started,
@@ -2657,6 +2747,11 @@ async fn ApiService::stream_workload(
     )
   })
   self.complete_admission(request.workload_id, completed - effective_started)
+  if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
+    connection.write_string("data: \{reply.body}\n\n")
+    connection.end_response()
+    return
+  }
   sequence += 1
   send_compatible_stream_event(
     connection,
@@ -4164,27 +4259,6 @@ async fn ApiService::dispatch_with_transport(
           400, "InvalidRequest", "invalid canonical workload", false,
         )
       }
-      if !bearer_authorized(headers, self.inference_token) {
-        match
-          self.api_key_check(
-            headers,
-            Inference,
-            Some(request.tenant_ref),
-            Some(request.model_selector),
-            true,
-          ) {
-          KeyAuthorized(_) => ()
-          KeyQuotaExceeded =>
-            return api_error(
-              429, "QuotaExceeded", "API key request quota is exhausted", false,
-            )
-          KeyDenied =>
-            return api_error(
-              401, "Unauthenticated", "valid tenant-scoped inference authority is required",
-              false,
-            )
-        }
-      }
       if !ephemeral_only(request) {
         return api_error(
           503, "RetentionUnavailable", "this deployment has no configured encrypted retention provider",
@@ -4197,7 +4271,43 @@ async fn ApiService::dispatch_with_transport(
       if workspace_error is Some(reply) {
         return reply
       }
-      try self.invoke_workload(request) catch {
+      let authority : @access.ApiAuthorization = if bearer_authorized(
+          headers,
+          self.inference_token,
+        ) {
+        {
+          key_id: "static-inference-authority",
+          tenant_ref: request.tenant_ref,
+          subject_ref: "static-inference-subject",
+          organization_id: header(headers, "x-lunanexa-organization").unwrap_or(
+            "default-organization",
+          ),
+          project_id: header(headers, "x-lunanexa-project").unwrap_or(
+            "default-project",
+          ),
+        }
+      } else {
+        match
+          self.api_key_check(
+            headers,
+            Inference,
+            Some(request.tenant_ref),
+            Some(request.model_selector),
+            true,
+          ) {
+          KeyAuthorized(value) => value
+          KeyQuotaExceeded =>
+            return api_error(
+              429, "QuotaExceeded", "API key request quota is exhausted", false,
+            )
+          KeyDenied =>
+            return api_error(
+              401, "Unauthenticated", "valid tenant-scoped inference authority is required",
+              false,
+            )
+        }
+      }
+      try self.invoke_workload(request, authority) catch {
         error => {
           self.release_workspace_admission(request, reserved)
           raise error
@@ -4264,6 +4374,7 @@ async fn ApiService::dispatch_with_transport(
                 },
                 artifact_digest: self.runtime.artifact_digest(),
                 runtime_version: self.runtime.runtime_version(),
+                execution_node_id: None,
                 timing: {
                   accepted_unix_ms: active.accepted_unix_ms,
                   started_unix_ms: started,
@@ -4787,6 +4898,12 @@ pub async fn ApiService::serve_on(
               "default-tenant",
             ),
             subject_ref: "static-inference-subject",
+            organization_id: header(request.headers, "x-lunanexa-organization").unwrap_or(
+              "default-organization",
+            ),
+            project_id: header(request.headers, "x-lunanexa-project").unwrap_or(
+              "default-project",
+            ),
           }
         }
       }
@@ -4826,6 +4943,7 @@ pub async fn ApiService::serve_on(
         self.stream_workload(
           workload,
           connection,
+          authority,
           openai=Some({
             id: "chatcmpl-\{request_digest[:32]}",
             model: value.model,
@@ -4967,7 +5085,18 @@ pub async fn ApiService::serve_on(
         connection.end_response()
         return
       }
-      try self.stream_workload(workload, connection) catch {
+      let authority : @access.ApiAuthorization = {
+        key_id: "static-inference-authority",
+        tenant_ref: workload.tenant_ref,
+        subject_ref: "static-inference-subject",
+        organization_id: header(request.headers, "x-lunanexa-organization").unwrap_or(
+          "default-organization",
+        ),
+        project_id: header(request.headers, "x-lunanexa-project").unwrap_or(
+          "default-project",
+        ),
+      }
+      try self.stream_workload(workload, connection, authority) catch {
         error => {
           self.release_workspace_admission(workload, reserved)
           raise error

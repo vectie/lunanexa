@@ -228,6 +228,10 @@ spec:
                   key: token
             - name: LUNANEXA_EXCLUSIVE_LEASE_PRICE_PER_SECOND_MINOR
               value: "0"
+            - name: LUNANEXA_INFERENCE_PRICE_PER_ACCELERATOR_SECOND_MINOR
+              value: "0"
+            - name: LUNANEXA_INFERENCE_RATE_VERSION
+              value: deployment-v1
             - name: LUNANEXA_BILLING_CURRENCY
               value: CNY
             - name: LUNANEXA_BILLING_SCALE
