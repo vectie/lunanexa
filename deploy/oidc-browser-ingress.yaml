@@ -21,6 +21,7 @@ data:
   LUNANEXA_ENTERPRISE_UPSTREAM: "http://lunanexa-enterprise:8080"
   LUNANEXA_WORKBENCH_UPSTREAM: "http://lunanexa-workbench:8080"
   LUNANEXA_OIDC_SCOPES: "openid profile email"
+  LUNANEXA_OIDC_CA_FILE: "/var/run/secrets/lunanexa/oidc/ca.pem"
   LUNANEXA_OIDC_PKCE_METHOD: "S256"
   LUNANEXA_OIDC_REQUIRE_STATE: "1"
   LUNANEXA_OIDC_REQUIRE_NONCE: "1"
@@ -118,11 +119,20 @@ spec:
                 secretKeyRef:
                   name: lunanexa-identity-ingress-credentials
                   key: identity-assertion-secret
+            - name: LUNANEXA_IDENTITY_GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-database
+                  key: url
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: oidc-provider-ca
+              mountPath: /var/run/secrets/lunanexa/oidc
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -131,6 +141,13 @@ spec:
             httpGet:
               path: /health
               port: identity-http
+      volumes:
+        - name: oidc-provider-ca
+          secret:
+            secretName: lunanexa-oidc-provider-ca
+            items:
+              - key: ca.pem
+                path: ca.pem
 ---
 apiVersion: v1
 kind: Service
@@ -239,6 +256,16 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-postgres
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: postgres-ha
+      ports:
+        - protocol: TCP
+          port: 5432
     - to:
         - namespaceSelector:
             matchLabels:

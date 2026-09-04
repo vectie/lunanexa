@@ -1,0 +1,27 @@
+import {
+  "vectie/lunanexa/internal/postgres",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/async/socket",
+  "moonbitlang/async/tls",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/x/codec/base64",
+  "moonbitlang/x/crypto",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
+
+options(
+  link: {
+    "native": {
+      "cc-link-flags": "-pthread -ldl -L/opt/homebrew/lib/postgresql@17 -lpq",
+    },
+  },
+)

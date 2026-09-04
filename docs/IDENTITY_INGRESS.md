@@ -21,11 +21,20 @@ short-lived sessions and API keys. A contract binds the stable LunaNexa
 `subject_ref`; it never binds an email address, OIDC cookie, client
 certificate DN, or bearer token.
 
+The browser cookie contains only a 256-bit opaque session identifier plus an
+HMAC. Authorization-flow state, verified identity claims, the bound LunaNexa
+browser bearer, and the CSRF token live in the shared PostgreSQL table
+`lunanexa.identity_gateway_sessions`. Both gateway replicas can therefore
+continue the same flow and survive pod replacement without putting provider or
+LunaNexa credentials in a browser cookie.
+
 The optional deployment profile combines
 `deploy/oidc-browser-ingress.yaml` with
-`deploy/oidc-browser-ingress-controller-patch.yaml`. It is a contract for a
-reviewed, deployment-supplied OIDC identity-gateway image, not a bundled
-identity provider. The public gateway runs in a separate Deployment with only
+`deploy/oidc-browser-ingress-controller-patch.yaml`. The reviewed MoonBit
+gateway executable and `images/Containerfile.identity-gateway` are bundled in
+this repository; deploy its image only by immutable digest. The identity
+provider remains a separate authority. The public gateway runs in a separate
+Deployment with only
 OIDC, UI, DNS, and identity-relay egress. The patch runs the same immutable
 image in `relay` mode as a minimal sidecar in every `lunanexa-control` pod. The
 relay admits only signed session-exchange and registration requests and forwards them to
@@ -46,8 +55,11 @@ The gateway must:
 
 - use the Authorization Code flow and require PKCE `S256`;
 - compare the discovered issuer exactly with the configured HTTPS issuer;
-- validate signature, issuer, audience, expiry, not-before, authorization-code
-  hash when present, and the configured client ID;
+- validate issuer, audience, expiry, not-before, nonce, and configured client
+  ID. The bundled gateway obtains the ID token only from the certificate-
+  verified token endpoint and then requires both certificate-verified userinfo
+  subject equality and active-token introspection bound to that client; it
+  rejects providers without an introspection endpoint;
 - generate cryptographically random, single-use `state` and `nonce` values,
   bind them to the initiating browser and exact redirect URI, and reject
   replay;
@@ -315,7 +327,17 @@ distinct control-plane authorities. It is not mounted into the identity
 gateway. Conversely, `identity-assertion-secret` remains optional in the local
 static-token profile but is mandatory whenever this OIDC profile is enabled.
 
-The identity provider must be reachable on TCP 443 from a namespace labeled
+For the current private/self-signed issuer, create Secret
+`lunanexa-oidc-provider-ca` in the gateway namespace with key `ca.pem`
+containing the issuer's existing CA. The gateway passes that exact file to TLS
+verification for discovery, token, userinfo, and introspection requests. It
+never enables an insecure TLS mode. Copying the CA does not change the issuer
+hostname or certificate. The gateway also reads the existing
+`lunanexa-database/url` Secret to persist opaque browser sessions across its two
+replicas.
+
+The identity provider must be reachable on its configured TLS port (443 or the
+current private 5006 endpoint) from a namespace labeled
 `lunanexa.io/service=oidc-provider`. Kubernetes NetworkPolicy cannot select an
 external DNS name; an external provider therefore needs a reviewed static-IP
 or CNI FQDN-policy overlay. Do not replace that fail-closed rule with arbitrary
