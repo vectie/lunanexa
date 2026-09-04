@@ -57,6 +57,14 @@ The gateway must:
 - keep client secrets and cookie/assertion keys in the deployment secret
   manager, never a ConfigMap, manifest, URL, browser bundle, or log.
 
+The upstream IdP may be a platform-operated public identity service with open
+sign-up, or a customer's federated enterprise IdP. A person does not need a
+corporate directory to use the public profile: they create an identity at the
+platform IdP, then the first verified sign-in creates the LunaNexa account.
+Account creation alone grants only the bounded trial policy, when enabled; it
+does not create an organization, approve a company, accept machine terms, settle
+payment or allocate hardware.
+
 The upstream IdP should require MFA for operator accounts and support provider
 session revocation, recovery, and account suspension. LunaNexa still checks its
 own account state and roles on every LunaNexa session authorization, so an IdP
@@ -273,7 +281,7 @@ manifest before applying the result:
 scripts/deploy/render-oidc-browser-ingress.sh \
   --output /ABSOLUTE/PROTECTED/management-with-oidc.yaml \
   --management-manifest /ABSOLUTE/PROTECTED/management.yaml \
-  --provider-ref CORP_OIDC \
+  --provider-ref PLATFORM_OR_ENTERPRISE_OIDC \
   --issuer-url https://IDP_HOST/REALM_PATH \
   --operator-host OPERATOR_HOST \
   --enterprise-host ENTERPRISE_HOST \
@@ -313,11 +321,11 @@ gateway on ports 8081 and 8080 and adds no egress. Only stripped, cookie-bound
 identity-only relay and loopback hop. No public console, enterprise, or
 workbench pod may connect directly to controller port 8080.
 
-`LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` resides on the existing
-controller state PVC. Back it up and restore it with the workspace, portal,
-access-key, contract, and audit state. The file is an atomic `0600` fallback;
-move it to the approved transactional database profile before claiming highly
-available account/session storage.
+`LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` is only the atomic
+`0600` local fallback. The production PostgreSQL profile commits the account,
+portal and related snapshot domains to the configured management database.
+Back up and restore those domains together. Controller leader fencing provides
+single-active failover; it is not a multi-writer account service.
 
 ## Local development compatibility
 

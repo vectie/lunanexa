@@ -1071,6 +1071,8 @@ The `lunanexa-control-credentials` Secret must provide:
 - `monitoring-token`;
 - `assignment-signing-secret`;
 - `catalog-signing-secret`;
+- `machine-commerce-signing-secret` (at least 32 random bytes, used only to
+  bind tenant, SKU, model, price and expiry into immutable machine quotes);
 - `exclusive-lease-signing-secret`;
 - `provider-callback-secret` (at least 32 random bytes, independent of every
   other signing authority);
@@ -1131,6 +1133,16 @@ are rejected. Partial configuration keeps `/v1/readiness` red with
 `CommercialProviderAdapterUnavailable` and customer payment/signature requests
 fail closed. Never reuse this token as an operator, inference, callback,
 credential-issuer or node authority.
+
+The same adapter contract carries `PaymentRefund` requests created by machine
+order compensation. Treat that kind as a refund of the named settled payment,
+not as another checkout. Submit the action receipt, then complete compensation
+only through an authenticated `Refunded` callback. The controller deliberately
+keeps capacity reserved until that callback. Before publishing machine commerce,
+also seed one legally reviewed current `machine-self-service` agreement template
+with an immutable readable `document_uri`, and approved active offerings through
+`POST /v1/machine-commerce/operator/offerings`. See
+[the self-service machine runbook](SELF_SERVICE_MACHINE_ORDERING.md).
 
 Configure `LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN` independently. The issuer
 pulls `GET /internal/v1/credential-issuer/requests` and posts the origin-bound
@@ -1205,6 +1217,7 @@ Example inventory for `dgx-spark-01`:
     }
   ],
   "labels": {
+    "lunanexa.io/region": "cn-east-1",
     "lunanexa.models": "model.text@v1",
     "lunanexa.warm-models": "",
     "lunanexa.data-classes": "Public,Internal,Confidential",
@@ -1219,6 +1232,9 @@ Inventory must be generated from the real host. Do not copy memory or device
 values from this example without verifying them. Live utilization, used/total
 GPU memory, maximum temperature and aggregate power come from the fixed
 `nvidia-smi` sensor query; labels cannot override those measurements.
+`lunanexa.io/region` is a trusted placement input for customer machine SKUs.
+Missing or mismatched region labels make that node unavailable to quoting; a
+customer can never supply or override this label.
 
 ## 9. Render and apply the management plane
 

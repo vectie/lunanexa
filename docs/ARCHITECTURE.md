@@ -128,6 +128,26 @@ Its callbacks are replay-, sequence-, tenant- and aggregate-checked, but its
 test MAC is explicitly not a qualified signature. It cannot satisfy a
 production trust, payment or tax requirement.
 
+The machine-commerce authority is a separate durable aggregate layered on this
+commercial plane. It owns active sellable SKUs, live-capacity projections,
+HMAC-bound quotes, prepaid orders, lifecycle generations, reservations and usage
+receipts. Public requests derive tenant, organization, project and purchaser
+from the selected account membership. They cannot name physical infrastructure.
+The supervised reconciler waits for authenticated settlement before it selects
+a matching fresh heartbeat, creates either an exclusive lease or managed model
+deployment, and advances the order. Its provider outbox has an explicit
+`PaymentRefund` kind so compensation is observable, retryable and distinct from
+a new checkout. File snapshots are a local fallback; the production profile
+uses the PostgreSQL snapshot domain `machine_commerce`.
+
+Dedicated endpoint access keys are recorded only as key identifiers in the
+machine aggregate; raw secrets remain in the access authority and are shown once.
+At inference admission the binding constrains eligible assignments to the exact
+paid deployment and rejects serving adapters that cannot enforce direct-node
+routing. Early termination immediately invalidates that binding. Dedicated
+requests still create usage evidence, but skip shared-MaaS rating because the
+capacity interval was prepaid.
+
 ### Technical decision plane
 
 Prewarm transitions, health-probe evaluation, safe cache telemetry, bounded
@@ -143,8 +163,9 @@ LunaNexa ships two Rabbita browser sites from shared public contracts:
 - the management console presents cluster health, users, access grants,
   capacity leases, models, deployments, policy and audit evidence;
 - the enterprise site presents onboarding, agreement signing requests, lease
-  requests/status, tenant cost/model views and a local-browser WebIDE with
-  generic model invocation and approved editor handoffs.
+  requests/status, tenant cost/model views, self-service organization creation,
+  prepaid machine ordering and a local-browser WebIDE with generic model
+  invocation and approved editor handoffs.
 
 An approved desktop handoff crosses the browser boundary with only a
 short-lived, single-use code in a URL fragment. The local client removes that

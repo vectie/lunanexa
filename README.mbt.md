@@ -38,6 +38,10 @@ LunaNexa owns:
   decisions for an explicitly inventoried, operator-managed fleet;
 - organizations, cost centers, projects, budgets, quotas, capacity commitments,
   rated usage, ledger evidence and versioned digital agreements;
+- public account onboarding through a deployment-approved identity provider,
+  self-service individual/company customer records, and organization switching;
+- prepaid self-service bare-machine and dedicated-endpoint offers with live
+  capacity, signed quotes, payment settlement, provisioning and compensation;
 - one Rabbita operator console for models, deployments, nodes, commercial
   governance, qualified-service evidence, jobs and alerts.
 
@@ -138,6 +142,7 @@ signature, payment or tax-invoice providers.
 - [Standalone source-grounded LunaNexa coursebook](docs-site/README.md)
 - [Product contract](docs/PRODUCT_CONTRACT.md)
 - [Enterprise portal and lease workflow](docs/ENTERPRISE_PORTAL.md)
+- [Self-service organization and machine ordering](docs/SELF_SERVICE_MACHINE_ORDERING.md)
 - [PostgreSQL management database](docs/DATABASE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Phased implementation plan](docs/PLAN.md)
