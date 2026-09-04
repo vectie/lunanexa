@@ -1,0 +1,6 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-workbench-public-gateway
+spec:
+  replicas: 0

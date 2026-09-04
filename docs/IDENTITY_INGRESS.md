@@ -310,25 +310,43 @@ scripts/deploy/render-oidc-browser-ingress.sh \
   --transport-origin https://INTERNAL_IDP_EDGE.svc.cluster.local:8443 \
   --operator-host OPERATOR_AUTHORITY \
   --enterprise-host ENTERPRISE_AUTHORITY \
-  --gateway-image REGISTRY/IDENTITY_GATEWAY@sha256:EXACT_64_HEX_DIGEST
+  --gateway-image REGISTRY/IDENTITY_GATEWAY@sha256:EXACT_64_HEX_DIGEST \
+  --identity-edge-image REGISTRY/NGINX_EDGE@sha256:EXACT_64_HEX_DIGEST
 ```
 
 `--transport-origin` is required by the platform-operated no-domain profile.
 An enterprise provider may omit it only when the gateway can reach the exact
 public issuer origin directly with the same strict TLS identity.
-The two browser values are exact HTTPS authorities and may be DNS names or
-IPv4 addresses with distinct ports. The renderer includes
-`deploy/oidc-browser-public-ingress.yaml` only when both are DNS-only hosts;
-IP or port authorities rely on the deployment's reviewed public TLS edges and
-are never written into invalid Kubernetes Ingress `host` fields.
+The two browser values are exact HTTPS authorities. DNS-only hosts render the
+optional `deploy/oidc-browser-public-ingress.yaml`. The supported direct-IP
+profile requires one IPv4 address with operator port `5003` and enterprise
+port `5005`; it renders `deploy/oidc-browser-direct-ip-edge.yaml` instead and
+never writes an IP literal or port into a Kubernetes Ingress `host` field.
+`--identity-edge-image` is mandatory and digest-pinned for that direct-IP
+profile; DNS-only rendering may omit it.
+
+The direct-IP overlay runs two `lunanexa-identity-edge` replicas. They listen
+only with TLS on `8443`, use the existing `lunanexa-oidc-ingress-tls` Secret,
+preserve the exact browser authority, and proxy only to
+`lunanexa-identity-gateway`. It repoints the existing
+`lunanexa-console-public` LoadBalancer to those edge pods and replaces its
+ports with exactly `5003` and `5005`. The previous console and workbench
+public-gateway Deployments are set to zero replicas, and the old Workbench
+LoadBalancer is converted to an endpoint-less ClusterIP on `8080`; consequently
+`4174`, `3000`, and `5001` are absent from the rendered public surface. This
+mode must be rendered over the management-foundation manifest containing those
+named legacy resources so the transition is explicit and ordinary
+`kubectl apply` closes the old paths without requiring prune.
 
 The renderer verifies the existing management manifest has no unresolved or
 invalid deployment placeholders, injects the sidecar into its named controller
-Deployment, and includes the identity ConfigMap, Service, NetworkPolicy, and
-Ingress. It rejects non-HTTPS issuers, malformed or equal browser hosts,
-mutable images, unsafe substitution characters, and unresolved inputs. It
-writes the combined rendered file with mode `0600`. Apply the combined file;
-do not apply the source patch directly or use a mutable image tag.
+Deployment, and includes the identity ConfigMap, Services and NetworkPolicies.
+It then includes exactly one public transport: the DNS Ingress or the direct-IP
+TLS edge. It rejects non-HTTPS issuers, malformed or equal browser hosts,
+unsupported direct-IP ports, mutable images, unsafe substitution characters,
+and unresolved inputs. It writes the combined rendered file with mode `0600`.
+Apply the combined file; do not apply a source patch directly or use a mutable
+image tag.
 
 The controller's required `lunanexa-control-credentials` Secret must also
 contain an independent `account-session-issuer-secret`. The standard
@@ -371,6 +389,17 @@ gateway on ports 8081 and 8080 and adds no egress. Only stripped, cookie-bound
 `lnxs_` requests may use the 8080 route; asserted identity still requires the
 identity-only relay and loopback hop. No public console, enterprise, or
 workbench pod may connect directly to controller port 8080.
+
+Run the focused direct-IP contract test before applying that profile:
+
+```sh
+scripts/deploy/oidc-browser-direct-ip-edge-manifest-test.sh
+```
+
+It verifies the two edge replicas, digest pin, `Never` pull policy, strict TLS
+listener, existing Secret reference, exact `5003`/`5005` LoadBalancer ports,
+legacy-port removal, old-gateway shutdown, NetworkPolicies, absence of Secrets,
+and mutual exclusion with the DNS-only Ingress.
 
 `LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` is only the atomic
 `0600` local fallback. The production PostgreSQL profile commits the account,

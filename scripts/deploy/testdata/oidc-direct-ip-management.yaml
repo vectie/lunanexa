@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-control
+spec:
+  selector:
+    matchLabels:
+      app: lunanexa-control
+  template:
+    metadata:
+      labels:
+        app: lunanexa-control
+    spec:
+      containers:
+        - name: control
+          image: registry.example.test/lunanexa/control@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          ports:
+            - name: http
+              containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-console-public-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-console-public-gateway
+  template:
+    metadata:
+      labels:
+        app: lunanexa-console-public-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.example.test/lunanexa/web@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-console-public
+  annotations:
+    lunanexa.io/exposure: temporary-plain-http
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    app: lunanexa-console-public-gateway
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 4174
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-workbench-public-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lunanexa-workbench-public-gateway
+  template:
+    metadata:
+      labels:
+        app: lunanexa-workbench-public-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.example.test/lunanexa/web@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-workbench-public
+  annotations:
+    lunanexa.io/exposure: temporary-plain-http
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    app: lunanexa-workbench-public-gateway
+  ports:
+    - name: http-public
+      protocol: TCP
+      port: 3000
+      targetPort: http
+    - name: compatibility-public
+      protocol: TCP
+      port: 5001
+      targetPort: http

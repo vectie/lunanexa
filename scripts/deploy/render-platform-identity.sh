@@ -100,7 +100,8 @@ identity_transport_origin="https://lunanexa-identity-internal.$identity_namespac
   --transport-origin "$identity_transport_origin" \
   --operator-host "$operator_host" \
   --enterprise-host "$enterprise_host" \
-  --gateway-image "$gateway_image" >/dev/null
+  --gateway-image "$gateway_image" \
+  --identity-edge-image "$identity_edge_image" >/dev/null
 
 identity_manifest=$work_directory/platform-identity.yaml
 identity_port=443
