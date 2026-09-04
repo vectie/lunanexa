@@ -5385,8 +5385,8 @@ extern "js" fn development_transport_allowed(endpoint : String) -> Bool =
   #| (endpoint) => {
   #|   try {
   #|     const url = new URL(endpoint, globalThis.location?.href || "http://localhost/");
-  #|     return url.protocol === "https:" || url.hostname === "localhost" ||
-  #|       url.hostname === "127.0.0.1" || url.hostname === "::1";
+  #|     return url.hostname === "localhost" || url.hostname === "127.0.0.1" ||
+  #|       url.hostname === "::1" || url.hostname === "[::1]";
   #|   } catch (_) { return false; }
   #| }
 
@@ -5468,90 +5468,96 @@ fn app_view(
               )
             None => @html.nothing
           },
-          @html.details(class="development-fallback", [
-            @html.summary(
-              portal_copy(
-                locale, "Development credential fallback", "开发凭据后备方式",
-              ),
-            ),
-            @html.div(class="development-form", [
-              @html.p(
-                class="development-warning",
+          if transport_allowed {
+            @html.details(class="development-fallback", [
+              @html.summary(
                 portal_copy(
-                  locale, "Local acceptance only. Enter a short-lived scoped token and opaque test subject. Public plain HTTP is blocked.",
-                  "仅用于本地验收。请输入短期限定范围令牌和不透明测试主体。公共明文 HTTP 已被阻止。",
+                  locale, "Development credential fallback", "开发凭据后备方式",
                 ),
               ),
-              @html.div([
-                @html.label(
-                  for_="portal-token",
+              @html.div(class="development-form", [
+                @html.p(
+                  class="development-warning",
                   portal_copy(
-                    locale, "Scoped development token", "限定范围开发令牌",
+                    locale, "Local acceptance only. Enter a short-lived scoped token and opaque test subject. Public plain HTTP is blocked.",
+                    "仅用于本地验收。请输入短期限定范围令牌和不透明测试主体。公共明文 HTTP 已被阻止。",
                   ),
                 ),
-                @html.input(
-                  id="portal-token",
-                  input_type=Password,
-                  value=model.token,
-                  auto_complete=Off,
-                  on_input=emit.map(value => TokenChanged(value)),
-                ),
-              ]),
-              @html.div([
-                @html.label(
-                  for_="portal-subject",
-                  portal_copy(
-                    locale, "Opaque test subject", "不透明测试主体",
+                @html.div([
+                  @html.label(
+                    for_="portal-token",
+                    portal_copy(
+                      locale, "Scoped development token", "限定范围开发令牌",
+                    ),
                   ),
+                  @html.input(
+                    id="portal-token",
+                    input_type=Password,
+                    value=model.token,
+                    auto_complete=Off,
+                    on_input=emit.map(value => TokenChanged(value)),
+                  ),
+                ]),
+                @html.div([
+                  @html.label(
+                    for_="portal-subject",
+                    portal_copy(
+                      locale, "Opaque test subject", "不透明测试主体",
+                    ),
+                  ),
+                  @html.input(
+                    id="portal-subject",
+                    value=model.subject_ref,
+                    maxlength=256,
+                    auto_complete=Off,
+                    on_input=emit.map(value => SubjectChanged(value)),
+                  ),
+                ]),
+                @html.div([
+                  @html.label(
+                    for_="portal-endpoint",
+                    portal_copy(
+                      locale, "Controller endpoint", "控制器端点",
+                    ),
+                  ),
+                  @html.input(
+                    id="portal-endpoint",
+                    value=model.endpoint,
+                    on_input=emit.map(value => EndpointChanged(value)),
+                  ),
+                ]),
+                @html.button(
+                  type_="button",
+                  disabled=model.connecting ||
+                    model.token == "" ||
+                    model.subject_ref == "" ||
+                    !transport_allowed,
+                  on_click=emit(Connect),
+                  if model.connecting {
+                    portal_copy(locale, "Connecting…", "正在连接…")
+                  } else {
+                    portal_copy(
+                      locale, "Connect development identity", "连接开发身份",
+                    )
+                  },
                 ),
-                @html.input(
-                  id="portal-subject",
-                  value=model.subject_ref,
-                  maxlength=256,
-                  auto_complete=Off,
-                  on_input=emit.map(value => SubjectChanged(value)),
-                ),
-              ]),
-              @html.div([
-                @html.label(
-                  for_="portal-endpoint",
-                  portal_copy(locale, "Controller endpoint", "控制器端点"),
-                ),
-                @html.input(
-                  id="portal-endpoint",
-                  value=model.endpoint,
-                  on_input=emit.map(value => EndpointChanged(value)),
-                ),
-              ]),
-              @html.button(
-                type_="button",
-                disabled=model.connecting ||
-                  model.token == "" ||
-                  model.subject_ref == "" ||
-                  !transport_allowed,
-                on_click=emit(Connect),
-                if model.connecting {
-                  portal_copy(locale, "Connecting…", "正在连接…")
+                if transport_allowed {
+                  @html.nothing
                 } else {
-                  portal_copy(
-                    locale, "Connect development identity", "连接开发身份",
+                  @html.p(
+                    class="login-error",
+                    attrs=@html.Attrs::build().role("alert"),
+                    portal_copy(
+                      locale, "Development credentials are restricted to localhost or loopback.",
+                      "开发凭据仅限 localhost 或环回地址。",
+                    ),
                   )
                 },
-              ),
-              if transport_allowed {
-                @html.nothing
-              } else {
-                @html.p(
-                  class="login-error",
-                  attrs=@html.Attrs::build().role("alert"),
-                  portal_copy(
-                    locale, "Use HTTPS, localhost, or loopback for development credentials.",
-                    "开发凭据仅可通过 HTTPS、localhost 或环回地址使用。",
-                  ),
-                )
-              },
-            ]),
-          ]),
+              ]),
+            ])
+          } else {
+            @html.nothing
+          },
         ],
       ),
     ])
@@ -5569,7 +5575,7 @@ fn app_view(
         @html.span(
           " · " +
           portal_copy(
-            locale, "development browser session; ends on logout or reload", "开发浏览器会话；退出或重新加载时结束",
+            locale, "secure browser session; ends on logout or expiry", "安全浏览器会话；退出或到期时结束",
           ),
         ),
       ]),
