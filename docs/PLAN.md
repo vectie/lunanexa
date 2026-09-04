@@ -380,3 +380,27 @@ Production gate still required:
 - pass real ingress, database, accelerator-fleet, security, finance, legal and
   operations acceptance for the selected deployment profile. Repository tests
   do not waive these external gates.
+
+### Implemented self-service organization and machine commerce slice
+
+- public OIDC first sign-in may create a LunaNexa account and bounded shared
+  trial without granting machine access;
+- authenticated users may create an individual or company customer organization
+  with legal profile, default cost center/project and owner roles, or join an
+  existing organization using a one-time email-bound invitation;
+- identity-verification requests are durable provider records; organization
+  activation requires an authenticated provider callback;
+- the enterprise portal supports explicit multi-organization selection and
+  propagates `X-LunaNexa-Organization` to every organization-scoped request;
+- live regional bare-machine and dedicated-endpoint SKUs support immutable
+  quotes, readable clickwrap or negotiated agreements, external checkout,
+  payment-gated provisioning, cancellation/termination and refund compensation;
+- physical node and accelerator identifiers remain absent from customer input
+  and output; placement is internal and based on trusted fresh heartbeat labels;
+- prepaid usage is recorded as evidence without creating a second payable
+  ledger charge.
+
+The remaining production work is operational rather than hidden product logic:
+deploy a public-sign-up-capable IdP or approved enterprise federation, configure
+identity/payment/signature adapters, publish legally approved immutable terms,
+seed approved SKUs, and complete the physical-cluster release evidence gate.

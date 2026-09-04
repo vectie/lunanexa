@@ -63,6 +63,32 @@ co-locate that role with compute, but co-location never makes management
 services compute capacity. Enterprise users cannot select or activate a
 hardware node.
 
+Human identity has two supported deployment shapes. A public platform identity
+provider may allow any eligible person to create an account, while an enterprise
+deployment may federate a customer's existing identity provider. Both terminate
+at the same signed OIDC assertion boundary; LunaNexa does not store passwords.
+An account is not a customer organization and grants no machine authority by
+itself. After sign-in, a person may create an `Individual` or `Company` legal
+customer record, or join an existing organization with a one-time invitation.
+Organization verification, membership roles, agreements, budgets, projects and
+orders remain LunaNexa authorities. Multi-organization requests must carry an
+explicit selected organization and fail closed when selection is ambiguous.
+
+The enterprise portal accepts only tenant-scoped commercial intent. It never
+accepts a node ID, GPU ID, host address or raw access secret. It offers shared
+MaaS, a prepaid dedicated model endpoint, and a prepaid bare accelerator
+machine. For the two machine-backed paths the customer selects an active SKU and
+duration, receives an immutable signed quote, accepts the current readable
+machine terms, and completes an external checkout. Capacity is assigned only
+after an authenticated exact-amount payment callback. `DedicatedEndpoint`
+creates a managed deployment and never an exclusive lease; `BareMachine`
+creates an exclusive-node lease. Cancellation, provisioning failure and
+capacity timeout enter durable compensation. Prepaid usage remains evidence and
+is not rated into a second payable ledger. A dedicated API key is durably bound
+to the exact active order and deployment; inference cannot fall back to shared
+capacity when that order ends or its routing cannot be enforced. See
+`docs/SELF_SERVICE_MACHINE_ORDERING.md`.
+
 ### Topology contract
 
 Management placement, compute enrollment, operator-network ingress, database
