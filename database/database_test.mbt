@@ -20,3 +20,30 @@ async test "related opaque snapshots commit and restore as one database operatio
   )
   database.close()
 }
+
+///|
+async test "production account and client handoff snapshots are allowlisted" {
+  guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
+    return
+  }
+  let database = @database.PostgresDatabase::open(url)
+  database.save_opaque_snapshot(
+    "accounts",
+    "account-test-v1",
+    "{\"accounts\":[],\"sessions\":[]}",
+  )
+  database.save_opaque_snapshot(
+    "client_handoffs",
+    "client-handoff-test-v1",
+    "{\"handoffs\":[],\"credentials\":[]}",
+  )
+  assert_eq(
+    database.load_snapshot("accounts", "account-test-v1"),
+    Some("{\"accounts\": [], \"sessions\": []}"),
+  )
+  assert_eq(
+    database.load_snapshot("client_handoffs", "client-handoff-test-v1"),
+    Some("{\"handoffs\": [], \"credentials\": []}"),
+  )
+  database.close()
+}
