@@ -343,7 +343,7 @@ async test "subject inbox reconciles access-ready and expiry notices from durabl
       tenant_ref: "tenant-lease",
       organization_id: "org-lease",
       subject_ref: "subject-lease",
-      roles: [Developer],
+      roles: [Developer, LegalSigner, LeaseRequester],
       active: true,
       created_unix_ms: now,
     }),
@@ -386,6 +386,74 @@ async test "subject inbox reconciles access-ready and expiry notices from durabl
       now + 2L,
     ),
   )
+  ignore(
+    portal.publish_agreement({
+      agreement_id: "agreement-subject-lease",
+      tenant_ref: "tenant-lease",
+      organization_id: "org-lease",
+      template_ref: "framework-v1",
+      title: "Subject lease agreement",
+      summary: "Required for exclusive machine access.",
+      rendered_document_hash: "sha256:subject-lease-document",
+      state: ReviewRequired,
+      generation: 1L,
+      signer_subject_ref: None,
+      signature_request_receipt: None,
+      executed_artifact_hash: None,
+      created_unix_ms: now - 5000L,
+      updated_unix_ms: now - 5000L,
+    }),
+  )
+  let signature = portal.request_signature(
+    "subject-lease",
+    {
+      agreement_id: "agreement-subject-lease",
+      expected_generation: 1L,
+      idempotency_key: "sign-subject-lease",
+    },
+    now - 4000L,
+  )
+  ignore(
+    portal.record_execution(
+      {
+        agreement_id: "agreement-subject-lease",
+        expected_generation: signature.generation,
+        signer_subject_ref: "subject-lease",
+        executed_artifact_hash: "sha256:subject-lease-executed",
+        evidence_receipt: "provider:verified:subject-lease",
+      },
+      now - 3000L,
+    ),
+  )
+  let request = portal.submit_lease_request(
+    "subject-lease",
+    {
+      request_id: "request-subject-lease",
+      idempotency_key: "request-subject-lease",
+      tenant_ref: "tenant-lease",
+      organization_id: "org-lease",
+      project_id: "project-lease",
+      unix_username: "lease_user",
+      starts_unix_ms: now - 1000L,
+      expires_unix_ms: now + 3600000L,
+      requested_model_ids: ["model-lease"],
+      justification: "Subject notification coverage",
+    },
+    now - 2000L,
+  )
+  ignore(
+    portal.review_lease_request(
+      {
+        request_id: request.submission.request_id,
+        expected_generation: request.generation,
+        decision: Approve,
+        node_id: Some("node-subject-lease"),
+        evidence_receipt: "operator:approved:subject-lease",
+      },
+      Some("exclusive-subject-lease"),
+      now - 1000L,
+    ),
+  )
   let notifications = @notification_store.NotificationStore::open(
     "\{directory}/notifications.json",
   )
@@ -416,6 +484,7 @@ async test "subject inbox reconciles access-ready and expiry notices from durabl
   assert_eq(inbox.status, 200)
   assert_true(inbox.body.contains("LeaseAccessReady"))
   assert_true(inbox.body.contains("LeaseExpiring"))
+  assert_true(inbox.body.contains("LeaseRequestApproved"))
   assert_true(inbox.body.contains("managed-reference-available"))
   assert_false(inbox.body.contains("ssh-cert:exclusive-subject-lease"))
   assert_false(inbox.body.contains("node-subject-lease"))
@@ -423,7 +492,7 @@ async test "subject inbox reconciles access-ready and expiry notices from durabl
   let records : Array[@notifications.NotificationRecord] = @json.from_json(
     @json.parse(repeated.body),
   )
-  assert_eq(records.length(), 2)
+  assert_eq(records.length(), 3)
   let reopened = @notification_store.NotificationStore::open(
     "\{directory}/notifications.json",
   )
@@ -431,7 +500,7 @@ async test "subject inbox reconciles access-ready and expiry notices from durabl
     reopened
     .records_for_subject("tenant-lease", "subject-lease", @async.now())
     .length(),
-    2,
+    3,
   )
   @fs.rmdir(directory, recursive=true)
 }

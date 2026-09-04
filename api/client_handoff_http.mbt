@@ -209,7 +209,9 @@ async fn ApiService::handle_client_handoff(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
   }
-  let portal_view = try portal.self_view(subject_ref) catch {
+  let portal_view = try
+    portal_view_for_request(portal, subject_ref, headers)
+  catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value

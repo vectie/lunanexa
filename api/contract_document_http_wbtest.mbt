@@ -886,6 +886,7 @@ async test "early termination close reconciles the settlement against the ledger
       display_name: "Org \{organization_id}",
       state: Active,
       verification_ref: None,
+      legal_profile: None,
       created_unix_ms: 1000L,
     })
     commercial.add_cost_center({

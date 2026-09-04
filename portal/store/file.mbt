@@ -76,17 +76,30 @@ fn FilePortalStore::restore_snapshot(
   if snapshot.schema_version != @portal.snapshot_schema_version {
     raise @portal.PortalError::InvalidInput("unsupported portal snapshot")
   }
-  let active_subjects : Map[String, Unit] = Map([])
+  let active_memberships : Map[String, Unit] = Map([])
+  let organization_tenants : Map[String, String] = Map([])
   for membership in snapshot.memberships {
     @portal.validate_membership(membership)
     if self.memberships.contains(membership.membership_id) {
       raise @portal.PortalError::InvalidInput("duplicate portal membership")
     }
-    if membership.active && active_subjects.contains(membership.subject_ref) {
-      raise @portal.PortalError::InvalidInput("duplicate active portal subject")
+    let active_scope = "\{membership.subject_ref}|\{membership.organization_id}"
+    if membership.active && active_memberships.contains(active_scope) {
+      raise @portal.PortalError::InvalidInput(
+        "duplicate active portal organization membership",
+      )
     }
     if membership.active {
-      active_subjects[membership.subject_ref] = ()
+      active_memberships[active_scope] = ()
+    }
+    match organization_tenants.get(membership.organization_id) {
+      Some(tenant_ref) if tenant_ref != membership.tenant_ref =>
+        raise @portal.PortalError::InvalidInput(
+          "portal organization crosses tenant boundaries",
+        )
+      Some(_) => ()
+      None =>
+        organization_tenants[membership.organization_id] = membership.tenant_ref
     }
     self.memberships[membership.membership_id] = membership
   }
@@ -106,7 +119,10 @@ fn FilePortalStore::restore_snapshot(
       self.lease_requests.contains(request.submission.request_id) {
       raise @portal.PortalError::InvalidInput("invalid portal lease request")
     }
-    guard self.membership_for_subject_unlocked(request.subject_ref)
+    guard self.membership_for_organization_unlocked(
+        request.subject_ref,
+        request.submission.organization_id,
+      )
       is Some(membership) else {
       raise @portal.PortalError::InvalidInput(
         "portal lease request subject has no active membership",
@@ -196,13 +212,31 @@ async fn FilePortalStore::persist(self : FilePortalStore) -> Unit {
 }
 
 ///|
-fn FilePortalStore::membership_for_subject_unlocked(
+fn FilePortalStore::membership_for_organization_unlocked(
   self : FilePortalStore,
   subject_ref : String,
+  organization_id : String,
 ) -> @portal.EnterpriseMembership? {
   self.memberships
   .values()
-  .find_first(value => value.subject_ref == subject_ref && value.active)
+  .find_first(value => {
+    value.subject_ref == subject_ref &&
+    value.organization_id == organization_id &&
+    value.active
+  })
+}
+
+///|
+pub async fn FilePortalStore::memberships_for_subject(
+  self : FilePortalStore,
+  subject_ref : String,
+) -> Array[@portal.EnterpriseMembership] {
+  self.mutex.acquire()
+  let memberships = sorted_memberships(self.memberships).filter(value => {
+    value.subject_ref == subject_ref && value.active
+  })
+  self.mutex.release()
+  memberships
 }
 
 ///|
@@ -237,33 +271,78 @@ pub async fn FilePortalStore::self_view(
 ) -> @portal.EnterpriseSelfView {
   self.mutex.acquire()
   try {
-    guard self.membership_for_subject_unlocked(subject_ref) is Some(membership) else {
+    let memberships = sorted_memberships(self.memberships).filter(value => {
+      value.subject_ref == subject_ref && value.active
+    })
+    if memberships.length() > 1 {
+      raise @portal.PortalError::OrganizationSelectionRequired
+    }
+    guard memberships.get(0) is Some(membership) else {
       raise @portal.PortalError::Unauthorized("enterprise membership required")
     }
-    let agreements = sorted_agreements(self.agreements).filter(value => {
-      value.tenant_ref == membership.tenant_ref &&
-      value.organization_id == membership.organization_id
+    let view = self.self_view_for_membership_unlocked(subject_ref, membership)
+    self.mutex.release()
+    view
+  } catch {
+    error => {
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+fn FilePortalStore::self_view_for_membership_unlocked(
+  self : FilePortalStore,
+  subject_ref : String,
+  membership : @portal.EnterpriseMembership,
+) -> @portal.EnterpriseSelfView {
+  let agreements = sorted_agreements(self.agreements).filter(value => {
+    value.tenant_ref == membership.tenant_ref &&
+    value.organization_id == membership.organization_id
+  })
+  let all_requests = sorted_requests(self.lease_requests)
+  let requests = if @portal.role_allows(
+      membership.roles,
+      OrganizationAdministrator,
+    ) {
+    all_requests.filter(value => {
+      value.submission.tenant_ref == membership.tenant_ref &&
+      value.submission.organization_id == membership.organization_id
     })
-    let all_requests = sorted_requests(self.lease_requests)
-    let requests = if @portal.role_allows(
-        membership.roles,
-        OrganizationAdministrator,
-      ) {
-      all_requests.filter(value => {
-        value.submission.tenant_ref == membership.tenant_ref &&
-        value.submission.organization_id == membership.organization_id
-      })
-    } else {
-      all_requests.filter(value => value.subject_ref == subject_ref)
+  } else {
+    all_requests.filter(value => value.subject_ref == subject_ref)
+  }
+  {
+    version: @portal.contract_version,
+    membership,
+    agreements,
+    lease_requests: requests,
+    can_sign: @portal.role_allows(membership.roles, LegalSigner),
+    can_request_lease: @portal.role_allows(membership.roles, LeaseRequester),
+  }
+}
+
+///|
+pub async fn FilePortalStore::self_view_for_organization(
+  self : FilePortalStore,
+  subject_ref : String,
+  organization_id : String,
+) -> @portal.EnterpriseSelfView {
+  if !@contracts.valid_identifier(organization_id) {
+    raise @portal.PortalError::InvalidInput("invalid organization identity")
+  }
+  self.mutex.acquire()
+  try {
+    guard self.membership_for_organization_unlocked(
+        subject_ref, organization_id,
+      )
+      is Some(membership) else {
+      raise @portal.PortalError::Unauthorized(
+        "active organization membership required",
+      )
     }
-    let view : @portal.EnterpriseSelfView = {
-      version: @portal.contract_version,
-      membership,
-      agreements,
-      lease_requests: requests,
-      can_sign: @portal.role_allows(membership.roles, LegalSigner),
-      can_request_lease: @portal.role_allows(membership.roles, LeaseRequester),
-    }
+    let view = self.self_view_for_membership_unlocked(subject_ref, membership)
     self.mutex.release()
     view
   } catch {
@@ -288,8 +367,22 @@ pub async fn FilePortalStore::put_membership(
     }
     if self.memberships
       .values()
-      .any(value => value.subject_ref == membership.subject_ref && value.active) {
-      raise @portal.PortalError::AlreadyExists(membership.subject_ref)
+      .any(value => {
+        value.subject_ref == membership.subject_ref &&
+        value.organization_id == membership.organization_id &&
+        value.active
+      }) {
+      raise @portal.PortalError::AlreadyExists(
+        "\{membership.subject_ref}:\{membership.organization_id}",
+      )
+    }
+    if self.memberships
+      .values()
+      .any(value => {
+        value.organization_id == membership.organization_id &&
+        value.tenant_ref != membership.tenant_ref
+      }) {
+      raise @portal.PortalError::TenantMismatch
     }
     self.memberships[membership.membership_id] = membership
     self.persist()
@@ -397,14 +490,18 @@ pub async fn FilePortalStore::request_signature(
   self.mutex.acquire()
   let previous = self.agreements.copy()
   try {
-    guard self.membership_for_subject_unlocked(subject_ref) is Some(membership) else {
+    guard self.agreements.get(request.agreement_id) is Some(agreement) else {
+      raise @portal.PortalError::NotFound(request.agreement_id)
+    }
+    guard self.membership_for_organization_unlocked(
+        subject_ref,
+        agreement.organization_id,
+      )
+      is Some(membership) else {
       raise @portal.PortalError::Unauthorized("enterprise membership required")
     }
     if !@portal.role_allows(membership.roles, LegalSigner) {
       raise @portal.PortalError::Unauthorized("legal signer role required")
-    }
-    guard self.agreements.get(request.agreement_id) is Some(agreement) else {
-      raise @portal.PortalError::NotFound(request.agreement_id)
     }
     if agreement.tenant_ref != membership.tenant_ref ||
       agreement.organization_id != membership.organization_id {
@@ -495,7 +592,11 @@ pub async fn FilePortalStore::submit_lease_request(
   self.mutex.acquire()
   let previous = self.lease_requests.copy()
   try {
-    guard self.membership_for_subject_unlocked(subject_ref) is Some(membership) else {
+    guard self.membership_for_organization_unlocked(
+        subject_ref,
+        submission.organization_id,
+      )
+      is Some(membership) else {
       raise @portal.PortalError::Unauthorized("enterprise membership required")
     }
     if !@portal.role_allows(membership.roles, LeaseRequester) {

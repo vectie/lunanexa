@@ -1396,7 +1396,7 @@ async fn ApiService::handle_offline_commerce(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
   }
-  let view = try portal.self_view(subject_ref) catch {
+  let view = try portal_view_for_request(portal, subject_ref, headers) catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value

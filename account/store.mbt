@@ -644,6 +644,70 @@ pub async fn AccountStore::invitation_views(
 }
 
 ///|
+/// Consumes an operator-issued invitation for an already authenticated
+/// account. The secret remains hashed at rest, email binding is mandatory,
+/// and a replay succeeds only for the account that consumed it originally.
+pub async fn AccountStore::accept_invitation(
+  self : AccountStore,
+  invitation_secret : String,
+  account_id : String,
+  now_unix_ms : Int64,
+) -> AccountInvitationView {
+  if invitation_secret.length() != 69 ||
+    !invitation_secret.has_prefix("lnxi_") ||
+    !@contracts.valid_identifier(account_id) ||
+    now_unix_ms <= 0L {
+    raise InvalidInput("invalid invitation acceptance")
+  }
+  let secret_digest = digest(invitation_secret)
+  self.mutex.acquire()
+  let previous = self.invitations.copy()
+  try {
+    guard self.accounts.get(account_id) is Some(account) &&
+      account.state == Active &&
+      role_allows(account.roles, EnterpriseUser) else {
+      raise Unauthorized
+    }
+    let mut matched : AccountInvitation? = None
+    for invitation in self.invitations.values() {
+      if constant_time_equal(invitation.secret_sha256, secret_digest) {
+        matched = Some(invitation)
+      }
+    }
+    guard matched is Some(invitation) &&
+      invitation.email.to_lower() == account.email.to_lower() else {
+      raise Unauthorized
+    }
+    let consumed = match invitation.consumed_account_id {
+      Some(consumed_account_id) if consumed_account_id == account_id =>
+        invitation
+      Some(_) => raise Unauthorized
+      None => {
+        if invitation.expires_unix_ms <= now_unix_ms {
+          raise Unauthorized
+        }
+        let updated = {
+          ..invitation,
+          consumed_account_id: Some(account_id),
+          consumed_unix_ms: Some(now_unix_ms),
+        }
+        self.invitations[invitation.invitation_id] = updated
+        self.persist()
+        updated
+      }
+    }
+    self.mutex.release()
+    invitation_view(consumed)
+  } catch {
+    error => {
+      self.invitations = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn AccountStore::register_with_invitation(
   self : AccountStore,
   invitation_secret : String,

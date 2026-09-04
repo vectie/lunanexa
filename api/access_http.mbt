@@ -136,7 +136,10 @@ async fn ApiService::api_key_check(
         let membership_active = match self.portal_store {
           Some(portal) =>
             try {
-              let view = portal.self_view(preview.subject_ref)
+              let view = portal.self_view_for_organization(
+                preview.subject_ref,
+                preview.organization_id,
+              )
               view.membership.tenant_ref == preview.tenant_ref &&
               view.membership.active &&
               @portal.role_allows(view.membership.roles, Developer)

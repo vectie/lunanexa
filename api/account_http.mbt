@@ -453,6 +453,7 @@ async fn ApiService::ensure_open_trial(
           display_name: "Trial — \{account.display_name}",
           state: Active,
           verification_ref: Some("trial:\{trial.trial_id}"),
+          legal_profile: None,
           created_unix_ms: trial.starts_unix_ms,
         })
       }
