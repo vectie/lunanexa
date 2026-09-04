@@ -91,6 +91,24 @@ lunanexa.identity.assertion.v1\n<issuer>\n<provider subject>\n<issued Unix ms>\n
 
 Here `\n` denotes one LF byte between fields.
 
+For a verified identity that has no LunaNexa account, the gateway calls
+`POST /v1/auth/register` with the same short lifetime and adds the verified
+OIDC `email` and display-name claims. Those two headers are covered by a
+separate canonical signature:
+
+```text
+lunanexa.identity.registration.v1\n<issuer>\n<provider subject>\n<email>\n<display name>\n<issued Unix ms>\n<expires Unix ms>\n<nonce>
+```
+
+The corresponding headers are `X-LunaNexa-Identity-Email` and
+`X-LunaNexa-Identity-Display-Name`; caller-supplied copies must be stripped at
+the edge. The request body contains only `lifetime_ms` and an optional
+`invitation_secret`. Without an invitation, registration creates an active
+`EnterpriseUser` account and browser session only—no membership, contract,
+API key, workspace lease, or machine authority. With an invitation, the
+gateway-signed email must match the invited email and the invitation-bound
+Developer membership is added.
+
 The assertion lifetime must not exceed 30 seconds. The nonce is a unique
 assertion/JTI and is consumed once. The gateway must never send tenant, role,
 email, account ID, or internal `subject_ref` as authority. LunaNexa resolves

@@ -34,6 +34,9 @@ for required in \
   'LUNANEXA_CONTROL_BEARER_ENDPOINT: "http://lunanexa-control:8080"' \
   'LUNANEXA_CONTROL_BEARER_PATH_PREFIX: "/v1/"' \
   'LUNANEXA_IDENTITY_EXCHANGE_PATH: "/v1/auth/session:exchange"' \
+  'LUNANEXA_IDENTITY_REGISTRATION_PATH: "/v1/auth/register"' \
+  'LUNANEXA_IDENTITY_REGISTRATION_ASSERTION_VERSION: "lunanexa.identity.registration.v1"' \
+  'LUNANEXA_OPEN_REGISTRATION_ENABLED: "1"' \
   'LUNANEXA_BROWSER_OIDC_START_PATH: "/auth/oidc/start"' \
   'LUNANEXA_BROWSER_SESSION_PATH: "/auth/session"' \
   'LUNANEXA_BROWSER_LOGOUT_PATH: "/auth/logout"' \
@@ -47,6 +50,8 @@ for required in \
   'LUNANEXA_ENTERPRISE_API_PATH_PREFIXES: "/v1/auth/,/v1/portal/self,/v1/portal/signature-requests,/v1/portal/lease-requests,' \
   'LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES: "lnxs_"' \
   'X-LunaNexa-Identity-Signature' \
+  'X-LunaNexa-Identity-Email' \
+  'X-LunaNexa-Identity-Display-Name' \
   'app.kubernetes.io/name: ingress-nginx'; do
   rg -q "$required" "$manifest"
 done

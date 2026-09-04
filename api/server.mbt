@@ -65,6 +65,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   operator_token : String
+  retire_bootstrap_operator_token : Bool
   // Token → operator identity map for contract-document operator routes,
   // where every mutation is attributed to the authenticated operator.
   operator_tokens : Map[String, String]
@@ -148,6 +149,7 @@ pub fn ApiService::new(
     reconciliation_only: false,
     runtime,
     operator_token,
+    retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
@@ -229,6 +231,7 @@ pub fn ApiService::with_registry(
     reconciliation_only: false,
     runtime,
     operator_token,
+    retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
@@ -311,6 +314,7 @@ pub fn ApiService::with_services(
     reconciliation_only: false,
     runtime,
     operator_token,
+    retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
@@ -395,6 +399,7 @@ pub fn ApiService::with_control_plane(
     reconciliation_only: false,
     runtime,
     operator_token,
+    retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
     inference_token,
     audit_token: operator_token,
@@ -442,6 +447,17 @@ pub fn ApiService::with_operator_tokens(
     }
     { ..self, operator_tokens, }
   }
+}
+
+///|
+/// Makes the deployment bootstrap token unusable after the first durable
+/// PlatformOperator account has been created. Other explicitly configured
+/// operator identities are unaffected.
+pub fn ApiService::with_retired_bootstrap_operator_token(
+  self : ApiService,
+  enabled : Bool,
+) -> ApiService {
+  { ..self, retire_bootstrap_operator_token: enabled }
 }
 
 ///|
@@ -1230,7 +1246,24 @@ async fn ApiService::operator_identity(
       .map(value => value.account.subject_ref)
   }
   match self.operator_tokens.get(value["Bearer ".length():].to_owned()) {
-    Some(identity) => Some(identity)
+    Some(identity) => {
+      let supplied = value["Bearer ".length():].to_owned()
+      let operator_created = match self.account_store {
+        Some(accounts) =>
+          accounts
+          .views()
+          .any(account => @account.role_allows(account.roles, PlatformOperator))
+        None => false
+      }
+      let bootstrap_retired = self.retire_bootstrap_operator_token &&
+        supplied == self.operator_token &&
+        operator_created
+      if bootstrap_retired {
+        None
+      } else {
+        Some(identity)
+      }
+    }
     None =>
       self
       .account_session_authorization(headers, PlatformOperator)
@@ -1779,10 +1812,12 @@ async fn ApiService::invoke_stream_with_bounded_retry(
   let primary_id = if primary == "" { "runtime-default" } else { primary }
   let alternate_id = if alternate == "" { "runtime-default" } else { alternate }
   let mut emitted = false
-  try self.runtime.invoke_stream_at(request, primary, output => {
+  try
+    self.runtime.invoke_stream_at(request, primary, output => {
       emitted = true
       on_chunk(output)
-    }) catch {
+    })
+  catch {
     error => {
       if @async.is_cancellation_error(error) ||
         !retryable_runtime_error(error) ||

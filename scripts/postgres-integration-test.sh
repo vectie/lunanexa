@@ -35,7 +35,7 @@ psql "$database_url" -v ON_ERROR_STOP=1 \
 LUNANEXA_DATABASE_URL="$database_url" moon run cmd/database --target native
 test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "2"
 LUNANEXA_TEST_DATABASE_URL="$database_url" \
-  moon test internal/postgres database portal/store workspace/directory \
+  moon test internal/postgres database account portal/store workspace/directory \
     notifications/store observability commercial/offline/store \
     nodelease/store nodelease/credential/store \
     api \

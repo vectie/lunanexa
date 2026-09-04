@@ -1,18 +1,36 @@
 ///|
 fn account_path(path : String) -> Bool {
   path == "/v1/auth/session:exchange" ||
+  path == "/v1/auth/register" ||
   path == "/v1/auth/self" ||
   path == "/v1/auth/sessions" ||
   path == "/v1/auth/sessions:revoke-all" ||
   path == "/v1/auth/logout" ||
   path.has_prefix("/v1/auth/sessions/") ||
   path == "/v1/accounts" ||
+  path == "/v1/account-invitations" ||
   path.has_prefix("/v1/accounts/")
 }
 
 ///|
 priv struct SessionExchangeIntent {
   lifetime_ms : Int64
+} derive(FromJson)
+
+///|
+priv struct RegistrationIntent {
+  invitation_secret : String?
+  lifetime_ms : Int64
+} derive(FromJson)
+
+///|
+priv struct AccountInvitationIssueIntent {
+  invitation_id : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  expires_unix_ms : Int64
 } derive(FromJson)
 
 ///|
@@ -35,6 +53,24 @@ priv struct AccountRolesIntent {
 
 ///|
 fn decode_session_exchange(body : String) -> SessionExchangeIntent? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_registration(body : String) -> RegistrationIntent? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_account_invitation(body : String) -> AccountInvitationIssueIntent? {
   try @json.from_json(@json.parse(body)) catch {
     _ => None
   } noraise {
@@ -100,6 +136,72 @@ priv struct TrustedIdentityAssertion {
   issuer : String
   subject : String
   replay_key : String
+}
+
+///|
+/// Registration claims are signed separately from login assertions because
+/// email and display name become durable account identity. A browser cannot
+/// add or alter either value after the gateway has verified the OIDC claims.
+priv struct TrustedRegistrationAssertion {
+  issuer : String
+  subject : String
+  email : String
+  display_name : String
+  replay_key : String
+}
+
+///|
+fn ApiService::trusted_registration_assertion(
+  self : ApiService,
+  headers : Map[String, String],
+  now_unix_ms : Int64,
+) -> TrustedRegistrationAssertion? {
+  if self.identity_assertion_secret.length() < 32 {
+    return None
+  }
+  guard header(headers, "X-LunaNexa-Identity-Issuer") is Some(issuer) &&
+    header(headers, "X-LunaNexa-Identity-Subject") is Some(subject) &&
+    header(headers, "X-LunaNexa-Identity-Email") is Some(email) &&
+    header(headers, "X-LunaNexa-Identity-Display-Name") is Some(display_name) &&
+    header(headers, "X-LunaNexa-Identity-Nonce") is Some(nonce) &&
+    header(headers, "X-LunaNexa-Identity-Issued-At") is Some(issued_raw) &&
+    header(headers, "X-LunaNexa-Identity-Expires-At") is Some(expires_raw) &&
+    header(headers, "X-LunaNexa-Identity-Signature") is Some(signature) &&
+    parse_identity_time(issued_raw) is Some(issued_unix_ms) &&
+    parse_identity_time(expires_raw) is Some(expires_unix_ms) else {
+    return None
+  }
+  if !safe_identity_value(issuer, 512) ||
+    !safe_identity_value(subject, 1024) ||
+    !safe_identity_value(email, 320) ||
+    !safe_identity_value(display_name, 128) ||
+    !email.contains("@") ||
+    !@contracts.valid_identifier(nonce) ||
+    issued_unix_ms > now_unix_ms + 5000L ||
+    issued_unix_ms < now_unix_ms - 30000L ||
+    expires_unix_ms <= now_unix_ms ||
+    expires_unix_ms <= issued_unix_ms ||
+    expires_unix_ms - issued_unix_ms > 30000L {
+    return None
+  }
+  let canonical = "lunanexa.identity.registration.v1\n\{issuer}\n\{subject}\n\{email}\n\{display_name}\n\{issued_raw}\n\{expires_raw}\n\{nonce}"
+  let signature_hex = @crypto.bytes_to_hex_string(
+    @crypto.hmac(
+      @crypto.SHA256::new(),
+      @utf8.encode(self.identity_assertion_secret).view(),
+      @utf8.encode(canonical).view(),
+    ),
+  )
+  if !constant_time_identity_equal(signature, "sha256:\{signature_hex}") {
+    return None
+  }
+  Some({
+    issuer,
+    subject,
+    email,
+    display_name,
+    replay_key: "lunanexa.identity.registration-nonce.v1\n\{issuer}\n\{nonce}",
+  })
 }
 
 ///|
@@ -222,6 +324,110 @@ async fn ApiService::handle_accounts(
       true,
     )
   }
+  if verb == Post && path == "/v1/auth/register" {
+    let now = @async.now()
+    guard allow_asserted_subject &&
+      decode_registration(body) is Some(intent) &&
+      self.trusted_registration_assertion(headers, now) is Some(assertion) else {
+      return api_error(
+        401, "IdentityAssertionRejected", "a fresh gateway-signed registration identity is required",
+        false,
+      )
+    }
+    match intent.invitation_secret {
+      None => {
+        let registered = try
+          accounts.register_open(
+            assertion.issuer,
+            assertion.subject,
+            assertion.replay_key,
+            assertion.display_name,
+            assertion.email,
+            intent.lifetime_ms,
+            now,
+          )
+        catch {
+          error => return account_error(error)
+        } noraise {
+          value => value
+        }
+        self.operator_audit_as(
+          registered.account.subject_ref,
+          "account.open-register",
+          registered.account.account_id,
+          "oidc-registration:verified",
+        )
+        return json_reply(201, registered.to_json())
+      }
+      Some(invitation_secret) => {
+        guard self.portal_store is Some(portal) else {
+          return api_error(
+            503, "PortalStoreUnavailable", "invited registration requires the portal membership authority",
+            true,
+          )
+        }
+        let registered = try
+          accounts.register_with_invitation(
+            invitation_secret,
+            assertion.issuer,
+            assertion.subject,
+            assertion.email,
+            assertion.replay_key,
+            assertion.display_name,
+            intent.lifetime_ms,
+            now,
+          )
+        catch {
+          error => return account_error(error)
+        } noraise {
+          value => value
+        }
+        let fingerprint = registered.account.account_id["account-".length():].to_owned()
+        let membership_id = "membership-\{fingerprint}"
+        match
+          portal.snapshot().memberships
+          .iter()
+          .find_first(membership => membership.membership_id == membership_id) {
+          Some(existing) =>
+            if existing.subject_ref != registered.account.subject_ref ||
+              existing.organization_id != registered.invitation.organization_id ||
+              existing.tenant_ref != registered.invitation.tenant_ref ||
+              !existing.active ||
+              !@portal.role_allows(existing.roles, Developer) {
+              return api_error(
+                409, "RegistrationConflict", "the invited enterprise membership conflicts with existing access",
+                false,
+              )
+            }
+          None =>
+            ignore(
+              portal.put_membership({
+                membership_id,
+                tenant_ref: registered.invitation.tenant_ref,
+                organization_id: registered.invitation.organization_id,
+                subject_ref: registered.account.subject_ref,
+                roles: [Developer],
+                active: true,
+                created_unix_ms: now,
+              }),
+            ) catch {
+              _ =>
+                return api_error(
+                  503, "PortalMembershipPersistenceFailed", "registration was recorded; retry with a fresh identity assertion to complete membership",
+                  true,
+                )
+            }
+        }
+        self.operator_audit_as(
+          registered.account.subject_ref,
+          "account.invited-register",
+          registered.account.account_id,
+          "invitation:\{registered.invitation.invitation_id}",
+        )
+        return json_reply(201, registered.to_json())
+      }
+    }
+  }
   if verb == Post && path == "/v1/auth/session:exchange" {
     guard allow_asserted_subject &&
       decode_session_exchange(body) is Some(intent) &&
@@ -304,6 +510,50 @@ async fn ApiService::handle_accounts(
     )
   }
   match (verb, path) {
+    (Get, "/v1/account-invitations") =>
+      json_reply(200, accounts.invitation_views().to_json())
+    (Post, "/v1/account-invitations") => {
+      guard decode_account_invitation(body) is Some(intent) else {
+        return api_error(
+          400, "InvalidRequest", "invalid account invitation intent", false,
+        )
+      }
+      if self.management_database is Some(_) &&
+        !self.commercial_project_exists(
+          intent.organization_id,
+          intent.project_id,
+        ) {
+        return api_error(
+          409, "CommercialProjectRequired", "the invitation must reference a project owned by the organization",
+          false,
+        )
+      }
+      let issued = try
+        accounts.issue_invitation(
+          {
+            invitation_id: intent.invitation_id,
+            email: intent.email,
+            organization_id: intent.organization_id,
+            tenant_ref: intent.tenant_ref,
+            project_id: intent.project_id,
+            created_by: operator_id,
+            expires_unix_ms: intent.expires_unix_ms,
+          },
+          @async.now(),
+        )
+      catch {
+        error => return account_error(error)
+      } noraise {
+        value => value
+      }
+      self.operator_audit_as(
+        operator_id,
+        "account.invitation.issue",
+        issued.invitation.invitation_id,
+        "account-invitation:issued",
+      )
+      json_reply(201, issued.to_json())
+    }
     (Get, "/v1/accounts") => json_reply(200, accounts.views().to_json())
     (Post, "/v1/accounts") => {
       guard decode_account_create(body) is Some(intent) else {

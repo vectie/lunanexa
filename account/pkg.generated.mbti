@@ -36,6 +36,43 @@ pub(all) struct AccountAuthorization {
   account : AccountView
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct AccountInvitation {
+  invitation_id : String
+  secret_sha256 : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  created_by : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  consumed_account_id : String?
+  consumed_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AccountInvitationIntent {
+  invitation_id : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  created_by : String
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AccountInvitationView {
+  invitation_id : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  created_by : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  consumed_account_id : String?
+  consumed_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 type AccountPersistence
 
 pub(all) enum AccountRole {
@@ -48,6 +85,7 @@ pub(all) struct AccountSnapshot {
   schema_version : String
   accounts : Array[HumanAccount]
   sessions : Array[BrowserSession]
+  invitations : Array[AccountInvitation]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum AccountState {
@@ -62,13 +100,18 @@ pub struct AccountStore {
   issuer_secret : String
   mut accounts : Map[String, HumanAccount]
   mut sessions : Map[String, BrowserSession]
+  mut invitations : Map[String, AccountInvitation]
   mutex : @async.Mutex
 }
 pub async fn AccountStore::authorize(Self, String, Int64, required_role? : AccountRole) -> AccountAuthorization
 pub async fn AccountStore::create(Self, HumanAccount) -> AccountView
+pub async fn AccountStore::invitation_views(Self) -> Array[AccountInvitationView]
+pub async fn AccountStore::issue_invitation(Self, AccountInvitationIntent, Int64) -> IssuedAccountInvitation
 pub async fn AccountStore::issue_session(Self, String, String, String, Int64, Int64) -> IssuedBrowserSession
 pub async fn AccountStore::open(String, String) -> Self
 pub async fn AccountStore::open_postgres(@database.PostgresDatabase, String) -> Self
+pub async fn AccountStore::register_open(Self, String, String, String, String, String, Int64, Int64) -> OpenRegisteredAccount
+pub async fn AccountStore::register_with_invitation(Self, String, String, String, String, String, String, Int64, Int64) -> RegisteredAccount
 pub async fn AccountStore::revoke_all_sessions(Self, String, Int64) -> Int
 pub async fn AccountStore::revoke_session(Self, String, String, Int64) -> BrowserSessionView
 pub async fn AccountStore::sessions_for_account(Self, String) -> Array[BrowserSessionView]
@@ -125,9 +168,25 @@ pub(all) struct HumanAccount {
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct IssuedAccountInvitation {
+  invitation : AccountInvitationView
+  secret : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct IssuedBrowserSession {
   session : BrowserSessionView
   secret : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct OpenRegisteredAccount {
+  account : AccountView
+  session : IssuedBrowserSession
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RegisteredAccount {
+  account : AccountView
+  invitation : AccountInvitationView
+  session : IssuedBrowserSession
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 // Type aliases

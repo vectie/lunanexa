@@ -52,10 +52,74 @@ pub(all) struct BrowserSession {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Operator-issued, one-time enterprise registration capability. Only a hash
+/// of the invitation secret is durable; self-registration can never mint an
+/// operator or audit role.
+pub(all) struct AccountInvitation {
+  invitation_id : String
+  secret_sha256 : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  created_by : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  consumed_account_id : String?
+  consumed_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct AccountInvitationIntent {
+  invitation_id : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  created_by : String
+  expires_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct AccountInvitationView {
+  invitation_id : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  created_by : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  consumed_account_id : String?
+  consumed_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct IssuedAccountInvitation {
+  invitation : AccountInvitationView
+  secret : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct RegisteredAccount {
+  account : AccountView
+  invitation : AccountInvitationView
+  session : IssuedBrowserSession
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct OpenRegisteredAccount {
+  account : AccountView
+  session : IssuedBrowserSession
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct AccountSnapshot {
   schema_version : String
   accounts : Array[HumanAccount]
   sessions : Array[BrowserSession]
+  // Optional for backward-compatible restoration of pre-registration state.
+  invitations : Array[AccountInvitation]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

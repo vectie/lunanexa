@@ -1091,6 +1091,12 @@ async fn main {
     )
     .with_role_tokens(audit_token, monitoring_token)
     .with_operator_tokens(operator_tokens)
+    .with_retired_bootstrap_operator_token(
+      @env.get_env_var("LUNANEXA_RETIRE_BOOTSTRAP_OPERATOR_TOKEN").unwrap_or(
+        "1",
+      ) ==
+      "1",
+    )
     .with_assignment_signing_secret(assignment_signing_secret)
     .with_artifact_root(
       @env.get_env_var("LUNANEXA_MODEL_STORE_ROOT").unwrap_or("/data/models"),

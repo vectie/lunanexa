@@ -256,6 +256,8 @@ spec:
               value: "runtime-token"
             - name: LUNANEXA_REQUIRE_WORKSPACE_LEASE
               value: "1"
+            - name: LUNANEXA_RETIRE_BOOTSTRAP_OPERATOR_TOKEN
+              value: "1"
             - name: LUNANEXA_ADMIN_SETTINGS_PATH
               value: /etc/lunanexa/admin-policy/admin-settings.json
             - name: LUNANEXA_RECONCILIATION_ONLY
