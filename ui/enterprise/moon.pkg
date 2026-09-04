@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/notifications",
   "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/nodelease",

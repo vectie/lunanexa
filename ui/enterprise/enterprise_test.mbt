@@ -309,3 +309,141 @@ test "free trial shows one clear action, limits, and no machine promise" {
   assert_true(chinese.contains("您的体验已就绪"))
   assert_true(chinese.contains("不会授予 SSH 或独占机器权限"))
 }
+
+///|
+test "cost checkout derives authority fields and exposes complete states" {
+  let state = @enterprise.demo_state()
+  assert_true(@enterprise.payment_checkout_available(state))
+  let ready = @enterprise.render({ ..state, route: Costs })
+  assert_true(ready.contains("Pay a finalized billing period"))
+  assert_true(ready.contains("CNY 18,420.00"))
+  assert_true(ready.contains("1842000 minor units"))
+  assert_true(ready.contains("Currency / scale"))
+  assert_true(ready.contains("CNY / 2"))
+  assert_true(ready.contains("period-2026-08"))
+  assert_true(ready.contains("Create secure checkout"))
+  assert_true(
+    ready.contains(
+      "Payment completes only after independently verified provider evidence",
+    ),
+  )
+  assert_true(ready.contains("Paid"))
+  let loading = state.update(SubmitPaymentCheckout)
+  assert_true(loading.payment_checkout_loading)
+  assert_false(@enterprise.payment_checkout_available(loading))
+  let loading_html = @enterprise.render({ ..loading, route: Costs })
+  assert_true(loading_html.contains("Creating secure checkout…"))
+  let empty = @enterprise.render({
+    ..state,
+    route: Costs,
+    provider_requests: [],
+  })
+  assert_true(empty.contains("No online payment requests yet."))
+  let expired_checkout = {
+    ..state.provider_requests[0],
+    state: Submitted,
+    expected_amount_minor: Some(1842000L),
+    action_url: Some("https://pay.example.invalid/expired"),
+    action_expires_unix_ms: Some(state.machine_access.now_unix_ms - 1L),
+  }
+  let renewable = @enterprise.render({
+    ..state,
+    route: Costs,
+    provider_requests: [expired_checkout],
+  })
+  assert_true(renewable.contains("Checkout link expired"))
+  assert_true(renewable.contains("Renew secure checkout"))
+  assert_false(
+    renewable.contains("href=\"https://pay.example.invalid/expired\""),
+  )
+  let chinese = @enterprise.render({
+    ..state,
+    route: Costs,
+    locale: ChineseSimplified,
+  })
+  assert_true(chinese.contains("支付已结算账期"))
+  assert_true(
+    chinese.contains(
+      "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生",
+    ),
+  )
+  assert_true(chinese.contains("创建安全支付请求"))
+}
+
+///|
+test "qualified signature handoff is explicit HTTPS-only and renewable" {
+  let state = @enterprise.demo_state()
+  let agreement = {
+    ..state.agreements[0],
+    state: SignatureRequested,
+    generation: 2L,
+    signer_subject_ref: Some("subject-alice"),
+    signature_request_receipt: Some("portal-signature:demo"),
+  }
+  let ready = @enterprise.render({
+    ..state,
+    route: Agreements,
+    agreements: [agreement],
+  })
+  assert_true(ready.contains("Continue with signature provider"))
+  assert_true(
+    ready.contains("href=\"https://sign.example.invalid/ceremony/demo\""),
+  )
+  assert_true(ready.contains("target=\"_blank\""))
+  assert_true(ready.contains("rel=\"noopener noreferrer\""))
+  assert_false(ready.contains("location.assign"))
+  let unsafe_record = {
+    ..state.provider_requests[1],
+    action_url: Some("http://sign.example.invalid/unsafe"),
+  }
+  let blocked = @enterprise.render({
+    ..state,
+    route: Agreements,
+    agreements: [agreement],
+    provider_requests: [unsafe_record],
+  })
+  assert_true(blocked.contains("provider link was blocked"))
+  assert_false(blocked.contains("href=\"http://sign.example.invalid/unsafe\""))
+  let expired_record = {
+    ..unsafe_record,
+    state: Submitted,
+    action_url: Some("https://sign.example.invalid/expired"),
+    action_expires_unix_ms: Some(state.machine_access.now_unix_ms - 1L),
+  }
+  let expired = @enterprise.render({
+    ..state,
+    route: Agreements,
+    agreements: [agreement],
+    provider_requests: [expired_record],
+  })
+  assert_true(expired.contains("Signing link expired"))
+  assert_true(expired.contains("Renew signing session"))
+  let terminal = @enterprise.render({
+    ..state,
+    route: Agreements,
+    agreements: [agreement],
+    provider_requests: [{ ..expired_record, state: Expired }],
+  })
+  assert_true(terminal.contains("Signing link expired"))
+  assert_false(terminal.contains("Renew signing session"))
+  assert_true(
+    @enterprise.valid_provider_action_url("https://sign.example.test/a"),
+  )
+  assert_false(
+    @enterprise.valid_provider_action_url("http://sign.example.test/a"),
+  )
+  assert_false(
+    @enterprise.valid_provider_action_url("https://user@sign.example.test/a"),
+  )
+  assert_false(
+    @enterprise.valid_provider_action_url("https://sign.example.test/a#secret"),
+  )
+  let chinese = @enterprise.render({
+    ..state,
+    route: Agreements,
+    locale: ChineseSimplified,
+    agreements: [agreement],
+  })
+  assert_true(chinese.contains("前往签署服务商继续办理"))
+  assert_true(chinese.contains("刷新状态"))
+}
