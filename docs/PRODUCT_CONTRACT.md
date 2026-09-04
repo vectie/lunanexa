@@ -67,6 +67,9 @@ Human identity has two supported deployment shapes. A public platform identity
 provider may allow any eligible person to create an account, while an enterprise
 deployment may federate a customer's existing identity provider. Both terminate
 at the same signed OIDC assertion boundary; LunaNexa does not store passwords.
+The standard public profile is LunaNexa-operated Keycloak 26.7.3 with verified
+email, recovery, TOTP and exact PKCE clients. Keycloak owns credentials and OIDC
+sessions; it grants no LunaNexa role, organization, contract or machine access.
 An account is not a customer organization and grants no machine authority by
 itself. After sign-in, a person may create an `Individual` or `Company` legal
 customer record, or join an existing organization with a one-time invitation.
