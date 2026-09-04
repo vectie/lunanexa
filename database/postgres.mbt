@@ -83,6 +83,8 @@ pub fn PostgresDatabase::projection_count(
 
 ///|
 fn allowed_domain(domain : String) -> Bool {
+  domain == "accounts" ||
+  domain == "client_handoffs" ||
   domain == "enterprise_portal" ||
   domain == "workspace_directory" ||
   domain == "workspace_admissions" ||
