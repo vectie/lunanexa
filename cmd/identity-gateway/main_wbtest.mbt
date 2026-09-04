@@ -65,6 +65,54 @@ test "issuer endpoint confinement supports current HTTPS IP and port" {
 }
 
 ///|
+test "OIDC transport override preserves the public issuer path" {
+  let config : GatewayConfig = {
+    mode: Proxy,
+    listen_address: "127.0.0.1:8080",
+    issuer: "https://106.39.18.146:5006/realms/lunanexa",
+    oidc_transport_origin: Some("https://id.lunanexa.example:8443"),
+    oidc_ca_file: None,
+    operator_host: "106.39.18.146:5003",
+    enterprise_host: "106.39.18.146:5005",
+    operator_redirect_uri: "https://106.39.18.146:5003/auth/oidc/callback",
+    enterprise_redirect_uri: "https://106.39.18.146:5005/auth/oidc/callback",
+    operator_client_id: "operator",
+    enterprise_client_id: "enterprise",
+    operator_client_secret: "operator-secret",
+    enterprise_client_secret: "enterprise-secret",
+    operator_cookie_name: "__Host-operator",
+    enterprise_cookie_name: "__Host-enterprise",
+    operator_cookie_secret: "operator-cookie-secret-32-bytes-000",
+    enterprise_cookie_secret: "enterprise-cookie-secret-32-bytes",
+    assertion_secret: "identity-assertion-secret-32-bytes",
+    database_url: "postgres://database",
+    relay_endpoint: "http://relay:8081",
+    control_endpoint: "http://control:8080",
+    operator_upstream: "http://operator:8080",
+    enterprise_upstream: "http://enterprise:8080",
+    session_idle_ms: 1800000L,
+    session_absolute_ms: 28800000L,
+    assertion_lifetime_ms: 30000L,
+  }
+  assert_eq(
+    oidc_transport_url(
+      config, "https://106.39.18.146:5006/realms/lunanexa/protocol/openid-connect/token",
+    ),
+    "https://id.lunanexa.example:8443/realms/lunanexa/protocol/openid-connect/token",
+  )
+  try {
+    let _ = oidc_transport_url(config, "https://attacker.example/token")
+    fail("escaped endpoint must be rejected")
+  } catch {
+    Failure(message) =>
+      assert_eq(
+        message, "OIDC transport endpoint escaped the configured issuer",
+      )
+    _ => fail("unexpected error")
+  }
+}
+
+///|
 test "ID token claims bind issuer client nonce and lifetime" {
   let header = base64url(@utf8.encode("{\"alg\":\"RS256\"}").view())
   let claims = base64url(

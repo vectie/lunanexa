@@ -79,6 +79,7 @@ fn load_config() -> GatewayConfig raise {
       mode,
       listen_address,
       issuer: "",
+      oidc_transport_origin: None,
       oidc_ca_file: None,
       operator_host: "",
       enterprise_host: "",
@@ -111,6 +112,18 @@ fn load_config() -> GatewayConfig raise {
     "LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI",
   )
   validate_https_origin(issuer, "LUNANEXA_OIDC_ISSUER_URL")
+  let oidc_transport_origin = optional_environment(
+    "LUNANEXA_OIDC_TRANSPORT_ORIGIN",
+  )
+  match oidc_transport_origin {
+    Some(origin) => {
+      validate_https_origin(origin, "LUNANEXA_OIDC_TRANSPORT_ORIGIN")
+      guard !origin[8:].contains("/") else {
+        raise Failure("OIDC transport origin must not include a path")
+      }
+    }
+    None => ()
+  }
   validate_https_origin(operator_redirect_uri, "operator redirect")
   validate_https_origin(enterprise_redirect_uri, "enterprise redirect")
   let operator_host = configured_host(operator_redirect_uri)
@@ -185,6 +198,7 @@ fn load_config() -> GatewayConfig raise {
     mode,
     listen_address,
     issuer,
+    oidc_transport_origin,
     oidc_ca_file: optional_environment("LUNANEXA_OIDC_CA_FILE"),
     operator_host,
     enterprise_host,

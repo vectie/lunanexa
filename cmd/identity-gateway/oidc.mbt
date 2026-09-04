@@ -33,12 +33,29 @@ fn oidc_trust(config : GatewayConfig) -> @tls.TrustedRoot {
 }
 
 ///|
+fn oidc_transport_url(config : GatewayConfig, url : String) -> String raise {
+  match config.oidc_transport_origin {
+    None => url
+    Some(origin) => {
+      guard same_issuer_endpoint(config.issuer, url) else {
+        raise Failure("OIDC transport endpoint escaped the configured issuer")
+      }
+      let (public_origin, _) = endpoint_origin_and_path(config.issuer, true)
+      "\{origin}\{url[public_origin.length():]}"
+    }
+  }
+}
+
+///|
 async fn oidc_get(
   config : GatewayConfig,
   url : String,
   headers : Map[String, String],
 ) -> (@http.Response, String) {
-  let (origin, path) = endpoint_origin_and_path(url, true)
+  let (origin, path) = endpoint_origin_and_path(
+    oidc_transport_url(config, url),
+    true,
+  )
   let client = @http.Client(origin, trust=oidc_trust(config))
   defer client.close()
   let response = client.get(path, extra_headers=headers)
@@ -53,7 +70,10 @@ async fn oidc_post_form(
   body : String,
   authorization : String,
 ) -> (@http.Response, String) {
-  let (origin, path) = endpoint_origin_and_path(url, true)
+  let (origin, path) = endpoint_origin_and_path(
+    oidc_transport_url(config, url),
+    true,
+  )
   let client = @http.Client(origin, trust=oidc_trust(config))
   defer client.close()
   let response = client.post(path, body, extra_headers={

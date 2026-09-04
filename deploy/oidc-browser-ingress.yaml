@@ -9,6 +9,10 @@ metadata:
 data:
   LUNANEXA_OIDC_PROVIDER_REF: "${LUNANEXA_OIDC_PROVIDER_REF}"
   LUNANEXA_OIDC_ISSUER_URL: "${LUNANEXA_OIDC_ISSUER_URL}"
+  # Optional backend-only origin for clusters that cannot hairpin through the
+  # public issuer address. Browser redirects and token issuer validation still
+  # use LUNANEXA_OIDC_ISSUER_URL exactly.
+  LUNANEXA_OIDC_TRANSPORT_ORIGIN: "${LUNANEXA_OIDC_TRANSPORT_ORIGIN}"
   LUNANEXA_OIDC_OPERATOR_REDIRECT_URI: "https://${LUNANEXA_OPERATOR_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI: "https://${LUNANEXA_ENTERPRISE_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ALLOWED_ORIGINS: "https://${LUNANEXA_OPERATOR_HOST},https://${LUNANEXA_ENTERPRISE_HOST}"
