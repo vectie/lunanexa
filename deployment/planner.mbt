@@ -413,6 +413,31 @@ pub fn preflight(
 }
 
 ///|
+/// Runs the ordinary fail-closed deployment preflight against exactly one
+/// controller-selected managed node. This is the placement primitive used by
+/// a dedicated model-service order after commercial settlement and capacity
+/// reservation. The caller must prove that `node_id` belongs to the order;
+/// the public customer contract never accepts or returns a physical node ID.
+///
+/// Keeping this as a restriction of the normal planning context preserves all
+/// registry, license, signature, evaluation, data-class, secret and resource
+/// gates. It cannot make an otherwise ineligible node executable.
+pub fn preflight_on_node(
+  templates : Array[ModelServiceTemplate],
+  intent : ModelServiceIntent,
+  context : PlanningContext,
+  node_id : String,
+) -> DeploymentPlan {
+  if !@contracts.valid_identifier(node_id, maximum_length=96) {
+    return preflight(templates, intent, { ..context, nodes: [] })
+  }
+  preflight(templates, intent, {
+    ..context,
+    nodes: context.nodes.filter(node => node.node_id == node_id),
+  })
+}
+
+///|
 pub fn desired_assignments(
   plan : DeploymentPlan,
   controller_epoch : Int64,
