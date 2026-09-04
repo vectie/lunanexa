@@ -34,6 +34,9 @@ data:
   LUNANEXA_SESSION_ABSOLUTE_TIMEOUT_SECONDS: "28800"
   LUNANEXA_IDENTITY_ASSERTION_MAXIMUM_SECONDS: "30"
   LUNANEXA_IDENTITY_EXCHANGE_PATH: "/v1/auth/session:exchange"
+  LUNANEXA_IDENTITY_REGISTRATION_PATH: "/v1/auth/register"
+  LUNANEXA_IDENTITY_REGISTRATION_ASSERTION_VERSION: "lunanexa.identity.registration.v1"
+  LUNANEXA_OPEN_REGISTRATION_ENABLED: "1"
   LUNANEXA_BROWSER_OIDC_START_PATH: "/auth/oidc/start"
   LUNANEXA_BROWSER_SESSION_PATH: "/auth/session"
   LUNANEXA_BROWSER_LOGOUT_PATH: "/auth/logout"
@@ -45,7 +48,7 @@ data:
   LUNANEXA_REJECT_NONCANONICAL_API_PATHS: "1"
   LUNANEXA_OPERATOR_API_PATH_PREFIXES: "/v1/"
   LUNANEXA_ENTERPRISE_API_PATH_PREFIXES: "/v1/auth/,/v1/portal/self,/v1/portal/signature-requests,/v1/portal/lease-requests,/v1/notifications/self,/v1/contract-documents/self,/v1/contract-documents/manifest,/v1/offline-commerce/self,/v1/machine-access/self"
-  LUNANEXA_STRIP_REQUEST_HEADERS: "X-LunaNexa-Subject,SSL-Client-Verify,SSL-Client-Subject-DN,X-LunaNexa-Identity-Issuer,X-LunaNexa-Identity-Subject,X-LunaNexa-Identity-Issued-At,X-LunaNexa-Identity-Expires-At,X-LunaNexa-Identity-Nonce,X-LunaNexa-Identity-Signature"
+  LUNANEXA_STRIP_REQUEST_HEADERS: "X-LunaNexa-Subject,SSL-Client-Verify,SSL-Client-Subject-DN,X-LunaNexa-Identity-Issuer,X-LunaNexa-Identity-Subject,X-LunaNexa-Identity-Email,X-LunaNexa-Identity-Display-Name,X-LunaNexa-Identity-Issued-At,X-LunaNexa-Identity-Expires-At,X-LunaNexa-Identity-Nonce,X-LunaNexa-Identity-Signature"
   LUNANEXA_ALLOWED_BROWSER_BEARER_PREFIXES: "lnxs_"
 ---
 apiVersion: apps/v1

@@ -88,6 +88,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   operator_token : String
+  retire_bootstrap_operator_token : Bool
   operator_tokens : Map[String, String]
   inference_token : String
   audit_token : String
@@ -108,7 +109,7 @@ pub struct ApiService {
   offline_commerce_capabilities_expires_unix_ms : Int64
   node_token : String
   version : String
-  active : Map[String, @async.Task[@runtimes.RuntimeInvocationResult]]
+  active : Map[String, @async.Task[(@runtimes.RuntimeInvocationResult, String)]]
   active_mutex : @async.Mutex
   response_cache : Map[String, @contracts.WorkloadResponse]
   response_cache_order : Array[String]
@@ -169,6 +170,7 @@ pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePor
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_retired_bootstrap_operator_token(Self, Bool) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
 pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self

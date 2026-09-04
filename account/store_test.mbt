@@ -296,3 +296,106 @@ async test "completed browser sessions are pruned after bounded retention" {
   )
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "enterprise invitation self-registration is hashed durable and role bounded" {
+  let directory = @fs.tmpdir(prefix="lunanexa-account-invitation-")
+  let path = "\{directory}/accounts.json"
+  let store = @account.AccountStore::open(
+    path, "account-invitation-test-secret-more-than-32-bytes",
+  )
+  let issued = store.issue_invitation(
+    {
+      invitation_id: "invitation-one",
+      email: "invited@example.invalid",
+      organization_id: "organization-one",
+      tenant_ref: "tenant-one",
+      project_id: "project-one",
+      created_by: "operator-one",
+      expires_unix_ms: 200000L,
+    },
+    100000L,
+  )
+  assert_true(issued.secret.has_prefix("lnxi_"))
+  assert_false(@fs.read_file(path).text().contains(issued.secret))
+  let registered = store.register_with_invitation(
+    issued.secret,
+    "https://identity.example/realms/lunanexa",
+    "provider-subject-invited",
+    "invited@example.invalid",
+    "assertion-invited-one",
+    "Invited User",
+    60000L,
+    100001L,
+  )
+  assert_eq(registered.account.email, "invited@example.invalid")
+  assert_eq(registered.account.roles, [EnterpriseUser])
+  assert_eq(registered.account.state, Active)
+  assert_eq(
+    registered.invitation.consumed_account_id,
+    Some(registered.account.account_id),
+  )
+  let authorized = store.authorize(
+    registered.session.secret,
+    100002L,
+    required_role=EnterpriseUser,
+  )
+  assert_eq(authorized.account.account_id, registered.account.account_id)
+  let reopened = @account.AccountStore::open(
+    path, "account-invitation-test-secret-more-than-32-bytes",
+  )
+  assert_eq(reopened.views().length(), 1)
+  assert_eq(reopened.invitation_views().length(), 1)
+  try
+    reopened.register_with_invitation(
+      issued.secret,
+      "https://identity.example/realms/lunanexa",
+      "different-provider-subject",
+      "invited@example.invalid",
+      "assertion-invited-two",
+      "Attacker",
+      60000L,
+      100003L,
+    )
+  catch {
+    @account.AccountError::Unauthorized => ()
+    _ => fail("unexpected invitation reuse error")
+  } noraise {
+    _ => fail("a consumed invitation registered a different identity")
+  }
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "open registration is idempotent and grants no privileged role" {
+  let directory = @fs.tmpdir(prefix="lunanexa-account-open-registration-")
+  let store = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "open-registration-session-secret-more-than-32-bytes",
+  )
+  let first = store.register_open(
+    "https://identity.example/realms/lunanexa", "provider-subject-open", "registration-assertion-one",
+    "Open User", "open@example.invalid", 60000L, 100000L,
+  )
+  assert_eq(first.account.roles, [EnterpriseUser])
+  assert_eq(first.account.state, Active)
+  let second = store.register_open(
+    "https://identity.example/realms/lunanexa", "provider-subject-open", "registration-assertion-two",
+    "Open User", "OPEN@example.invalid", 60000L, 100001L,
+  )
+  assert_eq(second.account.account_id, first.account.account_id)
+  assert_true(second.session.secret != first.session.secret)
+  assert_eq(store.views().length(), 1)
+  try
+    store.register_open(
+      "https://identity.example/realms/lunanexa", "provider-subject-open", "registration-assertion-three",
+      "Open User", "attacker@example.invalid", 60000L, 100002L,
+    )
+  catch {
+    @account.AccountError::AlreadyExists(_) => ()
+    _ => fail("unexpected open-registration identity conflict")
+  } noraise {
+    _ => fail("an existing identity changed its bound email")
+  }
+  @fs.rmdir(directory, recursive=true)
+}
