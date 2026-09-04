@@ -61,6 +61,13 @@ fn signed_registration_headers(
 }
 
 ///|
+priv struct TrialRegistrationResponse {
+  account : @account.AccountView
+  session : @account.IssuedBrowserSession
+  trial : @account.TrialEntitlement?
+} derive(FromJson)
+
+///|
 async test "identity exchange requires trusted transport and stored roles" {
   let directory = @fs.tmpdir(prefix="lunanexa-account-http-")
   let assertion_secret = "identity-assertion-test-secret-more-than-32-bytes"
@@ -393,6 +400,184 @@ async test "verified OIDC identity can register freely without machine authority
   assert_eq(
     service.handle(Get, "/v1/portal/self", session_headers, "").status,
     503,
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "free registration provisions one bounded shared-inference trial" {
+  let directory = @fs.tmpdir(prefix="lunanexa-registration-trial-http-")
+  let assertion_secret = "trial-registration-assertion-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "trial-registration-session-secret-more-than-32-bytes",
+  )
+  let portal = @portal_store.FilePortalStore::open("\{directory}/portal.json")
+  let workspace = @directory.FileWorkspaceDirectory::open(
+    "\{directory}/workspace.json",
+  )
+  let access = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "trial-registration-api-key-secret-more-than-32-bytes",
+  )
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "test",
+    )
+    .with_account_store(accounts, assertion_secret)
+    .with_portal_store(portal)
+    .with_workspace_directory(workspace, true)
+    .with_access_store(access)
+    .with_open_registration_trial(86400000L, 100L, ["text.qwen"])
+  let now = @async.now()
+  let response = service.handle_with_transport(
+    Post,
+    "/v1/auth/register",
+    signed_registration_headers(
+      assertion_secret,
+      "https://identity.example",
+      "trial-provider-subject",
+      "trial-user@example.invalid",
+      "Trial User",
+      "trial-registration-nonce",
+      now,
+      now + 30000L,
+    ),
+    "{\"lifetime_ms\":\"60000\"}",
+    true,
+  )
+  assert_eq(response.status, 201)
+  let registered : TrialRegistrationResponse = @json.from_json(
+    @json.parse(response.body),
+  )
+  guard registered.trial is Some(trial) else { fail("trial missing") }
+  assert_eq(registered.account.roles, [EnterpriseUser])
+  assert_eq(trial.maximum_requests, 100L)
+  assert_eq(trial.allowed_models, ["text.qwen"])
+  let session_headers = {
+    "Authorization": "Bearer \{registered.session.secret}",
+  }
+  assert_eq(
+    service.handle(Get, "/v1/auth/trial", session_headers, "").status,
+    200,
+  )
+  let workspace_state = workspace.snapshot(now + 1L)
+  assert_eq(workspace_state.leases.length(), 1)
+  assert_eq(workspace_state.leases[0].state, Active)
+  assert_eq(workspace_state.leases[0].limits.max_active_sessions, 1)
+  let key_body = (
+    {
+      "key_id": "trial-api-key",
+      "project_id": trial.project_id,
+      "display_name": "Trial key",
+      "scopes": ["ModelList", "Inference"],
+      "allowed_models": ["text.qwen"],
+      "expires_unix_ms": trial.expires_unix_ms.to_json(),
+      "maximum_requests": 100L.to_json(),
+    } : Json).stringify()
+  let key_reply = service.handle(
+    Post,
+    "/v1/portal/self/api-keys",
+    session_headers,
+    key_body,
+  )
+  assert_eq(key_reply.status, 201)
+  let issued : @access.IssuedApiKeyView = @json.from_json(
+    @json.parse(key_reply.body),
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{issued.secret}" },
+      "",
+    ).status,
+    200,
+  )
+  let second_body = key_body.replace(
+    old="trial-api-key",
+    new="trial-api-key-two",
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/portal/self/api-keys",
+      session_headers,
+      second_body,
+    ).status,
+    409,
+  )
+  // Shared trial access is represented only by a topology-free workspace
+  // lease; no exclusive machine store or credential handoff is installed.
+  assert_eq(
+    service.handle(Get, "/v1/machine-access/self", session_headers, "").status,
+    503,
+  )
+  let invitation_reply = service.handle(
+    Post,
+    "/v1/account-invitations",
+    { "Authorization": "Bearer operator-token" },
+    (
+      {
+        "invitation_id": "trial-upgrade-invitation",
+        "email": "trial-user@example.invalid",
+        "organization_id": "enterprise-org",
+        "tenant_ref": "enterprise-tenant",
+        "project_id": "enterprise-project",
+        "expires_unix_ms": (now + 86400000L).to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(invitation_reply.status, 201)
+  let invitation : @account.IssuedAccountInvitation = @json.from_json(
+    @json.parse(invitation_reply.body),
+  )
+  let upgraded = service.handle_with_transport(
+    Post,
+    "/v1/auth/register",
+    signed_registration_headers(
+      assertion_secret,
+      "https://identity.example",
+      "trial-provider-subject",
+      "trial-user@example.invalid",
+      "Trial User",
+      "trial-upgrade-nonce",
+      now + 1L,
+      now + 30000L,
+    ),
+    (
+      {
+        "invitation_secret": invitation.secret,
+        "lifetime_ms": 60000L.to_json(),
+      } : Json).stringify(),
+    true,
+  )
+  assert_eq(upgraded.status, 201)
+  assert_eq(
+    portal.self_view(registered.account.subject_ref).membership.organization_id,
+    "enterprise-org",
+  )
+  assert_true(
+    accounts.trial_for_account(registered.account.account_id).unwrap().revoked_unix_ms
+    is Some(_),
+  )
+  assert_eq(workspace.snapshot(now + 2L).leases[0].state, Revoked)
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{issued.secret}" },
+      "",
+    ).status,
+    401,
   )
   @fs.rmdir(directory, recursive=true)
 }

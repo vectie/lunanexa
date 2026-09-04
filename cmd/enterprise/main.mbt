@@ -187,6 +187,7 @@ priv enum Outcome {
     Int64,
     @portal.EnterpriseSelfView,
     @enterprise_ui.AccountView?,
+    @enterprise_ui.TrialEntitlementView?,
     Array[@enterprise_ui.BrowserSessionView],
     Array[@enterprise_ui.EnterpriseCostCenterRow],
     String,
@@ -593,6 +594,7 @@ async fn load_self(
 ) -> (
   @portal.EnterpriseSelfView,
   @enterprise_ui.AccountView?,
+  @enterprise_ui.TrialEntitlementView?,
   Array[@enterprise_ui.BrowserSessionView],
   Array[@enterprise_ui.EnterpriseCostCenterRow],
   String,
@@ -628,6 +630,23 @@ async fn load_self(
             model.token,
             model.subject_ref,
           ),
+        ),
+      ),
+    )
+  } else {
+    None
+  }
+  let trial : @enterprise_ui.TrialEntitlementView? = if model.token.has_prefix(
+      "lnxs_",
+    ) {
+    @json.from_json(
+      @json.parse(
+        request(
+          "GET",
+          model.endpoint,
+          "/v1/auth/trial",
+          model.token,
+          model.subject_ref,
         ),
       ),
     )
@@ -906,9 +925,9 @@ async fn load_self(
     _ => "—"
   }
   (
-    view, account, browser_sessions, cost_centers, provisional_spend, models, notifications,
-    notification_preferences, machines, orders, artifacts, contract_manifest, contract_packets,
-    contract_events, contract_governance, desktop_client, api_keys,
+    view, account, trial, browser_sessions, cost_centers, provisional_spend, models,
+    notifications, notification_preferences, machines, orders, artifacts, contract_manifest,
+    contract_packets, contract_events, contract_governance, desktop_client, api_keys,
   )
 }
 
@@ -1201,14 +1220,20 @@ async fn request_and_download_offline_artifact(
 ///|
 async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
   let draft = model.portal.api_key_issue_draft
+  let requested_expiry = current_unix_ms() +
+    draft.lifetime_days.to_int64() * 86400000L
+  let expires_unix_ms = match model.portal.trial {
+    Some(trial) if trial.revoked_unix_ms is None &&
+      trial.expires_unix_ms < requested_expiry => trial.expires_unix_ms
+    _ => requested_expiry
+  }
   let intent : PortalApiKeyIssueIntent = {
     key_id: random_identifier("api-key"),
     project_id: model.portal.project_id.trim().to_owned(),
     display_name: draft.display_name.trim().to_owned(),
     scopes: @enterprise_ui.api_key_scopes(model.portal),
     allowed_models: @enterprise_ui.api_key_allowed_models(model.portal),
-    expires_unix_ms: current_unix_ms() +
-    draft.lifetime_days.to_int64() * 86400000L,
+    expires_unix_ms,
     maximum_requests: draft.maximum_requests,
   }
   let response = request(
@@ -1392,6 +1417,7 @@ fn load_command(
       (
         view,
         account,
+        trial,
         browser_sessions,
         cost_centers,
         provisional_spend,
@@ -1412,6 +1438,7 @@ fn load_command(
           model.session_generation,
           view,
           account,
+          trial,
           browser_sessions,
           cost_centers,
           provisional_spend,
@@ -3079,6 +3106,7 @@ fn update(
         dispatched_session_generation,
         view,
         account,
+        trial,
         browser_sessions,
         cost_centers,
         provisional_spend,
@@ -3099,6 +3127,11 @@ fn update(
       if dispatched_session_generation != model.session_generation {
         return (model, @rabbita.none)
       }
+      let active_trial = match trial {
+        Some(value) if value.revoked_unix_ms is None &&
+          value.expires_unix_ms > current_unix_ms() => Some(value)
+        _ => None
+      }
       let next = {
         ..model,
         connecting: false,
@@ -3107,14 +3140,29 @@ fn update(
           ..model.portal,
           membership: Some(view.membership),
           account,
+          trial,
           browser_sessions,
           api_keys,
+          api_key_issue_draft: match active_trial {
+            Some(value) =>
+              {
+                ..model.portal.api_key_issue_draft,
+                allowed_models: value.allowed_models.join(", "),
+                lifetime_days: 1,
+                maximum_requests: value.maximum_requests,
+              }
+            None => model.portal.api_key_issue_draft
+          },
           agreements: view.agreements,
           lease_requests: view.lease_requests,
           cost_centers,
           provisional_spend,
           model_catalog: models,
           desktop_client,
+          project_id: match active_trial {
+            Some(value) => value.project_id
+            None => model.portal.project_id
+          },
           notifications,
           notification_preferences,
           machine_access: {

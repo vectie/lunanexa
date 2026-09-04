@@ -154,7 +154,24 @@ async fn ApiService::api_key_check(
             )
           None => self.allow_legacy_unbound_access
         }
-        if !account_active || !membership_active || !contract_active {
+        let trial_active = match self.account_store {
+          Some(accounts) =>
+            match accounts.active_trial_for_subject(preview.subject_ref, now) {
+              Some(trial) =>
+                trial.tenant_ref == preview.tenant_ref &&
+                trial.organization_id == preview.organization_id &&
+                trial.project_id == preview.project_id &&
+                trial.api_key_id == Some(preview.key_id) &&
+                model.map_or(true, selected => {
+                  trial.allowed_models.contains(selected)
+                })
+              None => false
+            }
+          None => false
+        }
+        if !account_active ||
+          !membership_active ||
+          (!contract_active && !trial_active) {
           return KeyDenied
         }
         let value = if consume {

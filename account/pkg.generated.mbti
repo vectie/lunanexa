@@ -86,6 +86,7 @@ pub(all) struct AccountSnapshot {
   accounts : Array[HumanAccount]
   sessions : Array[BrowserSession]
   invitations : Array[AccountInvitation]?
+  trials : Array[TrialEntitlement]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum AccountState {
@@ -101,10 +102,14 @@ pub struct AccountStore {
   mut accounts : Map[String, HumanAccount]
   mut sessions : Map[String, BrowserSession]
   mut invitations : Map[String, AccountInvitation]
+  mut trials : Map[String, TrialEntitlement]
   mutex : @async.Mutex
 }
+pub async fn AccountStore::active_trial_for_subject(Self, String, Int64) -> TrialEntitlement?
 pub async fn AccountStore::authorize(Self, String, Int64, required_role? : AccountRole) -> AccountAuthorization
+pub async fn AccountStore::bind_trial_api_key(Self, String, String, Int64) -> TrialEntitlement
 pub async fn AccountStore::create(Self, HumanAccount) -> AccountView
+pub async fn AccountStore::ensure_trial(Self, TrialEntitlementIntent, Int64) -> TrialEntitlement
 pub async fn AccountStore::invitation_views(Self) -> Array[AccountInvitationView]
 pub async fn AccountStore::issue_invitation(Self, AccountInvitationIntent, Int64) -> IssuedAccountInvitation
 pub async fn AccountStore::issue_session(Self, String, String, String, Int64, Int64) -> IssuedBrowserSession
@@ -114,10 +119,12 @@ pub async fn AccountStore::register_open(Self, String, String, String, String, S
 pub async fn AccountStore::register_with_invitation(Self, String, String, String, String, String, String, Int64, Int64) -> RegisteredAccount
 pub async fn AccountStore::revoke_all_sessions(Self, String, Int64) -> Int
 pub async fn AccountStore::revoke_session(Self, String, String, Int64) -> BrowserSessionView
+pub async fn AccountStore::revoke_trial_for_account(Self, String, Int64) -> TrialEntitlement
 pub async fn AccountStore::sessions_for_account(Self, String) -> Array[BrowserSessionView]
 pub async fn AccountStore::set_roles(Self, String, Array[AccountRole], Int64) -> AccountView
 pub async fn AccountStore::set_state(Self, String, AccountState, Int64) -> AccountView
 pub async fn AccountStore::snapshot(Self) -> AccountSnapshot
+pub async fn AccountStore::trial_for_account(Self, String) -> TrialEntitlement?
 pub async fn AccountStore::views(Self) -> Array[AccountView]
 
 pub(all) struct AccountView {
@@ -187,6 +194,31 @@ pub(all) struct RegisteredAccount {
   account : AccountView
   invitation : AccountInvitationView
   session : IssuedBrowserSession
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TrialEntitlement {
+  trial_id : String
+  account_id : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  allowed_models : Array[String]
+  maximum_requests : Int64
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  api_key_id : String?
+  revoked_unix_ms : Int64?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct TrialEntitlementIntent {
+  trial_id : String
+  account_id : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  allowed_models : Array[String]
+  maximum_requests : Int64
+  expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 // Type aliases

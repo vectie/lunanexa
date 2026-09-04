@@ -427,21 +427,36 @@ async fn ApiService::handle_enterprise_portal(
           false,
         )
       }
-      // Contract governance is the access authority for customer-issued keys.
-      // Keep this check on the portal path as well as the operator path so a
-      // developer membership cannot bypass an absent, expired, or superseded
-      // master lease.
-      guard self.contract_document_store is Some(contract_store) else {
-        return api_error(
-          503, "ContractStoreUnavailable", "an effective master lease could not be verified",
-          true,
-        )
+      let now = @async.now()
+      let contract_active = match self.contract_document_store {
+        Some(contract_store) =>
+          contract_store.has_effective_master_lease(
+            view.membership.tenant_ref,
+            subject_ref,
+            now,
+          )
+        None => false
       }
-      if !contract_store.has_effective_master_lease(
-          view.membership.tenant_ref,
-          subject_ref,
-          @async.now(),
-        ) {
+      let trial = match self.account_store {
+        Some(accounts) => accounts.active_trial_for_subject(subject_ref, now)
+        None => None
+      }
+      let trial_active = match trial {
+        Some(value) =>
+          value.tenant_ref == view.membership.tenant_ref &&
+          value.organization_id == view.membership.organization_id &&
+          value.project_id == intent.project_id &&
+          value.api_key_id is None &&
+          intent.expires_unix_ms <= value.expires_unix_ms &&
+          intent.maximum_requests <= value.maximum_requests &&
+          intent.scopes.all(scope => scope == ModelList || scope == Inference) &&
+          intent.allowed_models.length() > 0 &&
+          intent.allowed_models.all(model => {
+            value.allowed_models.contains(model)
+          })
+        None => false
+      }
+      if !contract_active && !trial_active {
         return api_error(
           409, "MasterLeaseRequired", "an effective master lease is required before issuing an API key",
           false,
@@ -461,7 +476,7 @@ async fn ApiService::handle_enterprise_portal(
             expires_unix_ms: intent.expires_unix_ms,
             maximum_requests: intent.maximum_requests,
           },
-          @async.now(),
+          now,
         )
       catch {
         _ =>
@@ -470,6 +485,38 @@ async fn ApiService::handle_enterprise_portal(
           )
       } noraise {
         value => value
+      }
+      match trial {
+        Some(value) if !contract_active =>
+          match self.account_store {
+            Some(accounts) =>
+              ignore(
+                accounts.bind_trial_api_key(
+                  value.trial_id,
+                  issued.credential.key_id,
+                  now,
+                ),
+              ) catch {
+                _ => {
+                  ignore(
+                    access.revoke_for_subject(
+                      issued.credential.key_id,
+                      view.membership.tenant_ref,
+                      subject_ref,
+                      now,
+                    ),
+                  ) catch {
+                    _ => ()
+                  }
+                  return api_error(
+                    409, "TrialApiKeyRejected", "the one-time trial API key was already issued",
+                    false,
+                  )
+                }
+              }
+            None => ()
+          }
+        _ => ()
       }
       json_reply(201, issued.public_view().to_json())
     }

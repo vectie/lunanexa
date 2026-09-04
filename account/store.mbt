@@ -11,6 +11,7 @@ pub struct AccountStore {
   mut accounts : Map[String, HumanAccount]
   mut sessions : Map[String, BrowserSession]
   mut invitations : Map[String, AccountInvitation]
+  mut trials : Map[String, TrialEntitlement]
   mutex : @async.Mutex
 }
 
@@ -157,6 +158,15 @@ fn sorted_invitations(
 }
 
 ///|
+fn sorted_trials(
+  values : Map[String, TrialEntitlement],
+) -> Array[TrialEntitlement] {
+  let result = values.values().to_array()
+  result.sort_by_key(value => value.trial_id)
+  result
+}
+
+///|
 let completed_session_retention_ms : Int64 = 2592000000L
 
 ///|
@@ -184,6 +194,7 @@ fn AccountStore::snapshot_unlocked(self : AccountStore) -> AccountSnapshot {
     accounts: sorted_accounts(self.accounts),
     sessions: sorted_sessions(self.sessions),
     invitations: Some(sorted_invitations(self.invitations)),
+    trials: Some(sorted_trials(self.trials)),
   }
 }
 
@@ -266,6 +277,33 @@ fn AccountStore::restore(
     }
     self.invitations[invitation.invitation_id] = invitation
   }
+  for trial in snapshot.trials.unwrap_or([]) {
+    if !@contracts.valid_identifier(trial.trial_id) ||
+      !self.accounts.contains(trial.account_id) ||
+      !@contracts.valid_identifier(trial.organization_id) ||
+      !@contracts.valid_identifier(trial.tenant_ref) ||
+      !@contracts.valid_identifier(trial.project_id) ||
+      trial.allowed_models.length() == 0 ||
+      trial.allowed_models.length() > 16 ||
+      trial.allowed_models.any(model => !@contracts.valid_identifier(model)) ||
+      trial.allowed_models.any(model => trial.allowed_models.count(model) != 1) ||
+      trial.maximum_requests <= 0L ||
+      trial.maximum_requests > 10000L ||
+      trial.starts_unix_ms <= 0L ||
+      trial.expires_unix_ms <= trial.starts_unix_ms ||
+      trial.expires_unix_ms - trial.starts_unix_ms > 2592000000L ||
+      trial.api_key_id.map_or(false, key_id => {
+        !@contracts.valid_identifier(key_id)
+      }) ||
+      trial.revoked_unix_ms.map_or(false, revoked => {
+        revoked < trial.starts_unix_ms
+      }) ||
+      self.trials.contains(trial.trial_id) ||
+      self.trials.values().any(value => value.account_id == trial.account_id) {
+      raise InvalidSnapshot("invalid trial entitlement")
+    }
+    self.trials[trial.trial_id] = trial
+  }
 }
 
 ///|
@@ -284,6 +322,7 @@ pub async fn AccountStore::open(
     accounts: Map([]),
     sessions: Map([]),
     invitations: Map([]),
+    trials: Map([]),
     mutex: Mutex(),
   }
   if @fs.exists(path) {
@@ -313,6 +352,7 @@ pub async fn AccountStore::open_postgres(
     accounts: Map([]),
     sessions: Map([]),
     invitations: Map([]),
+    trials: Map([]),
     mutex: Mutex(),
   }
   match database.load_snapshot("accounts", snapshot_schema_version) {
@@ -333,6 +373,197 @@ pub async fn AccountStore::snapshot(self : AccountStore) -> AccountSnapshot {
   let result = self.snapshot_unlocked()
   self.mutex.release()
   result
+}
+
+///|
+/// Creates or resumes the single bounded free trial associated with an
+/// account. The deterministic intent makes registration retries safe.
+pub async fn AccountStore::ensure_trial(
+  self : AccountStore,
+  intent : TrialEntitlementIntent,
+  now_unix_ms : Int64,
+) -> TrialEntitlement {
+  if !@contracts.valid_identifier(intent.trial_id) ||
+    !@contracts.valid_identifier(intent.account_id) ||
+    !@contracts.valid_identifier(intent.organization_id) ||
+    !@contracts.valid_identifier(intent.tenant_ref) ||
+    !@contracts.valid_identifier(intent.project_id) ||
+    intent.allowed_models.length() == 0 ||
+    intent.allowed_models.length() > 16 ||
+    intent.allowed_models.any(model => !@contracts.valid_identifier(model)) ||
+    intent.allowed_models.any(model => intent.allowed_models.count(model) != 1) ||
+    intent.maximum_requests <= 0L ||
+    intent.maximum_requests > 10000L ||
+    now_unix_ms <= 0L ||
+    intent.expires_unix_ms <= now_unix_ms ||
+    intent.expires_unix_ms - now_unix_ms > 2592000000L {
+    raise InvalidInput("invalid trial entitlement")
+  }
+  self.mutex.acquire()
+  let previous = self.trials.copy()
+  try {
+    guard self.accounts.get(intent.account_id) is Some(account) &&
+      account.state == Active &&
+      role_allows(account.roles, EnterpriseUser) else {
+      raise Unauthorized
+    }
+    match self.trials.get(intent.trial_id) {
+      Some(existing) => {
+        if existing.account_id != intent.account_id ||
+          existing.organization_id != intent.organization_id ||
+          existing.tenant_ref != intent.tenant_ref ||
+          existing.project_id != intent.project_id ||
+          existing.allowed_models != intent.allowed_models ||
+          existing.maximum_requests != intent.maximum_requests {
+          raise AlreadyExists(intent.trial_id)
+        }
+        self.mutex.release()
+        return existing
+      }
+      None => ()
+    }
+    if self.trials.values().any(value => value.account_id == intent.account_id) {
+      raise AlreadyExists(intent.account_id)
+    }
+    let trial : TrialEntitlement = {
+      trial_id: intent.trial_id,
+      account_id: intent.account_id,
+      organization_id: intent.organization_id,
+      tenant_ref: intent.tenant_ref,
+      project_id: intent.project_id,
+      allowed_models: intent.allowed_models,
+      maximum_requests: intent.maximum_requests,
+      starts_unix_ms: now_unix_ms,
+      expires_unix_ms: intent.expires_unix_ms,
+      api_key_id: None,
+      revoked_unix_ms: None,
+    }
+    self.trials[intent.trial_id] = trial
+    self.persist()
+    self.mutex.release()
+    trial
+  } catch {
+    error => {
+      self.trials = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+pub async fn AccountStore::trial_for_account(
+  self : AccountStore,
+  account_id : String,
+) -> TrialEntitlement? {
+  self.mutex.acquire()
+  let value = self.trials
+    .values()
+    .find_first(trial => trial.account_id == account_id)
+  self.mutex.release()
+  value
+}
+
+///|
+pub async fn AccountStore::active_trial_for_subject(
+  self : AccountStore,
+  subject_ref : String,
+  now_unix_ms : Int64,
+) -> TrialEntitlement? {
+  self.mutex.acquire()
+  let account_id = self.accounts
+    .values()
+    .find_first(account => {
+      account.subject_ref == subject_ref && account.state == Active
+    })
+    .map(account => account.account_id)
+  let value = match account_id {
+    Some(id) =>
+      self.trials
+      .values()
+      .find_first(trial => {
+        trial.account_id == id &&
+        trial.starts_unix_ms <= now_unix_ms &&
+        trial.expires_unix_ms > now_unix_ms &&
+        trial.revoked_unix_ms is None
+      })
+    None => None
+  }
+  self.mutex.release()
+  value
+}
+
+///|
+pub async fn AccountStore::bind_trial_api_key(
+  self : AccountStore,
+  trial_id : String,
+  key_id : String,
+  now_unix_ms : Int64,
+) -> TrialEntitlement {
+  if !@contracts.valid_identifier(trial_id) ||
+    !@contracts.valid_identifier(key_id) {
+    raise InvalidInput("invalid trial API key binding")
+  }
+  self.mutex.acquire()
+  let previous = self.trials.copy()
+  try {
+    guard self.trials.get(trial_id) is Some(trial) &&
+      trial.expires_unix_ms > now_unix_ms &&
+      trial.revoked_unix_ms is None else {
+      raise Unauthorized
+    }
+    match trial.api_key_id {
+      Some(existing) if existing != key_id => raise AlreadyExists(trial_id)
+      Some(_) => {
+        self.mutex.release()
+        return trial
+      }
+      None => ()
+    }
+    let updated = { ..trial, api_key_id: Some(key_id) }
+    self.trials[trial_id] = updated
+    self.persist()
+    self.mutex.release()
+    updated
+  } catch {
+    error => {
+      self.trials = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+pub async fn AccountStore::revoke_trial_for_account(
+  self : AccountStore,
+  account_id : String,
+  now_unix_ms : Int64,
+) -> TrialEntitlement {
+  self.mutex.acquire()
+  let previous = self.trials.copy()
+  try {
+    guard self.trials
+      .values()
+      .find_first(trial => trial.account_id == account_id)
+      is Some(trial) else {
+      raise NotFound(account_id)
+    }
+    let updated = match trial.revoked_unix_ms {
+      Some(_) => trial
+      None => { ..trial, revoked_unix_ms: Some(now_unix_ms) }
+    }
+    self.trials[trial.trial_id] = updated
+    self.persist()
+    self.mutex.release()
+    updated
+  } catch {
+    error => {
+      self.trials = previous
+      self.mutex.release()
+      raise error
+    }
+  }
 }
 
 ///|
@@ -472,30 +703,41 @@ pub async fn AccountStore::register_with_invitation(
         }
       }
       None => {
-        if self.accounts.contains(account_id) ||
-          self.accounts
-          .values()
-          .any(account => {
-            account.identity_issuer == identity_issuer &&
-            account.identity_subject_sha256 == external_digest
-          }) {
-          raise AlreadyExists(account_id)
+        match self.accounts.get(account_id) {
+          Some(existing) =>
+            if existing.identity_issuer != identity_issuer ||
+              existing.identity_subject_sha256 != external_digest ||
+              existing.email.to_lower() != identity_email.to_lower() ||
+              existing.state != Active ||
+              !role_allows(existing.roles, EnterpriseUser) {
+              raise AlreadyExists(account_id)
+            }
+          None => {
+            if self.accounts
+              .values()
+              .any(account => {
+                account.identity_issuer == identity_issuer &&
+                account.identity_subject_sha256 == external_digest
+              }) {
+              raise AlreadyExists(account_id)
+            }
+            let account : HumanAccount = {
+              version: contract_version,
+              account_id,
+              subject_ref,
+              identity_issuer,
+              identity_subject_sha256: external_digest,
+              display_name,
+              email: invitation.email,
+              identity_receipt: "invitation:\{invitation.invitation_id}",
+              roles: [EnterpriseUser],
+              state: Active,
+              created_unix_ms: now_unix_ms,
+              updated_unix_ms: now_unix_ms,
+            }
+            self.accounts[account_id] = account
+          }
         }
-        let account : HumanAccount = {
-          version: contract_version,
-          account_id,
-          subject_ref,
-          identity_issuer,
-          identity_subject_sha256: external_digest,
-          display_name,
-          email: invitation.email,
-          identity_receipt: "invitation:\{invitation.invitation_id}",
-          roles: [EnterpriseUser],
-          state: Active,
-          created_unix_ms: now_unix_ms,
-          updated_unix_ms: now_unix_ms,
-        }
-        self.accounts[account_id] = account
         self.invitations[invitation.invitation_id] = {
           ..invitation,
           consumed_account_id: Some(account_id),

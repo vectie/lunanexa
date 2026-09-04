@@ -399,3 +399,61 @@ async test "open registration is idempotent and grants no privileged role" {
   }
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "free trial is single use, bounded, durable, and key bound" {
+  let directory = @fs.tmpdir(prefix="lunanexa-account-trial-")
+  let path = "\{directory}/accounts.json"
+  let secret = "trial-account-session-secret-more-than-32-bytes"
+  let store = @account.AccountStore::open(path, secret)
+  let registered = store.register_open(
+    "https://identity.example", "trial-subject", "trial-registration-assertion",
+    "Trial User", "trial@example.invalid", 60000L, 100000L,
+  )
+  let trial = store.ensure_trial(
+    {
+      trial_id: "trial-one",
+      account_id: registered.account.account_id,
+      organization_id: "trial-org-one",
+      tenant_ref: "trial-tenant-one",
+      project_id: "trial-project-one",
+      allowed_models: ["text.qwen"],
+      maximum_requests: 100L,
+      expires_unix_ms: 87400000L,
+    },
+    100000L,
+  )
+  assert_eq(trial.api_key_id, None)
+  let bound = store.bind_trial_api_key(trial.trial_id, "trial-key-one", 100001L)
+  assert_eq(bound.api_key_id, Some("trial-key-one"))
+  assert_true(
+    store.active_trial_for_subject(registered.account.subject_ref, 100002L)
+    is Some(_),
+  )
+  assert_eq(
+    store.ensure_trial(
+      {
+        trial_id: "trial-one",
+        account_id: registered.account.account_id,
+        organization_id: "trial-org-one",
+        tenant_ref: "trial-tenant-one",
+        project_id: "trial-project-one",
+        allowed_models: ["text.qwen"],
+        maximum_requests: 100L,
+        expires_unix_ms: 99999999L,
+      },
+      100003L,
+    ).expires_unix_ms,
+    87400000L,
+  )
+  let reopened = @account.AccountStore::open(path, secret)
+  assert_eq(
+    reopened.trial_for_account(registered.account.account_id).unwrap().api_key_id,
+    Some("trial-key-one"),
+  )
+  assert_eq(
+    reopened.active_trial_for_subject(registered.account.subject_ref, 87400000L),
+    None,
+  )
+  @fs.rmdir(directory, recursive=true)
+}

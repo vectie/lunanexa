@@ -7,6 +7,19 @@ desktop forms.
 
 ## Product journey
 
+### Individual trial user
+
+1. Choose **Sign in / register** and complete the external OIDC login.
+2. LunaNexa creates the account and a 24-hour shared-inference trial; no
+   invitation, opaque identifier entry, or operator action is required.
+3. Review the expiry, approved model aliases, hourly limit and total request
+   allowance, then create the single trial API key.
+4. Use the approved model through the shared workspace. The trial does not
+   create SSH credentials, an exclusive-node lease, or access to a physical
+   machine.
+5. To continue, accept an organization invitation. LunaNexa replaces the trial
+   membership and immediately revokes the trial lease and trial-key authority.
+
 ### Operator
 
 1. Open **Users & access** and choose **Create WebIDE access**.
@@ -51,6 +64,11 @@ exception repair and migration; they are not the default onboarding journey.
 - The identity provider still owns passwords, MFA and recovery.
 - A human must verify the external identity before the access package is
   created.
+- Open registration uses gateway-signed email and display-name claims. Browser
+  form fields never become account identity by themselves.
+- The default free trial is 24 hours, one concurrent inference, 20 requests per
+  hour, 100 requests total, and the `text.qwen` allowlist. Deployment owners
+  may reduce these bounds through reviewed environment configuration.
 - LunaNexa never fabricates an effective MasterLease or a model approval.
 - WebIDE access is enabled only when account, Developer membership, active
   grant, effective MasterLease, requested lease and approved model alias agree.
