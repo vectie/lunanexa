@@ -1,5 +1,5 @@
 ///|
-pub let schema_version : Int = 3
+pub let schema_version : Int = 4
 
 ///|
 pub let schema_sql : String =
@@ -32,8 +32,9 @@ pub let schema_sql : String =
   #|  created_unix_ms bigint NOT NULL CHECK (created_unix_ms > 0),
   #|  payload jsonb NOT NULL
   #|);
-  #|CREATE UNIQUE INDEX IF NOT EXISTS enterprise_memberships_active_subject
-  #|  ON lunanexa.enterprise_memberships(subject_ref) WHERE active;
+  #|DROP INDEX IF EXISTS lunanexa.enterprise_memberships_active_subject;
+  #|CREATE UNIQUE INDEX IF NOT EXISTS enterprise_memberships_active_subject_organization
+  #|  ON lunanexa.enterprise_memberships(subject_ref, organization_id) WHERE active;
   #|CREATE INDEX IF NOT EXISTS enterprise_memberships_tenant_org
   #|  ON lunanexa.enterprise_memberships(tenant_ref, organization_id);
   #|CREATE TABLE IF NOT EXISTS lunanexa.portal_agreements (
@@ -103,6 +104,8 @@ pub let schema_sql : String =
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (2)
   #|ON CONFLICT (version) DO NOTHING;
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (3)
+  #|ON CONFLICT (version) DO NOTHING;
+  #|INSERT INTO lunanexa.schema_migrations(version) VALUES (4)
   #|ON CONFLICT (version) DO NOTHING;
   #|COMMIT;
 

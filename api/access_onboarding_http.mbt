@@ -877,7 +877,20 @@ async fn ApiService::enable_webide_access_package(
     is Some(account) else {
     return api_error(404, "NotFound", "access package was not found", false)
   }
-  let membership = try portal.self_view(account.subject_ref).membership catch {
+  let operation_id = "access-\{account_id}"
+  guard journal.record(operation_id) is Some(record) &&
+    (record.step == Prepared || record.step == Enabled) else {
+    return api_error(
+      409, "AccessPackageNotReady", "the onboarding journal is not prepared for enablement",
+      false,
+    )
+  }
+  let membership = try
+    portal.self_view_for_organization(
+      account.subject_ref,
+      record.intent.organization_id,
+    ).membership
+  catch {
     _ =>
       return api_error(
         409, "AccessPackageNotReady", "an active Developer membership is required",
@@ -951,14 +964,6 @@ async fn ApiService::enable_webide_access_package(
     is Some(lease) else {
     return api_error(
       409, "AccessPackageNotReady", "a requested workspace lease is required", false,
-    )
-  }
-  let operation_id = "access-\{account_id}"
-  guard journal.record(operation_id) is Some(record) &&
-    (record.step == Prepared || record.step == Enabled) else {
-    return api_error(
-      409, "AccessPackageNotReady", "the onboarding journal is not prepared for enablement",
-      false,
     )
   }
   if lease.state == Requested {

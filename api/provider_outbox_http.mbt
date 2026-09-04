@@ -77,9 +77,12 @@ fn provider_request_digest(organization_id : String, key : String) -> String {
 async fn ApiService::queue_provider_record(
   self : ApiService,
   record : @commercial_integrations.ExternalRecord,
+  commercial_lock_held? : Bool = false,
 ) -> @commercial_integrations.ExternalRecordView {
-  self.commercial_mutex.acquire()
-  defer self.commercial_mutex.release()
+  if !commercial_lock_held {
+    self.commercial_mutex.acquire()
+  }
+  defer (if !commercial_lock_held { self.commercial_mutex.release() })
   let before = self.commercial_integrations.durable_snapshot()
   match self.commercial_integrations.record_by_id(record.record_id) {
     Some(existing) if existing.state == Submitted =>
@@ -218,6 +221,7 @@ async fn ApiService::handle_commercial_provider_adapter(
 async fn ApiService::create_payment_checkout(
   self : ApiService,
   subject_ref : String,
+  headers : Map[String, String],
   intent : ProviderPaymentCheckoutIntent,
 ) -> HttpReply {
   guard self.portal_store is Some(portal) else {
@@ -225,7 +229,7 @@ async fn ApiService::create_payment_checkout(
       503, "PortalUnavailable", "enterprise portal is unavailable", true,
     )
   }
-  let view = try portal.self_view(subject_ref) catch {
+  let view = try portal_view_for_request(portal, subject_ref, headers) catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value

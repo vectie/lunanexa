@@ -169,12 +169,30 @@ async test "PostgreSQL portal registration and agreement survive restart" {
     ),
   )
   assert_eq(database.projection_count("portal_lease_requests"), 2L)
+  ignore(
+    store.put_membership({
+      membership_id: "member-postgres-second-org",
+      tenant_ref: "tenant-postgres-second-org",
+      organization_id: "org-postgres-second-org",
+      subject_ref: "subject-postgres",
+      roles: [Developer],
+      active: true,
+      created_unix_ms: 1400L,
+    }),
+  )
+  assert_eq(database.projection_count("enterprise_memberships"), 3L)
+  assert_eq(
+    store.self_view_for_organization(
+      "subject-postgres", "org-postgres-second-org",
+    ).membership.tenant_ref,
+    "tenant-postgres-second-org",
+  )
   let before_invalid = store.snapshot()
   let duplicate_memberships = before_invalid.memberships.copy()
   duplicate_memberships.push({
     membership_id: "member-postgres-forged",
-    tenant_ref: "tenant-forged",
-    organization_id: "org-forged",
+    tenant_ref: "tenant-postgres",
+    organization_id: "org-postgres",
     subject_ref: "subject-postgres",
     roles: [LeaseRequester],
     active: true,
@@ -191,7 +209,7 @@ async test "PostgreSQL portal registration and agreement survive restart" {
   } noraise {
     _ => fail("duplicate active subject snapshot was committed")
   }
-  assert_eq(database.projection_count("enterprise_memberships"), 2L)
+  assert_eq(database.projection_count("enterprise_memberships"), 3L)
   assert_eq(database.projection_count("portal_lease_requests"), 2L)
   reopened_database.close()
   database.close()

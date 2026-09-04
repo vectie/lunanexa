@@ -152,6 +152,7 @@ pub(all) suberror PortalError {
   NotFound(String)
   AlreadyExists(String)
   Unauthorized(String)
+  OrganizationSelectionRequired
   TenantMismatch
   IdempotencyConflict(String)
   InvalidTransition(String)

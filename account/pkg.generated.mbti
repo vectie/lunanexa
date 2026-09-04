@@ -105,6 +105,7 @@ pub struct AccountStore {
   mut trials : Map[String, TrialEntitlement]
   mutex : @async.Mutex
 }
+pub async fn AccountStore::accept_invitation(Self, String, String, Int64) -> AccountInvitationView
 pub async fn AccountStore::active_trial_for_subject(Self, String, Int64) -> TrialEntitlement?
 pub async fn AccountStore::authorize(Self, String, Int64, required_role? : AccountRole) -> AccountAuthorization
 pub async fn AccountStore::bind_trial_api_key(Self, String, String, Int64) -> TrialEntitlement

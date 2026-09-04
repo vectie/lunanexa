@@ -865,19 +865,25 @@ async fn ApiService::handle_contract_documents(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
   }
-  let view = try portal.self_view(subject_ref) catch {
+  let view = try portal_view_for_request(portal, subject_ref, headers) catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value
   }
+  let scoped_packets = store
+    .packets_for_subject(subject_ref)
+    .filter(packet => {
+      packet.tenant_ref == view.membership.tenant_ref &&
+      packet.organization_id == view.membership.organization_id
+    })
   match (verb, path) {
     (Get, "/v1/contract-documents/manifest") =>
       json_reply(200, manifest.to_json())
     (Get, "/v1/contract-documents/self") =>
-      json_reply(200, store.packets_for_subject(subject_ref).to_json())
+      json_reply(200, scoped_packets.to_json())
     (Get, "/v1/contract-documents/self/events") => {
       let packet_ids : Map[String, Unit] = Map([])
-      for packet in store.packets_for_subject(subject_ref) {
+      for packet in scoped_packets {
         packet_ids[packet.packet_id] = ()
       }
       json_reply(
@@ -889,7 +895,7 @@ async fn ApiService::handle_contract_documents(
     }
     (Get, "/v1/contract-documents/self/governance") => {
       let packet_ids : Map[String, Unit] = Map([])
-      for packet in store.packets_for_subject(subject_ref) {
+      for packet in scoped_packets {
         packet_ids[packet.packet_id] = ()
       }
       let snapshot = store.snapshot()
@@ -912,7 +918,7 @@ async fn ApiService::handle_contract_documents(
       })
     }
     (Post, _) if self_approval_id(path, ":nudge") is Some(approval_id) => {
-      let packets = store.packets_for_subject(subject_ref)
+      let packets = scoped_packets
       let packet_ids : Map[String, Unit] = Map([])
       for packet in packets {
         packet_ids[packet.packet_id] = ()
@@ -1008,7 +1014,9 @@ async fn ApiService::handle_contract_documents(
         @contracts.valid_identifier(intent.packet_id) &&
         @contracts.valid_identifier(intent.idempotency_key) &&
         store.packet(source_packet_id) is Some(source) &&
-        source.subject_ref == subject_ref else {
+        source.subject_ref == subject_ref &&
+        source.tenant_ref == view.membership.tenant_ref &&
+        source.organization_id == view.membership.organization_id else {
         return api_error(
           404, "ContractPacketNotFound", "contract packet was not found", false,
         )
@@ -1036,7 +1044,9 @@ async fn ApiService::handle_contract_documents(
       }
       guard decoded is Some(request) &&
         store.packet(packet_id) is Some(packet) &&
-        packet.subject_ref == subject_ref else {
+        packet.subject_ref == subject_ref &&
+        packet.tenant_ref == view.membership.tenant_ref &&
+        packet.organization_id == view.membership.organization_id else {
         return api_error(
           404, "ContractPacketNotFound", "contract packet was not found", false,
         )
@@ -1067,7 +1077,9 @@ async fn ApiService::handle_contract_documents(
       }
       guard decoded is Some(request) &&
         store.packet(packet_id) is Some(packet) &&
-        packet.subject_ref == subject_ref else {
+        packet.subject_ref == subject_ref &&
+        packet.tenant_ref == view.membership.tenant_ref &&
+        packet.organization_id == view.membership.organization_id else {
         return api_error(
           404, "ContractPacketNotFound", "contract packet was not found", false,
         )
@@ -1082,7 +1094,9 @@ async fn ApiService::handle_contract_documents(
       }
       guard decoded is Some(request) &&
         store.packet(packet_id) is Some(packet) &&
-        packet.subject_ref == subject_ref else {
+        packet.subject_ref == subject_ref &&
+        packet.tenant_ref == view.membership.tenant_ref &&
+        packet.organization_id == view.membership.organization_id else {
         return api_error(
           404, "ContractPacketNotFound", "contract packet was not found", false,
         )
@@ -1113,7 +1127,9 @@ async fn ApiService::handle_contract_documents(
       guard decoded is Some(request) &&
         request.expected_values_sha256 is Some(digest) &&
         store.packet(packet_id) is Some(packet) &&
-        packet.subject_ref == subject_ref else {
+        packet.subject_ref == subject_ref &&
+        packet.tenant_ref == view.membership.tenant_ref &&
+        packet.organization_id == view.membership.organization_id else {
         return api_error(
           404, "ContractPacketNotFound", "contract packet was not found", false,
         )

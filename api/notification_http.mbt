@@ -628,6 +628,7 @@ pub async fn ApiService::reconcile_notifications(
         if membership.active {
           self.refresh_subject_notifications(
             membership.tenant_ref,
+            membership.organization_id,
             membership.subject_ref,
             now_unix_ms,
           )
@@ -852,11 +853,14 @@ async fn ApiService::enqueue_subject_notification(
 async fn ApiService::refresh_subject_notifications(
   self : ApiService,
   tenant_ref : String,
+  organization_id : String,
   subject_ref : String,
   now_unix_ms : Int64,
 ) -> Unit {
   guard self.portal_store is Some(portal) else { return }
-  let view = portal.self_view(subject_ref) catch { _ => return }
+  let view = portal.self_view_for_organization(subject_ref, organization_id) catch {
+    _ => return
+  }
   for request in view.lease_requests {
     if request.state == Approved && request.subject_ref == subject_ref {
       self.enqueue_subject_notification(
@@ -876,8 +880,18 @@ async fn ApiService::refresh_subject_notifications(
     }
   }
   guard self.exclusive_lease_store is Some(leases) else { return }
+  let selected_lease_ids : Map[String, Unit] = Map([])
+  for request in view.lease_requests {
+    if request.subject_ref == subject_ref &&
+      request.submission.tenant_ref == tenant_ref &&
+      request.submission.organization_id == organization_id &&
+      request.exclusive_lease_id is Some(lease_id) {
+      selected_lease_ids[lease_id] = ()
+    }
+  }
   for lease in leases.leases() {
-    if lease.intent.subject_ref != subject_ref {
+    if lease.intent.subject_ref != subject_ref ||
+      !selected_lease_ids.contains(lease.intent.lease_id) {
       continue
     }
     let lease_ref = lease.intent.lease_id
@@ -1001,15 +1015,22 @@ async fn ApiService::notification_subject_context(
   self : ApiService,
   headers : Map[String, String],
   allow_asserted_subject : Bool,
-) -> (String, String)? {
+) -> (String, String, String)? {
   guard self.portal_store is Some(portal) &&
     self.portal_subject(headers, allow_asserted_subject) is Some(subject_ref) else {
     return None
   }
-  try portal.self_view(subject_ref) catch {
+  try portal_view_for_request(portal, subject_ref, headers) catch {
     _ => None
   } noraise {
-    view => Some((view.membership.tenant_ref, subject_ref))
+    view =>
+      Some(
+        (
+          view.membership.tenant_ref,
+          view.membership.organization_id,
+          subject_ref,
+        ),
+      )
   }
 }
 
@@ -1077,7 +1098,7 @@ async fn ApiService::handle_notifications(
   }
   if path == "/v1/notifications/self" {
     guard self.notification_subject_context(headers, allow_asserted_subject)
-      is Some((tenant_ref, subject_ref)) else {
+      is Some((tenant_ref, organization_id, subject_ref)) else {
       return api_error(
         401, "Unauthorized", "trusted portal identity is required", false,
       )
@@ -1087,7 +1108,9 @@ async fn ApiService::handle_notifications(
         405, "MethodNotAllowed", "notification inbox listing requires GET", false,
       )
     }
-    self.refresh_subject_notifications(tenant_ref, subject_ref, now)
+    self.refresh_subject_notifications(
+      tenant_ref, organization_id, subject_ref, now,
+    )
     return json_reply(
       200,
       store.records_for_subject(tenant_ref, subject_ref, now).to_json(),
@@ -1095,7 +1118,7 @@ async fn ApiService::handle_notifications(
   }
   if path == "/v1/notifications/self/preferences" {
     guard self.notification_subject_context(headers, allow_asserted_subject)
-      is Some((tenant_ref, subject_ref)) else {
+      is Some((tenant_ref, _, subject_ref)) else {
       return api_error(
         401, "Unauthorized", "trusted portal identity is required", false,
       )
@@ -1156,7 +1179,7 @@ async fn ApiService::handle_notifications(
       )
     }
     guard self.notification_subject_context(headers, allow_asserted_subject)
-      is Some((tenant_ref, subject_ref)) else {
+      is Some((tenant_ref, _, subject_ref)) else {
       return api_error(
         401, "Unauthorized", "trusted portal identity is required", false,
       )

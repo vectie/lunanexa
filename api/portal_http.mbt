@@ -96,6 +96,11 @@ fn portal_error_reply(error : Error) -> HttpReply {
       api_error(
         403, "PortalAccessDenied", "enterprise role is insufficient", false,
       )
+    @portal.PortalError::OrganizationSelectionRequired =>
+      api_error(
+        409, "OrganizationSelectionRequired", "select an active organization before using this route",
+        false,
+      )
     @portal.PortalError::TenantMismatch =>
       api_error(
         403, "TenantMismatch", "request crosses the tenant boundary", false,
@@ -290,6 +295,11 @@ async fn ApiService::handle_enterprise_portal(
       true,
     )
   }
+  if self_service_portal_account_path(path) {
+    return self.handle_self_service_organizations(
+      verb, path, headers, body, portal,
+    )
+  }
   if path.has_prefix("/v1/portal/operator/") {
     if !self.operator_authorized(headers) {
       return api_error(
@@ -384,7 +394,9 @@ async fn ApiService::handle_enterprise_portal(
           503, "AccessStoreUnavailable", "API key state is unavailable", true,
         )
       }
-      let view = try portal.self_view(subject_ref) catch {
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
@@ -407,7 +419,9 @@ async fn ApiService::handle_enterprise_portal(
           503, "AccessStoreUnavailable", "API key state is unavailable", true,
         )
       }
-      let view = try portal.self_view(subject_ref) catch {
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
@@ -456,11 +470,76 @@ async fn ApiService::handle_enterprise_portal(
           })
         None => false
       }
-      if !contract_active && !trial_active {
+      let ready_deployment_ids : Map[String, Unit] = Map([])
+      match self.deployment_store {
+        Some(deployments) =>
+          for operation in deployments.operations() {
+            if operation.state == Ready && operation.endpoint is Some(_) {
+              ready_deployment_ids[operation.deployment_id] = ()
+            }
+          }
+        None => ()
+      }
+      let dedicated_order = if !contract_active && !trial_active {
+        match self.machine_commerce_store {
+          Some(machine_store) =>
+            machine_store
+            .orders_for_subject(subject_ref)
+            .iter()
+            .find_first(order => {
+              order.offering_kind == DedicatedEndpoint &&
+              order.state == Active &&
+              order.organization_id == view.membership.organization_id &&
+              order.tenant_ref == view.membership.tenant_ref &&
+              order.project_id == intent.project_id &&
+              order.active_started_unix_ms.map_or(false, started => {
+                now < started + order.duration_seconds * 1000L
+              }) &&
+              order.requested_model_selector.map_or(false, model => {
+                intent.allowed_models.length() == 1 &&
+                intent.allowed_models[0] == model
+              }) &&
+              intent.scopes.length() > 0 &&
+              intent.scopes.all(scope => {
+                scope == ModelList || scope == Inference
+              }) &&
+              order.target_deployment_ref.map_or(false, deployment_id => {
+                ready_deployment_ids.contains(deployment_id)
+              })
+            })
+          None => None
+        }
+      } else {
+        None
+      }
+      if !contract_active && !trial_active && dedicated_order is None {
         return api_error(
-          409, "MasterLeaseRequired", "an effective master lease is required before issuing an API key",
+          409, "EntitlementRequired", "an effective master lease, active trial, or paid dedicated order is required before issuing an API key",
           false,
         )
+      }
+      match dedicated_order {
+        Some(order) =>
+          ignore(
+            self.machine_commerce_store
+            .unwrap()
+            .bind_access_key(order.order_id, subject_ref, intent.key_id, now),
+          ) catch {
+            _ =>
+              return api_error(
+                409, "ApiKeyBindingRejected", "the API key could not be bound to the paid dedicated order",
+                true,
+              )
+          }
+        None => ()
+      }
+      let effective_expires_unix_ms = match dedicated_order {
+        Some(order) =>
+          order.active_started_unix_ms
+          .map(started => started + order.duration_seconds * 1000L)
+          .unwrap_or(intent.expires_unix_ms)
+          .min(intent.expires_unix_ms)
+        None => intent.expires_unix_ms
       }
       let issued = try
         access.issue(
@@ -473,7 +552,7 @@ async fn ApiService::handle_enterprise_portal(
             display_name: intent.display_name,
             scopes: intent.scopes,
             allowed_models: intent.allowed_models,
-            expires_unix_ms: intent.expires_unix_ms,
+            expires_unix_ms: effective_expires_unix_ms,
             maximum_requests: intent.maximum_requests,
           },
           now,
@@ -530,7 +609,9 @@ async fn ApiService::handle_enterprise_portal(
       let prefix = "/v1/portal/self/api-keys/".length()
       let suffix = ":revoke".length()
       let key_id = path[prefix:path.length() - suffix].to_owned()
-      let view = try portal.self_view(subject_ref) catch {
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
@@ -553,7 +634,9 @@ async fn ApiService::handle_enterprise_portal(
       })
     }
     (Get, "/v1/portal/self") => {
-      let view = try portal.self_view(subject_ref) catch {
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
@@ -561,10 +644,17 @@ async fn ApiService::handle_enterprise_portal(
       json_reply(200, view.to_json())
     }
     (Get, "/v1/portal/self/commercial") => {
-      let view = try portal.self_view(subject_ref) catch {
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
+      }
+      if !@portal.role_allows(view.membership.roles, BillingViewer) {
+        return api_error(
+          403, "PortalAccessDenied", "billing role is required", false,
+        )
       }
       let snapshot = try
         self.commercial_store.snapshot(view.membership.organization_id)
@@ -577,10 +667,23 @@ async fn ApiService::handle_enterprise_portal(
       } noraise {
         value => value
       }
-      json_reply(200, snapshot.to_json())
+      let customer_snapshot = {
+        ..snapshot,
+        usage_observations: [],
+        role_grants: if view.membership.roles.contains(
+            OrganizationAdministrator,
+          ) {
+          snapshot.role_grants
+        } else {
+          []
+        },
+      }
+      json_reply(200, customer_snapshot.to_json())
     }
     (Get, "/v1/portal/self/provider-requests") => {
-      let view = try portal.self_view(subject_ref) catch {
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
@@ -592,7 +695,7 @@ async fn ApiService::handle_enterprise_portal(
       )
       let records = snapshot.records.filter(record => {
         match record.kind {
-          Payment | TaxInvoice =>
+          Payment | PaymentRefund | TaxInvoice =>
             @portal.role_allows(view.membership.roles, BillingViewer)
           IdentityVerification =>
             view.membership.roles.contains(OrganizationAdministrator)
@@ -633,11 +736,11 @@ async fn ApiService::handle_enterprise_portal(
           400, "InvalidRequest", "invalid payment checkout intent", false,
         )
       }
-      self.create_payment_checkout(subject_ref, value)
+      self.create_payment_checkout(subject_ref, headers, value)
     }
     (Get, "/v1/portal/self/models") => {
       ignore(
-        try portal.self_view(subject_ref) catch {
+        try portal_view_for_request(portal, subject_ref, headers) catch {
           error => return portal_error_reply(error)
         } noraise {
           value => value
@@ -686,7 +789,9 @@ async fn ApiService::handle_enterprise_portal(
           true,
         )
       }
-      let self_view = try portal.self_view(subject_ref) catch {
+      let self_view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value

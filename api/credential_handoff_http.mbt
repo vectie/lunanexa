@@ -85,15 +85,15 @@ async fn ApiService::credential_subject_context(
   self : ApiService,
   headers : Map[String, String],
   allow_asserted_subject : Bool,
-) -> String? {
+) -> (String, @portal.EnterpriseSelfView)? {
   guard self.portal_store is Some(portal) &&
     self.portal_subject(headers, allow_asserted_subject) is Some(subject_ref) else {
     return None
   }
-  try portal.self_view(subject_ref) catch {
+  try portal_view_for_request(portal, subject_ref, headers) catch {
     _ => None
   } noraise {
-    _ => Some(subject_ref)
+    view => Some((subject_ref, view))
   }
 }
 
@@ -288,7 +288,7 @@ async fn ApiService::handle_credential_handoff(
     )
   }
   guard self.credential_subject_context(headers, allow_asserted_subject)
-    is Some(subject_ref) else {
+    is Some((subject_ref, portal_view)) else {
     return api_error(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
@@ -298,7 +298,14 @@ async fn ApiService::handle_credential_handoff(
   let suffix = if is_redeem { "/credential:redeem" } else { "/credential" }
   guard credential_lease_id(path, self_prefix, suffix) is Some(lease_id) &&
     leases.lease(lease_id) is Some(lease) &&
-    lease.intent.subject_ref == subject_ref else {
+    lease.intent.subject_ref == subject_ref &&
+    portal_view.lease_requests.any(request => {
+      request.subject_ref == subject_ref &&
+      request.submission.tenant_ref == portal_view.membership.tenant_ref &&
+      request.submission.organization_id ==
+      portal_view.membership.organization_id &&
+      request.exclusive_lease_id == Some(lease_id)
+    }) else {
     return api_error(404, "NotFound", "credential handoff was not found", false)
   }
   if is_redeem {
