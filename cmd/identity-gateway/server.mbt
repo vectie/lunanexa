@@ -299,8 +299,12 @@ async fn handle_browser_session(
     (current.kind == "identity" || current.kind == "session") else {
     return send_error(connection, 401, "browser-session-expired")
   }
-  if current.kind == "identity" && !store.delete(current_id) {
-    return send_error(connection, 409, "browser-session-already-issued")
+  // Keep the state-changing consume outside a boolean expression. In
+  // particular, an already-issued session must never evaluate delete().
+  if current.kind == "identity" {
+    if !store.delete(current_id) {
+      return send_error(connection, 409, "browser-session-already-issued")
+    }
   }
   let (active_id, active) = if current.kind == "identity" {
     let issued = issue_controller_session(config, current, audience, now)
