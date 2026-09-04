@@ -1,6 +1,7 @@
 ///|
 pub(all) enum EnterpriseRoute {
   Overview
+  SelfService
   AccountAccess
   Agreements
   LeaseRequests
@@ -158,6 +159,8 @@ pub(all) struct EnterpriseState {
   route : EnterpriseRoute
   locale : @i18n.Locale
   membership : @portal.EnterpriseMembership?
+  organizations : Array[SelfServiceOrganizationView]
+  selected_organization_id : String?
   account : AccountView?
   trial : TrialEntitlementView?
   browser_sessions : Array[BrowserSessionView]
@@ -181,6 +184,7 @@ pub(all) struct EnterpriseState {
   payment_checkout_loading : Bool
   model_catalog : Array[@portal.EnterpriseModelSummary]
   desktop_client : EnterpriseDesktopClient?
+  self_service : SelfServiceState
   project_id : String
   unix_username : String
   model_ids : String
@@ -195,6 +199,7 @@ pub(all) struct EnterpriseState {
 ///|
 pub(all) enum EnterpriseMessage {
   Navigate(EnterpriseRoute)
+  SelfService(SelfServiceMessage)
   LocaleChanged(@i18n.Locale)
   OpenApiKeyIssue
   CancelApiKeyIssue
@@ -242,6 +247,8 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     route: Overview,
     locale: @i18n.default_locale(),
     membership: None,
+    organizations: [],
+    selected_organization_id: None,
     account: None,
     trial: None,
     browser_sessions: [],
@@ -277,6 +284,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     payment_checkout_loading: false,
     model_catalog: [],
     desktop_client: None,
+    self_service: default_self_service_state(),
     project_id: "",
     unix_username: "",
     model_ids: "",
@@ -403,6 +411,47 @@ pub fn demo_state() -> EnterpriseState {
       active: true,
       created_unix_ms: now - 2592000000L,
     }),
+    organizations: [
+      {
+        organization: {
+          organization_id: "org-northstar",
+          display_name: "Northstar Research",
+          state: Active,
+          verification_ref: Some("verification-demo"),
+          legal_profile: Some({
+            subject_kind: Company,
+            legal_name: "Northstar Research Ltd.",
+            country_code: "CN",
+            registration_number: Some("REG-DEMO"),
+            tax_identifier: Some("TAX-DEMO"),
+            registered_address: "100 Science Road, Beijing",
+            billing_contact: {
+              display_name: "Alice Chen",
+              email: "alice@example.invalid",
+              phone: None,
+            },
+          }),
+        },
+        membership: {
+          membership_id: "membership-northstar",
+          tenant_ref: "tenant-northstar",
+          organization_id: "org-northstar",
+          subject_ref: "subject-alice",
+          roles: [
+            OrganizationAdministrator,
+            LegalSigner,
+            LeaseRequester,
+            BillingViewer,
+            Developer,
+          ],
+          active: true,
+          created_unix_ms: now - 2592000000L,
+        },
+        default_project_id: Some("project-vision-lab"),
+        verification: Some({ required: false, record: None, blocker_code: None }),
+      },
+    ],
+    selected_organization_id: Some("org-northstar"),
     account: Some({
       account_id: "account-alice",
       subject_ref: "subject-alice",
@@ -720,6 +769,7 @@ pub fn demo_state() -> EnterpriseState {
       blocker_codes: [],
       approved_model_aliases: ["text.default"],
     }),
+    self_service: demo_self_service_state(now),
     project_id: "project-vision-lab",
     unix_username: "alice",
     model_ids: "qwen3-32b, bge-m3",
@@ -733,8 +783,32 @@ pub fn EnterpriseState::update(
   message : EnterpriseMessage,
 ) -> EnterpriseState {
   match message {
-    Navigate(route) =>
-      { ..self, route, success_message: None, error_message: None }
+    Navigate(route) => {
+      let dedicated = if route == AccountAccess {
+        self.self_service.order.filter(order => {
+          order.kind == DedicatedMaaS && order.status == ActiveOrder
+        })
+      } else {
+        None
+      }
+      match dedicated {
+        Some(order) =>
+          {
+            ..self,
+            route,
+            api_key_issue_draft: {
+              ..self.api_key_issue_draft,
+              display_name: "Dedicated · \{order.order_id}",
+              allowed_models: order.model_selector.unwrap_or(""),
+              lifetime_days: ((order.duration_hours + 23) / 24).max(1),
+            },
+            api_key_issue_open: true,
+            success_message: None,
+            error_message: None,
+          }
+        None => { ..self, route, success_message: None, error_message: None }
+      }
+    }
     LocaleChanged(locale) =>
       {
         ..self,
@@ -745,6 +819,94 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
+    SelfService(SelectProduct(product)) => {
+      let selected = self.self_service.update(SelectProduct(product))
+      let organization_ready = self.membership is Some(membership) &&
+        membership.active
+      {
+        ..self,
+        route: SelfService,
+        self_service: {
+          ..selected,
+          step: if product == SharedMaaS || organization_ready {
+            Capacity
+          } else {
+            Organization
+          },
+        },
+        success_message: None,
+        error_message: None,
+      }
+    }
+    SelfService(SelectOrganization(organization_id)) => {
+      let selection = self.organizations
+        .iter()
+        .find_first(value => {
+          value.organization.organization_id == organization_id &&
+          value.membership.active
+        })
+      match selection {
+        Some(value) => {
+          let project_id = value.default_project_id.unwrap_or("")
+          {
+            ..self,
+            membership: Some(value.membership),
+            selected_organization_id: Some(organization_id),
+            project_id,
+            self_service: {
+              ..self.self_service,
+              project_id,
+              quote: None,
+              order: None,
+              orders: [],
+              checkout: None,
+              terms_accepted: false,
+              terms_reviewed: false,
+              action_error: None,
+            },
+            success_message: None,
+            error_message: None,
+          }
+        }
+        None =>
+          {
+            ..self,
+            selected_organization_id: None,
+            membership: None,
+            self_service: {
+              ..self.self_service,
+              quote: None,
+              order: None,
+              orders: [],
+              checkout: None,
+              terms_accepted: false,
+              terms_reviewed: false,
+              action_error: Some(
+                copy(
+                  self.locale,
+                  "Select an active organization before continuing.",
+                  "请先选择一个活跃组织。",
+                ),
+              ),
+            },
+          }
+      }
+    }
+    SelfService(RequestQuote) =>
+      {
+        ..self,
+        self_service: { ..self.self_service.update(RequestQuote), step: Quote },
+      }
+    SelfService(CreateMachineOrder) =>
+      {
+        ..self,
+        self_service: {
+          ..self.self_service.update(CreateMachineOrder),
+          step: ContractPayment,
+        },
+      }
+    SelfService(message) =>
+      { ..self, self_service: self.self_service.update(message) }
     OpenApiKeyIssue =>
       {
         ..self,
@@ -934,9 +1096,10 @@ fn text_command(
 fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
   match route {
     Overview => copy(locale, "Overview", "概览")
+    SelfService => copy(locale, "Get started", "自助开通")
     AccountAccess => copy(locale, "Account & API keys", "账户与 API 密钥")
     Agreements => copy(locale, "Agreements", "协议")
-    LeaseRequests => copy(locale, "Lease requests", "租用申请")
+    LeaseRequests => copy(locale, "Managed requests", "受管申请")
     Notifications => copy(locale, "Notifications", "通知")
     Costs => copy(locale, "Usage & costs", "用量与成本")
     Models => copy(locale, "Model catalog", "模型目录")
@@ -1139,6 +1302,7 @@ fn navigation(
     for
       route in [
         Overview,
+        SelfService,
         AccountAccess,
         Agreements,
         LeaseRequests,
@@ -1188,8 +1352,8 @@ fn navigation(
       @html.p(
         copy(
           state.locale,
-          "You request capacity here. LunaNexa operators select and prepare the assigned DGX node.",
-          "您在此申请容量；LunaNexa 运维人员选择并准备分配的 DGX 节点。",
+          "Catalog orders are self-service. Managed requests remain available when an operator must select exceptional capacity.",
+          "目录订单支持自助开通；需要运维人员选择特殊算力时，仍可提交受管申请。",
         ),
       ),
     ]),
@@ -1204,6 +1368,23 @@ fn page_header(
   let organization = match state.membership {
     Some(value) => value.organization_id
     None => copy(state.locale, "Not connected", "未连接")
+  }
+  let organization_options : Array[@rabbita.Html] = [
+    @html.option(
+      value="",
+      selected=state.selected_organization_id is None,
+      copy(state.locale, "Select organization", "选择组织"),
+    ),
+  ]
+  for value in state.organizations {
+    organization_options.push(
+      @html.option(
+        value=value.organization.organization_id,
+        selected=state.selected_organization_id ==
+          Some(value.organization.organization_id),
+        "\{value.organization.display_name} · \{value.organization.organization_id}",
+      ),
+    )
   }
   @html.header(class="enterprise-topbar", [
     @html.div([
@@ -1241,6 +1422,30 @@ fn page_header(
           ],
         ),
       ]),
+      if state.organizations.length() > 1 {
+        @html.div(class="organization-control", [
+          @html.label(
+            for_="enterprise-organization",
+            copy(state.locale, "Organization", "组织"),
+          ),
+          @html.select(
+            id="enterprise-organization",
+            attrs=@html.Attrs::build().aria_label(
+              copy(
+                state.locale,
+                "Active organization for scoped requests",
+                "限定范围请求所使用的活跃组织",
+              ),
+            ),
+            on_change=self_service_text_command(emit, value => {
+              SelectOrganization(value)
+            }),
+            organization_options,
+          ),
+        ])
+      } else {
+        @html.nothing
+      },
       @html.div(class="topbar-meta", [
         @html.span(class="status-dot", ""),
         @html.span(organization),
@@ -1338,6 +1543,7 @@ fn overview_view(
   }
   @html.div(class="page-stack", [
     trial_panel,
+    product_choices(state, emit, true),
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
@@ -1347,15 +1553,15 @@ fn overview_view(
         @html.h2(
           copy(
             state.locale,
-            "From agreement to an isolated GPU workspace",
-            "从协议签署到隔离 GPU 工作区",
+            "Need a managed capacity exception?",
+            "需要受管算力例外？",
           ),
         ),
         @html.p(
           copy(
             state.locale,
-            "Review required agreements, request a time window, then follow preparation status. Node selection and activation remain operator-controlled.",
-            "审阅必需协议、申请使用时段，然后跟踪准备状态。节点选择与激活仍由运维人员控制。",
+            "Use this path when the self-service catalog cannot satisfy your requirements. An operator will review policy, availability and node assignment.",
+            "当自助目录无法满足需求时使用此流程。运维人员将审核策略、库存与节点分配。",
           ),
         ),
       ]),
@@ -1363,7 +1569,7 @@ fn overview_view(
         type_="button",
         class="primary-action",
         on_click=command(emit, Navigate(LeaseRequests)),
-        copy(state.locale, "Request capacity", "申请容量"),
+        copy(state.locale, "Request managed capacity", "申请受管算力"),
       ),
     ]),
     @html.div(class="metric-grid", [
@@ -2409,17 +2615,13 @@ fn lease_requests_view(
     @html.section(class="request-form", [
       @html.p(
         class="eyebrow",
-        copy(
-          state.locale,
-          "NEW EXCLUSIVE CAPACITY REQUEST",
-          "新建独占容量申请",
-        ),
+        copy(state.locale, "MANAGED CAPACITY REQUEST", "受管算力申请"),
       ),
       @html.h2(
         copy(
           state.locale,
-          "Request a time-bounded workspace",
-          "申请有时限的工作区",
+          "Request a manually assigned workspace",
+          "申请人工分配的工作区",
         ),
       ),
       @html.p(
@@ -3590,6 +3792,7 @@ fn content(
 ) -> @rabbita.Html {
   match state.route {
     Overview => overview_view(state, emit)
+    SelfService => self_service_view(state, emit)
     AccountAccess => account_access_view(state, emit)
     Agreements => agreements_view(state, emit)
     LeaseRequests => lease_requests_view(state, emit)
@@ -3666,6 +3869,7 @@ fn enterprise_view(
     @html.style_tag(stylesheet),
     @html.style_tag(account_styles),
     @html.style_tag(provider_styles),
+    @html.style_tag(self_service_styles()),
     @html.a(
       class="skip-link",
       href="#enterprise-main",
