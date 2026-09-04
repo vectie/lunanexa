@@ -9,6 +9,7 @@ base_policy=$repo_root/deploy/network-policy.yaml
 controller_manifest=$repo_root/deploy/controller.yaml
 dev_patch=$repo_root/deploy/management-foundation/network-policy-dev-browser-patch.yaml
 enterprise_source=$repo_root/cmd/enterprise/main.mbt
+direct_management_fixture=$repo_root/scripts/deploy/testdata/oidc-direct-ip-management.yaml
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-oidc-ingress-test.XXXXXX")
 cleanup() { rm -rf "$test_directory"; }
 trap cleanup EXIT HUP INT TERM
@@ -206,13 +207,14 @@ rg -F -q 'https://lunanexa-identity-internal.lunanexa-identity.svc.cluster.local
 no_domain_rendered=$test_directory/oidc-browser-no-domain.yaml
 "$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
   --output "$no_domain_rendered" \
-  --management-manifest "$management" \
+  --management-manifest "$direct_management_fixture" \
   --provider-ref platform-oidc \
   --issuer-url https://203.0.113.40:5006/realms/lunanexa \
   --transport-origin https://lunanexa-identity-internal.lunanexa-identity.svc.cluster.local:8443 \
   --operator-host 203.0.113.40:5003 \
   --enterprise-host 203.0.113.40:5005 \
   --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --identity-edge-image registry.example.test/lunanexa/web@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
   >/dev/null
 rg -F -q 'https://203.0.113.40:5003/auth/oidc/callback' "$no_domain_rendered"
 rg -F -q 'https://203.0.113.40:5005/auth/oidc/callback' "$no_domain_rendered"
@@ -221,6 +223,10 @@ if rg -q '^kind: Ingress$' "$no_domain_rendered"; then
   printf '%s\n' 'no-domain browser render emitted an invalid IP:port Ingress' >&2
   exit 1
 fi
+rg -U -q 'kind: Deployment(.|\n)*name: lunanexa-identity-edge(.|\n)*replicas: 2' \
+  "$no_domain_rendered"
+rg -U -q 'name: lunanexa-console-public(.|\n)*app: lunanexa-identity-edge' \
+  "$no_domain_rendered"
 
 set +e
 "$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \

@@ -4,6 +4,7 @@ umask 077
 
 output= management_manifest= provider_ref= issuer_url= transport_origin=
 operator_host= enterprise_host= gateway_image=
+identity_edge_image=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output=$2; shift 2 ;;
@@ -14,6 +15,7 @@ while [ "$#" -gt 0 ]; do
     --operator-host) operator_host=$2; shift 2 ;;
     --enterprise-host) enterprise_host=$2; shift 2 ;;
     --gateway-image) gateway_image=$2; shift 2 ;;
+    --identity-edge-image) identity_edge_image=$2; shift 2 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 64 ;;
   esac
 done
@@ -42,6 +44,16 @@ is_dns_ingress_host() {
   case "$1" in *:*) return 1 ;; esac
   case "$1" in *[A-Za-z-]*) ;; *) return 1 ;; esac
   safe_host "$1"
+}
+is_ipv4_literal() {
+  printf '%s\n' "$1" | awk -F. '
+    NF != 4 { exit 1 }
+    {
+      for (i = 1; i <= 4; i++) {
+        if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1
+      }
+    }
+  '
 }
 safe_https_url() {
   case "$1" in https://*) ;; *) return 1 ;; esac
@@ -78,7 +90,11 @@ safe_authority "$operator_host"
 safe_authority "$enterprise_host"
 test "$operator_host" != "$enterprise_host"
 safe_digest_image "$gateway_image"
+if [ -n "$identity_edge_image" ]; then
+  safe_digest_image "$identity_edge_image"
+fi
 command -v kubectl >/dev/null
+command -v awk >/dev/null
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-oidc-render.XXXXXX")
@@ -90,6 +106,7 @@ profile=$test_directory/oidc-browser-ingress.yaml
 patch=$test_directory/oidc-browser-ingress-controller-patch.yaml
 rendered=$test_directory/rendered.yaml
 browser_ingress=
+direct_ip_edge=
 cp "$management_manifest" "$base"
 sed \
   -e "s|\${LUNANEXA_OIDC_PROVIDER_REF}|$provider_ref|g" \
@@ -106,6 +123,48 @@ if is_dns_ingress_host "$operator_host" && \
     -e "s|\${LUNANEXA_OPERATOR_HOST}|$operator_host|g" \
     -e "s|\${LUNANEXA_ENTERPRISE_HOST}|$enterprise_host|g" \
     "$repo_root/deploy/oidc-browser-public-ingress.yaml" > "$browser_ingress"
+else
+  operator_ip=${operator_host%:*}
+  enterprise_ip=${enterprise_host%:*}
+  operator_port=${operator_host##*:}
+  enterprise_port=${enterprise_host##*:}
+  if ! is_ipv4_literal "$operator_ip" || \
+    ! is_ipv4_literal "$enterprise_ip" || \
+    [ "$operator_ip" != "$enterprise_ip" ] || \
+    [ "$operator_port" != 5003 ] || \
+    [ "$enterprise_port" != 5005 ]; then
+    printf '%s\n' \
+      'direct-IP browser edge requires one IPv4 address on operator port 5003 and enterprise port 5005' >&2
+    exit 64
+  fi
+  if [ -z "$identity_edge_image" ]; then
+    printf '%s\n' \
+      'direct-IP browser edge requires --identity-edge-image pinned by sha256 digest' >&2
+    exit 64
+  fi
+  for required_resource in \
+    lunanexa-console-public \
+    lunanexa-workbench-public \
+    lunanexa-console-public-gateway \
+    lunanexa-workbench-public-gateway; do
+    if ! rg -q "name: $required_resource" "$base"; then
+      printf 'direct-IP browser edge requires management resource: %s\n' \
+        "$required_resource" >&2
+      exit 64
+    fi
+  done
+  direct_ip_edge=$test_directory/oidc-browser-direct-ip-edge.yaml
+  sed \
+    -e "s|\${OIDC_IDENTITY_EDGE_IMAGE}|$identity_edge_image|g" \
+    "$repo_root/deploy/oidc-browser-direct-ip-edge.yaml" > "$direct_ip_edge"
+  cp "$repo_root/deploy/oidc-browser-direct-ip-console-service-patch.json" \
+    "$test_directory/oidc-browser-direct-ip-console-service-patch.json"
+  cp "$repo_root/deploy/oidc-browser-direct-ip-workbench-service-patch.json" \
+    "$test_directory/oidc-browser-direct-ip-workbench-service-patch.json"
+  cp "$repo_root/deploy/oidc-browser-disable-console-public-gateway-patch.yaml" \
+    "$test_directory/oidc-browser-disable-console-public-gateway-patch.yaml"
+  cp "$repo_root/deploy/oidc-browser-disable-workbench-public-gateway-patch.yaml" \
+    "$test_directory/oidc-browser-disable-workbench-public-gateway-patch.yaml"
 fi
 sed \
   -e "s|\${OIDC_IDENTITY_GATEWAY_IMAGE}|$gateway_image|g" \
@@ -121,6 +180,12 @@ if [ -n "$browser_ingress" ] && \
   printf '%s\n' 'OIDC browser Ingress render retained a deployment placeholder' >&2
   exit 1
 fi
+if [ -n "$direct_ip_edge" ] && \
+  rg -q '\$\{[A-Z0-9_]+\}|registry\.invalid|lunanexa\.invalid' \
+    "$direct_ip_edge"; then
+  printf '%s\n' 'direct-IP browser edge render retained a deployment placeholder' >&2
+  exit 1
+fi
 
 printf '%s\n' \
   'apiVersion: kustomize.config.k8s.io/v1beta1' \
@@ -132,10 +197,30 @@ if [ -n "$browser_ingress" ]; then
   printf '%s\n' '  - oidc-browser-public-ingress.yaml' \
     >> "$test_directory/kustomization.yaml"
 fi
+if [ -n "$direct_ip_edge" ]; then
+  printf '%s\n' '  - oidc-browser-direct-ip-edge.yaml' \
+    >> "$test_directory/kustomization.yaml"
+fi
 printf '%s\n' \
   'patches:' \
   '  - path: oidc-browser-ingress-controller-patch.yaml' \
   >> "$test_directory/kustomization.yaml"
+if [ -n "$direct_ip_edge" ]; then
+  printf '%s\n' \
+    '  - path: oidc-browser-direct-ip-console-service-patch.json' \
+    '    target:' \
+    '      version: v1' \
+    '      kind: Service' \
+    '      name: lunanexa-console-public' \
+    '  - path: oidc-browser-direct-ip-workbench-service-patch.json' \
+    '    target:' \
+    '      version: v1' \
+    '      kind: Service' \
+    '      name: lunanexa-workbench-public' \
+    '  - path: oidc-browser-disable-console-public-gateway-patch.yaml' \
+    '  - path: oidc-browser-disable-workbench-public-gateway-patch.yaml' \
+    >> "$test_directory/kustomization.yaml"
+fi
 kubectl kustomize "$test_directory" > "$rendered"
 
 output_next=$output.next

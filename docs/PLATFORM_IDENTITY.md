@@ -171,9 +171,19 @@ versioned administration migrations rather than deleting the realm or database.
 The rendered no-domain profile uses `lunanexa-identity-public`, a LoadBalancer
 Service whose configured port terminates the existing public certificate on a
 restricted edge and then verifies the cluster-local Keycloak backend name.
-It deliberately omits a Kubernetes public Ingress because Ingress host rules
-cannot contain an IP literal or port. DNS deployments may separately render
-`deploy/platform-identity-public-ingress.yaml` by adding
+For the browser applications, the same render also creates a separate
+two-replica `lunanexa-identity-edge`. It terminates the existing
+`lunanexa-oidc-ingress-tls` certificate and exposes only operator `5003` and
+enterprise `5005` through the repointed `lunanexa-console-public` Service. The
+edge can reach only `lunanexa-identity-gateway`; it never proxies directly to
+the controller. The render sets both former plaintext public-gateway
+Deployments to zero replicas and removes public ports `4174`, `3000`, and
+`5001`. The enterprise bundle continues to serve `/workbench/` on the protected
+enterprise origin.
+
+The no-domain profile deliberately omits Kubernetes public Ingress resources
+because Ingress host rules cannot contain an IP literal or port. DNS
+deployments may separately render `deploy/platform-identity-public-ingress.yaml` by adding
 `--identity-ingress-host EXACT_DNS_ISSUER_HOST` to the same renderer call. The
 renderer requires that DNS host to equal `--identity-host`; its public TLS
 Secret is never mounted into Keycloak or the internal edge.

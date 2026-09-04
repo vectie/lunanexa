@@ -93,26 +93,8 @@ if rg -q 'https://[^ ]*\*|path: /admin' "$manifest" "$public_ingress_manifest"; 
 fi
 
 management=$test_directory/management.yaml
-printf '%s\n' \
-  'apiVersion: apps/v1' \
-  'kind: Deployment' \
-  'metadata:' \
-  '  name: lunanexa-control' \
-  'spec:' \
-  '  selector:' \
-  '    matchLabels:' \
-  '      app: lunanexa-control' \
-  '  template:' \
-  '    metadata:' \
-  '      labels:' \
-  '        app: lunanexa-control' \
-  '    spec:' \
-  '      containers:' \
-  '        - name: control' \
-  '          image: registry.example.test/lunanexa/control@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
-  '          ports:' \
-  '            - name: http' \
-  '              containerPort: 8080' > "$management"
+cp "$repo_root/scripts/deploy/testdata/oidc-direct-ip-management.yaml" \
+  "$management"
 rendered=$test_directory/platform.yaml
 "$repo_root/scripts/deploy/render-platform-identity.sh" \
   --output "$rendered" \
