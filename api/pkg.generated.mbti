@@ -14,6 +14,7 @@ import {
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
+  "vectie/lunanexa/machinecommerce",
   "vectie/lunanexa/node",
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/notifications",
@@ -66,6 +67,7 @@ pub struct ApiService {
   commercial_mutex : @async.Mutex
   inference_rate_card : @commercial.RateCard?
   offline_commerce_store : @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore?
+  machine_commerce_store : @vectie/lunanexa/machinecommerce/store.MachineCommerceStore?
   contract_document_store : @vectie/lunanexa/contractdoc/store.ContractDocumentStore?
   contract_document_worker_token : String
   contract_approval_threshold_minor_units : Int64?
@@ -127,6 +129,7 @@ pub struct ApiService {
   audit_mutex : @async.Mutex
   execution_slots : @semaphore.Semaphore
 }
+pub async fn ApiService::activate_machine_order_settled_payment(Self, String, @machinecommerce.MachinePaymentSettlement, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
 pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], String) -> HttpReply
 pub async fn ApiService::internal_component_ready(Self) -> Bool
 pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadiness
@@ -136,12 +139,14 @@ pub async fn ApiService::reconcile_access_onboarding(Self, Int64) -> Int
 pub async fn ApiService::reconcile_contract_governance(Self, Int64) -> Unit
 pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
 pub async fn ApiService::reconcile_expiring_contracts(Self, Int64, Int64) -> Unit
+pub async fn ApiService::reconcile_machine_commerce(Self) -> Unit
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
 pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
 pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int, Int64) -> Unit
 pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int) -> Unit
+pub async fn ApiService::run_machine_commerce_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
@@ -171,6 +176,7 @@ pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Fail
 pub fn ApiService::with_inference_rate_card(Self, @commercial.RateCard) -> Self raise Failure
 pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
 pub fn ApiService::with_legacy_unbound_access_for_local_testing(Self) -> Self
+pub fn ApiService::with_machine_commerce_store(Self, @vectie/lunanexa/machinecommerce/store.MachineCommerceStore) -> Self
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
 pub fn ApiService::with_model_source_adapter(Self, String, String) -> Self raise Failure
 pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self

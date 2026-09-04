@@ -625,6 +625,9 @@ async fn main {
   let offline_commerce_path = @env.get_env_var("LUNANEXA_OFFLINE_COMMERCE_PATH").unwrap_or(
     "lunanexa-offline-commerce.json",
   )
+  let machine_commerce_path = @env.get_env_var("LUNANEXA_MACHINE_COMMERCE_PATH").unwrap_or(
+    "lunanexa-machine-commerce.json",
+  )
   let contract_document_path = @env.get_env_var(
     "LUNANEXA_CONTRACT_DOCUMENT_PATH",
   ).unwrap_or("lunanexa-contract-documents.json")
@@ -807,6 +810,9 @@ async fn main {
   let catalog_signing_secret = required_environment(
     "LUNANEXA_CATALOG_SIGNING_SECRET",
   )
+  let machine_commerce_signing_secret = required_environment(
+    "LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET",
+  )
   let deployment_store = match management_database {
     Some(database) =>
       @deployment_store.FileDeploymentStore::open_postgres(
@@ -957,6 +963,16 @@ async fn main {
     Some(database) =>
       @offline_store.OfflineCommerceStore::open_postgres(database)
     None => @offline_store.OfflineCommerceStore::open(offline_commerce_path)
+  }
+  let machine_commerce_store = match management_database {
+    Some(database) =>
+      @machinecommerce_store.MachineCommerceStore::open_postgres(
+        database, machine_commerce_signing_secret,
+      )
+    None =>
+      @machinecommerce_store.MachineCommerceStore::open(
+        machine_commerce_path, machine_commerce_signing_secret,
+      )
   }
   let contract_document_store = match management_database {
     Some(database) =>
@@ -1129,6 +1145,9 @@ async fn main {
     ("LUNANEXA_MONITORING_TOKEN", monitoring_token),
     ("LUNANEXA_ASSIGNMENT_SIGNING_SECRET", assignment_signing_secret),
     ("LUNANEXA_CATALOG_SIGNING_SECRET", catalog_signing_secret),
+    (
+      "LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET", machine_commerce_signing_secret,
+    ),
     ("LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET", exclusive_lease_signing_secret),
     ("LUNANEXA_API_KEY_ISSUER_SECRET", api_key_issuer_secret),
     ("LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET", account_session_issuer_secret),
@@ -1333,6 +1352,7 @@ async fn main {
     )
     .with_external_export_proof_token(external_export_proof_token)
     .with_offline_commerce_store(offline_commerce_store)
+    .with_machine_commerce_store(machine_commerce_store)
     .with_contract_document_store(contract_document_store)
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
@@ -1488,6 +1508,15 @@ async fn main {
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_offline_commerce_reconciler(service)
+    }
+    group.spawn_bg(allow_failure=false) <| () => {
+      service.run_machine_commerce_reconciler_forever(
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_MACHINE_COMMERCE_RECONCILE_INTERVAL_MS").unwrap_or(
+            "30000",
+          ),
+        ).to_int(),
+      )
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_contract_governance_reconciler(service)

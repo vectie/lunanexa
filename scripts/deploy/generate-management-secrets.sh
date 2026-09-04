@@ -23,7 +23,8 @@ mkdir -m 0700 "$credentials_directory" "$database_directory" "$trust_directory" 
 
 for name in \
   runtime-token operator-token inference-token audit-token monitoring-token \
-  assignment-signing-secret catalog-signing-secret exclusive-lease-signing-secret \
+  assignment-signing-secret catalog-signing-secret machine-commerce-signing-secret \
+  exclusive-lease-signing-secret \
   credential-handoff-issuer-secret client-handoff-issuer-secret lease-helper-receipt-secret \
   guide-diagnostics-token api-key-issuer-secret account-session-issuer-secret \
   provider-callback-secret commercial-provider-adapter-token \

@@ -10,6 +10,8 @@ import {
   "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/commercial/offline/store" @offline_store,
+  "vectie/lunanexa/machinecommerce",
+  "vectie/lunanexa/machinecommerce/store" @machinecommerce_store,
   "vectie/lunanexa/deployment",
   "vectie/lunanexa/deployment/store" @deployment_store,
   "vectie/lunanexa/controller",

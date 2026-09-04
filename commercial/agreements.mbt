@@ -9,6 +9,14 @@ pub fn CommercialStore::register_agreement_template(
     template.locale.length() == 0 ||
     template.locale.length() > 32 ||
     !valid_sha256(template.rendered_document_hash) ||
+    template.document_uri.map_or(false, uri => {
+      uri.length() == 0 ||
+      uri.length() > 2048 ||
+      uri.any(character => character.is_whitespace()) ||
+      uri.contains("#") ||
+      uri.contains("?") ||
+      (!uri.has_prefix("https://") && !uri.has_prefix("/docs/"))
+    }) ||
     template.effective_unix_ms <= 0L ||
     template.created_unix_ms <= 0L {
     raise InvalidInput("invalid agreement template")
@@ -44,6 +52,9 @@ pub fn CommercialStore::set_template_state(
   }
   if !allowed {
     raise InvalidTransition("agreement template state")
+  }
+  if next == ReadyTemplate && template.document_uri is None {
+    raise InvalidInput("ready agreement template requires readable terms")
   }
   let updated = { ..template, state: next }
   self.templates[key] = updated

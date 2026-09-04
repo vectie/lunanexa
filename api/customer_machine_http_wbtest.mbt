@@ -18,7 +18,7 @@ async fn customer_machine_test_service(
         tenant_ref: "tenant-a",
         organization_id: "org-a",
         subject_ref: "subject-a",
-        roles: [Developer],
+        roles: [Developer, LegalSigner, LeaseRequester],
         active: true,
         created_unix_ms: now,
       },
@@ -70,6 +70,74 @@ async fn customer_machine_test_service(
         evidence_receipt: "agent:active",
       },
       now + 2L,
+    ),
+  )
+  ignore(
+    portal.publish_agreement({
+      agreement_id: "agreement-customer-a",
+      tenant_ref: "tenant-a",
+      organization_id: "org-a",
+      template_ref: "framework-v1",
+      title: "Customer A agreement",
+      summary: "Exclusive machine access agreement.",
+      rendered_document_hash: "sha256:customer-a-document",
+      state: ReviewRequired,
+      generation: 1L,
+      signer_subject_ref: None,
+      signature_request_receipt: None,
+      executed_artifact_hash: None,
+      created_unix_ms: now - 20000L,
+      updated_unix_ms: now - 20000L,
+    }),
+  )
+  let signature = portal.request_signature(
+    "subject-a",
+    {
+      agreement_id: "agreement-customer-a",
+      expected_generation: 1L,
+      idempotency_key: "sign-customer-a",
+    },
+    now - 19000L,
+  )
+  ignore(
+    portal.record_execution(
+      {
+        agreement_id: "agreement-customer-a",
+        expected_generation: signature.generation,
+        signer_subject_ref: "subject-a",
+        executed_artifact_hash: "sha256:customer-a-executed",
+        evidence_receipt: "provider:verified:customer-a",
+      },
+      now - 18000L,
+    ),
+  )
+  let request = portal.submit_lease_request(
+    "subject-a",
+    {
+      request_id: "request-customer-a",
+      idempotency_key: "request-customer-a",
+      tenant_ref: "tenant-a",
+      organization_id: "org-a",
+      project_id: "project-a",
+      unix_username: "alice",
+      starts_unix_ms: now - 10000L,
+      expires_unix_ms: now + 600000L,
+      requested_model_ids: ["model-a"],
+      justification: "Exclusive development environment",
+    },
+    now - 17000L,
+  )
+  ignore(
+    portal.review_lease_request(
+      {
+        request_id: request.submission.request_id,
+        expected_generation: request.generation,
+        decision: Approve,
+        node_id: Some("customer-node-a"),
+        evidence_receipt: "operator:approved:customer-a",
+      },
+      Some("lease-customer-a"),
+      now - 16000L,
     ),
   )
   let runtime = @runtimes.OpenAiTextRuntime::new(
@@ -207,6 +275,197 @@ async test "customer machine listing is live tenant safe and secret free" {
       Array[@nodelease.CustomerExclusiveMachineView]).length(),
     0,
   )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "customer machine access requires and enforces organization selection" {
+  let directory = @fs.tmpdir(prefix="lunanexa-customer-machine-multi-org-")
+  let now = @async.now()
+  let (service, leases, portal, credentials) = customer_machine_test_service(
+    directory, now,
+  )
+  ignore(
+    portal.put_membership({
+      membership_id: "member-a-second-org",
+      tenant_ref: "tenant-c",
+      organization_id: "org-c",
+      subject_ref: "subject-a",
+      roles: [Developer, LegalSigner, LeaseRequester],
+      active: true,
+      created_unix_ms: now,
+    }),
+  )
+  ignore(
+    portal.publish_agreement({
+      agreement_id: "agreement-customer-c",
+      tenant_ref: "tenant-c",
+      organization_id: "org-c",
+      template_ref: "framework-v1",
+      title: "Customer C agreement",
+      summary: "Second organization machine agreement.",
+      rendered_document_hash: "sha256:customer-c-document",
+      state: ReviewRequired,
+      generation: 1L,
+      signer_subject_ref: None,
+      signature_request_receipt: None,
+      executed_artifact_hash: None,
+      created_unix_ms: now - 15000L,
+      updated_unix_ms: now - 15000L,
+    }),
+  )
+  let signature = portal.request_signature(
+    "subject-a",
+    {
+      agreement_id: "agreement-customer-c",
+      expected_generation: 1L,
+      idempotency_key: "sign-customer-c",
+    },
+    now - 14000L,
+  )
+  ignore(
+    portal.record_execution(
+      {
+        agreement_id: "agreement-customer-c",
+        expected_generation: signature.generation,
+        signer_subject_ref: "subject-a",
+        executed_artifact_hash: "sha256:customer-c-executed",
+        evidence_receipt: "provider:verified:customer-c",
+      },
+      now - 13000L,
+    ),
+  )
+  ignore(
+    leases.issue(
+      {
+        version: @nodelease.contract_version,
+        idempotency_key: "customer-machine-c",
+        lease_id: "lease-customer-c",
+        node_id: "customer-node-c",
+        subject_ref: "subject-a",
+        unix_username: "alice-c",
+        access_credential_ref: "secret:internal-customer-c",
+        starts_unix_ms: now - 10000L,
+        expires_unix_ms: now + 600000L,
+      },
+      now,
+    ),
+  )
+  let request = portal.submit_lease_request(
+    "subject-a",
+    {
+      request_id: "request-customer-c",
+      idempotency_key: "request-customer-c",
+      tenant_ref: "tenant-c",
+      organization_id: "org-c",
+      project_id: "project-c",
+      unix_username: "alice-c",
+      starts_unix_ms: now - 10000L,
+      expires_unix_ms: now + 600000L,
+      requested_model_ids: ["model-c"],
+      justification: "Second organization environment",
+    },
+    now - 12000L,
+  )
+  ignore(
+    portal.review_lease_request(
+      {
+        request_id: request.submission.request_id,
+        expected_generation: request.generation,
+        decision: Approve,
+        node_id: Some("customer-node-c"),
+        evidence_receipt: "operator:approved:customer-c",
+      },
+      Some("lease-customer-c"),
+      now - 11000L,
+    ),
+  )
+  let ambiguous = service.handle(
+    Get,
+    "/v1/machine-access/self",
+    customer_headers("subject-a"),
+    "",
+  )
+  assert_eq(ambiguous.status, 409)
+  let first = service.handle(
+    Get,
+    "/v1/machine-access/self",
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-a",
+      "X-LunaNexa-Organization": "org-a",
+    },
+    "",
+  )
+  assert_eq(first.status, 200)
+  assert_true(first.body.contains("lease-customer-a"))
+  assert_false(first.body.contains("lease-customer-c"))
+  let first_lease = leases.lease("lease-customer-a").unwrap()
+  ignore(
+    credentials.issue(
+      {
+        request_id: "credential-multi-org-a",
+        lease_id: first_lease.intent.lease_id,
+        expected_generation: first_lease.generation,
+        host_alias: "customer-a.cluster.example",
+        ssh_port: 2222,
+        host_key_fingerprint: "SHA256:abcdefghijklmnopqrstuvwxyzABCDEFG1234567890_-",
+        issuer_redirect_url: "https://issuer.example/redeem/credential-multi-org-a",
+      },
+      first_lease,
+      now,
+    ),
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/machine-access/self/lease-customer-a/credential",
+      {
+        "Authorization": "Bearer inference-token",
+        "X-LunaNexa-Subject": "subject-a",
+        "X-LunaNexa-Organization": "org-a",
+      },
+      "",
+    ).status,
+    200,
+  )
+  let second = service.handle(
+    Get,
+    "/v1/machine-access/self",
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-a",
+      "X-LunaNexa-Organization": "org-c",
+    },
+    "",
+  )
+  assert_eq(second.status, 200)
+  assert_true(second.body.contains("lease-customer-c"))
+  assert_false(second.body.contains("lease-customer-a"))
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/machine-access/self/lease-customer-a/credential",
+      {
+        "Authorization": "Bearer inference-token",
+        "X-LunaNexa-Subject": "subject-a",
+        "X-LunaNexa-Organization": "org-c",
+      },
+      "",
+    ).status,
+    404,
+  )
+  let forged = service.handle(
+    Get,
+    "/v1/machine-access/self",
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-a",
+      "X-LunaNexa-Organization": "org-not-owned",
+    },
+    "",
+  )
+  assert_eq(forged.status, 403)
   @fs.rmdir(directory, recursive=true)
 }
 

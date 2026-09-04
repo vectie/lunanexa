@@ -40,6 +40,7 @@ pub struct ApiService {
   commercial_mutex : @async.Mutex
   inference_rate_card : @commercial.RateCard?
   offline_commerce_store : @offline_store.OfflineCommerceStore?
+  machine_commerce_store : @machinecommerce_store.MachineCommerceStore?
   contract_document_store : @contractdoc_store.ContractDocumentStore?
   contract_document_worker_token : String
   // Four-eyes approval threshold in CNY minor units: operator execute/close on
@@ -136,6 +137,7 @@ pub fn ApiService::new(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -228,6 +230,7 @@ pub fn ApiService::with_registry(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -321,6 +324,7 @@ pub fn ApiService::with_services(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -416,6 +420,7 @@ pub fn ApiService::with_control_plane(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -631,6 +636,15 @@ pub fn ApiService::with_offline_commerce_store(
   offline_commerce_store : @offline_store.OfflineCommerceStore,
 ) -> ApiService {
   { ..self, offline_commerce_store: Some(offline_commerce_store) }
+}
+
+///|
+/// Enables the durable machine catalog, quote, payment and order authority.
+pub fn ApiService::with_machine_commerce_store(
+  self : ApiService,
+  machine_commerce_store : @machinecommerce_store.MachineCommerceStore,
+) -> ApiService {
+  { ..self, machine_commerce_store: Some(machine_commerce_store) }
 }
 
 ///|
@@ -1690,6 +1704,7 @@ fn placement_runtime_estimate_ms(
 async fn ApiService::schedule_and_admit(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
+  required_deployment_id : String?,
 ) -> (HttpReply?, Array[String]) {
   let now = @async.now()
   let budgets = self.global_settings.request_budgets
@@ -1726,6 +1741,18 @@ async fn ApiService::schedule_and_admit(
       Some(
         api_error(
           409, "NoPlacement", "model selector has no approved schedulable target",
+          false,
+        ),
+      ),
+      [],
+    )
+  }
+  if required_deployment_id is Some(_) &&
+    !self.runtime.uses_direct_node_routing() {
+    return (
+      Some(
+        api_error(
+          503, "DedicatedRoutingUnavailable", "the serving adapter cannot enforce dedicated deployment routing",
           false,
         ),
       ),
@@ -1777,6 +1804,9 @@ async fn ApiService::schedule_and_admit(
             assignment.runtime.name == target.runtime.name &&
             assignment.runtime.version == target.runtime.version &&
             assignment.runtime.image_digest == target.runtime.image_digest &&
+            required_deployment_id.map_or(true, required => {
+              assignment.deployment_id == required
+            }) &&
             assignment.lease_expires_unix_ms > now &&
             heartbeat.running_deployments.any(deployment_id => {
               deployment_id == assignment.deployment_id
@@ -2234,7 +2264,21 @@ async fn ApiService::invoke_workload(
     }
     None => ()
   }
-  let (admission_error, routing_nodes) = self.schedule_and_admit(request)
+  let (dedicated_order, binding_error) = self.dedicated_order_binding(
+    authority,
+    Some(request.model_selector),
+    @async.now(),
+  )
+  if binding_error is Some(reply) {
+    return reply
+  }
+  let required_deployment_id = match dedicated_order {
+    Some(order) => order.target_deployment_ref
+    None => None
+  }
+  let (admission_error, routing_nodes) = self.schedule_and_admit(
+    request, required_deployment_id,
+  )
   if admission_error is Some(reply) {
     return reply
   }
@@ -2651,7 +2695,27 @@ async fn ApiService::stream_workload(
     connection.end_response()
     return
   }
-  let (admission_error, routing_nodes) = self.schedule_and_admit(request)
+  let (dedicated_order, binding_error) = self.dedicated_order_binding(
+    authority,
+    Some(request.model_selector),
+    @async.now(),
+  )
+  if binding_error is Some(reply) {
+    connection.send_response(reply.status, reason(reply.status), extra_headers={
+      "Content-Type": reply.content_type,
+      "Cache-Control": "no-store",
+    })
+    connection.write_string(reply.body)
+    connection.end_response()
+    return
+  }
+  let required_deployment_id = match dedicated_order {
+    Some(order) => order.target_deployment_ref
+    None => None
+  }
+  let (admission_error, routing_nodes) = self.schedule_and_admit(
+    request, required_deployment_id,
+  )
   if admission_error is Some(reply) {
     connection.send_response(reply.status, reason(reply.status), extra_headers={
       "Content-Type": reply.content_type,
@@ -2980,6 +3044,11 @@ async fn ApiService::dispatch_with_transport(
   }
   if client_handoff_path(path) {
     return self.handle_client_handoff(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
+  if machine_commerce_path(path) {
+    return self.handle_machine_commerce(
       verb, path, headers, body, allow_asserted_subject,
     )
   }

@@ -52,6 +52,7 @@ pub fn CommercialStore::from_durable_snapshot(
   }
   let store = CommercialStore::new()
   for value in durable.commercial.organizations {
+    validate_organization(value)
     if store.organizations.contains(value.organization_id) {
       raise InvalidInput("duplicate organization")
     }
@@ -205,6 +206,67 @@ fn safe_display_name(value : String) -> Bool {
 }
 
 ///|
+fn safe_legal_text(value : String, maximum_length : Int) -> Bool {
+  let trimmed = value.trim()
+  trimmed != "" &&
+  value.length() <= maximum_length &&
+  value.all(character => {
+    character.is_printable() &&
+    character != '\u0000' &&
+    character != '\n' &&
+    character != '\r'
+  })
+}
+
+///|
+fn valid_country_code(value : String) -> Bool {
+  value.length() == 2 &&
+  value.all(character => character >= 'A' && character <= 'Z')
+}
+
+///|
+fn valid_optional_legal_identifier(value : String?) -> Bool {
+  match value {
+    Some(identifier) => safe_legal_text(identifier, 160)
+    None => true
+  }
+}
+
+///|
+fn validate_organization(value : Organization) -> Unit raise CommercialError {
+  if !safe_identifier(value.organization_id) ||
+    !safe_display_name(value.display_name) ||
+    value.created_unix_ms <= 0L {
+    raise InvalidInput("invalid organization")
+  }
+  match value.legal_profile {
+    Some(profile) => {
+      if !safe_legal_text(profile.legal_name, 240) ||
+        !valid_country_code(profile.country_code) ||
+        !valid_optional_legal_identifier(profile.registration_number) ||
+        !valid_optional_legal_identifier(profile.tax_identifier) ||
+        !safe_legal_text(profile.registered_address, 500) ||
+        !safe_legal_text(profile.billing_contact.display_name, 160) ||
+        !safe_legal_text(profile.billing_contact.email, 320) ||
+        !profile.billing_contact.email.contains("@") ||
+        !profile.billing_contact.phone
+        .map(phone => safe_legal_text(phone, 64))
+        .unwrap_or(true) {
+        raise InvalidInput("invalid organization legal profile")
+      }
+      if profile.subject_kind == Company &&
+        profile.registration_number is None &&
+        profile.tax_identifier is None {
+        raise InvalidInput(
+          "a company requires a registration number or tax identifier",
+        )
+      }
+    }
+    None => ()
+  }
+}
+
+///|
 fn valid_sha256(value : String) -> Bool {
   if value.length() != 71 || !value.has_prefix("sha256:") {
     false
@@ -271,11 +333,7 @@ pub fn CommercialStore::add_organization(
   self : CommercialStore,
   value : Organization,
 ) -> Unit raise CommercialError {
-  if !safe_identifier(value.organization_id) ||
-    !safe_display_name(value.display_name) ||
-    value.created_unix_ms <= 0L {
-    raise InvalidInput("invalid organization")
-  }
+  validate_organization(value)
   if self.organizations.contains(value.organization_id) {
     raise AlreadyExists("organization")
   }

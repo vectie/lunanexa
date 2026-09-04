@@ -160,14 +160,40 @@ async fn ApiService::handle_customer_machine_access(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
   }
-  let portal_view = try portal.self_view(subject_ref) catch {
+  let portal_view = try
+    portal_view_for_request(portal, subject_ref, headers)
+  catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value
   }
   self.reconcile_expired_exclusive_leases()
   let now = @async.now()
-  let subject_leases = leases.leases_for_subject(subject_ref)
+  let selected_lease_ids : Map[String, Unit] = Map([])
+  for request in portal_view.lease_requests {
+    if request.subject_ref == subject_ref &&
+      request.submission.tenant_ref == portal_view.membership.tenant_ref &&
+      request.submission.organization_id ==
+      portal_view.membership.organization_id &&
+      request.exclusive_lease_id is Some(lease_id) {
+      selected_lease_ids[lease_id] = ()
+    }
+  }
+  match self.machine_commerce_store {
+    Some(machine_store) =>
+      for order in machine_store.orders_for_subject(subject_ref) {
+        if order.organization_id == portal_view.membership.organization_id &&
+          order.tenant_ref == portal_view.membership.tenant_ref &&
+          order.offering_kind == BareMachine &&
+          order.target_lease_ref is Some(lease_id) {
+          selected_lease_ids[lease_id] = ()
+        }
+      }
+    None => ()
+  }
+  let subject_leases = leases
+    .leases_for_subject(subject_ref)
+    .filter(lease => selected_lease_ids.contains(lease.intent.lease_id))
   match (verb, path) {
     (Get, "/v1/machine-access/self") => {
       let views : Array[@nodelease.CustomerExclusiveMachineView] = []
@@ -250,6 +276,7 @@ async fn ApiService::handle_customer_machine_access(
       )
       self.refresh_subject_notifications(
         portal_view.membership.tenant_ref,
+        portal_view.membership.organization_id,
         subject_ref,
         now,
       )

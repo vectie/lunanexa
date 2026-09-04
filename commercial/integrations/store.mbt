@@ -134,7 +134,7 @@ fn validate_record(record : ExternalRecord) -> Unit raise IntegrationError {
     raise InvalidInput("invalid external integration record")
   }
   match record.kind {
-    Payment | TaxInvoice =>
+    Payment | PaymentRefund | TaxInvoice =>
       if record.expected_amount_minor.map(amount => amount < 0L).unwrap_or(true) ||
         record.currency.map(valid_currency).unwrap_or(false) == false ||
         record.money_scale.map(scale => scale < 0 || scale > 9).unwrap_or(true) {
@@ -352,7 +352,9 @@ pub fn IntegrationStore::renew_expired_dispatch(
   guard self.records.get(record_id) is Some(record) else {
     raise NotFound("external record")
   }
-  if record.kind != Payment && record.kind != QualifiedSignature {
+  if record.kind != Payment &&
+    record.kind != PaymentRefund &&
+    record.kind != QualifiedSignature {
     raise InvalidTransition("provider request kind cannot be renewed")
   }
   if record.state == Pending {
@@ -387,6 +389,8 @@ pub fn external_transition_allowed(
     (Payment, Submitted, Authorized | Settled | Failed) => true
     (Payment, Authorized, Settled | Failed | Voided) => true
     (Payment, Settled, Refunded) => true
+    (PaymentRefund, Pending, Submitted | Refunded | Failed) => true
+    (PaymentRefund, Submitted, Refunded | Failed | Expired) => true
     (TaxInvoice, Pending, Submitted | Issued | Failed) => true
     (TaxInvoice, Submitted, Issued | Failed | Voided) => true
     (TaxInvoice, Issued, Credited | Voided) => true
@@ -405,7 +409,7 @@ fn evidence_matches(
   callback : ExternalCallback,
 ) -> Bool {
   let money_matches = match record.kind {
-    Payment | TaxInvoice =>
+    Payment | PaymentRefund | TaxInvoice =>
       callback.amount_minor == record.expected_amount_minor &&
       callback.currency == record.currency
     IdentityVerification | QualifiedSignature =>
@@ -417,7 +421,7 @@ fn evidence_matches(
     TaxInvoice =>
       record.expected_document_hash is None ||
       callback.document_hash == record.expected_document_hash
-    IdentityVerification | Payment => true
+    IdentityVerification | Payment | PaymentRefund => true
   }
   money_matches && document_matches
 }
