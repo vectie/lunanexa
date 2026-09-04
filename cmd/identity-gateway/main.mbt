@@ -13,7 +13,14 @@ async fn main {
       server.run_forever(
         (request, reader, connection) => {
           handle_proxy(store, config, request, reader, connection) catch {
-            _ => send_error(connection, 503, "identity-gateway-unavailable")
+            Failure(message) => {
+              println("[identity-gateway] proxy request failed: \{message}")
+              send_error(connection, 503, "identity-gateway-unavailable")
+            }
+            _ => {
+              println("[identity-gateway] proxy request failed: internal error")
+              send_error(connection, 503, "identity-gateway-unavailable")
+            }
           }
         },
         allow_failure=true,
@@ -23,7 +30,14 @@ async fn main {
       server.run_forever(
         (request, reader, connection) => {
           handle_relay(config, request, reader, connection) catch {
-            _ => send_error(connection, 503, "identity-gateway-unavailable")
+            Failure(message) => {
+              println("[identity-gateway] relay request failed: \{message}")
+              send_error(connection, 503, "identity-gateway-unavailable")
+            }
+            _ => {
+              println("[identity-gateway] relay request failed: internal error")
+              send_error(connection, 503, "identity-gateway-unavailable")
+            }
           }
         },
         allow_failure=true,
