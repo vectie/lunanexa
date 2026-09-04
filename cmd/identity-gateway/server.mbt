@@ -163,12 +163,17 @@ async fn handle_oidc_start(
   let discovery = discover(config) catch {
     _ => return send_error(connection, 503, "oidc-discovery-unavailable")
   }
-  let state = random_token(32)
-  let nonce = random_token(32)
-  let verifier = random_token(48)
-  let challenge = base64url(
-    Bytes::from_array(@crypto.sha256(@utf8.encode(verifier))).view(),
-  )
+  let (state, nonce, verifier, challenge) = try {
+    let state = random_token(32)
+    let nonce = random_token(32)
+    let verifier = random_token(48)
+    let challenge = base64url(
+      Bytes::from_array(@crypto.sha256(@utf8.encode(verifier))).view(),
+    )
+    (state, nonce, verifier, challenge)
+  } catch {
+    _ => return send_error(connection, 503, "oidc-flow-entropy-unavailable")
+  }
   let now = @async.now()
   let flow : GatewayCookie = {
     kind: "flow",
