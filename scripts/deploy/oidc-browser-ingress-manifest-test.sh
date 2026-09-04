@@ -77,7 +77,7 @@ for required in \
   'name: LUNANEXA_IDENTITY_GATEWAY_MODE' \
   'value: relay' \
   'name: LUNANEXA_CONTROL_ENDPOINT' \
-  'value: http://127.0.0.1:8080' \
+  'value: http://127.0.0.1:8082' \
   'name: LUNANEXA_IDENTITY_EXCHANGE_PATH' \
   'value: /v1/auth/session:exchange' \
   'name: LUNANEXA_IDENTITY_REGISTRATION_PATH' \
@@ -175,7 +175,7 @@ if rg -q '\$\{[A-Z0-9_]+\}' "$rendered"; then
   exit 1
 fi
 rg -U -q 'name: lunanexa-control(.|\n)*name: control(.|\n)*name: identity-relay' "$rendered"
-rg -q 'http://127.0.0.1:8080' "$rendered"
+rg -q 'http://127.0.0.1:8082' "$rendered"
 rg -q 'containerPort: 8081' "$rendered"
 rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$rendered"
 rg -q 'http://lunanexa-identity-relay:8081' "$rendered"
