@@ -5003,6 +5003,65 @@ async fn send_listener_reply(
 }
 
 ///|
+/// Serve only the two gateway-to-controller identity mutations on a listener
+/// that the controller binds to loopback. This does not depend on
+/// `ServerConnection::client_addr`: moonbitlang/async 0.20.3 currently exposes
+/// the accepted socket's local address there instead of the peer returned by
+/// `Server::accept`. The ordinary API listener therefore remains untrusted,
+/// while this separate socket is trusted by construction and is never exposed
+/// by a Kubernetes Service.
+pub async fn ApiService::serve_identity_on(
+  self : ApiService,
+  server : @http.Server,
+) -> Unit {
+  server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    if request.meth != Post ||
+      (
+        request.path != "/v1/auth/register" &&
+        request.path != "/v1/auth/session:exchange"
+      ) {
+      send_listener_reply(
+        connection,
+        api_error(
+          404, "NotFound", "identity listener route was not found", false,
+        ),
+      )
+      return
+    }
+    let body = match read_bounded_request_body(reader, 256) {
+      RequestBody(value) => value
+      RequestBodyTooLarge => {
+        send_listener_reply(
+          connection,
+          api_error(
+            413, "PayloadTooLarge", "identity request body exceeds the relay contract limit",
+            false,
+          ),
+        )
+        return
+      }
+      RequestBodyInvalidUtf8 => {
+        send_listener_reply(
+          connection,
+          api_error(
+            400, "InvalidRequest", "identity request body is not valid UTF-8", false,
+          ),
+        )
+        return
+      }
+    }
+    let reply = self.handle_with_transport(
+      Post,
+      request.path,
+      request.headers,
+      body,
+      true,
+    )
+    send_listener_reply(connection, reply)
+  })
+}
+
+///|
 fn loopback_client(address : @socket.Addr) -> Bool {
   let rendered = address.to_string()
   rendered.has_prefix("127.") ||
