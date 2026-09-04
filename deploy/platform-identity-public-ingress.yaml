@@ -1,0 +1,51 @@
+# Optional DNS-hosted public edge for the platform identity provider. The
+# no-domain/IP:port profile does not render this resource because Kubernetes
+# Ingress host rules cannot contain an IP literal or a port. Deployments with a
+# reviewed DNS name may render this template separately and must preserve the
+# exact public issuer authority configured on Keycloak.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lunanexa-platform-idp-public
+  namespace: "${LUNANEXA_IDENTITY_NAMESPACE}"
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/proxy-ssl-secret: "${LUNANEXA_IDENTITY_NAMESPACE}/lunanexa-platform-idp-tls"
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: "on"
+    nginx.ingress.kubernetes.io/proxy-ssl-server-name: "on"
+    nginx.ingress.kubernetes.io/proxy-ssl-name: "${LUNANEXA_IDENTITY_INGRESS_HOST}"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "${LUNANEXA_IDENTITY_INGRESS_HOST}"
+      secretName: lunanexa-platform-idp-tls
+  rules:
+    - host: "${LUNANEXA_IDENTITY_INGRESS_HOST}"
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-identity-public
+                port:
+                  number: ${LUNANEXA_IDENTITY_PUBLIC_EDGE_PORT}
+          - path: /realms
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-identity-public
+                port:
+                  number: ${LUNANEXA_IDENTITY_PUBLIC_EDGE_PORT}
+          - path: /resources
+            pathType: Prefix
+            backend:
+              service:
+                name: lunanexa-identity-public
+                port:
+                  number: ${LUNANEXA_IDENTITY_PUBLIC_EDGE_PORT}

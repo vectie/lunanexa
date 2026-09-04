@@ -307,10 +307,20 @@ scripts/deploy/render-oidc-browser-ingress.sh \
   --management-manifest /ABSOLUTE/PROTECTED/management.yaml \
   --provider-ref PLATFORM_OR_ENTERPRISE_OIDC \
   --issuer-url https://IDP_HOST/REALM_PATH \
-  --operator-host OPERATOR_HOST \
-  --enterprise-host ENTERPRISE_HOST \
+  --transport-origin https://INTERNAL_IDP_EDGE.svc.cluster.local:8443 \
+  --operator-host OPERATOR_AUTHORITY \
+  --enterprise-host ENTERPRISE_AUTHORITY \
   --gateway-image REGISTRY/IDENTITY_GATEWAY@sha256:EXACT_64_HEX_DIGEST
 ```
+
+`--transport-origin` is required by the platform-operated no-domain profile.
+An enterprise provider may omit it only when the gateway can reach the exact
+public issuer origin directly with the same strict TLS identity.
+The two browser values are exact HTTPS authorities and may be DNS names or
+IPv4 addresses with distinct ports. The renderer includes
+`deploy/oidc-browser-public-ingress.yaml` only when both are DNS-only hosts;
+IP or port authorities rely on the deployment's reviewed public TLS edges and
+are never written into invalid Kubernetes Ingress `host` fields.
 
 The renderer verifies the existing management manifest has no unresolved or
 invalid deployment placeholders, injects the sidecar into its named controller
@@ -327,21 +337,28 @@ distinct control-plane authorities. It is not mounted into the identity
 gateway. Conversely, `identity-assertion-secret` remains optional in the local
 static-token profile but is mandatory whenever this OIDC profile is enabled.
 
-For the current private/self-signed issuer, create Secret
-`lunanexa-oidc-provider-ca` in the gateway namespace with key `ca.pem`
-containing the issuer's existing CA. The gateway passes that exact file to TLS
-verification for discovery, token, userinfo, and introspection requests. It
-never enables an insecure TLS mode. Copying the CA does not change the issuer
-hostname or certificate. The gateway also reads the existing
+For a private transport origin, create Secret `lunanexa-oidc-provider-ca` in
+the gateway namespace with key `ca.pem` containing the CA that signed the
+transport edge certificate. That certificate must cover the exact
+`svc.cluster.local` name in `--transport-origin`. The gateway passes that CA
+file to strict TLS verification for discovery, token, userinfo, and
+introspection requests; it never enables an insecure TLS mode. Returned issuer
+metadata and ID-token `iss` must still equal the public `--issuer-url` exactly,
+including an IP literal and non-default port when configured. The gateway also
+reads the existing
 `lunanexa-database/url` Secret to persist opaque browser sessions across its two
 replicas.
 
-The identity provider must be reachable on its configured TLS port (443 or the
-current private 5006 endpoint) from a namespace labeled
-`lunanexa.io/service=oidc-provider`. Kubernetes NetworkPolicy cannot select an
-external DNS name; an external provider therefore needs a reviewed static-IP
-or CNI FQDN-policy overlay. Do not replace that fail-closed rule with arbitrary
-Internet egress.
+The platform-operated profile makes the transport origin
+`https://lunanexa-identity-internal.IDENTITY_NAMESPACE.svc.cluster.local:8443`.
+That two-replica edge accepts only `/realms/lunanexa/`, overwrites forwarding
+headers with the exact public issuer authority, and verifies the Keycloak
+backend certificate against
+`lunanexa-platform-idp-service.IDENTITY_NAMESPACE.svc.cluster.local`. The
+gateway is permitted to reach only this namespace-selected TLS edge; it needs
+no public-IP or arbitrary Internet egress. External enterprise providers still
+need a reviewed static-IP or CNI FQDN-policy overlay because Kubernetes
+NetworkPolicy cannot select an external DNS name.
 
 The base controller policy does not admit ingress-nginx to native controller
 port 8080. The OIDC overlay exposes the separate

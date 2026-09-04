@@ -3,6 +3,7 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 manifest=$repo_root/deploy/oidc-browser-ingress.yaml
+public_ingress_manifest=$repo_root/deploy/oidc-browser-public-ingress.yaml
 controller_patch=$repo_root/deploy/oidc-browser-ingress-controller-patch.yaml
 base_policy=$repo_root/deploy/network-policy.yaml
 controller_manifest=$repo_root/deploy/controller.yaml
@@ -13,7 +14,8 @@ cleanup() { rm -rf "$test_directory"; }
 trap cleanup EXIT HUP INT TERM
 
 test -f "$manifest"
-if rg -q '^kind: Secret$' "$manifest"; then
+test -f "$public_ingress_manifest"
+if rg -q '^kind: Secret$' "$manifest" "$public_ingress_manifest"; then
   printf '%s\n' 'OIDC ingress manifest must reference deployment-owned secrets' >&2
   exit 1
 fi
@@ -56,6 +58,7 @@ for required in \
   'app.kubernetes.io/name: ingress-nginx'; do
   rg -q "$required" "$manifest"
 done
+rg -U -q 'lunanexa.io/service: oidc-provider(.|\n)*port: 8443' "$manifest"
 if rg -q 'LUNANEXA_ENTERPRISE_API_PATH_PREFIXES:.*\/v1\/portal\/,' "$manifest"; then
   printf '%s\n' 'enterprise browser policy includes operator portal routes' >&2
   exit 1
@@ -99,8 +102,7 @@ fi
 
 # Browser ingress terminates only at the identity gateway. Neither UI gateway
 # nor the controller may be a public Ingress backend in this profile.
-ingress_document=$test_directory/ingress.yaml
-sed -n '/^kind: Ingress$/,$p' "$manifest" > "$ingress_document"
+ingress_document=$public_ingress_manifest
 test "$(rg -c 'name: lunanexa-identity-gateway' "$ingress_document")" -eq 2
 test "$(rg -c 'number: 8081' "$ingress_document")" -eq 2
 if rg -q 'name: lunanexa-(control|console|enterprise|workbench)$' "$ingress_document"; then
@@ -182,7 +184,43 @@ rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$rend
 rg -q 'http://lunanexa-identity-relay:8081' "$rendered"
 rg -q 'http://lunanexa-control:8080' "$rendered"
 rg -q 'LUNANEXA_OIDC_TRANSPORT_ORIGIN: ""' "$rendered"
+rg -U -q 'kind: Ingress(.|\n)*name: lunanexa-oidc-browser' "$rendered"
 test "$(stat -f '%Lp' "$rendered" 2>/dev/null || stat -c '%a' "$rendered")" = 600
+
+private_transport_rendered=$test_directory/oidc-browser-private-transport.yaml
+"$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
+  --output "$private_transport_rendered" \
+  --management-manifest "$management" \
+  --provider-ref platform-oidc \
+  --issuer-url https://203.0.113.40:5006/realms/lunanexa \
+  --transport-origin https://lunanexa-identity-internal.lunanexa-identity.svc.cluster.local:8443 \
+  --operator-host operator.example.test \
+  --enterprise-host enterprise.example.test \
+  --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  >/dev/null
+rg -F -q 'https://203.0.113.40:5006/realms/lunanexa' \
+  "$private_transport_rendered"
+rg -F -q 'https://lunanexa-identity-internal.lunanexa-identity.svc.cluster.local:8443' \
+  "$private_transport_rendered"
+
+no_domain_rendered=$test_directory/oidc-browser-no-domain.yaml
+"$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
+  --output "$no_domain_rendered" \
+  --management-manifest "$management" \
+  --provider-ref platform-oidc \
+  --issuer-url https://203.0.113.40:5006/realms/lunanexa \
+  --transport-origin https://lunanexa-identity-internal.lunanexa-identity.svc.cluster.local:8443 \
+  --operator-host 203.0.113.40:5003 \
+  --enterprise-host 203.0.113.40:5005 \
+  --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  >/dev/null
+rg -F -q 'https://203.0.113.40:5003/auth/oidc/callback' "$no_domain_rendered"
+rg -F -q 'https://203.0.113.40:5005/auth/oidc/callback' "$no_domain_rendered"
+rg -F -q 'https://203.0.113.40:5003,https://203.0.113.40:5005' "$no_domain_rendered"
+if rg -q '^kind: Ingress$' "$no_domain_rendered"; then
+  printf '%s\n' 'no-domain browser render emitted an invalid IP:port Ingress' >&2
+  exit 1
+fi
 
 set +e
 "$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
@@ -215,9 +253,43 @@ mutable_image_status=$?
   --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >/dev/null 2>&1
 injected_issuer_status=$?
+"$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
+  --output "$test_directory/unsafe-transport.yaml" \
+  --management-manifest "$management" \
+  --provider-ref platform-oidc \
+  --issuer-url https://203.0.113.40:5006/realms/lunanexa \
+  --transport-origin https://lunanexa-identity-internal.lunanexa-identity.svc.cluster.local:8443/realms \
+  --operator-host operator.example.test \
+  --enterprise-host enterprise.example.test \
+  --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  >/dev/null 2>&1
+unsafe_transport_status=$?
+"$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
+  --output "$test_directory/invalid-port.yaml" \
+  --management-manifest "$management" \
+  --provider-ref platform-oidc \
+  --issuer-url https://203.0.113.40:5006/realms/lunanexa \
+  --operator-host 203.0.113.40:70000 \
+  --enterprise-host 203.0.113.40:5005 \
+  --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  >/dev/null 2>&1
+invalid_port_status=$?
+"$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
+  --output "$test_directory/injected-authority.yaml" \
+  --management-manifest "$management" \
+  --provider-ref platform-oidc \
+  --issuer-url https://203.0.113.40:5006/realms/lunanexa \
+  --operator-host '203.0.113.40:5003;return-200' \
+  --enterprise-host 203.0.113.40:5005 \
+  --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  >/dev/null 2>&1
+injected_authority_status=$?
 set -e
 test "$unsafe_issuer_status" -ne 0
 test "$mutable_image_status" -ne 0
 test "$injected_issuer_status" -ne 0
+test "$unsafe_transport_status" -ne 0
+test "$invalid_port_status" -ne 0
+test "$injected_authority_status" -ne 0
 
 printf '%s\n' 'OIDC browser ingress manifest tests passed'
