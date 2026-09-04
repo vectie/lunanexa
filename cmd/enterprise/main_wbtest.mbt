@@ -245,7 +245,7 @@ test "signed-out enterprise gate hides application navigation and actions" {
   assert_true(html.contains("Sign in or create an account"))
   assert_true(html.contains("bounded trial when trials are enabled"))
   assert_true(html.contains("href=\"/auth/oidc/start?audience=enterprise\""))
-  assert_true(html.contains("Development credential fallback"))
+  assert_false(html.contains("Development credential fallback"))
   assert_false(html.contains("session_token="))
   assert_false(html.contains("Enterprise navigation"))
   assert_false(html.contains("Request capacity"))
