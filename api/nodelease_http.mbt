@@ -38,6 +38,90 @@ fn decode_lease_agent_observation(
 }
 
 ///|
+/// Records the billable wall-clock interval for a portal-owned exclusive
+/// machine exactly once. The lease is billed while idle as dedicated capacity:
+/// from its contracted start until the earlier of verified cleanup and expiry.
+/// Raw operator leases have no tenant project and therefore remain outside the
+/// customer ledger.
+async fn ApiService::meter_completed_exclusive_lease(
+  self : ApiService,
+  lease : @nodelease.ExclusiveNodeLease,
+) -> Bool {
+  if lease.state != Completed || self.portal_store is None {
+    return true
+  }
+  let portal = self.portal_store.unwrap()
+  guard portal.snapshot().lease_requests
+    .iter()
+    .find_first(request => {
+      request.exclusive_lease_id == Some(lease.intent.lease_id) &&
+      request.state == Approved &&
+      request.subject_ref == lease.intent.subject_ref
+    })
+    is Some(request) else {
+    // Operator-created maintenance/test leases are not customer purchases.
+    return true
+  }
+  let started_unix_ms = lease.intent.starts_unix_ms
+  let ended_unix_ms = lease.updated_unix_ms.min(lease.intent.expires_unix_ms)
+  if ended_unix_ms <= started_unix_ms {
+    return true
+  }
+  let quantity = (ended_unix_ms - started_unix_ms + 999L) / 1000L
+  let event_id = "exclusive-lease-usage:\{lease.intent.lease_id}"
+  let entry_id = "exclusive-lease-charge:\{lease.intent.lease_id}"
+  let observation : @commercial.UsageObservation = {
+    event_id,
+    organization_id: request.submission.organization_id,
+    project_id: request.submission.project_id,
+    actor_ref: lease.intent.subject_ref,
+    workload_id: lease.intent.lease_id,
+    node_id: lease.intent.node_id,
+    lease_epoch: lease.generation,
+    meter: "exclusive-node-second",
+    quantity,
+    unit: "second",
+    started_unix_ms,
+    ended_unix_ms,
+    observed_unix_ms: lease.updated_unix_ms,
+  }
+  self.commercial_mutex.acquire()
+  defer self.commercial_mutex.release()
+  let before = self.commercial_store.durable_snapshot()
+  let accepted = try {
+    ignore(self.commercial_store.ingest_usage(observation))
+    ignore(
+      self.commercial_store.rate_usage(
+        event_id,
+        entry_id,
+        {
+          rate_card_id: "exclusive-node-second",
+          version: "lease-v1",
+          meter: "exclusive-node-second",
+          unit: "second",
+          unit_price: self.exclusive_lease_unit_price,
+          effective_from_unix_ms: 1L,
+          effective_until_unix_ms: 9223372036854775806L,
+        },
+        lease.updated_unix_ms,
+      ),
+    )
+    self.persist_commercial_state()
+    true
+  } catch {
+    _ => false
+  } noraise {
+    value => value
+  }
+  if !accepted {
+    ignore(self.commercial_store.replace_from_durable_snapshot(before)) catch {
+      _ => ()
+    }
+  }
+  accepted
+}
+
+///|
 async fn ApiService::observe_node_lease_action(
   self : ApiService,
   node_id : String,
@@ -145,14 +229,17 @@ async fn ApiService::observe_node_lease_action(
           }
           advance(draining, RevokingAccess)
         }
-      "sanitize" => {
-        let sanitizing = if initial.state == RevokingAccess {
-          advance(initial, Sanitizing)
-        } else {
+      "sanitize" =>
+        if initial.state == Completed {
           initial
+        } else {
+          let sanitizing = if initial.state == RevokingAccess {
+            advance(initial, Sanitizing)
+          } else {
+            initial
+          }
+          advance(sanitizing, Completed)
         }
-        advance(sanitizing, Completed)
-      }
       "quarantine" =>
         if initial.state == Quarantined {
           initial
@@ -189,6 +276,13 @@ async fn ApiService::observe_node_lease_action(
     transitioned.intent.lease_id,
     observation.receipt,
   )
+  if transitioned.state == Completed &&
+    !self.meter_completed_exclusive_lease(transitioned) {
+    return api_error(
+      503, "LeaseMeteringPending", "machine cleanup succeeded but durable commercial metering is pending retry",
+      true,
+    )
+  }
   json_reply(200, transitioned.to_json())
 }
 
@@ -227,6 +321,9 @@ pub async fn ApiService::reconcile_expired_exclusive_leases(
         lease.intent.lease_id,
         lease.authority_receipt,
       )
+    }
+    if lease.state == Completed {
+      ignore(self.meter_completed_exclusive_lease(lease))
     }
   }
   self.record_component_event(
