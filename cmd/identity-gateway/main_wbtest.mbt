@@ -14,6 +14,15 @@ test "form codec is strict and round trips UTF-8" {
 }
 
 ///|
+async test "secure random bytes come from the native operating system source" {
+  let first = secure_random(32)
+  let second = secure_random(32)
+  assert_eq(first.length(), 32)
+  assert_eq(second.length(), 32)
+  assert_false(first == second)
+}
+
+///|
 test "API canonicalization rejects encoded and traversal paths" {
   assert_eq(canonical_api_path("/v1/auth/self"), Some("/v1/auth/self"))
   assert_eq(

@@ -1,7 +1,6 @@
 import {
   "vectie/lunanexa/internal/postgres",
   "moonbitlang/async",
-  "moonbitlang/async/fs",
   "moonbitlang/async/http",
   "moonbitlang/async/io",
   "moonbitlang/async/socket",
@@ -19,6 +18,7 @@ supported_targets = "native"
 pkgtype(kind: "executable")
 
 options(
+  "native-stub": [ "secure_random.c" ],
   link: {
     "native": {
       "cc-link-flags": "-pthread -ldl -L/opt/homebrew/lib/postgresql@17 -lpq",

@@ -163,10 +163,15 @@ fn cookie_value(headers : Map[String, String], name : String) -> String? {
 }
 
 ///|
-async fn secure_random(length : Int) -> Bytes {
-  let source = @fs.open("/dev/urandom", mode=ReadOnly)
-  defer source.close()
-  source.read_exactly(length)
+fn secure_random(length : Int) -> Bytes raise {
+  guard length > 0 && length <= 256 else {
+    raise Failure("secure random request length is invalid")
+  }
+  let output = Bytes::make(length, 0)
+  guard native_fill_secure_random(output) == 0 else {
+    raise Failure("operating system secure random source is unavailable")
+  }
+  output
 }
 
 ///|
@@ -197,6 +202,6 @@ fn decode_cookie_reference(value : String, secret : String) -> String? {
 }
 
 ///|
-async fn random_token(bytes : Int) -> String {
+fn random_token(bytes : Int) -> String raise {
   base64url(secure_random(bytes).view())
 }
