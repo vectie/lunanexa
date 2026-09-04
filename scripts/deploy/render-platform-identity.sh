@@ -4,7 +4,7 @@ umask 077
 
 output= management_manifest= management_namespace= identity_namespace=
 identity_host= operator_host= enterprise_host= database_host= database_name=
-identity_egress_cidr= gateway_image= keycloak_image=
+gateway_image= keycloak_image= identity_edge_image= identity_ingress_host=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output=$2; shift 2 ;;
@@ -12,13 +12,14 @@ while [ "$#" -gt 0 ]; do
     --management-namespace) management_namespace=$2; shift 2 ;;
     --identity-namespace) identity_namespace=$2; shift 2 ;;
     --identity-host) identity_host=$2; shift 2 ;;
+    --identity-ingress-host) identity_ingress_host=$2; shift 2 ;;
     --operator-host) operator_host=$2; shift 2 ;;
     --enterprise-host) enterprise_host=$2; shift 2 ;;
     --database-host) database_host=$2; shift 2 ;;
     --database-name) database_name=$2; shift 2 ;;
-    --identity-egress-cidr) identity_egress_cidr=$2; shift 2 ;;
     --gateway-image) gateway_image=$2; shift 2 ;;
     --keycloak-image) keycloak_image=$2; shift 2 ;;
+    --identity-edge-image) identity_edge_image=$2; shift 2 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 64 ;;
   esac
 done
@@ -28,17 +29,23 @@ safe_host() {
   case "$1" in ''|*[!A-Za-z0-9.-]*|.*|*.) return 1 ;; esac
   case "$1" in *..*) return 1 ;; esac
 }
+safe_authority() {
+  case "$1" in ''|*[!A-Za-z0-9.:-]*) return 1 ;; esac
+  authority_host=$1
+  case "$1" in
+    *:*)
+      authority_host=${1%:*}
+      authority_port=${1##*:}
+      case "$authority_port" in ''|*[!0-9]*) return 1 ;; esac
+      test "$authority_port" -gt 0
+      test "$authority_port" -le 65535
+      case "$authority_host" in *:*) return 1 ;; esac
+      ;;
+  esac
+  safe_host "$authority_host"
+}
 safe_database_host() {
   case "$1" in ''|*[!A-Za-z0-9._:-]*) return 1 ;; esac
-}
-safe_ipv4_cidr() {
-  case "$1" in ''|*[!0-9./]*|*/*/*) return 1 ;; esac
-  printf '%s\n' "$1" | awk -F '[./]' '
-    NF != 5 { exit 1 }
-    $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ ||
-    $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ { exit 1 }
-    $1 > 255 || $2 > 255 || $3 > 255 || $4 > 255 || $5 < 24 || $5 > 32 { exit 1 }
-  '
 }
 safe_digest_image() {
   case "$1" in *@sha256:*) ;; *) return 1 ;; esac
@@ -60,17 +67,21 @@ test -f "$management_manifest"
 safe_identifier "$management_namespace"
 safe_identifier "$identity_namespace"
 test "$management_namespace" != "$identity_namespace"
-safe_host "$identity_host"
-safe_host "$operator_host"
-safe_host "$enterprise_host"
+safe_authority "$identity_host"
+if [ -n "$identity_ingress_host" ]; then
+  safe_host "$identity_ingress_host"
+  test "$identity_host" = "$identity_ingress_host"
+fi
+safe_authority "$operator_host"
+safe_authority "$enterprise_host"
 test "$identity_host" != "$operator_host"
 test "$identity_host" != "$enterprise_host"
 test "$operator_host" != "$enterprise_host"
 safe_database_host "$database_host"
 safe_identifier "$database_name"
-safe_ipv4_cidr "$identity_egress_cidr"
 safe_digest_image "$gateway_image"
 safe_digest_image "$keycloak_image"
+safe_digest_image "$identity_edge_image"
 command -v kubectl >/dev/null
 command -v rg >/dev/null
 
@@ -80,27 +91,43 @@ cleanup() { rm -rf "$work_directory"; }
 trap cleanup EXIT HUP INT TERM
 
 gateway_manifest=$work_directory/management-with-oidc.yaml
+identity_transport_origin="https://lunanexa-identity-internal.$identity_namespace.svc.cluster.local:8443"
 "$repo_root/scripts/deploy/render-oidc-browser-ingress.sh" \
   --output "$gateway_manifest" \
   --management-manifest "$management_manifest" \
   --provider-ref lunanexa-platform-oidc \
   --issuer-url "https://$identity_host/realms/lunanexa" \
+  --transport-origin "$identity_transport_origin" \
   --operator-host "$operator_host" \
   --enterprise-host "$enterprise_host" \
   --gateway-image "$gateway_image" >/dev/null
 
 identity_manifest=$work_directory/platform-identity.yaml
+identity_port=443
+case "$identity_host" in *:*) identity_port=${identity_host##*:} ;; esac
 sed \
   -e "s|\${LUNANEXA_MANAGEMENT_NAMESPACE}|$management_namespace|g" \
   -e "s|\${LUNANEXA_IDENTITY_NAMESPACE}|$identity_namespace|g" \
   -e "s|\${LUNANEXA_IDENTITY_HOST}|$identity_host|g" \
+  -e "s|\${LUNANEXA_IDENTITY_PORT}|$identity_port|g" \
   -e "s|\${LUNANEXA_OPERATOR_HOST}|$operator_host|g" \
   -e "s|\${LUNANEXA_ENTERPRISE_HOST}|$enterprise_host|g" \
   -e "s|\${LUNANEXA_IDENTITY_DATABASE_HOST}|$database_host|g" \
   -e "s|\${LUNANEXA_IDENTITY_DATABASE_NAME}|$database_name|g" \
-  -e "s|\${LUNANEXA_IDENTITY_EGRESS_CIDR}|$identity_egress_cidr|g" \
   -e "s|\${KEYCLOAK_IMAGE}|$keycloak_image|g" \
+  -e "s|\${IDENTITY_EDGE_IMAGE}|$identity_edge_image|g" \
   "$repo_root/deploy/platform-identity.yaml" > "$identity_manifest"
+
+identity_ingress_manifest=
+if [ -n "$identity_ingress_host" ]; then
+  identity_ingress_manifest=$work_directory/platform-identity-public-ingress.yaml
+  sed \
+    -e "s|\${LUNANEXA_IDENTITY_NAMESPACE}|$identity_namespace|g" \
+    -e "s|\${LUNANEXA_IDENTITY_INGRESS_HOST}|$identity_ingress_host|g" \
+    -e "s|\${LUNANEXA_IDENTITY_PUBLIC_EDGE_PORT}|$identity_port|g" \
+    "$repo_root/deploy/platform-identity-public-ingress.yaml" \
+    > "$identity_ingress_manifest"
+fi
 
 if rg -q 'registry\.invalid|lunanexa\.invalid' \
   "$gateway_manifest" "$identity_manifest" || \
@@ -117,10 +144,22 @@ if rg -q 'registry\.invalid|lunanexa\.invalid' \
   printf '%s\n' 'platform identity render retained a deployment placeholder' >&2
   exit 1
 fi
+if [ -n "$identity_ingress_manifest" ] && \
+  rg -q '\$\{[A-Z0-9_]+\}|registry\.invalid|lunanexa\.invalid' \
+    "$identity_ingress_manifest"; then
+  printf '%s\n' 'platform identity public Ingress retained a deployment placeholder' >&2
+  exit 1
+fi
 
 output_next=$output.next
-awk 'FNR == 1 && NR != 1 { print "---" } { print }' \
-  "$gateway_manifest" "$identity_manifest" > "$output_next"
+if [ -n "$identity_ingress_manifest" ]; then
+  awk 'FNR == 1 && NR != 1 { print "---" } { print }' \
+    "$gateway_manifest" "$identity_manifest" "$identity_ingress_manifest" \
+    > "$output_next"
+else
+  awk 'FNR == 1 && NR != 1 { print "---" } { print }' \
+    "$gateway_manifest" "$identity_manifest" > "$output_next"
+fi
 chmod 0600 "$output_next"
 mv "$output_next" "$output"
 printf 'rendered LunaNexa platform identity profile: %s\n' "$output"

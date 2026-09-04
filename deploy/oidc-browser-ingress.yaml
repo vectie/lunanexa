@@ -9,9 +9,10 @@ metadata:
 data:
   LUNANEXA_OIDC_PROVIDER_REF: "${LUNANEXA_OIDC_PROVIDER_REF}"
   LUNANEXA_OIDC_ISSUER_URL: "${LUNANEXA_OIDC_ISSUER_URL}"
-  # Optional backend-only origin for clusters that cannot hairpin through the
-  # public issuer address. Browser redirects and token issuer validation still
-  # use LUNANEXA_OIDC_ISSUER_URL exactly.
+  # Backend-only origin for clusters that must not hairpin through the public
+  # issuer address. Browser redirects and token issuer validation still use
+  # LUNANEXA_OIDC_ISSUER_URL exactly. The platform-operated profile sets this
+  # to its cluster-local HTTPS identity edge.
   LUNANEXA_OIDC_TRANSPORT_ORIGIN: "${LUNANEXA_OIDC_TRANSPORT_ORIGIN}"
   LUNANEXA_OIDC_OPERATOR_REDIRECT_URI: "https://${LUNANEXA_OPERATOR_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI: "https://${LUNANEXA_ENTERPRISE_HOST}/auth/oidc/callback"
@@ -260,6 +261,8 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 8443
     - to:
         - podSelector:
             matchLabels:
@@ -336,42 +339,3 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: lunanexa-oidc-browser
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - "${LUNANEXA_OPERATOR_HOST}"
-        - "${LUNANEXA_ENTERPRISE_HOST}"
-      secretName: lunanexa-oidc-ingress-tls
-  rules:
-    - host: "${LUNANEXA_OPERATOR_HOST}"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: lunanexa-identity-gateway
-                port:
-                  number: 8081
-    - host: "${LUNANEXA_ENTERPRISE_HOST}"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: lunanexa-identity-gateway
-                port:
-                  number: 8081

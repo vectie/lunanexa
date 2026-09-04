@@ -23,6 +23,26 @@ safe_host() {
   case "$1" in ''|*[!A-Za-z0-9.-]*|.*|*.) return 1 ;; esac
   case "$1" in *..*) return 1 ;; esac
 }
+safe_authority() {
+  case "$1" in ''|*[!A-Za-z0-9.:-]*) return 1 ;; esac
+  authority_host=$1
+  case "$1" in
+    *:*)
+      authority_host=${1%:*}
+      authority_port=${1##*:}
+      case "$authority_port" in ''|*[!0-9]*) return 1 ;; esac
+      test "$authority_port" -gt 0
+      test "$authority_port" -le 65535
+      case "$authority_host" in *:*) return 1 ;; esac
+      ;;
+  esac
+  safe_host "$authority_host"
+}
+is_dns_ingress_host() {
+  case "$1" in *:*) return 1 ;; esac
+  case "$1" in *[A-Za-z-]*) ;; *) return 1 ;; esac
+  safe_host "$1"
+}
 safe_https_url() {
   case "$1" in https://*) ;; *) return 1 ;; esac
   case "${1#https://}" in ''|/*) return 1 ;; esac
@@ -54,8 +74,8 @@ if [ -n "$transport_origin" ]; then
     exit 64
   esac
 fi
-safe_host "$operator_host"
-safe_host "$enterprise_host"
+safe_authority "$operator_host"
+safe_authority "$enterprise_host"
 test "$operator_host" != "$enterprise_host"
 safe_digest_image "$gateway_image"
 command -v kubectl >/dev/null
@@ -69,6 +89,7 @@ base=$test_directory/management.yaml
 profile=$test_directory/oidc-browser-ingress.yaml
 patch=$test_directory/oidc-browser-ingress-controller-patch.yaml
 rendered=$test_directory/rendered.yaml
+browser_ingress=
 cp "$management_manifest" "$base"
 sed \
   -e "s|\${LUNANEXA_OIDC_PROVIDER_REF}|$provider_ref|g" \
@@ -78,6 +99,14 @@ sed \
   -e "s|\${LUNANEXA_ENTERPRISE_HOST}|$enterprise_host|g" \
   -e "s|\${OIDC_IDENTITY_GATEWAY_IMAGE}|$gateway_image|g" \
   "$repo_root/deploy/oidc-browser-ingress.yaml" > "$profile"
+if is_dns_ingress_host "$operator_host" && \
+  is_dns_ingress_host "$enterprise_host"; then
+  browser_ingress=$test_directory/oidc-browser-public-ingress.yaml
+  sed \
+    -e "s|\${LUNANEXA_OPERATOR_HOST}|$operator_host|g" \
+    -e "s|\${LUNANEXA_ENTERPRISE_HOST}|$enterprise_host|g" \
+    "$repo_root/deploy/oidc-browser-public-ingress.yaml" > "$browser_ingress"
+fi
 sed \
   -e "s|\${OIDC_IDENTITY_GATEWAY_IMAGE}|$gateway_image|g" \
   "$repo_root/deploy/oidc-browser-ingress-controller-patch.yaml" > "$patch"
@@ -86,15 +115,27 @@ if rg -q '\$\{[A-Z0-9_]+\}|registry\.invalid|lunanexa\.invalid' \
   printf '%s\n' 'OIDC ingress render retained a deployment placeholder' >&2
   exit 1
 fi
+if [ -n "$browser_ingress" ] && \
+  rg -q '\$\{[A-Z0-9_]+\}|registry\.invalid|lunanexa\.invalid' \
+    "$browser_ingress"; then
+  printf '%s\n' 'OIDC browser Ingress render retained a deployment placeholder' >&2
+  exit 1
+fi
 
 printf '%s\n' \
   'apiVersion: kustomize.config.k8s.io/v1beta1' \
   'kind: Kustomization' \
   'resources:' \
   '  - management.yaml' \
-  '  - oidc-browser-ingress.yaml' \
+  '  - oidc-browser-ingress.yaml' > "$test_directory/kustomization.yaml"
+if [ -n "$browser_ingress" ]; then
+  printf '%s\n' '  - oidc-browser-public-ingress.yaml' \
+    >> "$test_directory/kustomization.yaml"
+fi
+printf '%s\n' \
   'patches:' \
-  '  - path: oidc-browser-ingress-controller-patch.yaml' > "$test_directory/kustomization.yaml"
+  '  - path: oidc-browser-ingress-controller-patch.yaml' \
+  >> "$test_directory/kustomization.yaml"
 kubectl kustomize "$test_directory" > "$rendered"
 
 output_next=$output.next
