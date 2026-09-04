@@ -25,6 +25,21 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: prometheus
+        # Provider adapters pull only machine routes on the control API. Both
+        # namespace and pod identity must match; no controller Internet egress
+        # is opened for commercial or credential ceremonies.
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: commercial-provider-adapter
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: commercial-provider-adapter
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: credential-issuer-adapter
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: credential-issuer-adapter
       ports:
         - protocol: TCP
           port: 8080
@@ -33,6 +48,9 @@ spec:
         - podSelector:
             matchLabels:
               app: lunanexa-postgres
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: postgres-ha
       ports:
         - protocol: TCP
           port: 5432

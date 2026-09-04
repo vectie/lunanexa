@@ -579,6 +579,62 @@ async fn ApiService::handle_enterprise_portal(
       }
       json_reply(200, snapshot.to_json())
     }
+    (Get, "/v1/portal/self/provider-requests") => {
+      let view = try portal.self_view(subject_ref) catch {
+        error => return portal_error_reply(error)
+      } noraise {
+        value => value
+      }
+      self.commercial_mutex.acquire()
+      defer self.commercial_mutex.release()
+      let snapshot = self.commercial_integrations.snapshot(
+        view.membership.organization_id,
+      )
+      let records = snapshot.records.filter(record => {
+        match record.kind {
+          Payment | TaxInvoice =>
+            @portal.role_allows(view.membership.roles, BillingViewer)
+          IdentityVerification =>
+            view.membership.roles.contains(OrganizationAdministrator)
+          QualifiedSignature =>
+            if !@portal.role_allows(view.membership.roles, LegalSigner) {
+              false
+            } else {
+              match
+                self.commercial_integrations.record_by_id(record.record_id) {
+                Some(raw) =>
+                  match raw.entitlement_transaction_ref {
+                    Some(link) if link.has_prefix("portal-agreement:") => {
+                      let agreement_id = link["portal-agreement:".length():].to_owned()
+                      view.agreements.any(agreement => {
+                        agreement.agreement_id == agreement_id &&
+                        agreement.signer_subject_ref == Some(subject_ref)
+                      })
+                    }
+                    _ => false
+                  }
+                None => false
+              }
+            }
+        }
+      })
+      json_reply(200, { ..snapshot, records, }.to_json())
+    }
+    (Post, "/v1/portal/payment-checkouts") => {
+      let intent : ProviderPaymentCheckoutIntent? = try
+        @json.from_json(@json.parse(body))
+      catch {
+        _ => None
+      } noraise {
+        value => Some(value)
+      }
+      guard intent is Some(value) else {
+        return api_error(
+          400, "InvalidRequest", "invalid payment checkout intent", false,
+        )
+      }
+      self.create_payment_checkout(subject_ref, value)
+    }
     (Get, "/v1/portal/self/models") => {
       ignore(
         try portal.self_view(subject_ref) catch {
@@ -619,13 +675,74 @@ async fn ApiService::handle_enterprise_portal(
           400, "InvalidRequest", "invalid signature request", false,
         )
       }
-      let persisted = try
-        portal.request_signature(subject_ref, request, @async.now())
-      catch {
+      if !@contracts.valid_identifier(request.idempotency_key) {
+        return api_error(
+          400, "InvalidRequest", "invalid signature request idempotency key", false,
+        )
+      }
+      if !self.commercial_provider_adapter_ready() {
+        return api_error(
+          503, "CommercialProviderUnavailable", "qualified-signature provider adapter is not ready",
+          true,
+        )
+      }
+      let self_view = try portal.self_view(subject_ref) catch {
         error => return portal_error_reply(error)
       } noraise {
         value => value
       }
+      let existing = self_view.agreements
+        .iter()
+        .find_first(value => value.agreement_id == request.agreement_id)
+      // Forward-repair a crash after the portal transition but before the
+      // integration outbox commit. A same signer can safely requeue the stable
+      // agreement generation even if the browser generated a new retry key.
+      let persisted = match existing {
+        Some(value) if value.state == SignatureRequested &&
+          value.signer_subject_ref == Some(subject_ref) => value
+        _ =>
+          try
+            portal.request_signature(subject_ref, request, @async.now())
+          catch {
+            error => return portal_error_reply(error)
+          } noraise {
+            value => value
+          }
+      }
+      let stable_request_key = "\{persisted.agreement_id}:\{persisted.generation}:\{persisted.rendered_document_hash}"
+      let digest = provider_request_digest(
+        persisted.organization_id,
+        stable_request_key,
+      )
+      let queued = try
+        self.queue_provider_record({
+          record_id: "signature-\{digest}",
+          organization_id: persisted.organization_id,
+          kind: QualifiedSignature,
+          provider: self.commercial_provider_name.unwrap_or(""),
+          environment: self.commercial_provider_environment.unwrap_or(""),
+          external_ref: "envelope-\{digest}",
+          state: Pending,
+          expected_amount_minor: None,
+          currency: None,
+          money_scale: None,
+          expected_document_hash: Some(persisted.rendered_document_hash),
+          entitlement_transaction_ref: Some(
+            "portal-agreement:\{persisted.agreement_id}",
+          ),
+          created_unix_ms: persisted.updated_unix_ms,
+          updated_unix_ms: persisted.updated_unix_ms,
+        })
+      catch {
+        _ =>
+          return api_error(
+            503, "CommercialPersistenceFailed", "signature request was retained but provider dispatch could not be queued",
+            true,
+          )
+      } noraise {
+        value => value
+      }
+      ignore(queued)
       json_reply(202, persisted.to_json())
     }
     (Post, "/v1/portal/lease-requests") => {

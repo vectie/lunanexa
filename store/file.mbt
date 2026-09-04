@@ -4,8 +4,14 @@ pub(all) suberror DurableStoreError {
 } derive(Debug, Eq)
 
 ///|
+enum StorePersistence {
+  StoreFile(String)
+  StorePostgres(@database.PostgresDatabase, String, Int64)
+}
+
+///|
 pub struct FileStore {
-  path : String
+  persistence : StorePersistence
   mut state : MemoryStore
   mutex : @async.Mutex
   requires_epoch_advance : Bool
@@ -41,7 +47,7 @@ pub async fn FileStore::open(path : String) -> FileStore {
   let existed = @fs.exists(path)
   let state = read_snapshot(path)
   let store : FileStore = {
-    path,
+    persistence: StoreFile(path),
     state,
     mutex: Mutex(),
     requires_epoch_advance: existed,
@@ -54,24 +60,76 @@ pub async fn FileStore::open(path : String) -> FileStore {
 }
 
 ///|
-async fn FileStore::persist(self : FileStore) -> Unit {
-  let lock_file = @fs.open(
-    "\{self.path}.lock",
-    mode=ReadWrite,
-    create_mode=OpenOrCreate,
-    permission=0o600,
-  )
-  defer lock_file.close()
-  lock_file.lock(Exclusive)
-  defer lock_file.unlock()
-  let durable = read_snapshot(self.path)
-  if durable.controller_epoch() > self.state.controller_epoch() {
-    self.state = durable
+pub async fn FileStore::open_postgres(
+  database : @database.PostgresDatabase,
+  holder_id : String,
+  fencing_token : Int64,
+) -> FileStore {
+  if !database.controller_leadership_is_current(holder_id, fencing_token) {
     raise DurableStoreError::InvalidState(
-      "controller was fenced by a newer durable epoch",
+      "controller PostgreSQL leadership is not current",
     )
   }
-  write_snapshot(self.path, self.state.snapshot())
+  let payload = database.load_snapshot("control", "lunanexa.store.v1")
+  let state = match payload {
+    Some(snapshot) =>
+      MemoryStore::restore(snapshot) catch {
+        error => raise DurableStoreError::InvalidState("\{Repr(error)}")
+      }
+    None => MemoryStore::new()
+  }
+  let store : FileStore = {
+    persistence: StorePostgres(database, holder_id, fencing_token),
+    state,
+    mutex: Mutex(),
+    requires_epoch_advance: payload is Some(_),
+    controller_fenced: false,
+  }
+  if payload is None {
+    database.save_opaque_snapshot(
+      "control",
+      "lunanexa.store.v1",
+      state.snapshot(),
+    )
+  }
+  store
+}
+
+///|
+async fn FileStore::persist(self : FileStore) -> Unit {
+  match self.persistence {
+    StoreFile(path) => {
+      let lock_file = @fs.open(
+        "\{path}.lock",
+        mode=ReadWrite,
+        create_mode=OpenOrCreate,
+        permission=0o600,
+      )
+      defer lock_file.close()
+      lock_file.lock(Exclusive)
+      defer lock_file.unlock()
+      let durable = read_snapshot(path)
+      if durable.controller_epoch() > self.state.controller_epoch() {
+        self.state = durable
+        raise DurableStoreError::InvalidState(
+          "controller was fenced by a newer durable epoch",
+        )
+      }
+      write_snapshot(path, self.state.snapshot())
+    }
+    StorePostgres(database, holder_id, fencing_token) => {
+      if !database.controller_leadership_is_current(holder_id, fencing_token) {
+        raise DurableStoreError::InvalidState(
+          "controller PostgreSQL leadership was lost",
+        )
+      }
+      database.save_opaque_snapshot(
+        "control",
+        "lunanexa.store.v1",
+        self.state.snapshot(),
+      )
+    }
+  }
 }
 
 ///|
@@ -105,17 +163,24 @@ pub async fn FileStore::controller_epoch(self : FileStore) -> Int64 {
 pub async fn FileStore::current_epoch_is_durable(self : FileStore) -> Bool {
   self.mutex.acquire()
   defer self.mutex.release()
-  let lock_file = @fs.open(
-    "\{self.path}.lock",
-    mode=ReadWrite,
-    create_mode=OpenOrCreate,
-    permission=0o600,
-  )
-  defer lock_file.close()
-  lock_file.lock(Exclusive)
-  defer lock_file.unlock()
-  let durable = read_snapshot(self.path)
-  durable.controller_epoch() == self.state.controller_epoch()
+  match self.persistence {
+    StoreFile(path) => {
+      let lock_file = @fs.open(
+        "\{path}.lock",
+        mode=ReadWrite,
+        create_mode=OpenOrCreate,
+        permission=0o600,
+      )
+      defer lock_file.close()
+      lock_file.lock(Exclusive)
+      defer lock_file.unlock()
+      let durable = read_snapshot(path)
+      durable.controller_epoch() == self.state.controller_epoch()
+    }
+    StorePostgres(database, holder_id, fencing_token) =>
+      database.controller_leadership_is_current(holder_id, fencing_token) &&
+      fencing_token == self.state.controller_epoch()
+  }
 }
 
 ///|

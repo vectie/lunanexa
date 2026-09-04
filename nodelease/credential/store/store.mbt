@@ -108,6 +108,7 @@ pub struct CredentialHandoffStore {
   issuer_secret : String
   issuer_readiness : @credential.CredentialIssuerReadinessEvidence?
   mut records : Map[String, @credential.CredentialHandoffRecord]
+  mut issuer_requests : Map[String, @credential.CredentialIssuerRequest]
   mutex : @async.Mutex
 }
 
@@ -124,9 +125,12 @@ fn sorted_records(
 fn CredentialHandoffStore::snapshot_unlocked(
   self : CredentialHandoffStore,
 ) -> @credential.CredentialHandoffSnapshot {
+  let issuer_requests = self.issuer_requests.values().to_array()
+  issuer_requests.sort_by_key(value => value.request_id)
   {
     schema_version: @credential.snapshot_schema_version,
     records: sorted_records(self.records),
+    issuer_requests: Some(issuer_requests),
   }
 }
 
@@ -188,6 +192,41 @@ fn CredentialHandoffStore::restore(
     request_ids[record.request_id] = record.handoff_ref
     lease_generations["\{record.lease_id}:\{record.generation}"] = record.handoff_ref
   }
+  for request in snapshot.issuer_requests.unwrap_or([]) {
+    @credential.validate_issuer_request_intent({
+      request_id: request.request_id,
+      lease_id: request.lease_id,
+      expected_generation: request.expected_generation,
+      host_alias: request.host_alias,
+      ssh_port: request.ssh_port,
+      host_key_fingerprint: request.host_key_fingerprint,
+    })
+    if !@nodelease.valid_unix_username(request.username) ||
+      request.created_unix_ms <= 0L ||
+      request.expires_unix_ms <= request.created_unix_ms ||
+      (request.issuer_redirect_url is Some(_)) !=
+      (request.dispatched_unix_ms is Some(_)) ||
+      request.dispatched_unix_ms.map_or(false, value => {
+        value < request.created_unix_ms || value >= request.expires_unix_ms
+      }) ||
+      self.issuer_requests.contains(request.request_id) {
+      raise InvalidSnapshot("invalid credential issuer request")
+    }
+    match request.issuer_redirect_url {
+      Some(url) =>
+        @credential.validate_issue_intent({
+          request_id: request.request_id,
+          lease_id: request.lease_id,
+          expected_generation: request.expected_generation,
+          host_alias: request.host_alias,
+          ssh_port: request.ssh_port,
+          host_key_fingerprint: request.host_key_fingerprint,
+          issuer_redirect_url: url,
+        })
+      None => ()
+    }
+    self.issuer_requests[request.request_id] = request
+  }
 }
 
 ///|
@@ -203,6 +242,7 @@ fn CredentialHandoffStore::empty(
     issuer_secret,
     issuer_readiness: None,
     records: Map([]),
+    issuer_requests: Map([]),
     mutex: Mutex(),
   }
 }
@@ -341,6 +381,206 @@ fn CredentialHandoffStore::by_request(
   request_id : String,
 ) -> @credential.CredentialHandoffRecord? {
   self.records.values().find_first(record => record.request_id == request_id)
+}
+
+///|
+pub async fn CredentialHandoffStore::queue_issuer_request(
+  self : CredentialHandoffStore,
+  intent : @credential.CredentialIssuerRequestIntent,
+  lease : @nodelease.ExclusiveNodeLease,
+  now_unix_ms : Int64,
+) -> @credential.CredentialIssuerRequest {
+  @credential.validate_issuer_request_intent(intent)
+  if !self.issuer_adapter_ready(now_unix_ms) {
+    raise @credential.CredentialHandoffError::InvalidInput(
+      "credential issuer is not ready",
+    )
+  }
+  if intent.lease_id != lease.intent.lease_id ||
+    intent.expected_generation != lease.generation {
+    raise @credential.CredentialHandoffError::StaleGeneration
+  }
+  if lease.state != Active ||
+    now_unix_ms < lease.intent.starts_unix_ms ||
+    now_unix_ms >= lease.intent.expires_unix_ms {
+    raise @credential.CredentialHandoffError::InvalidInput(
+      "credential issuer request requires an active lease",
+    )
+  }
+  self.mutex.acquire()
+  let previous = self.issuer_requests.copy()
+  try {
+    match self.issuer_requests.get(intent.request_id) {
+      Some(existing) if existing.lease_id == intent.lease_id &&
+        existing.expected_generation == intent.expected_generation &&
+        existing.host_alias == intent.host_alias &&
+        existing.ssh_port == intent.ssh_port &&
+        existing.host_key_fingerprint == intent.host_key_fingerprint => {
+        self.mutex.release()
+        return existing
+      }
+      Some(_) => raise @credential.CredentialHandoffError::IdempotencyConflict
+      None => ()
+    }
+    if self.issuer_requests
+      .values()
+      .any(value => {
+        value.lease_id == intent.lease_id &&
+        value.expected_generation == intent.expected_generation
+      }) {
+      raise @credential.CredentialHandoffError::IdempotencyConflict
+    }
+    let request : @credential.CredentialIssuerRequest = {
+      request_id: intent.request_id,
+      lease_id: intent.lease_id,
+      expected_generation: intent.expected_generation,
+      username: lease.intent.unix_username,
+      host_alias: intent.host_alias,
+      ssh_port: intent.ssh_port,
+      host_key_fingerprint: intent.host_key_fingerprint,
+      created_unix_ms: now_unix_ms,
+      expires_unix_ms: lease.intent.expires_unix_ms,
+      issuer_redirect_url: None,
+      dispatched_unix_ms: None,
+    }
+    self.issuer_requests[intent.request_id] = request
+    self.persist()
+    self.mutex.release()
+    request
+  } catch {
+    error => {
+      self.issuer_requests = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+pub async fn CredentialHandoffStore::pending_issuer_requests(
+  self : CredentialHandoffStore,
+  now_unix_ms : Int64,
+) -> Array[@credential.CredentialIssuerRequest] {
+  self.mutex.acquire()
+  let values = self.issuer_requests
+    .values()
+    .filter(value => {
+      value.issuer_redirect_url is None && now_unix_ms < value.expires_unix_ms
+    })
+    .to_array()
+  values.sort_by_key(value => value.created_unix_ms)
+  self.mutex.release()
+  values
+}
+
+///|
+pub async fn CredentialHandoffStore::issuer_request(
+  self : CredentialHandoffStore,
+  request_id : String,
+) -> @credential.CredentialIssuerRequest? {
+  self.mutex.acquire()
+  let request = self.issuer_requests.get(request_id)
+  self.mutex.release()
+  request
+}
+
+///|
+pub async fn CredentialHandoffStore::accept_issuer_dispatch(
+  self : CredentialHandoffStore,
+  receipt : @credential.CredentialIssuerDispatchReceipt,
+  lease : @nodelease.ExclusiveNodeLease,
+) -> (@credential.CredentialIssuerRequest, @credential.CredentialHandoffRecord) {
+  self.mutex.acquire()
+  let previous_requests = self.issuer_requests.copy()
+  let previous_records = self.records.copy()
+  try {
+    guard self.issuer_requests.get(receipt.request_id) is Some(request) else {
+      raise @credential.CredentialHandoffError::NotFound
+    }
+    if request.issuer_redirect_url == Some(receipt.issuer_redirect_url) &&
+      request.dispatched_unix_ms == Some(receipt.accepted_unix_ms) {
+      guard self.by_request(request.request_id) is Some(existing) else {
+        raise @credential.CredentialHandoffError::InvalidSnapshot(
+          "dispatched issuer request lacks handoff",
+        )
+      }
+      self.mutex.release()
+      return (request, existing)
+    }
+    if request.lease_id != lease.intent.lease_id ||
+      request.expected_generation != lease.generation {
+      raise @credential.CredentialHandoffError::StaleGeneration
+    }
+    if lease.state != Active ||
+      receipt.accepted_unix_ms < lease.intent.starts_unix_ms ||
+      receipt.accepted_unix_ms >= lease.intent.expires_unix_ms ||
+      request.issuer_redirect_url is Some(_) ||
+      receipt.accepted_unix_ms < request.created_unix_ms ||
+      receipt.accepted_unix_ms >= request.expires_unix_ms ||
+      !self.issuer_redirect_ready(
+        receipt.issuer_redirect_url,
+        receipt.accepted_unix_ms,
+      ) {
+      raise @credential.CredentialHandoffError::InvalidInput(
+        "credential issuer dispatch is invalid",
+      )
+    }
+    let intent : @credential.CredentialHandoffIssueIntent = {
+      request_id: request.request_id,
+      lease_id: request.lease_id,
+      expected_generation: request.expected_generation,
+      host_alias: request.host_alias,
+      ssh_port: request.ssh_port,
+      host_key_fingerprint: request.host_key_fingerprint,
+      issuer_redirect_url: receipt.issuer_redirect_url,
+    }
+    @credential.validate_issue_intent(intent)
+    if self.by_request(request.request_id) is Some(_) ||
+      self.records
+      .values()
+      .any(record => {
+        record.lease_id == request.lease_id &&
+        record.generation == request.expected_generation
+      }) {
+      raise @credential.CredentialHandoffError::IdempotencyConflict
+    }
+    let handoff_ref = self.handoff_ref(intent, lease, receipt.accepted_unix_ms)
+    let record : @credential.CredentialHandoffRecord = {
+      version: @credential.contract_version,
+      handoff_ref,
+      request_id: request.request_id,
+      lease_id: request.lease_id,
+      node_id: lease.intent.node_id,
+      subject_ref: lease.intent.subject_ref,
+      generation: lease.generation,
+      username: request.username,
+      host_alias: request.host_alias,
+      ssh_port: request.ssh_port,
+      host_key_fingerprint: request.host_key_fingerprint,
+      issuer_redirect_url: receipt.issuer_redirect_url,
+      created_unix_ms: receipt.accepted_unix_ms,
+      expires_unix_ms: lease.intent.expires_unix_ms,
+      redeemed_unix_ms: None,
+      revoked_unix_ms: None,
+    }
+    let updated = {
+      ..request,
+      issuer_redirect_url: Some(receipt.issuer_redirect_url),
+      dispatched_unix_ms: Some(receipt.accepted_unix_ms),
+    }
+    self.issuer_requests[receipt.request_id] = updated
+    self.records[handoff_ref] = record
+    self.persist()
+    self.mutex.release()
+    (updated, record)
+  } catch {
+    error => {
+      self.issuer_requests = previous_requests
+      self.records = previous_records
+      self.mutex.release()
+      raise error
+    }
+  }
 }
 
 ///|

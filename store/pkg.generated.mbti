@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
 }
 
 // Values
@@ -45,7 +46,7 @@ pub(all) struct BackupBundle {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct FileStore {
-  path : String
+  persistence : StorePersistence
   mut state : MemoryStore
   mutex : @async.Mutex
   requires_epoch_advance : Bool
@@ -67,6 +68,7 @@ pub async fn FileStore::heartbeats(Self) -> Array[@contracts.NodeHeartbeat]
 pub async fn FileStore::idempotent_result(Self, String) -> @contracts.WorkloadResponse?
 pub async fn FileStore::node_directive(Self, String) -> @contracts.NodeDirective?
 pub async fn FileStore::open(String) -> Self
+pub async fn FileStore::open_postgres(@database.PostgresDatabase, String, Int64) -> Self
 pub async fn FileStore::put_assignment(Self, @contracts.DesiredAssignment) -> Unit
 pub async fn FileStore::put_heartbeat(Self, @contracts.NodeHeartbeat) -> Unit
 pub async fn FileStore::put_node_directive(Self, @contracts.NodeDirective) -> Unit
@@ -116,6 +118,8 @@ pub fn MemoryStore::snapshot(Self) -> String
 pub fn MemoryStore::workload_result(Self, String) -> @contracts.WorkloadResponse?
 pub fn MemoryStore::workload_results(Self) -> Array[WorkloadResultRecord]
 pub impl MetadataStore for MemoryStore
+
+type StorePersistence
 
 pub(all) struct StoreSnapshot {
   schema_version : String

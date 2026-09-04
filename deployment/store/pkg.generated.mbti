@@ -4,6 +4,7 @@ package "vectie/lunanexa/deployment/store"
 import {
   "moonbitlang/async",
   "moonbitlang/core/debug",
+  "vectie/lunanexa/database",
   "vectie/lunanexa/deployment",
 }
 
@@ -15,8 +16,10 @@ pub(all) suberror DeploymentStoreError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+type DeploymentPersistence
+
 pub struct FileDeploymentStore {
-  path : String
+  persistence : DeploymentPersistence
   signing_secret : String
   templates : Map[String, @deployment.ModelServiceTemplate]
   operations : Map[String, @deployment.DeploymentOperation]
@@ -25,6 +28,7 @@ pub struct FileDeploymentStore {
 pub async fn FileDeploymentStore::create_operation(Self, @deployment.DeploymentPlan, Int64) -> @deployment.DeploymentOperation
 pub async fn FileDeploymentStore::deployment(Self, String) -> @deployment.DeploymentOperation?
 pub async fn FileDeploymentStore::open(String, String) -> Self
+pub async fn FileDeploymentStore::open_postgres(@database.PostgresDatabase, String) -> Self
 pub async fn FileDeploymentStore::operation(Self, String) -> @deployment.DeploymentOperation?
 pub async fn FileDeploymentStore::operations(Self) -> Array[@deployment.DeploymentOperation]
 pub async fn FileDeploymentStore::register_template(Self, @deployment.ModelServiceTemplate) -> @deployment.ModelServiceTemplate

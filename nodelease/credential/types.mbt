@@ -33,6 +33,43 @@ pub(all) struct CredentialHandoffIssueIntent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Operator intent before an external credential issuer has created its
+/// browser ceremony. Node and human subject are derived from the active lease.
+pub(all) struct CredentialIssuerRequestIntent {
+  request_id : String
+  lease_id : String
+  expected_generation : Int64
+  host_alias : String
+  ssh_port : Int
+  host_key_fingerprint : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Durable minimal-disclosure issuer outbox record.
+pub(all) struct CredentialIssuerRequest {
+  request_id : String
+  lease_id : String
+  expected_generation : Int64
+  username : String
+  host_alias : String
+  ssh_port : Int
+  host_key_fingerprint : String
+  created_unix_ms : Int64
+  expires_unix_ms : Int64
+  issuer_redirect_url : String?
+  dispatched_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Machine adapter receipt. It acknowledges ceremony creation only; it does
+/// not contain an SSH key, certificate, password, or node identity.
+pub(all) struct CredentialIssuerDispatchReceipt {
+  request_id : String
+  issuer_redirect_url : String
+  accepted_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct CredentialHandoffRecord {
   version : String
   handoff_ref : String
@@ -88,6 +125,7 @@ pub(all) struct CredentialHandoffRedemption {
 pub(all) struct CredentialHandoffSnapshot {
   schema_version : String
   records : Array[CredentialHandoffRecord]
+  issuer_requests : Array[CredentialIssuerRequest]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

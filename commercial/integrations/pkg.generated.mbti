@@ -41,6 +41,29 @@ pub(all) struct ExternalCallback {
   signature_verified : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct ExternalDispatchReceipt {
+  record_id : String
+  provider : String
+  environment : String
+  external_ref : String
+  action_url : String
+  action_expires_unix_ms : Int64
+  accepted_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ExternalProviderIntent {
+  record_id : String
+  kind : ExternalRecordKind
+  provider : String
+  environment : String
+  external_ref : String
+  expected_amount_minor : Int64?
+  currency : String?
+  money_scale : Int?
+  expected_document_hash : String?
+  created_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct ExternalRecord {
   record_id : String
   organization_id : String
@@ -92,6 +115,8 @@ pub(all) struct ExternalRecordView {
   money_scale : Int?
   expected_document_hash : String?
   entitlement_transaction_ref_sha256 : String?
+  action_url : String?
+  action_expires_unix_ms : Int64?
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -99,6 +124,8 @@ pub(all) struct IntegrationDurableSnapshot {
   schema_version : String
   records : Array[ExternalRecord]
   callbacks : Array[ExternalCallback]
+  dispatch_receipts : Array[ExternalDispatchReceipt]?
+  dispatch_receipt_history : Array[ExternalDispatchReceipt]?
   reconciliation_exception_counts : Map[String, Int]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
@@ -113,13 +140,20 @@ pub struct IntegrationStore {
   mut records : Map[String, ExternalRecord]
   mut external_index : Map[String, String]
   mut callbacks : Map[String, ExternalCallback]
+  mut dispatch_receipts : Map[String, ExternalDispatchReceipt]
+  mut dispatch_receipt_history : Array[ExternalDispatchReceipt]
   mut reconciliation_exception_counts : Map[String, Int]
 }
 pub fn IntegrationStore::durable_snapshot(Self) -> IntegrationDurableSnapshot
 pub fn IntegrationStore::from_durable_snapshot(IntegrationDurableSnapshot) -> Self raise IntegrationError
+pub fn IntegrationStore::mark_submitted(Self, String, Int64) -> (ExternalRecord, ReconciliationResult) raise IntegrationError
 pub fn IntegrationStore::new() -> Self
+pub fn IntegrationStore::pending_provider_intents(Self, String, String) -> Array[ExternalProviderIntent] raise IntegrationError
 pub fn IntegrationStore::reconcile_callback(Self, ExternalCallback) -> (ExternalRecord, ReconciliationResult) raise IntegrationError
+pub fn IntegrationStore::record_by_id(Self, String) -> ExternalRecord?
+pub fn IntegrationStore::record_dispatch(Self, ExternalDispatchReceipt) -> (ExternalRecord, ReconciliationResult) raise IntegrationError
 pub fn IntegrationStore::register(Self, ExternalRecord) -> ReconciliationResult raise IntegrationError
+pub fn IntegrationStore::renew_expired_dispatch(Self, String, Int64) -> (ExternalRecord, ReconciliationResult) raise IntegrationError
 pub fn IntegrationStore::replace_from_durable_snapshot(Self, IntegrationDurableSnapshot) -> Unit raise IntegrationError
 pub fn IntegrationStore::snapshot(Self, String) -> IntegrationSnapshot
 

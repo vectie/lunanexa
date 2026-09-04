@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
   "vectie/lunanexa/settings",
 }
 
@@ -94,9 +95,20 @@ pub(all) struct EvidenceBundle {
   benchmark_summaries : Array[BenchmarkSummary]
   scenario_passed : Bool
   isolation_scan_passed : Bool
+  physical_cluster_passed : Bool
+  postgres_failover_passed : Bool
+  object_store_transfer_passed : Bool
+  inference_billing_passed : Bool
+  provider_integration_passed : Bool
+  browser_acceptance_passed : Bool
   security_report_ref : String
   operations_report_ref : String
   license_report_ref : String
+  ha_report_ref : String
+  object_store_report_ref : String
+  provider_report_ref : String
+  sanitization_report_ref : String
+  browser_report_ref : String
   accepted_by : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn EvidenceBundle::export_json(Self) -> String
@@ -106,14 +118,25 @@ pub(all) struct EvidenceBundleInput {
   release_version : String
   scenario_passed : Bool
   isolation_scan_passed : Bool
+  physical_cluster_passed : Bool
+  postgres_failover_passed : Bool
+  object_store_transfer_passed : Bool
+  inference_billing_passed : Bool
+  provider_integration_passed : Bool
+  browser_acceptance_passed : Bool
   security_report_ref : String
   operations_report_ref : String
   license_report_ref : String
+  ha_report_ref : String
+  object_store_report_ref : String
+  provider_report_ref : String
+  sanitization_report_ref : String
+  browser_report_ref : String
   accepted_by : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct FileTelemetry {
-  path : String
+  persistence : TelemetryPersistence
   sample_history_limit : Int
   benchmark_history_limit : Int
   safety_limits : @settings.TelemetrySafetySettings
@@ -123,6 +146,7 @@ pub struct FileTelemetry {
   mutex : @async.Mutex
 }
 pub async fn FileTelemetry::open(String, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
+pub async fn FileTelemetry::open_postgres(@database.PostgresDatabase, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
 pub async fn FileTelemetry::record_benchmark(Self, BenchmarkRun) -> BenchmarkSummary
 pub async fn FileTelemetry::record_sample(Self, @contracts.TelemetrySample) -> Unit
 pub async fn FileTelemetry::snapshot(Self) -> TelemetrySnapshot
@@ -148,6 +172,8 @@ pub(all) struct ServiceObjective {
   minimum_throughput_units_per_second : Int
   maximum_failure_per_mille : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type TelemetryPersistence
 
 pub(all) struct TelemetrySnapshot {
   schema_version : String

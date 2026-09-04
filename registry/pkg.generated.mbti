@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/database",
 }
 
 // Values
@@ -93,13 +94,15 @@ pub(all) struct EvaluationRecord {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct FileRegistry {
-  path : String
-  registry : ModelRegistry
+  persistence : RegistryPersistence
+  mut registry : ModelRegistry
   mutex : @async.Mutex
 }
+pub async fn FileRegistry::adopt_import(Self, @contracts.ModelRecord, LicenseRecord) -> Unit
 pub async fn FileRegistry::approve(Self, String, String, Int64) -> @contracts.ModelRecord
 pub async fn FileRegistry::deployment_allowed(Self, String, @contracts.RuntimeSpec) -> Bool
 pub async fn FileRegistry::open(String) -> Self
+pub async fn FileRegistry::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn FileRegistry::promote(Self, String, String, String, RolloutStage, String, Int64) -> PromotionReceipt
 pub async fn FileRegistry::record_evaluation(Self, EvaluationRecord) -> Unit
 pub async fn FileRegistry::record_license(Self, LicenseRecord) -> Unit
@@ -172,6 +175,8 @@ pub(all) struct PromotionReceipt {
   generation : Int64
   timestamp_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type RegistryPersistence
 
 pub(all) struct RegistrySnapshot {
   schema_version : String

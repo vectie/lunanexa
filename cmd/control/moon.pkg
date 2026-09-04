@@ -21,6 +21,7 @@ import {
   "vectie/lunanexa/notifications/store" @notification_store,
   "vectie/lunanexa/notifications/worker" @notification_worker,
   "vectie/lunanexa/observability",
+  "vectie/lunanexa/onboarding",
   "vectie/lunanexa/portal/store" @portal_store,
   "vectie/lunanexa/store",
   "vectie/lunanexa/scheduler",

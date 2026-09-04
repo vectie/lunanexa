@@ -114,6 +114,59 @@ source checksum verification. Enabling it before the directory has a reviewed
 packaging/materialization contract would falsely promise deployability and is
 not an acceptable shortcut.
 
+## Adopt a verified object-store import
+
+The model itself is never embedded in a LunaNexa image. After an explicitly
+authorized publisher has copied the checksum-verified source directory to the
+deployment's Moongate S3 bucket and recorded an immutable `s3://` artifact URI,
+an operator can adopt that import into the registry:
+
+```http
+POST /v1/model-sources/modelscope/imports/{import_id}:adopt
+Authorization: Bearer <operator session or token>
+Content-Type: application/json
+
+{
+  "model_id": "model.minicpm5-1b",
+  "version": "modelscope-main",
+  "license_id": "license.minicpm5-apache",
+  "compatible_architectures": ["nvidia-gb10", "nvidia-ampere"],
+  "minimum_memory_mib": 8192
+}
+```
+
+Adoption succeeds only when the durable import is `Verified`, complete, has a
+valid SHA-256 manifest digest, and points to `s3://`. The model and its pending
+license record are then persisted atomically. The result remains a `Candidate`:
+license acceptance, signature verification, evaluation, explicit approval,
+alias promotion, and deployment are still separate auditable actions.
+
+The node materializer downloads the immutable object directly from S3 with
+SigV4 through the configured Moongate endpoint. S3 credentials remain on the
+node and are not forwarded to a runtime container. Publishing local model bytes
+is deliberately not an implicit controller action: the exact source path,
+bucket/prefix, endpoint, and transfer authority must be deployment-approved.
+
+### Operator console adoption
+
+The **Models** screen keeps durable imports visible after refresh or a new
+operator sign-in; repeating a ModelScope catalog search is not required. An
+**Adopt as Candidate** action is shown only for a complete `Verified` import
+with a valid SHA-256 manifest, declared upstream license, and immutable
+`s3://` artifact URI. Imports that still point at the adapter-local model store
+show the missing S3-publication prerequisite and cannot open the form.
+
+The adoption form asks only for values the controller cannot infer safely:
+model ID, registry version, pending-license record ID, compatible
+architectures, and minimum accelerator memory. It keeps those values while an
+operator corrects validation or request errors, reports loading and completion
+through accessible status regions, and stacks into a single column on narrow
+screens. A successful response is described as `Candidate` registration—not
+approval or deployment—and the console continues to show the four remaining
+gates: license acceptance, artifact signature/provenance, digest-specific
+evaluation, and explicit operator approval. Alias promotion, runtime
+qualification, and deployment remain separate later actions.
+
 ## Management deployment
 
 The management foundation deploys `lunanexa-model-source` as a private

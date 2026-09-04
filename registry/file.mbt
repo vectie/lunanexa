@@ -1,7 +1,13 @@
 ///|
+enum RegistryPersistence {
+  RegistryFile(String)
+  RegistryPostgres(@database.PostgresDatabase)
+}
+
+///|
 pub struct FileRegistry {
-  path : String
-  registry : ModelRegistry
+  persistence : RegistryPersistence
+  mut registry : ModelRegistry
   mutex : @async.Mutex
 }
 
@@ -25,7 +31,7 @@ pub async fn FileRegistry::open(path : String) -> FileRegistry {
   } else {
     ModelRegistry::new()
   }
-  let durable = { path, registry, mutex: Mutex() }
+  let durable = { persistence: RegistryFile(path), registry, mutex: Mutex() }
   if !@fs.exists(path) {
     write_registry(path, registry.snapshot())
   }
@@ -33,8 +39,40 @@ pub async fn FileRegistry::open(path : String) -> FileRegistry {
 }
 
 ///|
+pub async fn FileRegistry::open_postgres(
+  database : @database.PostgresDatabase,
+) -> FileRegistry {
+  let payload = database.load_snapshot("model_registry", "lunanexa.registry.v1")
+  let registry = match payload {
+    Some(snapshot) => ModelRegistry::restore(snapshot)
+    None => ModelRegistry::new()
+  }
+  let durable = {
+    persistence: RegistryPostgres(database),
+    registry,
+    mutex: Mutex(),
+  }
+  if payload is None {
+    database.save_opaque_snapshot(
+      "model_registry",
+      "lunanexa.registry.v1",
+      registry.snapshot(),
+    )
+  }
+  durable
+}
+
+///|
 async fn FileRegistry::persist(self : FileRegistry) -> Unit {
-  write_registry(self.path, self.registry.snapshot())
+  match self.persistence {
+    RegistryFile(path) => write_registry(path, self.registry.snapshot())
+    RegistryPostgres(database) =>
+      database.save_opaque_snapshot(
+        "model_registry",
+        "lunanexa.registry.v1",
+        self.registry.snapshot(),
+      )
+  }
 }
 
 ///|
@@ -110,6 +148,54 @@ pub async fn FileRegistry::record_license(
     self.persist()
   } catch {
     error => {
+      self.mutex.release()
+      raise error
+    }
+  } noraise {
+    _ => self.mutex.release()
+  }
+}
+
+///|
+/// Atomically adopts a verified external import as a registry candidate and
+/// records its license for separate human acceptance. A persistence failure
+/// restores the exact previous registry snapshot.
+pub async fn FileRegistry::adopt_import(
+  self : FileRegistry,
+  model : @contracts.ModelRecord,
+  license : LicenseRecord,
+) -> Unit {
+  self.mutex.acquire()
+  let before_json = self.registry.snapshot()
+  let before : RegistrySnapshot = @json.from_json(@json.parse(before_json))
+  try {
+    let existing_model = before.models
+      .iter()
+      .find_first(value => {
+        value.model_id == model.model_id && value.version == model.version
+      })
+    let existing_license = before.licenses
+      .iter()
+      .find_first(value => value.license_id == license.license_id)
+    match existing_model {
+      Some(value) if value != model => raise InvalidMetadata(model.model_id)
+      _ => ()
+    }
+    match existing_license {
+      Some(value) if value != license =>
+        raise InvalidMetadata(license.license_id)
+      _ => ()
+    }
+    if existing_model is None {
+      self.registry.register_model(model)
+    }
+    if existing_license is None {
+      self.registry.record_license(license)
+    }
+    self.persist()
+  } catch {
+    error => {
+      self.registry = ModelRegistry::restore(before_json)
       self.mutex.release()
       raise error
     }

@@ -17,6 +17,10 @@ import {
 
 supported_targets = "native"
 
+import {
+  "moonbitlang/core/env",
+} for "test"
+
 options(
   link: {
     "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq" },

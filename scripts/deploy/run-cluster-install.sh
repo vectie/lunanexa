@@ -135,7 +135,7 @@ verify_management_manifests() {
   if [ -f "$rendered_directory/management.yaml" ]; then
     return
   fi
-  for manifest in prerequisites.yaml postgres.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
+  for manifest in prerequisites.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
     test -f "$rendered_directory/$manifest"
   done
 }
@@ -155,7 +155,9 @@ verify_management_secret_manifest() {
         "assignment-signing-secret",
         "audit-token",
         "catalog-signing-secret",
+        "commercial-provider-adapter-token",
         "credential-handoff-issuer-secret",
+        "credential-issuer-adapter-token",
         "entitlement-authority-callback-token",
         "exclusive-lease-signing-secret",
         "guide-admin-auth-key",
@@ -172,10 +174,11 @@ verify_management_secret_manifest() {
         "lunanexa-control-credentials",
         "lunanexa-cosign-trust",
         "lunanexa-database",
+        "lunanexa-model-source-credentials",
         "lunanexa-offline-commerce-readiness"
       ] as $secret_names |
       resources as $resources |
-      ($resources | length) == 4 and
+      ($resources | length) == 5 and
       ([$resources[].metadata.name] | sort) == ($secret_names | sort) and
       all($resources[];
         .apiVersion == "v1" and .kind == "Secret" and
@@ -199,7 +202,9 @@ verify_management_secret_manifest() {
       (($resources[] | select(.metadata.name == "lunanexa-cosign-trust") | .data | keys) ==
         ["cosign.pub"]) and
       (($resources[] | select(.metadata.name == "lunanexa-offline-commerce-readiness") | .data | keys) ==
-        ["pending"])
+        ["pending"]) and
+      (($resources[] | select(.metadata.name == "lunanexa-model-source-credentials") | .data | keys) ==
+        ["token"])
     ' >/dev/null; then
     printf '%s\n' '[blocked] management secret manifest violates the exact resource, authority, or printable-byte contract' >&2
     return 1
@@ -275,10 +280,17 @@ verify_kubernetes_accelerator() {
 }
 
 wait_for_management_rollouts() {
-  printf '%s\n' '[wait] PostgreSQL stateful workload'
-  KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" rollout status \
-    statefulset/lunanexa-postgres --timeout=5m
-  for deployment_name in lunanexa-control lunanexa-console lunanexa-enterprise lunanexa-workbench lunanexa-model-source; do
+  printf '%s\n' '[wait] deployment/lunanexa-control elected leader endpoint'
+  KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" wait \
+    --for=jsonpath='{.status.updatedReplicas}'=3 \
+    deployment/lunanexa-control --timeout=5m
+  KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" wait \
+    --for=jsonpath='{.status.replicas}'=3 \
+    deployment/lunanexa-control --timeout=5m
+  KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" wait \
+    --for=jsonpath='{.status.availableReplicas}'=1 \
+    deployment/lunanexa-control --timeout=5m
+  for deployment_name in lunanexa-console lunanexa-enterprise lunanexa-workbench lunanexa-model-source; do
     printf '[wait] deployment/%s\n' "$deployment_name"
     KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" rollout status \
       "deployment/$deployment_name" --timeout=5m
@@ -288,7 +300,7 @@ wait_for_management_rollouts() {
 verify_management_services() {
   KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" get \
     statefulsets,deployments,pods,services
-  for service_name in lunanexa-postgres lunanexa-control lunanexa-console lunanexa-enterprise lunanexa-workbench lunanexa-model-source; do
+  for service_name in lunanexa-control lunanexa-console lunanexa-enterprise lunanexa-workbench lunanexa-model-source; do
     endpoint_addresses=$(KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" get \
       "endpoints/$service_name" \
       -o 'jsonpath={range .subsets[*].addresses[*]}{.ip}{"\n"}{end}')
@@ -309,7 +321,7 @@ preview_management_changes() {
     preview_manifests=$rendered_directory/management.yaml
   else
     preview_manifests=
-    for manifest in prerequisites.yaml postgres.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
+    for manifest in prerequisites.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
       preview_manifests="${preview_manifests}${preview_manifests:+
 }$rendered_directory/$manifest"
     done
@@ -380,7 +392,7 @@ if [ "$installs_management" -eq 1 ]; then
   if [ -f "$rendered_directory/management.yaml" ]; then
     scan_manifest_for_placeholders "$rendered_directory/management.yaml"
   else
-    for manifest in prerequisites.yaml postgres.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
+    for manifest in prerequisites.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
       scan_manifest_for_placeholders "$rendered_directory/$manifest"
     done
   fi
@@ -480,7 +492,7 @@ if [ "$installs_management" -eq 1 ]; then
   if [ -f "$rendered_directory/management.yaml" ]; then
     KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" apply -f "$rendered_directory/management.yaml"
   else
-    for manifest in prerequisites.yaml postgres.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
+    for manifest in prerequisites.yaml controller.yaml console.yaml enterprise.yaml workbench.yaml network-policy.yaml; do
       KUBECONFIG="$kubeconfig" kubectl -n "$cluster_namespace" apply -f "$rendered_directory/$manifest"
     done
   fi

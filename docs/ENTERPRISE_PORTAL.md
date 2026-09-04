@@ -58,6 +58,8 @@ clients):
 - `POST /v1/portal/self/api-keys`
 - `POST /v1/portal/self/api-keys/{key_id}:revoke`
 - `POST /v1/portal/signature-requests`
+- `POST /v1/portal/payment-checkouts`
+- `GET /v1/portal/self/provider-requests`
 - `POST /v1/portal/lease-requests`
 
 Operator endpoints require the operator authority:
@@ -71,6 +73,38 @@ Provider adapters call `POST /v1/provider-callbacks/commercial` with the exact
 HMAC-bound routing headers described in the deployment guide. The legacy
 operator execution route fails closed with `VerifiedTransportRequired`; an
 operator bearer token is not signature evidence.
+
+The provider adapter first claims queued work with its independent machine
+token at `GET /internal/v1/commercial-provider/requests`. After creating the
+provider ceremony it posts a bound dispatch receipt to
+`POST /internal/v1/commercial-provider/dispatch-receipts`. The browser sees the
+validated HTTPS action URL only in its role-scoped projection: billing roles
+see payment/invoice actions, organization administrators see identity actions,
+and only the agreement's bound legal signer sees a signature action.
+Until that receipt is durable the state remains `Pending`; after it, the state
+is only `Submitted`. Settlement and execution still require the signed
+provider callback.
+
+The enterprise UI maps this protocol to two short, explicit customer journeys:
+
+- **Usage & costs** sends only the finalized billing-period ID and an
+  idempotency key. The server derives amount, currency and scale from that
+  authenticated organization's immutable finalized period and binds one stable
+  checkout record to it. The customer waits for the provider adapter,
+  and explicitly opens the returned HTTPS action. Creating or opening a
+  checkout is never represented as settlement.
+- **Agreements** binds qualified-signature requests to the immutable document
+  hash. `Pending`, `Submitted`, completed, failed and expired states remain
+  visible; an unexpired HTTPS action is opened only after a customer click.
+  Non-HTTPS, user-info, fragment-bearing and expired actions are not rendered
+  as links. An elapsed `Submitted` action can be renewed by reposting the same
+  agreement request with a new browser idempotency key; the old receipt is
+  retired and the agreement generation, signer and document remain unchanged.
+
+Both pages provide a manual status refresh, bilingual live-region feedback and
+mobile layouts with full-width actions. The UI never embeds provider scripts,
+automatically redirects, or treats the provider action URL as completion
+evidence.
 
 The portal snapshot is stored atomically at `LUNANEXA_PORTAL_PATH`. Lease
 submissions are idempotent. Reviews are generation-fenced. Approval first

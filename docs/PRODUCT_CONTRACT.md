@@ -186,14 +186,15 @@ references, incompatible data classes, or insufficient capacity create typed
 preflight blockers rather than partially launching a runtime.
 
 The v1 one-click materialization contract keeps stable `s3://bucket/object`
-logical references. The first deployment profile resolves them through an
-artifact gateway rooted at `/data/models` on its selected storage placement;
-other profiles may use another reviewed deployment-owned gateway. A detached
+references. Production nodes resolve them directly against the reviewed
+Moongate S3-compatible HTTPS origin and authenticate with node-local,
+least-privilege SigV4 credentials that are never passed to runtimes. A detached
 signature may have its own reference; an opaque Cosign evidence reference
 resolves to the sibling `<model-object>.sig` object. OCI remains the
 digest-pinned runtime-image transport. Artifact transfer is pull-based by the
 selected node and bound to its live signed assignment; the controller never
-opens an SSH, copy or arbitrary shell channel.
+opens an SSH, copy or arbitrary shell channel and does not mount model bytes in
+the production HA profile.
 
 ## 7. Explicit non-goals for v1
 

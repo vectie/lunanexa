@@ -83,6 +83,13 @@ pub fn PostgresDatabase::projection_count(
 
 ///|
 fn allowed_domain(domain : String) -> Bool {
+  domain == "control" ||
+  domain == "model_registry" ||
+  domain == "node_enrollment" ||
+  domain == "scheduler" ||
+  domain == "telemetry" ||
+  domain == "deployments" ||
+  domain == "access_onboarding" ||
   domain == "accounts" ||
   domain == "client_handoffs" ||
   domain == "enterprise_portal" ||
@@ -98,6 +105,133 @@ fn allowed_domain(domain : String) -> Bool {
   domain == "technical_operations" ||
   domain == "credential_handoffs" ||
   domain == "exclusive_node_leases"
+}
+
+///|
+let controller_advisory_lock_id : String = "5496452340495695181"
+
+///|
+fn valid_controller_holder(holder_id : String) -> Bool {
+  let value = holder_id.trim()
+  value.length() > 0 && value.length() <= 256
+}
+
+///|
+/// Tries to become the sole active control-plane writer. PostgreSQL session
+/// advisory locking supplies crash release; the monotonically increasing row
+/// supplies a durable fencing token for assignments and readiness.
+pub async fn PostgresDatabase::try_acquire_controller_leadership(
+  self : PostgresDatabase,
+  holder_id : String,
+) -> Int64? {
+  if !valid_controller_holder(holder_id) {
+    raise QueryFailed("controller holder id is invalid")
+  }
+  self.mutex.acquire()
+  try {
+    let locked = run(
+      self.connection,
+      "SELECT pg_try_advisory_lock($1::bigint)::text",
+      parameters=[Some(controller_advisory_lock_id)],
+    )
+    if locked.value(0, 0) != Some("true") && locked.value(0, 0) != Some("t") {
+      self.mutex.release()
+      return None
+    }
+    ignore(run(self.connection, "BEGIN"))
+    let elected = run(
+      self.connection,
+      (
+        #|INSERT INTO lunanexa.controller_leadership
+        #|  (singleton, fencing_token, holder_id, backend_pid, acquired_at)
+        #|VALUES (
+        #|  true,
+        #|  GREATEST(
+        #|    1,
+        #|    COALESCE((
+        #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
+        #|      FROM lunanexa.snapshots WHERE domain = 'control'
+        #|    ), 1)
+        #|  ),
+        #|  $1,
+        #|  pg_backend_pid(),
+        #|  now()
+        #|)
+        #|ON CONFLICT (singleton) DO UPDATE SET
+        #|  fencing_token = GREATEST(
+        #|    lunanexa.controller_leadership.fencing_token + 1,
+        #|    COALESCE((
+        #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
+        #|      FROM lunanexa.snapshots WHERE domain = 'control'
+        #|    ), 1)
+        #|  ),
+        #|  holder_id = EXCLUDED.holder_id,
+        #|  backend_pid = pg_backend_pid(),
+        #|  acquired_at = now()
+        #|RETURNING fencing_token::text
+      ),
+      parameters=[Some(holder_id.trim().to_owned())],
+    )
+    guard elected.value(0, 0) is Some(raw_token) else {
+      raise QueryFailed("controller leadership token is missing")
+    }
+    let token = @string.parse_int64(raw_token) catch {
+      _ => raise QueryFailed("controller leadership token is invalid")
+    }
+    ignore(run(self.connection, "COMMIT"))
+    self.mutex.release()
+    Some(token)
+  } catch {
+    error => {
+      rollback(self.connection)
+      ignore(
+        run(self.connection, "SELECT pg_advisory_unlock($1::bigint)", parameters=[
+          Some(controller_advisory_lock_id),
+        ]),
+      ) catch {
+        _ => ()
+      }
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
+/// Returns false after connection loss, leadership replacement, or token
+/// mismatch. Callers use this on readiness and before every mutation.
+pub async fn PostgresDatabase::controller_leadership_is_current(
+  self : PostgresDatabase,
+  holder_id : String,
+  fencing_token : Int64,
+) -> Bool {
+  if !valid_controller_holder(holder_id) || fencing_token <= 0L {
+    return false
+  }
+  self.mutex.acquire()
+  let result = try {
+    let checked = run(
+      self.connection,
+      (
+        #|SELECT EXISTS (
+        #|  SELECT 1 FROM lunanexa.controller_leadership
+        #|  WHERE singleton = true
+        #|    AND holder_id = $1
+        #|    AND fencing_token = $2::bigint
+        #|    AND backend_pid = pg_backend_pid()
+        #|)::text
+      ),
+      parameters=[
+        Some(holder_id.trim().to_owned()),
+        Some(fencing_token.to_string()),
+      ],
+    )
+    checked.value(0, 0) == Some("true") || checked.value(0, 0) == Some("t")
+  } catch {
+    _ => false
+  }
+  self.mutex.release()
+  result
 }
 
 ///|

@@ -1,6 +1,7 @@
 ///|
 fn access_onboarding_path(path : String) -> Bool {
   path == "/v1/onboarding/access-packages" ||
+  path == "/v1/onboarding/access-packages/operations" ||
   (
     path.has_prefix("/v1/onboarding/access-packages/") &&
     path.has_suffix(":enable")
@@ -36,6 +37,191 @@ fn webide_access_package_fingerprint(
 ) -> String {
   let digest = @account.identity_subject_digest(issuer, subject)
   digest[7:31].to_owned()
+}
+
+///|
+fn access_onboarding_intent(
+  operator_id : String,
+  request : WebIdeAccessPackageIntent,
+  now : Int64,
+) -> @onboarding.AccessOnboardingIntent {
+  let fingerprint = webide_access_package_fingerprint(
+    request.identity_issuer,
+    request.identity_subject,
+  )
+  let account_id = "account-\{fingerprint}"
+  {
+    operation_id: "access-\{account_id}",
+    fingerprint,
+    requested_by: operator_id,
+    account_id,
+    subject_ref: "subject-\{fingerprint}",
+    identity_issuer: request.identity_issuer,
+    identity_subject_sha256: @account.identity_subject_digest(
+      request.identity_issuer,
+      request.identity_subject,
+    ),
+    display_name: request.display_name,
+    email: request.email,
+    organization_id: request.organization_id,
+    tenant_ref: request.tenant_ref,
+    membership_id: "membership-\{fingerprint}",
+    user_id: "user-\{fingerprint}",
+    grant_id: "grant-\{fingerprint}",
+    lease_id: "lease-\{fingerprint}",
+    identity_receipt: "oidc-verified-\{fingerprint}",
+    expires_unix_ms: now + request.lifetime_days.to_int64() * 86400000L,
+  }
+}
+
+///|
+fn valid_access_onboarding_request(intent : WebIdeAccessPackageIntent) -> Bool {
+  intent.identity_verified &&
+  intent.template_id == "webide-developer" &&
+  intent.lifetime_days > 0 &&
+  intent.lifetime_days <= 365 &&
+  safe_identity_value(intent.identity_issuer, 512) &&
+  safe_identity_value(intent.identity_subject, 1024) &&
+  safe_identity_value(intent.display_name, 128) &&
+  safe_identity_value(intent.email, 320) &&
+  @contracts.valid_identifier(intent.organization_id) &&
+  @contracts.valid_identifier(intent.tenant_ref)
+}
+
+///|
+fn same_access_onboarding_terms(
+  request : WebIdeAccessPackageIntent,
+  record : @onboarding.AccessOnboardingRecord,
+) -> Bool {
+  let intent = record.intent
+  intent.fingerprint ==
+  webide_access_package_fingerprint(
+    request.identity_issuer,
+    request.identity_subject,
+  ) &&
+  intent.identity_issuer == request.identity_issuer &&
+  intent.identity_subject_sha256 ==
+  @account.identity_subject_digest(
+    request.identity_issuer,
+    request.identity_subject,
+  ) &&
+  intent.display_name == request.display_name &&
+  intent.email == request.email &&
+  intent.organization_id == request.organization_id &&
+  intent.tenant_ref == request.tenant_ref &&
+  intent.expires_unix_ms - record.created_unix_ms ==
+  request.lifetime_days.to_int64() * 86400000L
+}
+
+///|
+async fn ApiService::create_webide_access_package(
+  self : ApiService,
+  operator_id : String,
+  request : WebIdeAccessPackageIntent,
+) -> HttpReply {
+  if !valid_access_onboarding_request(request) {
+    return api_error(
+      400, "InvalidRequest", "verified identity, organization, tenant, template and access period are required",
+      false,
+    )
+  }
+  guard self.access_onboarding_store is Some(journal) else {
+    return api_error(
+      503, "AccessOnboardingUnavailable", "a durable onboarding journal is required",
+      true,
+    )
+  }
+  let now = @async.now()
+  let candidate = access_onboarding_intent(operator_id, request, now)
+  let record = match journal.record(candidate.operation_id) {
+    Some(existing) => {
+      if !same_access_onboarding_terms(request, existing) {
+        return api_error(
+          409, "AccessPackageConflict", "the onboarding identity was replayed with different access terms",
+          false,
+        )
+      }
+      existing
+    }
+    None =>
+      try journal.begin(candidate, now) catch {
+        @onboarding.AccessOnboardingError::IdempotencyConflict(_) =>
+          return api_error(
+            409, "AccessPackageConflict", "the onboarding identity was replayed with different access terms",
+            false,
+          )
+        _ =>
+          return api_error(
+            503, "AccessOnboardingJournalUnavailable", "the onboarding intent could not be committed",
+            true,
+          )
+      } noraise {
+        value => value
+      }
+  }
+  let intent = record.intent
+  if record.status == Conflicted {
+    return api_error(
+      409, "AccessPackageConflict", "the onboarding operation requires explicit operator recovery",
+      false,
+    )
+  }
+  if record.status == RecoverableFailure {
+    ignore(journal.retry(intent.operation_id, now)) catch {
+      _ =>
+        return api_error(
+          503, "AccessOnboardingJournalUnavailable", "the onboarding retry could not be committed",
+          true,
+        )
+    }
+  }
+  let reply = try self.execute_webide_access_package(intent, now) catch {
+    _ => {
+      ignore(
+        journal.fail(
+          intent.operation_id,
+          "StepUnavailable",
+          "an onboarding dependency was unavailable; reconciliation will retry",
+          false,
+          @async.now(),
+        ),
+      ) catch {
+        _ => ()
+      }
+      return api_error(
+        503, "AccessOnboardingStepFailed", "onboarding will resume from its durable checkpoint",
+        true,
+      )
+    }
+  } noraise {
+    value => value
+  }
+  if reply.status == 409 {
+    ignore(
+      journal.fail(
+        intent.operation_id,
+        "ResourceConflict",
+        "a derived onboarding resource conflicts with authoritative state",
+        true,
+        @async.now(),
+      ),
+    ) catch {
+      _ => ()
+    }
+  } else if reply.status >= 500 {
+    ignore(
+      journal.fail(
+        intent.operation_id,
+        "StepUnavailable",
+        "an onboarding dependency was unavailable; reconciliation will retry",
+        false,
+        @async.now(),
+      ),
+    ) catch {
+      _ => ()
+    }
+  }
+  reply
 }
 
 ///|
@@ -203,53 +389,30 @@ async fn ApiService::access_package_views(self : ApiService) -> Array[Json] {
 }
 
 ///|
-async fn ApiService::create_webide_access_package(
+async fn ApiService::execute_webide_access_package(
   self : ApiService,
-  operator_id : String,
-  intent : WebIdeAccessPackageIntent,
+  intent : @onboarding.AccessOnboardingIntent,
+  now : Int64,
 ) -> HttpReply {
-  if !intent.identity_verified ||
-    intent.template_id != "webide-developer" ||
-    intent.lifetime_days <= 0 ||
-    intent.lifetime_days > 365 ||
-    !safe_identity_value(intent.identity_issuer, 512) ||
-    !safe_identity_value(intent.identity_subject, 1024) ||
-    !safe_identity_value(intent.display_name, 128) ||
-    !safe_identity_value(intent.email, 320) ||
-    !@contracts.valid_identifier(intent.organization_id) ||
-    !@contracts.valid_identifier(intent.tenant_ref) {
-    return api_error(
-      400, "InvalidRequest", "verified identity, organization, tenant, template and access period are required",
-      false,
-    )
-  }
   guard self.account_store is Some(accounts) &&
     self.portal_store is Some(portal) &&
-    self.workspace_directory is Some(directory) else {
+    self.workspace_directory is Some(directory) &&
+    self.access_onboarding_store is Some(journal) else {
     return api_error(
-      503, "AccessOnboardingUnavailable", "account, portal and workspace authorities are required",
+      503, "AccessOnboardingUnavailable", "account, portal, workspace and onboarding journal authorities are required",
       true,
     )
   }
-  let now = @async.now()
-  let fingerprint = webide_access_package_fingerprint(
-    intent.identity_issuer,
-    intent.identity_subject,
-  )
-  let account_id = "account-\{fingerprint}"
-  let subject_ref = "subject-\{fingerprint}"
-  let membership_id = "membership-\{fingerprint}"
-  let user_id = "user-\{fingerprint}"
-  let grant_id = "grant-\{fingerprint}"
-  let lease_id = "lease-\{fingerprint}"
-  let identity_receipt = "oidc-verified-\{fingerprint}"
-  let expires = now + intent.lifetime_days.to_int64() * 86400000L
-  self.operator_audit_as(
-    operator_id,
-    "access-package.begin",
-    account_id,
-    "access-package:\{fingerprint}:begin",
-  )
+  let operator_id = intent.requested_by
+  let fingerprint = intent.fingerprint
+  let account_id = intent.account_id
+  let subject_ref = intent.subject_ref
+  let membership_id = intent.membership_id
+  let user_id = intent.user_id
+  let grant_id = intent.grant_id
+  let lease_id = intent.lease_id
+  let identity_receipt = intent.identity_receipt
+  let expires = intent.expires_unix_ms
   match
     accounts.views().iter().find_first(value => value.account_id == account_id) {
     Some(existing) => {
@@ -284,10 +447,7 @@ async fn ApiService::create_webide_access_package(
           account_id,
           subject_ref,
           identity_issuer: intent.identity_issuer,
-          identity_subject_sha256: @account.identity_subject_digest(
-            intent.identity_issuer,
-            intent.identity_subject,
-          ),
+          identity_subject_sha256: intent.identity_subject_sha256,
           display_name: intent.display_name,
           email: intent.email,
           identity_receipt,
@@ -299,14 +459,27 @@ async fn ApiService::create_webide_access_package(
       ) catch {
         _ =>
           return api_error(
-            409, "AccessPackageConflict", "the identity is already registered under another account",
-            false,
+            503, "AccessOnboardingStepFailed", "account persistence is temporarily unavailable",
+            true,
           )
       }
       self.operator_audit_as(
         operator_id, "access-package.account.created", account_id, identity_receipt,
       )
     }
+  }
+  if self.access_onboarding_fail_after_step == Some(AccountReady) {
+    return api_error(
+      503, "InjectedOnboardingFailure", "injected failure after account persistence",
+      true,
+    )
+  }
+  ignore(journal.advance(intent.operation_id, AccountReady, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "the account checkpoint could not be committed",
+        true,
+      )
   }
   let portal_snapshot = portal.snapshot()
   match
@@ -338,8 +511,8 @@ async fn ApiService::create_webide_access_package(
       ) catch {
         _ =>
           return api_error(
-            409, "AccessPackageConflict", "enterprise membership creation was rejected",
-            false,
+            503, "AccessOnboardingStepFailed", "membership persistence is temporarily unavailable",
+            true,
           )
       }
       self.operator_audit_as(
@@ -349,6 +522,19 @@ async fn ApiService::create_webide_access_package(
         "access-package:\{fingerprint}:membership",
       )
     }
+  }
+  if self.access_onboarding_fail_after_step == Some(MembershipReady) {
+    return api_error(
+      503, "InjectedOnboardingFailure", "injected failure after membership persistence",
+      true,
+    )
+  }
+  ignore(journal.advance(intent.operation_id, MembershipReady, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "the membership checkpoint could not be committed",
+        true,
+      )
   }
   let initial_workspace = directory.snapshot(now)
   match
@@ -391,14 +577,27 @@ async fn ApiService::create_webide_access_package(
       ) catch {
         _ =>
           return api_error(
-            409, "AccessPackageConflict", "workspace user creation was rejected",
-            false,
+            503, "AccessOnboardingStepFailed", "workspace-user persistence is temporarily unavailable",
+            true,
           )
       }
       self.operator_audit_as(
         operator_id, "access-package.workspace-user.created", user_id, identity_receipt,
       )
     }
+  }
+  if self.access_onboarding_fail_after_step == Some(WorkspaceUserReady) {
+    return api_error(
+      503, "InjectedOnboardingFailure", "injected failure after workspace-user persistence",
+      true,
+    )
+  }
+  ignore(journal.advance(intent.operation_id, WorkspaceUserReady, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "the workspace-user checkpoint could not be committed",
+        true,
+      )
   }
   let workspace_after_user = directory.snapshot(now)
   match
@@ -435,8 +634,8 @@ async fn ApiService::create_webide_access_package(
       ) catch {
         _ =>
           return api_error(
-            409, "AccessPackageConflict", "Developer access grant creation was rejected",
-            false,
+            503, "AccessOnboardingStepFailed", "Developer grant persistence is temporarily unavailable",
+            true,
           )
       }
       self.operator_audit_as(
@@ -446,6 +645,19 @@ async fn ApiService::create_webide_access_package(
         "access-package:\{fingerprint}:grant",
       )
     }
+  }
+  if self.access_onboarding_fail_after_step == Some(GrantReady) {
+    return api_error(
+      503, "InjectedOnboardingFailure", "injected failure after grant persistence",
+      true,
+    )
+  }
+  ignore(journal.advance(intent.operation_id, GrantReady, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "the grant checkpoint could not be committed",
+        true,
+      )
   }
   let workspace_after_grant = directory.snapshot(now)
   match
@@ -495,8 +707,8 @@ async fn ApiService::create_webide_access_package(
       ) catch {
         _ =>
           return api_error(
-            409, "AccessPackageConflict", "workspace lease creation was rejected",
-            false,
+            503, "AccessOnboardingStepFailed", "workspace-lease persistence is temporarily unavailable",
+            true,
           )
       }
       self.operator_audit_as(
@@ -507,12 +719,38 @@ async fn ApiService::create_webide_access_package(
       )
     }
   }
-  self.operator_audit_as(
-    operator_id,
-    "access-package.prepared",
-    account_id,
-    "access-package:\{fingerprint}:prepared",
-  )
+  if self.access_onboarding_fail_after_step == Some(LeaseReady) {
+    return api_error(
+      503, "InjectedOnboardingFailure", "injected failure after lease persistence",
+      true,
+    )
+  }
+  ignore(journal.advance(intent.operation_id, LeaseReady, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "the lease checkpoint could not be committed",
+        true,
+      )
+  }
+  let already_prepared = match journal.record(intent.operation_id) {
+    Some(record) => record.step == Prepared || record.step == Enabled
+    None => false
+  }
+  ignore(journal.advance(intent.operation_id, Prepared, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "the prepared checkpoint could not be committed",
+        true,
+      )
+  }
+  if !already_prepared {
+    self.operator_audit_as(
+      operator_id,
+      "access-package.prepared",
+      account_id,
+      "access-package:\{fingerprint}:prepared",
+    )
+  }
   let membership = portal.snapshot().memberships
     .iter()
     .find_first(value => value.membership_id == membership_id)
@@ -534,6 +772,90 @@ async fn ApiService::create_webide_access_package(
 }
 
 ///|
+/// Resumes every non-terminal access onboarding operation from its last
+/// durable checkpoint. Deterministic resource identifiers make a crash after
+/// a resource write but before its journal write safe to replay.
+pub async fn ApiService::reconcile_access_onboarding(
+  self : ApiService,
+  now_unix_ms : Int64,
+) -> Int {
+  guard self.access_onboarding_store is Some(journal) else { return 0 }
+  let pending = journal.pending()
+  let mut completed = 0
+  for record in pending {
+    if record.intent.expires_unix_ms <= now_unix_ms {
+      ignore(
+        journal.fail(
+          record.intent.operation_id,
+          "OnboardingExpired",
+          "the requested access window expired before provisioning completed",
+          true,
+          now_unix_ms,
+        ),
+      ) catch {
+        _ => ()
+      }
+      continue
+    }
+    let resumed = try
+      journal.retry(record.intent.operation_id, now_unix_ms)
+    catch {
+      _ => continue
+    } noraise {
+      value => value
+    }
+    let reply = try
+      self.execute_webide_access_package(resumed.intent, now_unix_ms)
+    catch {
+      _ => {
+        ignore(
+          journal.fail(
+            resumed.intent.operation_id,
+            "StepUnavailable",
+            "an onboarding dependency was unavailable; reconciliation will retry",
+            false,
+            now_unix_ms,
+          ),
+        ) catch {
+          _ => ()
+        }
+        continue
+      }
+    } noraise {
+      value => value
+    }
+    if reply.status < 300 {
+      completed += 1
+    } else if reply.status == 409 {
+      ignore(
+        journal.fail(
+          resumed.intent.operation_id,
+          "ResourceConflict",
+          "a derived onboarding resource conflicts with authoritative state",
+          true,
+          now_unix_ms,
+        ),
+      ) catch {
+        _ => ()
+      }
+    } else {
+      ignore(
+        journal.fail(
+          resumed.intent.operation_id,
+          "StepUnavailable",
+          "an onboarding dependency was unavailable; reconciliation will retry",
+          false,
+          now_unix_ms,
+        ),
+      ) catch {
+        _ => ()
+      }
+    }
+  }
+  completed
+}
+
+///|
 async fn ApiService::enable_webide_access_package(
   self : ApiService,
   operator_id : String,
@@ -541,9 +863,10 @@ async fn ApiService::enable_webide_access_package(
 ) -> HttpReply {
   guard self.account_store is Some(accounts) &&
     self.portal_store is Some(portal) &&
-    self.workspace_directory is Some(directory) else {
+    self.workspace_directory is Some(directory) &&
+    self.access_onboarding_store is Some(journal) else {
     return api_error(
-      503, "AccessOnboardingUnavailable", "account, portal and workspace authorities are required",
+      503, "AccessOnboardingUnavailable", "account, portal, workspace and onboarding journal authorities are required",
       true,
     )
   }
@@ -630,6 +953,14 @@ async fn ApiService::enable_webide_access_package(
       409, "AccessPackageNotReady", "a requested workspace lease is required", false,
     )
   }
+  let operation_id = "access-\{account_id}"
+  guard journal.record(operation_id) is Some(record) &&
+    (record.step == Prepared || record.step == Enabled) else {
+    return api_error(
+      409, "AccessPackageNotReady", "the onboarding journal is not prepared for enablement",
+      false,
+    )
+  }
   if lease.state == Requested {
     ignore(directory.activate_lease(lease.lease_id, now)) catch {
       _ =>
@@ -644,6 +975,13 @@ async fn ApiService::enable_webide_access_package(
       account_id,
       "access-package:\{account_id}:lease:\{lease.lease_id}",
     )
+  }
+  ignore(journal.advance(operation_id, Enabled, now)) catch {
+    _ =>
+      return api_error(
+        503, "AccessOnboardingJournalUnavailable", "WebIDE access is active but its completion checkpoint must be reconciled",
+        true,
+      )
   }
   json_reply(
     200,
@@ -678,6 +1016,16 @@ async fn ApiService::handle_access_onboarding(
     )
   }
   match (verb, path) {
+    (Get, "/v1/onboarding/access-packages/operations") =>
+      match self.access_onboarding_store {
+        Some(journal) =>
+          json_reply(200, journal.snapshot().operations.to_json())
+        None =>
+          api_error(
+            503, "AccessOnboardingUnavailable", "a durable onboarding journal is required",
+            true,
+          )
+      }
     (Get, "/v1/onboarding/access-packages") =>
       json_reply(200, self.access_package_views().to_json())
     (Post, "/v1/onboarding/access-packages") => {

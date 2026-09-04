@@ -92,6 +92,9 @@ async test "one access package intent is resumable and enables only after contra
   let directory = @directory.FileWorkspaceDirectory::open(
     "\{temp}/workspace.json",
   )
+  let onboarding = @onboarding.AccessOnboardingStore::open(
+    "\{temp}/onboarding.json",
+  )
   let contracts = @contractdoc_store.ContractDocumentStore::open(
     "\{temp}/contracts.json",
   )
@@ -113,6 +116,7 @@ async test "one access package intent is resumable and enables only after contra
     )
     .with_portal_store(portal)
     .with_workspace_directory(directory, true)
+    .with_access_onboarding_store(onboarding)
     .with_contract_document_store(contracts)
   let body = "{\"identity_issuer\":\"https://identity.example\",\"identity_subject\":\"provider-user-42\",\"display_name\":\"Friendly Developer\",\"email\":\"friendly@example.com\",\"organization_id\":\"org-friendly\",\"tenant_ref\":\"tenant-friendly\",\"template_id\":\"webide-developer\",\"lifetime_days\":30,\"identity_verified\":true}"
   assert_eq(
@@ -198,4 +202,107 @@ async test "one access package intent is resumable and enables only after contra
   let audit = service.handle(Get, "/v1/audit", headers, "")
   assert_true(audit.body.contains("access-package.prepared"))
   assert_true(audit.body.contains("access-package.enabled"))
+}
+
+///|
+async test "access onboarding recovers after a cross-store crash boundary and restart" {
+  let temp = @fs.tmpdir(prefix="lunanexa-access-onboarding-restart-")
+  let state_path = "\{temp}/state.json"
+  let account_path = "\{temp}/accounts.json"
+  let portal_path = "\{temp}/portal.json"
+  let workspace_path = "\{temp}/workspace.json"
+  let onboarding_path = "\{temp}/onboarding.json"
+  let registry_path = "\{temp}/registry.json"
+  let session_secret = "account-session-issuer-secret-more-than-thirty-two-bytes"
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let first_accounts = @account.AccountStore::open(account_path, session_secret)
+  let first_portal = @portal_store.FilePortalStore::open(portal_path)
+  let first_directory = @directory.FileWorkspaceDirectory::open(workspace_path)
+  let first_journal = @onboarding.AccessOnboardingStore::open(onboarding_path)
+  let first_base = ApiService::with_registry(
+      @store.FileStore::open(state_path),
+      @registry.FileRegistry::open(registry_path),
+      runtime,
+      "operator-token",
+      "inference-token",
+      "node-token",
+      "0.1.0",
+    )
+    .with_account_store(
+      first_accounts, "identity-assertion-secret-more-than-thirty-two-bytes",
+    )
+    .with_portal_store(first_portal)
+    .with_workspace_directory(first_directory, true)
+    .with_access_onboarding_store(first_journal)
+  let first = {
+    ..first_base,
+    access_onboarding_fail_after_step: Some(MembershipReady),
+  }
+  let body = "{\"identity_issuer\":\"https://identity.example\",\"identity_subject\":\"restart-user\",\"display_name\":\"Restart User\",\"email\":\"restart@example.com\",\"organization_id\":\"org-restart\",\"tenant_ref\":\"tenant-restart\",\"template_id\":\"webide-developer\",\"lifetime_days\":30,\"identity_verified\":true}"
+  let headers = { "Authorization": "Bearer operator-token" }
+  let interrupted = first.handle(
+    Post,
+    "/v1/onboarding/access-packages",
+    headers,
+    body,
+  )
+  assert_eq(interrupted.status, 503)
+  assert_eq(first_accounts.views().length(), 1)
+  assert_eq(first_portal.snapshot().memberships.length(), 1)
+  let interrupted_record = first_journal.snapshot().operations[0]
+  assert_eq(interrupted_record.step, AccountReady)
+  assert_eq(interrupted_record.status, RecoverableFailure)
+
+  let reopened_accounts = @account.AccountStore::open(
+    account_path, session_secret,
+  )
+  let reopened_portal = @portal_store.FilePortalStore::open(portal_path)
+  let reopened_directory = @directory.FileWorkspaceDirectory::open(
+    workspace_path,
+  )
+  let reopened_journal = @onboarding.AccessOnboardingStore::open(
+    onboarding_path,
+  )
+  let restarted = ApiService::with_registry(
+      @store.FileStore::open(state_path),
+      @registry.FileRegistry::open(registry_path),
+      runtime,
+      "operator-token",
+      "inference-token",
+      "node-token",
+      "0.1.0",
+    )
+    .with_account_store(
+      reopened_accounts, "identity-assertion-secret-more-than-thirty-two-bytes",
+    )
+    .with_portal_store(reopened_portal)
+    .with_workspace_directory(reopened_directory, true)
+    .with_access_onboarding_store(reopened_journal)
+  assert_eq(restarted.reconcile_access_onboarding(@async.now()), 1)
+  let recovered = reopened_journal.snapshot().operations[0]
+  assert_eq(recovered.step, Prepared)
+  assert_eq(recovered.status, PreparedForEnablement)
+  assert_eq(recovered.attempts, 2)
+  assert_eq(reopened_accounts.views().length(), 1)
+  assert_eq(reopened_portal.snapshot().memberships.length(), 1)
+  let workspace = reopened_directory.snapshot(@async.now())
+  assert_eq(workspace.users.length(), 1)
+  assert_eq(workspace.access_grants.length(), 1)
+  assert_eq(workspace.leases.length(), 1)
+  let operations = restarted.handle(
+    Get,
+    "/v1/onboarding/access-packages/operations",
+    headers,
+    "",
+  )
+  assert_eq(operations.status, 200)
+  assert_true(operations.body.contains("PreparedForEnablement"))
+  assert_false(operations.body.contains("restart-user"))
 }
