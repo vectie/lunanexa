@@ -589,6 +589,16 @@ async fn main {
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
     "127.0.0.1:8080",
   )
+  let identity_address = @env.get_env_var("LUNANEXA_IDENTITY_LISTEN_ADDRESS").unwrap_or(
+    "127.0.0.1:8082",
+  )
+  if !identity_address.has_prefix("127.") &&
+    !identity_address.has_prefix("[::1]:") &&
+    !identity_address.has_prefix("::1:") {
+    raise Failure::Failure(
+      "LUNANEXA_IDENTITY_LISTEN_ADDRESS must be an explicit loopback address",
+    )
+  }
   let state_path = @env.get_env_var("LUNANEXA_STATE_PATH").unwrap_or(
     "lunanexa-state.json",
   )
@@ -1486,7 +1496,14 @@ async fn main {
     None => authority_service
   }
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
+  let identity_server = @http.Server(
+    @socket.Addr::parse(identity_address),
+    reuse_addr=true,
+  )
   @async.with_task_group <| group => {
+    group.spawn_bg(allow_failure=false) <| () => {
+      service.serve_identity_on(identity_server)
+    }
     match (management_database, controller_leadership) {
       (Some(database), Some((holder_id, token))) =>
         group.spawn_bg(allow_failure=false) <| () => {

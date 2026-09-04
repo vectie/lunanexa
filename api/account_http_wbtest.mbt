@@ -405,6 +405,55 @@ async test "verified OIDC identity can register freely without machine authority
 }
 
 ///|
+async test "loopback identity listener admits signed registration and nothing else" {
+  let directory = @fs.tmpdir(prefix="lunanexa-identity-listener-")
+  let assertion_secret = "identity-listener-assertion-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "identity-listener-session-secret-more-than-32-bytes",
+  )
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+    durable, runtime, "operator-token", "inference-token", "node-token", "test",
+  ).with_account_store(accounts, assertion_secret)
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      service.serve_identity_on(server)
+    }
+    let now = @async.now()
+    let (registered, _) = @http.post(
+      "http://\{server.addr}/v1/auth/register",
+      "{\"lifetime_ms\":\"60000\"}",
+      headers=signed_registration_headers(
+        assertion_secret,
+        "https://identity.example/realms/lunanexa",
+        "provider-subject-listener",
+        "listener@example.invalid",
+        "Listener User",
+        "listener-registration-nonce",
+        now,
+        now + 30000L,
+      ),
+    )
+    assert_eq(registered.code, 201)
+    let (blocked, _) = @http.get("http://\{server.addr}/health")
+    assert_eq(blocked.code, 404)
+    server.close()
+  }
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "free registration provisions one bounded shared-inference trial" {
   let directory = @fs.tmpdir(prefix="lunanexa-registration-trial-http-")
   let assertion_secret = "trial-registration-assertion-secret-more-than-32-bytes"

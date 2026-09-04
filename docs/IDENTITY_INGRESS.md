@@ -29,7 +29,10 @@ identity provider. The public gateway runs in a separate Deployment with only
 OIDC, UI, DNS, and identity-relay egress. The patch runs the same immutable
 image in `relay` mode as a minimal sidecar in every `lunanexa-control` pod. The
 relay admits only signed session-exchange and registration requests and forwards them to
-`http://127.0.0.1:8080`; it has no Secret mount and no permitted egress. This
+`http://127.0.0.1:8082`; it has no Secret mount and no permitted egress. Port
+8082 is a controller-owned loopback-only listener that accepts exactly
+`POST /v1/auth/register` and `POST /v1/auth/session:exchange`; it is never
+selected by a Service. This
 split preserves the controller's proven-loopback identity boundary without
 granting the controller pod the public gateway's IdP or UI egress.
 

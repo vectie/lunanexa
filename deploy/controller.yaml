@@ -44,6 +44,8 @@ spec:
           env:
             - name: LUNANEXA_LISTEN_ADDRESS
               value: 0.0.0.0:8080
+            - name: LUNANEXA_IDENTITY_LISTEN_ADDRESS
+              value: 127.0.0.1:8082
             - name: LUNANEXA_STATE_PATH
               value: /var/lib/lunanexa/control.json
             - name: LUNANEXA_REGISTRY_PATH

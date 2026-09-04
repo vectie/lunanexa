@@ -149,6 +149,7 @@ pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int
 pub async fn ApiService::run_machine_commerce_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit
+pub async fn ApiService::serve_identity_on(Self, @http.Server) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
 pub async fn ApiService::trusted_operational_tenant_hash(Self, Map[String, String], Bool) -> String?
 pub fn ApiService::with_access_onboarding_store(Self, @onboarding.AccessOnboardingStore) -> Self
