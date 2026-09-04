@@ -23,6 +23,8 @@ spec:
           env:
             - name: LUNANEXA_ALLOW_HTTP_LOOPBACK
               value: "1"
+            - name: LUNANEXA_DATABASE_HA_MODE
+              value: development-single-instance
             - name: LUNANEXA_MACHINE_HELPER_NODE_SCOPE
               value: "temporary-ascend-qualification"
             - name: LUNANEXA_RUNTIME_ENDPOINTS_PATH
@@ -35,6 +37,10 @@ spec:
               value: "0"
             - name: LUNANEXA_GUIDE_ORIGIN
               value: "http://127.0.0.1:4390"
+            # Development-only compatibility gateway. Production controllers
+            # do not mount model bytes; compute nodes pull directly from S3.
+            - name: LUNANEXA_MODEL_STORE_ROOT
+              value: /data/models
           resources:
             requests:
               cpu: 500m
@@ -42,6 +48,10 @@ spec:
             limits:
               cpu: "4"
               memory: 8Gi
+          volumeMounts:
+            - name: model-store
+              mountPath: /data/models
+              readOnly: true
       volumes:
         - name: model-store
           hostPath:

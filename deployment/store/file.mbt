@@ -4,8 +4,14 @@ pub(all) suberror DeploymentStoreError {
 } derive(Debug, Eq)
 
 ///|
+enum DeploymentPersistence {
+  DeploymentFile(String)
+  DeploymentPostgres(@database.PostgresDatabase)
+}
+
+///|
 pub struct FileDeploymentStore {
-  path : String
+  persistence : DeploymentPersistence
   signing_secret : String
   templates : Map[String, @deployment.ModelServiceTemplate]
   operations : Map[String, @deployment.DeploymentOperation]
@@ -128,7 +134,7 @@ pub async fn FileDeploymentStore::open(
     )
   }
   let store : FileDeploymentStore = {
-    path,
+    persistence: DeploymentFile(path),
     signing_secret,
     templates: Map([]),
     operations: Map([]),
@@ -165,8 +171,66 @@ pub async fn FileDeploymentStore::open(
 }
 
 ///|
+pub async fn FileDeploymentStore::open_postgres(
+  database : @database.PostgresDatabase,
+  signing_secret : String,
+) -> FileDeploymentStore {
+  if signing_secret == "" {
+    raise DeploymentStoreError::InvalidSnapshot(
+      "catalog signing authority is unavailable",
+    )
+  }
+  let store : FileDeploymentStore = {
+    persistence: DeploymentPostgres(database),
+    signing_secret,
+    templates: Map([]),
+    operations: Map([]),
+    mutex: Mutex(),
+  }
+  let payload = database.load_snapshot("deployments", "lunanexa.deployments.v2")
+  match payload {
+    Some(raw) => {
+      let snapshot : @deployment.DeploymentSnapshot = @json.from_json(
+        @json.parse(raw),
+      ) catch {
+        error => raise InvalidSnapshot("\{Repr(error)}")
+      }
+      if snapshot.schema_version != "lunanexa.deployments.v2" {
+        raise InvalidSnapshot("unsupported deployment snapshot")
+      }
+      if !snapshot_signature_valid(snapshot, signing_secret) {
+        raise InvalidSnapshot("deployment snapshot integrity check failed")
+      }
+      for template in snapshot.templates {
+        @deployment.validate_template(template) catch {
+          _ => raise InvalidSnapshot("invalid catalog template")
+        }
+        if !signature_valid(template, signing_secret) {
+          raise InvalidSnapshot("catalog template signature is invalid")
+        }
+        store.templates[template_key(template.template_id, template.version)] = template
+      }
+      for operation in snapshot.operations {
+        store.operations[operation.operation_id] = operation
+      }
+    }
+    None => store.persist()
+  }
+  store
+}
+
+///|
 async fn FileDeploymentStore::persist(self : FileDeploymentStore) -> Unit {
-  write_snapshot(self.path, self.snapshot_unlocked())
+  let snapshot = self.snapshot_unlocked()
+  match self.persistence {
+    DeploymentFile(path) => write_snapshot(path, snapshot)
+    DeploymentPostgres(database) =>
+      database.save_opaque_snapshot(
+        "deployments",
+        "lunanexa.deployments.v2",
+        snapshot.to_json().stringify(),
+      )
+  }
 }
 
 ///|

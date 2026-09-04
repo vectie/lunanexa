@@ -149,6 +149,8 @@ async fn ApiService::handle_provider_callback(
     received_unix_ms: event_unix_ms,
     signature_verified: true,
   }
+  self.commercial_mutex.acquire()
+  defer self.commercial_mutex.release()
   let before_commercial = self.commercial_store.durable_snapshot()
   let before_integrations = self.commercial_integrations.durable_snapshot()
   let (record, result) = try

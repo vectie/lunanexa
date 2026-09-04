@@ -1,0 +1,98 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/onboarding"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/database",
+}
+
+// Values
+pub let snapshot_schema_version : String
+
+// Errors
+pub(all) suberror AccessOnboardingError {
+  InvalidIntent(String)
+  IdempotencyConflict(String)
+  OperationNotFound(String)
+  InvalidTransition(String)
+  InvalidSnapshot(String)
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct AccessOnboardingIntent {
+  operation_id : String
+  fingerprint : String
+  requested_by : String
+  account_id : String
+  subject_ref : String
+  identity_issuer : String
+  identity_subject_sha256 : String
+  display_name : String
+  email : String
+  organization_id : String
+  tenant_ref : String
+  membership_id : String
+  user_id : String
+  grant_id : String
+  lease_id : String
+  identity_receipt : String
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type AccessOnboardingPersistence
+
+pub(all) struct AccessOnboardingRecord {
+  intent : AccessOnboardingIntent
+  step : AccessOnboardingStep
+  status : AccessOnboardingStatus
+  attempts : Int
+  last_error_code : String?
+  last_error_message : String?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AccessOnboardingSnapshot {
+  schema_version : String
+  operations : Array[AccessOnboardingRecord]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AccessOnboardingStatus {
+  Running
+  RecoverableFailure
+  PreparedForEnablement
+  Completed
+  Conflicted
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AccessOnboardingStep {
+  IntentRecorded
+  AccountReady
+  MembershipReady
+  WorkspaceUserReady
+  GrantReady
+  LeaseReady
+  Prepared
+  Enabled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct AccessOnboardingStore {
+  persistence : AccessOnboardingPersistence
+  mut operations : Map[String, AccessOnboardingRecord]
+  mutex : @async.Mutex
+}
+pub async fn AccessOnboardingStore::advance(Self, String, AccessOnboardingStep, Int64) -> AccessOnboardingRecord
+pub async fn AccessOnboardingStore::begin(Self, AccessOnboardingIntent, Int64) -> AccessOnboardingRecord
+pub async fn AccessOnboardingStore::fail(Self, String, String, String, Bool, Int64) -> AccessOnboardingRecord
+pub async fn AccessOnboardingStore::open(String) -> Self
+pub async fn AccessOnboardingStore::open_postgres(@database.PostgresDatabase) -> Self
+pub async fn AccessOnboardingStore::pending(Self) -> Array[AccessOnboardingRecord]
+pub async fn AccessOnboardingStore::record(Self, String) -> AccessOnboardingRecord?
+pub async fn AccessOnboardingStore::retry(Self, String, Int64) -> AccessOnboardingRecord
+pub async fn AccessOnboardingStore::snapshot(Self) -> AccessOnboardingSnapshot
+
+// Type aliases
+
+// Traits

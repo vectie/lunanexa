@@ -8,6 +8,8 @@ fn handoff_intent(
     client_id: "desktop-client",
     tenant_ref: "tenant-1",
     subject_ref: "subject-1",
+    organization_id: "organization-1",
+    project_id: "project-1",
     display_name: "Desktop workspace",
     allowed_models: ["model-a"],
     handoff_expires_unix_ms: now + 120000L,

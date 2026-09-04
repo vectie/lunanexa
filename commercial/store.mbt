@@ -253,6 +253,20 @@ fn CommercialStore::require_project(
 }
 
 ///|
+/// Returns a project only when it belongs to the supplied organization. This
+/// is the tenant-safe attribution check used before issuing billable access.
+pub fn CommercialStore::project_for_organization(
+  self : CommercialStore,
+  organization_id : String,
+  project_id : String,
+) -> Project? {
+  match self.projects.get(project_id) {
+    Some(value) if value.organization_id == organization_id => Some(value)
+    _ => None
+  }
+}
+
+///|
 pub fn CommercialStore::add_organization(
   self : CommercialStore,
   value : Organization,

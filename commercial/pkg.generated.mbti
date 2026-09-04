@@ -242,6 +242,7 @@ pub fn CommercialStore::has_permission(Self, String, String, CommercialPermissio
 pub fn CommercialStore::ingest_usage(Self, UsageObservation) -> IdempotencyResult raise CommercialError
 pub fn CommercialStore::new() -> Self
 pub fn CommercialStore::organization(Self, String) -> Organization?
+pub fn CommercialStore::project_for_organization(Self, String, String) -> Project?
 pub fn CommercialStore::rate_usage(Self, String, String, RateCard, Int64) -> (LedgerEntry, IdempotencyResult) raise CommercialError
 pub fn CommercialStore::reconcile_signature_callback(Self, SignatureCallback) -> (Agreement, IdempotencyResult) raise CommercialError
 pub fn CommercialStore::record_identity_verification(Self, String, String) -> Organization raise CommercialError

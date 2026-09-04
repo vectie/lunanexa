@@ -246,6 +246,15 @@ test "loaded controller state keeps the selected route and locale" {
     model_source_results: [],
     model_source_total: 0L,
     model_imports: [],
+    model_adoption_draft: {
+      import_id: "ms-import-1",
+      model_id: "model.minicpm5-1b",
+      version: "modelscope-main",
+      license_id: "license.minicpm5-apache",
+      compatible_architectures: "nvidia-gb10",
+      minimum_memory_mib: "8192",
+    },
+    model_adopted_imports: ["ms-import-complete"],
     operation_name: "set-quota",
     operation_body: "{\"tenant_ref\":\"team-a\"}",
     quick_deployment_id: "service-1",
@@ -262,6 +271,8 @@ test "loaded controller state keeps the selected route and locale" {
   assert_eq(merged.locale, ChineseSimplified)
   assert_eq(merged.route, Policies)
   assert_eq(merged.model_source_query, "MiniCPM")
+  assert_eq(merged.model_adoption_draft.import_id, "ms-import-1")
+  assert_eq(merged.model_adopted_imports, ["ms-import-complete"])
   assert_eq(merged.operation_name, "set-quota")
   assert_eq(merged.operation_body, "{\"tenant_ref\":\"team-a\"}")
   assert_eq(merged.quick_deployment_id, "service-1")
@@ -298,6 +309,122 @@ test "model source search is edited independently from generic operations" {
   )
   assert_eq(edited.console.model_source_query, "OpenBMB")
   assert_eq(edited.console.operation_body, "{\"tenant_ref\":\"team-a\"}")
+}
+
+///|
+test "verified S3 model adoption is validated, stateful, and route-bound" {
+  assert_eq(
+    model_adoption_path("ms-import-1"),
+    "/v1/model-sources/modelscope/imports/ms-import-1:adopt",
+  )
+  assert_true(
+    model_adoption_intent({
+      import_id: "ms-import-1",
+      model_id: "../model",
+      version: "v1",
+      license_id: "license-1",
+      compatible_architectures: "nvidia-gb10",
+      minimum_memory_mib: "8192",
+    })
+    is None,
+  )
+  guard model_adoption_intent({
+      import_id: "ms-import-1",
+      model_id: " model.minicpm5-1b ",
+      version: " modelscope-main ",
+      license_id: " license.minicpm5-apache ",
+      compatible_architectures: " nvidia-gb10, nvidia-ampere ",
+      minimum_memory_mib: " 8192 ",
+    })
+    is Some(intent) else {
+    fail("expected a valid adoption intent")
+  }
+  assert_eq(intent.model_id, "model.minicpm5-1b")
+  assert_eq(intent.compatible_architectures, ["nvidia-gb10", "nvidia-ampere"])
+  assert_eq(intent.minimum_memory_mib, 8192)
+  let verified : @ui.ModelImportRow = {
+    import_id: "ms-import-1",
+    source: "modelscope",
+    model_id: "OpenBMB/MiniCPM5-1B",
+    revision: "master",
+    state: Verified,
+    files_total: 11,
+    files_completed: 11,
+    bytes_total: 2171355326L,
+    bytes_completed: 2171355326L,
+    manifest_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    artifact_uri: "s3://models/modelscope/ms-import-1",
+    license: "apache-2.0",
+    error_code: "",
+    cancel_requested: false,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1100L,
+  }
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    credential: "operator-secret",
+    audit_credential: "audit-secret",
+    csrf_token: "csrf-secret",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: {
+      ..@ui.default_state(),
+      route: Models,
+      operator_authenticated: true,
+      model_imports: [verified],
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (opened, _) = update_live(
+    model,
+    Console(BeginModelAdoption(verified.import_id)),
+    emit,
+  )
+  assert_eq(opened.console.model_adoption_draft.import_id, verified.import_id)
+  let (invalid, _) = update_live(opened, Console(SubmitModelAdoption), emit)
+  assert_false(invalid.console.loading)
+  assert_true(invalid.console.error_message is Some(_))
+  let ready = {
+    ..opened,
+    console: {
+      ..opened.console,
+      model_adoption_draft: {
+        import_id: verified.import_id,
+        model_id: intent.model_id,
+        version: intent.version,
+        license_id: intent.license_id,
+        compatible_architectures: "nvidia-gb10, nvidia-ampere",
+        minimum_memory_mib: "8192",
+      },
+    },
+  }
+  let (submitting, _) = update_live(ready, Console(SubmitModelAdoption), emit)
+  assert_true(submitting.console.loading)
+  assert_eq(submitting.console.error_message, None)
+  let (completed, _) = update_live(
+    ready,
+    Outcome(
+      ModelAdopted(
+        English,
+        verified.import_id,
+        "Registered as Candidate; gates remain.",
+      ),
+    ),
+    emit,
+  )
+  assert_eq(completed.console.model_adoption_draft.import_id, "")
+  assert_eq(completed.console.model_adopted_imports, [verified.import_id])
+  assert_true(completed.console.loading)
+  assert_true(
+    completed.console.success_message
+    .unwrap_or("")
+    .contains("Registered as Candidate"),
+  )
 }
 
 ///|

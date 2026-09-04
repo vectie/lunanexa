@@ -28,6 +28,46 @@ fn signed_identity_headers(
 }
 
 ///|
+fn signed_registration_headers(
+  secret : String,
+  issuer : String,
+  subject : String,
+  email : String,
+  display_name : String,
+  nonce : String,
+  issued_unix_ms : Int64,
+  expires_unix_ms : Int64,
+) -> Map[String, String] {
+  let issued = issued_unix_ms.to_string()
+  let expires = expires_unix_ms.to_string()
+  let canonical = "lunanexa.identity.registration.v1\n\{issuer}\n\{subject}\n\{email}\n\{display_name}\n\{issued}\n\{expires}\n\{nonce}"
+  let signature = @crypto.bytes_to_hex_string(
+    @crypto.hmac(
+      @crypto.SHA256::new(),
+      @utf8.encode(secret).view(),
+      @utf8.encode(canonical).view(),
+    ),
+  )
+  {
+    "X-LunaNexa-Identity-Issuer": issuer,
+    "X-LunaNexa-Identity-Subject": subject,
+    "X-LunaNexa-Identity-Email": email,
+    "X-LunaNexa-Identity-Display-Name": display_name,
+    "X-LunaNexa-Identity-Issued-At": issued,
+    "X-LunaNexa-Identity-Expires-At": expires,
+    "X-LunaNexa-Identity-Nonce": nonce,
+    "X-LunaNexa-Identity-Signature": "sha256:\{signature}",
+  }
+}
+
+///|
+priv struct TrialRegistrationResponse {
+  account : @account.AccountView
+  session : @account.IssuedBrowserSession
+  trial : @account.TrialEntitlement?
+} derive(FromJson)
+
+///|
 async test "identity exchange requires trusted transport and stored roles" {
   let directory = @fs.tmpdir(prefix="lunanexa-account-http-")
   let assertion_secret = "identity-assertion-test-secret-more-than-32-bytes"
@@ -191,6 +231,428 @@ async test "identity exchange requires trusted transport and stored roles" {
 }
 
 ///|
+async test "operator invitation enables one-time OIDC self-registration" {
+  let directory = @fs.tmpdir(prefix="lunanexa-account-registration-http-")
+  let assertion_secret = "registration-assertion-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "registration-session-secret-more-than-32-bytes",
+  )
+  let portal = @portal_store.FilePortalStore::open("\{directory}/portal.json")
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "test",
+    )
+    .with_account_store(accounts, assertion_secret)
+    .with_portal_store(portal)
+  let now = @async.now()
+  let invitation_reply = service.handle(
+    Post,
+    "/v1/account-invitations",
+    { "Authorization": "Bearer operator-token" },
+    (
+      {
+        "invitation_id": "invitation-http-one",
+        "email": "invited-http@example.invalid",
+        "organization_id": "organization-http-one",
+        "tenant_ref": "tenant-http-one",
+        "project_id": "project-http-one",
+        "expires_unix_ms": (now + 86400000L).to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(invitation_reply.status, 201)
+  let issued : @account.IssuedAccountInvitation = @json.from_json(
+    @json.parse(invitation_reply.body),
+  )
+  assert_false(
+    @fs.read_file("\{directory}/accounts.json").text().contains(issued.secret),
+  )
+  let headers = signed_registration_headers(
+    assertion_secret,
+    "https://identity.example/realms/lunanexa",
+    "provider-subject-registration",
+    "invited-http@example.invalid",
+    "Registered User",
+    "registration-nonce-one",
+    now,
+    now + 30000L,
+  )
+  let registration_body = (
+    { "invitation_secret": issued.secret, "lifetime_ms": 60000L.to_json() } :
+    Json).stringify()
+  assert_eq(
+    service.handle_with_transport(
+      Post,
+      "/v1/auth/register",
+      headers,
+      registration_body,
+      false,
+    ).status,
+    401,
+  )
+  let registered_reply = service.handle_with_transport(
+    Post,
+    "/v1/auth/register",
+    headers,
+    registration_body,
+    true,
+  )
+  assert_eq(registered_reply.status, 201)
+  let registered : @account.RegisteredAccount = @json.from_json(
+    @json.parse(registered_reply.body),
+  )
+  assert_eq(registered.account.roles, [EnterpriseUser])
+  let membership = portal.self_view(registered.account.subject_ref).membership
+  assert_eq(membership.organization_id, "organization-http-one")
+  assert_eq(membership.tenant_ref, "tenant-http-one")
+  assert_eq(membership.roles, [Developer])
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/auth/self",
+      { "Authorization": "Bearer \{registered.session.secret}" },
+      "",
+    ).status,
+    200,
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "verified OIDC identity can register freely without machine authority" {
+  let directory = @fs.tmpdir(prefix="lunanexa-open-registration-http-")
+  let assertion_secret = "open-registration-assertion-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "open-registration-session-secret-more-than-32-bytes",
+  )
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+    durable, runtime, "operator-token", "inference-token", "node-token", "test",
+  ).with_account_store(accounts, assertion_secret)
+  let now = @async.now()
+  let headers = signed_registration_headers(
+    assertion_secret,
+    "https://identity.example/realms/lunanexa",
+    "provider-subject-open-registration",
+    "open-registration@example.invalid",
+    "Open Registration",
+    "open-registration-nonce-one",
+    now,
+    now + 30000L,
+  )
+  let forged = headers.copy()
+  forged["X-LunaNexa-Identity-Email"] = "attacker@example.invalid"
+  assert_eq(
+    service.handle_with_transport(
+      Post,
+      "/v1/auth/register",
+      forged,
+      "{\"lifetime_ms\":\"60000\"}",
+      true,
+    ).status,
+    401,
+  )
+  let registered_reply = service.handle_with_transport(
+    Post,
+    "/v1/auth/register",
+    headers,
+    "{\"lifetime_ms\":\"60000\"}",
+    true,
+  )
+  assert_eq(registered_reply.status, 201)
+  let registered : @account.OpenRegisteredAccount = @json.from_json(
+    @json.parse(registered_reply.body),
+  )
+  assert_eq(registered.account.roles, [EnterpriseUser])
+  assert_eq(registered.account.email, "open-registration@example.invalid")
+  let session_headers = {
+    "Authorization": "Bearer \{registered.session.secret}",
+  }
+  assert_eq(
+    service.handle(Get, "/v1/auth/self", session_headers, "").status,
+    200,
+  )
+  // Registration never converts the browser session into operator or machine
+  // authority. Those capabilities remain behind separate durable grants.
+  assert_eq(
+    service.handle(Get, "/v1/accounts", session_headers, "").status,
+    401,
+  )
+  assert_eq(
+    service.handle(Get, "/v1/portal/self", session_headers, "").status,
+    503,
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "free registration provisions one bounded shared-inference trial" {
+  let directory = @fs.tmpdir(prefix="lunanexa-registration-trial-http-")
+  let assertion_secret = "trial-registration-assertion-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "trial-registration-session-secret-more-than-32-bytes",
+  )
+  let portal = @portal_store.FilePortalStore::open("\{directory}/portal.json")
+  let workspace = @directory.FileWorkspaceDirectory::open(
+    "\{directory}/workspace.json",
+  )
+  let access = @access.AccessStore::open(
+    "\{directory}/access.json",
+    "trial-registration-api-key-secret-more-than-32-bytes",
+  )
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "test",
+    )
+    .with_account_store(accounts, assertion_secret)
+    .with_portal_store(portal)
+    .with_workspace_directory(workspace, true)
+    .with_access_store(access)
+    .with_open_registration_trial(86400000L, 100L, ["text.qwen"])
+  let now = @async.now()
+  let response = service.handle_with_transport(
+    Post,
+    "/v1/auth/register",
+    signed_registration_headers(
+      assertion_secret,
+      "https://identity.example",
+      "trial-provider-subject",
+      "trial-user@example.invalid",
+      "Trial User",
+      "trial-registration-nonce",
+      now,
+      now + 30000L,
+    ),
+    "{\"lifetime_ms\":\"60000\"}",
+    true,
+  )
+  assert_eq(response.status, 201)
+  let registered : TrialRegistrationResponse = @json.from_json(
+    @json.parse(response.body),
+  )
+  guard registered.trial is Some(trial) else { fail("trial missing") }
+  assert_eq(registered.account.roles, [EnterpriseUser])
+  assert_eq(trial.maximum_requests, 100L)
+  assert_eq(trial.allowed_models, ["text.qwen"])
+  let session_headers = {
+    "Authorization": "Bearer \{registered.session.secret}",
+  }
+  assert_eq(
+    service.handle(Get, "/v1/auth/trial", session_headers, "").status,
+    200,
+  )
+  let workspace_state = workspace.snapshot(now + 1L)
+  assert_eq(workspace_state.leases.length(), 1)
+  assert_eq(workspace_state.leases[0].state, Active)
+  assert_eq(workspace_state.leases[0].limits.max_active_sessions, 1)
+  let key_body = (
+    {
+      "key_id": "trial-api-key",
+      "project_id": trial.project_id,
+      "display_name": "Trial key",
+      "scopes": ["ModelList", "Inference"],
+      "allowed_models": ["text.qwen"],
+      "expires_unix_ms": trial.expires_unix_ms.to_json(),
+      "maximum_requests": 100L.to_json(),
+    } : Json).stringify()
+  let key_reply = service.handle(
+    Post,
+    "/v1/portal/self/api-keys",
+    session_headers,
+    key_body,
+  )
+  assert_eq(key_reply.status, 201)
+  let issued : @access.IssuedApiKeyView = @json.from_json(
+    @json.parse(key_reply.body),
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{issued.secret}" },
+      "",
+    ).status,
+    200,
+  )
+  let second_body = key_body.replace(
+    old="trial-api-key",
+    new="trial-api-key-two",
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/portal/self/api-keys",
+      session_headers,
+      second_body,
+    ).status,
+    409,
+  )
+  // Shared trial access is represented only by a topology-free workspace
+  // lease; no exclusive machine store or credential handoff is installed.
+  assert_eq(
+    service.handle(Get, "/v1/machine-access/self", session_headers, "").status,
+    503,
+  )
+  let invitation_reply = service.handle(
+    Post,
+    "/v1/account-invitations",
+    { "Authorization": "Bearer operator-token" },
+    (
+      {
+        "invitation_id": "trial-upgrade-invitation",
+        "email": "trial-user@example.invalid",
+        "organization_id": "enterprise-org",
+        "tenant_ref": "enterprise-tenant",
+        "project_id": "enterprise-project",
+        "expires_unix_ms": (now + 86400000L).to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(invitation_reply.status, 201)
+  let invitation : @account.IssuedAccountInvitation = @json.from_json(
+    @json.parse(invitation_reply.body),
+  )
+  let upgraded = service.handle_with_transport(
+    Post,
+    "/v1/auth/register",
+    signed_registration_headers(
+      assertion_secret,
+      "https://identity.example",
+      "trial-provider-subject",
+      "trial-user@example.invalid",
+      "Trial User",
+      "trial-upgrade-nonce",
+      now + 1L,
+      now + 30000L,
+    ),
+    (
+      {
+        "invitation_secret": invitation.secret,
+        "lifetime_ms": 60000L.to_json(),
+      } : Json).stringify(),
+    true,
+  )
+  assert_eq(upgraded.status, 201)
+  assert_eq(
+    portal.self_view(registered.account.subject_ref).membership.organization_id,
+    "enterprise-org",
+  )
+  assert_true(
+    accounts.trial_for_account(registered.account.account_id).unwrap().revoked_unix_ms
+    is Some(_),
+  )
+  assert_eq(workspace.snapshot(now + 2L).leases[0].state, Revoked)
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{issued.secret}" },
+      "",
+    ).status,
+    401,
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "bootstrap operator token retires after durable operator creation" {
+  let directory = @fs.tmpdir(prefix="lunanexa-bootstrap-retirement-")
+  let assertion_secret = "bootstrap-assertion-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "bootstrap-session-secret-more-than-32-bytes",
+  )
+  let now = @async.now()
+  ignore(
+    accounts.create({
+      version: @account.contract_version,
+      account_id: "account-platform-operator",
+      subject_ref: "subject-platform-operator",
+      identity_issuer: "https://identity.example/realms/lunanexa",
+      identity_subject_sha256: @account.identity_subject_digest(
+        "https://identity.example/realms/lunanexa", "provider-platform-operator",
+      ),
+      display_name: "Platform Operator",
+      email: "operator@example.invalid",
+      identity_receipt: "identity-proof:platform-operator",
+      roles: [PlatformOperator],
+      state: Active,
+      created_unix_ms: now,
+      updated_unix_ms: now,
+    }),
+  )
+  let session = accounts.issue_session(
+    "https://identity.example/realms/lunanexa",
+    "provider-platform-operator",
+    "bootstrap-session-assertion",
+    60000L,
+    now + 1L,
+  )
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "test",
+    )
+    .with_account_store(accounts, assertion_secret)
+    .with_retired_bootstrap_operator_token(true)
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/accounts",
+      { "Authorization": "Bearer operator-token" },
+      "",
+    ).status,
+    401,
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/accounts",
+      { "Authorization": "Bearer \{session.secret}" },
+      "",
+    ).status,
+    200,
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "operator account creation returns only the safe public view" {
   let directory = @fs.tmpdir(prefix="lunanexa-account-create-http-")
   let accounts = @account.AccountStore::open(
@@ -271,6 +733,8 @@ async test "operator account creation returns only the safe public view" {
       key_id: "key-operator-attribution",
       tenant_ref: "tenant-created",
       subject_ref: "subject-created",
+      organization_id: "organization-created",
+      project_id: "project-created",
       display_name: "Operator attribution proof",
       scopes: [Inference],
       allowed_models: [],
@@ -315,6 +779,8 @@ async test "operator account creation returns only the safe public view" {
       key_id: "key-created-account",
       tenant_ref: "tenant-created",
       subject_ref: "subject-created",
+      organization_id: "organization-created",
+      project_id: "project-created",
       display_name: "Created account key",
       scopes: [Inference],
       allowed_models: [],

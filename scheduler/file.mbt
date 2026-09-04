@@ -34,8 +34,14 @@ pub(all) suberror SchedulerStateError {
 } derive(Debug, Eq)
 
 ///|
+enum SchedulerPersistence {
+  SchedulerFile(String)
+  SchedulerPostgres(@database.PostgresDatabase)
+}
+
+///|
 pub struct FileScheduler {
-  path : String
+  persistence : SchedulerPersistence
   mut capacity : Int
   decision_history_limit : Int
   background_capacity_percent : Int
@@ -100,7 +106,7 @@ pub async fn FileScheduler::open(
     raise InvalidSchedulerState("priority capacity percentages are invalid")
   }
   let scheduler : FileScheduler = {
-    path,
+    persistence: SchedulerFile(path),
     capacity: capacity.max(1),
     decision_history_limit,
     background_capacity_percent,
@@ -151,8 +157,80 @@ pub async fn FileScheduler::open(
 }
 
 ///|
+pub async fn FileScheduler::open_postgres(
+  database : @database.PostgresDatabase,
+  capacity : Int,
+  decision_history_limit? : Int = 1024,
+  background_capacity_percent? : Int = 75,
+  normal_capacity_percent? : Int = 90,
+) -> FileScheduler {
+  if decision_history_limit <= 0 || decision_history_limit > 65536 {
+    raise InvalidSchedulerState(
+      "decision history limit must be positive and bounded",
+    )
+  }
+  if background_capacity_percent <= 0 ||
+    background_capacity_percent > normal_capacity_percent ||
+    normal_capacity_percent > 100 {
+    raise InvalidSchedulerState("priority capacity percentages are invalid")
+  }
+  let scheduler : FileScheduler = {
+    persistence: SchedulerPostgres(database),
+    capacity: capacity.max(1),
+    decision_history_limit,
+    background_capacity_percent,
+    normal_capacity_percent,
+    quotas: Map([]),
+    active: Map([]),
+    usage: Map([]),
+    decisions: [],
+    mutex: Mutex(),
+  }
+  let payload = database.load_snapshot("scheduler", "lunanexa.scheduler.v2")
+  match payload {
+    Some(raw) => {
+      let snapshot : SchedulerSnapshot = @json.from_json(@json.parse(raw)) catch {
+        error => raise InvalidSchedulerState("\{Repr(error)}")
+      }
+      if snapshot.schema_version != "lunanexa.scheduler.v2" ||
+        snapshot.capacity <= 0 {
+        raise InvalidSchedulerState("unsupported or invalid scheduler snapshot")
+      }
+      scheduler.capacity = snapshot.capacity
+      for quota in snapshot.quotas {
+        scheduler.quotas[quota.tenant_ref] = quota
+      }
+      for admission in snapshot.active {
+        if admission.deadline_unix_ms > @async.now() {
+          scheduler.active[admission.workload_id] = admission
+        }
+      }
+      for usage in snapshot.usage {
+        scheduler.usage[usage.tenant_ref] = usage
+      }
+      scheduler.decisions.push_iter(snapshot.decisions.iter())
+      while scheduler.decisions.length() > decision_history_limit {
+        ignore(scheduler.decisions.remove(0))
+      }
+      scheduler.persist()
+    }
+    None => scheduler.persist()
+  }
+  scheduler
+}
+
+///|
 async fn FileScheduler::persist(self : FileScheduler) -> Unit {
-  write_scheduler(self.path, self.snapshot_unlocked())
+  let snapshot = self.snapshot_unlocked()
+  match self.persistence {
+    SchedulerFile(path) => write_scheduler(path, snapshot)
+    SchedulerPostgres(database) =>
+      database.save_opaque_snapshot(
+        "scheduler",
+        "lunanexa.scheduler.v2",
+        snapshot.to_json().stringify(),
+      )
+  }
 }
 
 ///|

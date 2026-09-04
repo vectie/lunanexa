@@ -71,6 +71,8 @@ start_controller() {
     LUNANEXA_OBSERVABILITY_PATH="$test_directory/observability.json" \
     LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
     LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
+    LUNANEXA_ACCOUNT_PATH="$test_directory/accounts.json" \
+    LUNANEXA_ACCESS_ONBOARDING_PATH="$test_directory/access-onboarding.json" \
     LUNANEXA_CREDENTIAL_HANDOFF_PATH="$test_directory/credential-handoffs.json" \
     LUNANEXA_CLIENT_HANDOFF_PATH="$test_directory/client-handoffs.json" \
     LUNANEXA_TECHNICAL_PATH="$test_directory/technical.json" \
@@ -93,6 +95,7 @@ start_controller() {
     LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority-01" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
+    LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET="process-test-account-session-authority" \
     LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="process-test-credential-handoff-authority" \
     LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET="process-test-client-handoff-authority" \
     LUNANEXA_CLIENT_ID="process-test-desktop" \
@@ -218,6 +221,8 @@ env \
   LUNANEXA_OBSERVABILITY_PATH="$test_directory/observability.json" \
   LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
   LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
+  LUNANEXA_ACCOUNT_PATH="$test_directory/accounts.json" \
+  LUNANEXA_ACCESS_ONBOARDING_PATH="$test_directory/access-onboarding.json" \
   LUNANEXA_CREDENTIAL_HANDOFF_PATH="$test_directory/credential-handoffs.json" \
   LUNANEXA_CLIENT_HANDOFF_PATH="$test_directory/client-handoffs.json" \
   LUNANEXA_TECHNICAL_PATH="$test_directory/technical.json" \
@@ -240,6 +245,7 @@ env \
   LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority-01" \
   LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
   LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
+  LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET="process-test-account-session-authority" \
   LUNANEXA_CREDENTIAL_HANDOFF_ISSUER_SECRET="process-test-credential-handoff-authority" \
   LUNANEXA_CLIENT_HANDOFF_ISSUER_SECRET="process-test-client-handoff-authority" \
   LUNANEXA_CLIENT_ID="process-test-desktop" \

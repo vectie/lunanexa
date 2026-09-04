@@ -31,6 +31,20 @@ fn constant_time_equal(left : String, right : String) -> Bool {
 }
 
 ///|
+fn valid_optional_attribution(
+  organization_id : String?,
+  project_id : String?,
+) -> Bool {
+  match (organization_id, project_id) {
+    (None, None) => true
+    (Some(organization), Some(project)) =>
+      @contracts.valid_identifier(organization) &&
+      @contracts.valid_identifier(project)
+    _ => false
+  }
+}
+
+///|
 fn sorted_handoffs(
   values : Map[String, @handoff.ClientHandoffRecord],
 ) -> Array[@handoff.ClientHandoffRecord] {
@@ -107,6 +121,7 @@ fn ClientHandoffStore::restore(
       !@contracts.valid_identifier(record.client_id) ||
       !@contracts.valid_identifier(record.tenant_ref) ||
       !@contracts.valid_identifier(record.subject_ref) ||
+      !valid_optional_attribution(record.organization_id, record.project_id) ||
       !@contracts.valid_identifier(record.api_key_id) ||
       !@contracts.valid_sha256_digest(record.code_sha256) ||
       record.created_unix_ms <= 0L ||
@@ -131,6 +146,10 @@ fn ClientHandoffStore::restore(
       !@contracts.valid_identifier(credential.client_id) ||
       !@contracts.valid_identifier(credential.tenant_ref) ||
       !@contracts.valid_identifier(credential.subject_ref) ||
+      !valid_optional_attribution(
+        credential.organization_id,
+        credential.project_id,
+      ) ||
       !@contracts.valid_sha256_digest(credential.secret_sha256) ||
       credential.issued_unix_ms <= 0L ||
       credential.expires_unix_ms <= credential.issued_unix_ms ||
@@ -250,7 +269,7 @@ fn ClientHandoffStore::handoff_code(
   intent : @handoff.ClientHandoffIssueIntent,
   created_unix_ms : Int64,
 ) -> String {
-  "lnxc_\{self.hmac_hex("lunanexa.client-handoff.code.v1|\{intent.request_id}|\{intent.client_id}|\{intent.tenant_ref}|\{intent.subject_ref}|\{created_unix_ms}")}"
+  "lnxc_\{self.hmac_hex("lunanexa.client-handoff.code.v2|\{intent.request_id}|\{intent.client_id}|\{intent.tenant_ref}|\{intent.subject_ref}|\{intent.organization_id}|\{intent.project_id}|\{created_unix_ms}")}"
 }
 
 ///|
@@ -258,7 +277,7 @@ fn ClientHandoffStore::api_secret(
   self : ClientHandoffStore,
   record : @handoff.ClientHandoffRecord,
 ) -> String {
-  "lnx_\{self.hmac_hex("lunanexa.client-handoff.api.v1|\{record.api_key_id}|\{record.handoff_id}|\{record.tenant_ref}|\{record.subject_ref}|\{record.created_unix_ms}")}"
+  "lnx_\{self.hmac_hex("lunanexa.client-handoff.api.v2|\{record.api_key_id}|\{record.handoff_id}|\{record.tenant_ref}|\{record.subject_ref}|\{record.organization_id.unwrap_or("legacy-unattributed")}|\{record.project_id.unwrap_or("legacy-unattributed")}|\{record.created_unix_ms}")}"
 }
 
 ///|
@@ -279,6 +298,8 @@ fn ClientHandoffStore::issued_view(
     client_id: record.client_id,
     tenant_ref: record.tenant_ref,
     subject_ref: record.subject_ref,
+    organization_id: record.organization_id.unwrap_or("legacy-unattributed"),
+    project_id: record.project_id.unwrap_or("legacy-unattributed"),
     display_name: record.display_name,
     allowed_models: record.allowed_models,
     handoff_expires_unix_ms: record.handoff_expires_unix_ms,
@@ -311,6 +332,8 @@ pub async fn ClientHandoffStore::issue(
       Some(existing) if existing.client_id == intent.client_id &&
         existing.tenant_ref == intent.tenant_ref &&
         existing.subject_ref == intent.subject_ref &&
+        existing.organization_id == Some(intent.organization_id) &&
+        existing.project_id == Some(intent.project_id) &&
         existing.display_name == intent.display_name &&
         existing.allowed_models == intent.allowed_models &&
         existing.handoff_expires_unix_ms == intent.handoff_expires_unix_ms &&
@@ -336,6 +359,8 @@ pub async fn ClientHandoffStore::issue(
       client_id: intent.client_id,
       tenant_ref: intent.tenant_ref,
       subject_ref: intent.subject_ref,
+      organization_id: Some(intent.organization_id),
+      project_id: Some(intent.project_id),
       api_key_id,
       code_sha256: digest_secret(code),
       display_name: intent.display_name,
@@ -354,6 +379,8 @@ pub async fn ClientHandoffStore::issue(
       client_id: intent.client_id,
       tenant_ref: intent.tenant_ref,
       subject_ref: intent.subject_ref,
+      organization_id: Some(intent.organization_id),
+      project_id: Some(intent.project_id),
       secret_sha256: digest_secret(secret),
       allowed_models: intent.allowed_models.copy(),
       issued_unix_ms: now_unix_ms,
@@ -418,6 +445,12 @@ pub async fn ClientHandoffStore::redeem(
     guard self.credentials.get(record.api_key_id) is Some(credential) else {
       raise @handoff.ClientHandoffError::NotFound
     }
+    guard record.organization_id is Some(organization_id) &&
+      record.project_id is Some(project_id) &&
+      credential.organization_id == Some(organization_id) &&
+      credential.project_id == Some(project_id) else {
+      raise @handoff.ClientHandoffError::Unauthorized
+    }
     // Verify the deterministic secret before consuming the one-time record.
     // A corrupted credential snapshot must fail closed without persisting an
     // irreversible redeemed state.
@@ -436,6 +469,8 @@ pub async fn ClientHandoffStore::redeem(
       api_secret: secret,
       tenant_ref: record.tenant_ref,
       subject_ref: record.subject_ref,
+      organization_id,
+      project_id,
       allowed_models: record.allowed_models.copy(),
       expires_unix_ms: credential.expires_unix_ms,
       maximum_requests: credential.maximum_requests,
@@ -478,6 +513,10 @@ pub async fn ClientHandoffStore::authorize(
     guard matched is Some(current) else {
       raise @handoff.ClientHandoffError::Unauthorized
     }
+    guard current.organization_id is Some(organization_id) &&
+      current.project_id is Some(project_id) else {
+      raise @handoff.ClientHandoffError::Unauthorized
+    }
     guard self.handoffs.get(current.handoff_id) is Some(record) &&
       record.redeemed_unix_ms is Some(_) &&
       record.revoked_unix_ms is None else {
@@ -505,6 +544,8 @@ pub async fn ClientHandoffStore::authorize(
       key_id: current.key_id,
       tenant_ref: current.tenant_ref,
       subject_ref: current.subject_ref,
+      organization_id,
+      project_id,
     }
   } catch {
     error => {

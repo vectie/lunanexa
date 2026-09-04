@@ -116,3 +116,91 @@ async test "credential API issue and redeem is one-time tenant-safe and secret-f
   assert_eq(recovered_machines[0].credential_handoff.state, Recoverable)
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "credential issuer adapter pulls minimal intent and atomically dispatches" {
+  let directory = @fs.tmpdir(prefix="lunanexa-credential-issuer-api-")
+  let now = @async.now()
+  let (base, leases, _, _) = customer_machine_test_service(directory, now)
+  let service = base.with_credential_issuer_adapter_token(
+    "credential-issuer-adapter-machine-token-more-than-32-bytes",
+  )
+  let lease = leases.lease("lease-customer-a").unwrap()
+  let intent : @credential.CredentialIssuerRequestIntent = {
+    request_id: "credential-issuer-request-a",
+    lease_id: lease.intent.lease_id,
+    expected_generation: lease.generation,
+    host_alias: "customer-a.cluster.example",
+    ssh_port: 2222,
+    host_key_fingerprint: "SHA256:abcdefghijklmnopqrstuvwxyzABCDEFG1234567890_-",
+  }
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/machine-credentials/lease-customer-a:request",
+      { "Authorization": "Bearer operator-token" },
+      intent.to_json().stringify(),
+    ).status,
+    202,
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/internal/v1/credential-issuer/requests",
+      { "Authorization": "Bearer wrong" },
+      "",
+    ).status,
+    401,
+  )
+  let adapter = {
+    "Authorization": "Bearer credential-issuer-adapter-machine-token-more-than-32-bytes",
+  }
+  let pending = service.handle(
+    Get,
+    "/internal/v1/credential-issuer/requests",
+    adapter,
+    "",
+  )
+  assert_eq(pending.status, 200)
+  assert_true(pending.body.contains(intent.request_id))
+  assert_false(pending.body.contains("customer-node-a"))
+  assert_false(pending.body.contains("subject-a"))
+  assert_false(pending.body.contains("access_credential_ref"))
+  let accepted = @async.now()
+  let receipt : @credential.CredentialIssuerDispatchReceipt = {
+    request_id: intent.request_id,
+    issuer_redirect_url: "https://issuer.example/redeem/credential-issuer-request-a",
+    accepted_unix_ms: accepted,
+  }
+  let dispatched = service.handle(
+    Post,
+    "/internal/v1/credential-issuer/dispatch-receipts",
+    adapter,
+    receipt.to_json().stringify(),
+  )
+  assert_eq(dispatched.status, 200)
+  assert_false(dispatched.body.contains("customer-node-a"))
+  assert_eq(
+    service.handle(
+      Post,
+      "/internal/v1/credential-issuer/dispatch-receipts",
+      adapter,
+      receipt.to_json().stringify(),
+    ).body,
+    dispatched.body,
+  )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/machine-access/self/lease-customer-a/credential",
+      customer_headers("subject-a"),
+      "",
+    ).status,
+    200,
+  )
+  assert_eq(
+    service.handle(Get, "/internal/v1/credential-issuer/requests", adapter, "").body,
+    "[]",
+  )
+  @fs.rmdir(directory, recursive=true)
+}

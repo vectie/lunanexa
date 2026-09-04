@@ -13,8 +13,14 @@ pub(all) suberror TelemetryError {
 } derive(Debug, Eq)
 
 ///|
+enum TelemetryPersistence {
+  TelemetryFile(String)
+  TelemetryPostgres(@database.PostgresDatabase)
+}
+
+///|
 pub struct FileTelemetry {
-  path : String
+  persistence : TelemetryPersistence
   sample_history_limit : Int
   benchmark_history_limit : Int
   safety_limits : @settings.TelemetrySafetySettings
@@ -61,7 +67,7 @@ pub async fn FileTelemetry::open(
     raise InvalidTelemetryState("history limits must be positive and bounded")
   }
   let telemetry : FileTelemetry = {
-    path,
+    persistence: TelemetryFile(path),
     sample_history_limit,
     benchmark_history_limit,
     safety_limits,
@@ -102,8 +108,68 @@ pub async fn FileTelemetry::open(
 }
 
 ///|
+pub async fn FileTelemetry::open_postgres(
+  database : @database.PostgresDatabase,
+  sample_history_limit? : Int = 10000,
+  benchmark_history_limit? : Int = 256,
+  safety_limits? : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
+) -> FileTelemetry {
+  if sample_history_limit <= 0 ||
+    sample_history_limit > 1000000 ||
+    benchmark_history_limit <= 0 ||
+    benchmark_history_limit > 65536 {
+    raise InvalidTelemetryState("history limits must be positive and bounded")
+  }
+  let telemetry : FileTelemetry = {
+    persistence: TelemetryPostgres(database),
+    sample_history_limit,
+    benchmark_history_limit,
+    safety_limits,
+    samples: [],
+    benchmark_runs: [],
+    benchmark_summaries: [],
+    mutex: Mutex(),
+  }
+  let payload = database.load_snapshot("telemetry", "lunanexa.telemetry.v1")
+  match payload {
+    Some(raw) => {
+      let snapshot : TelemetrySnapshot = @json.from_json(@json.parse(raw)) catch {
+        error => raise InvalidTelemetryState("\{Repr(error)}")
+      }
+      if snapshot.schema_version != "lunanexa.telemetry.v1" {
+        raise InvalidTelemetryState("unsupported telemetry snapshot")
+      }
+      telemetry.samples.push_iter(snapshot.samples.iter())
+      telemetry.benchmark_runs.push_iter(snapshot.benchmark_runs.iter())
+      telemetry.benchmark_summaries.push_iter(
+        snapshot.benchmark_summaries.iter(),
+      )
+      while telemetry.samples.length() > sample_history_limit {
+        ignore(telemetry.samples.remove(0))
+      }
+      while telemetry.benchmark_runs.length() > benchmark_history_limit {
+        ignore(telemetry.benchmark_runs.remove(0))
+        ignore(telemetry.benchmark_summaries.remove(0))
+      }
+      telemetry.persist()
+    }
+    None => telemetry.persist()
+  }
+  telemetry
+}
+
+///|
 async fn FileTelemetry::persist(self : FileTelemetry) -> Unit {
-  write_telemetry(self.path, self.snapshot_unlocked())
+  let snapshot = self.snapshot_unlocked()
+  match self.persistence {
+    TelemetryFile(path) => write_telemetry(path, snapshot)
+    TelemetryPostgres(database) =>
+      database.save_opaque_snapshot(
+        "telemetry",
+        "lunanexa.telemetry.v1",
+        snapshot.to_json().stringify(),
+      )
+  }
 }
 
 ///|

@@ -39,6 +39,20 @@ fn valid_text(value : String, maximum : Int) -> Bool {
 }
 
 ///|
+fn valid_billing_attribution(
+  organization_id : String?,
+  project_id : String?,
+) -> Bool {
+  match (organization_id, project_id) {
+    (None, None) => true
+    (Some(organization), Some(project)) =>
+      @contracts.valid_identifier(organization) &&
+      @contracts.valid_identifier(project)
+    _ => false
+  }
+}
+
+///|
 pub fn validate_api_key_intent(
   intent : ApiKeyIssueIntent,
   now_unix_ms : Int64,
@@ -46,6 +60,8 @@ pub fn validate_api_key_intent(
   if !@contracts.valid_identifier(intent.key_id) ||
     !@contracts.valid_identifier(intent.tenant_ref) ||
     !@contracts.valid_identifier(intent.subject_ref) ||
+    !@contracts.valid_identifier(intent.organization_id) ||
+    !@contracts.valid_identifier(intent.project_id) ||
     !valid_text(intent.display_name, 128) ||
     intent.scopes.length() == 0 ||
     intent.scopes.length() > 2 ||
@@ -104,6 +120,10 @@ fn AccessStore::restore(
       !@contracts.valid_identifier(credential.key_id) ||
       !@contracts.valid_identifier(credential.tenant_ref) ||
       !@contracts.valid_identifier(credential.subject_ref) ||
+      !valid_billing_attribution(
+        credential.organization_id,
+        credential.project_id,
+      ) ||
       credential.secret_sha256.length() != 71 ||
       !credential.secret_sha256.has_prefix("sha256:") ||
       credential.issued_unix_ms <= 0L ||
@@ -197,7 +217,7 @@ fn AccessStore::issue_secret(
 ) -> String {
   let key = @utf8.encode(self.issuer_secret)
   let material = @utf8.encode(
-    "lunanexa.api-key.v1|\{intent.key_id}|\{intent.tenant_ref}|\{intent.subject_ref}|\{now_unix_ms}",
+    "lunanexa.api-key.v2|\{intent.key_id}|\{intent.tenant_ref}|\{intent.subject_ref}|\{intent.organization_id}|\{intent.project_id}|\{now_unix_ms}",
   )
   "lnx_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()))}"
 }
@@ -220,6 +240,8 @@ pub async fn AccessStore::issue(
       key_id: intent.key_id,
       tenant_ref: intent.tenant_ref,
       subject_ref: intent.subject_ref,
+      organization_id: Some(intent.organization_id),
+      project_id: Some(intent.project_id),
       display_name: intent.display_name,
       secret_sha256: digest_secret(secret),
       scopes: intent.scopes,
@@ -333,6 +355,10 @@ pub async fn AccessStore::authorize(
       }
     }
     guard matched is Some(current) else { raise Unauthorized }
+    guard current.organization_id is Some(organization_id) &&
+      current.project_id is Some(project_id) else {
+      raise Unauthorized
+    }
     if current.revoked_unix_ms is Some(_) ||
       current.expires_unix_ms <= now_unix_ms ||
       !current.scopes.contains(scope) ||
@@ -360,6 +386,8 @@ pub async fn AccessStore::authorize(
       key_id: current.key_id,
       tenant_ref: current.tenant_ref,
       subject_ref: current.subject_ref,
+      organization_id,
+      project_id,
     }
   } catch {
     error => {
@@ -385,6 +413,8 @@ pub async fn AccessStore::views(self : AccessStore) -> Array[ApiCredentialView] 
     key_id: value.key_id,
     tenant_ref: value.tenant_ref,
     subject_ref: value.subject_ref,
+    organization_id: value.organization_id,
+    project_id: value.project_id,
     display_name: value.display_name,
     scopes: value.scopes,
     allowed_models: value.allowed_models,
@@ -403,6 +433,8 @@ pub fn IssuedApiKey::public_view(self : IssuedApiKey) -> IssuedApiKeyView {
       key_id: self.credential.key_id,
       tenant_ref: self.credential.tenant_ref,
       subject_ref: self.credential.subject_ref,
+      organization_id: self.credential.organization_id,
+      project_id: self.credential.project_id,
       display_name: self.credential.display_name,
       scopes: self.credential.scopes,
       allowed_models: self.credential.allowed_models,

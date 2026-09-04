@@ -57,7 +57,9 @@ case " $* " in
         "assignment-signing-secret",
         "audit-token",
         "catalog-signing-secret",
+        "commercial-provider-adapter-token",
         "credential-handoff-issuer-secret",
+        "credential-issuer-adapter-token",
         "entitlement-authority-callback-token",
         "exclusive-lease-signing-secret",
         "guide-admin-auth-key",
@@ -87,7 +89,8 @@ case " $* " in
           {apiVersion:"v1",kind:"Secret",metadata:{name:"lunanexa-control-credentials"},type:"Opaque",data:$control},
           {apiVersion:"v1",kind:"Secret",metadata:{name:"lunanexa-database"},type:"Opaque",data:{database:"bHVuYW5leGE=",password:"YQ==",url:"YQ==",username:"bHVuYW5leGE="}},
           {apiVersion:"v1",kind:"Secret",metadata:{name:"lunanexa-cosign-trust"},type:"Opaque",data:{"cosign.pub":"YQ=="}},
-          {apiVersion:"v1",kind:"Secret",metadata:{name:"lunanexa-offline-commerce-readiness"},type:"Opaque",data:{pending:"cGVuZGluZw=="}}
+          {apiVersion:"v1",kind:"Secret",metadata:{name:"lunanexa-offline-commerce-readiness"},type:"Opaque",data:{pending:"cGVuZGluZw=="}},
+          {apiVersion:"v1",kind:"Secret",metadata:{name:"lunanexa-model-source-credentials"},type:"Opaque",data:{token:"YQ=="}}
         ]
       }
     '
@@ -311,10 +314,19 @@ run_case() {
     test "$status" -eq 0
     grep -q '^\[ok\] 4 selected compute node(s) are Active with fresh heartbeats$' "$output"
     grep -q '^\[complete\] deployment target management-and-compute is reconciled$' "$output"
-    grep -q 'rollout status statefulset/lunanexa-postgres --timeout=5m' "$kubectl_log"
+    if grep -q 'statefulset/lunanexa-postgres' "$kubectl_log"; then
+      printf '%s\n' 'production installer unexpectedly managed bundled PostgreSQL' >&2
+      exit 1
+    fi
     grep -q 'create --dry-run=client --validate=false --namespace lunanexa' "$kubectl_log"
-    grep -q 'get endpoints/lunanexa-postgres' "$kubectl_log"
-    for deployment_name in lunanexa-control lunanexa-console lunanexa-enterprise lunanexa-workbench lunanexa-model-source; do
+    if grep -q 'get endpoints/lunanexa-postgres' "$kubectl_log"; then
+      printf '%s\n' 'production installer unexpectedly required bundled PostgreSQL' >&2
+      exit 1
+    fi
+    grep -q "wait --for=jsonpath={.status.updatedReplicas}=3 deployment/lunanexa-control --timeout=5m" "$kubectl_log"
+    grep -q "wait --for=jsonpath={.status.replicas}=3 deployment/lunanexa-control --timeout=5m" "$kubectl_log"
+    grep -q "wait --for=jsonpath={.status.availableReplicas}=1 deployment/lunanexa-control --timeout=5m" "$kubectl_log"
+    for deployment_name in lunanexa-console lunanexa-enterprise lunanexa-workbench lunanexa-model-source; do
       grep -q "rollout status deployment/$deployment_name --timeout=5m" "$kubectl_log"
       grep -q "get endpoints/$deployment_name" "$kubectl_log"
     done

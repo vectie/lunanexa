@@ -22,6 +22,56 @@ fn active_lease(now : Int64) -> @nodelease.ExclusiveNodeLease {
 }
 
 ///|
+async test "issuer outbox dispatch atomically creates one recoverable handoff" {
+  let directory = @fs.tmpdir(prefix="lunanexa-credential-issuer-outbox-")
+  let path = "\{directory}/handoffs.json"
+  let secret = "credential-handoff-test-secret-with-more-than-32-bytes"
+  let now = @async.now()
+  let lease = active_lease(now)
+  let store = ready_store(path, secret, now)
+  let intent : @credential.CredentialIssuerRequestIntent = {
+    request_id: "issuer-request-1",
+    lease_id: lease.intent.lease_id,
+    expected_generation: lease.generation,
+    host_alias: "dgx-user-1.cluster.example",
+    ssh_port: 2222,
+    host_key_fingerprint: "SHA256:abcdefghijklmnopqrstuvwxyzABCDEFG1234567890_-",
+  }
+  let queued = store.queue_issuer_request(intent, lease, now)
+  assert_eq(queued.issuer_redirect_url, None)
+  assert_eq(store.pending_issuer_requests(now).length(), 1)
+  let before = store.snapshot()
+  let invalid : @credential.CredentialIssuerDispatchReceipt = {
+    request_id: intent.request_id,
+    issuer_redirect_url: "https://evil.example/redeem/request",
+    accepted_unix_ms: now + 1L,
+  }
+  let mut rejected = false
+  ignore(store.accept_issuer_dispatch(invalid, lease)) catch {
+    @credential.CredentialHandoffError::InvalidInput(_) => rejected = true
+    _ => ()
+  }
+  assert_true(rejected)
+  assert_eq(store.snapshot(), before)
+  assert_eq(store.view_for_lease(lease, lease.intent.subject_ref, now), None)
+  let receipt : @credential.CredentialIssuerDispatchReceipt = {
+    ..invalid,
+    issuer_redirect_url: "https://ssh-ca.example/redeem/issuer-request-1",
+  }
+  let (dispatched, handoff) = store.accept_issuer_dispatch(receipt, lease)
+  assert_eq(dispatched.issuer_redirect_url, Some(receipt.issuer_redirect_url))
+  assert_eq(handoff.request_id, intent.request_id)
+  assert_eq(store.pending_issuer_requests(now + 2L).length(), 0)
+  assert_eq(store.accept_issuer_dispatch(receipt, lease), (dispatched, handoff))
+  let restored = ready_store(path, secret, now)
+  assert_eq(
+    restored.accept_issuer_dispatch(receipt, lease),
+    (dispatched, handoff),
+  )
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 fn issue_intent() -> @credential.CredentialHandoffIssueIntent {
   {
     request_id: "credential-request-1",

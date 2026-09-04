@@ -26,6 +26,14 @@ For the short operator-to-user journey that replaces manual account,
 membership, grant, lease, contract and handoff coordination, see
 [Access onboarding UX](ACCESS_ONBOARDING_UX.md).
 
+Access-package creation is a persisted forward-recovery saga, not an impossible
+transaction spanning independent authorities. Its `access_onboarding`
+PostgreSQL snapshot (or `0600` development file) is committed before the first
+resource and after every verified step. Startup reconciliation resumes
+non-terminal work. A crash between a resource write and its checkpoint is
+repaired by validating the deterministically named resource; failures and
+conflicts remain visible rather than becoming silent orphan state.
+
 ## Trust boundary
 
 A `WorkspaceLease` is an expiring control-plane entitlement. It declares
@@ -170,3 +178,12 @@ receipt and never return credential or node material.
    bearer token in a URL.
 6. Validate revoked/expired leases, narrow layouts, keyboard operation and
    built-image isolation before hardware acceptance.
+
+## Open-registration trial boundary
+
+Open registration may create one short-lived shared-inference trial workspace.
+That workspace is topology-free and authorizes only its recorded model
+allowlist and request limits. It never creates an exclusive-node lease, SSH
+access, a machine account, or credential handoff. An enterprise invitation
+replaces the trial membership and revokes the trial grant and lease before the
+enterprise access path proceeds.

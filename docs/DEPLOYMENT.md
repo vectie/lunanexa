@@ -33,10 +33,10 @@ flowchart TB
       C["LunaNexa controller"]
       UI["Console and workbench"]
       DB["Durable metadata PVC"]
-      MS["Assignment-scoped artifact gateway"]
-      MD["/data/models · 8 TB"]
+      MS["Moongate S3 endpoint"]
+      MD["Model-source staging · 8 TB"]
       OR["OCI registry"]
-      MD -->|"read-only"| MS
+      MD -->|"explicit reviewed publish"| MS
       K --> C
       C --> DB
       UI --> C
@@ -209,6 +209,8 @@ scripts/deploy/render-management-foundation.sh \
   --control-gid MODEL_STORE_GID \
   --runtime-endpoint http://127.0.0.1:19090/v1/responses \
   --public-api-base-url https://gpu.example.com \
+  --commercial-provider-action-origin https://provider.example \
+  --s3-region cn-east-1 \
   --controller-epoch 1
 scripts/deploy/generate-management-secrets.sh \
   /ABSOLUTE/PROTECTED_DIRECTORY/management-secrets.yaml
@@ -424,8 +426,9 @@ kubectl label node "$MANAGEMENT_NODE" lunanexa.io/role=management --overwrite
 kubectl get node "$MANAGEMENT_NODE" -L lunanexa.io/role
 ```
 
-Prepare and verify the management-node model disk before any controller pod can
-mount it:
+Prepare and verify the management-node source-staging disk before the
+ModelScope adapter can mount it. Production controller pods do not mount this
+path:
 
 ```sh
 findmnt /data/models
@@ -516,7 +519,15 @@ and role split. Then require the controller and browser deployments to become
 ready:
 
 ```sh
-kubectl -n "$LUNANEXA_NAMESPACE" rollout status deployment/lunanexa-control
+kubectl -n "$LUNANEXA_NAMESPACE" wait \
+  --for=jsonpath='{.status.updatedReplicas}'=3 \
+  deployment/lunanexa-control --timeout=5m
+kubectl -n "$LUNANEXA_NAMESPACE" wait \
+  --for=jsonpath='{.status.replicas}'=3 \
+  deployment/lunanexa-control --timeout=5m
+kubectl -n "$LUNANEXA_NAMESPACE" wait \
+  --for=jsonpath='{.status.availableReplicas}'=1 \
+  deployment/lunanexa-control --timeout=5m
 kubectl -n "$LUNANEXA_NAMESPACE" rollout status deployment/lunanexa-console
 kubectl -n "$LUNANEXA_NAMESPACE" rollout status deployment/lunanexa-enterprise
 kubectl -n "$LUNANEXA_NAMESPACE" get pods,svc,ingress,pvc -o wide
@@ -555,12 +566,11 @@ deployment-owned values with protected permissions:
 /etc/lunanexa/inventory.json                truthful dgx-spark-01 inventory
 ```
 
-For the built-in controller artifact gateway,
-`LUNANEXA_ARTIFACT_CREDENTIAL_PATH` must resolve to the same unique node secret
-as `LUNANEXA_NODE_TOKEN_PATH`; the reviewed examples point both at
-`/etc/lunanexa/node-token`. The secret is authenticated again against the live
-assignment and one-time transfer grant, so it is not a general model-store
-credential.
+For production direct S3 materialization, install the node's scoped access-key
+ID, secret access key and optional STS token in separate root-managed files.
+Grant read access only to the registered model bucket/prefix and route the
+configured HTTPS origin through Moongate. These object-store credentials are
+independent from `LUNANEXA_NODE_TOKEN_PATH` and are never passed to a runtime.
 
 Confirm the node ID agrees in all three places before starting the agent:
 
@@ -666,12 +676,13 @@ node's strict HTTPS runtime mapping.
 
 ## 2. Non-negotiable boundaries
 
-- `/data/models` remains on the management node. Do not NFS-mount it into DGX
-  runtime containers or expose its host path through the public API.
-- Keep logical `s3://bucket/object` references in catalog records, but point the
-  node agent at the controller's protected `/v1/artifacts` gateway. The gateway
-  resolves the key below `/data/models` only after node, assignment, deployment,
-  digest, expiry, controller epoch, signature and one-time transfer checks pass.
+- Source staging may remain on a data/management node, but it is not a
+  deployable model distribution path and must not be NFS-mounted into DGX
+  runtime containers or exposed through the public API.
+- Keep immutable `s3://bucket/object` references in catalog records and point
+  production node agents at the reviewed Moongate S3 HTTPS origin. Node-local
+  SigV4 credentials must be bucket/prefix scoped; assignment, digest, size and
+  detached-signature checks still gate cache publication.
 - Runtime images are immutable OCI images pinned by full SHA-256 digest.
 - Every DGX has a unique node credential. Bootstrap tokens are one-use and
   expire within 15 minutes.
@@ -902,12 +913,13 @@ with a production value.
 
 ## 5. Prepare model and runtime distribution
 
-### Model storage and scoped gateway
+### Model storage and direct S3 materialization
 
-Use a deterministic layout under `/data/models`; for example:
+Use an immutable object layout in the Moongate-routed S3-compatible store; for
+example:
 
 ```text
-/data/models/
+s3://models/
   models/
     model.text/
       v1/
@@ -917,12 +929,13 @@ Use a deterministic layout under `/data/models`; for example:
   quarantine/
 ```
 
-Register the model above using the logical object
-`s3://models/model.text/v1/model.blob`. With
-`LUNANEXA_MODEL_STORE_ROOT=/data/models`, the controller resolves it as
-`/data/models/models/model.text/v1/model.blob`. The gateway has no list or write
-route. A DGX authenticates with its own Node credential and must send the
-assignment ID, deployment ID and model digest headers added by the node daemon.
+Register the model using the exact object URI
+`s3://models/model.text/v1/model.blob`. Production controllers do not mount or
+proxy model bytes. After receiving a signed, generation-fenced assignment, the
+DGX node materializer signs a bounded S3 GET with its node-local SigV4
+credential and downloads directly through the configured Moongate HTTPS
+endpoint. The runtime container never receives the S3 access key, secret, or
+optional STS token.
 
 Before registration:
 
@@ -932,12 +945,19 @@ Before registration:
 4. verify the signature from a clean host;
 5. retain license, provenance and evaluation evidence outside the model blob.
 
-Set the node ConfigMap `artifact-endpoint` to the protected controller artifact
-base, for example `https://control.cluster.example/v1/artifacts`. The node agent
-constructs `<artifact-endpoint>/<bucket>/<object>`. The built-in gateway supports
-ordinary GET and strict `Range: bytes=N-` resume. It consumes a durable,
-short-lived transfer nonce before opening the file and returns no filesystem
-path or model-store credential.
+Set the node ConfigMap `artifact-endpoint` to the reviewed Moongate S3 origin,
+for example `https://models.moongate.example`, and set `s3-region` to the
+signing region. Mount least-privilege read credentials at the paths named by
+`LUNANEXA_S3_ACCESS_KEY_ID_PATH`,
+`LUNANEXA_S3_SECRET_ACCESS_KEY_PATH`, and optionally
+`LUNANEXA_S3_SESSION_TOKEN_PATH`. The materializer constructs
+`<artifact-endpoint>/<bucket>/<object>`, uses strict `Range: bytes=N-` resume,
+verifies the registered size and SHA-256, then verifies the detached Cosign
+signature before atomic cache publication.
+
+The controller-hosted artifact gateway remains available only in the explicit
+single-host development overlay. It is not part of the production HA data
+path and the production controller Deployment has no model-store `hostPath`.
 
 ### Runtime images and routes
 
@@ -998,8 +1018,8 @@ kubectl label node dgx-spark-04 lunanexa.io/role=gpu
 Replace `MANAGEMENT_NODE` with the real Kubernetes node name. Add a reviewed
 deployment overlay with:
 
-- `nodeSelector: {lunanexa.io/role: management}` for the controller, console,
-  workbench and controller artifact gateway;
+- topology/affinity appropriate to the external HA control-plane profile for
+  the controller, console and workbench;
 - `nodeSelector: {lunanexa.io/role: gpu}` for the node-agent DaemonSet;
 - tolerations only for the taints deliberately assigned to those nodes.
 
@@ -1019,7 +1039,18 @@ reviewed `deploy/network-policy.yaml` overlay:
 
 ```sh
 kubectl label namespace RUNTIME_NAMESPACE lunanexa.io/service=runtime
+kubectl label namespace COMMERCIAL_ADAPTER_NAMESPACE \
+  lunanexa.io/service=commercial-provider-adapter
+kubectl label namespace CREDENTIAL_ISSUER_NAMESPACE \
+  lunanexa.io/service=credential-issuer-adapter
 ```
+
+The corresponding adapter pods must carry
+`app.kubernetes.io/name=commercial-provider-adapter` or
+`app.kubernetes.io/name=credential-issuer-adapter`. Both namespace and pod
+selectors are required before the default-deny policy permits their pull calls
+to controller port 8080. This does not grant the controller arbitrary outbound
+provider access.
 
 If services use host addresses rather than namespaces, replace the namespace
 selectors with narrowly scoped `ipBlock` rules. Never add unrestricted egress.
@@ -1086,6 +1117,28 @@ back to the authenticated headers, and stores the callback ID for replay.
 Payment, tax-invoice, identity and qualified-signature adapters use the same
 transport. Do not send `signature_verified` to an operator endpoint; those
 routes fail with `VerifiedTransportRequired`.
+
+Configure `LUNANEXA_COMMERCIAL_PROVIDER_ADAPTER_TOKEN` as an independent
+32–4096 byte machine authority. The adapter polls
+`GET /internal/v1/commercial-provider/requests` and acknowledges provider
+ceremony creation at
+`POST /internal/v1/commercial-provider/dispatch-receipts`. It must use the
+configured `LUNANEXA_PROVIDER_CALLBACK_NAME` and
+`LUNANEXA_PROVIDER_CALLBACK_ENVIRONMENT`; a matching callback secret is
+mandatory. Set `LUNANEXA_COMMERCIAL_PROVIDER_ACTION_ORIGIN` to the exact HTTPS
+origin allowed for checkout and signing actions; receipts outside that origin
+are rejected. Partial configuration keeps `/v1/readiness` red with
+`CommercialProviderAdapterUnavailable` and customer payment/signature requests
+fail closed. Never reuse this token as an operator, inference, callback,
+credential-issuer or node authority.
+
+Configure `LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN` independently. The issuer
+pulls `GET /internal/v1/credential-issuer/requests` and posts the origin-bound
+ceremony receipt to
+`POST /internal/v1/credential-issuer/dispatch-receipts`. Both that token and a
+valid signed `LUNANEXA_CREDENTIAL_ISSUER_READINESS_PATH` document are required
+for `credential_broker_configured=true`; repository code or an operator-entered
+redirect alone never makes production readiness green.
 
 ### TLS and Cosign trust
 
@@ -1202,8 +1255,10 @@ order:
 
 1. namespace labels, service accounts, PVC, ConfigMaps and secret-provider
    resources derived from `deploy/prerequisites.yaml`;
-2. PostgreSQL from `deploy/postgres.yaml`, or the approved external PostgreSQL
-   service, then run the `cmd/database` migration check;
+2. for local development only, PostgreSQL from `deploy/postgres.yaml`; for
+   production, an approved external HA PostgreSQL service with verified TLS,
+   synchronous replication, automated failover and tested backups, then run
+   the `cmd/database` migration check;
 3. private model-source adapter from `deploy/model-source.yaml`, including its
    dedicated authority and durable import-state PVC;
 4. controller from `deploy/controller.yaml`;
@@ -1216,12 +1271,27 @@ order:
 Check the management plane before enrollment:
 
 ```sh
-kubectl -n lunanexa rollout status deployment/lunanexa-control
+kubectl -n lunanexa wait \
+  --for=jsonpath='{.status.updatedReplicas}'=3 \
+  deployment/lunanexa-control --timeout=5m
+kubectl -n lunanexa wait \
+  --for=jsonpath='{.status.replicas}'=3 \
+  deployment/lunanexa-control --timeout=5m
+kubectl -n lunanexa wait \
+  --for=jsonpath='{.status.availableReplicas}'=1 \
+  deployment/lunanexa-control --timeout=5m
 kubectl -n lunanexa get pods,svc,ingress,pvc
 curl --fail --cacert SERVER_CA_FILE \
   --cert OPERATOR_CLIENT_CERT --key OPERATOR_CLIENT_KEY \
   https://LUNANEXA_HOST/health
 ```
+
+The controller Deployment intentionally has three processes but one ready
+writer. Standbys wait on PostgreSQL advisory leadership and do not bind the
+HTTP port. After leader loss, one standby increments the database fencing token,
+restores all authoritative snapshots, and becomes ready. A rollout may briefly
+report two non-ready standbys; this is expected and must not be "fixed" by
+making every replica writable. See [PostgreSQL management database](DATABASE.md).
 
 Client-certificate options depend on the chosen identity system; supply them
 without putting private-key material in shell history.

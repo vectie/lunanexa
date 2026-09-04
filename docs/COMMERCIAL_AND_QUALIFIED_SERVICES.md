@@ -47,10 +47,49 @@ the expected tenant, agreement and evidence.
 
 ## Qualified-service boundary
 
-Production providers remain outside LunaNexa. The callback listener validates
+Production providers remain outside LunaNexa. LunaNexa exposes a durable,
+machine-authenticated pull outbox rather than calling a provider-selected URL:
+
+- `GET /internal/v1/commercial-provider/requests` returns pending provider
+  intents. The machine view omits organization, tenant, human-subject,
+  agreement-content and entitlement identifiers.
+- `POST /internal/v1/commercial-provider/dispatch-receipts` records the exact
+  provider/environment/external-reference binding and a bounded HTTPS browser
+  action. It can advance only `Pending -> Submitted`.
+- enterprise users create payment intents at
+  `POST /v1/portal/payment-checkouts`, request signing at
+  `POST /v1/portal/signature-requests`, and read organization-scoped state at
+  `GET /v1/portal/self/provider-requests`.
+
+Payment checkout input contains only a finalized `period_id` and a browser
+idempotency key. The server resolves the authenticated organization, exact
+positive period total, currency and scale and fixes the entitlement reference
+to `billing-period:<period-id>`. Organization plus period identify one stable
+record, so new browser keys cannot create parallel checkouts; authorized or
+settled records are never reopened.
+
+Payment and signature action expiry is a controlled renewal of that same
+provider record and external reference. Under the commercial-store mutex the
+expired receipt is moved to durable audit history, the record is made pending,
+and only then may the adapter rotate its provider session. Retired receipts are
+rejected on replay. Signature renewal does not change agreement generation,
+document hash, signer or legal state, and a retry repairs a crash that persisted
+`SignatureRequested` before the outbox write.
+
+The pull design has no controller-side provider URL and no user-controlled
+SSRF surface. Adapter tokens, callback secrets and browser action URLs are
+separate authorities. Action URLs reject HTTP, user-info, fragments,
+backslashes, whitespace, excessive length and post-acceptance mutation.
+The tenant projection is role-filtered: payment and invoice actions require
+`BillingViewer`, identity verification requires `OrganizationAdministrator`,
+and a qualified-signature action is visible only to the agreement's bound
+`LegalSigner`. A same-organization `Developer` cannot retrieve those URLs.
+
+The callback listener validates
 an HMAC over provider, environment, event ID, event timestamp and the exact raw
 body, enforces a five-minute window, then binds those headers back to the
-normalized callback. Only this boundary sets `signature_verified=true`.
+normalized callback. Only this boundary sets `signature_verified=true`. An
+outbox dispatch receipt is never payment, identity or signature evidence.
 Callback IDs replay idempotently, identity verification can activate only a
 pending organization, and a verified qualified-signature record linked as
 `portal-agreement:<agreement-id>` executes the matching portal agreement.

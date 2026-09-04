@@ -2,9 +2,9 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "254542461543727721ff8f6c8863687f757c9ae3",
-    "working_tree": "dirty-docs-refresh",
-    "inspected_at": "2026-09-03T11:53:07.849Z"
+    "revision": "4f2333876e8405c5647e1d628ff99d7ad7927219",
+    "working_tree": "dirty-merge-docs-refresh",
+    "inspected_at": "2026-09-04T07:01:27.227Z"
   },
   "sources": [
     {
@@ -17,35 +17,35 @@
     {
       "id": "product-contract",
       "path": "docs/PRODUCT_CONTRACT.md",
-      "digest": "sha256:48e69376afe36bcc9e17da0483d4439df0d4519d54f301774f8bb1b59bda10f9",
+      "digest": "sha256:2d63618d036be92907c7cff57397566fbc918f043f6b5973861937d8d998c5bc",
       "kind": "product-contract",
       "public": true
     },
     {
       "id": "architecture",
       "path": "docs/ARCHITECTURE.md",
-      "digest": "sha256:4968336075679622efc60123f6fcf7f1738771cb30fd9181ccae99bb0326fce5",
+      "digest": "sha256:183a8c4de2e9b0eed6ad98ad518eae0523ff3609a87b5caba9b3d0516fd308bd",
       "kind": "architecture",
       "public": true
     },
     {
       "id": "implementation-status",
       "path": "docs/IMPLEMENTATION_STATUS.md",
-      "digest": "sha256:b95f30b31b2173afc3cec9056f4e565826371cb4875b394c601a82023e52eb45",
+      "digest": "sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b",
       "kind": "readiness",
       "public": true
     },
     {
       "id": "deployment",
       "path": "docs/DEPLOYMENT.md",
-      "digest": "sha256:c8d878fece5d6c3db7cc030f8e7e294812b734cd3fcc5cec88ec45257e9bacd1",
+      "digest": "sha256:cc2a35526680fe210bacd7691a8c1313e87817189d237b657ddfdda8e79d7e14",
       "kind": "deployment",
       "public": true
     },
     {
       "id": "operations",
       "path": "docs/OPERATIONS.md",
-      "digest": "sha256:716a36c91304c9e213fd1fe2b8517ccf36c0c76a410275d6c15daac2feb674de",
+      "digest": "sha256:11fa522d84849679b3670d6649cfcf62df77b10c892fb97e5555dff2f017f92b",
       "kind": "operations",
       "public": true
     },
@@ -73,14 +73,14 @@
     {
       "id": "management-plane",
       "path": "docs/MANAGEMENT_PLANE.md",
-      "digest": "sha256:7bc83d7f12387e198b6482fde3919e8467cab0bce0273453972b6a280ce23b43",
+      "digest": "sha256:935668f817a1337ee4c4c7c03193aa97a23735491a9c34f70f4a63a10a53bc1a",
       "kind": "model-service-management",
       "public": true
     },
     {
       "id": "workspaces",
       "path": "docs/WORKSPACES.md",
-      "digest": "sha256:8f3630affb53749303a2b184c9eb2d28daa09e18d88b7720d881b03fc81880d0",
+      "digest": "sha256:c9f23eac7178be71961cd7332530e4b43792be1e8bdb919c494a6ba87cd58d22",
       "kind": "workspace-authority",
       "public": true
     },
@@ -94,14 +94,14 @@
     {
       "id": "database",
       "path": "docs/DATABASE.md",
-      "digest": "sha256:d6c79faacda36e1873a76dfd2cfe937cd8f00571f0013ed805d1accde1761bd5",
+      "digest": "sha256:0bf5a3b0cf5df5b82cf348a794bb8b04f97ddd8930424e76e552471905cdf4b9",
       "kind": "database",
       "public": true
     },
     {
       "id": "production-readiness",
       "path": "docs/PRODUCTION_READINESS.md",
-      "digest": "sha256:062e7bfd6a7bde9adde8810d42979aea734d0fe93131d0131257e32fa71daec8",
+      "digest": "sha256:d5f23bf4c4d8366471108adc9cb31f51fca7139b850c65b2f5e3144a381513b9",
       "kind": "production-readiness",
       "public": true
     },
@@ -136,7 +136,7 @@
     {
       "id": "api-server",
       "path": "api/server.mbt",
-      "digest": "sha256:f0921270f20c58d805cc84b416b43eda785704541f17f0c67cd6d2c5e1086767",
+      "digest": "sha256:5f7b8c6f90948af972f9d190a5ecab07e5c7c623a488290a409c8dc1e6347aa7",
       "kind": "implementation",
       "public": true
     },
@@ -171,14 +171,14 @@
     {
       "id": "identity-ingress",
       "path": "docs/IDENTITY_INGRESS.md",
-      "digest": "sha256:87e175a986f227161d7d4138a32961a81bb029ebbd731c482e448bc96e790323",
+      "digest": "sha256:b7bd4c73bbf85a51e6b3d3b145cbe5bcf58a75906d9faf8a7f2647f6bfa6d2a5",
       "kind": "identity-ingress",
       "public": true
     },
     {
       "id": "access-onboarding-ux",
       "path": "docs/ACCESS_ONBOARDING_UX.md",
-      "digest": "sha256:6b137c71bc8a6fc2a223c3cf37bdae216dfe175e8a386f38efefae65df93a8a7",
+      "digest": "sha256:e44adfb07db4e02b73084e942245997e140f65f802b62dc3fad6e863b656285a",
       "kind": "access-onboarding",
       "public": true
     }

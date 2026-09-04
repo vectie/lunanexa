@@ -177,6 +177,41 @@ async test "file registry survives restart with rollback history" {
 }
 
 ///|
+async test "verified import adoption persists model and pending license atomically" {
+  let directory = @fs.tmpdir(prefix="lunanexa-registry-adopt-test-")
+  let path = "\{directory}/registry.json"
+  let durable = @registry.FileRegistry::open(path)
+  let model = candidate("v1")
+  let license : @registry.LicenseRecord = {
+    license_id: model.license_id,
+    model_id: model.model_id,
+    status: Pending,
+    accepted_by: "",
+    evidence_ref: "modelscope-license:apache-2.0",
+    expires_unix_ms: None,
+  }
+  durable.adopt_import(model, license)
+  let adopted = @registry.FileRegistry::open(path).snapshot()
+  assert_eq(adopted.models, [model])
+  assert_eq(adopted.licenses, [license])
+  let before_replay = durable.snapshot()
+  durable.adopt_import(model, license)
+  assert_eq(durable.snapshot(), before_replay)
+  let mut conflicted = false
+  ignore(
+    durable.adopt_import(model, {
+      ..license,
+      evidence_ref: "modelscope-license:conflicting",
+    }),
+  ) catch {
+    _ => conflicted = true
+  }
+  assert_true(conflicted)
+  assert_eq(durable.snapshot(), before_replay)
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 test "deployment requires an approved artifact and exact registered runtime" {
   let registry = @registry.ModelRegistry::new()
   make_approvable(registry, "v1")

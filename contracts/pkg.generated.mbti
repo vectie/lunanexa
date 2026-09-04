@@ -364,6 +364,7 @@ pub(all) struct WorkloadResponse {
   usage : Usage
   artifact_digest : String
   runtime_version : String
+  execution_node_id : String?
   timing : Timing
   retryable : Bool
   audit_receipt : String

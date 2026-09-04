@@ -141,6 +141,9 @@ pub(all) struct WorkloadResponse {
   usage : Usage
   artifact_digest : String
   runtime_version : String
+  // Optional so receipts written before node-level metering remain readable.
+  // New runtime results always bind the receipt to the execution target.
+  execution_node_id : String?
   timing : Timing
   retryable : Bool
   audit_receipt : String

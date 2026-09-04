@@ -39,12 +39,12 @@ preflight findings identify the missing approval, evidence, secret reference,
 or capacity. Re-submitting the same idempotency key returns the same operation.
 
 The catalog template carries separate immutable references for the runtime OCI
-image and the model blob. For v1, the model blob retains a stable logical
-`s3://bucket/object` reference, resolved by the controller below the
-management-node `/data/models` root. Its detached signature either uses another
-logical reference or the sibling `<model-object>.sig` convention for an opaque
-Cosign evidence reference. Only nodes selected in `DeploymentPlan` receive
-assignments and can authenticate to those gateway objects. Runtime readiness
+image and the model blob. The model blob retains a stable
+`s3://bucket/object` reference, resolved by the selected node against the
+reviewed Moongate S3 origin using node-local scoped SigV4 credentials. Its
+detached signature either uses another logical reference or the sibling
+`<model-object>.sig` convention for an opaque Cosign evidence reference. Only
+nodes selected in `DeploymentPlan` receive assignments. Runtime readiness
 cannot converge until the node has verified and atomically cached the exact
 model bytes.
 

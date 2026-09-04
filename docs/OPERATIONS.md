@@ -295,23 +295,27 @@ Each node also requires these materialization values:
 | Variable | Meaning |
 | --- | --- |
 | `LUNANEXA_MODEL_CACHE_PATH` | Absolute host-backed cache root; defaults to `/var/lib/lunanexa/models` |
-| `LUNANEXA_ARTIFACT_ENDPOINT` | Protected controller base ending in `/v1/artifacts` |
-| `LUNANEXA_ARTIFACT_CREDENTIAL_PATH` | The node's own protected Node credential file; its value is never passed to runtimes |
+| `LUNANEXA_ARTIFACT_TRANSPORT` | `s3-sigv4` in production; `controller-gateway` is development compatibility only |
+| `LUNANEXA_ARTIFACT_ENDPOINT` | Reviewed Moongate S3-compatible HTTPS origin without a path |
+| `LUNANEXA_S3_REGION` | SigV4 signing region |
+| `LUNANEXA_S3_ACCESS_KEY_ID_PATH` | Root-managed file containing the node's scoped S3 access-key ID |
+| `LUNANEXA_S3_SECRET_ACCESS_KEY_PATH` | Root-managed file containing the matching S3 secret; never passed to runtimes |
+| `LUNANEXA_S3_SESSION_TOKEN_PATH` | Optional root-managed short-lived STS token file |
 | `LUNANEXA_ARTIFACT_MAX_SIZE_BYTES` | Per-artifact safety ceiling; defaults to 1 TiB |
 | `LUNANEXA_NVIDIA_SMI_BINARY` | Allowlisted `/usr/bin/nvidia-smi` or `/usr/local/bin/nvidia-smi` sensor executable |
 | `LUNANEXA_COSIGN_BINARY` | Allowlisted Cosign path in the node-agent image |
 | `LUNANEXA_COSIGN_PUBLIC_KEY_PATH` | Read-only node-local public key used for detached model signatures |
 
-The model reference in an approved template is a logical
-`s3://bucket/object` value. Its detached signature may be another logical
+The model reference in an approved template is an immutable
+`s3://bucket/object` value. Its detached signature may be another object
 reference; an opaque Cosign evidence reference resolves to the sibling
-`<model-object>.sig` object. The selected node maps these beneath the controller
-gateway, which authorizes only its live assignment, resumes an incomplete
-transfer using strict `Range`, verifies the declared size, SHA-256
-digest and detached Cosign signature, and atomically publishes the model under
-the cache root. The runtime receives only `/var/lib/lunanexa/model/model` as a
-read-only bind mount. When no local desired assignment references the digest,
-reconciliation prunes that node's copy.
+`<model-object>.sig` object. The selected node maps these to the configured
+Moongate S3 origin, signs the GET locally, resumes an incomplete transfer using
+strict `Range`, verifies the declared size, SHA-256 digest and detached Cosign
+signature, and atomically publishes the model under the cache root. The
+runtime receives only `/var/lib/lunanexa/model/model` as a read-only bind mount
+and receives no object-store credential. When no local desired assignment
+references the digest, reconciliation prunes that node's copy.
 
 ## Operator sequence
 

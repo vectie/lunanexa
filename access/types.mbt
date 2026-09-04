@@ -12,6 +12,8 @@ pub(all) struct ApiKeyIssueIntent {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
   display_name : String
   scopes : Array[ApiKeyScope]
   allowed_models : Array[String]
@@ -24,6 +26,10 @@ pub(all) struct ApiCredential {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  // Optional only so pre-attribution snapshots remain readable. Credentials
+  // without both values are never authorized and must be reissued.
+  organization_id : String?
+  project_id : String?
   display_name : String
   secret_sha256 : String
   scopes : Array[ApiKeyScope]
@@ -52,6 +58,8 @@ pub(all) struct ApiAuthorization {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -59,6 +67,8 @@ pub(all) struct ApiCredentialView {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
+  project_id : String?
   display_name : String
   scopes : Array[ApiKeyScope]
   allowed_models : Array[String]

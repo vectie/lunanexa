@@ -74,6 +74,8 @@ async test "personal API keys recheck the current account before quota use" {
       key_id: "key-account-check",
       tenant_ref: "tenant-account-check",
       subject_ref: "subject-api-user",
+      organization_id: "organization-account-check",
+      project_id: "project-account-check",
       display_name: "Account-bound key",
       scopes: [Inference],
       allowed_models: [],

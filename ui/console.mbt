@@ -92,6 +92,19 @@ pub(all) struct ModelImportRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Operator-supplied registry identity for one checksum-verified import.
+/// Source-derived artifact metadata stays outside this draft and is resolved
+/// by the controller from the durable import record.
+pub(all) struct ModelAdoptionDraft {
+  import_id : String
+  model_id : String
+  version : String
+  license_id : String
+  compatible_architectures : String
+  minimum_memory_mib : String
+} derive(Debug, Eq)
+
+///|
 pub(all) struct DeploymentRow {
   assignment_id : String
   deployment_id : String
@@ -429,6 +442,8 @@ pub(all) struct ConsoleState {
   model_source_results : Array[ModelSourceCatalogRow]
   model_source_total : Int64
   model_imports : Array[ModelImportRow]
+  model_adoption_draft : ModelAdoptionDraft
+  model_adopted_imports : Array[String]
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -462,6 +477,14 @@ pub(all) enum ConsoleMessage {
   CancelModelImport(String)
   RetryModelImport(String)
   RefreshModelImports
+  BeginModelAdoption(String)
+  DismissModelAdoption
+  ModelAdoptionIdChanged(String)
+  ModelAdoptionVersionChanged(String)
+  ModelAdoptionLicenseChanged(String)
+  ModelAdoptionArchitecturesChanged(String)
+  ModelAdoptionMemoryChanged(String)
+  SubmitModelAdoption
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -603,6 +626,15 @@ pub fn default_state() -> ConsoleState {
     model_source_results: [],
     model_source_total: 0L,
     model_imports: [],
+    model_adoption_draft: {
+      import_id: "",
+      model_id: "",
+      version: "",
+      license_id: "",
+      compatible_architectures: "",
+      minimum_memory_mib: "",
+    },
+    model_adopted_imports: [],
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -4387,7 +4419,19 @@ fn model_import_for(
   imports : Array[ModelImportRow],
   model_id : String,
 ) -> ModelImportRow? {
-  imports.iter().find_first(import_ => import_.model_id == model_id)
+  let mut selected : ModelImportRow? = None
+  for import_ in imports {
+    if import_.model_id == model_id {
+      match selected {
+        Some(current) =>
+          if import_.updated_unix_ms > current.updated_unix_ms {
+            selected = Some(import_)
+          }
+        None => selected = Some(import_)
+      }
+    }
+  }
+  selected
 }
 
 ///|
@@ -4414,10 +4458,445 @@ fn model_import_progress(import_ : ModelImportRow) -> Int {
 }
 
 ///|
+fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
+  import_.source == "modelscope" &&
+  @contracts.valid_identifier(import_.import_id, maximum_length=128) &&
+  import_.state == Verified &&
+  import_.files_total > 0 &&
+  import_.files_completed == import_.files_total &&
+  import_.bytes_total > 0L &&
+  import_.bytes_completed == import_.bytes_total &&
+  import_.artifact_uri.has_prefix("s3://") &&
+  @contracts.valid_sha256_digest(import_.manifest_digest) &&
+  import_.license.trim() != ""
+}
+
+///|
+fn model_adoption_identifier_valid(value : String) -> Bool {
+  @contracts.valid_identifier(value.trim().to_owned())
+}
+
+///|
+fn model_adoption_architectures_valid(value : String) -> Bool {
+  let mut count = 0
+  for part in value.split(",") {
+    let architecture = part.trim().to_owned()
+    if !@contracts.valid_identifier(architecture, maximum_length=128) {
+      return false
+    }
+    count += 1
+    if count > 16 {
+      return false
+    }
+  }
+  count > 0
+}
+
+///|
+fn model_adoption_memory_valid(value : String) -> Bool {
+  let memory = @string.parse_int(value.trim()) catch { _ => return false }
+  memory > 0
+}
+
+///|
+fn model_adoption_draft_valid(draft : ModelAdoptionDraft) -> Bool {
+  draft.import_id != "" &&
+  model_adoption_identifier_valid(draft.model_id) &&
+  model_adoption_identifier_valid(draft.version) &&
+  model_adoption_identifier_valid(draft.license_id) &&
+  model_adoption_architectures_valid(draft.compatible_architectures) &&
+  model_adoption_memory_valid(draft.minimum_memory_mib)
+}
+
+///|
+fn model_adoption_form(
+  state : ConsoleState,
+  import_ : ModelImportRow,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let adopted = state.model_adopted_imports.any(value => {
+    value == import_.import_id
+  })
+  if adopted {
+    return @html.div(
+      class="model-adoption-complete",
+      attrs=@html.Attrs::build().role("status").aria_live("polite"),
+      [
+        @html.strong(
+          localized(
+            state.locale,
+            "Registered as a Candidate",
+            "已登记为候选模型",
+          ),
+        ),
+        @html.span(
+          localized(
+            state.locale,
+            "No license, signature, evaluation, approval, alias, or deployment gate was bypassed.",
+            "许可证、签名、评测、批准、别名与部署门槛均未绕过。",
+          ),
+        ),
+      ],
+    )
+  }
+  if !model_import_adoptable(import_) {
+    return @html.div(class="model-adoption-blocked", [
+      @html.strong(
+        localized(
+          state.locale,
+          "Not ready for registry adoption",
+          "尚不能登记到注册表",
+        ),
+      ),
+      @html.span(
+        localized(
+          state.locale,
+          "The import must be complete, checksum-verified, license-declared, and published at an immutable s3:// URI through Moongate.",
+          "导入必须完整、通过校验、声明许可证，并经 Moongate 发布到不可变的 s3:// URI。",
+        ),
+      ),
+    ])
+  }
+  if state.model_adoption_draft.import_id != import_.import_id {
+    return @html.button(
+      type_="button",
+      class="primary-button",
+      disabled=!state.operator_authenticated || state.loading,
+      on_click=command(emit, BeginModelAdoption(import_.import_id)),
+      localized(
+        state.locale,
+        "Adopt as Candidate…",
+        "登记为候选模型…",
+      ),
+    )
+  }
+  let draft = state.model_adoption_draft
+  let model_id_invalid = draft.model_id != "" &&
+    !model_adoption_identifier_valid(draft.model_id)
+  let version_invalid = draft.version != "" &&
+    !model_adoption_identifier_valid(draft.version)
+  let license_invalid = draft.license_id != "" &&
+    !model_adoption_identifier_valid(draft.license_id)
+  let architectures_invalid = draft.compatible_architectures != "" &&
+    !model_adoption_architectures_valid(draft.compatible_architectures)
+  let memory_invalid = draft.minimum_memory_mib != "" &&
+    !model_adoption_memory_valid(draft.minimum_memory_mib)
+  let valid = model_adoption_draft_valid(draft)
+  @html.form(
+    class="model-adoption-form",
+    on_submit=command(emit, SubmitModelAdoption),
+    attrs=@html.Attrs::build().aria_labelledby("model-adoption-title"),
+    [
+      @html.fieldset(disabled=state.loading, [
+        @html.legend(
+          id="model-adoption-title",
+          localized(
+            state.locale,
+            "Register checksum-verified source as Candidate",
+            "将校验通过的源登记为候选模型",
+          ),
+        ),
+        @html.p(
+          class="field-help model-adoption-intro",
+          localized(
+            state.locale,
+            "Artifact URI, size, digest, upstream identity, and license evidence are locked to this verified import. Enter only registry identity and placement constraints that cannot be inferred safely.",
+            "制品 URI、大小、摘要、上游身份与许可证证据均锁定到本次已验证导入。这里只填写无法安全推导的注册表身份与放置约束。",
+          ),
+        ),
+        @html.div(class="model-adoption-grid", [
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-adoption-id",
+              localized(state.locale, "Model ID", "模型 ID"),
+            ),
+            @html.input(
+              id="model-adoption-id",
+              input_type=Text,
+              required=true,
+              maxlength=256,
+              placeholder="model.minicpm5-1b",
+              value=draft.model_id,
+              attrs=@html.Attrs::build()
+                .aria_describedby("model-adoption-id-help")
+                .aria_invalid(if model_id_invalid { "true" } else { "false" }),
+              on_input=text_command(emit, value => ModelAdoptionIdChanged(value)),
+            ),
+            @html.p(
+              id="model-adoption-id-help",
+              class=if model_id_invalid {
+                "field-help field-error"
+              } else {
+                "field-help"
+              },
+              localized(
+                state.locale,
+                "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                "使用稳定的字母、数字、点、冒号、连字符或下划线。",
+              ),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-adoption-version",
+              localized(state.locale, "Version", "版本"),
+            ),
+            @html.input(
+              id="model-adoption-version",
+              input_type=Text,
+              required=true,
+              maxlength=256,
+              placeholder="modelscope-main",
+              value=draft.version,
+              attrs=@html.Attrs::build()
+                .aria_describedby("model-adoption-version-help")
+                .aria_invalid(if version_invalid { "true" } else { "false" }),
+              on_input=text_command(emit, value => {
+                ModelAdoptionVersionChanged(value)
+              }),
+            ),
+            @html.p(
+              id="model-adoption-version-help",
+              class=if version_invalid {
+                "field-help field-error"
+              } else {
+                "field-help"
+              },
+              localized(
+                state.locale,
+                "A stable registry version; source revision remains in provenance.",
+                "稳定的注册表版本；源 revision 会保留在来源证据中。",
+              ),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-adoption-license",
+              localized(state.locale, "License record ID", "许可证记录 ID"),
+            ),
+            @html.input(
+              id="model-adoption-license",
+              input_type=Text,
+              required=true,
+              maxlength=256,
+              placeholder="license.minicpm5-apache",
+              value=draft.license_id,
+              attrs=@html.Attrs::build()
+                .aria_describedby("model-adoption-license-help")
+                .aria_invalid(if license_invalid { "true" } else { "false" }),
+              on_input=text_command(emit, value => {
+                ModelAdoptionLicenseChanged(value)
+              }),
+            ),
+            @html.p(
+              id="model-adoption-license-help",
+              class=if license_invalid {
+                "field-help field-error"
+              } else {
+                "field-help"
+              },
+              localized(
+                state.locale,
+                "Creates a pending record; this does not accept the license.",
+                "将创建待审核记录；此操作不会接受许可证。",
+              ),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-adoption-architectures",
+              localized(
+                state.locale,
+                "Compatible architectures",
+                "兼容架构",
+              ),
+            ),
+            @html.input(
+              id="model-adoption-architectures",
+              input_type=Text,
+              required=true,
+              maxlength=2048,
+              placeholder="nvidia-gb10, nvidia-ampere",
+              value=draft.compatible_architectures,
+              attrs=@html.Attrs::build()
+                .aria_describedby("model-adoption-architectures-help")
+                .aria_invalid(
+                  if architectures_invalid {
+                    "true"
+                  } else {
+                    "false"
+                  },
+                ),
+              on_input=text_command(emit, value => {
+                ModelAdoptionArchitecturesChanged(value)
+              }),
+            ),
+            @html.p(
+              id="model-adoption-architectures-help",
+              class=if architectures_invalid {
+                "field-help field-error"
+              } else {
+                "field-help"
+              },
+              localized(
+                state.locale,
+                "Comma-separated; 1–16 validated architecture identifiers.",
+                "用逗号分隔；填写 1–16 个经过验证的架构标识。",
+              ),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-adoption-memory",
+              localized(
+                state.locale,
+                "Minimum accelerator memory (MiB)",
+                "最低加速器显存（MiB）",
+              ),
+            ),
+            @html.input(
+              id="model-adoption-memory",
+              input_type=Number,
+              required=true,
+              min=1,
+              step=1,
+              inputmode="numeric",
+              placeholder="8192",
+              value=draft.minimum_memory_mib,
+              attrs=@html.Attrs::build()
+                .aria_describedby("model-adoption-memory-help")
+                .aria_invalid(if memory_invalid { "true" } else { "false" }),
+              on_input=text_command(emit, value => {
+                ModelAdoptionMemoryChanged(value)
+              }),
+            ),
+            @html.p(
+              id="model-adoption-memory-help",
+              class=if memory_invalid {
+                "field-help field-error"
+              } else {
+                "field-help"
+              },
+              localized(
+                state.locale,
+                "Measured placement floor, not a requested allocation.",
+                "这是实测放置下限，不是申请分配量。",
+              ),
+            ),
+          ]),
+        ]),
+        @html.div(class="model-adoption-actions", [
+          @html.span(
+            class="secondary",
+            localized(
+              state.locale,
+              "Creates Candidate + pending license only. Four safety gates remain.",
+              "仅创建候选模型与待审核许可证；仍保留四个安全门。",
+            ),
+          ),
+          @html.div(class="row-actions", [
+            @html.button(
+              type_="button",
+              class="secondary-button",
+              disabled=state.loading,
+              on_click=command(emit, DismissModelAdoption),
+              localized(state.locale, "Cancel", "取消"),
+            ),
+            @html.button(
+              type_="submit",
+              class="primary-button",
+              disabled=!valid || state.loading,
+              localized(
+                state.locale,
+                if state.loading {
+                  "Registering…"
+                } else {
+                  "Register Candidate"
+                },
+                if state.loading {
+                  "正在登记…"
+                } else {
+                  "登记候选模型"
+                },
+              ),
+            ),
+          ]),
+        ]),
+      ]),
+    ],
+  )
+}
+
+///|
+fn verified_import_gate(
+  state : ConsoleState,
+  import_ : ModelImportRow,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  @html.div(class="verified-import-actions", [
+    @html.div(class="approval-gate-note", [
+      @html.strong(
+        localized(
+          state.locale,
+          "Checksum passed; four safety gates remain",
+          "校验已通过；仍保留四个安全门",
+        ),
+      ),
+      @html.span(
+        localized(
+          state.locale,
+          "Adoption only creates a Candidate from the immutable S3 artifact. It does not package the model or make it deployable.",
+          "登记只会从不可变 S3 制品创建候选模型；不会打包模型，也不会使其可部署。",
+        ),
+      ),
+      @html.ul(class="model-approval-checklist", [
+        @html.li(
+          localized(
+            state.locale,
+            "Pending · License acceptance",
+            "待完成 · 许可证接受",
+          ),
+        ),
+        @html.li(
+          localized(
+            state.locale,
+            "Pending · Artifact signature and provenance",
+            "待完成 · 制品签名与来源证明",
+          ),
+        ),
+        @html.li(
+          localized(
+            state.locale,
+            "Pending · Evaluation for this exact digest",
+            "待完成 · 针对此精确摘要的评测",
+          ),
+        ),
+        @html.li(
+          localized(
+            state.locale,
+            "Pending · Explicit operator approval",
+            "待完成 · 运维人员明确批准",
+          ),
+        ),
+      ]),
+    ]),
+    model_adoption_form(state, import_, emit),
+  ])
+}
+
+///|
 fn models_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  let detached_imports = state.model_imports.filter(import_ => {
+    !state.model_source_results.any(candidate => {
+      match model_import_for(state.model_imports, candidate.id) {
+        Some(visible) => visible.import_id == import_.import_id
+        None => false
+      }
+    })
+  })
   @html.section(attrs=@html.Attrs::build().aria_labelledby("models-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -4647,62 +5126,7 @@ fn models_view(
                           },
                         )
                       } else if value.state == Verified {
-                        @html.div(class="approval-gate-note", [
-                          @html.strong(
-                            localized(
-                              state.locale,
-                              "Downloaded; approval gates remain",
-                              "下载完成；仍需通过批准门槛",
-                            ),
-                          ),
-                          @html.span(
-                            localized(
-                              state.locale,
-                              "Source checksum passed. Approval remains disabled until a deployable package is signed, its license is accepted, evaluation passes, and a qualified runtime template references the exact digest.",
-                              "源文件校验已通过。只有可部署制品完成签名、许可证获接受、评测通过，且合格运行时模板引用同一摘要后，才能批准供用户使用。",
-                            ),
-                          ),
-                          @html.ul(class="model-approval-checklist", [
-                            @html.li(
-                              localized(
-                                state.locale,
-                                "Passed · ModelScope file sizes and SHA-256",
-                                "已通过 · 魔搭文件大小与 SHA-256",
-                              ),
-                            ),
-                            @html.li(
-                              localized(
-                                state.locale,
-                                "Pending · Deployable package and signature",
-                                "待完成 · 可部署制品及签名",
-                              ),
-                            ),
-                            @html.li(
-                              localized(
-                                state.locale,
-                                "Pending · License acceptance and evaluation",
-                                "待完成 · 许可证接受及评测",
-                              ),
-                            ),
-                            @html.li(
-                              localized(
-                                state.locale,
-                                "Pending · Qualified runtime and service template",
-                                "待完成 · 合格运行时及服务模板",
-                              ),
-                            ),
-                          ]),
-                          @html.button(
-                            type_="button",
-                            class="primary-button",
-                            disabled=true,
-                            localized(
-                              state.locale,
-                              "Approve for users",
-                              "批准供用户使用",
-                            ),
-                          ),
-                        ])
+                        verified_import_gate(state, value, emit)
                       } else {
                         @html.div(class="model-import-recovery", [
                           @html.span(class="danger-copy", value.error_code),
@@ -4732,6 +5156,150 @@ fn models_view(
                 },
               ])
             }
+          ],
+        )
+      },
+      if detached_imports.length() == 0 {
+        @html.nothing
+      } else {
+        @html.section(
+          class="detached-imports",
+          attrs=@html.Attrs::build().aria_labelledby("recent-imports-title"),
+          [
+            @html.div(class="detached-imports-heading", [
+              @html.h4(
+                id="recent-imports-title",
+                localized(
+                  state.locale,
+                  "Imports awaiting a next action",
+                  "等待后续操作的导入",
+                ),
+              ),
+              @html.span(
+                class="secondary",
+                localized(
+                  state.locale,
+                  "Visible after refresh or sign-in without repeating a catalog search.",
+                  "刷新或重新登录后无需再次搜索模型库即可查看。",
+                ),
+              ),
+            ]),
+            @html.div(
+              class="detached-import-list",
+              [
+                for import_ in detached_imports => {
+                  @html.article(class="detached-import-row", [
+                    @html.div(class="model-source-card-heading", [
+                      @html.div([
+                        @html.strong(import_.model_id),
+                        @html.span(
+                          class="mono secondary",
+                          "{import_.revision} · {import_.import_id}",
+                        ),
+                      ]),
+                      @html.span(
+                        class="status status-neutral",
+                        model_import_label(state.locale, import_.state),
+                      ),
+                    ]),
+                    @html.div(class="model-source-facts", [
+                      @html.span(model_source_size(import_.bytes_total)),
+                      @html.span(
+                        if import_.license == "" {
+                          localized(
+                            state.locale,
+                            "License unspecified",
+                            "未声明许可证",
+                          )
+                        } else {
+                          import_.license
+                        },
+                      ),
+                      @html.span(
+                        if import_.artifact_uri.has_prefix("s3://") {
+                          localized(
+                            state.locale,
+                            "Published to S3",
+                            "已发布到 S3",
+                          )
+                        } else {
+                          localized(
+                            state.locale,
+                            "Awaiting S3 publication",
+                            "等待发布到 S3",
+                          )
+                        },
+                      ),
+                    ]),
+                    @html.div(class="model-import-status", [
+                      @html.div([
+                        @html.strong(
+                          localized(
+                            state.locale,
+                            "Import progress",
+                            "导入进度",
+                          ),
+                        ),
+                        @html.span(
+                          class="secondary mono",
+                          "{model_import_progress(import_)}% · {import_.files_completed}/{import_.files_total}",
+                        ),
+                      ]),
+                      @html.div(class="model-import-track", [
+                        @html.span(
+                          class="model-import-fill",
+                          style=["width: {model_import_progress(import_)}%"],
+                          "",
+                        ),
+                      ]),
+                      if import_.state == Downloading || import_.state == Queued {
+                        @html.button(
+                          type_="button",
+                          class="secondary-button danger-button",
+                          disabled=import_.cancel_requested || state.loading,
+                          on_click=command(
+                            emit,
+                            CancelModelImport(import_.import_id),
+                          ),
+                          if import_.cancel_requested {
+                            localized(
+                              state.locale,
+                              "Cancelling…",
+                              "正在取消…",
+                            )
+                          } else {
+                            localized(state.locale, "Cancel", "取消")
+                          },
+                        )
+                      } else if import_.state == Verified {
+                        verified_import_gate(state, import_, emit)
+                      } else {
+                        @html.div(class="model-import-recovery", [
+                          @html.span(
+                            class="danger-copy",
+                            if import_.error_code == "" {
+                              model_import_label(state.locale, import_.state)
+                            } else {
+                              import_.error_code
+                            },
+                          ),
+                          @html.button(
+                            type_="button",
+                            class="secondary-button",
+                            disabled=state.loading,
+                            on_click=command(
+                              emit,
+                              RetryModelImport(import_.import_id),
+                            ),
+                            localized(state.locale, "Retry", "重试"),
+                          ),
+                        ])
+                      },
+                    ]),
+                  ])
+                }
+              ],
+            ),
           ],
         )
       },
@@ -7672,8 +8240,25 @@ fn console_styles() -> String {
     #|.model-import-status > div:first-child { display: flex; justify-content: space-between; gap: .6rem; }
     #|.model-import-track { height: .42rem; overflow: hidden; border-radius: 999px; background: var(--line); }
     #|.model-import-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .18s ease; }
+    #|.verified-import-actions { display: grid; gap: .7rem; }
     #|.approval-gate-note { display: grid; gap: .2rem; padding: .65rem; border-left: .2rem solid var(--warning); border-radius: .35rem; background: var(--warning-soft); }
     #|.approval-gate-note span { color: var(--muted-strong); font-size: .7rem; line-height: 1.45; }
+    #|.model-adoption-form { padding-top: .75rem; border-top: 1px solid var(--line); }
+    #|.model-adoption-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #|.model-adoption-form legend { padding: 0; color: var(--ink); font-size: .82rem; font-weight: 760; }
+    #|.model-adoption-intro { max-width: 58rem; }
+    #|.model-adoption-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem .85rem; margin-top: .75rem; }
+    #|.model-adoption-grid .field-group:last-child { grid-column: 1 / -1; max-width: 24rem; }
+    #|.model-adoption-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .85rem; }
+    #|.model-adoption-actions .row-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+    #|.model-adoption-complete, .model-adoption-blocked { display: grid; gap: .25rem; padding: .65rem; border-left: .2rem solid var(--success); border-radius: .35rem; background: var(--success-soft); }
+    #|.model-adoption-blocked { border-left-color: var(--warning); background: var(--warning-soft); }
+    #|.model-adoption-complete span, .model-adoption-blocked span { color: var(--muted-strong); font-size: .7rem; line-height: 1.45; }
+    #|.detached-imports { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    #|.detached-imports-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+    #|.detached-imports-heading h4 { margin: 0; font-size: .9rem; }
+    #|.detached-import-list { display: grid; gap: .65rem; margin-top: .7rem; }
+    #|.detached-import-row { display: grid; gap: .7rem; min-width: 0; padding: .85rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface-subtle); }
     #|.field-group select { padding: .55rem .65rem; }
     #|.field-group textarea { display: block; min-height: 15rem; padding: .7rem; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.55; }
     #|.operation-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
@@ -7700,6 +8285,8 @@ fn console_styles() -> String {
     #|  .policy-summary > div:nth-child(2) { border-right: 0; }
     #|  .policy-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     #|  .model-source-results { grid-template-columns: 1fr; }
+    #|  .model-adoption-grid { grid-template-columns: 1fr; }
+    #|  .model-adoption-grid .field-group:last-child { grid-column: auto; max-width: none; }
     #|}
     #|@media (max-width: 56rem) {
     #|  .console-root { display: flex; flex-direction: column; }
@@ -7751,6 +8338,9 @@ fn console_styles() -> String {
     #|  .access-package-evidence { max-width: none; }
     #|  .model-onboarding-steps { grid-template-columns: 1fr; }
     #|  .model-source-search { grid-template-columns: 1fr; }
+    #|  .model-adoption-actions, .detached-imports-heading { align-items: stretch; flex-direction: column; }
+    #|  .model-adoption-actions .row-actions { display: grid; grid-template-columns: 1fr; }
+    #|  .model-adoption-actions button { width: 100%; }
     #|  .topology-graph { min-width: 44rem; padding: 1rem; }
     #|  .node-summary { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
     #|  .node-summary-cell { display: none; }

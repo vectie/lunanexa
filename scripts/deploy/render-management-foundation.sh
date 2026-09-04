@@ -6,6 +6,8 @@ output_directory= management_node= control_image= web_image= model_source_image=
 workbench_public_image= coursebook_public_image= postgres_image=
 model_store_root= control_uid= control_gid= runtime_endpoint=
 public_api_base_url= controller_epoch=
+commercial_provider_action_origin=
+s3_region=
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -22,6 +24,8 @@ while [ "$#" -gt 0 ]; do
     --control-gid) control_gid=$2; shift 2 ;;
     --runtime-endpoint) runtime_endpoint=$2; shift 2 ;;
     --public-api-base-url) public_api_base_url=$2; shift 2 ;;
+    --commercial-provider-action-origin) commercial_provider_action_origin=$2; shift 2 ;;
+    --s3-region) s3_region=$2; shift 2 ;;
     --controller-epoch) controller_epoch=$2; shift 2 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 64 ;;
   esac
@@ -47,6 +51,15 @@ safe_public_api_base_url() {
   case "$1" in *'|'*|*'&'*|*'\'*|*'$'*|*'{'*|*'}'*|*'@'*|*'?'*|*'#'*) return 1 ;; esac
 }
 
+safe_commercial_provider_action_origin() {
+  case "$1" in https://*) ;; *) return 1 ;; esac
+  case "$1" in
+    https://|*'/'|*'|'*|*'&'*|*'\'*|*'$'*|*'{'*|*'}'*|*'@'*|*'?'*|*'#'*|*' '*)
+      return 1
+      ;;
+  esac
+}
+
 safe_path "$output_directory"
 safe_identifier "$management_node"
 safe_image "$control_image"; safe_image "$web_image"
@@ -56,6 +69,8 @@ safe_path "$model_store_root"
 safe_integer "$control_uid"; safe_integer "$control_gid"; safe_integer "$controller_epoch"
 safe_endpoint "$runtime_endpoint"
 safe_public_api_base_url "$public_api_base_url"
+safe_commercial_provider_action_origin "$commercial_provider_action_origin"
+safe_identifier "$s3_region"
 test "$control_uid" -gt 0; test "$control_gid" -gt 0; test "$controller_epoch" -gt 0
 command -v kubectl >/dev/null
 command -v rg >/dev/null
@@ -92,7 +107,9 @@ replace '\${CONTROLLER_EPOCH}' "$controller_epoch" "$work_directory/prerequisite
 replace '\${RUNTIME_ENDPOINT}' "$runtime_endpoint" "$work_directory/prerequisites-patch.yaml"
 replace '\${CONTROLLER_ENDPOINT}' "$controller_endpoint" "$work_directory/prerequisites-patch.yaml"
 replace '\${ARTIFACT_ENDPOINT}' "$artifact_endpoint" "$work_directory/prerequisites-patch.yaml"
+replace '\${S3_REGION}' "$s3_region" "$work_directory/prerequisites.yaml"
 replace '\${LUNANEXA_PUBLIC_API_BASE_URL}' "$public_api_base_url" "$work_directory/controller.yaml"
+replace '\${COMMERCIAL_PROVIDER_ACTION_ORIGIN}' "$commercial_provider_action_origin" "$work_directory/controller.yaml"
 management_config_digest=$(sha256_files \
   "$work_directory/prerequisites.yaml" \
   "$work_directory/prerequisites-patch.yaml")

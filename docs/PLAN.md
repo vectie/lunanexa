@@ -72,7 +72,8 @@ Deliver:
 - digest verification, provenance and compatible-hardware declarations;
 - evaluation suite and benchmark profile records;
 - versioned aliases, canary rollout, promotion, rollback and immutable receipts;
-- OCI image adapters and the management-node `/data/models` artifact gateway;
+- OCI image adapters and direct, resumable, SigV4-authenticated model pull from
+  the Moongate S3-compatible endpoint;
 - a least-privilege ModelScope adapter and the browse → download → verify →
   approve workflow defined in `MODELSCOPE_MODEL_ONBOARDING.md`;
 - explicit payload retention and evaluation-capture consent.

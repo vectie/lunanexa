@@ -100,6 +100,8 @@ pub fn validate_issue_intent(
     !@contracts.valid_identifier(intent.client_id) ||
     !@contracts.valid_identifier(intent.tenant_ref) ||
     !@contracts.valid_identifier(intent.subject_ref) ||
+    !@contracts.valid_identifier(intent.organization_id) ||
+    !@contracts.valid_identifier(intent.project_id) ||
     !valid_text(intent.display_name, 128) ||
     intent.allowed_models.length() == 0 ||
     intent.allowed_models.length() > 128 ||

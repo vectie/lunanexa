@@ -30,6 +30,7 @@ pub struct PostgresDatabase {
   mutex : @async.Mutex
 }
 pub fn PostgresDatabase::close(Self) -> Unit
+pub async fn PostgresDatabase::controller_leadership_is_current(Self, String, Int64) -> Bool
 pub async fn PostgresDatabase::load_snapshot(Self, String, String) -> String?
 pub fn PostgresDatabase::open(String) -> Self raise DatabaseError
 pub fn PostgresDatabase::ping(Self) -> Bool
@@ -38,6 +39,7 @@ pub async fn PostgresDatabase::save_opaque_snapshot(Self, String, String, String
 pub async fn PostgresDatabase::save_opaque_snapshots(Self, Array[(String, String, String)]) -> Unit
 pub async fn PostgresDatabase::save_portal_snapshot(Self, @portal.PortalSnapshot) -> Unit
 pub async fn PostgresDatabase::save_workspace_snapshot(Self, @workspace.WorkspaceDirectorySnapshot) -> Unit
+pub async fn PostgresDatabase::try_acquire_controller_leadership(Self, String) -> Int64?
 
 // Type aliases
 

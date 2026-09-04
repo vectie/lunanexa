@@ -29,16 +29,17 @@ flowchart LR
     D -->|"heartbeat and bounded usage telemetry"| M
 ```
 
-The management node is the authority and source of artifacts. It does not push
-models to every DGX. Only the node named by a managed assignment or exclusive
-lease pulls the requested model. `/data/models` is a management-node storage
-root, not a path exposed in public API responses or mounted directly into a
-tenant container.
+The management plane is the model-policy authority; the reviewed S3-compatible
+store is the production source of artifact bytes. It does not push models to
+every DGX. Only the node named by a managed assignment or exclusive lease pulls
+the requested model through Moongate. Source staging and node caches are not
+paths exposed in public API responses or mounted directly into tenant
+containers.
 
 Runtime images remain immutable OCI images pinned by digest. Model artifacts
 remain digest- and signature-verified objects. An exclusive user can request
-approved artifacts through a scoped management-node distribution endpoint;
-the node-local daemon performs the actual pull and verification.
+approved artifacts; the node-local daemon performs the scoped SigV4 pull and
+verification without exposing object-store credentials to the user runtime.
 
 ## Lease lifecycle
 
@@ -108,6 +109,19 @@ returns the opaque, single-use, generation-bound handoff reference which the
 deployment-owned credential authority redeems only after repeating identity
 and lease checks. The actual credential issuer remains an external production
 prerequisite.
+
+This credential flow is not callback-only. An operator queues the lease-bound
+intent at `POST /v1/machine-credentials/{lease}:request`; an independently
+authenticated issuer pulls pending work from
+`GET /internal/v1/credential-issuer/requests` and acknowledges its ceremony at
+`POST /internal/v1/credential-issuer/dispatch-receipts`. Request dispatch and
+handoff creation are committed under one store lock and one snapshot write, so
+a failed receipt cannot leave a hidden redeemable handoff. The customer
+redemption returns the issuer URL only after the signed, unexpired
+issuer-readiness document proves a matching HTTPS origin. LunaNexa never posts
+lease, node or subject data to an arbitrary issuer URL. Missing/expired
+readiness, machine authority, or an origin mismatch fails closed, and
+`/v1/readiness` reports `CredentialBrokerUnavailable`.
 
 The broker persists the first redemption time and derives a bounded redemption
 receipt from the subject, lease and generation. If the browser loses the first

@@ -10,6 +10,7 @@ async test "credential PostgreSQL restart preserves single-use redemption" {
     @credential.CredentialHandoffSnapshot::{
       schema_version: @credential.snapshot_schema_version,
       records: [],
+      issuer_requests: None,
     }
     .to_json()
     .stringify(),

@@ -266,3 +266,133 @@ test "durable integration snapshot replays verified callback history" {
   let restored = @integrations.IntegrationStore::from_durable_snapshot(decoded)
   assert_eq(restored.durable_snapshot(), snapshot)
 }
+
+///|
+test "provider outbox is minimal dispatch-bound idempotent and durable" {
+  let store = @integrations.IntegrationStore::new()
+  let record = payment_record()
+  ignore(store.register(record))
+  let intents = store.pending_provider_intents("dummy-pay", "sandbox")
+  assert_eq(intents.length(), 1)
+  assert_eq(intents[0].record_id, record.record_id)
+  let intent_json = intents.to_json().stringify()
+  assert_false(intent_json.contains("organization_id"))
+  assert_false(intent_json.contains("subject_ref"))
+  let receipt : @integrations.ExternalDispatchReceipt = {
+    record_id: record.record_id,
+    provider: record.provider,
+    environment: record.environment,
+    external_ref: record.external_ref,
+    action_url: "https://payments.example/checkout/session-a?opaque=one-time",
+    action_expires_unix_ms: 901000L,
+    accepted_unix_ms: 1000L,
+  }
+  let (submitted, applied) = store.record_dispatch(receipt)
+  assert_eq(submitted.state, Submitted)
+  assert_eq(applied, Applied)
+  assert_eq(store.record_dispatch(receipt).1, Replayed)
+  assert_eq(
+    store.snapshot(record.organization_id).records[0].action_url,
+    Some(receipt.action_url),
+  )
+  assert_eq(store.pending_provider_intents("dummy-pay", "sandbox").length(), 0)
+  let durable = store.durable_snapshot()
+  let restored = @integrations.IntegrationStore::from_durable_snapshot(durable)
+  assert_eq(restored.durable_snapshot(), durable)
+}
+
+///|
+test "provider dispatch rejects unsafe redirect and cross-provider binding" {
+  let store = @integrations.IntegrationStore::new()
+  let record = payment_record()
+  ignore(store.register(record))
+  let base : @integrations.ExternalDispatchReceipt = {
+    record_id: record.record_id,
+    provider: record.provider,
+    environment: record.environment,
+    external_ref: record.external_ref,
+    action_url: "https://payments.example/checkout/session-a",
+    action_expires_unix_ms: 901000L,
+    accepted_unix_ms: 1000L,
+  }
+  for
+    candidate in [
+      "http://payments.example/checkout", "javascript:alert(1)", "https://user@payments.example/checkout",
+      "https://payments.example/checkout#secret", "https://payments.example/checkout\\escape",
+    ] {
+    let mut rejected = false
+    ignore(store.record_dispatch({ ..base, action_url: candidate })) catch {
+      EvidenceMismatch(_) => rejected = true
+      _ => ()
+    }
+    assert_true(rejected)
+  }
+  let mut crossed = false
+  ignore(store.record_dispatch({ ..base, provider: "other-pay" })) catch {
+    EvidenceMismatch(_) => crossed = true
+    _ => ()
+  }
+  assert_true(crossed)
+}
+
+///|
+test "expired dispatch renewal is single-record durable and rejects retired receipt" {
+  let store = @integrations.IntegrationStore::new()
+  let record = payment_record()
+  ignore(store.register(record))
+  let old_receipt : @integrations.ExternalDispatchReceipt = {
+    record_id: record.record_id,
+    provider: record.provider,
+    environment: record.environment,
+    external_ref: record.external_ref,
+    action_url: "https://payments.example/checkout/old",
+    action_expires_unix_ms: 2000L,
+    accepted_unix_ms: 1000L,
+  }
+  ignore(store.record_dispatch(old_receipt))
+  let mut early = false
+  ignore(store.renew_expired_dispatch(record.record_id, 1999L)) catch {
+    InvalidTransition(_) => early = true
+    _ => ()
+  }
+  assert_true(early)
+  let (renewed, applied) = store.renew_expired_dispatch(record.record_id, 2000L)
+  assert_eq(applied, Applied)
+  assert_eq(renewed.state, Pending)
+  assert_eq(store.pending_provider_intents("dummy-pay", "sandbox").length(), 1)
+  let mut retired = false
+  ignore(store.record_dispatch(old_receipt)) catch {
+    IdempotencyConflict(_) => retired = true
+    _ => ()
+  }
+  assert_true(retired)
+  let mut retired_url = false
+  ignore(
+    store.record_dispatch({
+      ..old_receipt,
+      accepted_unix_ms: 2100L,
+      action_expires_unix_ms: 3000L,
+    }),
+  ) catch {
+    IdempotencyConflict(_) => retired_url = true
+    _ => ()
+  }
+  assert_true(retired_url)
+  let new_receipt = {
+    ..old_receipt,
+    action_url: "https://payments.example/checkout/new",
+    accepted_unix_ms: 2100L,
+    action_expires_unix_ms: 3000L,
+  }
+  assert_eq(store.record_dispatch(new_receipt).0.state, Submitted)
+  let durable = store.durable_snapshot()
+  assert_eq(durable.dispatch_receipt_history.unwrap_or([]), [old_receipt])
+  let restored = @integrations.IntegrationStore::from_durable_snapshot(durable)
+  assert_eq(restored.durable_snapshot(), durable)
+  let mut retired_after_restart = false
+  ignore(restored.record_dispatch(old_receipt)) catch {
+    IdempotencyConflict(_) => retired_after_restart = true
+    _ => ()
+  }
+  assert_true(retired_after_restart)
+}
