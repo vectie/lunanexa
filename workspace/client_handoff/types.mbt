@@ -22,6 +22,8 @@ pub(all) struct ClientHandoffIssueIntent {
   client_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
   display_name : String
   allowed_models : Array[String]
   handoff_expires_unix_ms : Int64
@@ -38,6 +40,8 @@ pub(all) struct ClientHandoffRecord {
   client_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
+  project_id : String?
   api_key_id : String
   code_sha256 : String
   display_name : String
@@ -58,6 +62,8 @@ pub(all) struct ClientCredential {
   client_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
+  project_id : String?
   secret_sha256 : String
   allowed_models : Array[String]
   issued_unix_ms : Int64
@@ -88,6 +94,8 @@ pub(all) struct ClientHandoffRedemption {
   api_secret : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
   allowed_models : Array[String]
   expires_unix_ms : Int64
   maximum_requests : Int64
@@ -124,6 +132,8 @@ pub(all) struct ClientAuthorization {
   key_id : String
   tenant_ref : String
   subject_ref : String
+  organization_id : String
+  project_id : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

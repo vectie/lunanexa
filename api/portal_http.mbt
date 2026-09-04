@@ -72,6 +72,7 @@ fn decode_lease_review(body : String) -> @portal.LeaseReview? {
 ///|
 priv struct PortalApiKeyIntent {
   key_id : String
+  project_id : String
   display_name : String
   scopes : Array[@access.ApiKeyScope]
   allowed_models : Array[String]
@@ -416,6 +417,16 @@ async fn ApiService::handle_enterprise_portal(
           403, "PortalAccessDenied", "developer role is required", false,
         )
       }
+      if self.management_database is Some(_) &&
+        !self.commercial_project_exists(
+          view.membership.organization_id,
+          intent.project_id,
+        ) {
+        return api_error(
+          409, "CommercialProjectRequired", "a project owned by the enterprise organization is required",
+          false,
+        )
+      }
       // Contract governance is the access authority for customer-issued keys.
       // Keep this check on the portal path as well as the operator path so a
       // developer membership cannot bypass an absent, expired, or superseded
@@ -442,6 +453,8 @@ async fn ApiService::handle_enterprise_portal(
             key_id: intent.key_id,
             tenant_ref: view.membership.tenant_ref,
             subject_ref,
+            organization_id: view.membership.organization_id,
+            project_id: intent.project_id,
             display_name: intent.display_name,
             scopes: intent.scopes,
             allowed_models: intent.allowed_models,

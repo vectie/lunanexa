@@ -232,6 +232,8 @@ async fn ApiService::api_key_check(
           key_id: value.key_id,
           tenant_ref: value.tenant_ref,
           subject_ref: value.subject_ref,
+          organization_id: value.organization_id,
+          project_id: value.project_id,
         })
       } catch {
         @client_handoff.ClientHandoffError::QuotaExceeded => KeyQuotaExceeded
@@ -399,6 +401,12 @@ async fn ApiService::handle_openai_compatibility(
             "default-tenant",
           ),
           subject_ref: "static-inference-subject",
+          organization_id: header(headers, "x-lunanexa-organization").unwrap_or(
+            "default-organization",
+          ),
+          project_id: header(headers, "x-lunanexa-project").unwrap_or(
+            "default-project",
+          ),
         }
         return self.invoke_openai_chat(value, static_authority, headers)
       }
@@ -442,7 +450,7 @@ async fn ApiService::invoke_openai_chat(
   if workspace_error is Some(reply) {
     return reply
   }
-  let canonical = self.invoke_workload(request)
+  let canonical = self.invoke_workload(request, authority)
   self.release_workspace_admission(request, reserved)
   if canonical.status < 200 || canonical.status >= 300 {
     return canonical

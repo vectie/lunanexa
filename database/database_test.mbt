@@ -28,14 +28,10 @@ async test "production account and client handoff snapshots are allowlisted" {
   }
   let database = @database.PostgresDatabase::open(url)
   database.save_opaque_snapshot(
-    "accounts",
-    "account-test-v1",
-    "{\"accounts\":[],\"sessions\":[]}",
+    "accounts", "account-test-v1", "{\"accounts\":[],\"sessions\":[]}",
   )
   database.save_opaque_snapshot(
-    "client_handoffs",
-    "client-handoff-test-v1",
-    "{\"handoffs\":[],\"credentials\":[]}",
+    "client_handoffs", "client-handoff-test-v1", "{\"handoffs\":[],\"credentials\":[]}",
   )
   assert_eq(
     database.load_snapshot("accounts", "account-test-v1"),

@@ -9,6 +9,7 @@ fn response() -> @contracts.WorkloadResponse {
     usage: { input_units: 1, output_units: 1, accelerator_ms: 2L, queue_ms: 0L },
     artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     runtime_version: "runtime-1",
+    execution_node_id: Some("node-1"),
     timing: {
       accepted_unix_ms: 1L,
       started_unix_ms: 1L,

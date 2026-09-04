@@ -38,6 +38,7 @@ LUNANEXA_TEST_DATABASE_URL="$database_url" \
   moon test internal/postgres database portal/store workspace/directory \
     notifications/store observability commercial/offline/store \
     nodelease/store nodelease/credential/store \
+    api \
     --target native --deny-warn
 
 printf '%s\n' 'PostgreSQL injection, migration, projection, rollback, and restart tests passed'

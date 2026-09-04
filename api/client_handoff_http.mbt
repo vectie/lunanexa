@@ -13,6 +13,7 @@ fn client_handoff_path(path : String) -> Bool {
 priv struct PortalClientHandoffIntent {
   request_id : String
   client_id : String
+  project_id : String
   allowed_models : Array[String]
 } derive(FromJson)
 
@@ -290,6 +291,16 @@ async fn ApiService::handle_client_handoff(
           )
         }
       }
+      if self.management_database is Some(_) &&
+        !self.commercial_project_exists(
+          portal_view.membership.organization_id,
+          intent.project_id,
+        ) {
+        return api_error(
+          409, "CommercialProjectRequired", "a project owned by the enterprise organization is required",
+          false,
+        )
+      }
       let now = @async.now()
       guard self.contract_document_store is Some(contract_store) &&
         contract_store.has_effective_master_lease(
@@ -336,6 +347,8 @@ async fn ApiService::handle_client_handoff(
             client_id: intent.client_id,
             tenant_ref: portal_view.membership.tenant_ref,
             subject_ref,
+            organization_id: portal_view.membership.organization_id,
+            project_id: intent.project_id,
             display_name: config.display_name,
             allowed_models: intent.allowed_models,
             handoff_expires_unix_ms: handoff_expiry,

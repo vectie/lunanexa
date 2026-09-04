@@ -55,6 +55,8 @@ test "OpenAI bridge declares the actual canonical input size" {
       key_id: "smoke-key",
       tenant_ref: "default-tenant",
       subject_ref: "static-inference-subject",
+      organization_id: "default-organization",
+      project_id: "default-project",
     },
     {},
     false,

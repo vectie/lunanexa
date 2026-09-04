@@ -24,6 +24,7 @@ priv struct GatewayBrowserBootstrap {
 ///|
 priv struct PortalApiKeyIssueIntent {
   key_id : String
+  project_id : String
   display_name : String
   scopes : Array[@enterprise_ui.ApiKeyScope]
   allowed_models : Array[String]
@@ -548,6 +549,7 @@ async fn launch_desktop_client(model : AppModel) -> String {
       {
         "request_id": random_identifier("desktop-handoff"),
         "client_id": client.client_id,
+        "project_id": model.portal.project_id,
         "allowed_models": allowed_models.to_json(),
       } : Json).stringify(),
   )
@@ -1201,6 +1203,7 @@ async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
   let draft = model.portal.api_key_issue_draft
   let intent : PortalApiKeyIssueIntent = {
     key_id: random_identifier("api-key"),
+    project_id: model.portal.project_id.trim().to_owned(),
     display_name: draft.display_name.trim().to_owned(),
     scopes: @enterprise_ui.api_key_scopes(model.portal),
     allowed_models: @enterprise_ui.api_key_allowed_models(model.portal),
