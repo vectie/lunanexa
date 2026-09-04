@@ -2,14 +2,15 @@
 set -eu
 umask 077
 
-output= management_manifest= provider_ref= issuer_url= operator_host=
-enterprise_host= gateway_image=
+output= management_manifest= provider_ref= issuer_url= transport_origin=
+operator_host= enterprise_host= gateway_image=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output=$2; shift 2 ;;
     --management-manifest) management_manifest=$2; shift 2 ;;
     --provider-ref) provider_ref=$2; shift 2 ;;
     --issuer-url) issuer_url=$2; shift 2 ;;
+    --transport-origin) transport_origin=$2; shift 2 ;;
     --operator-host) operator_host=$2; shift 2 ;;
     --enterprise-host) enterprise_host=$2; shift 2 ;;
     --gateway-image) gateway_image=$2; shift 2 ;;
@@ -46,6 +47,13 @@ safe_path "$management_manifest"
 test -f "$management_manifest"
 safe_identifier "$provider_ref"
 safe_https_url "$issuer_url"
+if [ -n "$transport_origin" ]; then
+  safe_https_url "$transport_origin"
+  case "${transport_origin#https://}" in */*)
+    printf '%s\n' 'OIDC transport origin must not include a path' >&2
+    exit 64
+  esac
+fi
 safe_host "$operator_host"
 safe_host "$enterprise_host"
 test "$operator_host" != "$enterprise_host"
@@ -65,6 +73,7 @@ cp "$management_manifest" "$base"
 sed \
   -e "s|\${LUNANEXA_OIDC_PROVIDER_REF}|$provider_ref|g" \
   -e "s|\${LUNANEXA_OIDC_ISSUER_URL}|$issuer_url|g" \
+  -e "s|\${LUNANEXA_OIDC_TRANSPORT_ORIGIN}|$transport_origin|g" \
   -e "s|\${LUNANEXA_OPERATOR_HOST}|$operator_host|g" \
   -e "s|\${LUNANEXA_ENTERPRISE_HOST}|$enterprise_host|g" \
   -e "s|\${OIDC_IDENTITY_GATEWAY_IMAGE}|$gateway_image|g" \

@@ -23,6 +23,7 @@ for required in \
   'app: lunanexa-control' \
   'lunanexa.io/browser-identity-sidecar: enabled' \
   'LUNANEXA_OIDC_ISSUER_URL:' \
+  'LUNANEXA_OIDC_TRANSPORT_ORIGIN:' \
   'LUNANEXA_OIDC_PKCE_METHOD: "S256"' \
   'LUNANEXA_OIDC_REQUIRE_STATE: "1"' \
   'LUNANEXA_OIDC_REQUIRE_NONCE: "1"' \
@@ -180,6 +181,7 @@ rg -q 'containerPort: 8081' "$rendered"
 rg -U -q 'kind: Deployment\nmetadata:\n  name: lunanexa-identity-gateway' "$rendered"
 rg -q 'http://lunanexa-identity-relay:8081' "$rendered"
 rg -q 'http://lunanexa-control:8080' "$rendered"
+rg -q 'LUNANEXA_OIDC_TRANSPORT_ORIGIN: ""' "$rendered"
 test "$(stat -f '%Lp' "$rendered" 2>/dev/null || stat -c '%a' "$rendered")" = 600
 
 set +e
