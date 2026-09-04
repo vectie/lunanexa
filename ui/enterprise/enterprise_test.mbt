@@ -265,3 +265,47 @@ test "account route is bilingual and API key issue validation is bounded" {
   assert_true(chinese.contains("创建 API 密钥"))
   assert_true(chinese.contains("原子轮换暂不可用"))
 }
+
+///|
+test "free trial shows one clear action, limits, and no machine promise" {
+  let state = @enterprise.demo_state()
+  let trial : @enterprise.TrialEntitlementView = {
+    trial_id: "trial-alice",
+    organization_id: "org-northstar",
+    tenant_ref: "tenant-northstar",
+    project_id: "trial-project-alice",
+    allowed_models: ["text.qwen"],
+    maximum_requests: 100L,
+    starts_unix_ms: state.machine_access.now_unix_ms - 1000L,
+    expires_unix_ms: state.machine_access.now_unix_ms + 86400000L,
+    api_key_id: None,
+    revoked_unix_ms: None,
+  }
+  let overview = @enterprise.render({
+    ..state,
+    route: Overview,
+    trial: Some(trial),
+  })
+  assert_true(overview.contains("Your trial is ready"))
+  assert_true(overview.contains("Create trial API key"))
+  assert_true(overview.contains("100"))
+  assert_true(overview.contains("text.qwen"))
+  assert_true(overview.contains("never grants SSH or exclusive machine access"))
+  let account = @enterprise.render({
+    ..state,
+    route: AccountAccess,
+    trial: Some({ ..trial, api_key_id: Some("trial-key") }),
+  })
+  assert_true(
+    account.contains("one-time trial API key has already been issued"),
+  )
+  assert_true(account.contains("disabled"))
+  let chinese = @enterprise.render({
+    ..state,
+    route: Overview,
+    locale: ChineseSimplified,
+    trial: Some(trial),
+  })
+  assert_true(chinese.contains("您的体验已就绪"))
+  assert_true(chinese.contains("不会授予 SSH 或独占机器权限"))
+}

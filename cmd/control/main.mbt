@@ -1065,6 +1065,23 @@ async fn main {
     )
     .with_access_store(access_store)
     .with_account_store(account_store, identity_assertion_secret)
+    .with_open_registration_trial(
+      @string.parse_int64(
+        @env.get_env_var("LUNANEXA_OPEN_TRIAL_HOURS").unwrap_or("24"),
+      ) *
+      3600000L,
+      @string.parse_int64(
+        @env.get_env_var("LUNANEXA_OPEN_TRIAL_MAXIMUM_REQUESTS").unwrap_or(
+          "100",
+        ),
+      ),
+      @env.get_env_var("LUNANEXA_OPEN_TRIAL_ALLOWED_MODELS")
+      .unwrap_or("text.qwen")
+      .split(",")
+      .map(value => value.trim().to_owned())
+      .filter(value => value != "")
+      .collect(),
+    )
     .with_technical_store(technical_operations)
     .with_deployment_store(
       deployment_store,

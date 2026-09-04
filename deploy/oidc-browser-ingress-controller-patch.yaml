@@ -10,7 +10,7 @@ spec:
     spec:
       containers:
         # This relay has no OIDC, UI, DNS, or external-network responsibility.
-        # It accepts only signed assertion exchange requests on port 8081 and
+        # It accepts only signed identity exchange/registration requests on port 8081 and
         # forwards them to the controller over the pod loopback interface.
         - name: identity-relay
           image: "${OIDC_IDENTITY_GATEWAY_IMAGE}"
@@ -27,6 +27,8 @@ spec:
               value: http://127.0.0.1:8080
             - name: LUNANEXA_IDENTITY_EXCHANGE_PATH
               value: /v1/auth/session:exchange
+            - name: LUNANEXA_IDENTITY_REGISTRATION_PATH
+              value: /v1/auth/register
             - name: LUNANEXA_RELAY_ALLOWED_METHOD
               value: POST
             - name: LUNANEXA_RELAY_MAXIMUM_BODY_BYTES

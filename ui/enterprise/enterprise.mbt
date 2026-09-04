@@ -125,11 +125,26 @@ pub(all) struct BrowserSessionView {
 } derive(Debug, Eq, FromJson)
 
 ///|
+pub(all) struct TrialEntitlementView {
+  trial_id : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  allowed_models : Array[String]
+  maximum_requests : Int64
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  api_key_id : String?
+  revoked_unix_ms : Int64?
+} derive(Debug, Eq, FromJson)
+
+///|
 pub(all) struct EnterpriseState {
   route : EnterpriseRoute
   locale : @i18n.Locale
   membership : @portal.EnterpriseMembership?
   account : AccountView?
+  trial : TrialEntitlementView?
   browser_sessions : Array[BrowserSessionView]
   api_keys : Array[ApiCredentialView]
   api_key_issue_draft : ApiKeyIssueDraft
@@ -207,6 +222,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     locale: @i18n.default_locale(),
     membership: None,
     account: None,
+    trial: None,
     browser_sessions: [],
     api_keys: [],
     api_key_issue_draft: {
@@ -389,6 +405,8 @@ pub fn demo_state() -> EnterpriseState {
         key_id: "key-notebook-active",
         tenant_ref: "tenant-northstar",
         subject_ref: "subject-alice",
+        organization_id: Some("org-northstar"),
+        project_id: Some("project-aurora"),
         display_name: "Research notebook",
         scopes: [ModelList, Inference],
         allowed_models: ["qwen3-32b"],
@@ -402,6 +420,8 @@ pub fn demo_state() -> EnterpriseState {
         key_id: "key-ci-revoked",
         tenant_ref: "tenant-northstar",
         subject_ref: "subject-alice",
+        organization_id: Some("org-northstar"),
+        project_id: Some("project-aurora"),
         display_name: "Retired CI client",
         scopes: [Inference],
         allowed_models: ["qwen3-32b", "bge-m3"],
@@ -1000,7 +1020,80 @@ fn overview_view(
   let open_requests = state.lease_requests
     .filter(value => value.state == Submitted)
     .length()
+  let trial_panel = match state.trial {
+    Some(trial) if trial.revoked_unix_ms is None => {
+      let active = trial.expires_unix_ms > state.machine_access.now_unix_ms
+      let consumed = match trial.api_key_id {
+        Some(key_id) =>
+          state.api_keys
+          .iter()
+          .find_first(key => key.key_id == key_id)
+          .map(key => key.consumed_requests)
+          .unwrap_or(0L)
+        None => 0L
+      }
+      @html.section(class="welcome-panel trial-panel", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            copy(
+              state.locale,
+              "FREE SHARED-INFERENCE TRIAL",
+              "免费共享推理体验",
+            ),
+          ),
+          @html.h2(
+            if active {
+              copy(state.locale, "Your trial is ready", "您的体验已就绪")
+            } else {
+              copy(
+                state.locale,
+                "Your trial has ended",
+                "您的体验已结束",
+              )
+            },
+          ),
+          @html.p(
+            if active {
+              copy(
+                state.locale,
+                "Use the approved model through a quota-bound API key. This trial never grants SSH or exclusive machine access.",
+                "通过受额度约束的 API 密钥使用已批准模型。体验不会授予 SSH 或独占机器权限。",
+              )
+            } else {
+              copy(
+                state.locale,
+                "Your account remains active. Ask your organization for an invitation to continue with governed enterprise access.",
+                "您的账户仍然有效。如需继续，请向组织申请邀请并升级为受治理的企业访问。",
+              )
+            },
+          ),
+          @html.p(
+            class="secondary",
+            "\{copy(state.locale, "Expires", "到期时间")} · \{@contractdoc.format_unix_ms_utc(trial.expires_unix_ms)} · \{copy(state.locale, "Requests", "请求数")} \{consumed}/\{trial.maximum_requests} · \{trial.allowed_models.join(", ")}",
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          class="primary-action",
+          disabled=!active,
+          on_click=command(emit, Navigate(AccountAccess)),
+          if trial.api_key_id is None {
+            copy(
+              state.locale,
+              "Create trial API key",
+              "创建体验 API 密钥",
+            )
+          } else {
+            copy(state.locale, "View trial API key", "查看体验 API 密钥")
+          },
+        ),
+      ])
+    }
+    _ => @html.nothing
+  }
   @html.div(class="page-stack", [
+    trial_panel,
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
@@ -1578,7 +1671,14 @@ fn account_access_view(
     )
   }
   let can_issue = membership.active &&
-    @portal.role_allows(membership.roles, Developer)
+    @portal.role_allows(membership.roles, Developer) &&
+    (match state.trial {
+      Some(trial) if trial.organization_id == membership.organization_id &&
+        trial.revoked_unix_ms is None =>
+        trial.expires_unix_ms > state.machine_access.now_unix_ms &&
+        trial.api_key_id is None
+      _ => true
+    })
   let browser_session_rows = [
     for browser_session in state.browser_sessions => {
       @html.div(class="browser-session-row", [
@@ -1734,11 +1834,21 @@ fn account_access_view(
               "创建限定范围的 API 密钥",
             )
           } else {
-            copy(
-              state.locale,
-              "An active Developer membership is required",
-              "需要有效的开发者成员资格",
-            )
+            match state.trial {
+              Some(trial) if trial.organization_id == membership.organization_id &&
+                trial.api_key_id is Some(_) =>
+                copy(
+                  state.locale,
+                  "The one-time trial API key has already been issued",
+                  "一次性体验 API 密钥已经签发",
+                )
+              _ =>
+                copy(
+                  state.locale,
+                  "An active Developer membership or available trial is required",
+                  "需要有效的开发者成员资格或可用体验权益",
+                )
+            }
           },
           on_click=command(emit, OpenApiKeyIssue),
           copy(state.locale, "Create API key", "创建 API 密钥"),

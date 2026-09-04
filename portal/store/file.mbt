@@ -305,6 +305,50 @@ pub async fn FilePortalStore::put_membership(
 }
 
 ///|
+/// Atomically replaces a known active trial membership with an enterprise
+/// membership. An arbitrary active membership can never be overwritten.
+pub async fn FilePortalStore::replace_trial_membership(
+  self : FilePortalStore,
+  trial_membership_id : String,
+  membership : @portal.EnterpriseMembership,
+) -> @portal.EnterpriseMembership {
+  @portal.validate_membership(membership)
+  if !membership.active || membership.membership_id == trial_membership_id {
+    raise @portal.PortalError::InvalidInput("invalid membership replacement")
+  }
+  self.mutex.acquire()
+  let previous = self.memberships.copy()
+  try {
+    guard self.memberships.get(trial_membership_id) is Some(trial) &&
+      trial.active &&
+      trial.subject_ref == membership.subject_ref &&
+      trial_membership_id.has_prefix("trial-membership-") else {
+      raise @portal.PortalError::Unauthorized("trial membership is unavailable")
+    }
+    match self.memberships.get(membership.membership_id) {
+      Some(existing) if existing == membership => {
+        self.mutex.release()
+        return existing
+      }
+      Some(_) =>
+        raise @portal.PortalError::AlreadyExists(membership.membership_id)
+      None => ()
+    }
+    self.memberships[trial_membership_id] = { ..trial, active: false }
+    self.memberships[membership.membership_id] = membership
+    self.persist()
+    self.mutex.release()
+    membership
+  } catch {
+    error => {
+      self.memberships = previous
+      self.mutex.release()
+      raise error
+    }
+  }
+}
+
+///|
 pub async fn FilePortalStore::publish_agreement(
   self : FilePortalStore,
   agreement : @portal.PortalAgreement,

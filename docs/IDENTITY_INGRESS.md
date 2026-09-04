@@ -28,7 +28,7 @@ reviewed, deployment-supplied OIDC identity-gateway image, not a bundled
 identity provider. The public gateway runs in a separate Deployment with only
 OIDC, UI, DNS, and identity-relay egress. The patch runs the same immutable
 image in `relay` mode as a minimal sidecar in every `lunanexa-control` pod. The
-relay admits only the signed session-exchange request and forwards it to
+relay admits only signed session-exchange and registration requests and forwards them to
 `http://127.0.0.1:8080`; it has no Secret mount and no permitted egress. This
 split preserves the controller's proven-loopback identity boundary without
 granting the controller pod the public gateway's IdP or UI egress.
@@ -104,16 +104,20 @@ The corresponding headers are `X-LunaNexa-Identity-Email` and
 `X-LunaNexa-Identity-Display-Name`; caller-supplied copies must be stripped at
 the edge. The request body contains only `lifetime_ms` and an optional
 `invitation_secret`. Without an invitation, registration creates an active
-`EnterpriseUser` account and browser session only—no membership, contract,
-API key, workspace lease, or machine authority. With an invitation, the
+`EnterpriseUser` account and browser session. When the controller's reviewed
+open-trial policy is enabled, it also creates a strictly bounded shared
+inference membership and workspace lease. It never creates an exclusive-node
+lease, SSH credential, contract, or machine authority. With an invitation, the
 gateway-signed email must match the invited email and the invitation-bound
 Developer membership is added.
 
 The assertion lifetime must not exceed 30 seconds. The nonce is a unique
 assertion/JTI and is consumed once. The gateway must never send tenant, role,
-email, account ID, or internal `subject_ref` as authority. LunaNexa resolves
-the signed issuer/subject through its durable account mapping and derives all
-roles and tenant access from LunaNexa stores.
+account ID, or internal `subject_ref` as authority. Email and display name are
+sent only in the registration assertion where the signature covers them; they
+are absent from ordinary login assertions. LunaNexa resolves the signed
+issuer/subject through its durable account mapping and derives all roles and
+tenant access from LunaNexa stores.
 
 `LUNANEXA_IDENTITY_ASSERTION_SECRET` is mounted from the same Kubernetes Secret
 key into the identity gateway and controller. It must contain at least 32
@@ -306,7 +310,7 @@ the controller pods but targets only the relay sidecar's distinct
 `identity-http` port 8081. The controller-pod overlay admits the identity
 gateway on ports 8081 and 8080 and adds no egress. Only stripped, cookie-bound
 `lnxs_` requests may use the 8080 route; asserted identity still requires the
-exchange-only relay and loopback hop. No public console, enterprise, or
+identity-only relay and loopback hop. No public console, enterprise, or
 workbench pod may connect directly to controller port 8080.
 
 `LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` resides on the existing

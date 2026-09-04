@@ -232,6 +232,12 @@ spec:
               value: "0"
             - name: LUNANEXA_INFERENCE_RATE_VERSION
               value: deployment-v1
+            - name: LUNANEXA_OPEN_TRIAL_HOURS
+              value: "24"
+            - name: LUNANEXA_OPEN_TRIAL_MAXIMUM_REQUESTS
+              value: "100"
+            - name: LUNANEXA_OPEN_TRIAL_ALLOWED_MODELS
+              value: text.qwen
             - name: LUNANEXA_BILLING_CURRENCY
               value: CNY
             - name: LUNANEXA_BILLING_SCALE

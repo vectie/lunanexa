@@ -170,3 +170,12 @@ receipt and never return credential or node material.
    bearer token in a URL.
 6. Validate revoked/expired leases, narrow layouts, keyboard operation and
    built-image isolation before hardware acceptance.
+
+## Open-registration trial boundary
+
+Open registration may create one short-lived shared-inference trial workspace.
+That workspace is topology-free and authorizes only its recorded model
+allowlist and request limits. It never creates an exclusive-node lease, SSH
+access, a machine account, or credential handoff. An enterprise invitation
+replaces the trial membership and revokes the trial grant and lease before the
+enterprise access path proceeds.

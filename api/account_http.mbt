@@ -3,6 +3,7 @@ fn account_path(path : String) -> Bool {
   path == "/v1/auth/session:exchange" ||
   path == "/v1/auth/register" ||
   path == "/v1/auth/self" ||
+  path == "/v1/auth/trial" ||
   path == "/v1/auth/sessions" ||
   path == "/v1/auth/sessions:revoke-all" ||
   path == "/v1/auth/logout" ||
@@ -280,6 +281,219 @@ fn account_error(error : Error) -> HttpReply {
 }
 
 ///|
+/// Provisions the shared, quota-bounded trial plane. Every identifier is
+/// derived from the account, so a retry resumes instead of duplicating access.
+/// No exclusive-node lease or credential-handoff record is created here.
+async fn ApiService::ensure_open_trial(
+  self : ApiService,
+  account : @account.AccountView,
+  now : Int64,
+) -> @account.TrialEntitlement? {
+  if self.open_trial_lifetime_ms == 0L {
+    return None
+  }
+  guard self.account_store is Some(accounts) &&
+    self.portal_store is Some(portal) &&
+    self.workspace_directory is Some(directory) else {
+    raise Failure::Failure("trial authorities are unavailable")
+  }
+  let fingerprint = account.account_id["account-".length():].to_owned()
+  let trial = accounts.ensure_trial(
+    {
+      trial_id: "trial-\{fingerprint}",
+      account_id: account.account_id,
+      organization_id: "trial-org-\{fingerprint}",
+      tenant_ref: "trial-tenant-\{fingerprint}",
+      project_id: "trial-project-\{fingerprint}",
+      allowed_models: self.open_trial_allowed_models,
+      maximum_requests: self.open_trial_maximum_requests,
+      expires_unix_ms: now + self.open_trial_lifetime_ms,
+    },
+    now,
+  )
+  let membership_id = "trial-membership-\{fingerprint}"
+  match
+    portal.snapshot().memberships
+    .iter()
+    .find_first(value => value.membership_id == membership_id) {
+    Some(existing) =>
+      if existing.subject_ref != account.subject_ref ||
+        existing.tenant_ref != trial.tenant_ref ||
+        existing.organization_id != trial.organization_id ||
+        !existing.active ||
+        !@portal.role_allows(existing.roles, Developer) {
+        raise Failure::Failure("trial membership conflicts with durable state")
+      }
+    None =>
+      ignore(
+        portal.put_membership({
+          membership_id,
+          tenant_ref: trial.tenant_ref,
+          organization_id: trial.organization_id,
+          subject_ref: account.subject_ref,
+          roles: [Developer],
+          active: true,
+          created_unix_ms: trial.starts_unix_ms,
+        }),
+      )
+  }
+  let user_id = "trial-user-\{fingerprint}"
+  let grant_id = "trial-grant-\{fingerprint}"
+  let lease_id = "trial-lease-\{fingerprint}"
+  let workspace = directory.snapshot(now)
+  match workspace.users.iter().find_first(value => value.user_id == user_id) {
+    Some(existing) =>
+      if existing.subject_ref != account.subject_ref ||
+        existing.email.to_lower() != account.email.to_lower() ||
+        existing.state != UserActive {
+        raise Failure::Failure(
+          "trial workspace user conflicts with durable state",
+        )
+      }
+    None =>
+      ignore(
+        directory.create_user({
+          version: @workspace.contract_version,
+          user_id,
+          subject_ref: account.subject_ref,
+          display_name: account.display_name,
+          email: account.email,
+          state: UserActive,
+          created_unix_ms: trial.starts_unix_ms,
+          last_active_unix_ms: None,
+          identity_receipt: "trial:\{trial.trial_id}",
+        }),
+      )
+  }
+  let after_user = directory.snapshot(now)
+  match
+    after_user.access_grants
+    .iter()
+    .find_first(value => value.grant_id == grant_id) {
+    Some(existing) =>
+      if existing.user_id != user_id ||
+        existing.tenant_ref != trial.tenant_ref ||
+        existing.access != Developer ||
+        existing.state != GrantActive ||
+        existing.expires_unix_ms != trial.expires_unix_ms {
+        raise Failure::Failure(
+          "trial workspace grant conflicts with durable state",
+        )
+      }
+    None =>
+      ignore(
+        directory.issue_access_grant(
+          {
+            version: @workspace.contract_version,
+            grant_id,
+            user_id,
+            tenant_ref: trial.tenant_ref,
+            access: Developer,
+            starts_unix_ms: trial.starts_unix_ms,
+            expires_unix_ms: trial.expires_unix_ms,
+            state: GrantActive,
+            policy_receipt: "trial:\{trial.trial_id}",
+          },
+          now,
+        ),
+      )
+  }
+  let after_grant = directory.snapshot(now)
+  match
+    after_grant.leases.iter().find_first(value => value.lease_id == lease_id) {
+    Some(existing) =>
+      if existing.subject_ref != account.subject_ref ||
+        existing.tenant_ref != trial.tenant_ref ||
+        existing.access != Developer ||
+        existing.state != Active ||
+        existing.expires_unix_ms != trial.expires_unix_ms {
+        raise Failure::Failure(
+          "trial workspace lease conflicts with durable state",
+        )
+      }
+    None =>
+      ignore(
+        directory.issue_lease(
+          {
+            version: @workspace.contract_version,
+            lease_id,
+            tenant_ref: trial.tenant_ref,
+            subject_ref: account.subject_ref,
+            access: Developer,
+            limits: {
+              max_active_sessions: 1,
+              max_session_duration_ms: 1800000L,
+              capabilities: [
+                {
+                  capability: TextGenerate,
+                  max_concurrent_requests: 1,
+                  max_requests_per_hour: 20,
+                  max_input_units_per_request: 16384,
+                  max_output_units_per_request: 2048,
+                },
+              ],
+            },
+            starts_unix_ms: trial.starts_unix_ms,
+            expires_unix_ms: trial.expires_unix_ms,
+            state: Active,
+            policy_receipt: "trial:\{trial.trial_id}",
+          },
+          now,
+        ),
+      )
+  }
+  if self.management_database is Some(_) {
+    self.commercial_mutex.acquire()
+    defer self.commercial_mutex.release()
+    let before = self.commercial_store.durable_snapshot()
+    try {
+      if self.commercial_store.organization(trial.organization_id) is None {
+        self.commercial_store.add_organization({
+          organization_id: trial.organization_id,
+          display_name: "Trial — \{account.display_name}",
+          state: Active,
+          verification_ref: Some("trial:\{trial.trial_id}"),
+          created_unix_ms: trial.starts_unix_ms,
+        })
+      }
+      let cost_center_id = "trial-cost-\{fingerprint}"
+      let commercial = self.commercial_store.durable_snapshot().commercial
+      if !commercial.cost_centers.any(value => {
+          value.cost_center_id == cost_center_id
+        }) {
+        self.commercial_store.add_cost_center({
+          cost_center_id,
+          organization_id: trial.organization_id,
+          parent_cost_center_id: None,
+          display_name: "Free trial",
+          created_unix_ms: trial.starts_unix_ms,
+        })
+      }
+      if self.commercial_store.project_for_organization(
+          trial.organization_id,
+          trial.project_id,
+        )
+        is None {
+        self.commercial_store.add_project({
+          project_id: trial.project_id,
+          organization_id: trial.organization_id,
+          cost_center_id,
+          display_name: "Free trial",
+          created_unix_ms: trial.starts_unix_ms,
+        })
+      }
+      self.persist_commercial_state()
+    } catch {
+      error => {
+        ignore(self.commercial_store.replace_from_durable_snapshot(before))
+        raise error
+      }
+    }
+  }
+  Some(trial)
+}
+
+///|
 async fn ApiService::current_account_session(
   self : ApiService,
   headers : Map[String, String],
@@ -351,13 +565,29 @@ async fn ApiService::handle_accounts(
         } noraise {
           value => value
         }
+        let trial = try self.ensure_open_trial(registered.account, now) catch {
+          _ =>
+            return api_error(
+              503, "TrialProvisioningPending", "the account is registered; retry sign-in to finish the bounded trial workspace",
+              true,
+            )
+        } noraise {
+          value => value
+        }
         self.operator_audit_as(
           registered.account.subject_ref,
           "account.open-register",
           registered.account.account_id,
           "oidc-registration:verified",
         )
-        return json_reply(201, registered.to_json())
+        return json_reply(201, {
+          "account": registered.account.to_json(),
+          "session": registered.session.to_json(),
+          "trial": match trial {
+            Some(value) => value.to_json()
+            None => Json::null()
+          },
+        })
       }
       Some(invitation_secret) => {
         guard self.portal_store is Some(portal) else {
@@ -399,24 +629,63 @@ async fn ApiService::handle_accounts(
                 false,
               )
             }
-          None =>
-            ignore(
-              portal.put_membership({
-                membership_id,
-                tenant_ref: registered.invitation.tenant_ref,
-                organization_id: registered.invitation.organization_id,
-                subject_ref: registered.account.subject_ref,
-                roles: [Developer],
-                active: true,
-                created_unix_ms: now,
-              }),
-            ) catch {
+          None => {
+            let membership : @portal.EnterpriseMembership = {
+              membership_id,
+              tenant_ref: registered.invitation.tenant_ref,
+              organization_id: registered.invitation.organization_id,
+              subject_ref: registered.account.subject_ref,
+              roles: [Developer],
+              active: true,
+              created_unix_ms: now,
+            }
+            try {
+              match accounts.trial_for_account(registered.account.account_id) {
+                Some(_) => {
+                  ignore(
+                    portal.replace_trial_membership(
+                      "trial-membership-\{fingerprint}",
+                      membership,
+                    ),
+                  )
+                  ignore(
+                    accounts.revoke_trial_for_account(
+                      registered.account.account_id,
+                      now,
+                    ),
+                  )
+                  match self.workspace_directory {
+                    Some(directory) => {
+                      ignore(
+                        directory.revoke_access_grant(
+                          "trial-grant-\{fingerprint}",
+                          now,
+                        ),
+                      ) catch {
+                        _ => ()
+                      }
+                      ignore(
+                        directory.revoke_lease(
+                          "trial-lease-\{fingerprint}",
+                          now,
+                        ),
+                      ) catch {
+                        _ => ()
+                      }
+                    }
+                    None => ()
+                  }
+                }
+                None => ignore(portal.put_membership(membership))
+              }
+            } catch {
               _ =>
                 return api_error(
                   503, "PortalMembershipPersistenceFailed", "registration was recorded; retry with a fresh identity assertion to complete membership",
                   true,
                 )
             }
+          }
         }
         self.operator_audit_as(
           registered.account.subject_ref,
@@ -459,6 +728,10 @@ async fn ApiService::handle_accounts(
       )
     }
     match (verb, path) {
+      (Get, "/v1/auth/trial") => {
+        let trial = accounts.trial_for_account(authorization.account.account_id)
+        return json_reply(200, trial.to_json())
+      }
       (Get, "/v1/auth/self") =>
         return json_reply(200, authorization.account.to_json())
       (Get, "/v1/auth/sessions") =>

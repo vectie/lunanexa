@@ -51,6 +51,9 @@ pub struct ApiService {
   store : @vectie/lunanexa/store.FileStore
   account_store : @account.AccountStore?
   identity_assertion_secret : String
+  open_trial_lifetime_ms : Int64
+  open_trial_maximum_requests : Int64
+  open_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
   management_database : @database.PostgresDatabase?
@@ -165,6 +168,7 @@ pub fn ApiService::with_offline_artifact_callback_tokens(Self, String, String) -
 pub fn ApiService::with_offline_commerce_capabilities(Self, Array[@offline.OfflineCommerceCapabilityEvidence], Int64) -> Self
 pub fn ApiService::with_offline_commerce_store(Self, @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore) -> Self
 pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -> Self raise
+pub fn ApiService::with_open_registration_trial(Self, Int64, Int64, Array[String]) -> Self raise Failure
 pub fn ApiService::with_operator_tokens(Self, Array[(String, String)]) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise

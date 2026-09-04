@@ -114,12 +114,43 @@ pub(all) struct OpenRegisteredAccount {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// A free-trial entitlement authorizes only the bounded shared-workspace path.
+/// It is not a node lease and cannot be used as machine or operator authority.
+pub(all) struct TrialEntitlement {
+  trial_id : String
+  account_id : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  allowed_models : Array[String]
+  maximum_requests : Int64
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  api_key_id : String?
+  revoked_unix_ms : Int64?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct TrialEntitlementIntent {
+  trial_id : String
+  account_id : String
+  organization_id : String
+  tenant_ref : String
+  project_id : String
+  allowed_models : Array[String]
+  maximum_requests : Int64
+  expires_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct AccountSnapshot {
   schema_version : String
   accounts : Array[HumanAccount]
   sessions : Array[BrowserSession]
   // Optional for backward-compatible restoration of pre-registration state.
   invitations : Array[AccountInvitation]?
+  // Optional for backward-compatible restoration of pre-trial state.
+  trials : Array[TrialEntitlement]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

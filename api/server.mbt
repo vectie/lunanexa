@@ -26,6 +26,9 @@ pub struct ApiService {
   store : @store.FileStore
   account_store : @account.AccountStore?
   identity_assertion_secret : String
+  open_trial_lifetime_ms : Int64
+  open_trial_maximum_requests : Int64
+  open_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
   management_database : @database.PostgresDatabase?
@@ -112,6 +115,9 @@ pub fn ApiService::new(
     store,
     account_store: None,
     identity_assertion_secret: "",
+    open_trial_lifetime_ms: 0L,
+    open_trial_maximum_requests: 0L,
+    open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     management_database: None,
@@ -194,6 +200,9 @@ pub fn ApiService::with_registry(
     store,
     account_store: None,
     identity_assertion_secret: "",
+    open_trial_lifetime_ms: 0L,
+    open_trial_maximum_requests: 0L,
+    open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     management_database: None,
@@ -277,6 +286,9 @@ pub fn ApiService::with_services(
     store,
     account_store: None,
     identity_assertion_secret: "",
+    open_trial_lifetime_ms: 0L,
+    open_trial_maximum_requests: 0L,
+    open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     management_database: None,
@@ -362,6 +374,9 @@ pub fn ApiService::with_control_plane(
     store,
     account_store: None,
     identity_assertion_secret: "",
+    open_trial_lifetime_ms: 0L,
+    open_trial_maximum_requests: 0L,
+    open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     management_database: None,
@@ -469,6 +484,33 @@ pub fn ApiService::with_account_store(
   identity_assertion_secret : String,
 ) -> ApiService {
   { ..self, account_store: Some(account_store), identity_assertion_secret }
+}
+
+///|
+/// Enables a one-time, per-account shared-inference trial. This policy cannot
+/// create exclusive-node leases or machine credentials.
+pub fn ApiService::with_open_registration_trial(
+  self : ApiService,
+  lifetime_ms : Int64,
+  maximum_requests : Int64,
+  allowed_models : Array[String],
+) -> ApiService raise Failure {
+  if lifetime_ms < 3600000L ||
+    lifetime_ms > 2592000000L ||
+    maximum_requests <= 0L ||
+    maximum_requests > 10000L ||
+    allowed_models.length() == 0 ||
+    allowed_models.length() > 16 ||
+    allowed_models.any(model => !@contracts.valid_identifier(model)) ||
+    allowed_models.any(model => allowed_models.count(model) != 1) {
+    raise Failure("invalid open-registration trial policy")
+  }
+  {
+    ..self,
+    open_trial_lifetime_ms: lifetime_ms,
+    open_trial_maximum_requests: maximum_requests,
+    open_trial_allowed_models: allowed_models,
+  }
 }
 
 ///|

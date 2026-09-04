@@ -78,6 +78,10 @@ for required in \
   'value: relay' \
   'name: LUNANEXA_CONTROL_ENDPOINT' \
   'value: http://127.0.0.1:8080' \
+  'name: LUNANEXA_IDENTITY_EXCHANGE_PATH' \
+  'value: /v1/auth/session:exchange' \
+  'name: LUNANEXA_IDENTITY_REGISTRATION_PATH' \
+  'value: /v1/auth/register' \
   'name: LUNANEXA_RELAY_ALLOWED_METHOD' \
   'value: POST' \
   'name: LUNANEXA_RELAY_MAXIMUM_BODY_BYTES' \
