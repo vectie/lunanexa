@@ -1,0 +1,8 @@
+# Build from the reviewed Linux binaries, never from a workspace/model directory.
+ARG RUNTIME_IMAGE
+FROM ${RUNTIME_IMAGE}
+COPY lunanexa-webide-gateway /usr/local/bin/lunanexa-webide-gateway
+COPY lunanexa-webide-model-proxy /usr/local/bin/lunanexa-webide-model-proxy
+USER 1000:1000
+EXPOSE 8082
+ENTRYPOINT ["/usr/local/bin/lunanexa-webide-gateway"]
