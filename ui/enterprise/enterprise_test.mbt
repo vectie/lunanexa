@@ -14,7 +14,7 @@ test "enterprise portal separates customer requests from operator assignment" {
   )
   assert_true(requests.contains("Password is not accepted"))
   assert_true(requests.contains(">WebIDE</button>"))
-  assert_true(desktop.contains("SECURE DESKTOP HANDOFF"))
+  assert_true(desktop.contains("SECURE WEBIDE HANDOFF"))
   assert_true(desktop.contains("single-use handoff"))
   assert_false(desktop.contains("href=\"/workbench/\""))
   assert_true(models.contains("Shared model catalog"))
@@ -28,11 +28,11 @@ test "enterprise portal separates customer requests from operator assignment" {
 ///|
 test "enterprise WebIDE journey exposes one truthful next action" {
   let state = @enterprise.demo_state()
-  let ready = @enterprise.render({ ..state, route: DesktopIde })
+  let ready = @enterprise.render({ ..state, route: DesktopIde, })
   assert_true(ready.contains("Your access journey"))
-  assert_true(ready.contains("Everything is ready"))
+  assert_true(ready.contains("Your access is ready"))
   assert_true(ready.contains("text.default"))
-  assert_true(ready.contains("Open desktop WebIDE"))
+  assert_true(ready.contains("Open Desktop WebIDE"))
   guard state.desktop_client is Some(client) else {
     fail("demo desktop client is required")
   }
@@ -118,13 +118,15 @@ test "enterprise machine route shows safe live access without topology" {
 test "lease form requires every bounded field" {
   let state = @enterprise.demo_state()
   assert_true(@enterprise.lease_form_valid(state))
-  assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "" }))
-  assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "root" }))
+  assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "", }))
   assert_false(
-    @enterprise.lease_form_valid({ ..state, unix_username: "Alice" }),
+    @enterprise.lease_form_valid({ ..state, unix_username: "root", }),
   )
-  assert_false(@enterprise.lease_form_valid({ ..state, model_ids: "" }))
-  assert_false(@enterprise.lease_form_valid({ ..state, loading: true }))
+  assert_false(
+    @enterprise.lease_form_valid({ ..state, unix_username: "Alice", }),
+  )
+  assert_false(@enterprise.lease_form_valid({ ..state, model_ids: "", }))
+  assert_false(@enterprise.lease_form_valid({ ..state, loading: true, }))
   let invalid = @enterprise.render({
     ..state,
     route: LeaseRequests,

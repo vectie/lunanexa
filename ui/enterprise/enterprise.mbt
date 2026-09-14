@@ -184,6 +184,7 @@ pub(all) struct EnterpriseState {
   payment_checkout_loading : Bool
   model_catalog : Array[@portal.EnterpriseModelSummary]
   desktop_client : EnterpriseDesktopClient?
+  desktop_clients : Array[EnterpriseDesktopClient]
   self_service : SelfServiceState
   project_id : String
   unix_username : String
@@ -224,6 +225,7 @@ pub(all) enum EnterpriseMessage {
   SubmitPaymentCheckout
   SubmitLease
   LaunchDesktopClient
+  SelectWebIde(String)
   MarkNotificationRead(String, Int64)
   SetNotificationEmail(@notifications.NotificationTopic, Bool)
   MachineAccess(@machine_access.MachineAccessMessage)
@@ -284,6 +286,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     payment_checkout_loading: false,
     model_catalog: [],
     desktop_client: None,
+    desktop_clients: [],
     self_service: default_self_service_state(),
     project_id: "",
     unix_username: "",
@@ -400,7 +403,7 @@ pub fn demo_state() -> EnterpriseState {
     updated_unix_ms: now - 86400000L,
     revision: 1L,
   }
-  {
+  let state = {
     ..default_state(now),
     membership: Some({
       membership_id: "membership-northstar",
@@ -775,6 +778,16 @@ pub fn demo_state() -> EnterpriseState {
     model_ids: "qwen3-32b, bge-m3",
     justification: "Private evaluation and adapter validation.",
   }
+  let clients = match state.desktop_client {
+    Some(desktop) => [desktop, {
+      ..desktop, client_id: "comfyui", display_name: "ComfyUI",
+      launch_uri: "https://creative.example.invalid/connect",
+      models_ready: false, ready: false,
+      blocker_codes: ["ApprovedModelRequired"], approved_model_aliases: [],
+    }]
+    None => []
+  }
+  { ..state, desktop_clients: clients }
 }
 
 ///|
@@ -783,6 +796,24 @@ pub fn EnterpriseState::update(
   message : EnterpriseMessage,
 ) -> EnterpriseState {
   match message {
+    SelectWebIde(client_id) => {
+      if self.loading {
+        return self
+      }
+      match
+        self.desktop_clients
+        .filter(client => client.client_id == client_id)
+        .get(0) {
+        Some(client) =>
+          {
+            ..self,
+            desktop_client: Some(client),
+            success_message: None,
+            error_message: None,
+          }
+        None => self
+      }
+    }
     Navigate(route) => {
       let dedicated = if route == AccountAccess {
         self.self_service.order.filter(order => {
@@ -3260,16 +3291,58 @@ fn desktop_ide_view(
   } else {
     copy(
       state.locale,
-      "Everything is ready. Open the desktop and start working.",
-      "所有项目均已就绪。打开桌面并开始工作。",
+      "Your access is ready. Open the selected WebIDE to continue.",
+      "访问权限已就绪。打开所选 WebIDE 继续工作。",
     )
   }
   @html.div(class="page-stack", [
+    if state.desktop_clients.length() > 1 {
+      @html.section(class="workflow-panel", [
+        @html.h2(copy(state.locale, "Choose your WebIDE", "选择 WebIDE")),
+        @html.p(
+          copy(
+            state.locale,
+            "Open your preferred workspace. Creative workflows stay in ComfyUI; code stays in your editor.",
+            "选择工作空间：创作流程使用 ComfyUI，代码开发使用编辑器。",
+          ),
+        ),
+        @html.div(
+          class="api-key-actions",
+          [
+            for client in state.desktop_clients => {
+              let selected = state.desktop_client.map_or(false, current => {
+                current.client_id == client.client_id
+              })
+              @html.button(
+                type_="button",
+                class=if selected {
+                  "scope-toggle is-selected"
+                } else {
+                  "scope-toggle"
+                },
+                disabled=state.loading,
+                attrs=@html.Attrs::build().aria_pressed(
+                  if selected {
+                    "true"
+                  } else {
+                    "false"
+                  },
+                ),
+                on_click=command(emit, SelectWebIde(client.client_id)),
+                client.display_name,
+              )
+            }
+          ],
+        ),
+      ])
+    } else {
+      @html.span("")
+    },
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
           class="eyebrow",
-          copy(state.locale, "SECURE DESKTOP HANDOFF", "安全桌面交接"),
+          copy(state.locale, "SECURE WEBIDE HANDOFF", "安全 WebIDE 交接"),
         ),
         @html.h2(
           copy(
@@ -3296,7 +3369,7 @@ fn desktop_ide_view(
           if state.loading {
             copy(state.locale, "Connecting…", "正在连接…")
           } else {
-            copy(state.locale, "Open desktop WebIDE", "打开桌面 WebIDE")
+            copy(state.locale, "Open \{name}", "打开 \{name}")
           },
         )
       },
