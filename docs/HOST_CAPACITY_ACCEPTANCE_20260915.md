@@ -25,3 +25,15 @@ propagation of Kubernetes disk pressure into LunaNexa inventory taints, cgroup
 resource constraints, real paid provisioning, or GPU model deployment. Kubernetes
 Ready alone does not establish resource availability. Test inventory is not
 hardware evidence. This change does not complete overall platform acceptance.
+
+## Read-only native executable check
+
+`lunanexa-node --inspect-host-resources` exits after reading Linux procfs; it
+does not load enrollment credentials, contact the controller or start workloads.
+Native release build exposed a missing `-ldl` in the node executable link flags;
+the flag was added and the release build then succeeded.
+
+Executed on management host ubuntu: `{"cpu_count":24,"memory_total_mib":"64073"}`.
+Independent system readings were `_NPROCESSORS_ONLN=24` and
+`MemTotal=65610872 kB`, whose integer MiB conversion is 64073. This verifies
+actual host collection on that AMD64 Linux machine, not the compute node or Spark.
