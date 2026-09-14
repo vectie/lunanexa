@@ -59,3 +59,52 @@ test "WebIDE labels remain escaped and selecting a client clears old notices" {
   assert_eq(selected.success_message, None)
   assert_false(@enterprise.render(selected).contains("<script>bad</script>"))
 }
+
+///|
+test "paid WebIDE selection pins project and model and never silently falls back" {
+  let demo = @enterprise.demo_state()
+  let order : @enterprise.SelfServiceOrderView = {
+    order_id: "paid-endpoint-a",
+    kind: DedicatedMaaS,
+    status: ActiveOrder,
+    project_id: "paid-project",
+    gpu_sku: "DGX Spark",
+    region: "test",
+    duration_hours: 24,
+    model_selector: Some("text.default"),
+    display_amount: "prepaid",
+    lease_ref: None,
+    deployment_ref: Some("paid-deployment"),
+    generation: 1L,
+    updated_unix_ms: 100L,
+  }
+  let state = {
+    ..demo,
+    route: DesktopIde,
+    self_service: { ..demo.self_service, orders: [order], order: Some(order), },
+  }.update(SelectWebIdeOrder(order.order_id))
+  assert_eq(
+    @enterprise.webide_launch_selection(state),
+    Some((Some(order.order_id), "paid-project", ["text.default"])),
+  )
+  let rendered = @enterprise.render(state)
+  assert_eq(rendered.split("value=\"paid-endpoint-a\"").count(), 2)
+  let terminated = {
+    ..state,
+    self_service: {
+      ..state.self_service,
+      orders: [{ ..order, status: TerminatedOrder, updated_unix_ms: 101L, }],
+    },
+  }
+  assert_eq(@enterprise.webide_launch_selection(terminated), None)
+  assert_true(@enterprise.render(terminated).contains("no shared fallback"))
+  assert_true(
+    @enterprise.render(terminated).contains("disabled>Open Desktop WebIDE"),
+  )
+  let missing = state.update(SelectWebIdeOrder("missing-order"))
+  assert_eq(@enterprise.webide_launch_selection(missing), None)
+  assert_true(
+    @enterprise.webide_launch_selection(missing.update(SelectWebIdeOrder("")))
+    is Some((None, _, _)),
+  )
+}

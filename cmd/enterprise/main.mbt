@@ -1382,9 +1382,9 @@ async fn launch_desktop_client(model : AppModel) -> String {
   if !client.ready {
     raise Failure("selected WebIDE access is not ready")
   }
-  let allowed_models = client.approved_model_aliases
-  if allowed_models.length() == 0 {
-    raise Failure("no approved model alias is available for the desktop client")
+  guard @enterprise_ui.webide_launch_selection(model.portal)
+    is Some((order_id, project_id, allowed_models)) else {
+    raise Failure("the selected WebIDE model source is not active and ready")
   }
   let response = request(
     "POST",
@@ -1396,7 +1396,8 @@ async fn launch_desktop_client(model : AppModel) -> String {
       {
         "request_id": random_identifier("desktop-handoff"),
         "client_id": client.client_id,
-        "project_id": model.portal.project_id,
+        "project_id": project_id,
+        "order_id": order_id.to_json(),
         "allowed_models": allowed_models.to_json(),
       } : Json).stringify(),
   )
@@ -2848,7 +2849,7 @@ async fn update_contract_information(
     "/v1/contract-documents/self/\{packet_id}:information",
     model.token,
     model.subject_ref,
-    body=ContractInformationUpdate::{ expected_revision, changes }
+    body=ContractInformationUpdate::{ expected_revision, changes, }
       .to_json()
       .stringify(),
   )
@@ -2869,7 +2870,7 @@ async fn contract_revision_action(
     "/v1/contract-documents/self/\{packet_id}:\{suffix}",
     model.token,
     model.subject_ref,
-    body=ContractRevisionAction::{ expected_revision, expected_values_sha256 }
+    body=ContractRevisionAction::{ expected_revision, expected_values_sha256, }
       .to_json()
       .stringify(),
   )
@@ -2911,7 +2912,7 @@ async fn contract_preview(
     "/v1/contract-documents/self/\{packet_id}:preview",
     model.token,
     model.subject_ref,
-    body=ContractPreviewIntent::{ expected_revision, form, changes }
+    body=ContractPreviewIntent::{ expected_revision, form, changes, }
       .to_json()
       .stringify(),
   )
@@ -3033,7 +3034,7 @@ fn demo_contract_action(
     ConfirmAction(ConfirmInformation(packet_id, _)) => packet_id
     ConfirmAction(RequestGeneration(packet_id, _, _)) => packet_id
     ConfirmAction(RequestRenewal(packet_id)) => packet_id
-    _ => return { ..documents, loading: false }
+    _ => return { ..documents, loading: false, }
   }
   guard documents.manifest is Some(manifest) &&
     documents.packets.search_by(packet => packet.packet_id == packet_id)
@@ -3200,7 +3201,7 @@ fn schedule_contract_preview(
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
     return (
-      { ..model, portal: { ..model.portal, contract_documents: documents } },
+      { ..model, portal: { ..model.portal, contract_documents: documents, }, },
       @rabbita.none,
     )
   }
@@ -3209,7 +3210,7 @@ fn schedule_contract_preview(
   let next = {
     ..model,
     contract_preview_generation: generation,
-    portal: { ..model.portal, contract_documents: pending },
+    portal: { ..model.portal, contract_documents: pending, },
   }
   let command = @rabbita.perform(message => emit(message), async fn() noraise {
     try contract_preview_delay_promise(delay_ms).wait() catch {
@@ -3297,9 +3298,9 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
-    EndpointChanged(value) => ({ ..model, endpoint: value }, @rabbita.none)
-    TokenChanged(value) => ({ ..model, token: value }, @rabbita.none)
-    SubjectChanged(value) => ({ ..model, subject_ref: value }, @rabbita.none)
+    EndpointChanged(value) => ({ ..model, endpoint: value, }, @rabbita.none)
+    TokenChanged(value) => ({ ..model, token: value, }, @rabbita.none)
+    SubjectChanged(value) => ({ ..model, subject_ref: value, }, @rabbita.none)
     Connect =>
       if model.token == "" || model.endpoint == "" {
         (
@@ -3332,7 +3333,7 @@ fn update(
       if model.demo_mode || model.bootstrap_started {
         (model, @rabbita.none)
       } else {
-        let next = { ..model, bootstrap_started: true, connecting: true }
+        let next = { ..model, bootstrap_started: true, connecting: true, }
         (next, bootstrap_command(next, emit))
       }
     BootstrapReady(generation, browser_session) =>
@@ -3353,7 +3354,7 @@ fn update(
       }
     BootstrapUnavailable(generation) =>
       if generation == model.session_generation {
-        ({ ..model, connecting: false }, @rabbita.none)
+        ({ ..model, connecting: false, }, @rabbita.none)
       } else {
         (model, @rabbita.none)
       }
@@ -3372,7 +3373,7 @@ fn update(
     Portal(LocaleChanged(locale)) => {
       apply_enterprise_locale(locale)
       (
-        { ..model, portal: model.portal.update(LocaleChanged(locale)) },
+        { ..model, portal: model.portal.update(LocaleChanged(locale)), },
         @rabbita.none,
       )
     }
@@ -3408,7 +3409,7 @@ fn update(
       match @enterprise_ui.selected_organization_header(portal) {
         Some(selected) if !model.demo_mode => {
           commit_enterprise_organization(selected)
-          let loading = { ..next, connecting: true }
+          let loading = { ..next, connecting: true, }
           (loading, load_command(loading, emit))
         }
         Some(selected) => {
@@ -3491,7 +3492,7 @@ fn update(
     }
     Portal(SelfService(RefreshOrganizations)) => {
       let portal = model.portal.update(SelfService(RefreshOrganizations))
-      let next = { ..model, portal, connecting: true }
+      let next = { ..model, portal, connecting: true, }
       if model.demo_mode {
         (
           {
@@ -3499,7 +3500,7 @@ fn update(
             connecting: false,
             portal: {
               ..portal,
-              self_service: { ..portal.self_service, action_loading: false },
+              self_service: { ..portal.self_service, action_loading: false, },
             },
           },
           @rabbita.none,
@@ -3548,7 +3549,7 @@ fn update(
             ..next,
             portal: {
               ..portal,
-              self_service: { ..portal.self_service, action_loading: false },
+              self_service: { ..portal.self_service, action_loading: false, },
             },
           },
           @rabbita.none,
@@ -3599,7 +3600,7 @@ fn update(
             ..next,
             portal: {
               ..portal,
-              self_service: { ..portal.self_service, action_loading: false },
+              self_service: { ..portal.self_service, action_loading: false, },
             },
           },
           @rabbita.none,
@@ -3616,7 +3617,7 @@ fn update(
       if model.demo_mode {
         let order = portal.self_service.order.map(value => {
           if value.order_id == order_id && value.generation == generation {
-            { ..value, status: CancelledOrder, generation: generation + 1L }
+            { ..value, status: CancelledOrder, generation: generation + 1L, }
           } else {
             value
           }
@@ -3652,7 +3653,11 @@ fn update(
       if model.demo_mode {
         let order = portal.self_service.order.map(value => {
           if value.order_id == order_id && value.generation == generation {
-            { ..value, status: TerminationPending, generation: generation + 1L }
+            {
+              ..value,
+              status: TerminationPending,
+              generation: generation + 1L,
+            }
           } else {
             value
           }
@@ -3703,7 +3708,7 @@ fn update(
       } else if !@enterprise_ui.api_key_issue_valid(model.portal) {
         (model, @rabbita.none)
       } else {
-        ({ ..model, portal: next }, api_key_issue_command(model, emit))
+        ({ ..model, portal: next, }, api_key_issue_command(model, emit))
       }
     }
     Portal(ConfirmRevokeApiKey(key_id)) => {
@@ -3728,7 +3733,10 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, api_key_revoke_command(model, key_id, emit))
+        (
+          { ..model, portal: next, },
+          api_key_revoke_command(model, key_id, emit),
+        )
       }
     }
     Portal(CopyOneTimeApiKeySecret) =>
@@ -3803,7 +3811,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           signature_command(model, agreement_id, emit),
         )
       }
@@ -3829,7 +3837,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, provider_requests_command(model, emit))
+        ({ ..model, portal: next, }, provider_requests_command(model, emit))
       }
     }
     Portal(SubmitPaymentCheckout) => {
@@ -3899,7 +3907,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, payment_checkout_command(model, emit))
+        ({ ..model, portal: next, }, payment_checkout_command(model, emit))
       }
     }
     Portal(SubmitLease) => {
@@ -3923,7 +3931,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, lease_command(model, emit))
+        ({ ..model, portal: next, }, lease_command(model, emit))
       }
     }
     Portal(LaunchDesktopClient) => {
@@ -3952,7 +3960,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, desktop_client_command(model, emit))
+        ({ ..model, portal: next, }, desktop_client_command(model, emit))
       }
     }
     Portal(MarkNotificationRead(notification_id, generation)) =>
@@ -3971,7 +3979,10 @@ fn update(
             }
           }
         ]
-        ({ ..model, portal: { ..model.portal, notifications, } }, @rabbita.none)
+        (
+          { ..model, portal: { ..model.portal, notifications, }, },
+          @rabbita.none,
+        )
       } else {
         (
           model,
@@ -4137,7 +4148,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, offline_order_command(model, emit))
+        ({ ..model, portal: next, }, offline_order_command(model, emit))
       }
     }
     Portal(OfflineCommerce(RequestEvidenceUpload(order_id, kind))) => {
@@ -4167,7 +4178,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           offline_upload_grant_command(model, order_id, kind, emit),
         )
       }
@@ -4199,7 +4210,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           offline_artifact_download_command(model, artifact_id, emit),
         )
       }
@@ -4227,10 +4238,10 @@ fn update(
         OfflineCommerce(ConfirmAction(CancelOrder(order_id, generation))),
       )
       if model.demo_mode {
-        ({ ..model, portal: next }, @rabbita.none)
+        ({ ..model, portal: next, }, @rabbita.none)
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           offline_order_cancellation_command(model, order_id, generation, emit),
         )
       }
@@ -4329,7 +4340,10 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: { ..model.portal, contract_documents: documents } },
+          {
+            ..model,
+            portal: { ..model.portal, contract_documents: documents, },
+          },
           contract_approval_nudge_command(model, approval_id, emit),
         )
       }
@@ -4357,7 +4371,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           contract_packet_command(
             model,
             model.contract_preview_generation,
@@ -4409,7 +4423,7 @@ fn update(
         )
       }
     Portal(portal_message) =>
-      ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
+      ({ ..model, portal: model.portal.update(portal_message), }, @rabbita.none)
     Outcome(ApiKeyIssued(generation, issued)) =>
       if generation != model.session_generation {
         (model, @rabbita.none)
@@ -4456,7 +4470,7 @@ fn update(
         let revoked_at = revoked_unix_ms.unwrap_or(current_unix_ms())
         let api_keys = model.portal.api_keys.map(key => {
           if key.key_id == key_id {
-            { ..key, revoked_unix_ms: Some(revoked_at) }
+            { ..key, revoked_unix_ms: Some(revoked_at), }
           } else {
             key
           }
@@ -4521,7 +4535,7 @@ fn update(
           let portal = base.update(
             SelfService(SelectOrganization(organization_id)),
           )
-          let next = { ..model, connecting: true, portal }
+          let next = { ..model, connecting: true, portal, }
           (next, load_command(next, emit))
         }
         None => {

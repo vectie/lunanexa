@@ -235,7 +235,7 @@ async test "settled bare order provisions internally without leaking its node" {
       memory_mib: 16384L,
       cpu_count: 16L,
       meter: "exclusive-node-second",
-      unit_price: { minor_units: 2L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 60L,
       minimum_duration_seconds: 60L,
       maximum_duration_seconds: 86400L,
@@ -427,7 +427,7 @@ async test "settled bare order provisions internally without leaking its node" {
     .with_commercial_provider_adapter(
       "provider-adapter-token-more-than-32-bytes", "provider-a", "sandbox", "https://provider.example",
     )
-  let service = { ..configured, commercial_store: commercial }
+  let service = { ..configured, commercial_store: commercial, }
   let customer_headers = {
     "Authorization": "Bearer inference-token",
     "X-LunaNexa-Subject": "subject-a",
@@ -813,7 +813,7 @@ async test "dedicated endpoint uses pinned managed deployment and never exclusiv
       memory_mib: 2048L,
       cpu_count: 1L,
       meter: "dedicated-endpoint-second",
-      unit_price: { minor_units: 3L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 3L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 60L,
       minimum_duration_seconds: 60L,
       maximum_duration_seconds: 86400L,
@@ -958,7 +958,204 @@ async test "dedicated endpoint uses pinned managed deployment and never exclusiv
     machine_store.order_for_access_key("dedicated-key-via-account").unwrap().order_id,
     active.order_id,
   )
+  let webide_service = machine_webide_fixture(service, directory, now)
+  let launch_intent : Json = {
+    "request_id": "paid-webide-launch",
+    "client_id": "comfyui",
+    "project_id": "project-a",
+    "allowed_models": ["text.default"],
+    "order_id": active.order_id,
+  }
+  let launch = webide_service.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    customer_headers,
+    launch_intent.stringify(),
+  )
+  assert_eq(launch.status, 201)
+  guard @json.parse(launch.body) is { "handoff_code": String(code), .. } else {
+    fail("missing paid launch")
+  }
+  let redeem = webide_service.handle(
+    Post,
+    "/v1/client-handoffs:redeem",
+    Map([]),
+    ({ "client_id": "comfyui", "handoff_code": code } : Json).stringify(),
+  )
+  assert_eq(redeem.status, 200)
+  guard @json.parse(redeem.body)
+    is { "api_secret": String(secret), "api_key_id": String(key_id), .. } else {
+    fail("missing paid credential")
+  }
+  assert_eq(
+    machine_store.order_for_access_key(key_id).unwrap().order_id,
+    active.order_id,
+  )
+  assert_eq(
+    webide_service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{secret}" },
+      "",
+    ).status,
+    200,
+  )
+  let wrong_project : Json = {
+    "request_id": "paid-webide-cross-project",
+    "client_id": "comfyui",
+    "project_id": "project-other",
+    "allowed_models": ["text.default"],
+    "order_id": active.order_id,
+  }
+  assert_eq(
+    webide_service.handle(
+      Post,
+      "/v1/portal/self/client-handoffs",
+      customer_headers,
+      wrong_project.stringify(),
+    ).status,
+    404,
+  )
+  ignore(
+    machine_store.request_termination(
+      "subject-a",
+      active.order_id,
+      {
+        idempotency_key: "end-paid-webide",
+        expected_generation: active.generation,
+        reason: "fixture termination",
+      },
+      @async.now(),
+    ),
+  )
+  assert_eq(
+    webide_service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{secret}" },
+      "",
+    ).status,
+    401,
+  )
+  assert_eq(
+    webide_service.handle(
+      Post,
+      "/v1/portal/self/client-handoffs",
+      customer_headers,
+      launch_intent.stringify(),
+    ).status,
+    409,
+  )
   @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async fn machine_webide_fixture(
+  service : ApiService,
+  root : String,
+  now : Int64,
+) -> ApiService {
+  let contracts = @contractdoc_store.ContractDocumentStore::open(
+    root + "/webide-contracts.json",
+  )
+  ignore(
+    contracts.create_packet(
+      {
+        ..@contractdoc.new_packet(
+          @contractdoc.youthpolicy_remote_lease_manifest(),
+          "paid-webide-master",
+          "paid-webide-master-key",
+          "tenant-a",
+          "org-a",
+          "subject-a",
+          "order-a",
+          None,
+          [MasterLease],
+          now,
+        ),
+        state: Effective,
+      },
+      "operator",
+    ),
+  )
+  let directory = @directory.FileWorkspaceDirectory::open(
+    root + "/webide-workspace.json",
+    now_unix_ms=now,
+  )
+  ignore(
+    directory.create_user({
+      version: @workspace.contract_version,
+      user_id: "webide-user-a",
+      subject_ref: "subject-a",
+      display_name: "Fixture user",
+      email: "fixture@example.invalid",
+      state: UserActive,
+      created_unix_ms: now,
+      last_active_unix_ms: None,
+      identity_receipt: "fixture-identity",
+    }),
+  )
+  ignore(
+    directory.issue_access_grant(
+      {
+        version: @workspace.contract_version,
+        grant_id: "webide-grant-a",
+        user_id: "webide-user-a",
+        tenant_ref: "tenant-a",
+        access: Developer,
+        starts_unix_ms: now - 1L,
+        expires_unix_ms: now + 7200000L,
+        state: GrantActive,
+        policy_receipt: "fixture-policy",
+      },
+      now,
+    ),
+  )
+  ignore(
+    directory.issue_lease(
+      {
+        version: @workspace.contract_version,
+        lease_id: "webide-lease-a",
+        tenant_ref: "tenant-a",
+        subject_ref: "subject-a",
+        access: Developer,
+        limits: {
+          max_active_sessions: 1,
+          max_session_duration_ms: 7200000L,
+          capabilities: [
+            {
+              capability: TextGenerate,
+              max_concurrent_requests: 1,
+              max_requests_per_hour: 100,
+              max_input_units_per_request: 4096,
+              max_output_units_per_request: 1024,
+            },
+          ],
+        },
+        starts_unix_ms: now - 1L,
+        expires_unix_ms: now + 7200000L,
+        state: Active,
+        policy_receipt: "fixture-lease",
+      },
+      now,
+    ),
+  )
+  let handoffs = @client_handoff_store.ClientHandoffStore::open(
+    root + "/webide-handoffs.json",
+    "paid-webide-fixture-secret-longer-than-32-bytes",
+  )
+  service
+  .with_legacy_unbound_access_for_local_testing()
+  .with_contract_document_store(contracts)
+  .with_workspace_directory(directory, true)
+  .with_client_handoff_store(handoffs, {
+    client_id: "comfyui",
+    display_name: "ComfyUI",
+    launch_uri: "https://creative.example.invalid/connect",
+    public_api_base_url: "https://moongate.example.invalid/v1",
+    handoff_lifetime_ms: 120000L,
+    maximum_requests: 1000L,
+  })
 }
 
 ///|
@@ -982,7 +1179,7 @@ async test "paid order without eligible capacity times out into compensation" {
       memory_mib: 16384L,
       cpu_count: 16L,
       meter: "exclusive-node-second",
-      unit_price: { minor_units: 1L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 1L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 60L,
       minimum_duration_seconds: 60L,
       maximum_duration_seconds: 3600L,

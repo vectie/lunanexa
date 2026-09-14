@@ -16,6 +16,7 @@ priv struct PortalClientHandoffIntent {
   client_id : String
   project_id : String
   allowed_models : Array[String]
+  order_id : String?
 } derive(FromJson)
 
 ///|
@@ -271,7 +272,8 @@ async fn ApiService::handle_client_handoff(
         blockers.push("ApprovedModelRequired")
       }
       let subject_handoffs = handoffs.views_for_subject(
-        portal_view.membership.tenant_ref, subject_ref,
+        portal_view.membership.tenant_ref,
+        subject_ref,
       )
       let views = configs.map(config => {
         (
@@ -325,6 +327,38 @@ async fn ApiService::handle_client_handoff(
         )
       }
       let now = @async.now()
+      let paid_order = match intent.order_id {
+        Some(order_id) => {
+          guard self.machine_commerce_store is Some(machine_store) &&
+            machine_store.order(order_id) is Some(order) &&
+            order.tenant_ref == portal_view.membership.tenant_ref &&
+            order.organization_id == portal_view.membership.organization_id &&
+            order.project_id == intent.project_id &&
+            order.purchaser_subject_ref == subject_ref else {
+            return api_error(
+              404, "NotFound", "dedicated machine order was not found", false,
+            )
+          }
+          guard order.offering_kind == DedicatedEndpoint &&
+            order.state == Active &&
+            order.requested_model_selector is Some(selected) &&
+            intent.allowed_models == [selected] &&
+            order.active_started_unix_ms is Some(started) &&
+            started + order.duration_seconds * 1000L > now &&
+            order.target_deployment_ref is Some(deployment_id) &&
+            self.deployment_store is Some(deployments) &&
+            deployments.deployment(deployment_id) is Some(operation) &&
+            operation.state == Ready &&
+            operation.endpoint is Some(_) else {
+            return api_error(
+              409, "DedicatedEndpointUnavailable", "the selected paid endpoint is not active and ready",
+              true,
+            )
+          }
+          Some(order)
+        }
+        None => None
+      }
       guard self.contract_document_store is Some(contract_store) &&
         contract_store.has_effective_master_lease(
           portal_view.membership.tenant_ref,
@@ -356,12 +390,22 @@ async fn ApiService::handle_client_handoff(
       } noraise {
         value => value
       }
+      let credential_expiry = match paid_order {
+        Some(order) =>
+          (order.active_started_unix_ms.unwrap() +
+          order.duration_seconds * 1000L).min(workspace.lease.expires_unix_ms)
+        None => workspace.lease.expires_unix_ms
+      }
       let requested_handoff_expiry = now + config.handoff_lifetime_ms
-      let handoff_expiry = if requested_handoff_expiry <
-        workspace.lease.expires_unix_ms {
+      let handoff_expiry = if requested_handoff_expiry < credential_expiry {
         requested_handoff_expiry
       } else {
-        workspace.lease.expires_unix_ms
+        credential_expiry - 1L
+      }
+      if handoff_expiry <= now {
+        return api_error(
+          409, "ActiveLeaseRequired", "the workspace lease is ending", false,
+        )
       }
       let issued = try
         handoffs.issue(
@@ -375,7 +419,7 @@ async fn ApiService::handle_client_handoff(
             display_name: config.display_name,
             allowed_models: intent.allowed_models,
             handoff_expires_unix_ms: handoff_expiry,
-            credential_expires_unix_ms: workspace.lease.expires_unix_ms,
+            credential_expires_unix_ms: credential_expiry,
             maximum_requests: config.maximum_requests,
           },
           now,
@@ -384,6 +428,59 @@ async fn ApiService::handle_client_handoff(
         error => return client_handoff_error_reply(error)
       } noraise {
         value => value
+      }
+      // The one-time code is not exposed until the identifier binding is
+      // durable. A partial failure leaves an unusable, revoked credential,
+      // never an accidentally shared-model fallback for a paid launch.
+      if paid_order is Some(order) {
+        let binding_ok = try {
+          guard self.machine_commerce_store is Some(machine_store) &&
+            handoffs
+            .views_for_subject(order.tenant_ref, subject_ref)
+            .filter(view => view.handoff_id == issued.handoff_id)
+            .get(0)
+            is Some(view) else {
+            raise Failure("handoff binding unavailable")
+          }
+          ignore(
+            machine_store.bind_access_key(
+              order.order_id,
+              subject_ref,
+              view.api_key_id,
+              now,
+            ),
+          )
+          let (_, denied) = self.dedicated_order_binding(
+            {
+              key_id: view.api_key_id,
+              tenant_ref: order.tenant_ref,
+              subject_ref,
+              organization_id: order.organization_id,
+              project_id: order.project_id,
+            },
+            order.requested_model_selector,
+            @async.now(),
+          )
+          denied is None
+        } catch {
+          _ => false
+        }
+        if !binding_ok {
+          ignore(
+            handoffs.revoke_for_subject(
+              issued.handoff_id,
+              order.tenant_ref,
+              subject_ref,
+              @async.now(),
+            ),
+          ) catch {
+            _ => ()
+          }
+          return api_error(
+            503, "DedicatedHandoffBindingFailed", "the paid workspace handoff could not be bound",
+            true,
+          )
+        }
       }
       json_reply(201, {
         "handoff_id": issued.handoff_id,

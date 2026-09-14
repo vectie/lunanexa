@@ -177,6 +177,12 @@ async fn ApiService::api_key_check(
           (!contract_active && !trial_active) {
           return KeyDenied
         }
+        let (_, order_denied) = self.dedicated_order_binding(
+          preview, model, now,
+        )
+        if order_denied is Some(_) {
+          return KeyDenied
+        }
         let value = if consume {
           match (tenant_ref, model) {
             (Some(tenant), Some(selected_model)) =>
@@ -246,36 +252,61 @@ async fn ApiService::api_key_check(
           None => false
         }
         let account_active = match self.account_store {
-          Some(accounts) => accounts.views().iter().any(account => {
-            account.subject_ref == value.subject_ref && account.state == Active &&
-            @account.role_allows(account.roles, EnterpriseUser)
-          })
+          Some(accounts) =>
+            accounts
+            .views()
+            .iter()
+            .any(account => {
+              account.subject_ref == value.subject_ref &&
+              account.state == Active &&
+              @account.role_allows(account.roles, EnterpriseUser)
+            })
           None => self.allow_legacy_unbound_access
         }
         let membership_active = match self.portal_store {
-          Some(portal) => try {
-            let view = portal.self_view_for_organization(value.subject_ref, value.organization_id)
-            view.membership.active && view.membership.tenant_ref == value.tenant_ref &&
-            @portal.role_allows(view.membership.roles, Developer)
-          } catch { _ => false }
+          Some(portal) =>
+            try {
+              let view = portal.self_view_for_organization(
+                value.subject_ref,
+                value.organization_id,
+              )
+              view.membership.active &&
+              view.membership.tenant_ref == value.tenant_ref &&
+              @portal.role_allows(view.membership.roles, Developer)
+            } catch {
+              _ => false
+            }
           None => self.allow_legacy_unbound_access
         }
-        if !workspace_active || !contract_active || !account_active || !membership_active {
+        if !workspace_active ||
+          !contract_active ||
+          !account_active ||
+          !membership_active {
           return KeyDenied
         }
-        if consume {
-          ignore(match model {
-            Some(selected_model) => store.authorize(secret, scope, model=selected_model, now, true)
-            None => store.authorize(secret, scope, now, true)
-          })
-        }
-        KeyAuthorized({
+        let authority : @access.ApiAuthorization = {
           key_id: value.key_id,
           tenant_ref: value.tenant_ref,
           subject_ref: value.subject_ref,
           organization_id: value.organization_id,
           project_id: value.project_id,
-        })
+        }
+        let (_, order_denied) = self.dedicated_order_binding(
+          authority, model, now,
+        )
+        if order_denied is Some(_) {
+          return KeyDenied
+        }
+        if consume {
+          ignore(
+            match model {
+              Some(selected_model) =>
+                store.authorize(secret, scope, model=selected_model, now, true)
+              None => store.authorize(secret, scope, now, true)
+            },
+          )
+        }
+        KeyAuthorized(authority)
       } catch {
         @client_handoff.ClientHandoffError::QuotaExceeded => KeyQuotaExceeded
         _ => KeyDenied
