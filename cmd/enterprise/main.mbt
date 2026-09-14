@@ -313,7 +313,7 @@ priv enum Outcome {
     Array[@contractdoc.ContractPacket],
     Array[@contractdoc.ContractPacketEvent],
     ContractSelfGovernance,
-    @enterprise_ui.EnterpriseDesktopClient?,
+    Array[@enterprise_ui.EnterpriseDesktopClient],
     Array[@enterprise_ui.ApiCredentialView],
     Array[@commercial_integrations.ExternalRecordView],
     @enterprise_ui.PaymentCheckoutQuote?
@@ -1379,14 +1379,10 @@ async fn launch_desktop_client(model : AppModel) -> String {
   guard model.portal.desktop_client is Some(client) else {
     raise Failure("desktop workspace integration is not configured")
   }
-  let allowed_models : Array[String] = []
-  for entry in model.portal.model_catalog {
-    match entry.alias_name {
-      Some(model_alias) if !allowed_models.contains(model_alias) =>
-        allowed_models.push(model_alias)
-      _ => ()
-    }
+  if !client.ready {
+    raise Failure("selected WebIDE access is not ready")
   }
+  let allowed_models = client.approved_model_aliases
   if allowed_models.length() == 0 {
     raise Failure("no approved model alias is available for the desktop client")
   }
@@ -1519,7 +1515,7 @@ async fn load_self(
   Array[@contractdoc.ContractPacket],
   Array[@contractdoc.ContractPacketEvent],
   ContractSelfGovernance,
-  @enterprise_ui.EnterpriseDesktopClient?,
+  Array[@enterprise_ui.EnterpriseDesktopClient],
   Array[@enterprise_ui.ApiCredentialView],
   Array[@commercial_integrations.ExternalRecordView],
   @enterprise_ui.PaymentCheckoutQuote?,
@@ -1763,34 +1759,36 @@ async fn load_self(
       ),
     ),
   )
-  let desktop_client : @enterprise_ui.EnterpriseDesktopClient? = try {
-    let response : DesktopClientResponse = @json.from_json(
+  let desktop_client : Array[@enterprise_ui.EnterpriseDesktopClient] = try {
+    let responses : Array[DesktopClientResponse] = @json.from_json(
       @json.parse(
         request(
           "GET",
           model.endpoint,
-          "/v1/portal/self/client",
+          "/v1/portal/self/clients",
           model.token,
           model.subject_ref,
         ),
       ),
     )
-    let client_view : @enterprise_ui.EnterpriseDesktopClient = {
-      client_id: response.client_id,
-      display_name: response.display_name,
-      launch_uri: response.launch_uri,
-      handoff_lifetime_ms: response.handoff_lifetime_ms,
-      connected_handoffs: response.handoffs.length(),
-      contract_ready: response.contract_ready,
-      workspace_ready: response.workspace_ready,
-      models_ready: response.models_ready,
-      ready: response.ready,
-      blocker_codes: response.blocker_codes,
-      approved_model_aliases: response.approved_model_aliases,
-    }
-    Some(client_view)
+    responses.map(response => {
+      (
+        {
+          client_id: response.client_id,
+          display_name: response.display_name,
+          launch_uri: response.launch_uri,
+          handoff_lifetime_ms: response.handoff_lifetime_ms,
+          connected_handoffs: response.handoffs.length(),
+          contract_ready: response.contract_ready,
+          workspace_ready: response.workspace_ready,
+          models_ready: response.models_ready,
+          ready: response.ready,
+          blocker_codes: response.blocker_codes,
+          approved_model_aliases: response.approved_model_aliases,
+        } : @enterprise_ui.EnterpriseDesktopClient)
+    })
   } catch {
-    _ => None
+    _ => []
   } noraise {
     value => value
   }
@@ -4862,7 +4860,18 @@ fn update(
           provider_requests_loading: false,
           payment_checkout_loading: false,
           model_catalog: models,
-          desktop_client,
+          desktop_clients: desktop_client,
+          desktop_client: match model.portal.desktop_client {
+            Some(selected) =>
+              match
+                desktop_client
+                .filter(client => client.client_id == selected.client_id)
+                .get(0) {
+                Some(client) => Some(client)
+                None => desktop_client.get(0)
+              }
+            None => desktop_client.get(0)
+          },
           project_id: match active_trial {
             Some(value) => value.project_id
             None => model.portal.project_id
