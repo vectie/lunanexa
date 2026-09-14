@@ -90,6 +90,19 @@ isolated host profile; actual artifact admission remains unqualified and must
 not be bypassed. The placeholder launch URL is not a working authenticated
 ComfyUI launch. Cross-process media acceptance remains outstanding.
 
+The running controller subsequently passed real HTTP signed-registration
+checks using a test identity assertion, not a real IdP login: unsigned
+registration returned 401, signed registration returned 201, replay of the same
+nonce returned 409, `/v1/auth/self` accepted the issued session and `/v1/accounts`
+rejected it with 401. The user then created a company through
+`/v1/portal/self/organizations`; it remained `PendingVerification`. Repeating
+the same organization request returned 200 with the identical response.
+The executable smoke and secret-free result are recorded locally as
+`aigc-spark-preflight/registration-http-acceptance.mbtx` and
+`registration-http-acceptance-result.json`. Test accounts/organizations remain
+only in the disposable acceptance database. This does not prove external IdP
+login, verified company approval or machine entitlement.
+
 An independent PostgreSQL 16.15 pod and 5 GiB PVC were created in
 `aigc-acceptance-20260915`, without a Service or public ingress. Namespace
 default-deny ingress/egress remains applied. An administrator-only localhost
