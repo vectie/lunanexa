@@ -71,6 +71,25 @@ The resulting executable SHA-256 is
 This is build evidence only; the controller has not yet passed isolated startup
 or full pipeline acceptance.
 
+Subsequent isolated startup **passed**: the executable acquired PostgreSQL
+leadership using the explicit `development-single-instance` profile and bound
+only to `127.0.0.1:5880` (API) and `127.0.0.1:5882` (identity listener).
+`GET /health` returned 200. Anonymous `GET /v1/accounts` returned 401; an
+operator-authenticated `POST /v1/accounts` created the test-only enterprise
+account `acceptance-user-20260915` with HTTP 201. Its public response did not
+contain the raw provider subject or its digest. A direct SQL query confirmed
+the `accounts` and `client_handoffs` snapshot domains exist in
+`acceptance_controller`, along with the other initialized stores.
+
+This is not public registration or identity-provider integration: the account
+was created using the operator API and a test-only identity receipt. No model
+deployment or readiness was asserted. The runtime endpoint is an unused
+loopback fixture address, and its configured artifact digest identifies the
+marked test MP4, not model weights. Cosign is not yet provisioned in this
+isolated host profile; actual artifact admission remains unqualified and must
+not be bypassed. The placeholder launch URL is not a working authenticated
+ComfyUI launch. Cross-process media acceptance remains outstanding.
+
 An independent PostgreSQL 16.15 pod and 5 GiB PVC were created in
 `aigc-acceptance-20260915`, without a Service or public ingress. Namespace
 default-deny ingress/egress remains applied. An administrator-only localhost
