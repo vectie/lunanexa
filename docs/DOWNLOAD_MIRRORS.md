@@ -22,7 +22,15 @@ As checked on 2026-09-14, [USTC's registry cache is suspended](https://mirrors.u
 while [TUNA's docker-ce mirror is not Docker Hub](https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/).
 Do not populate daemon registry-mirrors with these unavailable/inapplicable
 endpoints. Existing digest-pinned private/local caches remain authoritative.
-Selecting another public registry requires a separately verified source.
+Docker Hub downloads now use the user-selected DaoCloud mirror:
+`https://docker.m.daocloud.io`. The dedicated local WebIDE build Docker profile
+uses this daemon mirror. Explicit image references can use
+`docker.m.daocloud.io/<repository>@sha256:<original-digest>`.
+Keep the original pinned digest and architecture; validate downloaded blob
+sizes and SHA-256 before accepting them. Never send private-registry credentials
+to this public mirror. See [DaoCloud's official instructions](https://github.com/DaoCloud/public-image-mirror).
+Other running Docker profiles and production containerd are not restarted by
+this preparation change.
 
 No model weights belong in these images. Registered model artifacts continue to
 use the configured artifact transfer path; new preparation downloads use
