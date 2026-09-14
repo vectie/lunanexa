@@ -446,7 +446,7 @@ async fn send_heartbeat(
     state: agent.state(),
     observed_generation: agent.observed_generation(),
     controller_epoch: agent.controller_epoch(),
-    inventory,
+    inventory: @node_agent.collect_linux_host_resources().inventory(inventory),
     running_deployments: agent.running_deployments(),
     timestamp_unix_ms: @async.now(),
     signature: "",

@@ -25,3 +25,27 @@ test "Linux host resource inventory validates actual procfs fields" {
     }
   }
 }
+
+///|
+test "measured host resources replace static labels without mutating inventory" {
+  let base : @contracts.NodeInventory = {
+    node_id: "test-only",
+    agent_version: "test",
+    os_release: "test",
+    runtime_names: [],
+    accelerators: [],
+    labels: {
+      "lunanexa.io/region": "test-region",
+      "lunanexa.io/host-cpu-count": "999",
+    },
+    taints: [],
+  }
+  assert_eq(@node.inventory_host_resources(base), None)
+  let measured : @node.HostResources = { cpu_count: 2, memory_total_mib: 4096L }
+  let updated = measured.inventory(base)
+  assert_eq(@node.inventory_host_resources(updated), Some(measured))
+  assert_eq(base.labels.get("lunanexa.io/host-cpu-count"), Some("999"))
+  assert_eq(updated.labels.get("lunanexa.io/region"), Some("test-region"))
+  updated.labels["lunanexa.io/host-memory-mib"] = "-1"
+  assert_eq(@node.inventory_host_resources(updated), None)
+}
