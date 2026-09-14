@@ -243,13 +243,25 @@ fn WorkspaceHost::resources(
         },
         {
           "to": [
-            { "podSelector": { "matchLabels": { "app": "lunanexa-control" } } },
+            {
+              "namespaceSelector": {
+                "matchLabels": {
+                  "kubernetes.io/metadata.name": config.controller_namespace,
+                },
+              },
+              "podSelector": { "matchLabels": { "app": "lunanexa-control" } },
+            },
           ],
           "ports": [{ "protocol": "TCP", "port": config.controller_port }],
         },
         {
           "to": [
             {
+              "namespaceSelector": {
+                "matchLabels": {
+                  "kubernetes.io/metadata.name": config.model_gateway_namespace,
+                },
+              },
               "podSelector": {
                 "matchLabels": { "app.kubernetes.io/name": "moongate" },
               },

@@ -61,7 +61,8 @@ pub async fn WorkspaceHost::provision(
     if !self.authorize(grant) {
       raise HostError::ControllerRejected
     }
-    for (path, resource) in self.resources(id, grant) {
+    for entry in self.resources(id, grant) {
+      let (path, resource) = entry
       ignore(
         self.kubernetes(
           Patch,

@@ -40,6 +40,7 @@ pub(all) struct StoredJob {
   retain_until_unix_ms : Int64
   expiry_requested : Bool
   execution_terminal : Bool
+  terminal_unix_ms : Int64?
   usage_receipt : String?
 } derive(Eq, ToJson, FromJson)
 
@@ -50,7 +51,7 @@ pub(all) struct Snapshot {
 } derive(Eq, ToJson, FromJson)
 
 ///|
-pub let schema_version : String = "lunanexa.media-jobs.v1"
+pub let schema_version : String = "lunanexa.media-jobs.v2"
 
 ///|
 pub(all) suberror JobError {

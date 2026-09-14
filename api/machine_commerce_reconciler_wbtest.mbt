@@ -733,9 +733,27 @@ async test "settled bare order provisions internally without leaking its node" {
 
 ///|
 async test "dedicated endpoint uses pinned managed deployment and never exclusive lease" {
+  exercise_dedicated_endpoint(TextGenerate)
+}
+
+///|
+async test "paid video order connects native media API with isolated lifecycle and usage" {
+  exercise_dedicated_endpoint(VideoGenerate)
+}
+
+///|
+async fn exercise_dedicated_endpoint(
+  capability : @contracts.Capability,
+) -> Unit {
   let directory = @fs.tmpdir(prefix="lunanexa-machine-dedicated-")
+  defer @fs.rmdir(directory, recursive=true)
   let now = @async.now()
-  let template = machine_dedicated_template()
+  let base = machine_dedicated_template()
+  let template = {
+    ..base,
+    capability,
+    runtime: { ..base.runtime, capabilities: [capability], },
+  }
   let durable = @store.FileStore::open("\{directory}/state.json")
   durable.fence_controller(1L)
   let heartbeat : @contracts.NodeHeartbeat = {
@@ -958,7 +976,12 @@ async test "dedicated endpoint uses pinned managed deployment and never exclusiv
     machine_store.order_for_access_key("dedicated-key-via-account").unwrap().order_id,
     active.order_id,
   )
-  let webide_service = machine_webide_fixture(service, directory, now)
+  let webide_service = machine_webide_fixture(
+    service,
+    directory,
+    now,
+    video=capability == VideoGenerate,
+  )
   let launch_intent : Json = {
     "request_id": "paid-webide-launch",
     "client_id": "comfyui",
@@ -1007,6 +1030,9 @@ async test "dedicated endpoint uses pinned managed deployment and never exclusiv
     "allowed_models": ["text.default"],
     "order_id": active.order_id,
   }
+  if capability == VideoGenerate {
+    exercise_media_api(webide_service, directory, secret, active, now)
+  }
   assert_eq(
     webide_service.handle(
       Post,
@@ -1046,7 +1072,6 @@ async test "dedicated endpoint uses pinned managed deployment and never exclusiv
     ).status,
     409,
   )
-  @fs.rmdir(directory, recursive=true)
 }
 
 ///|
@@ -1054,6 +1079,7 @@ async fn machine_webide_fixture(
   service : ApiService,
   root : String,
   now : Int64,
+  video? : Bool = false,
 ) -> ApiService {
   let contracts = @contractdoc_store.ContractDocumentStore::open(
     root + "/webide-contracts.json",
@@ -1124,7 +1150,11 @@ async fn machine_webide_fixture(
           max_session_duration_ms: 7200000L,
           capabilities: [
             {
-              capability: TextGenerate,
+              capability: if video {
+                VideoGenerate
+              } else {
+                TextGenerate
+              },
               max_concurrent_requests: 1,
               max_requests_per_hour: 100,
               max_input_units_per_request: 4096,

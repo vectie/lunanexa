@@ -1,6 +1,8 @@
 ///|
 pub(all) struct HostConfig {
   namespace_name : String
+  controller_namespace : String
+  model_gateway_namespace : String
   comfyui_image : String
   model_proxy_image : String
   storage_class : String
@@ -114,6 +116,8 @@ fn origin(value : String) -> Bool {
 ///|
 pub fn WorkspaceHost::new(config : HostConfig) -> WorkspaceHost raise HostError {
   if !dns_label(config.namespace_name) ||
+    !dns_label(config.controller_namespace) ||
+    !dns_label(config.model_gateway_namespace) ||
     !dns_label(config.storage_class) ||
     !pinned_image(config.comfyui_image) ||
     !pinned_image(config.model_proxy_image) ||

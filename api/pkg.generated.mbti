@@ -15,6 +15,9 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
   "vectie/lunanexa/machinecommerce",
+  "vectie/lunanexa/media/jobs",
+  "vectie/lunanexa/media/provider",
+  "vectie/lunanexa/media/runtime",
   "vectie/lunanexa/node",
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/notifications",
@@ -49,6 +52,7 @@ pub(all) enum ApiMethod {
 } derive(Eq, @debug.Debug)
 
 pub struct ApiService {
+  media : MediaService?
   global_settings : @settings.GlobalAdminSettings
   store : @vectie/lunanexa/store.FileStore
   account_store : @account.AccountStore?
@@ -77,6 +81,7 @@ pub struct ApiService {
   credential_issuer_adapter_token : String?
   client_handoff_store : @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
+  additional_client_launch_configs : Array[@client_handoff.ClientLaunchConfig]
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -140,6 +145,7 @@ pub async fn ApiService::reconcile_contract_governance(Self, Int64) -> Unit
 pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
 pub async fn ApiService::reconcile_expiring_contracts(Self, Int64, Int64) -> Unit
 pub async fn ApiService::reconcile_machine_commerce(Self) -> Unit
+pub async fn ApiService::reconcile_media_jobs(Self) -> (Int, Int)
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
@@ -158,6 +164,7 @@ pub fn ApiService::with_account_store(Self, @account.AccountStore, String) -> Se
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig) -> Self raise Failure
+pub fn ApiService::with_client_launch_catalog(Self, Array[@client_handoff.ClientLaunchConfig]) -> Self raise Failure
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_commercial_provider_adapter(Self, String, String, String, String) -> Self raise Failure
 pub fn ApiService::with_contract_approval_threshold(Self, Int64) -> Self
@@ -179,6 +186,8 @@ pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise 
 pub fn ApiService::with_legacy_unbound_access_for_local_testing(Self) -> Self
 pub fn ApiService::with_machine_commerce_store(Self, @vectie/lunanexa/machinecommerce/store.MachineCommerceStore) -> Self
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
+pub fn ApiService::with_media_jobs(Self, @jobs.JobStore, Array[MediaBinding]) -> Self raise
+pub fn ApiService::with_media_templates(Self, @jobs.JobStore, Array[MediaTemplateBinding]) -> Self raise
 pub fn ApiService::with_model_source_adapter(Self, String, String) -> Self raise Failure
 pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
@@ -232,6 +241,31 @@ pub(all) struct ManagementReadiness {
   guide_diagnostics_configured : Bool
   exclusive_lease_expiry_reconciler_healthy : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MediaBinding {
+  deployment_id : String
+  deployment_generation : Int64
+  node_id : String
+  origin : String
+  bearer : String?
+  profile : @provider.Profile
+} derive(@json.FromJson)
+
+pub struct MediaService {
+  jobs : @jobs.JobStore
+  runtime : @runtime.VideoRuntime
+  bindings : Array[MediaBinding]
+  templates : Array[MediaTemplateBinding]
+}
+
+pub(all) struct MediaTemplateBinding {
+  template_id : String
+  template_version : String
+  node_id : String
+  origin : String
+  bearer : String?
+  profile : @provider.Profile
+} derive(@json.FromJson)
 
 pub(all) struct OfflineArtifactView {
   artifact_id : String

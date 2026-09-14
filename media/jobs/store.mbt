@@ -77,6 +77,10 @@ pub async fn JobStore::restore(
       record.retain_until_unix_ms < record.deadline_unix_ms ||
       record.progress.map_or(false, value => value < 0 || value > 100) ||
       record.provider_job_id.map_or(false, id => !provider_id_valid(id)) ||
+      record.execution_terminal != (record.terminal_unix_ms is Some(_)) ||
+      record.terminal_unix_ms.map_or(false, ended => {
+        ended < record.created_unix_ms || ended > record.updated_unix_ms
+      }) ||
       record.usage_receipt.map_or(false, value => {
         !@contracts.valid_identifier(value)
       }) ||
@@ -159,6 +163,8 @@ pub async fn JobStore::reserve(
   now : Int64,
   deadline : Int64,
   retain_until : Int64,
+  maximum_active? : Int = 1,
+  maximum_per_hour? : Int = 100,
 ) -> (StoredJob, Bool) {
   if !owner_valid(owner) ||
     !@contracts.valid_identifier(idempotency_key) ||
@@ -169,7 +175,11 @@ pub async fn JobStore::reserve(
     deadline <= now ||
     deadline - now > 7200000L ||
     retain_until < deadline ||
-    retain_until - now > 604800000L {
+    retain_until - now > 604800000L ||
+    maximum_active < 1 ||
+    maximum_active > 10000 ||
+    maximum_per_hour < 1 ||
+    maximum_per_hour > 100000 {
     raise InvalidInput
   }
   let request_key = digest(
@@ -196,6 +206,18 @@ pub async fn JobStore::reserve(
   if self.jobs.length() >= self.maximum_jobs {
     raise CapacityExceeded
   }
+  let related = self.jobs
+    .values()
+    .filter(job => {
+      job.owner.tenant_ref == owner.tenant_ref &&
+      job.owner.subject_ref == owner.subject_ref
+    })
+    .to_array()
+  if related.filter(job => busy(job)).length() >= maximum_active ||
+    related.filter(job => job.created_unix_ms > now - 3600000L).length() >=
+    maximum_per_hour {
+    raise Busy
+  }
   let value : StoredJob = {
     job_id: "video-" + request_key[7:].to_owned(),
     owner,
@@ -212,6 +234,7 @@ pub async fn JobStore::reserve(
     retain_until_unix_ms: retain_until,
     expiry_requested: false,
     execution_terminal: false,
+    terminal_unix_ms: None,
     usage_receipt: None,
   }
   (self.commit(value), true)
@@ -361,6 +384,11 @@ pub async fn JobStore::observe(
     state,
     progress,
     execution_terminal: state == Completed || state == Failed,
+    terminal_unix_ms: if state == Completed || state == Failed {
+      Some(now)
+    } else {
+      None
+    },
     updated_unix_ms: now,
   })
 }
@@ -397,6 +425,11 @@ pub async fn JobStore::cancel(
     state,
     expiry_requested: expiry,
     execution_terminal: job.execution_terminal || job.state == Intent,
+    terminal_unix_ms: if job.state == Intent {
+      Some(now)
+    } else {
+      job.terminal_unix_ms
+    },
     updated_unix_ms: now,
   })
 }
@@ -430,6 +463,7 @@ pub async fn JobStore::acknowledge_deletion(
       Cancelled
     },
     execution_terminal: true,
+    terminal_unix_ms: Some(job.terminal_unix_ms.unwrap_or(now)),
     updated_unix_ms: now,
   })
 }
