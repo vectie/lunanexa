@@ -1051,19 +1051,34 @@ async fn main {
         client_handoff_path, client_handoff_issuer_secret,
       )
   }
-  let client_launch_config : @client_handoff.ClientLaunchConfig = {
-    client_id: required_environment("LUNANEXA_CLIENT_ID"),
-    display_name: required_environment("LUNANEXA_CLIENT_DISPLAY_NAME"),
-    launch_uri: required_environment("LUNANEXA_CLIENT_LAUNCH_URI"),
-    public_api_base_url: required_environment("LUNANEXA_PUBLIC_API_BASE_URL"),
-    handoff_lifetime_ms: @string.parse_int64(
-      @env.get_env_var("LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS").unwrap_or(
-        "120000",
-      ),
-    ),
-    maximum_requests: @string.parse_int64(
-      @env.get_env_var("LUNANEXA_CLIENT_MAXIMUM_REQUESTS").unwrap_or("100000"),
-    ),
+  let client_launch_catalog : Array[@client_handoff.ClientLaunchConfig] = match
+    @env.get_env_var("LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON") {
+    Some(document) => @json.from_json(@json.parse(document))
+    None =>
+      [
+        {
+          client_id: required_environment("LUNANEXA_CLIENT_ID"),
+          display_name: required_environment("LUNANEXA_CLIENT_DISPLAY_NAME"),
+          launch_uri: required_environment("LUNANEXA_CLIENT_LAUNCH_URI"),
+          public_api_base_url: required_environment(
+            "LUNANEXA_PUBLIC_API_BASE_URL",
+          ),
+          handoff_lifetime_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS").unwrap_or(
+              "120000",
+            ),
+          ),
+          maximum_requests: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_CLIENT_MAXIMUM_REQUESTS").unwrap_or(
+              "100000",
+            ),
+          ),
+        },
+      ]
+  }
+  guard @client_handoff.valid_client_launch_catalog(client_launch_catalog) &&
+    client_launch_catalog.get(0) is Some(client_launch_config) else {
+    raise Failure("client launch catalog is invalid")
   }
   let technical_operations = match management_database {
     Some(database) => @technical_store.TechnicalStore::open_postgres(database)
@@ -1350,6 +1365,7 @@ async fn main {
     .with_exclusive_lease_store(exclusive_lease_store)
     .with_credential_handoff_store(credential_handoff_store)
     .with_client_handoff_store(client_handoff_store, client_launch_config)
+    .with_client_launch_catalog(client_launch_catalog)
     .with_lease_helper_receipt_secret(lease_helper_receipt_secret)
     .with_portal_store(portal_store)
     .with_notification_store(notification_store)

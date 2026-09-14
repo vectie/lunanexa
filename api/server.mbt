@@ -52,6 +52,7 @@ pub struct ApiService {
   credential_issuer_adapter_token : String?
   client_handoff_store : @client_handoff_store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
+  additional_client_launch_configs : Array[@client_handoff.ClientLaunchConfig]
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -147,6 +148,7 @@ pub fn ApiService::new(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -240,6 +242,7 @@ pub fn ApiService::with_registry(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -334,6 +337,7 @@ pub fn ApiService::with_services(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -430,6 +434,7 @@ pub fn ApiService::with_control_plane(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -959,6 +964,28 @@ pub fn ApiService::with_client_handoff_store(
     ..self,
     client_handoff_store: Some(client_handoff_store),
     client_launch_config: Some(client_launch_config),
+    additional_client_launch_configs: [],
+  }
+}
+
+///|
+/// Configures multiple approved WebIDE launch bridges while preserving the
+/// first entry as the legacy /self/client default.
+pub fn ApiService::with_client_launch_catalog(
+  self : ApiService,
+  configs : Array[@client_handoff.ClientLaunchConfig],
+) -> ApiService raise Failure {
+  guard self.client_handoff_store is Some(_) &&
+    @client_handoff.valid_client_launch_catalog(configs) &&
+    configs.get(0) is Some(first) else {
+    raise Failure(
+      "client launch catalog is invalid or handoff store is missing",
+    )
+  }
+  {
+    ..self,
+    client_launch_config: Some(first),
+    additional_client_launch_configs: configs[1:].to_owned(),
   }
 }
 

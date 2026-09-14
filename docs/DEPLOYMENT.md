@@ -824,6 +824,45 @@ evidence is current.
 
 ### Desktop WebIDE one-click integration
 
+Multiple approved WebIDEs (for example a code editor and a hosted ComfyUI
+launch bridge) may coexist. Set `LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON` to an
+array of `ClientLaunchConfig` objects; the first entry remains the legacy
+`GET /v1/portal/self/client` default. The portal uses authenticated
+`GET /v1/portal/self/clients` to select one client. IDs are unique, the catalog
+is bounded to 32 entries, and each client's handoff/redemption uses its own
+deployment-owned launch and API URLs. Unknown/removed clients fail closed.
+
+Example configuration shape (placeholders, not a running ComfyUI service):
+
+```json
+[
+  {
+    "client_id": "desktop-workspace",
+    "display_name": "Desktop WebIDE",
+    "launch_uri": "http://127.0.0.1:4188/?mode=mooncode",
+    "public_api_base_url": "https://gateway.example/v1",
+    "handoff_lifetime_ms": 120000,
+    "maximum_requests": 100000
+  },
+  {
+    "client_id": "comfyui",
+    "display_name": "ComfyUI",
+    "launch_uri": "https://creative.example/connect",
+    "public_api_base_url": "https://gateway.example/v1",
+    "handoff_lifetime_ms": 120000,
+    "maximum_requests": 100000
+  }
+]
+```
+
+Do not set the ComfyUI launch URI to its raw `8188` listener: it must be a
+qualified single-use handoff bridge with workspace isolation, lease-aware HTTP
+and WebSocket access, and server-side model credentials. Catalog `ready` reports
+existing access prerequisites, not runtime/process health. See
+[managed media generation](MEDIA_GENERATION.md) for the separate hosted-client
+and physical media-runtime acceptance gates. No production catalog entry is
+automatically added by this change.
+
 Set these controller values in the production overlay:
 
 ```text

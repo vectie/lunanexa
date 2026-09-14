@@ -92,6 +92,18 @@ pub fn valid_client_launch_config(config : ClientLaunchConfig) -> Bool {
 }
 
 ///|
+/// A deployment-owned WebIDE catalog. IDs must be unique; clients never supply
+/// their own launch or provider URLs when requesting a handoff.
+pub fn valid_client_launch_catalog(configs : Array[ClientLaunchConfig]) -> Bool {
+  configs.length() > 0 &&
+  configs.length() <= 32 &&
+  configs.all(valid_client_launch_config) &&
+  configs.all(config => {
+    configs.filter(other => other.client_id == config.client_id).length() == 1
+  })
+}
+
+///|
 pub fn validate_issue_intent(
   intent : ClientHandoffIssueIntent,
   now_unix_ms : Int64,
