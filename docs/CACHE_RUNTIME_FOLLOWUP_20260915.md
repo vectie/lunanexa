@@ -62,8 +62,27 @@ not establish trust automatically on future Spark nodes.
 
 ## Still not qualified
 
+### Subsequent native persistence check
+
+The actual ComfyUI HTTP API accepted a clearly marked `TEST ONLY / NO GPU MODEL`
+PNG and MP4 fixture. Downloaded PNG bytes matched the uploaded source. A real
+`LoadVideo -> SaveVideo` queue execution completed successfully, prompt ID
+`41f4808d-f34d-4d44-bf62-9afd23ee6889`, producing
+`output/acceptance/test-only_00001_.mp4`. This was video loading/saving, not
+inference. A workflow was saved through `/userdata` as `Acceptance Saved.json`.
+
+The test deployment was then restarted. The old pod
+`comfyui-acceptance-6487b97576-v9pqp` was replaced by
+`comfyui-acceptance-55776cb75c-78vpj`; rollout completed successfully. Through a
+new port-forward targeting that exact replacement pod, the saved workflow,
+uploaded PNG and output MP4 were downloaded again. All three compared
+byte-for-byte equal to their pre-restart copies. Evidence files are in the
+operator's `aigc-spark-preflight/persistence-*` directory. This proves persistence
+for these files across this container/pod replacement on the same local-path
+PVC, not storage-node loss recovery, tenant isolation or browser authentication.
+
 These checks do not prove authenticated provisioning, tenant isolation,
-workflow persistence across rebuilds, the full MoonGate inference pipeline,
+the full MoonGate inference pipeline,
 payment/lease integration, or fault recovery. Those remain separate acceptance
 work. No real model was deployed and no Spark GPU or dual-node performance was
 tested. The production controller was not upgraded during this follow-up.
