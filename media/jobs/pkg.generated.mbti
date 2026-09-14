@@ -1,0 +1,91 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/media/jobs"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub let schema_version : String
+
+// Errors
+pub(all) suberror JobError {
+  InvalidInput
+  InvalidSnapshot
+  NotFound
+  Conflict
+  Busy
+  InvalidTransition
+  CapacityExceeded
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct JobStore {
+  mut jobs : Map[String, StoredJob]
+  persist : async (Snapshot) -> Unit
+  mutex : @async.Mutex
+  maximum_jobs : Int
+}
+pub async fn JobStore::acknowledge_deletion(Self, String, Owner, String, Int64) -> StoredJob
+pub async fn JobStore::attach_provider(Self, String, Owner, String, Int64) -> StoredJob
+pub async fn JobStore::begin_submission(Self, String, Owner, Int64) -> StoredJob
+pub async fn JobStore::cancel(Self, String, Owner, Bool, Int64) -> StoredJob
+pub async fn JobStore::get(Self, String, Owner) -> StoredJob
+pub async fn JobStore::observe(Self, String, Owner, State, Int?, Int64) -> StoredJob
+pub async fn JobStore::record_usage(Self, String, Owner, String) -> StoredJob
+pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int64, Int64, Int64) -> (StoredJob, Bool)
+pub async fn JobStore::restore(Snapshot, async (Snapshot) -> Unit, maximum_jobs? : Int) -> Self
+pub async fn JobStore::snapshot(Self) -> Snapshot
+pub async fn JobStore::submission_unknown(Self, String, Owner, Int64) -> StoredJob
+
+pub(all) struct Owner {
+  tenant_ref : String
+  subject_ref : String
+  organization_id : String
+  project_id : String
+  order_id : String
+} derive(Eq, ToJson, @json.FromJson)
+
+pub(all) struct Snapshot {
+  schema_version : String
+  jobs : Array[StoredJob]
+} derive(Eq, ToJson, @json.FromJson)
+
+pub(all) enum State {
+  Intent
+  Submitting
+  SubmissionUnknown
+  Queued
+  Running
+  Completed
+  Failed
+  Cancelling
+  Cancelled
+  Expired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct StoredJob {
+  job_id : String
+  owner : Owner
+  request_digest : String
+  idempotency_digest : String
+  model : String
+  deployment_id : String
+  provider_job_id : String?
+  state : State
+  progress : Int?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  deadline_unix_ms : Int64
+  retain_until_unix_ms : Int64
+  expiry_requested : Bool
+  execution_terminal : Bool
+  usage_receipt : String?
+} derive(Eq, ToJson, @json.FromJson)
+pub fn StoredJob::public_view(Self, Int64) -> Json
+
+// Type aliases
+
+// Traits
