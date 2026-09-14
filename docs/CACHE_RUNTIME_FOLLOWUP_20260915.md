@@ -62,6 +62,28 @@ not establish trust automatically on future Spark nodes.
 
 ## Still not qualified
 
+### Isolated controller build and PostgreSQL verification
+
+The clean `fb1adba` native release controller build completed successfully
+(71 build tasks). `cmd/control` source is unchanged through `9627bd8`.
+The resulting executable SHA-256 is
+`7fc3316414ddc8098397ba1068d61cfd842c1751766bd322ff2ca120c72e0c2f`.
+This is build evidence only; the controller has not yet passed isolated startup
+or full pipeline acceptance.
+
+An independent PostgreSQL 16.15 pod and 5 GiB PVC were created in
+`aigc-acceptance-20260915`, without a Service or public ingress. Namespace
+default-deny ingress/egress remains applied. An administrator-only localhost
+port-forward provides test access; this disposable instance uses trust auth and
+must not be exposed or reused as a production database.
+
+All four `database` tests passed against its `acceptance_only` database:
+atomic snapshots, account/client-handoff domains, transaction rollback/mutex
+release, and exclusive leadership transfer after connection close. A separate
+empty `acceptance_controller` database was created for the subsequent controller
+startup so fixture snapshot contents do not contaminate that check. No
+production database or controller was changed.
+
 ### Native API regression revalidation
 
 The clean `fb1adba` source archive (API/account/commerce/media/workspace sources
