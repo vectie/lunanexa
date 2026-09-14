@@ -255,7 +255,8 @@ async test "real HTTP bridge keeps credentials private, isolates workspaces and 
     group.spawn_bg(no_wait=true, allow_failure=true, () => {
       public.run_forever((req, body, conn) => bridge.handle(req, body, conn))
     })
-    for (server, name) in [(alice, "alice"), (bob, "bob")] {
+    for entry in [(alice, "alice"), (bob, "bob")] {
+      let (server, name) = entry
       group.spawn_bg(no_wait=true, allow_failure=true, () => {
         server.run_forever((req, _body, conn) => {
           assert_eq(header(req.headers, "cookie"), None)
@@ -274,7 +275,8 @@ async test "real HTTP bridge keeps credentials private, isolates workspaces and 
     let (alice_cookie, _) = launch_test(origin, "lnxc_alice")
     let (bob_cookie, _) = launch_test(origin, "lnxc_bob")
     assert_eq(redeemed.length(), 2)
-    for (cookies, name) in [(alice_cookie, "alice"), (bob_cookie, "bob")] {
+    for entry in [(alice_cookie, "alice"), (bob_cookie, "bob")] {
+      let (cookies, name) = entry
       let (response, content) = @http.get(origin + "/queue", headers={
         "cookie": cookies,
         "authorization": "Bearer browser-poison",

@@ -25,6 +25,8 @@ pub(all) suberror HostError {
 // Types and methods
 pub(all) struct HostConfig {
   namespace_name : String
+  controller_namespace : String
+  model_gateway_namespace : String
   comfyui_image : String
   model_proxy_image : String
   storage_class : String

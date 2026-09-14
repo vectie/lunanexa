@@ -248,6 +248,16 @@ async test "cleanup of completed output does not claim a second executing GPU sl
   let restored = JobStore::restore(store.snapshot(), _ => ())
   assert_eq(restored.get(second.job_id, owner()).state, Intent)
   assert_eq(restored.get(first.job_id, owner()).state, Cancelling)
+  assert_eq(restored.get(first.job_id, owner()).terminal_unix_ms, Some(1003L))
+  ignore(
+    restored.acknowledge_deletion(
+      first.job_id,
+      owner(),
+      "private-provider-a",
+      1005L,
+    ),
+  )
+  assert_eq(restored.get(first.job_id, owner()).terminal_unix_ms, Some(1003L))
   ignore(restored.begin_submission(second.job_id, owner(), 1005L))
   try {
     ignore(
@@ -263,4 +273,69 @@ async test "cleanup of completed output does not claim a second executing GPU sl
     JobError::Conflict => ()
     error => fail("Unexpected error: \{error}")
   }
+}
+
+///|
+async test "workspace video budgets cannot be bypassed with another project or paid order" {
+  let store = JobStore::restore(empty_snapshot(), _ => ())
+  let first = reserve(store, "first")
+  let other = {
+    ..owner(),
+    project_id: "another-project",
+    order_id: "another-order",
+  }
+  assert_true(
+    try {
+      ignore(
+        store.reserve(
+          other,
+          "second",
+          "sha256:" + "b".repeat(64),
+          "video.h3",
+          "deployment",
+          1001L,
+          2000L,
+          5000L,
+        ),
+      )
+      false
+    } catch {
+      JobError::Busy => true
+      _ => false
+    },
+  )
+  ignore(store.cancel(first.job_id, owner(), false, 1002L))
+  assert_true(
+    try {
+      ignore(
+        store.reserve(
+          other,
+          "second",
+          "sha256:" + "b".repeat(64),
+          "video.h3",
+          "deployment",
+          1003L,
+          2000L,
+          5000L,
+          maximum_per_hour=1,
+        ),
+      )
+      false
+    } catch {
+      JobError::Busy => true
+      _ => false
+    },
+  )
+  let (_, created) = store.reserve(
+    other,
+    "second",
+    "sha256:" + "b".repeat(64),
+    "video.h3",
+    "deployment",
+    3601001L,
+    3602000L,
+    3605000L,
+    maximum_per_hour=1,
+  )
+  assert_true(created)
 }

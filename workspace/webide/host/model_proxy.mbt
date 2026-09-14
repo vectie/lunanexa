@@ -232,11 +232,29 @@ pub async fn handle_model_proxy(
     }
     let upstream = @http.Client(config.model_gateway_origin)
     defer upstream.close()
-    upstream.request(request.meth, request.path, extra_headers={
+    let upstream_headers = {
       "authorization": "Bearer " + config.api_secret,
       "content-type": content_type,
       "accept": "application/json, video/mp4",
-    })
+    }
+    if request.meth == Post && request.path == "/v1/videos" {
+      guard request_header(request.headers, "idempotency-key") is Some(key) &&
+        key.length() > 0 &&
+        key.length() <= 128 &&
+        key.all(c => {
+          (c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') ||
+          c == '-' ||
+          c == '_'
+        }) else {
+        return proxy_reply(
+          connection, 400, "A stable video Idempotency-Key is required",
+        )
+      }
+      upstream_headers["idempotency-key"] = key
+    }
+    upstream.request(request.meth, request.path, extra_headers=upstream_headers)
     upstream.write(payload)
     let response = upstream.end_request()
     if response.code < 200 || response.code >= 300 {

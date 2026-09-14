@@ -35,7 +35,7 @@ pub async fn JobStore::cancel(Self, String, Owner, Bool, Int64) -> StoredJob
 pub async fn JobStore::get(Self, String, Owner) -> StoredJob
 pub async fn JobStore::observe(Self, String, Owner, State, Int?, Int64) -> StoredJob
 pub async fn JobStore::record_usage(Self, String, Owner, String) -> StoredJob
-pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int64, Int64, Int64) -> (StoredJob, Bool)
+pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int64, Int64, Int64, maximum_active? : Int, maximum_per_hour? : Int) -> (StoredJob, Bool)
 pub async fn JobStore::restore(Snapshot, async (Snapshot) -> Unit, maximum_jobs? : Int) -> Self
 pub async fn JobStore::snapshot(Self) -> Snapshot
 pub async fn JobStore::submission_unknown(Self, String, Owner, Int64) -> StoredJob
@@ -82,6 +82,7 @@ pub(all) struct StoredJob {
   retain_until_unix_ms : Int64
   expiry_requested : Bool
   execution_terminal : Bool
+  terminal_unix_ms : Int64?
   usage_receipt : String?
 } derive(Eq, ToJson, @json.FromJson)
 pub fn StoredJob::public_view(Self, Int64) -> Json

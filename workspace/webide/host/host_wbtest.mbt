@@ -2,6 +2,8 @@
 fn host_config() -> HostConfig {
   {
     namespace_name: "webide",
+    controller_namespace: "lunanexa",
+    model_gateway_namespace: "webide",
     comfyui_image: "registry.test/comfyui@sha256:" + "a".repeat(64),
     model_proxy_image: "registry.test/proxy@sha256:" + "b".repeat(64),
     storage_class: "local-path",
@@ -47,8 +49,19 @@ test "workspace desired state is deterministic, private and CPU-only" {
   assert_eq(resources, host.resources(id, grant))
   assert_eq(resources.length(), 5)
   assert_true(resources[0].0.contains("networkpolicies"))
+  assert_true(
+    resources[0].1
+    .stringify()
+    .contains("\"kubernetes.io/metadata.name\":\"lunanexa\""),
+  )
+  assert_true(
+    resources[0].1
+    .stringify()
+    .contains("\"kubernetes.io/metadata.name\":\"webide\""),
+  )
   let mut secrets = 0
-  for (path, value) in resources {
+  for entry in resources {
+    let (path, value) = entry
     let text = value.stringify()
     if path.contains("/secrets/") {
       assert_true(text.contains(grant.api_secret))
@@ -136,6 +149,8 @@ test "host accepts only bounded resources and immutable images" {
       { ..host_config(), cpu_millis: 0, },
       { ..host_config(), kubernetes_origin: "http://kubernetes.default.svc", },
       { ..host_config(), namespace_name: "../../kube-system", },
+      { ..host_config(), controller_namespace: "../../kube-system", },
+      { ..host_config(), model_gateway_namespace: "*", },
     ] {
     try {
       ignore(WorkspaceHost::new(config))
@@ -374,6 +389,7 @@ async test "pod-local model proxy injects scoped credentials and never bypasses 
     let headers = {
       "content-type": "application/x-www-form-urlencoded",
       "authorization": "Bearer browser-poison",
+      "idempotency-key": "fixture-video-request",
     }
     let (submitted, result) = @http.post(
       origin + "/v1/videos",

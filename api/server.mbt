@@ -22,6 +22,7 @@ pub(all) struct CancellationReceipt {
 
 ///|
 pub struct ApiService {
+  media : MediaService?
   global_settings : @settings.GlobalAdminSettings
   store : @store.FileStore
   account_store : @account.AccountStore?
@@ -139,6 +140,7 @@ pub fn ApiService::new(
     inference_rate_card: None,
     offline_commerce_store: None,
     machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -233,6 +235,7 @@ pub fn ApiService::with_registry(
     inference_rate_card: None,
     offline_commerce_store: None,
     machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -328,6 +331,7 @@ pub fn ApiService::with_services(
     inference_rate_card: None,
     offline_commerce_store: None,
     machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -425,6 +429,7 @@ pub fn ApiService::with_control_plane(
     inference_rate_card: None,
     offline_commerce_store: None,
     machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -3069,6 +3074,12 @@ async fn ApiService::dispatch_with_transport(
   if openai_compatibility_path(path) {
     return self.handle_openai_compatibility(verb, path, headers, body)
   }
+  if path == "/v1/videos" || path.has_prefix("/v1/videos/") {
+    return self.handle_media(verb, path, headers, body)
+  }
+  if path.has_prefix("/v1/media/operator/") {
+    return self.handle_media_operator(verb, path, headers, body)
+  }
   if client_handoff_path(path) {
     return self.handle_client_handoff(
       verb, path, headers, body, allow_asserted_subject,
@@ -5105,6 +5116,10 @@ pub async fn ApiService::serve_on(
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
     let allow_asserted_subject = loopback_client(connection.client_addr())
     if self.serve_artifact(request, connection) {
+      return
+    }
+    if request.meth == Get && request.path.has_prefix("/v1/videos/") && request.path.has_suffix("/content") {
+      self.serve_media_content(request, connection)
       return
     }
     if request.meth == Post && request.path == "/v1/chat/completions" {

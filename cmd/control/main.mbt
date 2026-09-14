@@ -1511,6 +1511,17 @@ async fn main {
       )
     None => authority_service
   }
+  let service = match @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") {
+    Some(path) => {
+      guard management_database is Some(database) else { raise Failure("media jobs require PostgreSQL persistence") }
+      let file = @fs.open(path, mode=ReadOnly)
+      defer file.close()
+      if file.size() > 1048576L { raise Failure("media binding configuration is too large") }
+      let bindings : Array[@api.MediaTemplateBinding] = @json.from_json(@json.parse(@io.Reader::read_all(file).text()))
+      service.with_media_templates(@media_job_store.open_postgres(database), bindings)
+    }
+    None => service
+  }
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   let identity_server = @http.Server(
     @socket.Addr::parse(identity_address),
@@ -1535,6 +1546,14 @@ async fn main {
           ),
         ).to_int(),
       )
+    }
+    if @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") is Some(_) {
+      group.spawn_bg(allow_failure=false) <| () => {
+        while true {
+          ignore(service.reconcile_media_jobs())
+          @async.sleep(15000)
+        }
+      }
     }
     group.spawn_bg(allow_failure=false) <| () => {
       notification_delivery_worker.run_forever()

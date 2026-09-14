@@ -1,0 +1,13 @@
+import {
+  "vectie/lunanexa/media/jobs",
+  "vectie/lunanexa/media/provider",
+  "moonbitlang/async",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/async/socket",
+} for "wbtest"

@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/media/runtime"
+
+import {
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/media/jobs",
+  "vectie/lunanexa/media/provider",
+}
+
+// Values
+
+// Errors
+pub(all) suberror RuntimeError {
+  Unauthorized
+  ContentUnavailable
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct VideoRuntime {
+  store : @jobs.JobStore
+  resolve : async (String) -> @provider.Provider
+  authorized : async (@jobs.Owner, String, String) -> Bool
+  settle : async (@jobs.StoredJob) -> String
+  now : () -> Int64
+}
+pub async fn VideoRuntime::cancel(Self, String, @jobs.Owner) -> @jobs.StoredJob
+pub async fn VideoRuntime::content(Self, String, @jobs.Owner, Int64, async (Bytes) -> Unit) -> Int64
+pub async fn VideoRuntime::get(Self, String, @jobs.Owner) -> @jobs.StoredJob
+pub fn VideoRuntime::new(@jobs.JobStore, async (String) -> @provider.Provider, async (@jobs.Owner, String, String) -> Bool, async (@jobs.StoredJob) -> String, now? : () -> Int64) -> Self
+pub async fn VideoRuntime::reconcile(Self) -> (Int, Int)
+pub async fn VideoRuntime::reconcile_submission(Self, String, @jobs.Owner, String) -> @jobs.StoredJob
+pub async fn VideoRuntime::submit(Self, @jobs.Owner, String, @provider.VideoRequest, String, Int64, Int64, maximum_active? : Int, maximum_per_hour? : Int) -> @jobs.StoredJob
+
+// Type aliases
+
+// Traits

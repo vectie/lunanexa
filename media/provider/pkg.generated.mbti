@@ -1,0 +1,62 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/media/provider"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/media/jobs",
+}
+
+// Values
+
+// Errors
+pub(all) suberror ProviderError {
+  InvalidConfiguration
+  InvalidRequest
+  Unavailable
+  InvalidResponse
+  ContentUnavailable
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct Observation {
+  id : String
+  state : @jobs.State
+  progress : Int?
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Profile {
+  model : String
+  provider_model : String
+  widths : Array[Int]
+  heights : Array[Int]
+  maximum_frames : Int
+  maximum_fps : Int
+  maximum_steps : Int
+  sound_supported : Bool
+} derive(Eq, ToJson, @json.FromJson)
+
+pub struct Provider {
+  origin : String
+  bearer : String?
+  profile : Profile
+  timeout_ms : Int
+}
+pub async fn Provider::content(Self, String, Int64, async (Bytes) -> Unit) -> Int64
+pub async fn Provider::delete(Self, String) -> Bool
+pub fn Provider::new(String, Profile, bearer? : String, timeout_ms? : Int) -> Self raise ProviderError
+pub async fn Provider::poll(Self, String) -> Observation
+pub async fn Provider::submit(Self, VideoRequest) -> Observation
+
+pub struct VideoRequest {
+  model : String
+  fields : Map[String, String]
+}
+pub fn VideoRequest::decode(Profile, String, String) -> Self raise ProviderError
+pub fn VideoRequest::digest(Self) -> String
+pub fn VideoRequest::model(Self) -> String
+pub fn VideoRequest::within_workspace_budget(Self, Int, Int) -> Bool
+
+// Type aliases
+
+// Traits
