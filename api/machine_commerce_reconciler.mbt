@@ -10,7 +10,7 @@ fn machine_template_ref(value : String) -> @deployment.TemplateRef? {
   if parts.length() == 2 &&
     @contracts.valid_identifier(parts[0]) &&
     @contracts.valid_identifier(parts[1]) {
-    Some({ template_id: parts[0], version: parts[1], })
+    Some({ template_id: parts[0], version: parts[1] })
   } else {
     None
   }
@@ -61,6 +61,11 @@ async fn ApiService::machine_offering_nodes(
 ) -> Array[String] {
   let candidates : Array[String] = []
   for heartbeat in self.store.heartbeats() {
+    guard @node.inventory_host_resources(heartbeat.inventory) is Some(host) &&
+      host.cpu_count.to_int64() >= offering.cpu_count &&
+      host.memory_total_mib >= offering.memory_mib else {
+      continue
+    }
     let healthy_accelerators = heartbeat.inventory.accelerators.filter(accelerator => {
       accelerator.healthy &&
       accelerator.architecture == offering.accelerator_class

@@ -71,3 +71,40 @@ pub async fn collect_linux_host_resources() -> HostResources {
     @fs.read_file("/proc/meminfo").text(),
   )
 }
+
+///|
+/// Reserved signed-inventory labels are overwritten from measurement, never
+/// inherited from the static inventory file or a customer offering.
+pub fn HostResources::inventory(
+  self : HostResources,
+  base : @contracts.NodeInventory,
+) -> @contracts.NodeInventory {
+  let labels = base.labels.copy()
+  labels["lunanexa.io/host-cpu-count"] = self.cpu_count.to_string()
+  labels["lunanexa.io/host-memory-mib"] = self.memory_total_mib.to_string()
+  { ..base, labels, }
+}
+
+///|
+/// Older agents without host measurements remain enrolled but cannot satisfy
+/// paid machine capacity. Invalid signed measurements fail closed as well.
+pub fn inventory_host_resources(
+  inventory : @contracts.NodeInventory,
+) -> HostResources? {
+  try {
+    guard inventory.labels.get("lunanexa.io/host-cpu-count") is Some(cpu) &&
+      inventory.labels.get("lunanexa.io/host-memory-mib") is Some(memory) &&
+      cpu.length() > 0 &&
+      memory.length() > 0 &&
+      cpu.all(c => c >= '0' && c <= '9') &&
+      memory.all(c => c >= '0' && c <= '9') else {
+      return None
+    }
+    let cpu_count = @string.parse_int(cpu)
+    let memory_total_mib = @string.parse_int64(memory)
+    guard cpu_count > 0 && memory_total_mib > 0L else { return None }
+    Some({ cpu_count, memory_total_mib })
+  } catch {
+    _ => None
+  }
+}
