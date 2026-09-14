@@ -2,6 +2,7 @@
 fn client_handoff_path(path : String) -> Bool {
   path == "/v1/client-handoffs:redeem" ||
   path == "/v1/portal/self/client" ||
+  path == "/v1/portal/self/clients" ||
   path == "/v1/portal/self/client-handoffs" ||
   (
     path.has_prefix("/v1/portal/self/client-handoffs/") &&
@@ -109,6 +110,7 @@ async fn ApiService::handle_client_handoff(
       true,
     )
   }
+  let configs = [config, ..self.additional_client_launch_configs]
   if path == "/v1/client-handoffs:redeem" {
     if verb != Post {
       return api_error(405, "MethodNotAllowed", "POST required", false)
@@ -117,6 +119,10 @@ async fn ApiService::handle_client_handoff(
       return api_error(
         400, "InvalidRequest", "invalid client handoff redemption", false,
       )
+    }
+    guard configs.filter(config => config.client_id == request.client_id).get(0)
+      is Some(config) else {
+      return api_error(403, "ClientMismatch", "client is not configured", false)
     }
     let now = @async.now()
     let redeemed = try
@@ -197,6 +203,9 @@ async fn ApiService::handle_client_handoff(
       "api_secret": redeemed.api_secret,
       "api_base_url": config.public_api_base_url,
       "tenant_ref": redeemed.tenant_ref,
+      "subject_ref": redeemed.subject_ref,
+      "organization_id": redeemed.organization_id,
+      "project_id": redeemed.project_id,
       "allowed_models": redeemed.allowed_models.to_json(),
       "expires_unix_ms": redeemed.expires_unix_ms.to_json(),
       "maximum_requests": redeemed.maximum_requests.to_json(),
@@ -222,7 +231,7 @@ async fn ApiService::handle_client_handoff(
     )
   }
   match (verb, path) {
-    (Get, "/v1/portal/self/client") => {
+    (Get, "/v1/portal/self/client" | "/v1/portal/self/clients") => {
       let now = @async.now()
       let contract_ready = match self.contract_document_store {
         Some(contracts) =>
@@ -261,25 +270,37 @@ async fn ApiService::handle_client_handoff(
       if aliases.length() == 0 {
         blockers.push("ApprovedModelRequired")
       }
-      json_reply(200, {
-        "client_id": config.client_id,
-        "display_name": config.display_name,
-        "launch_uri": config.launch_uri,
-        "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
-        "contract_ready": contract_ready,
-        "workspace_ready": workspace_ready,
-        "models_ready": aliases.length() > 0,
-        "ready": blockers.length() == 0,
-        "blocker_codes": blockers.to_json(),
-        "approved_model_aliases": aliases.to_json(),
-        "handoffs": handoffs
-        .views_for_subject(portal_view.membership.tenant_ref, subject_ref)
-        .to_json(),
+      let subject_handoffs = handoffs.views_for_subject(
+        portal_view.membership.tenant_ref, subject_ref,
+      )
+      let views = configs.map(config => {
+        (
+          {
+            "client_id": config.client_id,
+            "display_name": config.display_name,
+            "launch_uri": config.launch_uri,
+            "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
+            "contract_ready": contract_ready,
+            "workspace_ready": workspace_ready,
+            "models_ready": aliases.length() > 0,
+            "ready": blockers.length() == 0,
+            "blocker_codes": blockers.to_json(),
+            "approved_model_aliases": aliases.to_json(),
+            "handoffs": subject_handoffs
+            .filter(handoff => handoff.client_id == config.client_id)
+            .to_json(),
+          } : Json)
       })
+      if path == "/v1/portal/self/client" {
+        json_reply(200, views[0])
+      } else {
+        json_reply(200, views.to_json())
+      }
     }
     (Post, "/v1/portal/self/client-handoffs") => {
       guard decode_portal_client_handoff(body) is Some(intent) &&
-        intent.client_id == config.client_id &&
+        configs.filter(config => config.client_id == intent.client_id).get(0)
+        is Some(config) &&
         intent.allowed_models.length() > 0 else {
         return api_error(
           400, "InvalidRequest", "invalid client handoff intent", false,

@@ -209,8 +209,8 @@ async fn ApiService::api_key_check(
       try {
         let value = match model {
           Some(selected_model) =>
-            store.authorize(secret, scope, model=selected_model, now, consume)
-          None => store.authorize(secret, scope, now, consume)
+            store.authorize(secret, scope, model=selected_model, now, false)
+          None => store.authorize(secret, scope, now, false)
         }
         if tenant_ref.map(tenant => tenant != value.tenant_ref).unwrap_or(false) {
           return KeyDenied
@@ -245,8 +245,29 @@ async fn ApiService::api_key_check(
             )
           None => false
         }
-        if !workspace_active || !contract_active {
+        let account_active = match self.account_store {
+          Some(accounts) => accounts.views().iter().any(account => {
+            account.subject_ref == value.subject_ref && account.state == Active &&
+            @account.role_allows(account.roles, EnterpriseUser)
+          })
+          None => self.allow_legacy_unbound_access
+        }
+        let membership_active = match self.portal_store {
+          Some(portal) => try {
+            let view = portal.self_view_for_organization(value.subject_ref, value.organization_id)
+            view.membership.active && view.membership.tenant_ref == value.tenant_ref &&
+            @portal.role_allows(view.membership.roles, Developer)
+          } catch { _ => false }
+          None => self.allow_legacy_unbound_access
+        }
+        if !workspace_active || !contract_active || !account_active || !membership_active {
           return KeyDenied
+        }
+        if consume {
+          ignore(match model {
+            Some(selected_model) => store.authorize(secret, scope, model=selected_model, now, true)
+            None => store.authorize(secret, scope, now, true)
+          })
         }
         KeyAuthorized({
           key_id: value.key_id,
