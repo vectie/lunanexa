@@ -19,9 +19,13 @@ pub fn classify_runtime_inspection(String, String, String) -> @contracts.Deploym
 
 pub async fn collect_accelerator_sensors(String, limits? : @settings.TelemetrySafetySettings) -> AcceleratorSensorSnapshot
 
+pub async fn collect_linux_host_resources() -> HostResources
+
 pub fn health(String) -> @contracts.HealthResponse
 
 pub fn heartbeat_signature(@contracts.NodeHeartbeat, String) -> String
+
+pub fn parse_linux_host_resources(String, String) -> HostResources raise
 
 pub fn parse_nvidia_smi_csv(String) -> AcceleratorSensorSnapshot raise
 
@@ -144,6 +148,11 @@ pub async fn FileEnrollmentService::open_postgres(@database.PostgresDatabase) ->
 pub async fn FileEnrollmentService::renew(Self, String, String, String, Int64, Int64, certificate_lifetime_ms? : Int64, renewal_grace_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::snapshot(Self) -> String
+
+pub(all) struct HostResources {
+  cpu_count : Int
+  memory_total_mib : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct MaterializedArtifact {
   digest : String
