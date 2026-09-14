@@ -1,0 +1,67 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/workspace/webide"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn workspace_id(Grant) -> String
+
+// Errors
+pub(all) suberror BridgeError {
+  InvalidConfiguration
+  InvalidGrant
+  Unauthorized
+  RequestTooLarge
+  CapacityExceeded
+  UpstreamUnavailable
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct Backend {
+  http_url : String
+  websocket_url : String
+}
+
+pub struct Bridge {
+  config : BridgeConfig
+  redeem : async (String) -> Grant
+  authorize : async (Grant) -> Bool
+  provision : async (String, Grant) -> Backend
+  sessions : Map[String, Session]
+  challenges : Map[String, Int64]
+  mutex : @async.Mutex
+}
+pub async fn Bridge::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
+pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend) -> Self raise BridgeError
+
+pub(all) struct BridgeConfig {
+  client_id : String
+  public_origin : String
+  maximum_sessions : Int
+  maximum_request_bytes : Int
+  maximum_socket_message_bytes : Int
+  request_timeout_ms : Int
+  authorization_interval_ms : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Grant {
+  client_id : String
+  tenant_ref : String
+  subject_ref : String
+  organization_id : String
+  project_id : String
+  api_secret : String
+  allowed_models : Array[String]
+  expires_unix_ms : Int64
+}
+
+type Session
+
+// Type aliases
+
+// Traits
