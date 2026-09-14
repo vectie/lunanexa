@@ -62,6 +62,29 @@ not establish trust automatically on future Spark nodes.
 
 ## Still not qualified
 
+### Native API regression revalidation
+
+The clean `fb1adba` source archive (API/account/commerce/media/workspace sources
+unchanged through `f192258`) passed all **125 native API tests** again on Linux
+with the isolated MoonBit 0.10.10 toolchain. The full log was captured at
+`aigc-spark-preflight/native-api-acceptance.log`; the adjacent
+`run-native-api-acceptance.mbtx` records the exact command and checks its exit
+code and complete summary.
+
+The first attempt failed because extracted libpq headers were not on the C
+include path. Setting `C_INCLUDE_PATH` to the extracted PostgreSQL headers,
+with corresponding `LIBRARY_PATH` and `LD_LIBRARY_PATH`, resolved that build
+environment issue without modifying dependencies or system packages.
+Warning 92 was disabled, and existing deprecation warnings remain; this is not
+the warning-clean release gate. Tests use disposable fixture state, including
+synthetic inventory confined to tests, not a modified physical node report.
+
+Coverage includes registration without machine authority, bounded trials,
+organization isolation, paid endpoint/video order handling, usage, revocation
+and cross-store onboarding restart recovery. Existing media fixture content is
+not playable video. These passes do not establish real identity/payment provider
+integration or the cross-process ComfyUI/MoonGate pipeline.
+
 ### Subsequent native persistence check
 
 The actual ComfyUI HTTP API accepted a clearly marked `TEST ONLY / NO GPU MODEL`
