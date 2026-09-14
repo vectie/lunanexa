@@ -103,6 +103,14 @@ The executable smoke and secret-free result are recorded locally as
 only in the disposable acceptance database. This does not prove external IdP
 login, verified company approval or machine entitlement.
 
+The same live HTTP smoke additionally passed account revocation checks:
+operator suspension returned 200; the previously valid session immediately
+received 401 from both `/v1/auth/self` and organization creation. Reactivation
+returned 200 but did not restore that old session (still 401). The test account
+was finally revoked through the operator API. This proves account-session
+revocation in this isolated controller, not cancellation of an already-running
+WebSocket, inference stream or machine lease.
+
 An independent PostgreSQL 16.15 pod and 5 GiB PVC were created in
 `aigc-acceptance-20260915`, without a Service or public ingress. Namespace
 default-deny ingress/egress remains applied. An administrator-only localhost
