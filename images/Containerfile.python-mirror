@@ -1,0 +1,6 @@
+# Configure an already-built, digest-pinned Python image without reinstalling
+# or changing its qualified packages. For new ComfyUI builds, use the main recipe.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+ARG PIP_INDEX_URL=https://mirrors.ustc.edu.cn/pypi/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} PIP_DEFAULT_TIMEOUT=30 PIP_RETRIES=2

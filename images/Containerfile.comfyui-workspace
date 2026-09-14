@@ -1,0 +1,27 @@
+# Supply an inspected python:3.12-slim-bookworm digest as PYTHON_IMAGE.
+# The build context contains only two reviewed git archives. No model weights,
+# local virtual environment, user workflows, credentials or repository history.
+ARG PYTHON_IMAGE
+FROM ${PYTHON_IMAGE}
+ARG COMFYUI_REVISION
+ARG VLLM_OMNI_REVISION
+ARG PIP_INDEX_URL=https://mirrors.ustc.edu.cn/pypi/simple
+LABEL org.opencontainers.image.title="LunaNexa CPU ComfyUI workspace"
+LABEL io.lunanexa.comfyui.revision="${COMFYUI_REVISION}"
+LABEL io.lunanexa.vllm-omni.revision="${VLLM_OMNI_REVISION}"
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} PIP_DEFAULT_TIMEOUT=30 PIP_RETRIES=2
+# Retry a failed general-package build with PIP_INDEX_URL set to
+# https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple . Do not use
+# extra-index-url as a priority list. CPU PyTorch requires its separate index.
+ADD comfyui.tar /opt/ComfyUI/
+ADD comfyui-vllm-omni.tar /opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/
+RUN python3 -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio \
+    && python3 -m pip install -r /opt/ComfyUI/requirements.txt \
+    && python3 -m pip check \
+    && python3 -m pip freeze --all > /opt/ComfyUI/lunanexa-python-packages.txt
+WORKDIR /opt/ComfyUI
+USER 1000:1000
+EXPOSE 8188
+ENTRYPOINT ["python3", "/opt/ComfyUI/main.py"]
+CMD ["--cpu", "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch", "--disable-api-nodes", "--disable-all-custom-nodes", "--whitelist-custom-nodes", "ComfyUI-vLLM-Omni"]
