@@ -48,13 +48,29 @@ The native image must contain `/usr/local/bin/lunanexa-webide-model-proxy`;
 the gateway image contains `/usr/local/bin/lunanexa-webide-gateway`.
 Neither successful compilation nor a digest proves a qualified runtime image.
 
+Build the native image with `images/Containerfile.webide-runtime`, supplying
+`RUNTIME_IMAGE` as the reviewed base image and `LUNANEXA_REVISION` as the full
+source commit. Build both native executables from a clean archive of that
+commit; do not reuse a staging directory merely because its binaries are recent.
+Record the source archive and binary SHA-256 values alongside the image digest.
+The revision label is provenance metadata, not a signed attestation by itself.
+
+The recipe explicitly sets executable mode 0755, switches to UID/GID 1000, and
+checks both executables. It also runs the actual workspace initializer and
+requires the starter workflow to exist, then removes that temporary smoke
+directory. This rejects stale proxy binaries lacking initialization mode as well
+as build artifacts whose original mode 0750 excludes the runtime user. Test the
+result again with the deployment's read-only root, writable PVC and native CPU
+architecture before treating the image as ready.
+
 ## Network and lifecycle requirements
 
 The generated NetworkPolicy is applied before runnable resources. It permits
 ingress only from `app.kubernetes.io/name=lunanexa-webide-gateway` in the same
-namespace. Egress is limited to kube-dns, the same-namespace controller labelled
-`app=lunanexa-control`, and MoonGate labelled `app.kubernetes.io/name=moongate`,
-on the configured ports. Deployment service routing must match these selectors;
+namespace. Egress is limited to kube-dns, the controller labelled
+`app=lunanexa-control` in `controller_namespace`, and MoonGate labelled
+`app.kubernetes.io/name=moongate` in `model_gateway_namespace`, on the configured
+ports. Namespace and pod selectors must both match. Deployment service routing must match these selectors;
 external or host-network gateways need a separately reviewed policy. A CNI that
 does not enforce NetworkPolicy is not an acceptable isolation boundary.
 

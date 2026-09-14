@@ -1,8 +1,24 @@
 # Build from the reviewed Linux binaries, never from a workspace/model directory.
 ARG RUNTIME_IMAGE
 FROM ${RUNTIME_IMAGE}
+ARG LUNANEXA_REVISION
+LABEL org.opencontainers.image.revision="${LUNANEXA_REVISION}"
+USER 0:0
+RUN test -n "${LUNANEXA_REVISION}"
 COPY lunanexa-webide-gateway /usr/local/bin/lunanexa-webide-gateway
 COPY lunanexa-webide-model-proxy /usr/local/bin/lunanexa-webide-model-proxy
+# Native build artifacts may arrive with mode 0750 and root ownership. Normalize
+# executable permissions explicitly before switching to the unprivileged user.
+RUN chmod 0755 /usr/local/bin/lunanexa-webide-gateway /usr/local/bin/lunanexa-webide-model-proxy
 USER 1000:1000
+RUN test -x /usr/local/bin/lunanexa-webide-gateway && test -x /usr/local/bin/lunanexa-webide-model-proxy
+# Exercise the actual unprivileged initializer, not only ELF permissions. This
+# also rejects a stale binary that predates the workspace initialization mode.
+RUN mkdir /tmp/lunanexa-image-initialize-smoke \
+    && LUNANEXA_WEBIDE_INITIALIZE=/tmp/lunanexa-image-initialize-smoke \
+       LUNANEXA_WEBIDE_INITIAL_MODEL=test-only.video \
+       /usr/local/bin/lunanexa-webide-model-proxy \
+    && test -s '/tmp/lunanexa-image-initialize-smoke/user/default/workflows/LunaNexa Video.json' \
+    && rm -r /tmp/lunanexa-image-initialize-smoke
 EXPOSE 8082
 ENTRYPOINT ["/usr/local/bin/lunanexa-webide-gateway"]
