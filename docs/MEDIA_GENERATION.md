@@ -133,6 +133,10 @@ tested and integrated slices may be described as delivered.
 - The media and hosted-workspace component suite passes 29 native tests with
   `--deny-warn`. Reconciliation uses at most eight concurrent workers and serves
   earlier deadlines first; an unavailable authority does not serialize all jobs.
+- The 13 hosted-workspace tests also pass with AddressSanitizer applied to the
+  entry packages and first-party C random-source stub in a disposable macOS
+  toolchain (plus two instrumentation markers). Apple Clang leak detection is
+  unavailable; this is not an all-dependency LeakSanitizer qualification.
 - Real disposable PostgreSQL tests pass: 4 database transaction/leadership tests
   and 2 media persistence tests, including ambiguous-submission restart recovery.
   They do not connect to the production database. Additional native unit/loopback
