@@ -81,6 +81,15 @@ operator's `aigc-spark-preflight/persistence-*` directory. This proves persisten
 for these files across this container/pod replacement on the same local-path
 PVC, not storage-node loss recovery, tenant isolation or browser authentication.
 
+The replacement pod's `/ws` endpoint also returned HTTP 101 with the correct
+WebSocket accept value and an initial `status` frame reporting an empty queue.
+The observation was deliberately bounded to three seconds (curl exit 28 after
+the successful upgrade); this is not a complete WebSocket lifecycle test.
+A `/view` request attempting traversal to `../../../../etc/passwd` returned
+403. These are direct private ComfyUI checks, not bridge authentication tests.
+The now-unused `image-import` and `workspace-volume-inspect` pods were deleted;
+the workspace PVC, downloaded caches and registry images were retained.
+
 These checks do not prove authenticated provisioning, tenant isolation,
 the full MoonGate inference pipeline,
 payment/lease integration, or fault recovery. Those remain separate acceptance
