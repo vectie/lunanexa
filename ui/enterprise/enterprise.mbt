@@ -185,6 +185,7 @@ pub(all) struct EnterpriseState {
   model_catalog : Array[@portal.EnterpriseModelSummary]
   desktop_client : EnterpriseDesktopClient?
   desktop_clients : Array[EnterpriseDesktopClient]
+  webide_order_id : String?
   self_service : SelfServiceState
   project_id : String
   unix_username : String
@@ -226,6 +227,7 @@ pub(all) enum EnterpriseMessage {
   SubmitLease
   LaunchDesktopClient
   SelectWebIde(String)
+  SelectWebIdeOrder(String)
   MarkNotificationRead(String, Int64)
   SetNotificationEmail(@notifications.NotificationTopic, Bool)
   MachineAccess(@machine_access.MachineAccessMessage)
@@ -287,6 +289,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     model_catalog: [],
     desktop_client: None,
     desktop_clients: [],
+    webide_order_id: None,
     self_service: default_self_service_state(),
     project_id: "",
     unix_username: "",
@@ -347,9 +350,9 @@ pub fn demo_state() -> EnterpriseState {
     preceding_packet_ref: Some("packet-demo-youthpolicy"),
     active_forms: [MasterLease],
     values: [
-      { field_id: "lessee.name", value: "Northstar Research" },
-      { field_id: "lease.start_date", value: "2025-09-01" },
-      { field_id: "lease.end_date", value: "2026-08-31" },
+      { field_id: "lessee.name", value: "Northstar Research", },
+      { field_id: "lease.start_date", value: "2025-09-01", },
+      { field_id: "lease.end_date", value: "2026-08-31", },
     ],
     values_sha256: Some(
       "sha256:7ca7d84d5b028ed5825a0e87104737c15d6f4c71463d8c567ce17e108075eb41",
@@ -451,7 +454,11 @@ pub fn demo_state() -> EnterpriseState {
           created_unix_ms: now - 2592000000L,
         },
         default_project_id: Some("project-vision-lab"),
-        verification: Some({ required: false, record: None, blocker_code: None }),
+        verification: Some({
+          required: false,
+          record: None,
+          blocker_code: None,
+        }),
       },
     ],
     selected_organization_id: Some("org-northstar"),
@@ -779,15 +786,23 @@ pub fn demo_state() -> EnterpriseState {
     justification: "Private evaluation and adapter validation.",
   }
   let clients = match state.desktop_client {
-    Some(desktop) => [desktop, {
-      ..desktop, client_id: "comfyui", display_name: "ComfyUI",
-      launch_uri: "https://creative.example.invalid/connect",
-      models_ready: false, ready: false,
-      blocker_codes: ["ApprovedModelRequired"], approved_model_aliases: [],
-    }]
+    Some(desktop) =>
+      [
+        desktop,
+        {
+          ..desktop,
+          client_id: "comfyui",
+          display_name: "ComfyUI",
+          launch_uri: "https://creative.example.invalid/connect",
+          models_ready: false,
+          ready: false,
+          blocker_codes: ["ApprovedModelRequired"],
+          approved_model_aliases: [],
+        },
+      ]
     None => []
   }
-  { ..state, desktop_clients: clients }
+  { ..state, desktop_clients: clients, }
 }
 
 ///|
@@ -796,6 +811,21 @@ pub fn EnterpriseState::update(
   message : EnterpriseMessage,
 ) -> EnterpriseState {
   match message {
+    SelectWebIdeOrder(order_id) => {
+      if self.loading {
+        return self
+      }
+      {
+        ..self,
+        webide_order_id: if order_id == "" {
+          None
+        } else {
+          Some(order_id)
+        },
+        success_message: None,
+        error_message: None,
+      }
+    }
     SelectWebIde(client_id) => {
       if self.loading {
         return self
@@ -837,7 +867,7 @@ pub fn EnterpriseState::update(
             success_message: None,
             error_message: None,
           }
-        None => { ..self, route, success_message: None, error_message: None }
+        None => { ..self, route, success_message: None, error_message: None, }
       }
     }
     LocaleChanged(locale) =>
@@ -926,7 +956,7 @@ pub fn EnterpriseState::update(
     SelfService(RequestQuote) =>
       {
         ..self,
-        self_service: { ..self.self_service.update(RequestQuote), step: Quote },
+        self_service: { ..self.self_service.update(RequestQuote), step: Quote, },
       }
     SelfService(CreateMachineOrder) =>
       {
@@ -937,7 +967,7 @@ pub fn EnterpriseState::update(
         },
       }
     SelfService(message) =>
-      { ..self, self_service: self.self_service.update(message) }
+      { ..self, self_service: self.self_service.update(message), }
     OpenApiKeyIssue =>
       {
         ..self,
@@ -948,11 +978,14 @@ pub fn EnterpriseState::update(
         error_message: None,
       }
     CancelApiKeyIssue =>
-      { ..self, api_key_issue_open: false, error_message: None }
+      { ..self, api_key_issue_open: false, error_message: None, }
     ApiKeyDisplayNameChanged(value) =>
       {
         ..self,
-        api_key_issue_draft: { ..self.api_key_issue_draft, display_name: value },
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          display_name: value,
+        },
       }
     ToggleApiKeyModelListScope =>
       {
@@ -995,9 +1028,9 @@ pub fn EnterpriseState::update(
         },
       }
     SubmitApiKeyIssue =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     CopyOneTimeApiKeySecret => self
-    DismissOneTimeApiKeySecret => { ..self, one_time_api_key_secret: None }
+    DismissOneTimeApiKeySecret => { ..self, one_time_api_key_secret: None, }
     BeginRevokeApiKey(key_id) =>
       {
         ..self,
@@ -1007,15 +1040,15 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
-    CancelRevokeApiKey => { ..self, api_key_revoke_id: None }
+    CancelRevokeApiKey => { ..self, api_key_revoke_id: None, }
     ConfirmRevokeApiKey(_) =>
-      { ..self, loading: true, success_message: None, error_message: None }
-    ProjectChanged(value) => { ..self, project_id: value }
-    UsernameChanged(value) => { ..self, unix_username: value }
-    ModelsChanged(value) => { ..self, model_ids: value }
-    JustificationChanged(value) => { ..self, justification: value }
+      { ..self, loading: true, success_message: None, error_message: None, }
+    ProjectChanged(value) => { ..self, project_id: value, }
+    UsernameChanged(value) => { ..self, unix_username: value, }
+    ModelsChanged(value) => { ..self, model_ids: value, }
+    JustificationChanged(value) => { ..self, justification: value, }
     SignAgreement(_) =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     RefreshProviderRequests =>
       {
         ..self,
@@ -1031,19 +1064,19 @@ pub fn EnterpriseState::update(
         error_message: None,
       }
     SubmitLease =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     LaunchDesktopClient =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     MarkNotificationRead(_, _) => self
     SetNotificationEmail(_, _) =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     MachineAccess(message) =>
-      { ..self, machine_access: self.machine_access.update(message) }
+      { ..self, machine_access: self.machine_access.update(message), }
     OfflineCommerce(message) =>
-      { ..self, offline_commerce: self.offline_commerce.update(message) }
+      { ..self, offline_commerce: self.offline_commerce.update(message), }
     ContractDocuments(message) =>
-      { ..self, contract_documents: self.contract_documents.update(message) }
-    ClearNotice => { ..self, success_message: None, error_message: None }
+      { ..self, contract_documents: self.contract_documents.update(message), }
+    ClearNotice => { ..self, success_message: None, error_message: None, }
   }
 }
 
@@ -3226,6 +3259,58 @@ fn models_view(state : EnterpriseState) -> @rabbita.Html {
 }
 
 ///|
+/// Resolves the user's explicit model source without silently falling back
+/// from a missing, terminated or stale dedicated order to shared inference.
+pub fn webide_launch_selection(
+  state : EnterpriseState,
+) -> (String?, String, Array[String])? {
+  guard state.desktop_client is Some(client) &&
+    client.ready &&
+    !client.approved_model_aliases.is_empty() else {
+    return None
+  }
+  match state.webide_order_id {
+    None =>
+      if state.project_id.is_empty() {
+        None
+      } else {
+        Some((None, state.project_id, client.approved_model_aliases))
+      }
+    Some(order_id) => {
+      let orders = webide_orders(state)
+      guard orders.filter(order => order.order_id == order_id).get(0)
+        is Some(order) &&
+        order.kind == DedicatedMaaS &&
+        order.status == ActiveOrder &&
+        order.deployment_ref is Some(_) &&
+        order.model_selector is Some(model) &&
+        client.approved_model_aliases.contains(model) else {
+        return None
+      }
+      Some((Some(order_id), order.project_id, [model]))
+    }
+  }
+}
+
+///|
+fn webide_orders(state : EnterpriseState) -> Array[SelfServiceOrderView] {
+  let values : Map[String, SelfServiceOrderView] = Map([])
+  for order in state.self_service.orders {
+    values[order.order_id] = order
+  }
+  if state.self_service.order is Some(order) {
+    if values
+      .get(order.order_id)
+      .map_or(true, previous => previous.updated_unix_ms < order.updated_unix_ms) {
+      values[order.order_id] = order
+    }
+  }
+  let result = values.values().to_array()
+  result.sort_by_key(order => order.order_id)
+  result
+}
+
+///|
 fn desktop_ide_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
@@ -3263,7 +3348,9 @@ fn desktop_ide_view(
         [],
       )
   }
-  let available = ready && !state.loading
+  let available = ready &&
+    !state.loading &&
+    webide_launch_selection(state) is Some(_)
   let next_action = if state.desktop_client is None {
     copy(
       state.locale,
@@ -3287,6 +3374,13 @@ fn desktop_ide_view(
       state.locale,
       "Your operator needs to approve at least one model alias.",
       "需要运维人员批准至少一个模型别名。",
+    )
+  } else if state.webide_order_id is Some(_) &&
+    webide_launch_selection(state) is None {
+    copy(
+      state.locale,
+      "The selected paid endpoint is unavailable. Choose an active order; no shared fallback will be used.",
+      "所选付费端点暂不可用。请选择有效订单；系统不会自动切换到共享模型。",
     )
   } else {
     copy(
@@ -3338,6 +3432,67 @@ fn desktop_ide_view(
     } else {
       @html.span("")
     },
+    @html.section(class="workflow-panel", [
+      @html.label(
+        for_="webide-model-source",
+        copy(state.locale, "Model source", "模型来源"),
+      ),
+      @html.select(
+        id="webide-model-source",
+        disabled=state.loading,
+        on_change=text_command(emit, value => SelectWebIdeOrder(value)),
+        [
+          @html.option(
+            value="",
+            selected=state.webide_order_id is None,
+            copy(
+              state.locale,
+              "Authorized shared models",
+              "已授权的共享模型",
+            ),
+          ),
+          ..match state.webide_order_id {
+            Some(id) if !webide_orders(state).any(order => {
+                order.order_id == id && order.kind == DedicatedMaaS
+              }) =>
+              [
+                @html.option(
+                  value=id,
+                  disabled=true,
+                  selected=true,
+                  copy(
+                    state.locale,
+                    "Selected order is unavailable",
+                    "所选订单不可用",
+                  ),
+                ),
+              ]
+            _ => []
+          },
+          ..[
+            for order in webide_orders(state) if order.kind == DedicatedMaaS => {
+              @html.option(
+                value=order.order_id,
+                disabled=order.status != ActiveOrder,
+                selected=state.webide_order_id == Some(order.order_id),
+                order.gpu_sku +
+                " · " +
+                order.model_selector.unwrap_or("") +
+                " · " +
+                order.order_id,
+              )
+            }
+          ],
+        ],
+      ),
+      @html.p(
+        copy(
+          state.locale,
+          "Dedicated orders stay bound to their purchased deployment and expiry.",
+          "专属订单绑定已购买的部署和有效期，不会混用共享算力。",
+        ),
+      ),
+    ]),
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
@@ -3874,7 +4029,7 @@ fn content(
     Models => models_view(state)
     DesktopIde => desktop_ide_view(state, emit)
     MachineAccess => {
-      let machine = { ..state.machine_access, locale: state.locale }
+      let machine = { ..state.machine_access, locale: state.locale, }
       match emit {
         Some(send) =>
           @machine_access.interactive_view(
@@ -3885,7 +4040,7 @@ fn content(
       }
     }
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale }
+      let commerce = { ..state.offline_commerce, locale: state.locale, }
       match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -3896,7 +4051,7 @@ fn content(
       }
     }
     ContractDocuments => {
-      let documents = { ..state.contract_documents, locale: state.locale }
+      let documents = { ..state.contract_documents, locale: state.locale, }
       match emit {
         Some(send) =>
           @contract_documents.interactive_view(
