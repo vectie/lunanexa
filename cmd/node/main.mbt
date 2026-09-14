@@ -703,6 +703,12 @@ async fn reconcile_once(
 
 ///|
 async fn main {
+  if @env.args().length() == 2 && @env.args()[1] == "--inspect-host-resources" {
+    println(
+      ToJson::to_json(@node_agent.collect_linux_host_resources()).stringify(),
+    )
+    return
+  }
   let global_settings = load_global_admin_settings()
   let base = environment("LUNANEXA_ENDPOINT")
   if !base.has_prefix("https://") &&
