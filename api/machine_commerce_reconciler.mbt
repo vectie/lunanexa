@@ -10,7 +10,7 @@ fn machine_template_ref(value : String) -> @deployment.TemplateRef? {
   if parts.length() == 2 &&
     @contracts.valid_identifier(parts[0]) &&
     @contracts.valid_identifier(parts[1]) {
-    Some({ template_id: parts[0], version: parts[1] })
+    Some({ template_id: parts[0], version: parts[1], })
   } else {
     None
   }
@@ -69,7 +69,10 @@ async fn ApiService::machine_offering_nodes(
       Some(leases) => leases.node_blocks_managed_placement(heartbeat.node_id)
       None => true
     }
+    // Paid machine offerings have no taint tolerations. Unknown or unhealthy
+    // inventory must not become sellable capacity merely because it is Active.
     if heartbeat.state == Active &&
+      heartbeat.inventory.taints.is_empty() &&
       heartbeat.timestamp_unix_ms +
       self.global_settings.control_timing.heartbeat_timeout_ms >=
       now_unix_ms &&

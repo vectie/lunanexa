@@ -456,6 +456,32 @@ async test "settled bare order provisions internally without leaking its node" {
     }).stringify(),
   )
   assert_eq(accepted_terms.status, 201)
+  durable.put_heartbeat({
+    ..heartbeat,
+    inventory: {
+      ..heartbeat.inventory,
+      taints: ["node.kubernetes.io/disk-pressure:NoSchedule"],
+    },
+  })
+  let tainted_quote = service.handle(
+    Post,
+    "/v1/portal/self/machine-quotes",
+    customer_headers,
+    ToJson::to_json(TestMachineQuoteRequest::{
+      quote_id: "tainted-node-quote",
+      idempotency_key: "tainted-node-quote",
+      project_id: "project-a",
+      offering_id: "bare-self-checkout",
+      quantity: 1L,
+      duration_seconds: 3600L,
+      unix_username: Some("developer"),
+      requested_model_selector: None,
+      model_template_ref: None,
+    }).stringify(),
+  )
+  assert_eq(tainted_quote.status, 409)
+  assert_true(tainted_quote.body.contains("CapacityUnavailable"))
+  durable.put_heartbeat(heartbeat)
   let self_quote = service.handle(
     Post,
     "/v1/portal/self/machine-quotes",
