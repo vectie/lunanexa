@@ -1,0 +1,18 @@
+import {
+  "vectie/lunanexa/workspace/webide",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/async/os_error",
+  "moonbitlang/async/tls",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/x/codec/base64",
+}
+
+import {
+  "moonbitlang/async/socket",
+} for "wbtest"
+
+supported_targets = "native"

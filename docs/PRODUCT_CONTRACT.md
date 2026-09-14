@@ -43,6 +43,7 @@ The initial distribution may produce several binaries or services:
 | Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
 | Enterprise portal | Rabbita onboarding, agreements, lease requests, cost/model views | No |
 | Developer workbench | Rabbita user workspace and provider-neutral model tooling inside the enterprise site | No |
+| Hosted WebIDE gateway | Single-use launch, live lease checks and isolated customer ComfyUI HTTP/WebSocket access | No |
 | Exclusive lease manager | Node reservation, access lifecycle, expiry and sanitization authority | No |
 | Node agent | Inventory, assignment-scoped model materialization, runtime supervision and heartbeats | Yes |
 | Runtime adapter | Starts and observes an approved serving runtime | Yes |
@@ -62,6 +63,16 @@ The sites run in the management role. A constrained profile may explicitly
 co-locate that role with compute, but co-location never makes management
 services compute capacity. Enterprise users cannot select or activate a
 hardware node.
+
+Hosted ComfyUI is a customer WebIDE, not a managed-node runtime or a second
+LunaNexa creative editor. Each tenant/subject/organization/project tuple receives
+its own process and persistent storage. A lease-aware gateway is the only
+browser ingress; the bare ComfyUI port is private. Model credentials stay in
+server-side services and model traffic uses the deployment-owned provider
+gateway. Installing custom nodes is an operator-reviewed image change. A browser
+profile has one active WebIDE identity; switching or logging out closes its old
+gateway session. Sessions are ephemeral and fail closed after a gateway restart;
+workflows and uploaded/generated files remain in the workspace volume.
 
 Human identity has two supported deployment shapes. A public platform identity
 provider may allow any eligible person to create an account, while an enterprise
