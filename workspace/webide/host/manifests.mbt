@@ -43,6 +43,40 @@ fn WorkspaceHost::resources(
   let config = self.config
   let meta = metadata(name, config.namespace_name)
   let labels : Json = { "lunanexa.io/workspace": name }
+  let trust_env : Array[Json] = match config.trusted_ca_config_map {
+    Some(_) =>
+      [
+        {
+          "name": "SSL_CERT_FILE",
+          "value": "/run/platform-trust/ca-bundle.crt",
+        },
+      ]
+    None => []
+  }
+  let trust_mounts : Array[Json] = match config.trusted_ca_config_map {
+    Some(_) =>
+      [
+        {
+          "name": "platform-trust",
+          "mountPath": "/run/platform-trust",
+          "readOnly": true,
+        },
+      ]
+    None => []
+  }
+  let trust_volumes : Array[Json] = match config.trusted_ca_config_map {
+    Some(name) =>
+      [
+        {
+          "name": "platform-trust",
+          "configMap": {
+            "name": name,
+            "items": [{ "key": "ca-bundle.crt", "path": "ca-bundle.crt" }],
+          },
+        },
+      ]
+    None => []
+  }
   let proxy : ModelProxyConfig = {
     client_id: grant.client_id,
     tenant_ref: grant.tenant_ref,
@@ -173,6 +207,7 @@ fn WorkspaceHost::resources(
                   "name": "LUNANEXA_MODEL_PROXY_CONFIG_FILE",
                   "value": "/run/model-proxy/model-proxy.json",
                 },
+                ..trust_env,
               ],
               "securityContext": security_context(),
               "resources": {
@@ -185,6 +220,7 @@ fn WorkspaceHost::resources(
                   "mountPath": "/run/model-proxy",
                   "readOnly": true,
                 },
+                ..trust_mounts,
               ],
             },
           ],
@@ -198,6 +234,7 @@ fn WorkspaceHost::resources(
               "name": "model-credential",
               "secret": { "secretName": name, "defaultMode": 288 },
             },
+            ..trust_volumes,
           ],
         },
       },
