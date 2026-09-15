@@ -632,6 +632,11 @@ async fn ApiService::ingest_machine_usage(
   let before = self.commercial_store.durable_snapshot()
   let accepted = try {
     for receipt in snapshot.usage_receipts {
+      // A fully metered prepaid term still has a durable completion receipt,
+      // but no additional consumption to ingest into the commercial ledger.
+      if receipt.quantity == 0L {
+        continue
+      }
       ignore(
         self.commercial_store.ingest_usage(receipt.commercial_observation()),
       )

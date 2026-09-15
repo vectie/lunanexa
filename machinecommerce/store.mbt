@@ -1016,6 +1016,14 @@ pub fn MachineCommerceStore::complete_termination_with_usage(
   if ended_unix_ms <= started_unix_ms || ended_unix_ms > now_unix_ms {
     raise InvalidInput("invalid terminal usage interval")
   }
+  guard order.active_started_unix_ms is Some(active_started) else {
+    raise InvalidTransition("machine order has no active start")
+  }
+  // Cleanup may finish after the prepaid term. Preserve its completion time
+  // on the order, but never count that delay as additional customer usage.
+  let usage_ended = ended_unix_ms
+    .min(active_started + order.duration_seconds * 1000L)
+    .max(started_unix_ms)
   guard self.offerings.get(order.offering_id) is Some(offering) else {
     raise NotFound("machine offering")
   }
@@ -1024,7 +1032,7 @@ pub fn MachineCommerceStore::complete_termination_with_usage(
     DedicatedEndpoint => order.target_deployment_ref.unwrap()
   }
   let quantity = checked_multiply(
-    (ended_unix_ms - started_unix_ms + 999L) / 1000L,
+    (usage_ended - started_unix_ms + 999L) / 1000L,
     order.quantity,
   )
   let receipt_id = "usage-termination-\{order_id}-\{order.generation}"
@@ -1041,7 +1049,7 @@ pub fn MachineCommerceStore::complete_termination_with_usage(
     quantity,
     unit: "second",
     started_unix_ms,
-    ended_unix_ms,
+    ended_unix_ms: usage_ended,
     observed_unix_ms: now_unix_ms,
     receipt_digest: "",
   }
@@ -1055,7 +1063,7 @@ pub fn MachineCommerceStore::complete_termination_with_usage(
     generation: order.generation + 1L,
     compensation_ref: Some(compensation_ref),
     capacity_reserved: false,
-    last_metered_unix_ms: Some(ended_unix_ms),
+    last_metered_unix_ms: Some(usage_ended),
     ended_unix_ms: Some(ended_unix_ms),
     updated_unix_ms: now_unix_ms,
   }

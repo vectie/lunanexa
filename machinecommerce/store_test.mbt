@@ -216,6 +216,62 @@ test "bare machine purchase is payment-gated and meters the terminal interval" {
   )
   assert_eq(first_receipt.quantity, 5L)
   assert_eq(first_receipt.resource_ref, "lease-bare")
+  for fully_metered in [false, true] {
+    let restored = @machinecommerce.MachineCommerceStore::from_snapshot(
+      "machine-commerce-test-signing-secret-0001",
+      store.snapshot(),
+    )
+    let current = if fully_metered {
+      let (updated, _, _) = restored.record_usage(
+        order.order_id,
+        {
+          idempotency_key: "meter-to-term",
+          expected_generation: metered.generation,
+          ended_unix_ms: now + 3601000L,
+        },
+        now + 3601000L,
+      )
+      updated
+    } else {
+      metered
+    }
+    let (pending, _) = restored.request_termination(
+      "subject-a",
+      order.order_id,
+      {
+        idempotency_key: "expire-order",
+        expected_generation: current.generation,
+        reason: "ContractDurationElapsed",
+      },
+      now + 3601000L,
+    )
+    let (finished, receipt, _) = restored.complete_termination_with_usage(
+      order.order_id,
+      "late-cleanup",
+      pending.generation,
+      "cleanup-proof",
+      now + 7201000L,
+      now + 7201000L,
+    )
+    assert_eq(receipt.quantity, if fully_metered { 0L } else { 3595L })
+    assert_eq(receipt.ended_unix_ms, now + 3601000L)
+    assert_eq(finished.ended_unix_ms, Some(now + 7201000L))
+    assert_false(finished.capacity_reserved)
+    let reopened = @machinecommerce.MachineCommerceStore::from_snapshot(
+      "machine-commerce-test-signing-secret-0001",
+      restored.snapshot(),
+    )
+    let (_, replay, result) = reopened.complete_termination_with_usage(
+      order.order_id,
+      "late-cleanup",
+      pending.generation,
+      "cleanup-proof",
+      now + 7201000L,
+      now + 7201000L,
+    )
+    assert_eq(replay, receipt)
+    assert_eq(result, Replayed)
+  }
   let (terminating, _) = store.request_termination(
     "subject-a",
     order.order_id,

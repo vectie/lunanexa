@@ -750,7 +750,19 @@ async test "settled bare order provisions internally without leaking its node" {
       usage_end,
     ),
   )
-  service.ingest_machine_usage(machine_store.snapshot())
+  let usage_snapshot = machine_store.snapshot()
+  let no_additional_usage = {
+    ..usage_snapshot.usage_receipts[0],
+    receipt_id: "zero-terminal-usage",
+    event_id: "zero-terminal-usage",
+    quantity: 0L,
+    started_unix_ms: usage_end,
+    ended_unix_ms: usage_end,
+  }
+  service.ingest_machine_usage({
+    ..usage_snapshot,
+    usage_receipts: [no_additional_usage, ..usage_snapshot.usage_receipts],
+  })
   let commercial_usage = service.commercial_store.snapshot("org-a")
   assert_eq(commercial_usage.usage_observations.length(), 1)
   assert_eq(commercial_usage.ledger_entries.length(), 0)
