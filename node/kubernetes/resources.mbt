@@ -225,8 +225,8 @@ pub fn render_runtime(
     [{ "name": "accelerators", "resourceClaimTemplateName": name.to_json() }]
   }
   let limits : Json = {
-    "cpu": (assignment.resources.cpu_millis.to_string() + "m").to_json(),
-    "memory": (assignment.resources.memory_mib.to_string() + "Mi").to_json(),
+    "cpu": canonical_cpu_quantity(assignment.resources.cpu_millis).to_json(),
+    "memory": canonical_memory_quantity(assignment.resources.memory_mib).to_json(),
   }
   let pod : Json = {
     "apiVersion": "v1",
