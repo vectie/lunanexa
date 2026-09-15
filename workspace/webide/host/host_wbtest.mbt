@@ -12,6 +12,7 @@ fn host_config() -> HostConfig {
     memory_mib: 2048,
     controller_origin: "http://controller.webide.svc:5000",
     model_gateway_origin: "http://moongate.webide.svc:5001",
+    trusted_ca_config_map: None,
     controller_port: 5000,
     model_gateway_port: 5001,
     kubernetes_origin: "https://kubernetes.default.svc",
@@ -33,6 +34,52 @@ fn proxy_config(controller : String, gateway : String) -> ModelProxyConfig {
     expires_unix_ms: @async.now() + 60000L,
     controller_origin: controller,
     model_gateway_origin: gateway,
+  }
+}
+
+///|
+test "platform CA is deployment-owned and mounted only by the model proxy" {
+  let config = { ..host_config(), trusted_ca_config_map: Some("platform-ca") }
+  let host = WorkspaceHost::new(config)
+  let grant = proxy_config(
+    config.controller_origin,
+    config.model_gateway_origin,
+  ).grant()
+  let resources = host.resources(@webide.workspace_id(grant), grant)
+  let deployment = resources
+    .iter()
+    .find_first(entry => entry.0.contains("/deployments/"))
+    .unwrap().1
+  guard deployment
+    is {
+      "spec": {
+        "template": { "spec": { "containers": Array(containers), .. }, .. },
+        ..
+      },
+      ..
+    } else {
+    fail("missing workspace containers")
+  }
+  for container in containers {
+    guard container is { "name": String(name), .. } else {
+      fail("missing container name")
+    }
+    if name == "model-proxy" {
+      assert_true(container.stringify().contains("SSL_CERT_FILE"))
+      assert_true(container.stringify().contains("/run/platform-trust"))
+    } else {
+      assert_false(container.stringify().contains("platform-trust"))
+      assert_false(container.stringify().contains("SSL_CERT_FILE"))
+    }
+  }
+  assert_true(deployment.stringify().contains("ca-bundle.crt"))
+  try
+    WorkspaceHost::new({ ..config, trusted_ca_config_map: Some("../secret") })
+  catch {
+    HostError::InvalidConfiguration => ()
+    _ => fail("unexpected host error")
+  } noraise {
+    _ => fail("invalid ConfigMap reference accepted")
   }
 }
 
@@ -103,7 +150,7 @@ test "workspace desired state is deterministic, private and CPU-only" {
   assert_true(dns_label(resource_name(id)))
   assert_true(
     resource_name(id) !=
-    resource_name(@webide.workspace_id({ ..grant, subject_ref: "bob", })),
+    resource_name(@webide.workspace_id({ ..grant, subject_ref: "bob" })),
   )
 }
 
@@ -145,12 +192,12 @@ test "host accepts only bounded resources and immutable images" {
   }
   for
     config in [
-      { ..host_config(), storage_gib: 0, },
-      { ..host_config(), cpu_millis: 0, },
-      { ..host_config(), kubernetes_origin: "http://kubernetes.default.svc", },
-      { ..host_config(), namespace_name: "../../kube-system", },
-      { ..host_config(), controller_namespace: "../../kube-system", },
-      { ..host_config(), model_gateway_namespace: "*", },
+      { ..host_config(), storage_gib: 0 },
+      { ..host_config(), cpu_millis: 0 },
+      { ..host_config(), kubernetes_origin: "http://kubernetes.default.svc" },
+      { ..host_config(), namespace_name: "../../kube-system" },
+      { ..host_config(), controller_namespace: "../../kube-system" },
+      { ..host_config(), model_gateway_namespace: "*" },
     ] {
     try {
       ignore(WorkspaceHost::new(config))

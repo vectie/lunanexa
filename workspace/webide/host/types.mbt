@@ -11,6 +11,7 @@ pub(all) struct HostConfig {
   memory_mib : Int
   controller_origin : String
   model_gateway_origin : String
+  trusted_ca_config_map : String?
   controller_port : Int
   model_gateway_port : Int
   kubernetes_origin : String
@@ -129,6 +130,7 @@ pub fn WorkspaceHost::new(config : HostConfig) -> WorkspaceHost raise HostError 
     config.memory_mib > 32768 ||
     !origin(config.controller_origin) ||
     !origin(config.model_gateway_origin) ||
+    config.trusted_ca_config_map.map_or(false, name => !dns_label(name)) ||
     !origin(config.kubernetes_origin) ||
     !config.kubernetes_origin.has_prefix("https://") ||
     !config.kubernetes_ca_file.has_prefix("/") ||
@@ -139,7 +141,7 @@ pub fn WorkspaceHost::new(config : HostConfig) -> WorkspaceHost raise HostError 
     config.model_gateway_port > 65535 {
     raise InvalidConfiguration
   }
-  { config, locks: {}, kubernetes_override: None, }
+  { config, locks: {}, kubernetes_override: None }
 }
 
 ///|

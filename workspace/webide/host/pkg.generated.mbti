@@ -35,6 +35,7 @@ pub(all) struct HostConfig {
   memory_mib : Int
   controller_origin : String
   model_gateway_origin : String
+  trusted_ca_config_map : String?
   controller_port : Int
   model_gateway_port : Int
   kubernetes_origin : String
