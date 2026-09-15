@@ -17,13 +17,14 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
 test "runtime quantities match Kubernetes canonical serialization" {
   let base = runtime_assignment()
   for
-    (cpu, memory, expected_cpu, expected_memory) in [
+    sample in [
       (100, 256, "100m", "256Mi"),
       (1000, 2048, "1", "2Gi"),
       (1500, 1536, "1500m", "1536Mi"),
       (2000, 1048576, "2", "1Ti"),
       (1, 1073741824, "1m", "1Pi"),
     ] {
+    let (cpu, memory, expected_cpu, expected_memory) = sample
     let assignment = {
       ..base,
       resources: { ..base.resources, cpu_millis: cpu, memory_mib: memory, },

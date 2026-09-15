@@ -13,7 +13,8 @@ fn canonical_cpu_quantity(millis : Int) -> String {
 /// Input is positive whole MiB, already bounded by the assignment validator.
 /// Divide before formatting; never multiply into an overflowing Int byte count.
 fn canonical_memory_quantity(mib : Int) -> String {
-  for (scale, suffix) in [(1073741824, "Pi"), (1048576, "Ti"), (1024, "Gi")] {
+  for unit in [(1073741824, "Pi"), (1048576, "Ti"), (1024, "Gi")] {
+    let (scale, suffix) = unit
     if mib % scale == 0 {
       return (mib / scale).to_string() + suffix
     }
