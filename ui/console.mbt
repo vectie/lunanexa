@@ -2001,7 +2001,7 @@ fn overview_view(
             localized(
               state.locale,
               "This live gate mirrors the final operator checks in the deployment guide. The controller still performs the authoritative preflight on click.",
-              "此实时门禁对应部署指南中的最终运维检查。点击后控制器仍会执行权威预检。",
+              "此实时检查对应部署指南中的最终运维检查。点击后控制器仍会执行权威预检。",
             ),
           ),
           @html.button(
@@ -2024,7 +2024,7 @@ fn overview_view(
             localized(
               state.locale,
               "Production acceptance gate",
-              "生产验收门禁",
+              "生产验收检查",
             ),
             if state.production_readiness.loading {
               localized(
@@ -8420,14 +8420,28 @@ fn console_view(
         attrs=@html.Attrs::build().aria_label(
           localized(
             state.locale,
-            "LunaNexa Cluster Operations",
-            "LunaNexa 集群运维",
+            "能源谷“创未来”街区算力平台 Cluster Operations",
+            "能源谷“创未来”街区算力平台 集群运维",
           ),
         ),
         [
-          @html.span(class="brand-mark", "LN"),
+          @html.span(
+            class="brand-mark",
+            style=[
+              "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+            ],
+            [
+              @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+                "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+                "transform: scale(1.22)", "transform-origin: center",
+              ]),
+            ],
+          ),
           @html.div(class="brand-copy", [
-            @html.span(class="brand-name", "LunaNexa"),
+            @html.span(
+              class="brand-name",
+              "能源谷“创未来”街区算力平台",
+            ),
             @html.span(
               class="brand-product",
               localized(state.locale, "Cluster operations", "集群运维"),

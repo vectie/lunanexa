@@ -599,13 +599,24 @@ fn topbar(
   }
   @html.header(class="topbar", [
     @html.div(class="brand", [
-      @html.span(class="product-mark", "LN"),
+      @html.span(
+        class="product-mark",
+        style=[
+          "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+        ],
+        [
+          @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+            "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+            "transform: scale(1.22)", "transform-origin: center",
+          ]),
+        ],
+      ),
       @html.div(class="brand-copy", [
         @html.strong(
           copy(
             state.locale,
-            "LunaNexa Workbench",
-            "LunaNexa 开发者工作台",
+            "能源谷“创未来”街区算力平台 Workbench",
+            "能源谷“创未来”街区算力平台 开发者工作台",
           ),
         ),
         @html.span(

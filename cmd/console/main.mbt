@@ -299,7 +299,7 @@ fn console_copy(
 ///|
 fn console_document_title(locale : @i18n.Locale) -> String {
   console_copy(
-    locale, "LunaNexa | Cluster Operations", "LunaNexa | 集群运维",
+    locale, "能源谷“创未来”街区算力平台 | Cluster Operations", "能源谷“创未来”街区算力平台 | 集群运维",
   )
 }
 
@@ -6352,8 +6352,19 @@ fn login_view(
     @html.style_tag(login_styles()),
     @html.section(class="login-context", [
       @html.div(class="login-brand", [
-        @html.span(class="login-mark", "LN"),
-        @html.strong("LunaNexa"),
+        @html.span(
+          class="login-mark",
+          style=[
+            "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+          ],
+          [
+            @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+              "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+              "transform: scale(1.22)", "transform-origin: center",
+            ]),
+          ],
+        ),
+        @html.strong("能源谷“创未来”街区算力平台"),
       ]),
       @html.div([
         @html.p(

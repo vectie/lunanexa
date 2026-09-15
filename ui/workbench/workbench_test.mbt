@@ -1,7 +1,9 @@
 ///|
 test "ready lease renders the dense Web IDE and client-side handoffs" {
   let html = @workbench.render(@workbench.demo_state())
-  assert_true(html.contains("LunaNexa Workbench"))
+  assert_true(
+    html.contains("能源谷“创未来”街区算力平台 Workbench"),
+  )
   assert_true(html.contains("lease-demo-01"))
   assert_true(html.contains("src/main.mbt"))
   assert_true(html.contains("id=\"code-editor\""))
