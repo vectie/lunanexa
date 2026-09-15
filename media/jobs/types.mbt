@@ -4,8 +4,14 @@ pub(all) struct Owner {
   subject_ref : String
   organization_id : String
   project_id : String
-  order_id : String
-} derive(Eq, ToJson, FromJson)
+  authority : Authority
+} derive(Eq)
+
+///|
+pub(all) enum Authority {
+  DedicatedOrder(String)
+  PrivateWorkspace(String)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum State {

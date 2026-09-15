@@ -193,7 +193,7 @@ fn ApiService::configure_media(
       self.settle_media_job(job, binding)
     },
   )
-  { ..self, media: Some({ jobs, runtime, bindings, templates, }), }
+  { ..self, media: Some({ jobs, runtime, bindings, templates }) }
 }
 
 ///|
@@ -207,21 +207,45 @@ async fn ApiService::media_authorized(
     return false
   }
   let now = @async.now()
-  guard self.machine_commerce_store is Some(machine) &&
-    machine.order(owner.order_id) is Some(order) &&
-    order.offering_kind == DedicatedEndpoint &&
-    order.state == Active &&
-    order.tenant_ref == owner.tenant_ref &&
-    order.organization_id == owner.organization_id &&
-    order.project_id == owner.project_id &&
-    order.purchaser_subject_ref == owner.subject_ref &&
-    order.requested_model_selector == Some(model) &&
-    model == binding.profile.model &&
-    order.target_deployment_ref == Some(binding.deployment_id) &&
-    order.active_started_unix_ms.map_or(false, started => {
-      now < started + order.duration_seconds * 1000L
-    }) else {
+  if model != binding.profile.model {
     return false
+  }
+  match owner.authority {
+    PrivateWorkspace(lease_id) => {
+      guard self.private_cloud_workspace_access &&
+        self.workspace_directory is Some(directory) else {
+        return false
+      }
+      let authorized = directory.authorize_subject_for_tenant(
+        owner.subject_ref,
+        owner.tenant_ref,
+        Developer,
+        now,
+      ) catch {
+        _ => return false
+      }
+      if authorized.lease.lease_id != lease_id {
+        return false
+      }
+    }
+    DedicatedOrder(order_id) => {
+      guard self.machine_commerce_store is Some(machine) &&
+        machine.order(order_id) is Some(order) &&
+        order.offering_kind == DedicatedEndpoint &&
+        order.state == Active &&
+        order.tenant_ref == owner.tenant_ref &&
+        order.organization_id == owner.organization_id &&
+        order.project_id == owner.project_id &&
+        order.purchaser_subject_ref == owner.subject_ref &&
+        order.requested_model_selector == Some(model) &&
+        model == binding.profile.model &&
+        order.target_deployment_ref == Some(binding.deployment_id) &&
+        order.active_started_unix_ms.map_or(false, started => {
+          now < started + order.duration_seconds * 1000L
+        }) else {
+        return false
+      }
+    }
   }
   guard self.deployment_store is Some(deployments) &&
     deployments.deployment(binding.deployment_id) is Some(operation) &&
@@ -244,14 +268,16 @@ async fn ApiService::media_authorized(
     }) else {
     return false
   }
-  guard self.portal_store is Some(portal) &&
-    self.contract_document_store is Some(contracts) &&
-    contracts.has_effective_master_lease(
-      owner.tenant_ref,
-      owner.subject_ref,
-      now,
-    ) else {
-    return false
+  guard self.portal_store is Some(portal) else { return false }
+  if owner.authority is DedicatedOrder(_) {
+    guard self.contract_document_store is Some(contracts) &&
+      contracts.has_effective_master_lease(
+        owner.tenant_ref,
+        owner.subject_ref,
+        now,
+      ) else {
+      return false
+    }
   }
   guard self.workspace_directory is Some(directory) else { return false }
   try {
@@ -289,8 +315,8 @@ async fn ApiService::settle_media_job(
   guard job.execution_terminal && job.terminal_unix_ms is Some(terminal) else {
     raise Failure("media job is not terminal")
   }
-  // This counts requests on already-paid capacity. It neither invents GPU time
-  // nor rates it again as shared token/accelerator usage.
+  // Count requests with distinct private/prepaid meters. Neither path invents
+  // GPU time or creates a second payable token/accelerator charge.
   let event_id = "media-usage-" + digest_hex(job.job_id)
   let observation : @commercial.UsageObservation = {
     event_id,
@@ -300,7 +326,10 @@ async fn ApiService::settle_media_job(
     workload_id: job.job_id,
     node_id: binding.node_id,
     lease_epoch: 0L,
-    meter: "prepaid-video-job",
+    meter: match job.owner.authority {
+      DedicatedOrder(_) => "prepaid-video-job"
+      PrivateWorkspace(_) => "private-workspace-video-job"
+    },
     quantity: 1L,
     unit: "job",
     started_unix_ms: job.created_unix_ms,
@@ -320,7 +349,7 @@ async fn ApiService::settle_media_job(
 async fn ApiService::media_owner(
   self : ApiService,
   headers : Map[String, String],
-) -> (@media_jobs.Owner, @machinecommerce.MachineOrder)? {
+) -> (@media_jobs.Owner, @machinecommerce.MachineOrder?)? {
   guard self.api_key_authorization(headers, Inference, false) is Some(authority) else {
     return None
   }
@@ -329,7 +358,38 @@ async fn ApiService::media_owner(
     None,
     @async.now(),
   )
-  guard denied is None && order is Some(order) else { return None }
+  guard denied is None else { return None }
+  guard order is Some(order) else {
+    guard self.private_workspace_key_authorized(
+        authority.key_id,
+        authority.tenant_ref,
+        authority.subject_ref,
+        @async.now(),
+      ) &&
+      self.workspace_directory is Some(directory) else {
+      return None
+    }
+    let workspace = directory.authorize_subject_for_tenant(
+      authority.subject_ref,
+      authority.tenant_ref,
+      Developer,
+      @async.now(),
+    ) catch {
+      _ => return None
+    }
+    return Some(
+      (
+        {
+          tenant_ref: authority.tenant_ref,
+          subject_ref: authority.subject_ref,
+          organization_id: authority.organization_id,
+          project_id: authority.project_id,
+          authority: PrivateWorkspace(workspace.lease.lease_id),
+        },
+        None,
+      ),
+    )
+  }
   guard order.requested_model_selector is Some(model) &&
     self.api_key_authorization(headers, Inference, model~, false) is Some(_) else {
     return None
@@ -341,9 +401,9 @@ async fn ApiService::media_owner(
         subject_ref: authority.subject_ref,
         organization_id: authority.organization_id,
         project_id: authority.project_id,
-        order_id: order.order_id,
+        authority: DedicatedOrder(order.order_id),
       },
-      order,
+      Some(order),
     ),
   )
 }
@@ -360,7 +420,7 @@ fn media_failure(error : Error) -> HttpReply {
       )
     @media_jobs.JobError::Busy =>
       api_error(
-        409, "VideoCapacityBusy", "the dedicated order has an unfinished or unreconciled job",
+        409, "VideoCapacityBusy", "the authorized resource has an unfinished or unreconciled job",
         true,
       )
     @media_jobs.JobError::CapacityExceeded =>
@@ -402,7 +462,7 @@ async fn ApiService::handle_media(
   }
   guard self.media_owner(headers) is Some((owner, order)) else {
     return api_error(
-      403, "DedicatedVideoOrderRequired", "an active paid model order and scoped API key are required",
+      403, "VideoEntitlementRequired", "an administrator-granted private workspace or active paid model order and scoped API key are required",
       false,
     )
   }
@@ -418,18 +478,52 @@ async fn ApiService::handle_media(
       let candidates = self
         .media_all_bindings(media.bindings, media.templates)
         .filter(binding => {
-          order.target_deployment_ref == Some(binding.deployment_id) &&
-          order.requested_model_selector == Some(binding.profile.model)
+          order.map_or(true, order => {
+            order.target_deployment_ref == Some(binding.deployment_id) &&
+            order.requested_model_selector == Some(binding.profile.model)
+          })
         })
       let active : Array[MediaBinding] = []
+      let mut request_matches = order is Some(_)
       for binding in candidates {
-        if self.media_authorized(owner, binding.profile.model, binding) {
+        if order is None {
+          let matches = try {
+            ignore(
+              @media_provider.VideoRequest::decode(
+                binding.profile,
+                header(headers, "content-type").unwrap_or("application/json"),
+                body,
+              ),
+            )
+            true
+          } catch {
+            _ => false
+          }
+          if !matches {
+            continue
+          }
+          request_matches = true
+        }
+        if self.api_key_authorization(
+            headers,
+            Inference,
+            model=binding.profile.model,
+            false,
+          )
+          is Some(_) &&
+          self.media_authorized(owner, binding.profile.model, binding) {
           active.push(binding)
         }
       }
+      if !request_matches && candidates.length() > 0 {
+        return api_error(
+          400, "InvalidVideoRequest", "video settings are outside the approved profiles",
+          false,
+        )
+      }
       guard active.length() == 1 else {
         return api_error(
-          503, "MediaProfileUnavailable", "the paid deployment does not have exactly one active media profile",
+          503, "MediaProfileUnavailable", "the selected model does not have exactly one authorized active media profile",
           false,
         )
       }
@@ -466,7 +560,7 @@ async fn ApiService::handle_media(
           owner.project_id,
         ) {
         return api_error(
-          409, "CommercialAttributionRequired", "the order requires an active commercial project",
+          409, "CommercialAttributionRequired", "video usage requires an active project",
           false,
         )
       }
@@ -489,8 +583,11 @@ async fn ApiService::handle_media(
           )
       }
       let now = @async.now()
-      let expires = order.active_started_unix_ms.unwrap() +
-        order.duration_seconds * 1000L
+      let expires = order.map_or(workspace.lease.expires_unix_ms, order => {
+        (order.active_started_unix_ms.unwrap() + order.duration_seconds * 1000L).min(
+          workspace.lease.expires_unix_ms,
+        )
+      })
       let deadline = (now + 7200000L).min(expires)
       let job = media.runtime.submit(
         owner,
@@ -507,6 +604,16 @@ async fn ApiService::handle_media(
     if path.has_prefix("/v1/videos/") {
       let id = path["/v1/videos/".length():].to_owned()
       if !@contracts.valid_identifier(id) || !id.has_prefix("video-") {
+        return api_error(404, "VideoNotFound", "video is unavailable", false)
+      }
+      let stored = media.jobs.get(id, owner)
+      guard self.api_key_authorization(
+          headers,
+          Inference,
+          model=stored.model,
+          false,
+        )
+        is Some(_) else {
         return api_error(404, "VideoNotFound", "video is unavailable", false)
       }
       if verb == Get {
@@ -563,9 +670,26 @@ async fn ApiService::serve_media_content(
   "/content".length()].to_owned()
   let mut started = false
   try {
+    let stored = media.jobs.get(id, owner)
+    guard self.api_key_authorization(
+        request.headers,
+        Inference,
+        model=stored.model,
+        false,
+      )
+      is Some(_) else {
+      raise @media_runtime.RuntimeError::Unauthorized
+    }
     ignore(
       media.runtime.content(id, owner, 1073741824L, bytes => {
-        if self.media_owner(request.headers) is None {
+        if self.media_owner(request.headers) is None ||
+          self.api_key_authorization(
+            request.headers,
+            Inference,
+            model=stored.model,
+            false,
+          )
+          is None {
           raise @media_runtime.RuntimeError::Unauthorized
         }
         if !started {
@@ -640,7 +764,14 @@ async fn ApiService::handle_media_operator(
             {
               "id": job.job_id,
               "state": job.state.to_json(),
-              "order_id": job.owner.order_id,
+              "order_id": match job.owner.authority {
+                DedicatedOrder(id) => id.to_json()
+                PrivateWorkspace(_) => (null : Json)
+              },
+              "workspace_lease_id": match job.owner.authority {
+                PrivateWorkspace(id) => id.to_json()
+                DedicatedOrder(_) => (null : Json)
+              },
               "request_digest": job.request_digest,
               "provider_binding": job.deployment_id,
             } : Json)

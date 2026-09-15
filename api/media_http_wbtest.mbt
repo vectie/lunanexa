@@ -5,7 +5,12 @@ async fn exercise_media_api(
   secret : String,
   order : @machinecommerce.MachineOrder,
   now : Int64,
+  private_cloud? : Bool = false,
 ) -> Unit {
+  let root = if private_cloud { root + "/private-media" } else { root }
+  if private_cloud {
+    @fs.mkdir(root)
+  }
   let accounts = @account.AccountStore::open(
     root + "/media-accounts.json",
     "media-fixture-session-secret-longer-than-32-bytes",
@@ -52,7 +57,7 @@ async fn exercise_media_api(
     created_unix_ms: now,
   })
   let jobs = @media_jobs.JobStore::restore(
-    { schema_version: @media_jobs.schema_version, jobs: [], },
+    { schema_version: @media_jobs.schema_version, jobs: [] },
     _ => (),
   )
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
@@ -78,6 +83,40 @@ async fn exercise_media_api(
       sound_supported: true,
     },
   }
+  let private_keys = @access.AccessStore::open(
+    root + "/private-keys.json",
+    "private-media-issuer-secret-longer-than-thirty-two-bytes",
+  )
+  let secret = if private_cloud {
+    private_keys.issue(
+      {
+        key_id: "private-media-key",
+        tenant_ref: "tenant-a",
+        subject_ref: "subject-a",
+        organization_id: "org-a",
+        project_id: "project-a",
+        display_name: "Private fixture",
+        scopes: [Inference, ModelList],
+        allowed_models: ["text.default"],
+        expires_unix_ms: now + 3600000L,
+        maximum_requests: 100L,
+      },
+      now,
+    ).secret
+  } else {
+    secret
+  }
+  let base = if private_cloud {
+    {
+      ..base
+      .with_private_cloud_workspace_access(true)
+      .with_access_store(private_keys),
+      machine_commerce_store: None,
+      contract_document_store: None,
+    }
+  } else {
+    base
+  }
   let service = {
     ..base.with_account_store(
       accounts, "fixture-assertion-secret-longer-than-32-bytes",
@@ -102,6 +141,33 @@ async fn exercise_media_api(
   let listener = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   defer listener.close()
   let request = "model=text.default&prompt=private-fixture-prompt&width=512&height=512&num_frames=25&fps=24"
+  if private_cloud {
+    assert_eq(
+      service
+      .with_private_cloud_workspace_access(false)
+      .handle(Post, "/v1/videos", headers, request).status,
+      403,
+    )
+    guard service.media_owner(headers) is Some((owner, None)) else {
+      fail("private media unexpectedly depends on a commercial order")
+    }
+    assert_true(owner.authority is PrivateWorkspace(_))
+    assert_true(service.media_authorized(owner, binding.profile.model, binding))
+    assert_false(
+      service.media_authorized(
+        { ..owner, authority: PrivateWorkspace("different-lease") },
+        binding.profile.model,
+        binding,
+      ),
+    )
+    assert_false(
+      service.media_authorized(
+        { ..owner, tenant_ref: "different-tenant" },
+        binding.profile.model,
+        binding,
+      ),
+    )
+  }
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, () => service.serve_on(listener))
     group.spawn_bg(no_wait=true, () => {
@@ -202,7 +268,14 @@ async fn exercise_media_api(
     ignore(service.handle(Get, "/v1/videos/" + id, headers, ""))
     let usage = commercial.durable_snapshot().commercial.usage_observations
     assert_eq(usage.length(), 1)
-    assert_eq(usage[0].meter, "prepaid-video-job")
+    assert_eq(
+      usage[0].meter,
+      if private_cloud {
+        "private-workspace-video-job"
+      } else {
+        "prepaid-video-job"
+      },
+    )
     assert_eq(usage[0].quantity, 1L)
     let content_url = "http://\{listener.addr}/v1/videos/" + id + "/content"
     let (download, bytes) = @http.get(content_url, headers={

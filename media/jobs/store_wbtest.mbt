@@ -5,13 +5,13 @@ fn owner() -> Owner {
     subject_ref: "subject-a",
     organization_id: "org-a",
     project_id: "project-a",
-    order_id: "order-a",
+    authority: DedicatedOrder("order-a"),
   }
 }
 
 ///|
 fn empty_snapshot() -> Snapshot {
-  { schema_version, jobs: [], }
+  { schema_version, jobs: [] }
 }
 
 ///|
@@ -68,11 +68,11 @@ async test "durable reservation is replayable, owner scoped and parameter bound"
   }
   for
     stranger in [
-      { ..owner(), tenant_ref: "tenant-b", },
-      { ..owner(), subject_ref: "subject-b", },
-      { ..owner(), organization_id: "org-b", },
-      { ..owner(), project_id: "project-b", },
-      { ..owner(), order_id: "order-b", },
+      { ..owner(), tenant_ref: "tenant-b" },
+      { ..owner(), subject_ref: "subject-b" },
+      { ..owner(), organization_id: "org-b" },
+      { ..owner(), project_id: "project-b" },
+      { ..owner(), authority: DedicatedOrder("order-b") },
     ] {
     try {
       ignore(store.get(job.job_id, stranger))
@@ -282,7 +282,7 @@ async test "workspace video budgets cannot be bypassed with another project or p
   let other = {
     ..owner(),
     project_id: "another-project",
-    order_id: "another-order",
+    authority: DedicatedOrder("another-order"),
   }
   assert_true(
     try {

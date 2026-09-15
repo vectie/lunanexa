@@ -10,7 +10,7 @@ fn owner_valid(owner : Owner) -> Bool {
     owner.subject_ref,
     owner.organization_id,
     owner.project_id,
-    owner.order_id,
+    owner.authority.reference(),
   ].all(value => @contracts.valid_identifier(value))
 }
 
@@ -43,7 +43,7 @@ fn provider_id_valid(id : String) -> Bool {
 fn snapshot(jobs : Map[String, StoredJob]) -> Snapshot {
   let values = jobs.values().to_array()
   values.sort_by_key(job => job.job_id)
-  { schema_version, jobs: values, }
+  { schema_version, jobs: values }
 }
 
 ///|
@@ -115,7 +115,7 @@ pub async fn JobStore::restore(
       raise InvalidSnapshot
     }
     if busy(record) {
-      let order = record.owner.order_id
+      let order = record.owner.authority.slot()
       if active_orders.contains(order) {
         raise InvalidSnapshot
       }
@@ -123,7 +123,7 @@ pub async fn JobStore::restore(
     }
     let record = if record.state == Submitting {
       recovered = true
-      { ..record, state: SubmissionUnknown, }
+      { ..record, state: SubmissionUnknown }
     } else {
       record
     }
@@ -133,7 +133,7 @@ pub async fn JobStore::restore(
   if recovered {
     persist(snapshot(jobs))
   }
-  { jobs, persist, maximum_jobs, mutex: @async.Mutex(), }
+  { jobs, persist, maximum_jobs, mutex: @async.Mutex() }
 }
 
 ///|
@@ -200,7 +200,7 @@ pub async fn JobStore::reserve(
   }
   if self.jobs
     .values()
-    .any(job => job.owner.order_id == owner.order_id && busy(job)) {
+    .any(job => job.owner.authority == owner.authority && busy(job)) {
     raise Busy
   }
   if self.jobs.length() >= self.maximum_jobs {
@@ -278,7 +278,7 @@ pub async fn JobStore::begin_submission(
     now >= job.deadline_unix_ms {
     raise InvalidTransition
   }
-  self.commit({ ..job, state: Submitting, updated_unix_ms: now, })
+  self.commit({ ..job, state: Submitting, updated_unix_ms: now })
 }
 
 ///|
@@ -300,7 +300,7 @@ pub async fn JobStore::submission_unknown(
   if job.state != Submitting && job.state != SubmissionUnknown {
     raise InvalidTransition
   }
-  self.commit({ ..job, state: SubmissionUnknown, updated_unix_ms: now, })
+  self.commit({ ..job, state: SubmissionUnknown, updated_unix_ms: now })
 }
 
 ///|
@@ -493,7 +493,7 @@ pub async fn JobStore::record_usage(
     }
     raise Conflict
   }
-  self.commit({ ..job, usage_receipt: Some(receipt), })
+  self.commit({ ..job, usage_receipt: Some(receipt) })
 }
 
 ///|

@@ -7,7 +7,7 @@ async test "reconciliation has bounded parallelism and isolates one failed autho
         {
           ..owner(),
           subject_ref: "subject-\{index}",
-          order_id: "order-\{index}",
+          authority: DedicatedOrder("order-\{index}"),
         },
         "request",
         request().digest(),

@@ -1101,6 +1101,14 @@ async fn exercise_dedicated_endpoint(
   }
   if capability == VideoGenerate {
     exercise_media_api(webide_service, directory, secret, active, now)
+    exercise_media_api(
+      webide_service,
+      directory,
+      secret,
+      active,
+      now,
+      private_cloud=true,
+    )
   }
   assert_eq(
     webide_service.handle(
