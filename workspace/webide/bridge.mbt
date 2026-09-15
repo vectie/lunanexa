@@ -390,6 +390,10 @@ pub async fn Bridge::handle(
       reply(connection, 413, "Workspace request exceeds its size limit.")
     BridgeError::CapacityExceeded =>
       reply(connection, 429, "Workspace capacity is temporarily full.")
+    BridgeError::AuthorityUnavailable =>
+      reply(
+        connection, 503, "Workspace authorization is temporarily unavailable. Retry shortly.",
+      )
     _ => {
       // Never log or return upstream errors: they may contain credentials,
       // prompts, filesystem paths or infrastructure addresses.

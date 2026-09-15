@@ -168,7 +168,7 @@ fn allowed_path(verb : @http.RequestMethod, path : String) -> Bool {
         "/", "/ws", "/queue", "/history", "/prompt", "/object_info", "/system_stats",
         "/features", "/extensions", "/embeddings", "/models", "/settings", "/users",
         "/userdata", "/v2/userdata", "/view", "/favicon.ico", "/jobs", "/workflow_templates",
-        "/i18n", "/experiment/models", "/node_replacements",
+        "/i18n", "/experiment/models", "/node_replacements", "/assets",
       ].contains(route) ||
       [
         "/assets/", "/scripts/", "/extensions/", "/locales/", "/object_info/", "/history/",

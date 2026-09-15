@@ -175,7 +175,7 @@ fn WorkspaceHost::resources(
                 "--disable-api-nodes", "--disable-all-custom-nodes", "--whitelist-custom-nodes",
                 "ComfyUI-vLLM-Omni", "--user-directory", "/workspace/user", "--temp-directory",
                 "/tmp/comfyui", "--input-directory", "/workspace/input", "--output-directory",
-                "/workspace/output",
+                "/workspace/output", "--enable-assets", "--database-url", "sqlite:////workspace/user/comfyui.db",
               ],
               "env": [
                 { "name": "PYTHONDONTWRITEBYTECODE", "value": "1" },

@@ -218,10 +218,21 @@ pub async fn handle_model_proxy(
       connection.write(response)
       return connection.end_response()
     }
-    let payload = limited(body, 1048576)
-    let content_type = request_header(request.headers, "content-type").unwrap_or(
+    let mut payload = limited(body, 1048576)
+    let mut content_type = request_header(request.headers, "content-type").unwrap_or(
       "application/json",
     )
+    if request.meth == Post &&
+      request.path == "/v1/videos" &&
+      content_type.has_prefix("multipart/form-data") {
+      guard multipart_fields(content_type, payload) is Some(fields) else {
+        return proxy_reply(
+          connection, 400, "A bounded text-only video form is required",
+        )
+      }
+      payload = @utf8.encode(fields.to_json().stringify())
+      content_type = "application/json"
+    }
     if request.meth == Post {
       guard form_model(content_type, payload) is Some(model) &&
         config.allowed_models.contains(model) else {

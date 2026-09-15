@@ -1,5 +1,6 @@
 # Supply an inspected python:3.12-slim-bookworm digest as PYTHON_IMAGE.
-# The build context contains only two reviewed git archives. No model weights,
+# The build context contains two reviewed git archives and the reviewed frontend
+# asset adapter described in COMFYUI_ASSETS.md. No model weights,
 # local virtual environment, user workflows, credentials or repository history.
 ARG PYTHON_IMAGE
 FROM ${PYTHON_IMAGE}
@@ -18,8 +19,13 @@ ADD comfyui.tar /opt/ComfyUI/
 ADD comfyui-vllm-omni.tar /opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/
 RUN python3 -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio \
     && python3 -m pip install -r /opt/ComfyUI/requirements.txt \
+    && python3 -m pip install comfyui-frontend-package==1.51.9 \
     && python3 -m pip check \
     && python3 -m pip freeze --all > /opt/ComfyUI/lunanexa-python-packages.txt
+# Reviewed staged artifact, produced with scripts/patch-comfyui-frontend-assets.mbtx.
+# The patch refuses unreviewed upstream bytes. It changes the output list only,
+# retaining the third-party UI and its existing asset API implementation.
+COPY comfyui-frontend-assets.js /usr/local/lib/python3.12/site-packages/comfyui_frontend_package/static/assets/settingStore-KkBYyEnh.js
 WORKDIR /opt/ComfyUI
 USER 1000:1000
 EXPOSE 8188

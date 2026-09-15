@@ -80,9 +80,15 @@ async fn authorize_grant(
       "authorization": "Bearer " + grant.api_secret,
     })
     ignore(limited(client, 1048576))
-    response.code == 200
+    match response.code {
+      200 => true
+      401 | 403 => false
+      _ => raise @webide.BridgeError::AuthorityUnavailable
+    }
   }) catch {
-    _ => false
+    // An unavailable authority is not evidence of revocation. Callers still
+    // deny this request, but retain the session and do not destroy live work.
+    _ => raise @webide.BridgeError::AuthorityUnavailable
   }
 }
 

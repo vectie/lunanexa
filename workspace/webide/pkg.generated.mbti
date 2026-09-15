@@ -19,6 +19,7 @@ pub(all) suberror BridgeError {
   RequestTooLarge
   CapacityExceeded
   UpstreamUnavailable
+  AuthorityUnavailable
 } derive(Eq, @debug.Debug)
 
 // Types and methods

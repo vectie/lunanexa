@@ -73,6 +73,10 @@ test "managed route policy rejects traversal, administration and arbitrary tunne
   assert_true(allowed_path(Post, "/prompt"))
   assert_true(allowed_path(Post, "/userdata/workflows%2Fhello%20world.json"))
   assert_false(allowed_path(Post, "/assets/main.js"))
+  assert_true(allowed_path(Get, "/api/assets?include_tags=output&limit=50"))
+  assert_false(allowed_path(Post, "/api/assets/seed"))
+  assert_false(allowed_path(Post, "/api/assets/download"))
+  assert_false(allowed_path(Delete, "/api/assets/123"))
   assert_false(allowed_path(Connect, "/"))
 }
 
@@ -142,11 +146,16 @@ async test "WebSocket relay supports binary and text and closes on live authorit
   defer public.close()
   defer backend.close()
   let origin = "http://\{public.addr}"
-  let active = { "value": true }
+  let active = { "value": true, "outage": false }
   let bridge = Bridge::new(
     test_config(origin),
     _ => test_grant("alice"),
-    _ => active["value"],
+    _ => {
+      if active["outage"] {
+        raise BridgeError::AuthorityUnavailable
+      }
+      active["value"]
+    },
     (_, _) => {
       http_url: "http://\{backend.addr}",
       websocket_url: "ws://\{backend.addr}",
@@ -184,9 +193,26 @@ async test "WebSocket relay supports binary and text and closes on live authorit
     let binary = @async.with_timeout(2000, () => socket.recv())
     assert_true(binary.kind is Binary)
     assert_eq(read_bounded(binary, 4096), b"\x00\xff\x80")
-    active["value"] = false
+    active["outage"] = true
     try {
       ignore(@async.with_timeout(2000, () => socket.recv()))
+      fail("socket remained open without current authority")
+    } catch {
+      @websocket.WebSocketError::ConnectionClosed(PolicyViolation, _) => ()
+      error => fail("expected a clean policy close: \{error}")
+    }
+    active["outage"] = false
+    let recovered = @websocket.Conn::connect(
+      "ws://\{public.addr}/ws?clientId=recovered",
+      headers={ "origin": origin, "cookie": cookies },
+    )
+    defer recovered.close()
+    recovered.send_text("reconnected")
+    let resumed = @async.with_timeout(2000, () => recovered.recv())
+    assert_eq(@utf8.decode(read_bounded(resumed, 4096)), "reconnected")
+    active["value"] = false
+    try {
+      ignore(@async.with_timeout(2000, () => recovered.recv()))
       fail("revoked socket remained open")
     } catch {
       @websocket.WebSocketError::ConnectionClosed(PolicyViolation, _) => ()
@@ -233,7 +259,7 @@ async test "real HTTP bridge keeps credentials private, isolates workspaces and 
   defer alice.close()
   defer bob.close()
   let origin = "http://\{public.addr}"
-  let active = { "alice": true, "bob": true }
+  let active = { "alice": true, "bob": true, "outage": false }
   let redeemed : Array[String] = []
   let bridge = Bridge::new(
     test_config(origin),
@@ -241,7 +267,12 @@ async test "real HTTP bridge keeps credentials private, isolates workspaces and 
       redeemed.push(code)
       test_grant(if code == "lnxc_alice" { "alice" } else { "bob" })
     },
-    grant => active.get(grant.subject_ref).unwrap_or(false),
+    grant => {
+      if active["outage"] {
+        raise BridgeError::AuthorityUnavailable
+      }
+      active.get(grant.subject_ref).unwrap_or(false)
+    },
     (_id, grant) => {
       let address = if grant.subject_ref == "alice" {
         alice.addr
@@ -305,6 +336,17 @@ async test "real HTTP bridge keeps credentials private, isolates workspaces and 
       "origin": origin,
     })
     assert_eq(large.code, 413)
+    active["outage"] = true
+    let (unavailable, _) = @http.get(origin + "/queue", headers={
+      "cookie": alice_cookie,
+    })
+    assert_eq(unavailable.code, 503)
+    active["outage"] = false
+    let (recovered, recovered_body) = @http.get(origin + "/queue", headers={
+      "cookie": alice_cookie,
+    })
+    assert_eq(recovered.code, 200)
+    assert_eq(recovered_body.text(), "alice")
     active["alice"] = false
     let (revoked, _) = @http.get(origin + "/queue", headers={
       "cookie": alice_cookie,
