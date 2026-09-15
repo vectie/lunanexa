@@ -805,10 +805,20 @@ async fn main {
         "unsupported LUNANEXA_ARTIFACT_TRANSPORT: \{value}",
       )
   }
-  let artifact_verifier = @node_agent.CosignArtifactSignatureVerifier::new(
-    environment("LUNANEXA_COSIGN_BINARY"),
-    environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
-  )
+  let artifact_verifier = match
+    @env.get_env_var("LUNANEXA_COSIGN_TRUSTED_ROOT_PATH") {
+    Some(path) =>
+      @node_agent.CosignArtifactSignatureVerifier::new(
+        environment("LUNANEXA_COSIGN_BINARY"),
+        environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
+        trusted_root_path=path,
+      )
+    None =>
+      @node_agent.CosignArtifactSignatureVerifier::new(
+        environment("LUNANEXA_COSIGN_BINARY"),
+        environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
+      )
+  }
   let lease_state_path = @env.get_env_var("LUNANEXA_LEASE_STATE_PATH").unwrap_or(
     "lunanexa-exclusive-lease-agent.json",
   )
