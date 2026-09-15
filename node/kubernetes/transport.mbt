@@ -32,16 +32,8 @@ pub fn authenticated_transport(
   }
   (verb, path, body) => {
     @async.with_timeout(10000, () => {
-      // Only the Pod lifecycle API is exposed by this adapter.
-      let segments = path.split("/").collect()
-      if (segments.length() != 6 && segments.length() != 7) ||
-        segments[0] != "" ||
-        segments[1] != "api" ||
-        segments[2] != "v1" ||
-        segments[3] != "namespaces" ||
-        !dns_label(segments[4].to_owned()) ||
-        segments[5] != "pods" ||
-        (segments.length() == 7 && !dns_label(segments[6].to_owned())) {
+      // Only runtime lifecycle resources, never Secrets, nodes or exec APIs.
+      if !allowed_resource_path(path) {
         raise LifecycleError::InvalidResource
       }
       let request_method : @http.RequestMethod = match verb {

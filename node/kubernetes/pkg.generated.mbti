@@ -3,6 +3,7 @@ package "vectie/lunanexa/node/kubernetes"
 
 import {
   "moonbitlang/core/debug",
+  "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
 }
 
@@ -10,6 +11,8 @@ import {
 pub fn authenticated_transport(String, String, String) -> (async (String, String, Json?) -> (Int, Json)) raise LifecycleError
 
 pub fn observe_pod(PodIdentity, Json) -> @contracts.DeploymentState raise ObservationError
+
+pub fn render_runtime(RuntimeSettings, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeResources raise LifecycleError
 
 // Errors
 pub(all) suberror LifecycleError {
@@ -25,6 +28,18 @@ pub(all) suberror ObservationError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct AuxiliaryIdentity {
+  kind : AuxiliaryKind
+  namespace_name : String
+  name : String
+  uid : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AuxiliaryKind {
+  NetworkPolicy
+  ClaimTemplate
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct PodIdentity {
   namespace_name : String
   pod_name : String
@@ -43,9 +58,29 @@ pub struct PodManager {
   namespace_name : String
 }
 pub async fn PodManager::create(Self, Json) -> String
+pub async fn PodManager::create_auxiliary(Self, Json) -> AuxiliaryIdentity
 pub fn PodManager::new(String, async (String, String, Json?) -> (Int, Json)) -> Self raise LifecycleError
 pub async fn PodManager::observe(Self, PodIdentity) -> @contracts.DeploymentState
+pub async fn PodManager::remove_auxiliary(Self, AuxiliaryIdentity) -> @contracts.DeploymentState
 pub async fn PodManager::stop(Self, PodIdentity) -> @contracts.DeploymentState
+
+pub(all) struct RuntimeResources {
+  name : String
+  pod : Json
+  claim_template : Json?
+  network_policy : Json
+} derive(Eq, @debug.Debug)
+
+pub(all) struct RuntimeSettings {
+  namespace_name : String
+  node_name : String
+  node_id : String
+  model_cache_root : String
+  runtime_port : Int
+  run_as_user : Int
+  device_class_name : String
+  controller_addresses : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 // Type aliases
 pub type Transport = async (String, String, Json?) -> (Int, Json)
