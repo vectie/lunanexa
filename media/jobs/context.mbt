@@ -45,7 +45,16 @@ pub async fn JobStore::remember_execution(
       continue
     }
     match job.execution_context {
-      Some(previous) => if previous != context { raise Conflict }
+      Some(previous) => {
+        if !execution_context_compatible(previous, context) {
+          raise Conflict
+        }
+        // Only this exact verified binding may enrich a legacy unknown instance.
+        if previous.instance_id is None && context.instance_id is Some(_) {
+          next[id] = { ..job, execution_context: Some(context), }
+          changed = true
+        }
+      }
       None => {
         next[id] = { ..job, execution_context: Some(context), }
         changed = true
@@ -53,7 +62,7 @@ pub async fn JobStore::remember_execution(
     }
   }
   if changed {
-    (self.persist)(snapshot(next))
+    (self.persist)(snapshot(next, self.terminations))
     self.jobs = next
   }
 }

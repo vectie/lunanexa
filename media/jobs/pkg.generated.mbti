@@ -5,6 +5,7 @@ import {
   "moonbitlang/async",
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
 }
 
 // Values
@@ -22,6 +23,12 @@ pub(all) suberror JobError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct AcceptedTermination {
+  node_id : String
+  evidence : @contracts.RuntimeTermination
+} derive(Eq, ToJson, @json.FromJson)
+pub fn AcceptedTermination::reference(Self) -> String
+
 pub(all) enum Authority {
   DedicatedOrder(String)
   PrivateWorkspace(String)
@@ -31,15 +38,19 @@ pub(all) struct ExecutionContext {
   deployment_id : String
   generation : Int64
   node_id : String
+  instance_id : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct JobStore {
   mut jobs : Map[String, StoredJob]
+  mut terminations : Array[AcceptedTermination]
   persist : async (Snapshot) -> Unit
   mutex : @async.Mutex
   maximum_jobs : Int
 }
+pub async fn JobStore::accept_termination(Self, AcceptedTermination) -> Unit
 pub async fn JobStore::acknowledge_deletion(Self, String, Owner, String, Int64) -> StoredJob
+pub async fn JobStore::acknowledge_instance_termination(Self, String, Owner, String, ExecutionContext, String, Int64, Int64) -> StoredJob
 pub async fn JobStore::attach_provider(Self, String, Owner, String, Int64) -> StoredJob
 pub async fn JobStore::begin_submission(Self, String, Owner, Int64) -> StoredJob
 pub async fn JobStore::cancel(Self, String, Owner, Bool, Int64) -> StoredJob
@@ -52,6 +63,7 @@ pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int6
 pub async fn JobStore::restore(Snapshot, async (Snapshot) -> Unit, maximum_jobs? : Int) -> Self
 pub async fn JobStore::snapshot(Self) -> Snapshot
 pub async fn JobStore::submission_unknown(Self, String, Owner, Int64) -> StoredJob
+pub async fn JobStore::termination_for_context(Self, ExecutionContext) -> AcceptedTermination?
 
 pub(all) struct Owner {
   tenant_ref : String
@@ -66,6 +78,7 @@ pub impl @json.FromJson for Owner
 pub(all) struct Snapshot {
   schema_version : String
   jobs : Array[StoredJob]
+  terminations : Array[AcceptedTermination]?
 } derive(Eq, ToJson, @json.FromJson)
 
 pub(all) enum State {
@@ -100,6 +113,8 @@ pub(all) struct StoredJob {
   execution_terminal : Bool
   terminal_unix_ms : Int64?
   usage_receipt : String?
+  termination_evidence_ref : String?
+  termination_observed_unix_ms : Int64?
 } derive(Eq, ToJson, @json.FromJson)
 pub fn StoredJob::public_view(Self, Int64) -> Json
 

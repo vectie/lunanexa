@@ -34,6 +34,8 @@ pub(all) struct ExecutionContext {
   deployment_id : String
   generation : Int64
   node_id : String
+  // None for legacy/static bindings; never infer it from a replacement.
+  instance_id : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -58,12 +60,21 @@ pub(all) struct StoredJob {
   execution_terminal : Bool
   terminal_unix_ms : Int64?
   usage_receipt : String?
+  termination_evidence_ref : String?
+  termination_observed_unix_ms : Int64?
 } derive(Eq, ToJson, FromJson)
 
 ///|
 pub(all) struct Snapshot {
   schema_version : String
   jobs : Array[StoredJob]
+  terminations : Array[AcceptedTermination]?
+} derive(Eq, ToJson, FromJson)
+
+///|
+pub(all) struct AcceptedTermination {
+  node_id : String
+  evidence : @contracts.RuntimeTermination
 } derive(Eq, ToJson, FromJson)
 
 ///|
@@ -83,6 +94,7 @@ pub(all) suberror JobError {
 ///|
 pub struct JobStore {
   mut jobs : Map[String, StoredJob]
+  mut terminations : Array[AcceptedTermination]
   persist : async (Snapshot) -> Unit
   mutex : @async.Mutex
   maximum_jobs : Int

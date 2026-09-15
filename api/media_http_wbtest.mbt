@@ -68,7 +68,11 @@ async fn exercise_media_api(
     created_unix_ms: now,
   })
   let jobs = @media_jobs.JobStore::restore(
-    { schema_version: @media_jobs.schema_version, jobs: [], },
+    {
+      schema_version: @media_jobs.schema_version,
+      jobs: [],
+      terminations: None,
+    },
     _ => (),
   )
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))

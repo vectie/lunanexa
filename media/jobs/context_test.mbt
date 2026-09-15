@@ -1,7 +1,7 @@
 ///|
 async test "public placement API survives a serialized store restart" {
   let store = @jobs.JobStore::restore(
-    { schema_version: @jobs.schema_version, jobs: [], },
+    { schema_version: @jobs.schema_version, jobs: [], terminations: None, },
     _ => (),
   )
   let owner : @jobs.Owner = {
@@ -12,6 +12,7 @@ async test "public placement API survives a serialized store restart" {
     authority: PrivateWorkspace("workspace-lease"),
   }
   let context : @jobs.ExecutionContext = {
+    instance_id: None,
     deployment_id: "deployment",
     generation: 1L,
     node_id: "node",

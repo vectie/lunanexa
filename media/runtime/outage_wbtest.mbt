@@ -1,5 +1,5 @@
 ///|
-async test "outage preserves jobs across restart while deadlines retain cancellation until acknowledgement" {
+async fn exercise_unverified_outage(instance_id : String?) -> Unit {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   defer server.close()
   let provider = @provider.Provider::new("http://\{server.addr}", profile())
@@ -57,6 +57,7 @@ async test "outage preserves jobs across restart while deadlines retain cancella
       2000L,
       5000L,
       execution_context={
+        instance_id,
         deployment_id: "deployment",
         generation: 1L,
         node_id: "node",
@@ -91,6 +92,8 @@ async test "outage preserves jobs across restart while deadlines retain cancella
     assert_eq(pending.state, Cancelling)
     assert_true(pending.expiry_requested)
     assert_false(pending.execution_terminal)
+    assert_eq(pending.termination_evidence_ref, None)
+    assert_true(restored.snapshot().terminations == Some([]))
     assert_eq(counts["settle"], 0)
     let final_store = @jobs.JobStore::restore(restored.snapshot(), _ => ())
     try
@@ -125,6 +128,16 @@ async test "outage preserves jobs across restart while deadlines retain cancella
     assert_eq(final_runtime.reconcile(), (0, 0))
     assert_eq(counts["settle"], 1)
   }
+}
+
+///|
+async test "outage preserves legacy jobs without inventing exit evidence" {
+  exercise_unverified_outage(None)
+}
+
+///|
+async test "outage preserves known incarnation capacity until real acknowledgement" {
+  exercise_unverified_outage(Some("a".repeat(64)))
 }
 
 ///|

@@ -10,6 +10,13 @@ struct ResourceRecord {
 } derive(ToJson, FromJson)
 
 ///|
+struct ObservedContainer {
+  pod_uid : String
+  container_id : String
+  termination_observed_unix_ms : Int64?
+} derive(ToJson, FromJson, Eq)
+
+///|
 struct RuntimeRecord {
   name : String
   assignment_id : String
@@ -21,6 +28,7 @@ struct RuntimeRecord {
   intent : String
   resources : Array[ResourceRecord]
   mut stopping : Bool
+  mut observed_containers : Array[ObservedContainer]?
 } derive(ToJson, FromJson)
 
 ///|
@@ -29,6 +37,7 @@ struct RuntimeJournal {
   settings : RuntimeSettings
   owner : String
   mut runtimes : Array[RuntimeRecord]
+  mut pending_terminations : Array[@contracts.RuntimeTermination]?
 } derive(ToJson, FromJson)
 
 ///|
@@ -75,6 +84,7 @@ pub fn RuntimeSupervisor::restore(
         settings,
         owner: fresh_owner,
         runtimes: [],
+        pending_terminations: None,
       }
   }
   if stored_journal.version != "lunanexa.kubernetes.runtime.v1" ||
@@ -104,7 +114,34 @@ pub fn RuntimeSupervisor::restore(
   // never discard a journal merely to apply a network-policy correction.
   let journal = { ..stored_journal, settings, }
   let names : Map[String, Bool] = Map([])
+  if journal.pending_terminations is Some(entries) {
+    if entries.length() > 4096 ||
+      entries.any(entry => {
+        !@contracts.valid_identifier(entry.assignment_id) ||
+        !@contracts.valid_identifier(entry.deployment_id) ||
+        entry.generation < 0L ||
+        entry.controller_epoch < 0L ||
+        entry.observed_unix_ms < 0L ||
+        !@contracts.valid_sha256_digest("sha256:" + entry.instance_id) ||
+        !@contracts.valid_sha256_digest(entry.artifact_digest) ||
+        !@contracts.valid_sha256_digest(entry.image_digest)
+      }) {
+      raise LifecycleError::InvalidResource
+    }
+  }
   for record in journal.runtimes {
+    if record.observed_containers is Some(containers) {
+      if containers.length() > 1024 ||
+        containers.any(container => {
+          container.pod_uid == "" ||
+          container.pod_uid.length() > 256 ||
+          container.container_id == "" ||
+          container.container_id.length() > 256 ||
+          (container.termination_observed_unix_ms is Some(time) && time < 0L)
+        }) {
+        raise LifecycleError::InvalidResource
+      }
+    }
     if !dns_label(record.name) ||
       !dns_label(record.assignment_id) ||
       names.contains(record.name) ||

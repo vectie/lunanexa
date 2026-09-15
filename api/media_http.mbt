@@ -68,6 +68,7 @@ fn MediaBinding::execution_context(
     deployment_id: self.deployment_id,
     generation: self.deployment_generation,
     node_id: self.node_id,
+    instance_id: self.instance_id,
   }
 }
 

@@ -3965,6 +3965,8 @@ async fn ApiService::dispatch_with_transport(
       )
       json_reply(200, certificate.to_json())
     }
+    (Post, "/v1/nodes/runtime-terminations") =>
+      self.accept_runtime_terminations(headers, body)
     (Put, "/v1/nodes/heartbeat") => {
       guard decode_heartbeat(body) is Some(heartbeat) else {
         return api_error(400, "InvalidRequest", "invalid node heartbeat", false)

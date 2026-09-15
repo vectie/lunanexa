@@ -36,6 +36,8 @@ pub fn parse_nvidia_smi_csv_with_limits(String, @settings.TelemetrySafetySetting
 
 pub fn private_runtime_container_address(String) -> String raise RuntimeSupervisorError
 
+pub fn termination_report_signature(@contracts.RuntimeTerminationReport, String) -> String
+
 // Errors
 pub(all) suberror ArtifactMaterializationError {
   InvalidConfiguration

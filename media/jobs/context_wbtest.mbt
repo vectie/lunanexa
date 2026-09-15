@@ -9,6 +9,7 @@ async test "placement metadata is durable and legacy records can be safely backf
   let decoded : StoredJob = @json.from_json(legacy)
   assert_eq(decoded.execution_context, None)
   let context : ExecutionContext = {
+    instance_id: None,
     deployment_id: "deployment-a",
     generation: 1L,
     node_id: "node-a",
@@ -35,6 +36,46 @@ async test "placement metadata is durable and legacy records can be safely backf
 }
 
 ///|
+async test "runtime incarnation survives snapshots and rejects replacement backfill" {
+  let legacy : ExecutionContext = @json.from_json({
+    "deployment_id": "deployment-a",
+    "generation": "1",
+    "node_id": "node-a",
+  })
+  assert_eq(legacy.instance_id, None)
+  let jobs = JobStore::restore(empty_snapshot(), _ => ())
+  let job = reserve(jobs, "instance-context")
+  jobs.remember_execution(job.deployment_id, legacy)
+  let known = { ..legacy, instance_id: Some("a".repeat(64)), }
+  jobs.remember_execution(job.deployment_id, known)
+  let encoded = ToJson::to_json(jobs.snapshot())
+  let restored = JobStore::restore(@json.from_json(encoded), _ => ())
+  assert_eq(restored.get(job.job_id, owner()).execution_context, Some(known))
+  try
+    restored.remember_execution(job.deployment_id, {
+      ..known,
+      instance_id: Some("b".repeat(64)),
+    })
+  catch {
+    Conflict => ()
+    error => raise error
+  } noraise {
+    _ => fail("replacement overwrote original incarnation")
+  }
+  try
+    restored.remember_execution(job.deployment_id, {
+      ..known,
+      instance_id: Some("invalid"),
+    })
+  catch {
+    InvalidInput => ()
+    error => raise error
+  } noraise {
+    _ => fail("invalid incarnation accepted")
+  }
+}
+
+///|
 async test "placement persistence failure and conflicting reservations publish no metadata" {
   let jobs = JobStore::restore(empty_snapshot(), _ => ())
   let job = reserve(jobs, "metadata-failure")
@@ -42,6 +83,7 @@ async test "placement persistence failure and conflicting reservations publish n
     raise Failure("disk unavailable")
   })
   let context : ExecutionContext = {
+    instance_id: None,
     deployment_id: "deployment-a",
     generation: 1L,
     node_id: "node-a",

@@ -11,7 +11,7 @@ fn owner() -> Owner {
 
 ///|
 fn empty_snapshot() -> Snapshot {
-  { schema_version, jobs: [] }
+  { schema_version, jobs: [], terminations: None, }
 }
 
 ///|
@@ -68,11 +68,11 @@ async test "durable reservation is replayable, owner scoped and parameter bound"
   }
   for
     stranger in [
-      { ..owner(), tenant_ref: "tenant-b" },
-      { ..owner(), subject_ref: "subject-b" },
-      { ..owner(), organization_id: "org-b" },
-      { ..owner(), project_id: "project-b" },
-      { ..owner(), authority: DedicatedOrder("order-b") },
+      { ..owner(), tenant_ref: "tenant-b", },
+      { ..owner(), subject_ref: "subject-b", },
+      { ..owner(), organization_id: "org-b", },
+      { ..owner(), project_id: "project-b", },
+      { ..owner(), authority: DedicatedOrder("order-b"), },
     ] {
     try {
       ignore(store.get(job.job_id, stranger))
