@@ -61,6 +61,10 @@ pub async fn WorkspaceHost::provision(
     if !self.authorize(grant) {
       raise HostError::ControllerRejected
     }
+    // Recreate controls rollouts, not a rapid scale-to-zero/scale-up cycle.
+    // Do not start a replacement while a prior writer is still terminating.
+    let stopped = self.workspace_scaled_down(name)
+    self.wait_for_workspace_pods(name, terminating_only=!stopped)
     for entry in self.resources(id, grant) {
       let (path, resource) = entry
       ignore(
@@ -233,4 +237,63 @@ async fn WorkspaceHost::scale_down(self : WorkspaceHost, name : String) -> Unit 
       Some(scale),
     ),
   )
+  self.wait_for_workspace_pods(name, terminating_only=false)
+}
+
+///|
+async fn WorkspaceHost::wait_for_workspace_pods(
+  self : WorkspaceHost,
+  name : String,
+  terminating_only~ : Bool,
+) -> Unit {
+  @async.with_timeout(120000, () => {
+    while true {
+      let (_, response) = self.kubernetes(
+        Get,
+        "/api/v1/namespaces/\{self.config.namespace_name}/pods?labelSelector=lunanexa.io%2Fworkspace%3D\{name}",
+        None,
+      )
+      guard response is { "items": Array(items), .. } else {
+        raise HostError::WorkspaceUnavailable
+      }
+      if response is { "metadata": { "continue": String(cursor), .. }, .. } &&
+        cursor != "" {
+        raise HostError::WorkspaceUnavailable
+      }
+      let pending = items.any(pod => {
+        !terminating_only ||
+        pod is { "metadata": { "deletionTimestamp": String(_), .. }, .. }
+      })
+      if !pending {
+        break
+      }
+      @async.sleep(250)
+    }
+  })
+}
+
+///|
+async fn WorkspaceHost::workspace_scaled_down(
+  self : WorkspaceHost,
+  name : String,
+) -> Bool {
+  let (_, response) = self.kubernetes(
+    Get,
+    "/apis/apps/v1/namespaces/\{self.config.namespace_name}/deployments?labelSelector=lunanexa.io%2Fworkspace%3D\{name}",
+    None,
+  )
+  guard response is { "items": Array(items), .. } else {
+    raise HostError::WorkspaceUnavailable
+  }
+  if response is { "metadata": { "continue": String(cursor), .. }, .. } && cursor != "" {
+    raise HostError::WorkspaceUnavailable
+  }
+  match items {
+    [] => false
+    [{ "metadata": { "name": String(found), .. }, "spec": { "replicas": Number(count, ..), .. }, .. }] if found == name => {
+      if count != 0.0 && count != 1.0 { raise HostError::WorkspaceUnavailable }
+      count == 0.0
+    }
+    _ => raise HostError::WorkspaceUnavailable
+  }
 }
