@@ -164,6 +164,30 @@ async fn exercise_media_api(
   let listener = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   defer listener.close()
   let request = "model=text.default&prompt=private-fixture-prompt&width=512&height=512&num_frames=25&fps=24"
+  // Startup discovery may temporarily yield no runtime. Reject submission,
+  // but preserve the caller's same-key retry path instead of a permanent error.
+  let undiscovered = service.with_media_jobs(jobs, [])
+  let unavailable = undiscovered.handle(Post, "/v1/videos", headers, request)
+  assert_eq(unavailable.status, 503)
+  assert_true(
+    @json.parse(unavailable.body)
+    is { "error": { "code": "VideoUnavailable", "retryable": true, .. }, .. },
+  )
+  assert_eq(state["submits"], 0)
+  let ambiguous = service.with_media_jobs(jobs, [
+    binding,
+    { ..binding, origin: "http://127.0.0.1:1", },
+  ])
+  let conflict = ambiguous.handle(Post, "/v1/videos", headers, request)
+  assert_eq(conflict.status, 503)
+  assert_true(
+    @json.parse(conflict.body)
+    is {
+      "error": { "code": "MediaProfileUnavailable", "retryable": false, .. },
+      ..
+    },
+  )
+  assert_eq(state["submits"], 0)
   if private_cloud {
     assert_eq(
       service
