@@ -137,6 +137,18 @@ async test "one access package intent is resumable and enables only after contra
     created_unix_ms: @async.now(),
   }
   ignore(portal.put_membership(existing_member))
+  let existing_user : @workspace.WorkspaceUser = {
+    version: @workspace.contract_version,
+    user_id: "trial-user-existing",
+    subject_ref: existing_member.subject_ref,
+    display_name: "Friendly Developer",
+    email: "friendly@example.com",
+    state: UserActive,
+    created_unix_ms: @async.now(),
+    last_active_unix_ms: None,
+    identity_receipt: "trial-existing-identity",
+  }
+  ignore(directory.create_user(existing_user))
   let created = service.handle(
     Post,
     "/v1/onboarding/access-packages",
@@ -150,6 +162,11 @@ async test "one access package intent is resumable and enables only after contra
   assert_eq(portal.snapshot().memberships.length(), 1)
   assert_eq(portal.snapshot().memberships[0], existing_member)
   assert_eq(directory.snapshot(@async.now()).users.length(), 1)
+  assert_eq(directory.snapshot(@async.now()).users[0], existing_user)
+  assert_eq(
+    directory.snapshot(@async.now()).access_grants[0].user_id,
+    existing_user.user_id,
+  )
   assert_eq(directory.snapshot(@async.now()).access_grants.length(), 1)
   assert_eq(directory.snapshot(@async.now()).leases.length(), 1)
   let replay = service.handle(

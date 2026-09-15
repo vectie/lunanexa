@@ -552,8 +552,19 @@ async fn ApiService::execute_webide_access_package(
       )
   }
   let initial_workspace = directory.snapshot(now)
-  match
+  let existing_user = match
     initial_workspace.users.iter().find_first(value => value.user_id == user_id) {
+    Some(user) => Some(user)
+    None =>
+      initial_workspace.users
+      .iter()
+      .find_first(value => value.subject_ref == subject_ref)
+  }
+  let user_id = match existing_user {
+    Some(user) => user.user_id
+    None => user_id
+  }
+  match existing_user {
     Some(existing) => {
       if existing.subject_ref != subject_ref || existing.email != intent.email {
         return api_error(
