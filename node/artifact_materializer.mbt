@@ -80,13 +80,14 @@ pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier with fn v
     !@contracts.valid_sha256_digest(digest) {
     raise ArtifactSignatureInvalid
   }
+  let material_flag = @signature.cosign_material_flag(signature_path)
   let (status, _, _) = @process.collect_output(
     self.binary,
     [
       "verify-blob",
       "--key",
       self.public_key_path,
-      "--signature",
+      material_flag,
       signature_path,
       artifact_path,
     ],
