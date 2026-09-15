@@ -15,6 +15,14 @@ physical or commercial launch readiness.
 
 ## Working policy
 
+Private-cloud workspace admission update: preserve IaaS bare-machine rentals,
+PaaS WebIDE/ComfyUI workspaces, and MaaS model APIs as separate delivery paths.
+Unify the role-aware workspace experience without sharing unisolated processes
+or storage. Explicit private-cloud deployments accept administrator-granted
+workspace access without a rental contract. Verify operator-only activation,
+cross-tenant denial, expiry, credential redemption, request-time revocation and
+unchanged commercial-order checks before switching a live deployment.
+
 Implement a meaningful phase, then run its phase gate. Avoid repeatedly running
 the entire cluster and UI matrix after each small edit. The last phase performs
 one consolidated end-to-end and failure campaign.
