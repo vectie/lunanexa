@@ -16,4 +16,5 @@ supported_targets = "native"
 
 options(
   "native-stub": [ "secure_random.c" ],
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
 )
