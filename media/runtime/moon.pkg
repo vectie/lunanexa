@@ -6,6 +6,8 @@ import {
 
 supported_targets = "native"
 
+options(link: { "native": { "cc-link-flags": "-pthread -ldl" } })
+
 import {
   "moonbitlang/async/http",
   "moonbitlang/async/io",
