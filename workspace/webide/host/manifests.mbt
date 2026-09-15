@@ -125,7 +125,12 @@ fn WorkspaceHost::resources(
       "strategy": { "type": "Recreate" },
       "selector": { "matchLabels": labels },
       "template": {
-        "metadata": { "labels": labels },
+        "metadata": {
+          "labels": {
+            "lunanexa.io/workspace": name,
+            "app.kubernetes.io/managed-by": "lunanexa-webide",
+          },
+        },
         "spec": {
           "automountServiceAccountToken": false,
           "nodeSelector": { "lunanexa.io/workspace-host": "true" },
