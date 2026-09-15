@@ -482,10 +482,25 @@ async fn ApiService::execute_webide_access_package(
       )
   }
   let portal_snapshot = portal.snapshot()
-  match
-    portal_snapshot.memberships
+  let derived_membership = portal_snapshot.memberships
     .iter()
-    .find_first(value => value.membership_id == membership_id) {
+    .find_first(value => value.membership_id == membership_id)
+  let existing_membership = match derived_membership {
+    Some(value) => Some(value)
+    None =>
+      portal_snapshot.memberships
+      .iter()
+      .find_first(value => {
+        value.subject_ref == subject_ref &&
+        value.organization_id == intent.organization_id &&
+        value.active
+      })
+  }
+  let resolved_membership_id = match existing_membership {
+    Some(existing) => existing.membership_id
+    None => membership_id
+  }
+  match existing_membership {
     Some(existing) =>
       if existing.subject_ref != subject_ref ||
         existing.tenant_ref != intent.tenant_ref ||
@@ -753,7 +768,7 @@ async fn ApiService::execute_webide_access_package(
   }
   let membership = portal.snapshot().memberships
     .iter()
-    .find_first(value => value.membership_id == membership_id)
+    .find_first(value => value.membership_id == resolved_membership_id)
     .unwrap()
   let account = accounts
     .views()
