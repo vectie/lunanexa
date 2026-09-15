@@ -153,15 +153,21 @@ async fn ApiService::handle_client_handoff(
         }
       None => false
     }
-    let contracted = match self.contract_document_store {
-      Some(contracts) =>
-        contracts.has_effective_master_lease(
-          redeemed.tenant_ref,
-          redeemed.subject_ref,
-          now,
-        )
-      None => false
-    }
+    let contracted = self.private_workspace_key_authorized(
+        redeemed.api_key_id,
+        redeemed.tenant_ref,
+        redeemed.subject_ref,
+        now,
+      ) ||
+      (match self.contract_document_store {
+        Some(contracts) =>
+          contracts.has_effective_master_lease(
+            redeemed.tenant_ref,
+            redeemed.subject_ref,
+            now,
+          )
+        None => false
+      })
     if !authorized || !contracted {
       ignore(
         try
@@ -234,15 +240,16 @@ async fn ApiService::handle_client_handoff(
   match (verb, path) {
     (Get, "/v1/portal/self/client" | "/v1/portal/self/clients") => {
       let now = @async.now()
-      let contract_ready = match self.contract_document_store {
-        Some(contracts) =>
-          contracts.has_effective_master_lease(
-            portal_view.membership.tenant_ref,
-            subject_ref,
-            now,
-          )
-        None => false
-      }
+      let contract_ready = self.private_cloud_workspace_access ||
+        (match self.contract_document_store {
+          Some(contracts) =>
+            contracts.has_effective_master_lease(
+              portal_view.membership.tenant_ref,
+              subject_ref,
+              now,
+            )
+          None => false
+        })
       let workspace_ready = match self.workspace_directory {
         Some(directory) =>
           try {
@@ -282,6 +289,7 @@ async fn ApiService::handle_client_handoff(
             "display_name": config.display_name,
             "launch_uri": config.launch_uri,
             "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
+            "contract_required": !self.private_cloud_workspace_access,
             "contract_ready": contract_ready,
             "workspace_ready": workspace_ready,
             "models_ready": aliases.length() > 0,
@@ -359,11 +367,14 @@ async fn ApiService::handle_client_handoff(
         }
         None => None
       }
-      guard self.contract_document_store is Some(contract_store) &&
-        contract_store.has_effective_master_lease(
-          portal_view.membership.tenant_ref,
-          subject_ref,
-          now,
+      guard (self.private_cloud_workspace_access && paid_order is None) ||
+        (
+          self.contract_document_store is Some(contract_store) &&
+          contract_store.has_effective_master_lease(
+            portal_view.membership.tenant_ref,
+            subject_ref,
+            now,
+          )
         ) else {
         return api_error(
           409, "MasterLeaseRequired", "an effective master lease is required", false,

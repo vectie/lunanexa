@@ -302,15 +302,16 @@ async fn ApiService::access_package_view_for_membership(
       value.expires_unix_ms > now &&
       (value.state == Requested || value.state == Active)
     })
-  let contract_ready = match self.contract_document_store {
-    Some(contracts) =>
-      contracts.has_effective_master_lease(
-        membership.tenant_ref,
-        account.subject_ref,
-        now,
-      )
-    None => false
-  }
+  let contract_ready = self.private_cloud_workspace_access ||
+    (match self.contract_document_store {
+      Some(contracts) =>
+        contracts.has_effective_master_lease(
+          membership.tenant_ref,
+          account.subject_ref,
+          now,
+        )
+      None => false
+    })
   let aliases = access_package_approved_aliases(self.registry)
   let account_active = account.state == Active &&
     @account.role_allows(account.roles, EnterpriseUser)
@@ -339,6 +340,7 @@ async fn ApiService::access_package_view_for_membership(
     "approved_model_aliases": aliases.to_json(),
     "account_ready": account_active,
     "membership_ready": membership_ready,
+    "contract_required": !self.private_cloud_workspace_access,
     "contract_ready": contract_ready,
     "workspace_ready": workspace_user_ready && grant_ready,
     "models_ready": models_ready,
@@ -935,11 +937,14 @@ async fn ApiService::enable_webide_access_package(
       false,
     )
   }
-  guard self.contract_document_store is Some(contracts) &&
-    contracts.has_effective_master_lease(
-      membership.tenant_ref,
-      account.subject_ref,
-      now,
+  guard self.private_cloud_workspace_access ||
+    (
+      self.contract_document_store is Some(contracts) &&
+      contracts.has_effective_master_lease(
+        membership.tenant_ref,
+        account.subject_ref,
+        now,
+      )
     ) else {
     return api_error(
       409, "MasterLeaseRequired", "complete the MasterLease before enabling WebIDE access",

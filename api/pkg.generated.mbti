@@ -64,6 +64,7 @@ pub struct ApiService {
   open_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
+  private_cloud_workspace_access : Bool
   management_database : @database.PostgresDatabase?
   technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
@@ -199,6 +200,7 @@ pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -
 pub fn ApiService::with_open_registration_trial(Self, Int64, Int64, Array[String]) -> Self raise Failure
 pub fn ApiService::with_operator_tokens(Self, Array[(String, String)]) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
+pub fn ApiService::with_private_cloud_workspace_access(Self, Bool) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self

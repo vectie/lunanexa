@@ -1380,6 +1380,9 @@ async fn main {
     .with_offline_commerce_store(offline_commerce_store)
     .with_machine_commerce_store(machine_commerce_store)
     .with_contract_document_store(contract_document_store)
+    .with_private_cloud_workspace_access(
+      @env.get_env_var("LUNANEXA_PRIVATE_CLOUD_WORKSPACE_ACCESS") == Some("1"),
+    )
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
@@ -1513,12 +1516,21 @@ async fn main {
   }
   let service = match @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") {
     Some(path) => {
-      guard management_database is Some(database) else { raise Failure("media jobs require PostgreSQL persistence") }
+      guard management_database is Some(database) else {
+        raise Failure("media jobs require PostgreSQL persistence")
+      }
       let file = @fs.open(path, mode=ReadOnly)
       defer file.close()
-      if file.size() > 1048576L { raise Failure("media binding configuration is too large") }
-      let bindings : Array[@api.MediaTemplateBinding] = @json.from_json(@json.parse(@io.Reader::read_all(file).text()))
-      service.with_media_templates(@media_job_store.open_postgres(database), bindings)
+      if file.size() > 1048576L {
+        raise Failure("media binding configuration is too large")
+      }
+      let bindings : Array[@api.MediaTemplateBinding] = @json.from_json(
+        @json.parse(@io.Reader::read_all(file).text()),
+      )
+      service.with_media_templates(
+        @media_job_store.open_postgres(database),
+        bindings,
+      )
     }
     None => service
   }

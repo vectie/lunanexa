@@ -82,18 +82,40 @@ async fn seed_client_handoff_model(registry : @registry.FileRegistry) -> Unit {
 
 ///|
 async test "enterprise desktop handoff redeems once and lease loss blocks inference" {
+  check_workspace_handoff(false)
+}
+
+///|
+async test "private cloud desktop and ComfyUI handoffs need no rental contract but retain revocation" {
+  check_workspace_handoff(true)
+}
+
+///|
+async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
   let temp = @fs.tmpdir(prefix="lunanexa-client-handoff-api-")
   let now = @async.now()
   let accounts = @account.AccountStore::open(
-    "\{temp}/accounts.json", "client-account-session-secret-more-than-32-bytes",
+    "\{temp}/accounts.json",
+    "client-account-session-secret-more-than-32-bytes",
   )
-  ignore(accounts.create({
-    version: @account.contract_version, account_id: "account-client", subject_ref: "subject-client",
-    identity_issuer: "https://identity.example",
-    identity_subject_sha256: @account.identity_subject_digest("https://identity.example", "client-user"),
-    display_name: "Client user", email: "client@example.invalid", identity_receipt: "identity-proof:client",
-    roles: [EnterpriseUser], state: Active, created_unix_ms: now, updated_unix_ms: now,
-  }))
+  ignore(
+    accounts.create({
+      version: @account.contract_version,
+      account_id: "account-client",
+      subject_ref: "subject-client",
+      identity_issuer: "https://identity.example",
+      identity_subject_sha256: @account.identity_subject_digest(
+        "https://identity.example", "client-user",
+      ),
+      display_name: "Client user",
+      email: "client@example.invalid",
+      identity_receipt: "identity-proof:client",
+      roles: [EnterpriseUser],
+      state: Active,
+      created_unix_ms: now,
+      updated_unix_ms: now,
+    }),
+  )
   let durable = @store.FileStore::open("\{temp}/state.json")
   let registry = @registry.FileRegistry::open("\{temp}/registry.json")
   seed_client_handoff_model(registry)
@@ -112,26 +134,28 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
   let documents = @contractdoc_store.ContractDocumentStore::open(
     "\{temp}/contracts.json",
   )
-  ignore(
-    documents.create_packet(
-      {
-        ..@contractdoc.new_packet(
-          @contractdoc.youthpolicy_remote_lease_manifest(),
-          "packet-client",
-          "packet-client-key",
-          "tenant-client",
-          "org-client",
-          "subject-client",
-          "order-client",
-          None,
-          [MasterLease],
-          now,
-        ),
-        state: Effective,
-      },
-      "operator",
-    ),
-  )
+  if !private_cloud {
+    ignore(
+      documents.create_packet(
+        {
+          ..@contractdoc.new_packet(
+            @contractdoc.youthpolicy_remote_lease_manifest(),
+            "packet-client",
+            "packet-client-key",
+            "tenant-client",
+            "org-client",
+            "subject-client",
+            "order-client",
+            None,
+            [MasterLease],
+            now,
+          ),
+          state: Effective,
+        },
+        "operator",
+      ),
+    )
+  }
   let directory = @directory.FileWorkspaceDirectory::open(
     "\{temp}/workspace.json",
     now_unix_ms=now,
@@ -211,8 +235,11 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
       "0.1.0",
     )
     .with_portal_store(portal)
-    .with_account_store(accounts, "client-account-assertion-secret-more-than-32-bytes")
+    .with_account_store(
+      accounts, "client-account-assertion-secret-more-than-32-bytes",
+    )
     .with_contract_document_store(documents)
+    .with_private_cloud_workspace_access(private_cloud)
     .with_workspace_directory(directory, true)
     .with_client_handoff_store(handoffs, {
       client_id: "desktop-client",
@@ -273,6 +300,7 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     fail("expected desktop client readiness")
   }
   assert_eq(client_fields["contract_ready"], true)
+  assert_eq(client_fields["contract_required"], (!private_cloud).to_json())
   assert_eq(client_fields["workspace_ready"], true)
   assert_eq(client_fields["models_ready"], true)
   assert_eq(client_fields["ready"], true)
@@ -384,9 +412,25 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     200,
   )
   ignore(accounts.set_state("account-client", Suspended, now + 1L))
-  assert_eq(service.handle(Get, "/v1/models", { "Authorization": "Bearer \{api_secret}" }, "").status, 401)
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{api_secret}" },
+      "",
+    ).status,
+    401,
+  )
   ignore(accounts.set_state("account-client", Active, now + 2L))
-  assert_eq(service.handle(Get, "/v1/models", { "Authorization": "Bearer \{api_secret}" }, "").status, 200)
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{api_secret}" },
+      "",
+    ).status,
+    200,
+  )
   ignore(directory.revoke_lease("lease-client", now + 10L))
   let after_termination = service.handle(
     Post,
