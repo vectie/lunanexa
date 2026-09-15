@@ -309,7 +309,9 @@ async test "partial provisioning resumes deterministically and stale reconciliat
     locks: {},
     kubernetes_override: Some((verb, path, body) => {
       requests.push(path)
-      if verb == Patch {
+      if path.contains("/pods?") || path.contains("/deployments?") {
+        (200, { "items": [] })
+      } else if verb == Patch {
         if path.contains("/secrets/") && state["fail_secret"] {
           raise HostError::WorkspaceUnavailable
         }

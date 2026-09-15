@@ -108,6 +108,83 @@ The isolated deployed workspace was also reopened again: connect 204, root 200,
 both retained video outputs listed, and the second download hash unchanged.
 These local source changes have not yet been rolled out to that controller.
 
+### Live PostgreSQL follow-up after cd59cd4
+
+The isolated PostgreSQL matrix was rerun against 19 newly created databases:
+19/19 fixture files passed (36 runner tests). Workspace PostgreSQL coverage now
+also persists grants, leases and workload reservations, reopens the store to
+verify scoped ownership, releases work, durably revokes the grant, and verifies
+that a newly reopened store rejects subsequent admission. This is real database
+evidence, not the environment-conditional skipped path. It does not inject a
+lost commit acknowledgement or prove HA failover.
+
+Every generated database was dropped. A separate catalog query confirmed zero
+`lnx_acceptance_*` databases remained. The temporary loopback SSH forward used
+only for the matrix was terminated; existing application forwards were kept.
+
+### Hosted revocation follow-up
+
+The actual isolated workspace again returned connect 204, root 200 and WebSocket
+101. Revocation closed an established socket with policy code 1008 after
+5143 ms; subsequent HTTP and WebSocket attempts returned 401. Cross-site socket
+requests returned 403 and forged cookies 401. A fresh scoped handoff reopened
+the workspace, listed both videos and downloaded the second with its unchanged
+hash. The saved workflow also retained SHA-256
+`0b3461688811b3abf5f6b9ba40c1d8d31b8685432c15416ab251ead9b299cee5`.
+
+This run revealed an unresolved startup defect: the new ComfyUI pod restarted
+once (exit 1), with its previous log reporting inability to acquire the shared
+`/workspace/user/comfyui.db` lock. It subsequently became ready, but successful
+reopening does not waive this failure. Old/new process overlap and deployment
+lifecycle ordering require investigation before claiming clean rebuilds.
+
+The host already specifies Recreate. Its scale-down previously returned after
+the scale API write, without draining old pods under the workspace lock. The
+pending correction waits for matching pods to disappear before releasing that
+lock and waits for terminating pods before provisioning. Host strict tests
+pass 10/10, including complete-list validation and active-versus-terminating
+pod cases. This requires namespaced pod-list RBAC and has not been deployed or
+verified against a live rapid reopen. Gateway restart during a scale transition
+also remains a distinct recovery case; no claim of a fully fixed lifecycle is
+made from these unit tests alone.
+
+Restart handling now reads the deployment's desired replica count before
+provisioning: a stopped deployment drains all old pods, including those not yet
+marked terminating. Active deployments only drain terminating pods. The host
+strict suite passes 11/11 with this additional restart-state fixture.
+The acceptance gateway lacked pod-list permission. A separate namespaced
+`webide-pod-drain-reader` Role and binding now grant only `list` on pods to
+`webide-gateway` in `aigc-acceptance-20260915`; its deployment-list permission
+already existed. Runtime binary rollout and rapid-reopen verification remain
+pending. Deployment installers must include this pod-list permission too.
+
+The subsequent Linux host strict suite passed 11/11 and the native release
+gateway build passed with `--deny-warn`. The isolated gateway was rolled to
+`acceptance/webide-runtime@sha256:be3bb84e497f19eb776398602691a03270a1b93b47fad34ba47b8d22b5b70625`;
+the prior digest `9d3ef5a3cad0ae3b285bd2027bd2db3bfa3ee8b40787b352fe265358309f7206`
+is retained for rollback. Only gateway container image was changed. Rollout
+completed and a fresh private handoff returned connect 204/root 200, listed both
+existing videos and preserved the second download hash. This verifies normal
+reopening with the new binary, not yet rapid revoke/reopen without a DB-lock
+restart. Binary-only staging is `/tmp/lunanexa-webide-recovery.0cX9z0`.
+
+### Verified scale-down / immediate reopen
+
+An initial revocation probe closed WebSocket 1008 after 5856 ms and denied old
+HTTP/WebSocket credentials with 401, but reused the existing pod on reopen.
+That run was explicitly not counted as a clean replacement test.
+
+The isolated workspace was then explicitly scaled to zero and immediately
+reopened through a fresh private handoff. During the wait only the old
+`...j6kc4` pod was listed, terminating. The subsequent replacement
+`webide-c247a80be5b473a2a088edca167fcbc5e5eccf2f00a27ce7aed27njf`
+was created at `2026-09-15T15:15:01Z`: ComfyUI and model-proxy both Ready,
+both restart count zero, no previous terminated state. Connect returned 204,
+root 200, both saved videos were listed and the second download hash remained
+unchanged. This proves the tested scale-down/immediate-reopen scenario with
+the patched gateway, not arbitrary multi-gateway coordination or forced node
+failure recovery. The bounded handoff was retained to keep the workspace usable.
+
 Other packages still contain deprecated or fragile async cleanup patterns.
 Running functional tests with warning exclusions does not satisfy the strict
 repository release gate. Environment-conditional PostgreSQL tests are not live
