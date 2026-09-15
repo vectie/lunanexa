@@ -841,11 +841,24 @@ pub fn MachineCommerceStore::request_termination(
   if order.state != Active {
     raise InvalidTransition("only an active machine order can be terminated")
   }
+  // Derive expiry from durable authority, never from caller-supplied reason text.
+  let expired = match order.active_started_unix_ms {
+    Some(started) =>
+      now_unix_ms >= started &&
+      (now_unix_ms - started) / 1000L >= order.duration_seconds
+    None => false
+  }
   let updated = {
     ..order,
     state: TerminationPending,
     generation: order.generation + 1L,
-    failure_code: Some("CustomerTermination"),
+    failure_code: Some(
+      if expired {
+        "ContractDurationElapsed"
+      } else {
+        "CustomerTermination"
+      },
+    ),
     updated_unix_ms: now_unix_ms,
   }
   self.orders[order_id] = updated
@@ -1032,7 +1045,8 @@ pub fn MachineCommerceStore::complete_termination_with_usage(
     DedicatedEndpoint => order.target_deployment_ref.unwrap()
   }
   let quantity = checked_multiply(
-    (usage_ended - started_unix_ms + 999L) / 1000L,
+    cumulative_seconds(usage_ended - active_started) -
+    cumulative_seconds(started_unix_ms - active_started),
     order.quantity,
   )
   let receipt_id = "usage-termination-\{order_id}-\{order.generation}"
@@ -1120,8 +1134,15 @@ pub fn MachineCommerceStore::record_usage(
   guard self.offerings.get(order.offering_id) is Some(offering) else {
     raise NotFound("machine offering")
   }
-  let elapsed_ms = intent.ended_unix_ms - started_unix_ms
-  let quantity = checked_multiply((elapsed_ms + 999L) / 1000L, order.quantity)
+  guard order.active_started_unix_ms is Some(active_started) &&
+    active_started <= started_unix_ms else {
+    raise InvalidTransition("machine order has no valid active start")
+  }
+  let quantity = checked_multiply(
+    cumulative_seconds(intent.ended_unix_ms - active_started) -
+    cumulative_seconds(started_unix_ms - active_started),
+    order.quantity,
+  )
   let receipt_id = "usage-\{order_id}-\{order.generation}"
   let unsigned : MachineUsageReceipt = {
     receipt_id,

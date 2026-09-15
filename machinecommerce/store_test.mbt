@@ -16,7 +16,7 @@ fn test_offering(
     memory_mib: 16384L,
     cpu_count: 16L,
     meter: "exclusive-node-second",
-    unit_price: { minor_units: 2L, currency: "CNY", scale: 2 },
+    unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
     billing_quantum_seconds: 60L,
     minimum_duration_seconds: 60L,
     maximum_duration_seconds: 86400L,
@@ -89,7 +89,7 @@ test "active purchasable offerings cannot be zero-priced" {
   let now = 1000000L
   let zero = {
     ..test_offering("zero", BareMachine, 1L, now),
-    unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
   }
   try @machinecommerce.validate_offering(zero) catch {
     InvalidInput(_) => ()
@@ -108,7 +108,7 @@ test "v1 machine quote rejects ambiguous multi-resource quantity" {
   ignore(store.put_offering(test_offering("quantity", BareMachine, 2L, now)))
   try
     store.create_quote(
-      { ..quote_intent("quantity", "quantity", false), quantity: 2L },
+      { ..quote_intent("quantity", "quantity", false), quantity: 2L, },
       now + 1L,
     )
   catch {
@@ -160,7 +160,7 @@ test "bare machine purchase is payment-gated and meters the terminal interval" {
       {
         provider_event_id: "payment-wrong",
         payment_ref: "pay-wrong",
-        settled_amount: { minor_units: 7199L, currency: "CNY", scale: 2 },
+        settled_amount: { minor_units: 7199L, currency: "CNY", scale: 2, },
       },
       now + 4L,
     )
@@ -216,6 +216,91 @@ test "bare machine purchase is payment-gated and meters the terminal interval" {
   )
   assert_eq(first_receipt.quantity, 5L)
   assert_eq(first_receipt.resource_ref, "lease-bare")
+  {
+    let polling = @machinecommerce.MachineCommerceStore::from_snapshot(
+      "machine-commerce-test-signing-secret-0001",
+      store.snapshot(),
+    )
+    let mut generation = metered.generation
+    let mut total = first_receipt.quantity
+    // Observed uneven coordinator polling boundaries from the live campaign.
+    for offset in [64155L, 127326L, 190618L, 253872L, 301000L] {
+      let (updated, receipt, _) = polling.record_usage(
+        order.order_id,
+        {
+          idempotency_key: "poll-\{offset}",
+          expected_generation: generation,
+          ended_unix_ms: now + offset,
+        },
+        now + offset,
+      )
+      generation = updated.generation
+      total += receipt.quantity
+    }
+    assert_eq(total, 300L)
+  }
+  {
+    let fractional = @machinecommerce.MachineCommerceStore::from_snapshot(
+      "machine-commerce-test-signing-secret-0001",
+      store.snapshot(),
+    )
+    let (first, a, _) = fractional.record_usage(
+      order.order_id,
+      {
+        idempotency_key: "fraction-a",
+        expected_generation: metered.generation,
+        ended_unix_ms: now + 6001L,
+      },
+      now + 6001L,
+    )
+    let (second, b, _) = fractional.record_usage(
+      order.order_id,
+      {
+        idempotency_key: "fraction-b",
+        expected_generation: first.generation,
+        ended_unix_ms: now + 6002L,
+      },
+      now + 6002L,
+    )
+    assert_eq(a.quantity + b.quantity, 1L)
+    let fractional = @machinecommerce.MachineCommerceStore::from_snapshot(
+      "machine-commerce-test-signing-secret-0001",
+      fractional.snapshot(),
+    )
+    let (_, replayed_receipt, replayed) = fractional.record_usage(
+      order.order_id,
+      {
+        idempotency_key: "fraction-b",
+        expected_generation: first.generation,
+        ended_unix_ms: now + 6002L,
+      },
+      now + 6003L,
+    )
+    assert_eq(replayed, Replayed)
+    assert_eq(replayed_receipt.quantity, 0L)
+    let (pending, _) = fractional.request_termination(
+      "subject-a",
+      order.order_id,
+      {
+        idempotency_key: "fraction-stop",
+        expected_generation: second.generation,
+        reason: "CustomerTermination",
+      },
+      now + 6003L,
+    )
+    let (_, terminal, _) = fractional.complete_termination_with_usage(
+      order.order_id,
+      "fraction-clean",
+      pending.generation,
+      "fraction-proof",
+      now + 7000L,
+      now + 7000L,
+    )
+    assert_eq(
+      first_receipt.quantity + a.quantity + b.quantity + terminal.quantity,
+      6L,
+    )
+  }
   for fully_metered in [false, true] {
     let restored = @machinecommerce.MachineCommerceStore::from_snapshot(
       "machine-commerce-test-signing-secret-0001",
@@ -253,6 +338,8 @@ test "bare machine purchase is payment-gated and meters the terminal interval" {
       now + 7201000L,
       now + 7201000L,
     )
+    assert_eq(pending.failure_code, Some("ContractDurationElapsed"))
+    assert_eq(finished.failure_code, Some("ContractDurationElapsed"))
     assert_eq(receipt.quantity, if fully_metered { 0L } else { 3595L })
     assert_eq(receipt.ended_unix_ms, now + 3601000L)
     assert_eq(finished.ended_unix_ms, Some(now + 7201000L))
@@ -278,10 +365,11 @@ test "bare machine purchase is payment-gated and meters the terminal interval" {
     {
       idempotency_key: "terminate-bare",
       expected_generation: metered.generation,
-      reason: "work completed",
+      reason: "ContractDurationElapsed",
     },
     now + 7000L,
   )
+  assert_eq(terminating.failure_code, Some("CustomerTermination"))
   let (terminated, final_receipt, _) = store.complete_termination_with_usage(
     order.order_id,
     "complete-termination-bare",
@@ -443,9 +531,9 @@ test "snapshot rejects quote tampering and preserves payment replay" {
   let snapshot = store.snapshot()
   let tampered_quote = {
     ..snapshot.quotes[0],
-    total: { ..snapshot.quotes[0].total, minor_units: 1L },
+    total: { ..snapshot.quotes[0].total, minor_units: 1L, },
   }
-  let tampered = { ..snapshot, quotes: [tampered_quote] }
+  let tampered = { ..snapshot, quotes: [tampered_quote], }
   try
     @machinecommerce.MachineCommerceStore::from_snapshot(secret, tampered)
   catch {
