@@ -31,11 +31,30 @@ async test "core control state restores from PostgreSQL under leadership fencing
     database, "core-store-test", token,
   )
   assert_eq(reopened.controller_epoch(), token)
+  let before = store.backup_snapshot()
   database.close()
   guard standby.try_acquire_controller_leadership("core-store-standby")
     is Some(next_token) else {
     fail("standby did not acquire leadership after session release")
   }
   assert_true(next_token > token)
+  for _ in 0..<2 {
+    try store.append_audit(durable_event()) catch {
+      _ => ()
+    } noraise {
+      _ => fail("disconnected former PostgreSQL leader accepted a write")
+    }
+    assert_eq(store.backup_snapshot(), before)
+  }
+  let successor = @store.FileStore::open_postgres(
+    standby, "core-store-standby", next_token,
+  )
+  successor.fence_controller(next_token)
+  successor.append_audit(durable_event())
+  assert_eq(successor.audit_events(), [durable_event()])
+  assert_eq(
+    @store.FileStore::open_postgres(standby, "core-store-standby", next_token).audit_events(),
+    [durable_event()],
+  )
   standby.close()
 }
