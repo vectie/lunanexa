@@ -7,6 +7,8 @@ import {
   "moonbitlang/async/tls",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/x/crypto",
 }
 
 supported_targets = "native"
