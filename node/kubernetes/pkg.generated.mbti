@@ -1,0 +1,53 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/node/kubernetes"
+
+import {
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn authenticated_transport(String, String, String) -> (async (String, String, Json?) -> (Int, Json)) raise LifecycleError
+
+pub fn observe_pod(PodIdentity, Json) -> @contracts.DeploymentState raise ObservationError
+
+// Errors
+pub(all) suberror LifecycleError {
+  ApiRejected(Int)
+  InvalidResource
+  OwnershipConflict
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror ObservationError {
+  InvalidIdentity
+  IdentityMismatch
+  InvalidObservation
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct PodIdentity {
+  namespace_name : String
+  pod_name : String
+  uid : String
+  node_name : String
+  assignment_id : String
+  generation : Int64
+  artifact_digest : String
+  image_ref : String
+  image_digest : String
+  container_name : String
+} derive(Eq, @debug.Debug)
+
+pub struct PodManager {
+  transport : async (String, String, Json?) -> (Int, Json)
+  namespace_name : String
+}
+pub async fn PodManager::create(Self, Json) -> String
+pub fn PodManager::new(String, async (String, String, Json?) -> (Int, Json)) -> Self raise LifecycleError
+pub async fn PodManager::observe(Self, PodIdentity) -> @contracts.DeploymentState
+pub async fn PodManager::stop(Self, PodIdentity) -> @contracts.DeploymentState
+
+// Type aliases
+pub type Transport = async (String, String, Json?) -> (Int, Json)
+
+// Traits
