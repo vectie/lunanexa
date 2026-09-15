@@ -2,6 +2,8 @@
 package "vectie/lunanexa/node/kubernetes"
 
 import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
@@ -19,6 +21,7 @@ pub(all) suberror LifecycleError {
   ApiRejected(Int)
   InvalidResource
   OwnershipConflict
+  LeaseExpired
 } derive(Eq, @debug.Debug)
 
 pub(all) suberror ObservationError {
@@ -64,6 +67,19 @@ pub async fn PodManager::observe(Self, PodIdentity) -> @contracts.DeploymentStat
 pub async fn PodManager::remove_auxiliary(Self, AuxiliaryIdentity) -> @contracts.DeploymentState
 pub async fn PodManager::stop(Self, PodIdentity) -> @contracts.DeploymentState
 
+type ResourceRecord derive(ToJson, @json.FromJson)
+
+type RuntimeJournal derive(ToJson, @json.FromJson)
+
+pub(all) struct RuntimeObservation {
+  assignment_id : String
+  pod_name : String
+  state : @contracts.DeploymentState
+  address : String
+} derive(Eq, @debug.Debug)
+
+type RuntimeRecord derive(ToJson, @json.FromJson)
+
 pub(all) struct RuntimeResources {
   name : String
   pod : Json
@@ -82,7 +98,28 @@ pub(all) struct RuntimeSettings {
   controller_addresses : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub struct RuntimeSupervisor {
+  journal : RuntimeJournal
+  transport : async (String, String, Json?) -> (Int, Json)
+  commit : async (String) -> Unit
+  mutex : @async.Mutex
+  file_lock : @fs.File?
+  mut closed : Bool
+  clock : () -> Int64
+}
+pub fn RuntimeSupervisor::close(Self) -> Unit
+pub async fn RuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeObservation
+pub async fn RuntimeSupervisor::open_file(RuntimeSettings, async (String, String, Json?) -> (Int, Json), String) -> Self
+pub async fn RuntimeSupervisor::reap_expired(Self, Int64) -> Unit
+pub async fn RuntimeSupervisor::remove_absent(Self, Array[String]) -> Unit
+pub fn RuntimeSupervisor::restore(RuntimeSettings, async (String, String, Json?) -> (Int, Json), async (String) -> Unit, String?, String, clock? : () -> Int64) -> Self raise
+pub fn RuntimeSupervisor::retained_artifact_digests(Self) -> Array[String]
+pub fn RuntimeSupervisor::snapshot(Self) -> String
+pub async fn RuntimeSupervisor::stop(Self, String) -> @contracts.DeploymentState
+
 // Type aliases
+pub type JournalCommit = async (String) -> Unit
+
 pub type Transport = async (String, String, Json?) -> (Int, Json)
 
 // Traits

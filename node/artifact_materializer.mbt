@@ -65,7 +65,7 @@ pub fn CosignArtifactSignatureVerifier::new(
     !safe_absolute_path(public_key_path) {
     raise InvalidConfiguration
   }
-  { binary, public_key_path }
+  { binary, public_key_path, }
 }
 
 ///|
@@ -302,7 +302,7 @@ pub async fn ArtifactMaterializer::open_s3(
   {
     ..base,
     node_id,
-    s3_sigv4: Some({ access_key_id, secret_access_key, region, session_token }),
+    s3_sigv4: Some({ access_key_id, secret_access_key, region, session_token, }),
   }
 }
 
@@ -586,7 +586,11 @@ async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::verify_cached(
     artifact.digest,
   )
   self.verified[artifact.digest] = true
-  { digest: artifact.digest, host_path: artifact_path, size_bytes: actual_size }
+  {
+    digest: artifact.digest,
+    host_path: artifact_path,
+    size_bytes: actual_size,
+  }
 }
 
 ///|
@@ -681,7 +685,11 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   )
   @fs.rename(ready_partial, ready_path, replace=true)
   self.verified[artifact.digest] = true
-  { digest: artifact.digest, host_path: artifact_path, size_bytes: actual_size }
+  {
+    digest: artifact.digest,
+    host_path: artifact_path,
+    size_bytes: actual_size,
+  }
 }
 
 ///|

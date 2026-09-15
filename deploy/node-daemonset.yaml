@@ -13,7 +13,7 @@ spec:
         app.kubernetes.io/part-of: lunanexa
         lunanexa.io/plane: node-agent
     spec:
-      serviceAccountName: lunanexa-node
+      serviceAccountName: lunanexa-managed-node
       automountServiceAccountToken: false
       hostPID: false
       hostNetwork: false
@@ -83,12 +83,16 @@ spec:
               value: /etc/lunanexa/cosign.pub
             - name: LUNANEXA_NODE_PUBLIC_KEY_REF
               value: host-ref:/etc/lunanexa/node-public-key
-            - name: LUNANEXA_CONTAINER_ENGINE
-              value: /usr/bin/podman
-            - name: LUNANEXA_RUNTIME_NETWORK
-              value: lunanexa-runtime
-            - name: LUNANEXA_CONTAINER_ENGINE_ENDPOINT
-              value: unix:///run/podman/podman.sock
+            - name: LUNANEXA_RUNTIME_BACKEND
+              value: kubernetes
+            - name: LUNANEXA_KUBERNETES_RUNTIME_CONFIG_PATH
+              value: /etc/lunanexa/kubernetes-runtime.json
+            - name: LUNANEXA_KUBERNETES_RUNTIME_STATE_PATH
+              value: /var/lib/lunanexa/kubernetes-runtime-state.json
+            - name: LUNANEXA_KUBERNETES_TOKEN_PATH
+              value: /var/run/secrets/lunanexa-kubernetes/token
+            - name: LUNANEXA_KUBERNETES_CA_PATH
+              value: /var/run/secrets/lunanexa-kubernetes/ca.crt
             - name: LUNANEXA_NODE_TOKEN_PATH
               value: /etc/lunanexa/node-token
             - name: LUNANEXA_ASSIGNMENT_SIGNING_SECRET_PATH
@@ -111,8 +115,9 @@ spec:
             - name: admin-settings
               mountPath: /etc/lunanexa/admin-policy
               readOnly: true
-            - name: podman-socket
-              mountPath: /run/podman/podman.sock
+            - name: kubernetes-api
+              mountPath: /var/run/secrets/lunanexa-kubernetes
+              readOnly: true
       volumes:
         - name: node-config
           hostPath:
@@ -125,7 +130,15 @@ spec:
         - name: admin-settings
           configMap:
             name: lunanexa-admin-settings
-        - name: podman-socket
-          hostPath:
-            path: /run/podman/podman.sock
-            type: Socket
+        - name: kubernetes-api
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt

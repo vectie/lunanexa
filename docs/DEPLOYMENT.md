@@ -296,6 +296,20 @@ lunanexa-node.service
 admin-settings.json
 ```
 
+The Kubernetes DaemonSet now selects `LUNANEXA_RUNTIME_BACKEND=kubernetes`
+and does not mount a Podman/containerd socket. Include the reviewed resources
+from `deploy/node-kubernetes-rbac.yaml` in the management prerequisites before
+installing compute agents; the compute-only installer does not implicitly create
+those namespaces or permissions. Render the ServiceAccount namespaces for the
+selected cluster namespace. Provision a private per-node
+`/etc/lunanexa/kubernetes-runtime.json` from
+`deploy/kubernetes-runtime.example.json`, matching the actual node identity,
+agent UID, model cache root and controller source addresses. The agent receives
+a rotating projected Kubernetes token, not a cluster-admin kubeconfig.
+Keep the runtime namespace dedicated to managed inference. This new backend
+still requires live allocation, serving and failure-fencing acceptance before
+production promotion; source-level support is not deployment evidence.
+
 Each protected per-node directory for that layout additionally contains
 `node.env`, `lunanexa-controller-tunnel.service`, `tunnel-identity`, and
 `tunnel-known-hosts`. The tunnel is a lab-only loopback transport over the

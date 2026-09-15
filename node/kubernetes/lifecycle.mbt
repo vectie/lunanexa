@@ -3,6 +3,7 @@ pub(all) suberror LifecycleError {
   ApiRejected(Int)
   InvalidResource
   OwnershipConflict
+  LeaseExpired
 } derive(Debug, Eq)
 
 ///|

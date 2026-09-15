@@ -24,6 +24,7 @@ pub(all) struct RuntimeResources {
 ///|
 fn safe_path(value : String) -> Bool {
   value.length() > 1 &&
+  value.length() <= 4096 &&
   value.has_prefix("/") &&
   !value.has_suffix("/") &&
   !value.contains("//") &&
@@ -232,6 +233,9 @@ pub fn render_runtime(
     "metadata": resource_metadata,
     "spec": {
       "automountServiceAccountToken": false,
+      "hostNetwork": false,
+      "hostPID": false,
+      "hostIPC": false,
       "enableServiceLinks": false,
       "restartPolicy": "Never",
       "terminationGracePeriodSeconds": (assignment.health.termination_grace_ms /
@@ -260,6 +264,18 @@ pub fn render_runtime(
           "value": "gpu",
           "effect": "NoSchedule",
         },
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300,
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300,
+        },
       ],
       "securityContext": {
         "runAsNonRoot": true,
@@ -281,9 +297,10 @@ pub fn render_runtime(
             "claims": claims.to_json(),
           },
           "securityContext": {
+            "privileged": false,
             "allowPrivilegeEscalation": false,
             "readOnlyRootFilesystem": true,
-            "capabilities": { "drop": ["ALL"] },
+            "capabilities": { "drop": ["ALL"], "add": [] },
           },
           "ports": [
             {
