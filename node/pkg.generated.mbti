@@ -109,8 +109,9 @@ pub(all) struct BootstrapToken {
 pub struct CosignArtifactSignatureVerifier {
   binary : String
   public_key_path : String
+  trusted_root_path : String?
 }
-pub fn CosignArtifactSignatureVerifier::new(String, String) -> Self raise ArtifactMaterializationError
+pub fn CosignArtifactSignatureVerifier::new(String, String, trusted_root_path? : String) -> Self raise ArtifactMaterializationError
 pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier
 
 type EnrollmentPersistence

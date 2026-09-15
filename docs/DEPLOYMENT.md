@@ -1207,6 +1207,18 @@ redirect alone never makes production readiness green.
 
 ### TLS and Cosign trust
 
+For node agents with read-only root filesystems or no public egress, mount
+administrator-validated Sigstore trusted material and set
+`LUNANEXA_COSIGN_TRUSTED_ROOT_PATH` to its absolute file path. The node passes
+that reference explicitly to `cosign verify-blob --trusted-root`, alongside the
+configured public key and bundle. This avoids implicit writable TUF cache
+initialization; it does not disable bundle or transparency-log verification.
+Refresh the mounted trusted material through the deployment's verified trust
+update process. Do not put tenant-supplied trust files in this location.
+When omitted, Cosign retains its default trust-loading behavior, which may
+require a writable cache and network access. The reference is optional for
+backward compatibility, not a claim that the default works in a read-only Pod.
+
 Provision:
 
 - `lunanexa-ingress-tls` for the public TLS endpoint;
