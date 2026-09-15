@@ -24,9 +24,22 @@ async fn main {
         request_timeout_ms: 300000,
         authorization_interval_ms: 5000,
       },
-      code => host.redeem(client_id, code),
-      grant => host.authorize(grant),
-      (id, grant) => host.provision(id, grant),
+      code => {
+        // Fixed stage names only: exceptions may contain credentials or JSON.
+        errdefer println("WebIDE launch failed at controller redemption")
+        host.redeem(client_id, code)
+      },
+      grant => {
+        let authorized = host.authorize(grant)
+        if !authorized {
+          println("WebIDE authority check rejected")
+        }
+        authorized
+      },
+      (id, grant) => {
+        errdefer println("WebIDE launch failed at workspace provisioning")
+        host.provision(id, grant)
+      },
     )
     let server = @http.Server(
       @socket.Addr::parse(required("LUNANEXA_WEBIDE_BIND")),

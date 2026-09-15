@@ -74,9 +74,16 @@ ports. Namespace and pod selectors must both match. Deployment service routing m
 external or host-network gateways need a separately reviewed policy. A CNI that
 does not enforce NetworkPolicy is not an acceptable isolation boundary.
 
-The provisioning identity needs namespace-scoped get/list/patch on the managed
+Workspace pod templates carry `app.kubernetes.io/managed-by=lunanexa-webide`
+in addition to the per-workspace selector. Gateway egress policies selecting
+managed workspace pods must match this pod label, not only Deployment metadata.
+Keep the per-workspace immutable Deployment selector unchanged during upgrades.
+
+The provisioning identity needs namespace-scoped get/list/create/patch on the managed
 Secrets, PVCs, Services, Deployments and NetworkPolicies, plus get/update on
-Deployment scale. Do not grant cluster-admin. Credentials must not be logged.
+Deployment scale. Server-Side Apply requires create for a missing object even
+though the HTTP request uses PATCH; patch alone cannot provision a first workspace.
+Do not grant cluster-admin. Credentials must not be logged.
 
 Every browser operation rechecks live authority. WebSockets recheck on a bounded
 timer. The gateway reconciles expired/revoked workspaces to zero replicas while

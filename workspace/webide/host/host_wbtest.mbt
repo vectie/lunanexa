@@ -46,6 +46,27 @@ test "platform CA is deployment-owned and mounted only by the model proxy" {
     config.model_gateway_origin,
   ).grant()
   let resources = host.resources(@webide.workspace_id(grant), grant)
+  let workload = resources
+    .iter()
+    .find_first(entry => entry.0.contains("/deployments/"))
+    .unwrap().1
+  guard workload
+    is {
+      "spec": {
+        "template": {
+          "metadata": {
+            "labels": { "app.kubernetes.io/managed-by": String(manager), .. },
+            ..
+          },
+          ..
+        },
+        ..
+      },
+      ..
+    } else {
+    fail("workspace pods must match gateway network-policy selectors")
+  }
+  assert_eq(manager, "lunanexa-webide")
   let deployment = resources
     .iter()
     .find_first(entry => entry.0.contains("/deployments/"))
