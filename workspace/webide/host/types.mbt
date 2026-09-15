@@ -141,7 +141,7 @@ pub fn WorkspaceHost::new(config : HostConfig) -> WorkspaceHost raise HostError 
     config.model_gateway_port > 65535 {
     raise InvalidConfiguration
   }
-  { config, locks: {}, kubernetes_override: None }
+  { config, locks: {}, kubernetes_override: None, }
 }
 
 ///|
