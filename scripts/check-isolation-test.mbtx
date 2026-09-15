@@ -1,0 +1,31 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+}
+
+async fn main {
+  let script = @fs.read_file("scripts/check-isolation.sh")
+  let scratch = @fs.tmpdir(prefix="lunanexa-isolation-scan-")
+  defer @fs.rmdir(scratch, recursive=true)
+  @fs.mkdir(scratch + "/scripts")
+  @fs.write_file(scratch + "/scripts/check-isolation.sh", script)
+  let cases : Array[(String, Bool)] = [
+    ("let container_id = runtime.handle\nlet identity = container_id.length()", true),
+    ("{ \"container_id\": runtime.handle }", false),
+    ("pub(all) struct Reply {\n  filesystem_path : String\n}", false),
+    ("let body = \"{\\\"provider_credential\\\":\\\"secret\\\"}\"", false),
+    ("{ \"stack_trace\": error }", false),
+    ("{ \"node_address\": node }", false),
+    ("import { \"vectie/moontown\" }", false),
+  ]
+  for index, entry in cases {
+    let (source, expected) = entry
+    @fs.write_file(scratch + "/fixture.mbt", source)
+    let result = @shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output()
+    guard (result.exit_code() == 0) == expected else {
+      fail("Isolation scan fixture \{index} has the wrong result: " + result.stderr())
+    }
+  }
+  println("Isolation/response scan fixtures: 7 passed. Static scans do not replace public-response tests.")
+}
