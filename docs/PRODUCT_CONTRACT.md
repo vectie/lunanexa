@@ -192,6 +192,16 @@ have produced accepted receipts.
 
 ## 6. Authority and security
 
+Private-cloud workspace admission is administrator-granted, not a commercial
+machine rental. An explicit deployment policy may admit WebIDE and ComfyUI
+without a MasterLease, but still requires an active account, Developer
+membership, administrator-issued workspace grant and bounded active workspace
+lease. Registration alone never activates these resources. Commercial machine
+orders retain their agreement, payment and lifecycle checks in either mode.
+The workspace is one role-aware experience, not a shared unisolated process or
+filesystem: organization/project boundaries remain enforced. Platform
+administration does not disclose passwords or raw user secrets.
+
 - Mutual authentication is required between controller and nodes.
 - Node agents initiate or maintain a narrow management channel. Interactive
   access exists only in explicit exclusive-node mode and is provisioned through

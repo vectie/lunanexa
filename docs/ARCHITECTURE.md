@@ -171,7 +171,10 @@ An approved desktop handoff crosses the browser boundary with only a
 short-lived, single-use code in a URL fragment. The local client removes that
 fragment, redeems through an administrator-pinned issuer and keeps the resulting
 lease-scoped API credential in its local provider gateway. LunaNexa stores only
-digests and rechecks lease plus contract authority on every credential use.
+digests and rechecks active workspace authority on every credential use.
+The explicit private-cloud profile replaces the rental-contract prerequisite
+with administrator-granted workspace access; commercial order-bound credentials
+never acquire that exemption. The default profile retains contract admission.
 Product-specific translation stays outside LunaNexa's source boundary.
 
 The enterprise portal writes only tenant-scoped intent. It does not accept a
