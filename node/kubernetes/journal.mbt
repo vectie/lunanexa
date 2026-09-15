@@ -77,14 +77,30 @@ pub fn RuntimeSupervisor::restore(
       }
   }
   if stored_journal.version != "lunanexa.kubernetes.runtime.v1" ||
-    { ..stored_journal.settings, runtime_secrets: None, } !=
-    { ..settings, runtime_secrets: None, } ||
+    {
+      ..stored_journal.settings,
+      runtime_secrets: None,
+      controller_addresses: [],
+    } !=
+    { ..settings, runtime_secrets: None, controller_addresses: [], } ||
+    (
+      stored_journal.settings.controller_addresses !=
+      settings.controller_addresses &&
+      (
+        !stored_journal.runtimes.is_empty() ||
+        settings.controller_addresses.is_empty() ||
+        !settings.controller_addresses.all(private_address)
+      )
+    ) ||
     !@contracts.valid_sha256_digest("sha256:" + stored_journal.owner) ||
     stored_journal.runtimes.length() > 1024 {
     raise LifecycleError::InvalidResource
   }
   // New image-bound references must not prevent cleanup of previous resources.
   // A live generation still has to match its persisted immutable resource intent.
+  // Controller source routes may change only after every owned runtime has been
+  // confirmed gone. Preserve the owner nonce and all identity/cache boundaries;
+  // never discard a journal merely to apply a network-policy correction.
   let journal = { ..stored_journal, settings, }
   let names : Map[String, Bool] = Map([])
   for record in journal.runtimes {

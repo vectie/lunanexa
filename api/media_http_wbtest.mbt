@@ -11,6 +11,17 @@ async fn exercise_media_api(
   if private_cloud {
     @fs.mkdir(root)
   }
+  // This is an in-process node simulator. Keep its evidence fresh while the
+  // HTTP fixture runs, just as a real node agent must. A one-shot heartbeat
+  // must not accidentally make this test depend on suite execution speed.
+  let fixture_heartbeat = base.store
+    .heartbeats()
+    .filter(value => value.node_id == "managed-node-a")[0]
+  base.store.put_heartbeat({
+    ..fixture_heartbeat,
+    timestamp_unix_ms: @async.now(),
+  })
+  base.refresh_deployment_operations()
   let accounts = @account.AccountStore::open(
     root + "/media-accounts.json",
     "media-fixture-session-secret-longer-than-32-bytes",
@@ -57,7 +68,7 @@ async fn exercise_media_api(
     created_unix_ms: now,
   })
   let jobs = @media_jobs.JobStore::restore(
-    { schema_version: @media_jobs.schema_version, jobs: [] },
+    { schema_version: @media_jobs.schema_version, jobs: [], },
     _ => (),
   )
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
@@ -155,20 +166,29 @@ async fn exercise_media_api(
     assert_true(service.media_authorized(owner, binding.profile.model, binding))
     assert_false(
       service.media_authorized(
-        { ..owner, authority: PrivateWorkspace("different-lease") },
+        { ..owner, authority: PrivateWorkspace("different-lease"), },
         binding.profile.model,
         binding,
       ),
     )
     assert_false(
       service.media_authorized(
-        { ..owner, tenant_ref: "different-tenant" },
+        { ..owner, tenant_ref: "different-tenant", },
         binding.profile.model,
         binding,
       ),
     )
   }
   @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, () => {
+      for ;; {
+        base.store.put_heartbeat({
+          ..fixture_heartbeat,
+          timestamp_unix_ms: @async.now(),
+        })
+        @async.sleep(1000)
+      }
+    })
     group.spawn_bg(no_wait=true, () => service.serve_on(listener))
     group.spawn_bg(no_wait=true, () => {
       server.run_forever((req, body, connection) => {
