@@ -180,7 +180,7 @@ pub fn ApiService::new(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -276,7 +276,7 @@ pub fn ApiService::with_registry(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -373,7 +373,7 @@ pub fn ApiService::with_services(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -472,7 +472,7 @@ pub fn ApiService::with_control_plane(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -527,7 +527,7 @@ pub fn ApiService::with_retired_bootstrap_operator_token(
   self : ApiService,
   enabled : Bool,
 ) -> ApiService {
-  { ..self, retire_bootstrap_operator_token: enabled }
+  { ..self, retire_bootstrap_operator_token: enabled, }
 }
 
 ///|
@@ -538,7 +538,7 @@ pub fn ApiService::with_account_store(
   account_store : @account.AccountStore,
   identity_assertion_secret : String,
 ) -> ApiService {
-  { ..self, account_store: Some(account_store), identity_assertion_secret }
+  { ..self, account_store: Some(account_store), identity_assertion_secret, }
 }
 
 ///|
@@ -548,7 +548,7 @@ pub fn ApiService::with_access_onboarding_store(
   self : ApiService,
   store : @onboarding.AccessOnboardingStore,
 ) -> ApiService {
-  { ..self, access_onboarding_store: Some(store) }
+  { ..self, access_onboarding_store: Some(store), }
 }
 
 ///|
@@ -587,7 +587,7 @@ pub fn ApiService::with_workspace_directory(
   directory : @directory.FileWorkspaceDirectory,
   require_workspace_lease : Bool,
 ) -> ApiService {
-  { ..self, workspace_directory: Some(directory), require_workspace_lease }
+  { ..self, workspace_directory: Some(directory), require_workspace_lease, }
 }
 
 ///|
@@ -597,7 +597,7 @@ pub fn ApiService::with_access_store(
   self : ApiService,
   access_store : @access.AccessStore,
 ) -> ApiService {
-  { ..self, access_store: Some(access_store) }
+  { ..self, access_store: Some(access_store), }
 }
 
 ///|
@@ -607,7 +607,7 @@ pub fn ApiService::with_access_store(
 pub fn ApiService::with_legacy_unbound_access_for_local_testing(
   self : ApiService,
 ) -> ApiService {
-  { ..self, allow_legacy_unbound_access: true }
+  { ..self, allow_legacy_unbound_access: true, }
 }
 
 ///|
@@ -641,7 +641,7 @@ pub fn ApiService::with_inference_rate_card(
     rate_card.effective_until_unix_ms <= rate_card.effective_from_unix_ms {
     raise Failure("invalid inference rate card")
   }
-  { ..self, inference_rate_card: Some(rate_card) }
+  { ..self, inference_rate_card: Some(rate_card), }
 }
 
 ///|
@@ -650,7 +650,7 @@ pub fn ApiService::with_offline_commerce_store(
   self : ApiService,
   offline_commerce_store : @offline_store.OfflineCommerceStore,
 ) -> ApiService {
-  { ..self, offline_commerce_store: Some(offline_commerce_store) }
+  { ..self, offline_commerce_store: Some(offline_commerce_store), }
 }
 
 ///|
@@ -659,7 +659,7 @@ pub fn ApiService::with_machine_commerce_store(
   self : ApiService,
   machine_commerce_store : @machinecommerce_store.MachineCommerceStore,
 ) -> ApiService {
-  { ..self, machine_commerce_store: Some(machine_commerce_store) }
+  { ..self, machine_commerce_store: Some(machine_commerce_store), }
 }
 
 ///|
@@ -668,7 +668,7 @@ pub fn ApiService::with_contract_document_store(
   self : ApiService,
   contract_document_store : @contractdoc_store.ContractDocumentStore,
 ) -> ApiService {
-  { ..self, contract_document_store: Some(contract_document_store) }
+  { ..self, contract_document_store: Some(contract_document_store), }
 }
 
 ///|
@@ -698,7 +698,7 @@ pub fn ApiService::with_contract_document_worker_token(
     token == self.inference_token {
     self
   } else {
-    { ..self, contract_document_worker_token: token }
+    { ..self, contract_document_worker_token: token, }
   }
 }
 
@@ -743,7 +743,7 @@ pub fn ApiService::with_entitlement_authority_callback_token(
     self.artifact_scanner_callback_token == Some(token) {
     self
   } else {
-    { ..self, entitlement_authority_callback_token: Some(token) }
+    { ..self, entitlement_authority_callback_token: Some(token), }
   }
 }
 
@@ -912,7 +912,7 @@ pub fn ApiService::with_technical_store(
   self : ApiService,
   technical_store : @technical_store.TechnicalStore,
 ) -> ApiService {
-  { ..self, technical_store: Some(technical_store) }
+  { ..self, technical_store: Some(technical_store), }
 }
 
 ///|
@@ -922,7 +922,7 @@ pub fn ApiService::with_deployment_store(
   deployment_store : @deployment_store.FileDeploymentStore,
   available_secret_refs? : Array[String] = [],
 ) -> ApiService {
-  { ..self, deployment_store: Some(deployment_store), available_secret_refs }
+  { ..self, deployment_store: Some(deployment_store), available_secret_refs, }
 }
 
 ///|
@@ -932,7 +932,7 @@ pub fn ApiService::with_exclusive_lease_store(
   self : ApiService,
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore,
 ) -> ApiService {
-  { ..self, exclusive_lease_store: Some(exclusive_lease_store) }
+  { ..self, exclusive_lease_store: Some(exclusive_lease_store), }
 }
 
 ///|
@@ -941,7 +941,7 @@ pub fn ApiService::with_credential_handoff_store(
   self : ApiService,
   credential_handoff_store : @credential_store.CredentialHandoffStore,
 ) -> ApiService {
-  { ..self, credential_handoff_store: Some(credential_handoff_store) }
+  { ..self, credential_handoff_store: Some(credential_handoff_store), }
 }
 
 ///|
@@ -956,7 +956,7 @@ pub fn ApiService::with_credential_issuer_adapter_token(
       "credential issuer adapter token must contain 32 to 4096 bytes",
     )
   }
-  { ..self, credential_issuer_adapter_token: Some(token) }
+  { ..self, credential_issuer_adapter_token: Some(token), }
 }
 
 ///|
@@ -1009,7 +1009,7 @@ pub fn ApiService::with_lease_helper_receipt_secret(
   if secret.length() < 32 {
     raise Failure("lease helper receipt secret must contain at least 32 bytes")
   }
-  { ..self, lease_helper_receipt_secret: secret }
+  { ..self, lease_helper_receipt_secret: secret, }
 }
 
 ///|
@@ -1025,7 +1025,7 @@ pub fn ApiService::with_machine_helper_adapter_evidence(
     ) {
     raise Failure("machine helper adapter evidence is invalid")
   }
-  { ..self, machine_helper_adapter_evidence: Some(evidence) }
+  { ..self, machine_helper_adapter_evidence: Some(evidence), }
 }
 
 ///|
@@ -1037,7 +1037,7 @@ pub fn ApiService::with_guide_diagnostics_token(
   if token.length() < 32 {
     raise Failure("guide diagnostics token must contain at least 32 bytes")
   }
-  { ..self, guide_diagnostics_token: token }
+  { ..self, guide_diagnostics_token: token, }
 }
 
 ///|
@@ -1047,7 +1047,7 @@ pub fn ApiService::with_portal_store(
   self : ApiService,
   portal_store : @portal_store.FilePortalStore,
 ) -> ApiService {
-  { ..self, portal_store: Some(portal_store) }
+  { ..self, portal_store: Some(portal_store), }
 }
 
 ///|
@@ -1056,7 +1056,7 @@ pub fn ApiService::with_notification_store(
   self : ApiService,
   notification_store : @notification_store.NotificationStore,
 ) -> ApiService {
-  { ..self, notification_store: Some(notification_store) }
+  { ..self, notification_store: Some(notification_store), }
 }
 
 ///|
@@ -1065,7 +1065,7 @@ pub fn ApiService::with_observability_store(
   self : ApiService,
   observability_store : @observability.ObservabilityStore,
 ) -> ApiService {
-  { ..self, observability_store: Some(observability_store) }
+  { ..self, observability_store: Some(observability_store), }
 }
 
 ///|
@@ -1074,7 +1074,7 @@ pub fn ApiService::with_notification_delivery_adapter_configured(
   self : ApiService,
   configured : Bool,
 ) -> ApiService {
-  { ..self, notification_delivery_adapter_configured: configured }
+  { ..self, notification_delivery_adapter_configured: configured, }
 }
 
 ///| Marks the external collector configured only after deployment explicitly
@@ -1085,7 +1085,7 @@ pub fn ApiService::with_external_observability_collector_configured(
   self : ApiService,
   configured : Bool,
 ) -> ApiService {
-  { ..self, external_observability_collector_configured: configured }
+  { ..self, external_observability_collector_configured: configured, }
 }
 
 ///| Installs the single-purpose collector-to-sink proof authority. Metrics and
@@ -1099,7 +1099,7 @@ pub fn ApiService::with_external_export_proof_token(
   if token.length() < 32 || token.length() > 4096 {
     return self
   }
-  { ..self, external_export_proof_token: token }
+  { ..self, external_export_proof_token: token, }
 }
 
 ///|
@@ -1107,7 +1107,7 @@ pub fn ApiService::with_signature_verifier(
   self : ApiService,
   verifier : @registry.CosignVerifier,
 ) -> ApiService {
-  { ..self, signature_verifier: Some(verifier) }
+  { ..self, signature_verifier: Some(verifier), }
 }
 
 ///|
@@ -1115,7 +1115,7 @@ pub fn ApiService::with_reconciliation_only(
   self : ApiService,
   enabled : Bool,
 ) -> ApiService {
-  { ..self, reconciliation_only: enabled }
+  { ..self, reconciliation_only: enabled, }
 }
 
 ///|
@@ -1124,7 +1124,7 @@ pub fn ApiService::with_role_tokens(
   audit_token : String,
   monitoring_token : String,
 ) -> ApiService {
-  { ..self, audit_token, monitoring_token }
+  { ..self, audit_token, monitoring_token, }
 }
 
 ///|
@@ -1132,7 +1132,7 @@ pub fn ApiService::with_assignment_signing_secret(
   self : ApiService,
   secret : String,
 ) -> ApiService {
-  { ..self, assignment_signing_secret: secret }
+  { ..self, assignment_signing_secret: secret, }
 }
 
 ///|
@@ -1142,7 +1142,7 @@ pub fn ApiService::with_artifact_root(
   self : ApiService,
   artifact_root : String,
 ) -> ApiService {
-  { ..self, artifact_root: Some(artifact_root) }
+  { ..self, artifact_root: Some(artifact_root), }
 }
 
 ///| Configures the fixed price per exclusive machine-second used for the
@@ -1165,7 +1165,7 @@ pub fn ApiService::with_exclusive_lease_unit_price(
       unit_price.scale,
     ),
   )
-  { ..self, exclusive_lease_unit_price: unit_price }
+  { ..self, exclusive_lease_unit_price: unit_price, }
 }
 
 ///| Installs transport-authentication secrets keyed by `provider|environment`.
@@ -1181,7 +1181,7 @@ pub fn ApiService::with_provider_callback_secrets(
       raise Failure::Failure("invalid provider callback secret configuration")
     }
   }
-  { ..self, provider_callback_secrets: secrets }
+  { ..self, provider_callback_secrets: secrets, }
 }
 
 ///|
@@ -1273,7 +1273,7 @@ async fn ApiService::cache_result(
 fn topology_free_workload_response(
   response : @contracts.WorkloadResponse,
 ) -> @contracts.WorkloadResponse {
-  { ..response, execution_node_id: None }
+  { ..response, execution_node_id: None, }
 }
 
 ///|
@@ -1344,7 +1344,7 @@ priv struct VerificationRequest {
 
 ///|
 fn json_reply(status : Int, value : Json) -> HttpReply {
-  { status, body: value.stringify(), content_type: "application/json" }
+  { status, body: value.stringify(), content_type: "application/json", }
 }
 
 ///|
@@ -1553,7 +1553,7 @@ async fn ApiService::next_audit(
     previous_hash,
     event_hash: "",
   }
-  { ..event, event_hash: @store.audit_event_hash(event) }
+  { ..event, event_hash: @store.audit_event_hash(event), }
 }
 
 ///|
@@ -1702,7 +1702,7 @@ async fn ApiService::managed_scheduler_node(
   )
   match self.exclusive_lease_store {
     Some(leases) if leases.node_blocks_managed_placement(heartbeat.node_id) =>
-      { ..snapshot, state: Cordoned }
+      { ..snapshot, state: Cordoned, }
     _ => snapshot
   }
 }
@@ -2450,7 +2450,7 @@ async fn ApiService::invoke_workload(
         )
         self.store.commit_workload(
           idempotency_key,
-          { ..response, output: None },
+          { ..response, output: None, },
           audit,
         )
       })
@@ -2510,7 +2510,7 @@ async fn ApiService::invoke_workload(
     )
     self.store.commit_workload(
       idempotency_key,
-      { ..response, output: None },
+      { ..response, output: None, },
       audit,
     )
   })
@@ -2998,7 +2998,7 @@ async fn ApiService::stream_workload(
     )
     self.store.commit_workload(
       idempotency_key,
-      { ..response, output: None },
+      { ..response, output: None, },
       audit,
     )
   })
@@ -4003,6 +4003,12 @@ async fn ApiService::dispatch_with_transport(
         ) {
         return api_error(
           409, "StaleGeneration", "heartbeat replay was rejected", false,
+        )
+      }
+      if !self.heartbeat_runtime_endpoints_valid(heartbeat, now) {
+        return api_error(
+          409, "InvalidRuntimeEndpoint", "runtime endpoint does not match current node assignments",
+          false,
         )
       }
       self.store.put_heartbeat(heartbeat)

@@ -8,6 +8,7 @@ pub(all) struct MediaBinding {
   origin : String
   bearer : String?
   profile : @media_provider.Profile
+  instance_id : String?
 } derive(FromJson)
 
 ///|
@@ -20,6 +21,7 @@ pub(all) struct MediaTemplateBinding {
   origin : String
   bearer : String?
   profile : @media_provider.Profile
+  runtime_route : @contracts.RuntimeRoutePolicy?
 } derive(FromJson)
 
 ///|
@@ -45,17 +47,17 @@ fn MediaBinding::provider(
 fn MediaBinding::identity(self : MediaBinding) -> String {
   // Token rotation does not change runtime identity; endpoint, model, profile,
   // placement or generation changes do. Old jobs cannot migrate implicitly.
-  "media-" +
-  digest_hex(
-    (
-      {
-        "deployment": self.deployment_id,
-        "generation": self.deployment_generation.to_json(),
-        "node": self.node_id,
-        "origin": self.origin,
-        "profile": self.profile.to_json(),
-      } : Json).stringify(),
-  )
+  let material : Json = {
+    "deployment": self.deployment_id,
+    "generation": self.deployment_generation.to_json(),
+    "node": self.node_id,
+    "origin": self.origin,
+    "profile": self.profile.to_json(),
+  }
+  if self.instance_id is Some(instance_id) && material is Object(fields) {
+    fields["instance_id"] = instance_id.to_json()
+  }
+  "media-" + digest_hex(material.stringify())
 }
 
 ///|
@@ -89,13 +91,25 @@ pub fn ApiService::with_media_templates(
       identities.contains(identity) {
       raise Failure("invalid or duplicate media template profile")
     }
+    let origin = match template.runtime_route {
+      None => template.origin
+      Some(policy) => {
+        if !policy.valid() || template.origin != "" {
+          raise Failure(
+            "managed media route requires a valid private boundary and no static fallback",
+          )
+        }
+        "http://" + policy.network + ":" + policy.port.to_string()
+      }
+    }
     let probe : MediaBinding = {
       deployment_id: "validation",
       deployment_generation: 1L,
       node_id: template.node_id,
-      origin: template.origin,
+      origin,
       bearer: template.bearer,
       profile: template.profile,
+      instance_id: None,
     }
     ignore(probe.provider())
     identities[identity] = true
@@ -111,6 +125,9 @@ async fn ApiService::media_all_bindings(
 ) -> Array[MediaBinding] {
   let result = fixed.copy()
   guard self.deployment_store is Some(deployments) else { return result }
+  let assignments = self.store.assignments()
+  let heartbeats = self.store.heartbeats()
+  let now = @async.now()
   // Historical operations are retained by the deployment store. Reconstruct
   // old immutable binding IDs too, so expiry cleanup still targets the original
   // generation after an order ends. Retain old versioned profiles until cleanup.
@@ -125,13 +142,53 @@ async fn ApiService::media_all_bindings(
         template.template_version == deployed.version &&
         template.node_id == operation.plan.replicas[0].node_id &&
         template.profile.model == deployed.model_selector {
+        let mut origin = template.origin
+        let mut instance_id : String? = None
+        if template.runtime_route is Some(policy) {
+          if !@controller.deployment_operation_ready(
+              operation, assignments, heartbeats, now,
+            ) {
+            continue
+          }
+          let candidates : Array[@contracts.RuntimeEndpoint] = []
+          for heartbeat in heartbeats {
+            if heartbeat.node_id != template.node_id ||
+              heartbeat.state != Active ||
+              now - heartbeat.timestamp_unix_ms >
+              self.global_settings.control_timing.heartbeat_timeout_ms {
+              continue
+            }
+            for endpoint in heartbeat.runtime_endpoints.unwrap_or([]) {
+              if operation.assignment_ids.contains(endpoint.assignment_id) &&
+                endpoint.deployment_id == operation.deployment_id &&
+                endpoint.generation == operation.generation &&
+                policy.allows(endpoint) &&
+                assignments.any(assignment => {
+                  assignment.node_id == template.node_id &&
+                  endpoint.matches(assignment, now)
+                }) {
+                candidates.push(endpoint)
+              }
+            }
+          }
+          if candidates.length() != 1 {
+            continue
+          }
+          let endpoint = candidates[0]
+          origin = "http://" +
+            endpoint.address +
+            ":" +
+            endpoint.port.to_string()
+          instance_id = Some(endpoint.instance_id)
+        }
         result.push({
           deployment_id: operation.deployment_id,
           deployment_generation: operation.generation,
           node_id: template.node_id,
-          origin: template.origin,
+          origin,
           bearer: template.bearer,
           profile: template.profile,
+          instance_id,
         })
       }
     }
@@ -193,7 +250,7 @@ fn ApiService::configure_media(
       self.settle_media_job(job, binding)
     },
   )
-  { ..self, media: Some({ jobs, runtime, bindings, templates }) }
+  { ..self, media: Some({ jobs, runtime, bindings, templates, }), }
 }
 
 ///|

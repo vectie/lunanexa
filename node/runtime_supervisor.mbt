@@ -13,6 +13,7 @@ pub(all) struct RuntimeInstance {
   artifact_digest : String
   observed_state : @contracts.DeploymentState
   container_address : String
+  endpoint : @contracts.RuntimeEndpoint?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -341,6 +342,7 @@ pub async fn OciRuntimeSupervisor::ensure_started(
     artifact_digest: assignment.artifact.digest,
     observed_state,
     container_address,
+    endpoint: None,
   }
 }
 

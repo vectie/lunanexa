@@ -193,6 +193,7 @@ async test "settled bare order provisions internally without leaking its node" {
       taints: [],
     },
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: now,
     signature: "test",
   }
@@ -224,6 +225,7 @@ async test "settled bare order provisions internally without leaking its node" {
       taints: [],
     },
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: now,
     signature: "test",
   })
@@ -243,7 +245,7 @@ async test "settled bare order provisions internally without leaking its node" {
       memory_mib: 16384L,
       cpu_count: 16L,
       meter: "exclusive-node-second",
-      unit_price: { minor_units: 2L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 60L,
       minimum_duration_seconds: 60L,
       maximum_duration_seconds: 86400L,
@@ -435,7 +437,7 @@ async test "settled bare order provisions internally without leaking its node" {
     .with_commercial_provider_adapter(
       "provider-adapter-token-more-than-32-bytes", "provider-a", "sandbox", "https://provider.example",
     )
-  let service = { ..configured, commercial_store: commercial }
+  let service = { ..configured, commercial_store: commercial, }
   let customer_headers = {
     "Authorization": "Bearer inference-token",
     "X-LunaNexa-Subject": "subject-a",
@@ -819,7 +821,7 @@ async fn exercise_dedicated_endpoint(
   let template = {
     ..base,
     capability,
-    runtime: { ..base.runtime, capabilities: [capability] },
+    runtime: { ..base.runtime, capabilities: [capability], },
   }
   let durable = @store.FileStore::open("\{directory}/state.json")
   durable.fence_controller(1L)
@@ -851,6 +853,7 @@ async fn exercise_dedicated_endpoint(
       taints: [],
     },
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: now,
     signature: "test",
   }
@@ -900,7 +903,7 @@ async fn exercise_dedicated_endpoint(
       memory_mib: 2048L,
       cpu_count: 1L,
       meter: "dedicated-endpoint-second",
-      unit_price: { minor_units: 3L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 3L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 60L,
       minimum_duration_seconds: 60L,
       maximum_duration_seconds: 86400L,
@@ -990,6 +993,7 @@ async fn exercise_dedicated_endpoint(
     ..heartbeat,
     observed_generation: 2L,
     running_deployments: [first.target_deployment_ref.unwrap()],
+    runtime_endpoints: None,
     timestamp_unix_ms: now + 1000L,
   })
   service.reconcile_machine_commerce()
@@ -1286,7 +1290,7 @@ async test "paid order without eligible capacity times out into compensation" {
       memory_mib: 16384L,
       cpu_count: 16L,
       meter: "exclusive-node-second",
-      unit_price: { minor_units: 1L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 1L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 60L,
       minimum_duration_seconds: 60L,
       maximum_duration_seconds: 3600L,

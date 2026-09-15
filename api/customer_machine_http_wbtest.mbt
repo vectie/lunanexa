@@ -199,6 +199,7 @@ fn customer_machine_test_heartbeat(now : Int64) -> @contracts.NodeHeartbeat {
       taints: [],
     },
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: now,
     signature: "",
   }
@@ -491,14 +492,14 @@ async test "customer termination requires subject confirmation and generation" {
     Post,
     "/v1/machine-access/self/lease-customer-a:terminate",
     customer_headers("subject-a"),
-    { ..request, confirmation: "yes" }.to_json().stringify(),
+    { ..request, confirmation: "yes", }.to_json().stringify(),
   )
   assert_eq(unconfirmed.status, 400)
   let stale = service.handle(
     Post,
     "/v1/machine-access/self/lease-customer-a:terminate",
     customer_headers("subject-a"),
-    { ..request, expected_generation: current.generation - 1L }
+    { ..request, expected_generation: current.generation - 1L, }
     .to_json()
     .stringify(),
   )

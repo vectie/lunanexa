@@ -215,6 +215,7 @@ async fn reconcile_once(
     controller_epoch: agent.controller_epoch(),
     inventory,
     running_deployments: agent.running_deployments(),
+    runtime_endpoints: None,
     timestamp_unix_ms: now,
     signature: "",
   }

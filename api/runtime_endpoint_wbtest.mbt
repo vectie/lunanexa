@@ -1,0 +1,118 @@
+///|
+async fn exercise_runtime_route_discovery(
+  service : ApiService,
+  operation : @deployment.DeploymentOperation,
+  binding : MediaBinding,
+) -> Unit {
+  let heartbeat = service.store
+    .heartbeats()
+    .filter(value => value.node_id == binding.node_id)[0]
+  let assignment = service.store
+    .assignments()
+    .filter(value => operation.assignment_ids.contains(value.assignment_id))[0]
+  let now = @async.now()
+  let endpoint : @contracts.RuntimeEndpoint = {
+    assignment_id: assignment.assignment_id,
+    deployment_id: assignment.deployment_id,
+    generation: assignment.generation,
+    controller_epoch: assignment.controller_epoch,
+    instance_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    address: "10.42.1.99",
+    port: 5885,
+    artifact_digest: assignment.artifact.digest,
+    image_digest: assignment.runtime.image_digest,
+    observed_unix_ms: now,
+  }
+  let current : @contracts.NodeHeartbeat = {
+    ..heartbeat,
+    timestamp_unix_ms: now,
+    runtime_endpoints: Some([endpoint]),
+  }
+  let template : MediaTemplateBinding = {
+    template_id: operation.plan.template.unwrap().template_id,
+    template_version: operation.plan.template.unwrap().version,
+    node_id: binding.node_id,
+    origin: "",
+    bearer: binding.bearer,
+    profile: binding.profile,
+    runtime_route: Some({ network: "10.42.1.0", prefix_length: 24, port: 5885, }),
+  }
+  assert_true(service.heartbeat_runtime_endpoints_valid(current, now))
+  for
+    invalid in [
+      { ..template, origin: "http://10.42.1.99:5885", },
+      {
+        ..template,
+        runtime_route: Some({
+          network: "8.8.8.0",
+          prefix_length: 24,
+          port: 5885,
+        }),
+      },
+    ] {
+    let jobs = @media_jobs.JobStore::restore(
+      { schema_version: @media_jobs.schema_version, jobs: [], },
+      _ => (),
+    )
+    try service.with_media_templates(jobs, [invalid]) catch {
+      _ => ()
+    } noraise {
+      _ => fail("unsafe managed route profile accepted")
+    }
+  }
+  for
+    bad in [
+      { ..endpoint, address: "169.254.169.254", },
+      { ..endpoint, deployment_id: "foreign-deployment", },
+      { ..endpoint, generation: endpoint.generation + 1L, },
+      { ..endpoint, observed_unix_ms: now + 1L, },
+      { ..endpoint, observed_unix_ms: now - 15001L, },
+    ] {
+    assert_false(
+      service.heartbeat_runtime_endpoints_valid(
+        { ..current, runtime_endpoints: Some([bad]), },
+        now,
+      ),
+    )
+  }
+  assert_false(
+    service.heartbeat_runtime_endpoints_valid(
+      { ..current, runtime_endpoints: Some([endpoint, endpoint]), },
+      now,
+    ),
+  )
+  assert_false(
+    service.heartbeat_runtime_endpoints_valid(
+      { ..current, node_id: "foreign-node", },
+      now,
+    ),
+  )
+  service.store.put_heartbeat(current)
+  let discovered = service.media_all_bindings([], [template])
+  assert_eq(discovered.length(), 1)
+  assert_eq(discovered[0].origin, "http://10.42.1.99:5885")
+  let original_identity = discovered[0].identity()
+  service.store.put_heartbeat({
+    ..current,
+    runtime_endpoints: Some([
+      {
+        ..endpoint,
+        instance_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+    ]),
+  })
+  let replacement = service.media_all_bindings([], [template])
+  assert_eq(replacement.length(), 1)
+  assert_true(replacement[0].identity() != original_identity)
+  for
+    bad in [
+      { ..endpoint, address: "10.42.2.99", },
+      { ..endpoint, port: 5886, },
+      { ..endpoint, observed_unix_ms: now - 15001L, },
+    ] {
+    service.store.put_heartbeat({ ..current, runtime_endpoints: Some([bad]), })
+    assert_eq(service.media_all_bindings([], [template]).length(), 0)
+  }
+  service.store.put_heartbeat({ ..heartbeat, timestamp_unix_ms: @async.now(), })
+  assert_eq(service.media_all_bindings([], [template]).length(), 0)
+}

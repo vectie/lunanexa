@@ -43,10 +43,10 @@ flowchart TB
     end
 
     subgraph Compute["DGX Spark workers"]
-      D1["DGX 1 · node agent · Podman"]
-      D2["DGX 2 · node agent · Podman"]
-      D3["DGX 3 · node agent · Podman"]
-      D4["DGX 4 · node agent · Podman"]
+      D1["DGX 1 · node agent · Kubernetes/containerd"]
+      D2["DGX 2 · node agent · Kubernetes/containerd"]
+      D3["DGX 3 · node agent · Kubernetes/containerd"]
+      D4["DGX 4 · node agent · Kubernetes/containerd"]
     end
 
     C <-->|"desired state and heartbeat"| D1
@@ -77,7 +77,7 @@ verified and cached locally before its runtime container starts.
 | DGX heartbeat, sensor telemetry and assignment reconciliation | Implemented | Deploy one protected agent per DGX with allowlisted `nvidia-smi` |
 | Selected-node model pull and local verification | Implemented | Controller serves only the object bound to the live node assignment from `/data/models` |
 | Batch jobs and autoscaling | Intentionally absent | Capacity is an explicitly inventoried fleet; operator placement and backpressure are explicit |
-| Digest-pinned runtime supervision | Implemented | Requires Podman/Docker, an OCI registry and an approved runtime image |
+| Digest-pinned runtime supervision | Implemented | Select Kubernetes/containerd on an existing cluster, or the legacy OCI engine adapter; requires a registry and an approved runtime image |
 | Controller/node transport mTLS termination | External | Provide a trusted service-mesh or loopback proxy; do not expose controller HTTP directly |
 | Exclusive lease reservation and managed-placement fence | Implemented | Safe for control-plane testing |
 | Exclusive lease watchdog and helper protocol | Implemented | Persists signed generation, expires offline, reports provision/revoke/sanitize/quarantine evidence |

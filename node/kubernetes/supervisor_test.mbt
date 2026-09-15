@@ -58,6 +58,8 @@ fn FakeApi::transport(self : FakeApi) -> @kubernetes.Transport {
                 "name": "runtime",
                 "ready": true,
                 "imageID": image.to_json(),
+                "containerID": ("containerd://fixture-" +
+                self.calls.length().to_string()).to_json(),
                 "state": { "running": {} },
               },
             ],

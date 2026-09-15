@@ -441,6 +441,7 @@ async fn send_heartbeat(
   inventory : @contracts.NodeInventory,
   agent : @node_agent.NodeAgent,
 ) -> Unit {
+  let runtime_endpoints = agent.runtime_endpoints(@async.now())
   let unsigned : @contracts.NodeHeartbeat = {
     node_id,
     state: agent.state(),
@@ -448,6 +449,11 @@ async fn send_heartbeat(
     controller_epoch: agent.controller_epoch(),
     inventory: @node_agent.collect_linux_host_resources().inventory(inventory),
     running_deployments: agent.running_deployments(),
+    runtime_endpoints: if runtime_endpoints.is_empty() {
+      None
+    } else {
+      Some(runtime_endpoints)
+    },
     timestamp_unix_ms: @async.now(),
     signature: "",
   }
@@ -570,6 +576,11 @@ async fn reconcile_once(
             assignment.assignment_id,
             instance.observed_state,
           )
+          if instance.endpoint is Some(endpoint) {
+            if !agent.observe_runtime_endpoint(endpoint, @async.now()) {
+              agent.observe_runtime(assignment.assignment_id, Failed)
+            }
+          }
         }
       } catch {
         _ => agent.observe_runtime(assignment.assignment_id, Failed)
@@ -836,6 +847,34 @@ async fn main {
       )
   }
   @async.with_task_group(group => {
+    if supervisor is @node_agent.Kubernetes(kubernetes) {
+      group.spawn_bg(() => {
+        while true {
+          try {
+            let observations = kubernetes.probe_assignments(
+              agent.snapshot().assignments,
+            )
+            for observation in observations {
+              agent.observe_runtime(
+                observation.assignment_id,
+                observation.state,
+              )
+              if observation.endpoint is Some(endpoint) {
+                if !agent.observe_runtime_endpoint(endpoint, @async.now()) {
+                  agent.observe_runtime(observation.assignment_id, Failed)
+                }
+              }
+            }
+          } catch {
+            _ =>
+              println(
+                "LunaNexa runtime probes unavailable; route observations expire fail-closed",
+              )
+          }
+          @async.sleep(1000)
+        }
+      })
+    }
     group.spawn_bg(() => {
       while true {
         if supervisor is @node_agent.Kubernetes(_) {

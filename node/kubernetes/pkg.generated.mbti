@@ -76,6 +76,7 @@ pub(all) struct RuntimeObservation {
   pod_name : String
   state : @contracts.DeploymentState
   address : String
+  endpoint : @contracts.RuntimeEndpoint?
 } derive(Eq, @debug.Debug)
 
 type RuntimeRecord derive(ToJson, @json.FromJson)
@@ -118,6 +119,7 @@ pub struct RuntimeSupervisor {
 pub fn RuntimeSupervisor::close(Self) -> Unit
 pub async fn RuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeObservation
 pub async fn RuntimeSupervisor::open_file(RuntimeSettings, async (String, String, Json?) -> (Int, Json), String) -> Self
+pub async fn RuntimeSupervisor::probe_assignments(Self, Array[@contracts.DesiredAssignment]) -> Array[RuntimeObservation]
 pub async fn RuntimeSupervisor::reap_expired(Self, Int64) -> Unit
 pub async fn RuntimeSupervisor::remove_absent(Self, Array[String]) -> Unit
 pub fn RuntimeSupervisor::restore(RuntimeSettings, async (String, String, Json?) -> (Int, Json), async (String) -> Unit, String?, String, clock? : () -> Int64) -> Self raise

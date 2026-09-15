@@ -139,6 +139,7 @@ pub async fn RuntimeSupervisor::ensure_started(
       pod_name: older[0].name,
       state: Draining,
       address: "",
+      endpoint: None,
     }
   }
   let record = match
@@ -164,6 +165,7 @@ pub async fn RuntimeSupervisor::ensure_started(
       pod_name: record.name,
       state,
       address: "",
+      endpoint: None,
     }
   }
   let mut pod : Json = Json::null()
@@ -177,8 +179,19 @@ pub async fn RuntimeSupervisor::ensure_started(
       pod_name: record.name,
       state,
       address: "",
+      endpoint: None,
     }
   }
+  self.observation(record, assignment, pod)
+}
+
+///|
+fn RuntimeSupervisor::observation(
+  self : RuntimeSupervisor,
+  record : RuntimeRecord,
+  assignment : @contracts.DesiredAssignment,
+  pod : Json,
+) -> RuntimeObservation raise {
   let pod_resource = record.resources[record.resources.length() - 1]
   let expected : PodIdentity = {
     namespace_name: self.journal.settings.namespace_name,
@@ -202,11 +215,42 @@ pub async fn RuntimeSupervisor::ensure_started(
   } else {
     ""
   }
+  let endpoint : @contracts.RuntimeEndpoint? = if state == Ready {
+    guard pod
+      is {
+        "status": {
+          "containerStatuses": [{ "containerID": String(container_id), .. }],
+          ..
+        },
+        ..
+      } &&
+      container_id.length() > 0 &&
+      container_id.length() <= 256 else {
+      raise LifecycleError::InvalidResource
+    }
+    Some({
+      assignment_id: assignment.assignment_id,
+      deployment_id: assignment.deployment_id,
+      generation: assignment.generation,
+      controller_epoch: assignment.controller_epoch,
+      instance_id: digest_text(
+        "kubernetes:" + pod_resource.uid.unwrap() + "|" + container_id,
+      ),
+      address,
+      port: self.journal.settings.runtime_port,
+      artifact_digest: assignment.artifact.digest,
+      image_digest: assignment.runtime.image_digest,
+      observed_unix_ms: (self.clock)(),
+    })
+  } else {
+    None
+  }
   {
     assignment_id: record.assignment_id,
     pod_name: record.name,
     state,
     address,
+    endpoint,
   }
 }
 

@@ -48,6 +48,7 @@ pub(all) struct RuntimeObservation {
   pod_name : String
   state : @contracts.DeploymentState
   address : String
+  endpoint : @contracts.RuntimeEndpoint?
 } derive(Debug, Eq)
 
 ///|
