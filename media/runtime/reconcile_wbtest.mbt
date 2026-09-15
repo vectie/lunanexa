@@ -37,13 +37,13 @@ async test "reconciliation has bounded parallelism and isolates one failed autho
       false
     },
     job => "receipt-" + job.job_id,
-    now=() => 4000L,
+    now=() => 1500L,
   )
   assert_eq(runtime.reconcile(), (11, 1))
   assert_true(peak > 1 && peak <= 8)
   assert_eq(active, 0)
   assert_eq(
-    jobs.snapshot().jobs.filter(job => job.state == Expired).length(),
+    jobs.snapshot().jobs.filter(job => job.state == Cancelled).length(),
     11,
   )
 }

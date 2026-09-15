@@ -40,10 +40,17 @@ fn provider_id_valid(id : String) -> Bool {
 }
 
 ///|
+fn execution_context_valid(value : ExecutionContext) -> Bool {
+  @contracts.valid_identifier(value.deployment_id) &&
+  @contracts.valid_identifier(value.node_id) &&
+  value.generation > 0L
+}
+
+///|
 fn snapshot(jobs : Map[String, StoredJob]) -> Snapshot {
   let values = jobs.values().to_array()
   values.sort_by_key(job => job.job_id)
-  { schema_version, jobs: values }
+  { schema_version, jobs: values, }
 }
 
 ///|
@@ -69,6 +76,9 @@ pub async fn JobStore::restore(
       !@contracts.valid_identifier(record.job_id) ||
       !@contracts.valid_identifier(record.model) ||
       !@contracts.valid_identifier(record.deployment_id) ||
+      record.execution_context.map_or(false, value => {
+        !execution_context_valid(value)
+      }) ||
       !@contracts.valid_sha256_digest(record.request_digest) ||
       !@contracts.valid_sha256_digest(record.idempotency_digest) ||
       record.created_unix_ms <= 0L ||
@@ -105,6 +115,15 @@ pub async fn JobStore::restore(
       ) {
       raise InvalidSnapshot
     }
+    if record.execution_context is Some(context) &&
+      jobs
+      .values()
+      .any(other => {
+        other.deployment_id == record.deployment_id &&
+        other.execution_context.map_or(false, previous => previous != context)
+      }) {
+      raise InvalidSnapshot
+    }
     if record.provider_job_id is Some(provider_id) &&
       jobs
       .values()
@@ -123,7 +142,7 @@ pub async fn JobStore::restore(
     }
     let record = if record.state == Submitting {
       recovered = true
-      { ..record, state: SubmissionUnknown }
+      { ..record, state: SubmissionUnknown, }
     } else {
       record
     }
@@ -133,7 +152,7 @@ pub async fn JobStore::restore(
   if recovered {
     persist(snapshot(jobs))
   }
-  { jobs, persist, maximum_jobs, mutex: @async.Mutex() }
+  { jobs, persist, maximum_jobs, mutex: @async.Mutex(), }
 }
 
 ///|
@@ -165,12 +184,14 @@ pub async fn JobStore::reserve(
   retain_until : Int64,
   maximum_active? : Int = 1,
   maximum_per_hour? : Int = 100,
+  execution_context? : ExecutionContext,
 ) -> (StoredJob, Bool) {
   if !owner_valid(owner) ||
     !@contracts.valid_identifier(idempotency_key) ||
     !@contracts.valid_sha256_digest(request_digest) ||
     !@contracts.valid_identifier(model) ||
     !@contracts.valid_identifier(deployment_id) ||
+    execution_context.map_or(false, value => !execution_context_valid(value)) ||
     now <= 0L ||
     deadline <= now ||
     deadline - now > 7200000L ||
@@ -188,12 +209,29 @@ pub async fn JobStore::reserve(
   self.mutex.acquire()
   defer self.mutex.release()
   for record in self.jobs.values() {
+    if record.deployment_id == deployment_id &&
+      record.execution_context is Some(previous) &&
+      execution_context is Some(next) &&
+      previous != next {
+      raise Conflict
+    }
     if record.idempotency_digest == request_key {
       if record.owner != owner ||
         record.request_digest != request_digest ||
         record.model != model ||
-        record.deployment_id != deployment_id {
+        record.deployment_id != deployment_id ||
+        (
+          record.execution_context is Some(previous) &&
+          execution_context is Some(next) &&
+          previous != next
+        ) {
         raise Conflict
+      }
+      if record.execution_context is None && execution_context is Some(context) {
+        return (
+          self.commit({ ..record, execution_context: Some(context), }),
+          false,
+        )
       }
       return (record, false)
     }
@@ -225,6 +263,7 @@ pub async fn JobStore::reserve(
     idempotency_digest: request_key,
     model,
     deployment_id,
+    execution_context,
     provider_job_id: None,
     state: Intent,
     progress: None,
@@ -278,7 +317,7 @@ pub async fn JobStore::begin_submission(
     now >= job.deadline_unix_ms {
     raise InvalidTransition
   }
-  self.commit({ ..job, state: Submitting, updated_unix_ms: now })
+  self.commit({ ..job, state: Submitting, updated_unix_ms: now, })
 }
 
 ///|
@@ -300,7 +339,7 @@ pub async fn JobStore::submission_unknown(
   if job.state != Submitting && job.state != SubmissionUnknown {
     raise InvalidTransition
   }
-  self.commit({ ..job, state: SubmissionUnknown, updated_unix_ms: now })
+  self.commit({ ..job, state: SubmissionUnknown, updated_unix_ms: now, })
 }
 
 ///|
@@ -493,7 +532,7 @@ pub async fn JobStore::record_usage(
     }
     raise Conflict
   }
-  self.commit({ ..job, usage_receipt: Some(receipt) })
+  self.commit({ ..job, usage_receipt: Some(receipt), })
 }
 
 ///|

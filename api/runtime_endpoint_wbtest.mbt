@@ -3,6 +3,7 @@ async fn exercise_runtime_route_discovery(
   service : ApiService,
   operation : @deployment.DeploymentOperation,
   binding : MediaBinding,
+  owner : @media_jobs.Owner,
 ) -> Unit {
   let heartbeat = service.store
     .heartbeats()
@@ -92,6 +93,43 @@ async fn exercise_runtime_route_discovery(
   assert_eq(discovered.length(), 1)
   assert_eq(discovered[0].origin, "http://10.42.1.99:5885")
   let original_identity = discovered[0].identity()
+  let jobs = @media_jobs.JobStore::restore(
+    { schema_version: @media_jobs.schema_version, jobs: [], },
+    _ => (),
+  )
+  let job = jobs.reserve(
+      owner,
+      "endpoint-outage",
+      "sha256:" + digest_hex("fixture-request"),
+      binding.profile.model,
+      original_identity,
+      now,
+      now + 3600000L,
+      now + 7200000L,
+    ).0
+  let configured = service.with_media_templates(jobs, [template])
+  let context = configured.media_execution_context(
+    jobs,
+    [],
+    [template],
+    original_identity,
+  )
+  assert_eq(jobs.get(job.job_id, owner).execution_context, Some(context))
+  let jobs = @media_jobs.JobStore::restore(jobs.snapshot(), _ => ())
+  let configured = service.with_media_templates(jobs, [template])
+  service.store.put_heartbeat({ ..current, runtime_endpoints: None, })
+  // Lost discovery is not lost ownership. An unsubmitted intent can still be
+  // inspected, but no provider address is invented or taken from stored data.
+  assert_eq(
+    configured.media.unwrap().runtime.get(job.job_id, owner).state,
+    Intent,
+  )
+  ignore(jobs.begin_submission(job.job_id, owner, now + 1L))
+  ignore(
+    jobs.attach_provider(job.job_id, owner, "fixture-old-instance", now + 2L),
+  )
+  assert_eq(configured.media.unwrap().runtime.reconcile(), (0, 1))
+  assert_eq(jobs.get(job.job_id, owner).state, Queued)
   service.store.put_heartbeat({
     ..current,
     runtime_endpoints: Some([
@@ -104,6 +142,10 @@ async fn exercise_runtime_route_discovery(
   let replacement = service.media_all_bindings([], [template])
   assert_eq(replacement.length(), 1)
   assert_true(replacement[0].identity() != original_identity)
+  // Even after a replacement becomes available, the old job stays attached to
+  // its original incarnation. Resolving it fails before any HTTP request.
+  assert_eq(configured.media.unwrap().runtime.reconcile(), (0, 1))
+  assert_eq(jobs.get(job.job_id, owner).state, Queued)
   for
     bad in [
       { ..endpoint, address: "10.42.2.99", },
@@ -115,4 +157,16 @@ async fn exercise_runtime_route_discovery(
   }
   service.store.put_heartbeat({ ..heartbeat, timestamp_unix_ms: @async.now(), })
   assert_eq(service.media_all_bindings([], [template]).length(), 0)
+  let unavailable = { ..service, reconciliation_only: true, }.with_media_templates(
+    jobs,
+    [template],
+  )
+  assert_eq(unavailable.media.unwrap().runtime.reconcile(), (0, 1))
+  assert_eq(jobs.get(job.job_id, owner).state, Queued)
+  let revoked = { ..service, account_store: None, }.with_media_templates(jobs, [
+    template,
+  ])
+  assert_eq(revoked.media.unwrap().runtime.reconcile(), (0, 1))
+  assert_eq(jobs.get(job.job_id, owner).state, Cancelling)
+  assert_false(jobs.get(job.job_id, owner).execution_terminal)
 }

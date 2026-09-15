@@ -1,6 +1,7 @@
 ///|
 pub(all) suberror RuntimeError {
   Unauthorized
+  AuthorityUnavailable
   ContentUnavailable
 } derive(Debug, Eq)
 
@@ -50,6 +51,7 @@ pub async fn VideoRuntime::submit(
   retain_until_unix_ms : Int64,
   maximum_active? : Int = 1,
   maximum_per_hour? : Int = 100,
+  execution_context? : @jobs.ExecutionContext,
 ) -> @jobs.StoredJob {
   if !(self.authorized)(owner, request.model(), deployment_id) {
     raise Unauthorized
@@ -65,6 +67,7 @@ pub async fn VideoRuntime::submit(
     retain_until_unix_ms,
     maximum_active~,
     maximum_per_hour~,
+    execution_context?,
   )
   // Only a durable Intent can be submitted. Network ambiguity is never retried.
   if job.state != Intent {
@@ -112,9 +115,12 @@ async fn VideoRuntime::refresh_internal(
   let now = (self.now)()
   let expired = now >= job.retain_until_unix_ms ||
     (!job.execution_terminal && now >= job.deadline_unix_ms)
-  let active = (self.authorized)(job.owner, job.model, job.deployment_id)
-  if expired || !active {
+  // A local durable deadline is conclusive even if the authority is down.
+  // For unexpired jobs, an unavailable authority must leave state unchanged.
+  if expired {
     job = self.store.cancel(job.job_id, job.owner, expired, now)
+  } else if !(self.authorized)(job.owner, job.model, job.deployment_id) {
+    job = self.store.cancel(job.job_id, job.owner, false, now)
   }
   if [@jobs.State::Cancelled, Expired].contains(job.state) {
     return self.record_terminal(job)

@@ -28,6 +28,15 @@ pub(all) enum State {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Durable placement facts for authorization and settlement, not a network
+/// route. Provider URLs and credentials still require current discovery.
+pub(all) struct ExecutionContext {
+  deployment_id : String
+  generation : Int64
+  node_id : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 /// Internal persistence contract; never serialize this object to a customer.
 /// Raw prompts, model credentials and endpoint URLs are deliberately absent.
 pub(all) struct StoredJob {
@@ -37,6 +46,7 @@ pub(all) struct StoredJob {
   idempotency_digest : String
   model : String
   deployment_id : String
+  execution_context : ExecutionContext?
   provider_job_id : String?
   state : State
   progress : Int?

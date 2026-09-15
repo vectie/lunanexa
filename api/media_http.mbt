@@ -61,6 +61,40 @@ fn MediaBinding::identity(self : MediaBinding) -> String {
 }
 
 ///|
+fn MediaBinding::execution_context(
+  self : MediaBinding,
+) -> @media_jobs.ExecutionContext {
+  {
+    deployment_id: self.deployment_id,
+    generation: self.deployment_generation,
+    node_id: self.node_id,
+  }
+}
+
+///|
+async fn ApiService::media_execution_context(
+  self : ApiService,
+  jobs : @media_jobs.JobStore,
+  fixed : Array[MediaBinding],
+  templates : Array[MediaTemplateBinding],
+  identity : String,
+) -> @media_jobs.ExecutionContext {
+  if jobs.context_for_binding(identity) is Some(context) {
+    return context
+  }
+  guard self
+    .media_all_bindings(fixed, templates)
+    .filter(binding => binding.identity() == identity)
+    .get(0)
+    is Some(binding) else {
+    raise @media_runtime.RuntimeError::AuthorityUnavailable
+  }
+  let context = binding.execution_context()
+  jobs.remember_execution(identity, context)
+  context
+}
+
+///|
 pub fn ApiService::with_media_jobs(
   self : ApiService,
   jobs : @media_jobs.JobStore,
@@ -230,43 +264,40 @@ fn ApiService::configure_media(
       binding.provider()
     },
     (owner, model, identity) => {
-      guard self
-        .media_all_bindings(bindings, templates)
-        .filter(binding => binding.identity() == identity)
-        .get(0)
-        is Some(binding) else {
+      if !self.media_owner_authorized(owner, model) {
         return false
       }
-      self.media_authorized(owner, model, binding)
+      let context = self.media_execution_context(
+        jobs, bindings, templates, identity,
+      )
+      if !self.media_order_matches(owner, context) {
+        return false
+      }
+      self.media_execution_authorized(model, context)
     },
     job => {
-      guard self
-        .media_all_bindings(bindings, templates)
-        .filter(binding => binding.identity() == job.deployment_id)
-        .get(0)
-        is Some(binding) else {
-        raise Failure("media binding unavailable")
-      }
-      self.settle_media_job(job, binding)
+      let context = self.media_execution_context(
+        jobs,
+        bindings,
+        templates,
+        job.deployment_id,
+      )
+      self.settle_media_job(job, context.node_id)
     },
   )
   { ..self, media: Some({ jobs, runtime, bindings, templates, }), }
 }
 
 ///|
-async fn ApiService::media_authorized(
+async fn ApiService::media_owner_authorized(
   self : ApiService,
   owner : @media_jobs.Owner,
   model : String,
-  binding : MediaBinding,
 ) -> Bool {
   if self.reconciliation_only || !self.store.current_epoch_is_durable() {
-    return false
+    raise @media_runtime.RuntimeError::AuthorityUnavailable
   }
   let now = @async.now()
-  if model != binding.profile.model {
-    return false
-  }
   match owner.authority {
     PrivateWorkspace(lease_id) => {
       guard self.private_cloud_workspace_access &&
@@ -295,25 +326,13 @@ async fn ApiService::media_authorized(
         order.project_id == owner.project_id &&
         order.purchaser_subject_ref == owner.subject_ref &&
         order.requested_model_selector == Some(model) &&
-        model == binding.profile.model &&
-        order.target_deployment_ref == Some(binding.deployment_id) &&
+        order.target_deployment_ref is Some(_) &&
         order.active_started_unix_ms.map_or(false, started => {
           now < started + order.duration_seconds * 1000L
         }) else {
         return false
       }
     }
-  }
-  guard self.deployment_store is Some(deployments) &&
-    deployments.deployment(binding.deployment_id) is Some(operation) &&
-    operation.state == Ready &&
-    operation.generation == binding.deployment_generation &&
-    operation.plan.template.map_or(false, template => {
-      template.capability == VideoGenerate
-    }) &&
-    operation.plan.replicas.length() == 1 &&
-    operation.plan.replicas[0].node_id == binding.node_id else {
-    return false
   }
   guard self.account_store is Some(accounts) &&
     accounts
@@ -364,10 +383,76 @@ async fn ApiService::media_authorized(
 }
 
 ///|
+async fn ApiService::media_execution_authorized(
+  self : ApiService,
+  model : String,
+  context : @media_jobs.ExecutionContext,
+) -> Bool {
+  guard self.deployment_store is Some(deployments) &&
+    deployments.deployment(context.deployment_id) is Some(operation) &&
+    operation.generation == context.generation &&
+    operation.plan.template.map_or(false, template => {
+      template.capability == VideoGenerate && template.model_selector == model
+    }) &&
+    operation.plan.replicas.length() == 1 &&
+    operation.plan.replicas[0].node_id == context.node_id else {
+    return false
+  }
+  // Desired authority survives readiness loss. Actual provider access still
+  // requires fresh endpoint evidence matching the original instance identity.
+  [@deployment.DeploymentOperationState::Ready, Degraded, Reconciling].contains(
+    operation.state,
+  )
+}
+
+///|
+async fn ApiService::media_authorized(
+  self : ApiService,
+  owner : @media_jobs.Owner,
+  model : String,
+  binding : MediaBinding,
+) -> Bool {
+  if model != binding.profile.model ||
+    !self.media_owner_authorized(owner, model) {
+    return false
+  }
+  if !self.media_order_matches(owner, binding.execution_context()) {
+    return false
+  }
+  guard self.deployment_store is Some(deployments) &&
+    deployments.deployment(binding.deployment_id) is Some(operation) &&
+    operation.state == Ready else {
+    return false
+  }
+  self.media_execution_authorized(model, binding.execution_context())
+}
+
+///|
+async fn ApiService::media_order_matches(
+  self : ApiService,
+  owner : @media_jobs.Owner,
+  context : @media_jobs.ExecutionContext,
+) -> Bool {
+  match owner.authority {
+    PrivateWorkspace(_) => true
+    DedicatedOrder(order_id) =>
+      match self.machine_commerce_store {
+        None => false
+        Some(machine) =>
+          machine
+          .order(order_id)
+          .map_or(false, order => {
+            order.target_deployment_ref == Some(context.deployment_id)
+          })
+      }
+  }
+}
+
+///|
 async fn ApiService::settle_media_job(
   self : ApiService,
   job : @media_jobs.StoredJob,
-  binding : MediaBinding,
+  node_id : String,
 ) -> String {
   guard job.execution_terminal && job.terminal_unix_ms is Some(terminal) else {
     raise Failure("media job is not terminal")
@@ -381,7 +466,7 @@ async fn ApiService::settle_media_job(
     project_id: job.owner.project_id,
     actor_ref: job.owner.subject_ref,
     workload_id: job.job_id,
-    node_id: binding.node_id,
+    node_id,
     lease_epoch: 0L,
     meter: match job.owner.authority {
       DedicatedOrder(_) => "prepaid-video-job"
@@ -491,6 +576,11 @@ fn media_failure(error : Error) -> HttpReply {
       )
     @media_runtime.RuntimeError::Unauthorized =>
       api_error(403, "VideoAccessEnded", "video authority has ended", false)
+    @media_runtime.RuntimeError::AuthorityUnavailable =>
+      api_error(
+        503, "VideoAuthorityUnavailable", "video authority could not be confirmed; retain the same request key",
+        true,
+      )
     @media_runtime.RuntimeError::ContentUnavailable =>
       api_error(
         409, "VideoContentUnavailable", "video is incomplete or expired", false,
@@ -655,6 +745,7 @@ async fn ApiService::handle_media(
         now + 86400000L,
         maximum_active=limit.max_concurrent_requests,
         maximum_per_hour=limit.max_requests_per_hour,
+        execution_context=binding.execution_context(),
       )
       return json_reply(200, job.public_view(@async.now()))
     }
