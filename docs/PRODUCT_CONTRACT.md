@@ -231,7 +231,12 @@ Moongate S3-compatible HTTPS origin and authenticate with node-local,
 least-privilege SigV4 credentials that are never passed to runtimes. A detached
 signature may have its own reference; an opaque Cosign evidence reference
 resolves to the sibling `<model-object>.sig` object. OCI remains the
-digest-pinned runtime-image transport. Artifact transfer is pull-based by the
+digest-pinned runtime-image transport. Signature objects may contain a detached
+signature or a Sigstore JSON bundle. Controller and node select the Cosign
+verification format from content, not the cache filename; malformed bundles
+are rejected without falling back to bare-signature verification. Public-key,
+transparency-log and artifact-digest checks remain required. Artifact transfer is
+pull-based by the
 selected node and bound to its live signed assignment; the controller never
 opens an SSH, copy or arbitrary shell channel and does not mount model bytes in
 the production HA profile.
