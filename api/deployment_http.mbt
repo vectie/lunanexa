@@ -158,7 +158,7 @@ async fn ApiService::deployment_planning_context(
         match self.exclusive_lease_store {
           Some(leases) if leases.node_blocks_managed_placement(
               heartbeat.node_id,
-            ) => { ..node, state: Cordoned }
+            ) => { ..node, state: Cordoned, }
           _ => node
         }
       }
@@ -285,6 +285,32 @@ async fn ApiService::reconcile_deployment_operation(
   guard self.deployment_store is Some(deployments) else { return operation }
   let now = @async.now()
   let mut current = operation
+  let readiness_lost = "runtime readiness lost or assignment lease expired"
+  if current.state == Ready ||
+    (current.state == Degraded && current.message == readiness_lost) {
+    let ready = @controller.deployment_operation_ready(
+      current,
+      self.store.assignments(),
+      self.store.heartbeats(),
+      now,
+    )
+    if current.state == Ready && !ready {
+      current = deployments.transition(
+        current.operation_id,
+        Degraded,
+        readiness_lost,
+        now,
+      )
+    } else if current.state == Degraded && ready {
+      current = deployments.transition(
+        current.operation_id,
+        Ready,
+        "all planned replicas report ready",
+        now,
+      )
+    }
+    return current
+  }
   if current.state == Planned {
     let assignments = @controller.deployment_assignments(
       current,
@@ -394,7 +420,10 @@ async fn ApiService::reconcile_deployment_operation(
 async fn ApiService::refresh_deployment_operations(self : ApiService) -> Unit {
   guard self.deployment_store is Some(deployments) else { return }
   for operation in deployments.operations() {
-    if operation.state == Planned || operation.state == Reconciling {
+    if operation.state == Planned ||
+      operation.state == Reconciling ||
+      operation.state == Ready ||
+      operation.state == Degraded {
       ignore(self.reconcile_deployment_operation(operation))
     }
   }
@@ -433,11 +462,7 @@ async fn ApiService::create_service_deployment(
   } noraise {
     value => value
   }
-  let result = if operation.state == Planned {
-    self.reconcile_deployment_operation(operation)
-  } else {
-    operation
-  }
+  let result = self.reconcile_deployment_operation(operation)
   self.operator_audit(
     "service-deployment.create",
     result.deployment_id,
@@ -526,9 +551,14 @@ async fn ApiService::promote_service_deployment(
   deployment_id : String,
 ) -> HttpReply {
   guard self.deployment_store is Some(deployments) &&
-    deployments.deployment(deployment_id) is Some(operation) &&
-    operation.state == Ready &&
-    operation.plan.template is Some(template) else {
+    deployments.deployment(deployment_id) is Some(stored) else {
+    return api_error(
+      409, "DeploymentRejected", "only a ready service deployment can be promoted",
+      false,
+    )
+  }
+  let operation = self.reconcile_deployment_operation(stored)
+  guard operation.state == Ready && operation.plan.template is Some(template) else {
     return api_error(
       409, "DeploymentRejected", "only a ready service deployment can be promoted",
       false,

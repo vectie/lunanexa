@@ -741,23 +741,53 @@ Each DGX needs:
 
 - a unique, stable Kubernetes node name such as `dgx-spark-01`;
 - the NVIDIA driver/toolkit required by the approved runtime image;
-- Podman or Docker at an allowlisted path;
-- a protected engine socket at `unix:///run/podman/podman.sock` or an approved
-  equivalent below `/run`;
+- the existing Kubernetes/containerd runtime and NVIDIA DRA device class
+  `gpu.nvidia.com` for the managed Kubernetes backend; no additional Podman or
+  Docker daemon/socket is required for that backend;
 - the root-owned `/usr/libexec/lunanexa-lease-helper` and unprivileged fixed
   client `/usr/libexec/lunanexa-lease-helper-client` for the recommended host
   systemd deployment, or a separately reviewed socket adapter when the node
   agent runs in Kubernetes;
-- a pre-created OCI network named `lunanexa-runtime`;
+- a dedicated managed-runtime namespace, scoped Kubernetes API credentials,
+  and reviewed controller-to-runtime network routes;
 - host directories `/etc/lunanexa` and `/var/lib/lunanexa`;
 - network access to the controller, artifact HTTPS endpoint, OCI registry and
   approved runtime route only;
 - synchronized time. Heartbeats outside the controller replay window are
   rejected.
 
-The supplied DaemonSet uses host paths for configuration, state and the Podman
-socket. Confirm that its non-root process identity can read the configuration
-files, write `/var/lib/lunanexa`, and access only the intended engine socket.
+The supplied DaemonSet selects `LUNANEXA_RUNTIME_BACKEND=kubernetes`, uses host
+paths for configuration/state and a projected Kubernetes token, and does not
+mount an engine socket. Confirm that its non-root process identity can read the
+configuration files and write the pre-created `/var/lib/lunanexa` directory.
+Prepare `deploy/node-kubernetes-rbac.yaml` and the per-node
+`deploy/kubernetes-runtime.example.json`; node identity and model-cache paths
+must match the agent configuration. The Role grants create/get/delete only for
+Pods, NetworkPolicies and ResourceClaimTemplates in the dedicated runtime
+namespace. Serving Pods receive neither this API token nor model-download
+credentials. Model bytes are materialized and verified before a read-only
+file mount is exposed to the runtime.
+
+`controller_addresses` contains exact private IPv4 **source addresses seen by
+the runtime**, not merely the management host's advertised address. For a
+host-based controller, inspect `ip route get POD_IP`: an overlay route can select
+a different source address. Validate actual connectivity and allow only the
+required `/32` sources and runtime port; do not open the whole Pod CIDR to fix a
+connection failure. A Pod's readiness probe does not prove that the controller
+can reach it. Controller source addresses can be updated in the persisted
+runtime journal only after all owned resources have been confirmed deleted;
+the owner nonce, node identity, namespace and cache boundaries are retained.
+Drain through the controller and wait for cleanup before changing this policy.
+Never remove the journal to bypass ownership checks.
+
+The legacy `oci` backend remains available for explicitly selected standalone
+deployments; only that backend requires an allowlisted Podman/Docker engine,
+protected socket and pre-created `lunanexa-runtime` network. It is not a
+prerequisite for the managed Kubernetes/containerd path.
+
+Run the [managed-runtime acceptance checklist](KUBERNETES_RUNTIME_ACCEPTANCE.md)
+before treating runtime readiness as customer-facing delivery evidence.
+
 Exclusive-machine actions are explicitly disabled in this DaemonSet with
 `LUNANEXA_EXCLUSIVE_LEASES_ENABLED=0`: the bundled sudo client is for the host
 systemd layout and is not runnable from a non-root pod. Do not change that flag
