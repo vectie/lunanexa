@@ -24,7 +24,7 @@ pub struct FileExclusiveLeaseStore {
 
 ///|
 fn canonical_lease(lease : @nodelease.ExclusiveNodeLease) -> String {
-  { ..lease, authority_receipt: "" }.to_json().stringify()
+  { ..lease, authority_receipt: "", }.to_json().stringify()
 }
 
 ///|
@@ -47,7 +47,7 @@ fn sign_lease(
   lease : @nodelease.ExclusiveNodeLease,
   signing_secret : String,
 ) -> @nodelease.ExclusiveNodeLease {
-  { ..lease, authority_receipt: authority_receipt(lease, signing_secret) }
+  { ..lease, authority_receipt: authority_receipt(lease, signing_secret), }
 }
 
 ///|
@@ -291,11 +291,16 @@ pub async fn FileExclusiveLeaseStore::issue(
 }
 
 ///|
+/// Persist and sign a generation-fenced lifecycle transition. A paid activation
+/// duration is valid only for an unexpired Provisioning-to-Active transition;
+/// it anchors the purchased interval at the accepted activation time atomically.
+/// Ordinary transitions preserve the original interval when the option is absent.
 pub async fn FileExclusiveLeaseStore::transition(
   self : FileExclusiveLeaseStore,
   lease_id : String,
   request : @nodelease.ExclusiveLeaseTransitionRequest,
   now_unix_ms : Int64,
+  activation_duration_ms? : Int64,
 ) -> @nodelease.ExclusiveNodeLease {
   self.mutex.acquire()
   let previous = self.leases.copy()
@@ -303,15 +308,36 @@ pub async fn FileExclusiveLeaseStore::transition(
     guard self.leases.get(lease_id) is Some(lease) else {
       raise LeaseNotFound(lease_id)
     }
-    let transitioned = sign_lease(
-      lease.transition(
-        request.state,
-        request.expected_generation,
-        request.evidence_receipt,
-        now_unix_ms,
-      ),
-      self.signing_secret,
+    let advanced = lease.transition(
+      request.state,
+      request.expected_generation,
+      request.evidence_receipt,
+      now_unix_ms,
     )
+    let advanced = match activation_duration_ms {
+      None => advanced
+      Some(duration) => {
+        if lease.state != Provisioning ||
+          request.state != Active ||
+          now_unix_ms >= lease.intent.expires_unix_ms ||
+          duration <= 0L ||
+          duration > 31536000000L ||
+          now_unix_ms > 9223372036854775807L - duration {
+          raise @nodelease.ExclusiveLeaseError::InvalidIntent(
+            "invalid paid activation interval",
+          )
+        }
+        {
+          ..advanced,
+          intent: {
+            ..advanced.intent,
+            starts_unix_ms: now_unix_ms,
+            expires_unix_ms: now_unix_ms + duration,
+          },
+        }
+      }
+    }
+    let transitioned = sign_lease(advanced, self.signing_secret)
     self.leases[lease_id] = transitioned
     self.persist()
     self.mutex.release()

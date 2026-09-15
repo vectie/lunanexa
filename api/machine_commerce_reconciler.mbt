@@ -10,7 +10,7 @@ fn machine_template_ref(value : String) -> @deployment.TemplateRef? {
   if parts.length() == 2 &&
     @contracts.valid_identifier(parts[0]) &&
     @contracts.valid_identifier(parts[1]) {
-    Some({ template_id: parts[0], version: parts[1] })
+    Some({ template_id: parts[0], version: parts[1], })
   } else {
     None
   }
@@ -304,7 +304,7 @@ async fn ApiService::reconcile_provisioning_machine_order(
             order.order_id,
             "machine-order-active-\{order.order_id}",
             order.generation,
-            now_unix_ms,
+            lease.intent.starts_unix_ms,
           ),
         ) catch {
           _ => ()
@@ -632,8 +632,8 @@ async fn ApiService::ingest_machine_usage(
   let before = self.commercial_store.durable_snapshot()
   let accepted = try {
     for receipt in snapshot.usage_receipts {
-      // A fully metered prepaid term still has a durable completion receipt,
-      // but no additional consumption to ingest into the commercial ledger.
+      // A completion or subsecond cumulative-meter checkpoint can be durable
+      // without adding any consumption to the commercial ledger.
       if receipt.quantity == 0L {
         continue
       }

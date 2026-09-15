@@ -429,6 +429,7 @@ async test "settled bare order provisions internally without leaking its node" {
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_exclusive_lease_store(leases)
+    .with_lease_helper_receipt_secret("machine-test-helper-receipt-key-more-than-32-bytes")
     .with_portal_store(portal)
     .with_machine_commerce_store(machine_store)
     .with_provider_callback_secrets({
@@ -727,19 +728,34 @@ async test "settled bare order provisions internally without leaking its node" {
     .lease(reconciled.target_lease_ref.unwrap())
     .unwrap()
   assert_eq(internal_lease.intent.node_id, "physical-node-a")
-  let active_lease = leases.transition(
-    internal_lease.intent.lease_id,
-    {
-      expected_generation: internal_lease.generation,
-      state: Active,
-      evidence_receipt: "agent:machine-ready",
-    },
-    @async.now(),
+  let activated_at = @async.now()
+  let action = @nodelease.LeaseAgentAction::ProvisionAccess(
+    lease_id=internal_lease.intent.lease_id,
+    username=internal_lease.intent.unix_username,
+    credential_ref=internal_lease.intent.access_credential_ref,
+    expires_unix_ms=internal_lease.intent.expires_unix_ms,
+    generation=internal_lease.generation,
   )
-  ignore(active_lease)
+  let activation = service.handle(
+    Post,
+    "/v1/nodes/physical-node-a/exclusive-lease:observe",
+    { "Authorization": "Node node-token", "X-LunaNexa-Node-Id": "physical-node-a" },
+    ({
+      "lease_id": internal_lease.intent.lease_id,
+      "observed_generation": internal_lease.generation.to_string(),
+      "action": "provision",
+      "receipt": @nodelease.signed_helper_receipt(action, activated_at, service.lease_helper_receipt_secret),
+      "observed_unix_ms": activated_at.to_string(),
+    } : Json).stringify(),
+  )
+  guard activation.status == 200 else { fail("Activation rejected: " + activation.body) }
+  let active_lease = leases.lease(internal_lease.intent.lease_id).unwrap()
+  assert_eq(active_lease.intent.starts_unix_ms, activated_at)
+  assert_eq(active_lease.intent.expires_unix_ms, activated_at + reconciled.duration_seconds * 1000L)
   service.reconcile_machine_commerce()
   let active_order = machine_store.order(created.order_id).unwrap()
   assert_eq(active_order.state, Active)
+  assert_eq(active_order.active_started_unix_ms, Some(activated_at))
   let usage_end = active_order.active_started_unix_ms.unwrap() + 60000L
   ignore(
     machine_store.record_usage(
@@ -768,6 +784,33 @@ async test "settled bare order provisions internally without leaking its node" {
   let commercial_usage = service.commercial_store.snapshot("org-a")
   assert_eq(commercial_usage.usage_observations.length(), 1)
   assert_eq(commercial_usage.ledger_entries.length(), 0)
+  let after_usage = machine_store.order(active_order.order_id).unwrap()
+  let (fractional, first_fraction, _) = machine_store.record_usage(
+    active_order.order_id,
+    {
+      idempotency_key: "fraction-positive",
+      expected_generation: after_usage.generation,
+      ended_unix_ms: usage_end + 1L,
+    },
+    usage_end + 1L,
+  )
+  assert_eq(first_fraction.quantity, 1L)
+  let (_, second_fraction, _) = machine_store.record_usage(
+    active_order.order_id,
+    {
+      idempotency_key: "fraction-zero",
+      expected_generation: fractional.generation,
+      ended_unix_ms: usage_end + 2L,
+    },
+    usage_end + 2L,
+  )
+  assert_eq(second_fraction.quantity, 0L)
+  for _ in 0..<2 {
+    service.ingest_machine_usage(machine_store.snapshot())
+    let ingested = service.commercial_store.snapshot("org-a")
+    assert_eq(ingested.usage_observations.length(), 2)
+    assert_eq(ingested.ledger_entries.length(), 0)
+  }
   let customer = service.handle(
     Get,
     "/v1/portal/self/machine-orders",

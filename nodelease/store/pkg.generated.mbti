@@ -38,7 +38,7 @@ pub async fn FileExclusiveLeaseStore::node_blocks_managed_placement(Self, String
 pub async fn FileExclusiveLeaseStore::open(String, String) -> Self
 pub async fn FileExclusiveLeaseStore::open_postgres(@database.PostgresDatabase, String) -> Self
 pub async fn FileExclusiveLeaseStore::reconcile_expired(Self, Int64) -> Bool
-pub async fn FileExclusiveLeaseStore::transition(Self, String, @nodelease.ExclusiveLeaseTransitionRequest, Int64) -> @nodelease.ExclusiveNodeLease
+pub async fn FileExclusiveLeaseStore::transition(Self, String, @nodelease.ExclusiveLeaseTransitionRequest, Int64, activation_duration_ms? : Int64) -> @nodelease.ExclusiveNodeLease
 
 // Type aliases
 
