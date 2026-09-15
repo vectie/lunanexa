@@ -3071,7 +3071,7 @@ async fn ApiService::dispatch_with_transport(
   if access_management_path(path) {
     return self.handle_access_management(verb, path, headers, body)
   }
-  if openai_compatibility_path(path) {
+  if openai_compatibility_path(path) && !(verb == Post && path == "/v1/models") {
     return self.handle_openai_compatibility(verb, path, headers, body)
   }
   if path == "/v1/videos" || path.has_prefix("/v1/videos/") {
