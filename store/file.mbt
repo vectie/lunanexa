@@ -16,6 +16,7 @@ pub struct FileStore {
   mutex : @async.Mutex
   requires_epoch_advance : Bool
   mut controller_fenced : Bool
+  mut leadership_lost : Bool
 }
 
 ///|
@@ -52,6 +53,7 @@ pub async fn FileStore::open(path : String) -> FileStore {
     mutex: Mutex(),
     requires_epoch_advance: existed,
     controller_fenced: false,
+    leadership_lost: false,
   }
   if !existed {
     write_snapshot(path, state.snapshot())
@@ -84,6 +86,7 @@ pub async fn FileStore::open_postgres(
     mutex: Mutex(),
     requires_epoch_advance: payload is Some(_),
     controller_fenced: false,
+    leadership_lost: false,
   }
   if payload is None {
     database.save_opaque_snapshot(
@@ -96,7 +99,12 @@ pub async fn FileStore::open_postgres(
 }
 
 ///|
-async fn FileStore::persist(self : FileStore) -> Unit {
+async fn FileStore::persist(self : FileStore, next : MemoryStore) -> Unit {
+  if self.leadership_lost {
+    raise DurableStoreError::InvalidState(
+      "controller leadership was permanently lost",
+    )
+  }
   match self.persistence {
     StoreFile(path) => {
       let lock_file = @fs.open(
@@ -109,16 +117,18 @@ async fn FileStore::persist(self : FileStore) -> Unit {
       lock_file.lock(Exclusive)
       defer lock_file.unlock()
       let durable = read_snapshot(path)
-      if durable.controller_epoch() > self.state.controller_epoch() {
+      if durable.controller_epoch() > next.controller_epoch() {
         self.state = durable
+        self.leadership_lost = true
         raise DurableStoreError::InvalidState(
           "controller was fenced by a newer durable epoch",
         )
       }
-      write_snapshot(path, self.state.snapshot())
+      write_snapshot(path, next.snapshot())
     }
     StorePostgres(database, holder_id, fencing_token) => {
       if !database.controller_leadership_is_current(holder_id, fencing_token) {
+        self.leadership_lost = true
         raise DurableStoreError::InvalidState(
           "controller PostgreSQL leadership was lost",
         )
@@ -126,10 +136,25 @@ async fn FileStore::persist(self : FileStore) -> Unit {
       database.save_opaque_snapshot(
         "control",
         "lunanexa.store.v1",
-        self.state.snapshot(),
+        next.snapshot(),
       )
     }
   }
+}
+
+///|
+// The candidate owns independent maps. Readers cannot observe a mutation until
+// its snapshot is durable, and cancellation always releases the process lock.
+async fn FileStore::update(
+  self : FileStore,
+  change : async (MemoryStore) -> Unit,
+) -> Unit {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  let next = self.state.candidate()
+  change(next)
+  self.persist(next)
+  self.state = next
 }
 
 ///|
@@ -137,18 +162,7 @@ pub async fn FileStore::put_assignment(
   self : FileStore,
   assignment : @contracts.DesiredAssignment,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_assignment(assignment)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => next.put_assignment(assignment))
 }
 
 ///|
@@ -163,6 +177,9 @@ pub async fn FileStore::controller_epoch(self : FileStore) -> Int64 {
 pub async fn FileStore::current_epoch_is_durable(self : FileStore) -> Bool {
   self.mutex.acquire()
   defer self.mutex.release()
+  if self.leadership_lost {
+    return false
+  }
   match self.persistence {
     StoreFile(path) => {
       let lock_file = @fs.open(
@@ -189,26 +206,21 @@ pub async fn FileStore::fence_controller(
   epoch : Int64,
 ) -> Unit {
   self.mutex.acquire()
-  if self.controller_fenced ||
+  defer self.mutex.release()
+  if self.leadership_lost ||
+    self.controller_fenced ||
     epoch <= 0L ||
     epoch < self.state.controller_epoch() ||
     (self.requires_epoch_advance && epoch <= self.state.controller_epoch()) {
-    self.mutex.release()
     raise DurableStoreError::InvalidState("controller epoch is stale")
   }
   if epoch > self.state.controller_epoch() {
-    self.state.set_controller_epoch(epoch)
-    try self.persist() catch {
-      error => {
-        self.mutex.release()
-        raise error
-      }
-    } noraise {
-      _ => ()
-    }
+    let next = self.state.candidate()
+    next.set_controller_epoch(epoch)
+    self.persist(next)
+    self.state = next
   }
   self.controller_fenced = true
-  self.mutex.release()
 }
 
 ///|
@@ -216,18 +228,7 @@ pub async fn FileStore::put_node_directive(
   self : FileStore,
   directive : @contracts.NodeDirective,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_node_directive(directive)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => next.put_node_directive(directive))
 }
 
 ///|
@@ -247,19 +248,10 @@ pub async fn FileStore::commit_node_directive(
   directive : @contracts.NodeDirective,
   audit : @contracts.AuditEvent,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_node_directive(directive)
-    self.state.append_audit(audit)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => {
+    next.put_node_directive(directive)
+    next.append_audit(audit)
+  })
 }
 
 ///|
@@ -268,19 +260,10 @@ pub async fn FileStore::commit_assignment(
   assignment : @contracts.DesiredAssignment,
   audit : @contracts.AuditEvent,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_assignment(assignment)
-    self.state.append_audit(audit)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => {
+    next.put_assignment(assignment)
+    next.append_audit(audit)
+  })
 }
 
 ///|
@@ -290,22 +273,15 @@ pub async fn FileStore::commit_assignment_removal(
   audit : @contracts.AuditEvent,
 ) -> Bool {
   self.mutex.acquire()
-  let removed = self.state.remove_assignment(assignment_id)
+  defer self.mutex.release()
+  let next = self.state.candidate()
+  let removed = next.remove_assignment(assignment_id)
   if !removed {
-    self.mutex.release()
     return false
   }
-  try {
-    self.state.append_audit(audit)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  next.append_audit(audit)
+  self.persist(next)
+  self.state = next
   true
 }
 
@@ -314,18 +290,7 @@ pub async fn FileStore::append_audit(
   self : FileStore,
   event : @contracts.AuditEvent,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.append_audit(event)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => next.append_audit(event))
 }
 
 ///|
@@ -364,18 +329,7 @@ pub async fn FileStore::put_heartbeat(
   self : FileStore,
   heartbeat : @contracts.NodeHeartbeat,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_heartbeat(heartbeat)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => next.put_heartbeat(heartbeat))
 }
 
 ///|
@@ -394,18 +348,7 @@ pub async fn FileStore::put_workload_result(
   idempotency_key : String,
   response : @contracts.WorkloadResponse,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_workload_result(idempotency_key, response)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => next.put_workload_result(idempotency_key, response))
 }
 
 ///|
@@ -415,19 +358,10 @@ pub async fn FileStore::commit_workload(
   response : @contracts.WorkloadResponse,
   audit : @contracts.AuditEvent,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.state.put_workload_result(idempotency_key, response)
-    self.state.append_audit(audit)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(next => {
+    next.put_workload_result(idempotency_key, response)
+    next.append_audit(audit)
+  })
 }
 
 ///|

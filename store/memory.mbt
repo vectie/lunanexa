@@ -40,6 +40,21 @@ pub fn MemoryStore::new() -> MemoryStore {
 }
 
 ///|
+// Store mutations replace records rather than editing their nested values.
+// Copy the mutable indexes and audit buffer without a JSON encode/decode pass.
+fn MemoryStore::candidate(self : MemoryStore) -> MemoryStore {
+  {
+    assignments: self.assignments.copy(),
+    audits: self.audits.copy(),
+    heartbeats: self.heartbeats.copy(),
+    workload_by_id: self.workload_by_id.copy(),
+    workload_by_idempotency: self.workload_by_idempotency.copy(),
+    node_directives: self.node_directives.copy(),
+    controller_epoch: self.controller_epoch,
+  }
+}
+
+///|
 pub fn MemoryStore::controller_epoch(self : MemoryStore) -> Int64 {
   self.controller_epoch
 }
@@ -150,7 +165,7 @@ pub fn MemoryStore::put_workload_result(
   idempotency_key : String,
   response : @contracts.WorkloadResponse,
 ) -> Unit {
-  let record : WorkloadResultRecord = { idempotency_key, response }
+  let record : WorkloadResultRecord = { idempotency_key, response, }
   self.workload_by_id[response.workload_id] = record
   self.workload_by_idempotency[idempotency_key] = record
 }
@@ -193,7 +208,7 @@ pub fn MemoryStore::snapshot(self : MemoryStore) -> String {
     node_directives: self.node_directives(),
     controller_epoch: self.controller_epoch,
   }
-  snapshot.to_json().stringify()
+  ToJson::to_json(snapshot).stringify()
 }
 
 ///|
