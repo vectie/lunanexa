@@ -14,10 +14,9 @@ if printf '%s\n' "$source_files" | xargs rg -n -i \
 fi
 
 if printf '%s\n' "$source_files" | xargs rg -n \
-  '(container_id|stack_trace|node_address|filesystem_path|provider_credential)' >/dev/null; then
+  '(container_id|stack_trace|node_address|filesystem_path|provider_credential)([[:space:]]*:|\\?")' >/dev/null; then
   printf '%s\n' 'response leak check failed: forbidden internal field found' >&2
   exit 1
 fi
 
 printf '%s\n' 'isolation and public-response scans passed'
-

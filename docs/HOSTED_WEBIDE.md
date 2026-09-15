@@ -68,11 +68,21 @@ architecture before treating the image as ready.
 The generated NetworkPolicy is applied before runnable resources. It permits
 ingress only from `app.kubernetes.io/name=lunanexa-webide-gateway` in the same
 namespace. Egress is limited to kube-dns, the controller labelled
-`app=lunanexa-control` in `controller_namespace`, and MoonGate labelled
-`app.kubernetes.io/name=moongate` in `model_gateway_namespace`, on the configured
+`app=lunanexa-control` in `controller_namespace`, and the deployment-owned model
+gateway labelled `lunanexa.io/model-gateway=true` in `model_gateway_namespace`, on the configured
 ports. Namespace and pod selectors must both match. Deployment service routing must match these selectors;
 external or host-network gateways need a separately reviewed policy. A CNI that
 does not enforce NetworkPolicy is not an acceptable isolation boundary.
+
+Before upgrading the workspace host, add `lunanexa.io/model-gateway: "true"`
+to the actual gateway's **Pod template** and wait for those Pods to be ready.
+The gateway can be MoonGate or another implementation of the published API;
+its product name is not part of LunaNexa's network policy. Do not label tenant
+workspaces, model runtimes, or arbitrary proxy Pods with this role. A matching
+role in a different namespace is not authorized, and a Pod without the role in
+the gateway namespace is not authorized. Restrict who may change Pod labels or
+create Pods in the trusted gateway namespace. Missing labels fail closed; do
+not compensate with an all-Pods or all-namespaces egress rule.
 
 Workspace pod templates carry `app.kubernetes.io/managed-by=lunanexa-webide`
 in addition to the per-workspace selector. Gateway egress policies selecting

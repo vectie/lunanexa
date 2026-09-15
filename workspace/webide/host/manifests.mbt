@@ -305,7 +305,7 @@ fn WorkspaceHost::resources(
                 },
               },
               "podSelector": {
-                "matchLabels": { "app.kubernetes.io/name": "moongate" },
+                "matchLabels": { "lunanexa.io/model-gateway": "true" },
               },
             },
           ],

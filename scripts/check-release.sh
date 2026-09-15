@@ -4,6 +4,7 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
+moon run scripts/check-isolation-test.mbtx
 sh scripts/check-isolation.sh
 sh scripts/validate-lunaflux-promotion-boundary.sh
 sh scripts/deploy/oidc-browser-ingress-manifest-test.sh

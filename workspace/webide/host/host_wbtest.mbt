@@ -11,7 +11,7 @@ fn host_config() -> HostConfig {
     cpu_millis: 1000,
     memory_mib: 2048,
     controller_origin: "http://controller.webide.svc:5000",
-    model_gateway_origin: "http://moongate.webide.svc:5001",
+    model_gateway_origin: "http://model-gateway.webide.svc:5001",
     trusted_ca_config_map: None,
     controller_port: 5000,
     model_gateway_port: 5001,
