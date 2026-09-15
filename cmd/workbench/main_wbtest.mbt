@@ -185,7 +185,10 @@ test "only the newest connection generation may advance the lease clock" {
 ///|
 test "workbench locale metadata is guarded and local failures follow the locale" {
   let locale = @i18n.parse_locale("zh-CN")
-  inspect(workbench_title(locale), content="LunaNexa 开发者工作台")
+  inspect(
+    workbench_title(locale),
+    content="能源谷“创未来”街区算力平台 开发者工作台",
+  )
   let _ = stored_locale()
   persist_locale(locale.storage_value())
   sync_document_locale(locale)

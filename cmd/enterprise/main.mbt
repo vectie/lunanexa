@@ -436,7 +436,7 @@ fn apply_enterprise_locale(locale : @i18n.Locale) -> Unit {
     locale.storage_value(),
     locale.language_tag(),
     portal_copy(
-      locale, "LunaNexa | Enterprise Portal", "LunaNexa | 企业门户",
+      locale, "能源谷“创未来”街区算力平台 | Enterprise Portal", "能源谷“创未来”街区算力平台 | 企业门户",
     ),
   )
 }

@@ -1399,9 +1399,20 @@ fn navigation(
   ]
   @html.aside(class="enterprise-sidebar", [
     @html.a(class="enterprise-brand", href="/enterprise/", [
-      @html.span(class="brand-mark", "LN"),
+      @html.span(
+        class="brand-mark",
+        style=[
+          "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+        ],
+        [
+          @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+            "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+            "transform: scale(1.22)", "transform-origin: center",
+          ]),
+        ],
+      ),
       @html.span([
-        @html.strong("LunaNexa"),
+        @html.strong("能源谷“创未来”街区算力平台"),
         @html.small(copy(state.locale, "Enterprise", "企业平台")),
       ]),
     ]),

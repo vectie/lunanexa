@@ -80,7 +80,9 @@ fn app_copy(
 
 ///|
 fn workbench_title(locale : @i18n.Locale) -> String {
-  app_copy(locale, "LunaNexa Workbench", "LunaNexa 开发者工作台")
+  app_copy(
+    locale, "能源谷“创未来”街区算力平台 Workbench", "能源谷“创未来”街区算力平台 开发者工作台",
+  )
 }
 
 ///|
