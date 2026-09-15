@@ -6,10 +6,13 @@ import {
   "moonbitlang/async/fs",
   "moonbitlang/async/io",
   "moonbitlang/core/encoding/utf8",
-  "moonbitlang/core/env",
   "moonbitlang/core/json",
   "moonbitlang/x/crypto",
 }
+
+import {
+  "moonbitlang/core/env",
+} for "test"
 
 supported_targets = "native"
 
