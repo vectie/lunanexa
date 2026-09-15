@@ -8,7 +8,7 @@ async test "file-backed media intents survive restart without resubmission" {
     subject_ref: "s",
     organization_id: "o",
     project_id: "p",
-    order_id: "order",
+    authority: DedicatedOrder("order"),
   }
   let store = @store.open_file(path)
   let (job, created) = store.reserve(
@@ -30,7 +30,7 @@ async test "file-backed media intents survive restart without resubmission" {
 }
 
 ///|
-async test "PostgreSQL media intents retain ownership and ambiguous submission across restart" {
+async test "PostgreSQL private media intents retain ownership and ambiguous submission across restart" {
   guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
     return
   }
@@ -49,7 +49,7 @@ async test "PostgreSQL media intents retain ownership and ambiguous submission a
     subject_ref: "s",
     organization_id: "o",
     project_id: "p",
-    order_id: "order",
+    authority: PrivateWorkspace("workspace-lease"),
   }
   let store = @store.open_postgres(database)
   let (job, created) = store.reserve(

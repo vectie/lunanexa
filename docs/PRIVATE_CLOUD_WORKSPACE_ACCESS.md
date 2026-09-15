@@ -18,6 +18,14 @@ lease, PaaS remains an isolated WebIDE/ComfyUI workspace, and MaaS remains a
 model API. A unified role-aware workspace is an interface decision, not shared
 tenant storage or unlimited administrator access to raw secrets.
 
-Implementation status: backend admission slice under validation. Unified UI,
+Video jobs distinguish commercial order ownership from private workspace-lease
+ownership. Private jobs must bind the exact active workspace lease, never a
+synthetic machine order; model/deployment readiness and per-capability limits
+remain required. Commercial job serialization and idempotency identity must
+remain unchanged when this authority distinction is introduced.
+
+Implementation status: backend admission and private video authority have
+component/API tests, including private task restoration in an isolated PostgreSQL
+database. These tests use synthetic providers, not GPU inference. Unified UI,
 live deployment and complete browser-to-provider acceptance remain separate
 unfinished work; this document is not a production acceptance claim.

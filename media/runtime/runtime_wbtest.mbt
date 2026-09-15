@@ -5,7 +5,7 @@ fn owner() -> @jobs.Owner {
     subject_ref: "s",
     organization_id: "o",
     project_id: "p",
-    order_id: "paid-order",
+    authority: DedicatedOrder("paid-order"),
   }
 }
 
@@ -34,7 +34,7 @@ fn request() -> @provider.VideoRequest raise {
 
 ///|
 async fn store() -> @jobs.JobStore {
-  @jobs.JobStore::restore({ schema_version: @jobs.schema_version, jobs: [], }, _ => {
+  @jobs.JobStore::restore({ schema_version: @jobs.schema_version, jobs: [] }, _ => {
     ()
   })
 }
@@ -124,7 +124,7 @@ async test "video runtime retries settlement but never resubmits an accepted req
     assert_eq(state["submits"], 1)
     assert_true(
       try {
-        ignore(runtime.get(job.job_id, { ..owner(), subject_ref: "intruder", }))
+        ignore(runtime.get(job.job_id, { ..owner(), subject_ref: "intruder" }))
         false
       } catch {
         @jobs.JobError::NotFound => true

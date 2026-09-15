@@ -22,6 +22,11 @@ pub(all) suberror JobError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) enum Authority {
+  DedicatedOrder(String)
+  PrivateWorkspace(String)
+} derive(Eq, @debug.Debug)
+
 pub struct JobStore {
   mut jobs : Map[String, StoredJob]
   persist : async (Snapshot) -> Unit
@@ -45,8 +50,10 @@ pub(all) struct Owner {
   subject_ref : String
   organization_id : String
   project_id : String
-  order_id : String
-} derive(Eq, ToJson, @json.FromJson)
+  authority : Authority
+} derive(Eq)
+pub impl ToJson for Owner
+pub impl @json.FromJson for Owner
 
 pub(all) struct Snapshot {
   schema_version : String
