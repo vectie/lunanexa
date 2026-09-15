@@ -4,7 +4,7 @@ test "legacy commercial owner retains exact idempotency JSON" {
   let owner : Owner = @json.from_json(@json.parse(encoded))
   assert_eq(owner.authority, DedicatedOrder("r"))
   assert_eq(owner.to_json().stringify(), encoded)
-  let private_owner = { ..owner, authority: PrivateWorkspace("r") }
+  let private_owner = { ..owner, authority: PrivateWorkspace("r"), }
   assert_false(private_owner.to_json().stringify().contains("order_id"))
   let decoded : Owner = @json.from_json(private_owner.to_json())
   assert_true(decoded == private_owner)
@@ -21,8 +21,11 @@ async test "private ownership survives recovery without colliding with commercia
     project_id: "p",
     authority: DedicatedOrder("same-id"),
   }
-  let private_owner = { ..commercial, authority: PrivateWorkspace("same-id") }
-  let store = JobStore::restore({ schema_version, jobs: [] }, _ => ())
+  let private_owner = { ..commercial, authority: PrivateWorkspace("same-id"), }
+  let store = JobStore::restore(
+    { schema_version, jobs: [], terminations: None, },
+    _ => (),
+  )
   let (paid, _) = store.reserve(
     commercial,
     "paid",

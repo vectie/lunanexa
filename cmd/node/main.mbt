@@ -848,6 +848,20 @@ async fn main {
   }
   @async.with_task_group(group => {
     if supervisor is @node_agent.Kubernetes(kubernetes) {
+      // Independent delivery: a failed report must not block probes, heartbeats
+      // or local lease enforcement. The durable outbox retains failed batches.
+      group.spawn_bg(() => {
+        let termination_cursor = Ref(0)
+        while true {
+          send_pending_terminations(
+            kubernetes, base, node_id, token, termination_cursor,
+          ) catch {
+            _ =>
+              println("LunaNexa termination evidence remains pending delivery")
+          }
+          @async.sleep(5000)
+        }
+      })
       group.spawn_bg(() => {
         while true {
           try {

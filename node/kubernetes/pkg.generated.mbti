@@ -12,6 +12,8 @@ import {
 // Values
 pub fn authenticated_transport(String, String, String) -> (async (String, String, Json?) -> (Int, Json)) raise LifecycleError
 
+pub fn observe_container_termination(PodIdentity, String, Json) -> Bool raise ObservationError
+
 pub fn observe_pod(PodIdentity, Json) -> @contracts.DeploymentState raise ObservationError
 
 pub fn render_runtime(RuntimeSettings, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeResources raise LifecycleError
@@ -42,6 +44,8 @@ pub(all) enum AuxiliaryKind {
   NetworkPolicy
   ClaimTemplate
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type ObservedContainer derive(Eq, ToJson, @json.FromJson)
 
 pub(all) struct PodIdentity {
   namespace_name : String
@@ -116,9 +120,11 @@ pub struct RuntimeSupervisor {
   mut closed : Bool
   clock : () -> Int64
 }
+pub async fn RuntimeSupervisor::acknowledge_terminations(Self, Array[@contracts.RuntimeTermination]) -> Unit
 pub fn RuntimeSupervisor::close(Self) -> Unit
 pub async fn RuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeObservation
 pub async fn RuntimeSupervisor::open_file(RuntimeSettings, async (String, String, Json?) -> (Int, Json), String) -> Self
+pub async fn RuntimeSupervisor::pending_terminations(Self) -> Array[@contracts.RuntimeTermination]
 pub async fn RuntimeSupervisor::probe_assignments(Self, Array[@contracts.DesiredAssignment]) -> Array[RuntimeObservation]
 pub async fn RuntimeSupervisor::reap_expired(Self, Int64) -> Unit
 pub async fn RuntimeSupervisor::remove_absent(Self, Array[String]) -> Unit

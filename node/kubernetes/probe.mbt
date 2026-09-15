@@ -1,5 +1,7 @@
 ///|
-/// Refresh existing resources without materialization or mutation. The caller
+/// Refresh existing resources without materialization or Kubernetes mutation.
+/// Newly observed container identities are checkpointed in the local journal.
+/// The caller
 /// supplies only assignments already accepted by the node verifier. This probe
 /// runs independently of downloads; it cannot create or adopt Kubernetes objects.
 pub async fn RuntimeSupervisor::probe_assignments(

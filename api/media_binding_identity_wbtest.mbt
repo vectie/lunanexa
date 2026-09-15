@@ -18,18 +18,22 @@ test "media instance identity fences replacement even when address is reused" {
       sound_supported: false,
     },
   }
-  let rotated = { ..original, bearer: Some("test-only-rotated-token") }
+  let rotated = { ..original, bearer: Some("test-only-rotated-token"), }
   assert_eq(original.identity(), rotated.identity())
-  let replacement = { ..original, instance_id: Some("pod-replacement") }
+  let replacement = { ..original, instance_id: Some("pod-replacement"), }
   assert_false(original.identity() == replacement.identity())
-  assert_eq(original.execution_context(), replacement.execution_context())
-  for changed in [
-    { ..original, origin: "http://10.42.1.35:5885" },
-    { ..original, deployment_generation: 2L },
-    { ..original, node_id: "node-other" },
-    { ..original, profile: { ..original.profile, provider_model: "fixture-other" } },
-    { ..original, instance_id: None },
-  ] {
+  assert_false(original.execution_context() == replacement.execution_context())
+  for
+    changed in [
+      { ..original, origin: "http://10.42.1.35:5885", },
+      { ..original, deployment_generation: 2L, },
+      { ..original, node_id: "node-other", },
+      {
+        ..original,
+        profile: { ..original.profile, provider_model: "fixture-other", },
+      },
+      { ..original, instance_id: None, },
+    ] {
     assert_false(original.identity() == changed.identity())
   }
 }

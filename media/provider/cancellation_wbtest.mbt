@@ -18,13 +18,14 @@ async test "cancellation requires positive acknowledgement for the exact upstrea
       })
     })
     for
-      (status, text, accepted) in [
+      scenario in [
         (404, "{\"id\":\"job-1\",\"deleted\":true}", false),
         (409, "{\"id\":\"job-1\",\"deleted\":true}", false),
         (200, "{\"id\":\"other-job\",\"deleted\":true}", false),
         (200, "{\"id\":\"job-1\",\"deleted\":false}", false),
         (200, "{\"id\":\"job-1\",\"deleted\":true}", true),
       ] {
+      let (status, text, accepted) = scenario
       code.val = status
       payload.val = text
       assert_eq(provider.delete("job-1"), accepted)

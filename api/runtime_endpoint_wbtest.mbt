@@ -52,7 +52,11 @@ async fn exercise_runtime_route_discovery(
       },
     ] {
     let jobs = @media_jobs.JobStore::restore(
-      { schema_version: @media_jobs.schema_version, jobs: [], },
+      {
+        schema_version: @media_jobs.schema_version,
+        jobs: [],
+        terminations: None,
+      },
       _ => (),
     )
     try service.with_media_templates(jobs, [invalid]) catch {
@@ -94,7 +98,11 @@ async fn exercise_runtime_route_discovery(
   assert_eq(discovered[0].origin, "http://10.42.1.99:5885")
   let original_identity = discovered[0].identity()
   let jobs = @media_jobs.JobStore::restore(
-    { schema_version: @media_jobs.schema_version, jobs: [], },
+    {
+      schema_version: @media_jobs.schema_version,
+      jobs: [],
+      terminations: None,
+    },
     _ => (),
   )
   let job = jobs.reserve(

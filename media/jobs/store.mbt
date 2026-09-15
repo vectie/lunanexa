@@ -43,14 +43,35 @@ fn provider_id_valid(id : String) -> Bool {
 fn execution_context_valid(value : ExecutionContext) -> Bool {
   @contracts.valid_identifier(value.deployment_id) &&
   @contracts.valid_identifier(value.node_id) &&
+  value.instance_id.map_or(true, id => {
+    @contracts.valid_sha256_digest("sha256:" + id)
+  }) &&
   value.generation > 0L
 }
 
 ///|
-fn snapshot(jobs : Map[String, StoredJob]) -> Snapshot {
+fn snapshot(
+  jobs : Map[String, StoredJob],
+  terminations : Array[AcceptedTermination],
+) -> Snapshot {
   let values = jobs.values().to_array()
   values.sort_by_key(job => job.job_id)
-  { schema_version, jobs: values, }
+  { schema_version, jobs: values, terminations: Some(terminations.copy()), }
+}
+
+///|
+fn execution_context_compatible(
+  a : ExecutionContext,
+  b : ExecutionContext,
+) -> Bool {
+  a.deployment_id == b.deployment_id &&
+  a.generation == b.generation &&
+  a.node_id == b.node_id &&
+  (
+    a.instance_id is None ||
+    b.instance_id is None ||
+    a.instance_id == b.instance_id
+  )
 }
 
 ///|
@@ -68,6 +89,23 @@ pub async fn JobStore::restore(
     raise InvalidSnapshot
   }
   let jobs : Map[String, StoredJob] = Map([])
+  let terminations = saved.terminations.unwrap_or([]).copy()
+  if terminations.length() > 10000 || !terminations.all(termination_valid) {
+    raise InvalidSnapshot
+  }
+  // Online acceptance allows one immutable record per node/incarnation. Restore
+  // must enforce the same invariant instead of choosing the first conflicting
+  // record during reconciliation. JSON tuple encoding avoids delimiter aliases.
+  let incarnations : Map[String, Bool] = Map([])
+  for value in terminations {
+    let identity = ([value.node_id, value.evidence.instance_id] : Array[String])
+      .to_json()
+      .stringify()
+    if incarnations.contains(identity) {
+      raise InvalidSnapshot
+    }
+    incarnations[identity] = true
+  }
   let requests : Map[String, Bool] = Map([])
   let active_orders : Map[String, Bool] = Map([])
   let mut recovered = false
@@ -76,6 +114,19 @@ pub async fn JobStore::restore(
       !@contracts.valid_identifier(record.job_id) ||
       !@contracts.valid_identifier(record.model) ||
       !@contracts.valid_identifier(record.deployment_id) ||
+      (record.termination_evidence_ref is Some(_)) !=
+      (record.termination_observed_unix_ms is Some(_)) ||
+      record.termination_observed_unix_ms.map_or(false, observed => {
+        observed < record.created_unix_ms || observed > record.updated_unix_ms
+      }) ||
+      record.termination_evidence_ref.map_or(false, reference => {
+        !@contracts.valid_identifier(reference) ||
+        !record.execution_terminal ||
+        record.execution_context.map_or(true, context => {
+          context.instance_id is None
+        }) ||
+        ![Failed, Cancelled, Expired, Cancelling].contains(record.state)
+      }) ||
       record.execution_context.map_or(false, value => {
         !execution_context_valid(value)
       }) ||
@@ -120,7 +171,9 @@ pub async fn JobStore::restore(
       .values()
       .any(other => {
         other.deployment_id == record.deployment_id &&
-        other.execution_context.map_or(false, previous => previous != context)
+        other.execution_context.map_or(false, previous => {
+          !execution_context_compatible(previous, context)
+        })
       }) {
       raise InvalidSnapshot
     }
@@ -147,26 +200,37 @@ pub async fn JobStore::restore(
       record
     }
     requests[record.idempotency_digest] = true
-    jobs[record.job_id] = record
+    // Earlier termination recovery could persist Cancelling after an already
+    // evidenced exit. Complete that local cleanup without contacting a dead
+    // provider; all evidence/terminal/context validation above still applies.
+    if record.state == Cancelling && record.termination_evidence_ref is Some(_) {
+      recovered = true
+      jobs[record.job_id] = {
+        ..record,
+        state: if record.expiry_requested { Expired } else { Cancelled },
+      }
+    } else {
+      jobs[record.job_id] = record
+    }
   }
   if recovered {
-    persist(snapshot(jobs))
+    persist(snapshot(jobs, terminations))
   }
-  { jobs, persist, maximum_jobs, mutex: @async.Mutex(), }
+  { jobs, terminations, persist, maximum_jobs, mutex: @async.Mutex(), }
 }
 
 ///|
 pub async fn JobStore::snapshot(self : JobStore) -> Snapshot {
   self.mutex.acquire()
   defer self.mutex.release()
-  snapshot(self.jobs)
+  snapshot(self.jobs, self.terminations)
 }
 
 ///|
 async fn JobStore::commit(self : JobStore, value : StoredJob) -> StoredJob {
   let next = self.jobs.copy()
   next[value.job_id] = value
-  (self.persist)(snapshot(next))
+  (self.persist)(snapshot(next, self.terminations))
   self.jobs = next
   value
 }
@@ -212,7 +276,7 @@ pub async fn JobStore::reserve(
     if record.deployment_id == deployment_id &&
       record.execution_context is Some(previous) &&
       execution_context is Some(next) &&
-      previous != next {
+      !execution_context_compatible(previous, next) {
       raise Conflict
     }
     if record.idempotency_digest == request_key {
@@ -223,7 +287,7 @@ pub async fn JobStore::reserve(
         (
           record.execution_context is Some(previous) &&
           execution_context is Some(next) &&
-          previous != next
+          !execution_context_compatible(previous, next)
         ) {
         raise Conflict
       }
@@ -235,6 +299,15 @@ pub async fn JobStore::reserve(
       }
       return (record, false)
     }
+  }
+  if execution_context is Some(context) &&
+    self.terminations.any(value => {
+      value.node_id == context.node_id &&
+      value.evidence.deployment_id == context.deployment_id &&
+      value.evidence.generation == context.generation &&
+      context.instance_id == Some(value.evidence.instance_id)
+    }) {
+    raise InvalidTransition
   }
   if self.jobs
     .values()
@@ -275,6 +348,8 @@ pub async fn JobStore::reserve(
     execution_terminal: false,
     terminal_unix_ms: None,
     usage_receipt: None,
+    termination_evidence_ref: None,
+    termination_observed_unix_ms: None,
   }
   (self.commit(value), true)
 }
@@ -315,6 +390,15 @@ pub async fn JobStore::begin_submission(
   if job.state != Intent ||
     now < job.updated_unix_ms ||
     now >= job.deadline_unix_ms {
+    raise InvalidTransition
+  }
+  if job.execution_context is Some(context) &&
+    self.terminations.any(value => {
+      value.node_id == context.node_id &&
+      value.evidence.deployment_id == context.deployment_id &&
+      value.evidence.generation == context.generation &&
+      context.instance_id == Some(value.evidence.instance_id)
+    }) {
     raise InvalidTransition
   }
   self.commit({ ..job, state: Submitting, updated_unix_ms: now, })
@@ -450,7 +534,8 @@ pub async fn JobStore::cancel(
     return job
   }
   let expiry = expired || job.expiry_requested
-  let state = if job.state == Intent {
+  let state = if job.state == Intent ||
+    (job.execution_terminal && job.termination_evidence_ref is Some(_)) {
     if expiry {
       Expired
     } else {

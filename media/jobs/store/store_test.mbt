@@ -42,6 +42,7 @@ async test "PostgreSQL private media intents retain ownership and ambiguous subm
     ToJson::to_json(@jobs.Snapshot::{
       schema_version: @jobs.schema_version,
       jobs: [],
+      terminations: None,
     }).stringify(),
   )
   let owner : @jobs.Owner = {

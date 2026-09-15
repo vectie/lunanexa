@@ -1,6 +1,6 @@
 ///|
 fn empty() -> @jobs.Snapshot {
-  { schema_version: @jobs.schema_version, jobs: [], }
+  { schema_version: @jobs.schema_version, jobs: [], terminations: None, }
 }
 
 ///|

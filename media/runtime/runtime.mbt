@@ -112,6 +112,31 @@ async fn VideoRuntime::refresh_internal(
   previous : @jobs.StoredJob,
 ) -> @jobs.StoredJob {
   let mut job = self.store.get(previous.job_id, previous.owner)
+  if job.termination_evidence_ref is Some(_) && job.execution_terminal {
+    return self.record_terminal(job)
+  }
+  if !job.execution_terminal &&
+    job.execution_context is Some(context) &&
+    self.store.termination_for_context(context) is Some(accepted) {
+    if job.state == @jobs.Intent {
+      return self.record_terminal(
+        self.store.cancel(
+          job.job_id,
+          job.owner,
+          (self.now)() >= job.deadline_unix_ms,
+          (self.now)(),
+        ),
+      )
+    }
+    return self.reconcile_verified_termination(
+      job.job_id,
+      job.owner,
+      job.deployment_id,
+      context,
+      accepted.reference(),
+      accepted.evidence.observed_unix_ms,
+    )
+  }
   let now = (self.now)()
   let expired = now >= job.retain_until_unix_ms ||
     (!job.execution_terminal && now >= job.deadline_unix_ms)

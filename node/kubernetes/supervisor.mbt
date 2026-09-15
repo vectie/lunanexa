@@ -46,6 +46,7 @@ fn RuntimeSupervisor::new_record(
     intent,
     resources,
     stopping: false,
+    observed_containers: None,
   }
 }
 
@@ -186,12 +187,12 @@ pub async fn RuntimeSupervisor::ensure_started(
 }
 
 ///|
-fn RuntimeSupervisor::observation(
+async fn RuntimeSupervisor::observation(
   self : RuntimeSupervisor,
   record : RuntimeRecord,
   assignment : @contracts.DesiredAssignment,
   pod : Json,
-) -> RuntimeObservation raise {
+) -> RuntimeObservation {
   let pod_resource = record.resources[record.resources.length() - 1]
   let expected : PodIdentity = {
     namespace_name: self.journal.settings.namespace_name,
@@ -206,6 +207,48 @@ fn RuntimeSupervisor::observation(
     container_name: "runtime",
   }
   let state = observe_pod(expected, pod)
+  if record.observed_containers is Some(containers) &&
+    pod
+    is {
+      "status": { "containerStatuses": [{ "containerID": String(_), .. }], .. },
+      ..
+    } {
+    for i, container in containers {
+      if container.pod_uid == expected.uid &&
+        container.termination_observed_unix_ms is None &&
+        observe_container_termination(expected, container.container_id, pod) {
+        let previous_containers = record.observed_containers
+        let next = previous_containers.unwrap_or([]).copy()
+        let observed = (self.clock)()
+        let previous_pending = self.journal.pending_terminations
+        let pending = previous_pending.unwrap_or([]).copy()
+        if pending.length() >= 4096 {
+          raise LifecycleError::InvalidResource
+        }
+        pending.push({
+          original_assignment: Some(assignment),
+          assignment_id: assignment.assignment_id,
+          deployment_id: assignment.deployment_id,
+          generation: assignment.generation,
+          controller_epoch: assignment.controller_epoch,
+          instance_id: digest_text(
+            "kubernetes:" + container.pod_uid + "|" + container.container_id,
+          ),
+          artifact_digest: assignment.artifact.digest,
+          image_digest: assignment.runtime.image_digest,
+          observed_unix_ms: observed,
+        })
+        next[i] = { ..container, termination_observed_unix_ms: Some(observed), }
+        record.observed_containers = Some(next)
+        self.journal.pending_terminations = Some(pending)
+        errdefer {
+          record.observed_containers = previous_containers
+          self.journal.pending_terminations = previous_pending
+        }
+        self.persist()
+      }
+    }
+  }
   let address = if state == Ready {
     guard pod is { "status": { "podIP": String(address), .. }, .. } &&
       private_address(address) else {
@@ -227,6 +270,34 @@ fn RuntimeSupervisor::observation(
       container_id.length() > 0 &&
       container_id.length() <= 256 else {
       raise LifecycleError::InvalidResource
+    }
+    let known : ObservedContainer = {
+      pod_uid: pod_resource.uid.unwrap(),
+      container_id,
+      termination_observed_unix_ms: None,
+    }
+    let previous = record.observed_containers
+    let containers = previous.unwrap_or([])
+    if containers.any(container => {
+        container.pod_uid == known.pod_uid &&
+        container.container_id == known.container_id &&
+        container.termination_observed_unix_ms is Some(_)
+      }) {
+      // A previously exited incarnation must never become a route again.
+      raise LifecycleError::InvalidResource
+    }
+    if !containers.contains(known) {
+      if containers.length() >= 1024 {
+        raise LifecycleError::InvalidResource
+      }
+      let next = containers.copy()
+      next.push(known)
+      record.observed_containers = Some(next)
+      errdefer {
+        record.observed_containers = previous
+      }
+      // Never publish a route whose incarnation cannot survive a node restart.
+      self.persist()
     }
     Some({
       assignment_id: assignment.assignment_id,
