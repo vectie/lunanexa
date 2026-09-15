@@ -670,6 +670,12 @@ async fn ApiService::handle_media(
         )
       }
       guard active.length() == 1 else {
+        if active.is_empty() {
+          return api_error(
+            503, "VideoUnavailable", "no authorized ready video runtime is currently available; retain the same request key",
+            true,
+          )
+        }
         return api_error(
           503, "MediaProfileUnavailable", "the selected model does not have exactly one authorized active media profile",
           false,
