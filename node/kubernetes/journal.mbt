@@ -66,7 +66,7 @@ pub fn RuntimeSupervisor::restore(
   fresh_owner : String,
   clock? : () -> Int64 = @async.now,
 ) -> RuntimeSupervisor raise {
-  let journal : RuntimeJournal = match snapshot {
+  let stored_journal : RuntimeJournal = match snapshot {
     Some(value) => @json.from_json(@json.parse(value))
     None =>
       {
@@ -76,12 +76,16 @@ pub fn RuntimeSupervisor::restore(
         runtimes: [],
       }
   }
-  if journal.version != "lunanexa.kubernetes.runtime.v1" ||
-    journal.settings != settings ||
-    !@contracts.valid_sha256_digest("sha256:" + journal.owner) ||
-    journal.runtimes.length() > 1024 {
+  if stored_journal.version != "lunanexa.kubernetes.runtime.v1" ||
+    { ..stored_journal.settings, runtime_secrets: None, } !=
+    { ..settings, runtime_secrets: None, } ||
+    !@contracts.valid_sha256_digest("sha256:" + stored_journal.owner) ||
+    stored_journal.runtimes.length() > 1024 {
     raise LifecycleError::InvalidResource
   }
+  // New image-bound references must not prevent cleanup of previous resources.
+  // A live generation still has to match its persisted immutable resource intent.
+  let journal = { ..stored_journal, settings, }
   let names : Map[String, Bool] = Map([])
   for record in journal.runtimes {
     if !dns_label(record.name) ||

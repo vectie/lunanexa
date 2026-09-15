@@ -87,6 +87,13 @@ pub(all) struct RuntimeResources {
   network_policy : Json
 } derive(Eq, @debug.Debug)
 
+pub(all) struct RuntimeSecretBinding {
+  image_ref : String
+  environment_name : String
+  secret_name : String
+  secret_key : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub(all) struct RuntimeSettings {
   namespace_name : String
   node_name : String
@@ -96,6 +103,7 @@ pub(all) struct RuntimeSettings {
   run_as_user : Int
   device_class_name : String
   controller_addresses : Array[String]
+  runtime_secrets : Array[RuntimeSecretBinding]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct RuntimeSupervisor {

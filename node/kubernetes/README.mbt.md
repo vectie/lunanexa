@@ -32,8 +32,8 @@ socket. This source change has **not yet switched the running cluster agent**.
   controller intent is compared directly with the runtime journal, not only the
   NodeAgent's in-memory assignment map.
 
-Remaining integration work: observe actual DRA allocation, inject image-bound
-runtime secret references, exercise the new agent on the real cluster and route
+Remaining integration work: observe actual DRA allocation,
+exercise the new agent on the real cluster and route
 the complete test-inference pipeline through it. Node-agent/API failure fencing
 still needs acceptance: the expiry annotation is metadata, **not a
 Kubernetes-enforced deadline**. The periodic reaper cannot guarantee process
@@ -56,6 +56,17 @@ the actual controller source addresses. Journal files require a private,
 deployment-owned directory. Fresh journals use `/usr/bin/openssl rand` for an
 OS-backed ownership nonce; an existing journal does not regenerate its owner.
 The nonce is a correlation marker, not a substitute for Kubernetes RBAC.
+
+Optional `runtime_secrets` entries contain only `image_ref`,
+`environment_name`, `secret_name` and `secret_key`. They apply only to the
+exact pinned image reference. Secret names must start with
+`lunanexa-runtime-` in the runtime namespace; references are required, not
+optional. The renderer cannot override model-path, device-selection, loader,
+proxy or node-authority environment variables. It does not read Secret values.
+Provision versioned runtime Secrets and use a new signed deployment generation
+when changing a reference. A reference change does not silently mutate an
+existing generation or prevent the journal from cleaning up its old resources.
+Secret environment values are not hot-reloaded into an already running process.
 
 `moon run cmd/node-runtime-plan -- INPUT.json` is a diagnostic renderer for
 server-side dry-run. It does **not** verify a signature or model file and cannot
