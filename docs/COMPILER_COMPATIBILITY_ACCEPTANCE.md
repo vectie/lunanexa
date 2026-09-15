@@ -70,16 +70,65 @@ the normal local LunaNexa checkout.
 
 ## Remaining boundaries
 
+### In-progress authority recovery batch
+
+After this batch, the complete native functional suite was rerun with
+`moon test --target native --warn-list -92-20`: **760/760 passed**. This is not
+the full strict gate and does not rerun conditional PostgreSQL cases with live
+database configuration. The standalone scanner process fixtures also passed
+8/8 again, and the deployment scan passed.
+
+API-key issue, revoke, subject-wide revoke and usage consumption now release
+their mutex with `defer` and restore the prior in-memory map on an unsuccessful
+operation, including cancellation unwind. Six native access tests pass with
+`--deny-warn`. New tests reject temporary-file writes for all four operations,
+compare memory and reopened disk state, verify retry after removing the injected
+failure, and cancel an authorization waiting behind an owned mutex. The latter
+is lock-wait cancellation evidence, not cancellation during a database commit.
+
+Workspace user creation and lifecycle transitions use the same scoped cleanup
+principle. A new file-backed test covers failed creation, suspension and
+revocation, subsequent successful retry, and rejection of reactivation after
+durable revocation. Grant/lease issuance, expiry reconciliation, activation,
+revocation and workload reservation/ownership paths now also use scoped cleanup.
+Directory tests pass 12/12 with `--deny-warn`, without warning exclusions; package
+interface generation also succeeds. The added admission failure fixture verifies
+retry after failed reservation, retained ownership after failed release, and
+cross-subject rejection. Conditional PostgreSQL cases in this run are not fresh
+live PostgreSQL evidence. A partial-success fault test first reproduced a real
+divergence: authority expiry persisted, admission write failed, and the old
+rollback restored active authority in memory. Authority and admission now track
+successful persistence separately, preserving the already durable expiry while
+rolling back the failed reservation. The regression passes and retries the same
+workload successfully. This does not provide cross-file atomicity or prove
+ambiguous database-commit recovery. Cancellation during persistence still needs
+dedicated coverage; lock-wait cancellation alone does not prove that case.
+
+The isolated deployed workspace was also reopened again: connect 204, root 200,
+both retained video outputs listed, and the second download hash unchanged.
+These local source changes have not yet been rolled out to that controller.
+
 Other packages still contain deprecated or fragile async cleanup patterns.
 Running functional tests with warning exclusions does not satisfy the strict
 repository release gate. Environment-conditional PostgreSQL tests are not live
 database evidence unless their required environment is explicitly supplied.
 
-The release script now gets past dependency compilation: isolation, promotion
-boundary, OIDC browser ingress, platform identity manifests and identity-secret
-generator tests pass. It then fails the existing possible-literal-secret scan.
-That finding still requires review; this checkpoint neither waives it nor
-asserts that it represents a real leaked credential.
+The release script now passes: isolation, promotion boundary, OIDC browser
+ingress, platform identity manifests, identity-secret generator tests, image
+checks and the deployment literal-secret heuristic all completed successfully.
+The previous secret-scan finding was an ingress `proxy-ssl-secret` reference,
+not an embedded credential. The replacement validates entire allowed reference
+values instead of excluding a whole line by keyword. Its 23 classification
+fixtures and 8 full-process fixtures cover references, invalid references,
+literal credentials and same-line credential smuggling. Rejected diagnostics
+withhold values; full-process fixtures explicitly assert this redaction.
+This remains a heuristic, not proof that the repository contains no secrets.
+
+A separate `moon check --target native --deny-warn` still exits 255 and reports
+100 errors, including fragile asynchronous cleanup patterns. The release script
+passes with compiler warnings and is not a substitute for that strict phase
+gate. The current scanner changes remain part of the unfinished acceptance
+batch, not a declaration of platform completion.
 
 The two-hour managed TEST ONLY provider instance is no longer present in its
 acceptance namespace. The persistent user workspace and outputs remain; no

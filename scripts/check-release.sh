@@ -16,11 +16,7 @@ if rg -n 'image:[[:space:]]+[^@[:space:]]+:(latest|main|master)' deploy >/dev/nu
   exit 1
 fi
 
-if rg -n -i '(password|token|secret)[[:space:]]*[:=][[:space:]]*[^$<{[:space:]][^[:space:]]+' \
-  deploy tests/fixtures | \
-  rg -v 'automountServiceAccountToken:[[:space:]]*false|nginx.ingress.kubernetes.io/auth-tls-secret:|tlsSecret:|revokeRefreshToken:' >/dev/null; then
-  printf '%s\n' 'secret scan failed: possible literal secret found' >&2
-  exit 1
-fi
+moon run scripts/check-deployment-secrets-test.mbtx
+moon run scripts/check-deployment-secrets.mbtx
 
 printf '%s\n' 'dependency, image, contract, secret, and response scans passed'

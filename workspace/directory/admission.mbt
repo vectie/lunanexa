@@ -56,7 +56,7 @@ async fn write_admissions(
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -192,7 +192,7 @@ async fn FileWorkspaceDirectory::open_postgres_admissions(
         database.save_opaque_snapshot(
           "workspace_admissions",
           admission_schema_version,
-          self.admission_snapshot_unlocked().to_json().stringify(),
+          ToJson::to_json(self.admission_snapshot_unlocked()).stringify(),
         )
       }
     }
@@ -200,7 +200,7 @@ async fn FileWorkspaceDirectory::open_postgres_admissions(
       database.save_opaque_snapshot(
         "workspace_admissions",
         admission_schema_version,
-        self.admission_snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(self.admission_snapshot_unlocked()).stringify(),
       )
   }
 }
@@ -216,7 +216,7 @@ async fn FileWorkspaceDirectory::persist_admissions(
       database.save_opaque_snapshot(
         "workspace_admissions",
         admission_schema_version,
-        self.admission_snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(self.admission_snapshot_unlocked()).stringify(),
       )
   }
 }
@@ -278,73 +278,75 @@ pub async fn FileWorkspaceDirectory::reserve_workload(
   let previous_grants = self.access_grants.copy()
   let previous_leases = self.leases.copy()
   let previous_reservations = self.workload_reservations.copy()
-  try {
-    let authority_changed = self.reconcile_expiry_unlocked(now_unix_ms)
-    ignore(self.reconcile_reservations_unlocked(now_unix_ms))
-    if self.workload_reservations.contains(workload_id) {
-      raise @workspace.WorkspaceDirectoryError::DuplicateRecord(
-        "workload:\{workload_id}",
-      )
-    }
-    let (_, limit) = self.reservation_lease_unlocked(
-      lease_id, subject_ref, tenant_ref, capability, now_unix_ms,
-    )
-    let hourly_window_start = now_unix_ms - 3600000L
-    let hourly_count = self.workload_reservations
-      .values()
-      .filter(reservation => {
-        reservation.lease_id == lease_id &&
-        reservation.capability == capability &&
-        reservation.reserved_unix_ms > hourly_window_start &&
-        reservation.reserved_unix_ms <= now_unix_ms
-      })
-      .length()
-    if hourly_count >= limit.max_requests_per_hour {
-      raise @workspace.WorkspaceDirectoryError::HourlyRequestLimitExceeded(
-        lease_id,
-      )
-    }
-    let concurrent_count = self.workload_reservations
-      .values()
-      .filter(reservation => {
-        reservation.lease_id == lease_id &&
-        reservation.capability == capability &&
-        reservation.state == ReservationHeld &&
-        reservation.expires_unix_ms > now_unix_ms
-      })
-      .length()
-    if concurrent_count >= limit.max_concurrent_requests {
-      raise @workspace.WorkspaceDirectoryError::ConcurrentRequestLimitExceeded(
-        lease_id,
-      )
-    }
-    self.workload_reservations[workload_id] = {
-      version: @workspace.contract_version,
-      workload_id,
-      request_key,
-      lease_id,
-      subject_ref,
-      tenant_ref,
-      capability,
-      reserved_unix_ms: now_unix_ms,
-      expires_unix_ms,
-      state: ReservationHeld,
-      released_unix_ms: 0L,
-    }
-    if authority_changed {
-      self.persist()
-    }
-    self.persist_admissions()
-    self.mutex.release()
-  } catch {
-    error => {
+  defer self.mutex.release()
+  let mut authority_committed = false
+  let mut committed = false
+  defer (if !committed {
+    if !authority_committed {
       self.access_grants = previous_grants
       self.leases = previous_leases
-      self.workload_reservations = previous_reservations
-      self.mutex.release()
-      raise error
     }
+    self.workload_reservations = previous_reservations
+  })
+  let authority_changed = self.reconcile_expiry_unlocked(now_unix_ms)
+  ignore(self.reconcile_reservations_unlocked(now_unix_ms))
+  if self.workload_reservations.contains(workload_id) {
+    raise @workspace.WorkspaceDirectoryError::DuplicateRecord(
+      "workload:\{workload_id}",
+    )
   }
+  let (_, limit) = self.reservation_lease_unlocked(
+    lease_id, subject_ref, tenant_ref, capability, now_unix_ms,
+  )
+  let hourly_window_start = now_unix_ms - 3600000L
+  let hourly_count = self.workload_reservations
+    .values()
+    .filter(reservation => {
+      reservation.lease_id == lease_id &&
+      reservation.capability == capability &&
+      reservation.reserved_unix_ms > hourly_window_start &&
+      reservation.reserved_unix_ms <= now_unix_ms
+    })
+    .length()
+  if hourly_count >= limit.max_requests_per_hour {
+    raise @workspace.WorkspaceDirectoryError::HourlyRequestLimitExceeded(
+      lease_id,
+    )
+  }
+  let concurrent_count = self.workload_reservations
+    .values()
+    .filter(reservation => {
+      reservation.lease_id == lease_id &&
+      reservation.capability == capability &&
+      reservation.state == ReservationHeld &&
+      reservation.expires_unix_ms > now_unix_ms
+    })
+    .length()
+  if concurrent_count >= limit.max_concurrent_requests {
+    raise @workspace.WorkspaceDirectoryError::ConcurrentRequestLimitExceeded(
+      lease_id,
+    )
+  }
+  self.workload_reservations[workload_id] = {
+    version: @workspace.contract_version,
+    workload_id,
+    request_key,
+    lease_id,
+    subject_ref,
+    tenant_ref,
+    capability,
+    reserved_unix_ms: now_unix_ms,
+    expires_unix_ms,
+    state: ReservationHeld,
+    released_unix_ms: 0L,
+  }
+  if authority_changed {
+    self.persist()
+    // Admission failure must not undo an expiry already written durably.
+    authority_committed = true
+  }
+  self.persist_admissions()
+  committed = true
 }
 
 ///|
@@ -356,31 +358,26 @@ pub async fn FileWorkspaceDirectory::release_workload(
 ) -> Unit {
   self.mutex.acquire()
   let previous = self.workload_reservations.copy()
-  try {
-    guard self.workload_reservations.get(workload_id) is Some(reservation) else {
-      raise @workspace.WorkspaceDirectoryError::RecordNotFound(
-        "workload:\{workload_id}",
-      )
-    }
-    if reservation.request_key != request_key {
-      raise @workspace.WorkspaceDirectoryError::AccessDenied(LeaseUnavailable)
-    }
-    if reservation.state == ReservationHeld {
-      self.workload_reservations[workload_id] = {
-        ..reservation,
-        state: ReservationReleased,
-        released_unix_ms: now_unix_ms,
-      }
-      self.persist_admissions()
-    }
-    self.mutex.release()
-  } catch {
-    error => {
-      self.workload_reservations = previous
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed { self.workload_reservations = previous })
+  guard self.workload_reservations.get(workload_id) is Some(reservation) else {
+    raise @workspace.WorkspaceDirectoryError::RecordNotFound(
+      "workload:\{workload_id}",
+    )
   }
+  if reservation.request_key != request_key {
+    raise @workspace.WorkspaceDirectoryError::AccessDenied(LeaseUnavailable)
+  }
+  if reservation.state == ReservationHeld {
+    self.workload_reservations[workload_id] = {
+      ..reservation,
+      state: ReservationReleased,
+      released_unix_ms: now_unix_ms,
+    }
+    self.persist_admissions()
+  }
+  committed = true
 }
 
 ///|
@@ -393,25 +390,20 @@ pub async fn FileWorkspaceDirectory::workload_owned_by(
 ) -> Bool {
   self.mutex.acquire()
   let previous = self.workload_reservations.copy()
-  try {
-    if self.reconcile_reservations_unlocked(now_unix_ms) {
-      self.persist_admissions()
-    }
-    let owned = self.workload_reservations
-      .get(workload_id)
-      .map_or(false, reservation => {
-        reservation.subject_ref == subject_ref &&
-        reservation.tenant_ref == tenant_ref
-      })
-    self.mutex.release()
-    owned
-  } catch {
-    error => {
-      self.workload_reservations = previous
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed { self.workload_reservations = previous })
+  if self.reconcile_reservations_unlocked(now_unix_ms) {
+    self.persist_admissions()
   }
+  let owned = self.workload_reservations
+    .get(workload_id)
+    .map_or(false, reservation => {
+      reservation.subject_ref == subject_ref &&
+      reservation.tenant_ref == tenant_ref
+    })
+  committed = true
+  owned
 }
 
 ///|
@@ -425,20 +417,15 @@ pub async fn FileWorkspaceDirectory::workload_owned_by_subject(
 ) -> Bool {
   self.mutex.acquire()
   let previous = self.workload_reservations.copy()
-  try {
-    if self.reconcile_reservations_unlocked(now_unix_ms) {
-      self.persist_admissions()
-    }
-    let owned = self.workload_reservations
-      .get(workload_id)
-      .map_or(false, reservation => reservation.subject_ref == subject_ref)
-    self.mutex.release()
-    owned
-  } catch {
-    error => {
-      self.workload_reservations = previous
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed { self.workload_reservations = previous })
+  if self.reconcile_reservations_unlocked(now_unix_ms) {
+    self.persist_admissions()
   }
+  let owned = self.workload_reservations
+    .get(workload_id)
+    .map_or(false, reservation => reservation.subject_ref == subject_ref)
+  committed = true
+  owned
 }
