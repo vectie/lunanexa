@@ -285,13 +285,22 @@ async fn WorkspaceHost::workspace_scaled_down(
   guard response is { "items": Array(items), .. } else {
     raise HostError::WorkspaceUnavailable
   }
-  if response is { "metadata": { "continue": String(cursor), .. }, .. } && cursor != "" {
+  if response is { "metadata": { "continue": String(cursor), .. }, .. } &&
+    cursor != "" {
     raise HostError::WorkspaceUnavailable
   }
   match items {
     [] => false
-    [{ "metadata": { "name": String(found), .. }, "spec": { "replicas": Number(count, ..), .. }, .. }] if found == name => {
-      if count != 0.0 && count != 1.0 { raise HostError::WorkspaceUnavailable }
+    [
+      {
+        "metadata": { "name": String(found), .. },
+        "spec": { "replicas": Number(count, ..), .. },
+        ..
+      },
+    ] if found == name => {
+      if count != 0.0 && count != 1.0 {
+        raise HostError::WorkspaceUnavailable
+      }
       count == 0.0
     }
     _ => raise HostError::WorkspaceUnavailable

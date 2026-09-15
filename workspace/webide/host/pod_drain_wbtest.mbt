@@ -62,11 +62,21 @@ async test "gateway restart reads desired replica state instead of assuming old 
     }),
   }
   assert_false(host.workspace_scaled_down("webide-test"))
-  value.val = { "items": [{ "metadata": { "name": "webide-test" }, "spec": { "replicas": 0 } }] }
+  value.val = {
+    "items": [
+      { "metadata": { "name": "webide-test" }, "spec": { "replicas": 0 } },
+    ],
+  }
   assert_true(host.workspace_scaled_down("webide-test"))
-  value.val = { "items": [{ "metadata": { "name": "webide-test" }, "spec": { "replicas": 1 } }] }
+  value.val = {
+    "items": [
+      { "metadata": { "name": "webide-test" }, "spec": { "replicas": 1 } },
+    ],
+  }
   assert_false(host.workspace_scaled_down("webide-test"))
-  value.val = { "items": [{ "metadata": { "name": "other" }, "spec": { "replicas": 0 } }] }
+  value.val = {
+    "items": [{ "metadata": { "name": "other" }, "spec": { "replicas": 0 } }],
+  }
   try host.workspace_scaled_down("webide-test") catch {
     HostError::WorkspaceUnavailable => ()
     _ => fail("unexpected deployment state error")
