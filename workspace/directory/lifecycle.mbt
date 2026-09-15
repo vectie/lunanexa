@@ -6,23 +6,17 @@ async fn FileWorkspaceDirectory::transition_user(
   now_unix_ms : Int64,
 ) -> (@workspace.WorkspaceUser, @workspace.WorkspaceUser) {
   self.mutex.acquire()
+  defer self.mutex.release()
   guard self.users.get(user_id) is Some(previous) else {
-    self.mutex.release()
     raise @workspace.WorkspaceDirectoryError::RecordNotFound("user:\{user_id}")
   }
-  try {
-    let updated = previous.transition(to, now_unix_ms)
-    self.users[user_id] = updated
-    self.persist()
-    self.mutex.release()
-    (previous, updated)
-  } catch {
-    error => {
-      self.users[user_id] = previous
-      self.mutex.release()
-      raise error
-    }
-  }
+  let mut committed = false
+  defer (if !committed { self.users[user_id] = previous })
+  let updated = previous.transition(to, now_unix_ms)
+  self.users[user_id] = updated
+  self.persist()
+  committed = true
+  (previous, updated)
 }
 
 ///|

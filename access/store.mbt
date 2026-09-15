@@ -99,7 +99,7 @@ async fn write_file(path : String, snapshot : AccessSnapshot) -> Unit {
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -189,7 +189,7 @@ pub async fn AccessStore::open_postgres(
       database.save_opaque_snapshot(
         "access_keys",
         snapshot_schema_version,
-        store.snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(store.snapshot_unlocked()).stringify(),
       )
   }
   store
@@ -204,7 +204,7 @@ async fn AccessStore::persist(self : AccessStore) -> Unit {
       database.save_opaque_snapshot(
         "access_keys",
         snapshot_schema_version,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -231,38 +231,33 @@ pub async fn AccessStore::issue(
   validate_api_key_intent(intent, now_unix_ms)
   let secret = self.issue_secret(intent, now_unix_ms)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.credentials.copy()
-  try {
-    if self.credentials.contains(intent.key_id) {
-      raise AlreadyExists(intent.key_id)
-    }
-    let credential : ApiCredential = {
-      key_id: intent.key_id,
-      tenant_ref: intent.tenant_ref,
-      subject_ref: intent.subject_ref,
-      organization_id: Some(intent.organization_id),
-      project_id: Some(intent.project_id),
-      display_name: intent.display_name,
-      secret_sha256: digest_secret(secret),
-      scopes: intent.scopes,
-      allowed_models: intent.allowed_models,
-      issued_unix_ms: now_unix_ms,
-      expires_unix_ms: intent.expires_unix_ms,
-      maximum_requests: intent.maximum_requests,
-      consumed_requests: 0L,
-      revoked_unix_ms: None,
-    }
-    self.credentials[intent.key_id] = credential
-    self.persist()
-    self.mutex.release()
-    { credential, secret }
-  } catch {
-    error => {
-      self.credentials = previous
-      self.mutex.release()
-      raise error
-    }
+  let mut committed = false
+  defer (if !committed { self.credentials = previous })
+  if self.credentials.contains(intent.key_id) {
+    raise AlreadyExists(intent.key_id)
   }
+  let credential : ApiCredential = {
+    key_id: intent.key_id,
+    tenant_ref: intent.tenant_ref,
+    subject_ref: intent.subject_ref,
+    organization_id: Some(intent.organization_id),
+    project_id: Some(intent.project_id),
+    display_name: intent.display_name,
+    secret_sha256: digest_secret(secret),
+    scopes: intent.scopes,
+    allowed_models: intent.allowed_models,
+    issued_unix_ms: now_unix_ms,
+    expires_unix_ms: intent.expires_unix_ms,
+    maximum_requests: intent.maximum_requests,
+    consumed_requests: 0L,
+    revoked_unix_ms: None,
+  }
+  self.credentials[intent.key_id] = credential
+  self.persist()
+  committed = true
+  { credential, secret, }
 }
 
 ///|
@@ -272,23 +267,18 @@ pub async fn AccessStore::revoke(
   now_unix_ms : Int64,
 ) -> ApiCredential {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.credentials.copy()
-  try {
-    guard self.credentials.get(key_id) is Some(current) else {
-      raise NotFound(key_id)
-    }
-    let revoked = { ..current, revoked_unix_ms: Some(now_unix_ms) }
-    self.credentials[key_id] = revoked
-    self.persist()
-    self.mutex.release()
-    revoked
-  } catch {
-    error => {
-      self.credentials = previous
-      self.mutex.release()
-      raise error
-    }
+  let mut committed = false
+  defer (if !committed { self.credentials = previous })
+  guard self.credentials.get(key_id) is Some(current) else {
+    raise NotFound(key_id)
   }
+  let revoked = { ..current, revoked_unix_ms: Some(now_unix_ms), }
+  self.credentials[key_id] = revoked
+  self.persist()
+  committed = true
+  revoked
 }
 
 ///|
@@ -304,31 +294,26 @@ pub async fn AccessStore::revoke_subject(
     raise InvalidInput("invalid API-key subject revocation")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.credentials.copy()
-  try {
-    let mut revoked_count = 0
-    for key_id, credential in self.credentials {
-      if credential.subject_ref == subject_ref &&
-        credential.revoked_unix_ms is None {
-        self.credentials[key_id] = {
-          ..credential,
-          revoked_unix_ms: Some(now_unix_ms),
-        }
-        revoked_count += 1
+  let mut committed = false
+  defer (if !committed { self.credentials = previous })
+  let mut revoked_count = 0
+  for key_id, credential in self.credentials {
+    if credential.subject_ref == subject_ref &&
+      credential.revoked_unix_ms is None {
+      self.credentials[key_id] = {
+        ..credential,
+        revoked_unix_ms: Some(now_unix_ms),
       }
-    }
-    if revoked_count > 0 {
-      self.persist()
-    }
-    self.mutex.release()
-    revoked_count
-  } catch {
-    error => {
-      self.credentials = previous
-      self.mutex.release()
-      raise error
+      revoked_count += 1
     }
   }
+  if revoked_count > 0 {
+    self.persist()
+  }
+  committed = true
+  revoked_count
 }
 
 ///|
@@ -346,55 +331,50 @@ pub async fn AccessStore::authorize(
   }
   let digest = digest_secret(secret)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.credentials.copy()
-  try {
-    let mut matched : ApiCredential? = None
-    for value in self.credentials.values() {
-      if constant_time_equal(value.secret_sha256, digest) {
-        matched = Some(value)
-      }
+  let mut committed = false
+  defer (if !committed { self.credentials = previous })
+  let mut matched : ApiCredential? = None
+  for value in self.credentials.values() {
+    if constant_time_equal(value.secret_sha256, digest) {
+      matched = Some(value)
     }
-    guard matched is Some(current) else { raise Unauthorized }
-    guard current.organization_id is Some(organization_id) &&
-      current.project_id is Some(project_id) else {
-      raise Unauthorized
+  }
+  guard matched is Some(current) else { raise Unauthorized }
+  guard current.organization_id is Some(organization_id) &&
+    current.project_id is Some(project_id) else {
+    raise Unauthorized
+  }
+  if current.revoked_unix_ms is Some(_) ||
+    current.expires_unix_ms <= now_unix_ms ||
+    !current.scopes.contains(scope) ||
+    tenant_ref.map(value => value != current.tenant_ref).unwrap_or(false) ||
+    model
+    .map(value => {
+      current.allowed_models.length() > 0 &&
+      !current.allowed_models.contains(value)
+    })
+    .unwrap_or(false) {
+    raise Unauthorized
+  }
+  if consume && current.consumed_requests >= current.maximum_requests {
+    raise QuotaExceeded
+  }
+  if consume {
+    self.credentials[current.key_id] = {
+      ..current,
+      consumed_requests: current.consumed_requests + 1L,
     }
-    if current.revoked_unix_ms is Some(_) ||
-      current.expires_unix_ms <= now_unix_ms ||
-      !current.scopes.contains(scope) ||
-      tenant_ref.map(value => value != current.tenant_ref).unwrap_or(false) ||
-      model
-      .map(value => {
-        current.allowed_models.length() > 0 &&
-        !current.allowed_models.contains(value)
-      })
-      .unwrap_or(false) {
-      raise Unauthorized
-    }
-    if consume && current.consumed_requests >= current.maximum_requests {
-      raise QuotaExceeded
-    }
-    if consume {
-      self.credentials[current.key_id] = {
-        ..current,
-        consumed_requests: current.consumed_requests + 1L,
-      }
-      self.persist()
-    }
-    self.mutex.release()
-    {
-      key_id: current.key_id,
-      tenant_ref: current.tenant_ref,
-      subject_ref: current.subject_ref,
-      organization_id,
-      project_id,
-    }
-  } catch {
-    error => {
-      self.credentials = previous
-      self.mutex.release()
-      raise error
-    }
+    self.persist()
+  }
+  committed = true
+  {
+    key_id: current.key_id,
+    tenant_ref: current.tenant_ref,
+    subject_ref: current.subject_ref,
+    organization_id,
+    project_id,
   }
 }
 
