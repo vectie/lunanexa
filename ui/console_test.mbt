@@ -50,7 +50,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     ],
     catalog_templates: [],
     service_deployments: [],
-    requests: { count: 10, p95_ms: 50, throughput_per_second: 4, errors: 0 },
+    requests: { count: 10, p95_ms: 50, throughput_per_second: 4, errors: 0, },
     request_details: [
       {
         timestamp_unix_ms: 1000L,
@@ -61,8 +61,8 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       },
     ],
     stream_events: [
-      { sequence: 1, kind: "Chunk", text: "hello", receipt: "" },
-      { sequence: 2, kind: "Completed", text: "", receipt: "workload:1" },
+      { sequence: 1, kind: "Chunk", text: "hello", receipt: "", },
+      { sequence: 2, kind: "Completed", text: "", receipt: "workload:1", },
     ],
     benchmark_evidence: ["text-short-v1 · p95 50 ms"],
     policies: {
@@ -322,7 +322,7 @@ test "all operator routes render from the shared typed state" {
 ///|
 test "operator offline commerce route is actionable and bilingual" {
   let demo = @ui.demo_state()
-  let english = @ui.render({ ..demo, route: OfflineCommerce })
+  let english = @ui.render({ ..demo, route: OfflineCommerce, })
   assert_true(english.contains("Offline reconciliation desk"))
   assert_true(english.contains("Accept exact digest"))
   let chinese = @ui.render({
@@ -342,7 +342,7 @@ test "commercial and qualified-service routes expose bounded evidence" {
   assert_true(cost_centers.contains("Cost center governance"))
   assert_true(cost_centers.contains("cc-1"))
   assert_true(cost_centers.contains("CNY 100.00"))
-  let agreements = @ui.render({ ..base, route: Agreements })
+  let agreements = @ui.render({ ..base, route: Agreements, })
   assert_true(agreements.contains("Digital agreement lifecycle"))
   assert_true(agreements.contains("agreement-1"))
   assert_true(agreements.contains("evidence:agreement:1"))
@@ -351,7 +351,7 @@ test "commercial and qualified-service routes expose bounded evidence" {
   assert_true(agreements.contains("portal-node-id"))
   assert_true(agreements.contains("Approve"))
   assert_true(agreements.contains("Reject"))
-  let qualified = @ui.render({ ..base, route: QualifiedServices })
+  let qualified = @ui.render({ ..base, route: QualifiedServices, })
   assert_true(qualified.contains("LunaFide"))
   assert_true(qualified.contains("TestOnly"))
   assert_true(qualified.contains("Not ready"))
@@ -372,7 +372,7 @@ test "alerts route localizes durable incident state and actions" {
   assert_true(english.contains("Dead letter"))
   assert_true(english.contains("Redrive"))
   assert_false(english.contains("recipient"))
-  let chinese = @ui.render({ ..state, locale: ChineseSimplified })
+  let chinese = @ui.render({ ..state, locale: ChineseSimplified, })
   assert_true(chinese.contains("运维告警中心"))
   assert_true(chinese.contains("节点心跳已超时"))
   assert_true(chinese.contains("静默 1 小时"))
@@ -391,7 +391,7 @@ test "dead-letter redrive confirmation carries the delivery generation" {
     ),
     "delivery-alert-node-1-email · attempt 5 · generation 1786200300000",
   )
-  let english = @ui.render({ ..state, confirmation: Some(confirmation) })
+  let english = @ui.render({ ..state, confirmation: Some(confirmation), })
   assert_true(english.contains("Confirm delivery redrive"))
   assert_true(english.contains("attempt count 5"))
   assert_true(english.contains("1786200300000"))
@@ -421,7 +421,7 @@ test "Chinese agreement governance localizes known semantic codes" {
 
 ///|
 test "typed operation surface exposes commercial and technical commands" {
-  let html = @ui.render({ ..console_state(Policies), confirmation: None })
+  let html = @ui.render({ ..console_state(Policies), confirmation: None, })
   assert_true(html.contains("Create organization"))
   assert_true(html.contains("Create cost center"))
   assert_true(html.contains("Register agreement template"))
@@ -438,14 +438,14 @@ test "commercial rows escape adversarial tenant and provider values" {
   let base = console_state(CostCenters)
   let cost_centers = @ui.render({
     ..base,
-    cost_centers: [{ ..base.cost_centers[0], display_name: hostile }],
+    cost_centers: [{ ..base.cost_centers[0], display_name: hostile, }],
   })
   assert_false(cost_centers.contains(hostile))
   assert_true(cost_centers.contains("&lt;img"))
   let qualified = @ui.render({
     ..base,
     route: QualifiedServices,
-    qualified_services: [{ ..base.qualified_services[0], provider: hostile }],
+    qualified_services: [{ ..base.qualified_services[0], provider: hostile, }],
   })
   assert_false(qualified.contains(hostile))
   assert_true(qualified.contains("&lt;img"))
@@ -465,16 +465,16 @@ test "demo snapshot presents the four-node nine-model fleet" {
   assert_true(overview.contains("9"))
   assert_true(overview.contains("Ready for one-click deployment"))
   assert_true(overview.contains("Open one-click deployment"))
-  let nodes = @ui.render({ ..state, route: Nodes })
+  let nodes = @ui.render({ ..state, route: Nodes, })
   assert_true(nodes.contains("dgx-spark-04"))
-  let models = @ui.render({ ..state, route: Models })
+  let models = @ui.render({ ..state, route: Models, })
   assert_true(models.contains("lunanexa.speech.transcribe"))
 }
 
 ///|
 test "node management exposes expandable telemetry and exclusive lease evidence" {
   let state = console_state(Nodes)
-  let html = @ui.render({ ..state, confirmation: None })
+  let html = @ui.render({ ..state, confirmation: None, })
   assert_true(html.contains("Cluster topology"))
   assert_true(html.contains("Operator access"))
   assert_true(html.contains("Management plane"))
@@ -502,7 +502,7 @@ test "node topology states missing compute links without inventing a healthy fle
   let html = @ui.render({
     ..state,
     nodes: [],
-    overview: { ..state.overview, active_nodes: 0, total_nodes: 0 },
+    overview: { ..state.overview, active_nodes: 0, total_nodes: 0, },
     confirmation: None,
   })
   assert_true(html.contains("Cluster topology"))
@@ -534,22 +534,24 @@ test "node topology is fully localized in Chinese" {
 ///|
 test "node detail escapes hostile lease and assignment evidence" {
   let state = console_state(Nodes)
+  let baseline = @ui.render({ ..state, confirmation: None, })
   let hostile = "<img src=x onerror=alert(1)>"
   let html = @ui.render({
     ..state,
     nodes: [
-      { ..state.nodes[0], lease_holder: hostile, active_assignment: hostile },
+      { ..state.nodes[0], lease_holder: hostile, active_assignment: hostile, },
     ],
     confirmation: None,
   })
   assert_false(html.contains(hostile))
-  assert_false(html.contains("<img"))
-  assert_true(html.contains("&lt;img"))
+  // Static branding images are allowed; hostile evidence cannot add an image.
+  assert_eq(html.split("<img").count(), baseline.split("<img").count())
+  assert_true(html.contains("&lt;img src=x onerror=alert(1)&gt;"))
 }
 
 ///|
 test "catalog route exposes governed one-click deployment controls" {
-  let html = @ui.render({ ..console_state(Catalog), confirmation: None })
+  let html = @ui.render({ ..console_state(Catalog), confirmation: None, })
   assert_true(html.contains("Model service catalog"))
   assert_true(html.contains("One-click model service"))
   assert_true(html.contains("Preflight enforced"))
@@ -610,17 +612,18 @@ test "operator WebIDE onboarding compresses setup into guided milestones" {
 ///|
 test "catalog escapes adversarial operator and template text" {
   let demo = @ui.demo_state()
+  let baseline = @ui.render({ ..demo, route: Catalog, })
   let hostile = "<img src=x onerror=alert(1)>"
   let html = @ui.render({
     ..demo,
     route: Catalog,
     quick_deployment_id: hostile,
-    catalog_templates: [{ ..demo.catalog_templates[0], display_name: hostile }],
+    catalog_templates: [{ ..demo.catalog_templates[0], display_name: hostile, }],
   })
   assert_false(html.contains(hostile))
-  assert_false(html.contains("<img"))
+  assert_eq(html.split("<img").count(), baseline.split("<img").count())
   assert_false(html.contains("onerror=alert(1)>"))
-  assert_true(html.contains("&lt;img"))
+  assert_true(html.contains("&lt;img src=x onerror=alert(1)&gt;"))
 }
 
 ///|
@@ -650,7 +653,7 @@ test "Simplified Chinese localizes catalog status counts and confirmations" {
     version: @contracts.contract_version,
     idempotency_key: "console:service-1:1000",
     deployment_id: "service-1",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 86400000L,
@@ -757,7 +760,7 @@ test "generated labels relocalize while raw placement rationale stays untouched"
         placement_reason: "placement/server-note-原样",
       },
     ],
-    users: [{ ..english.users[1], last_active: "Never" }],
+    users: [{ ..english.users[1], last_active: "Never", }],
     confirmation: None,
   })
   assert_true(chinese.contains("placement/server-note-原样"))
@@ -765,7 +768,7 @@ test "generated labels relocalize while raw placement rationale stays untouched"
     ..english,
     locale: ChineseSimplified,
     route: Users,
-    users: [{ ..english.users[1], last_active: "Never" }],
+    users: [{ ..english.users[1], last_active: "Never", }],
     confirmation: None,
   })
   assert_true(chinese_users.contains("从未"))
@@ -778,15 +781,15 @@ test "Simplified Chinese status copy follows each resource lifecycle" {
     ..access,
     locale: ChineseSimplified,
     users: [
-      { ..access.users[0], state: UserActive },
-      { ..access.users[0], state: UserInvited },
-      { ..access.users[0], state: UserSuspended },
-      { ..access.users[0], state: UserRevoked },
+      { ..access.users[0], state: UserActive, },
+      { ..access.users[0], state: UserInvited, },
+      { ..access.users[0], state: UserSuspended, },
+      { ..access.users[0], state: UserRevoked, },
     ],
     access_grants: [
-      { ..access.access_grants[0], state: GrantActive },
-      { ..access.access_grants[0], state: GrantExpired },
-      { ..access.access_grants[0], state: GrantRevoked },
+      { ..access.access_grants[0], state: GrantActive, },
+      { ..access.access_grants[0], state: GrantExpired, },
+      { ..access.access_grants[0], state: GrantRevoked, },
     ],
     confirmation: None,
   })
@@ -801,11 +804,11 @@ test "Simplified Chinese status copy follows each resource lifecycle" {
     ..leases,
     locale: ChineseSimplified,
     compute_leases: [
-      { ..leases.compute_leases[0], state: Requested },
-      { ..leases.compute_leases[0], state: Active },
-      { ..leases.compute_leases[0], state: Suspended },
-      { ..leases.compute_leases[0], state: Expired },
-      { ..leases.compute_leases[0], state: Revoked },
+      { ..leases.compute_leases[0], state: Requested, },
+      { ..leases.compute_leases[0], state: Active, },
+      { ..leases.compute_leases[0], state: Suspended, },
+      { ..leases.compute_leases[0], state: Expired, },
+      { ..leases.compute_leases[0], state: Revoked, },
     ],
     confirmation: None,
   })
@@ -817,12 +820,12 @@ test "Simplified Chinese status copy follows each resource lifecycle" {
     ..nodes,
     locale: ChineseSimplified,
     nodes: [
-      { ..nodes.nodes[0], state: Active },
-      { ..nodes.nodes[0], state: Enrolling },
-      { ..nodes.nodes[0], state: Cordoned },
-      { ..nodes.nodes[0], state: Draining },
-      { ..nodes.nodes[0], state: Unreachable },
-      { ..nodes.nodes[0], state: Retired },
+      { ..nodes.nodes[0], state: Active, },
+      { ..nodes.nodes[0], state: Enrolling, },
+      { ..nodes.nodes[0], state: Cordoned, },
+      { ..nodes.nodes[0], state: Draining, },
+      { ..nodes.nodes[0], state: Unreachable, },
+      { ..nodes.nodes[0], state: Retired, },
     ],
     confirmation: None,
   })
@@ -837,12 +840,12 @@ test "Simplified Chinese status copy follows each resource lifecycle" {
     ..models,
     locale: ChineseSimplified,
     models: [
-      { ..models.models[0], state: Candidate },
-      { ..models.models[0], state: Verified },
-      { ..models.models[0], state: Evaluated },
-      { ..models.models[0], state: Approved },
-      { ..models.models[0], state: Deprecated },
-      { ..models.models[0], state: Revoked },
+      { ..models.models[0], state: Candidate, },
+      { ..models.models[0], state: Verified, },
+      { ..models.models[0], state: Evaluated, },
+      { ..models.models[0], state: Approved, },
+      { ..models.models[0], state: Deprecated, },
+      { ..models.models[0], state: Revoked, },
     ],
     confirmation: None,
   })
@@ -857,14 +860,14 @@ test "Simplified Chinese status copy follows each resource lifecycle" {
     ..deployments,
     locale: ChineseSimplified,
     deployments: [
-      { ..deployments.deployments[0], observed: Pending },
-      { ..deployments.deployments[0], observed: Preparing },
-      { ..deployments.deployments[0], observed: Starting },
-      { ..deployments.deployments[0], observed: Ready },
-      { ..deployments.deployments[0], observed: Draining },
-      { ..deployments.deployments[0], observed: Degraded },
-      { ..deployments.deployments[0], observed: Failed },
-      { ..deployments.deployments[0], observed: Stopped },
+      { ..deployments.deployments[0], observed: Pending, },
+      { ..deployments.deployments[0], observed: Preparing, },
+      { ..deployments.deployments[0], observed: Starting, },
+      { ..deployments.deployments[0], observed: Ready, },
+      { ..deployments.deployments[0], observed: Draining, },
+      { ..deployments.deployments[0], observed: Degraded, },
+      { ..deployments.deployments[0], observed: Failed, },
+      { ..deployments.deployments[0], observed: Stopped, },
     ],
     confirmation: None,
   })
@@ -920,7 +923,7 @@ test "Simplified Chinese maps known semantic codes and preserves unknown values"
     ..requests,
     locale: ChineseSimplified,
     request_details: [
-      { ..requests.request_details[0], result: "accepted" },
+      { ..requests.request_details[0], result: "accepted", },
       {
         ..requests.request_details[0],
         action: "workload.vendor-action",
@@ -929,10 +932,10 @@ test "Simplified Chinese maps known semantic codes and preserves unknown values"
       },
     ],
     stream_events: [
-      { sequence: 1, kind: "Chunk", text: "raw chunk", receipt: "" },
-      { sequence: 2, kind: "Completed", text: "", receipt: "receipt:done" },
-      { sequence: 3, kind: "Failed", text: "raw failure", receipt: "" },
-      { sequence: 4, kind: "Cancelled", text: "", receipt: "" },
+      { sequence: 1, kind: "Chunk", text: "raw chunk", receipt: "", },
+      { sequence: 2, kind: "Completed", text: "", receipt: "receipt:done", },
+      { sequence: 3, kind: "Failed", text: "raw failure", receipt: "", },
+      { sequence: 4, kind: "Cancelled", text: "", receipt: "", },
       {
         sequence: 5,
         kind: "VendorEvent",
@@ -968,8 +971,8 @@ test "Simplified Chinese maps known semantic codes and preserves unknown values"
     ..nodes,
     locale: ChineseSimplified,
     nodes: [
-      { ..nodes.nodes[0], architecture: "unreported" },
-      { ..nodes.nodes[0], architecture: "vendor-arch/raw" },
+      { ..nodes.nodes[0], architecture: "unreported", },
+      { ..nodes.nodes[0], architecture: "vendor-arch/raw", },
     ],
     confirmation: None,
   })
@@ -980,7 +983,7 @@ test "Simplified Chinese maps known semantic codes and preserves unknown values"
     ..audit,
     locale: ChineseSimplified,
     audit: [
-      { ..audit.audit[0], result: "accepted" },
+      { ..audit.audit[0], result: "accepted", },
       {
         ..audit.audit[0],
         decision: "decision.raw",
@@ -1020,7 +1023,7 @@ test "language selector remains available through loading and error states" {
 ///|
 test "empty and error states remain explicit" {
   let state = console_state(Nodes)
-  let html = @ui.render({ ..state, nodes: [], error_message: Some("offline") })
+  let html = @ui.render({ ..state, nodes: [], error_message: Some("offline"), })
   assert_true(html.contains("No nodes enrolled"))
   assert_true(html.contains("Unable to complete the operation: offline"))
   assert_true(html.contains("@media (max-width: 40rem)"))
@@ -1039,10 +1042,14 @@ test "overview distinguishes healthy, attention, and awaiting telemetry states" 
   let attention = @ui.render(console_state(Overview))
   let healthy = @ui.render({
     ..console_state(Overview),
-    overview: { ..console_state(Overview).overview, active_nodes: 4, alerts: 0 },
+    overview: {
+      ..console_state(Overview).overview,
+      active_nodes: 4,
+      alerts: 0,
+    },
     confirmation: None,
   })
-  let awaiting = @ui.render({ ..@ui.default_state(), confirmation: None })
+  let awaiting = @ui.render({ ..@ui.default_state(), confirmation: None, })
   assert_true(attention.contains("Cluster needs attention"))
   assert_true(attention.contains("Review required"))
   assert_true(healthy.contains("Cluster operational"))
@@ -1472,7 +1479,7 @@ test "model import recovery and adoption preserve every safety gate" {
 
 ///|
 test "empty model registry points to governed ModelScope onboarding" {
-  let html = @ui.render({ ..console_state(Models), models: [] })
+  let html = @ui.render({ ..console_state(Models), models: [], })
   assert_true(html.contains("No models registered yet"))
   assert_true(html.contains("Search ModelScope above and start a download"))
 }

@@ -75,6 +75,7 @@ test "opaque adapter consumes the OCI-supervised private address" {
     artifact_digest: "b".repeat(64),
     observed_state: Ready,
     container_address: "172.19.0.8",
+    endpoint: None,
   }
   let discovery = verifier_only_authority_fixture()
     .opaque_adapter()
