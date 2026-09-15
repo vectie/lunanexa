@@ -198,11 +198,18 @@ async fn WorkspaceHost::reconcile_page(
     } catch {
       _ => None
     }
-    let active = match grant {
-      Some(value) =>
-        resource_name(@webide.workspace_id(value)) == name &&
-        self.authorize(value)
-      None => false
+    let active = try {
+      match grant {
+        Some(value) =>
+          resource_name(@webide.workspace_id(value)) == name &&
+          self.authorize(value)
+        None => false
+      }
+    } catch {
+      // Preserve this workspace on an inconclusive authority check. Continue
+      // scanning so independently expired/revoked workspaces are still stopped.
+      @webide.BridgeError::AuthorityUnavailable => continue
+      error => raise error
     }
     if !active {
       self.scale_down(name)

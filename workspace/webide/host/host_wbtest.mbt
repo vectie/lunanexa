@@ -39,7 +39,7 @@ fn proxy_config(controller : String, gateway : String) -> ModelProxyConfig {
 
 ///|
 test "platform CA is deployment-owned and mounted only by the model proxy" {
-  let config = { ..host_config(), trusted_ca_config_map: Some("platform-ca") }
+  let config = { ..host_config(), trusted_ca_config_map: Some("platform-ca"), }
   let host = WorkspaceHost::new(config)
   let grant = proxy_config(
     config.controller_origin,
@@ -95,7 +95,7 @@ test "platform CA is deployment-owned and mounted only by the model proxy" {
   }
   assert_true(deployment.stringify().contains("ca-bundle.crt"))
   try
-    WorkspaceHost::new({ ..config, trusted_ca_config_map: Some("../secret") })
+    WorkspaceHost::new({ ..config, trusted_ca_config_map: Some("../secret"), })
   catch {
     HostError::InvalidConfiguration => ()
     _ => fail("unexpected host error")
@@ -148,6 +148,8 @@ test "workspace desired state is deterministic, private and CPU-only" {
   assert_false(desired.contains("--base-directory"))
   assert_true(desired.contains("--disable-api-nodes"))
   assert_true(desired.contains("--disable-all-custom-nodes"))
+  assert_true(desired.contains("--enable-assets"))
+  assert_true(desired.contains("sqlite:////workspace/user/comfyui.db"))
   assert_true(desired.contains("initialize-workspace"))
   assert_true(
     deployment
@@ -171,7 +173,7 @@ test "workspace desired state is deterministic, private and CPU-only" {
   assert_true(dns_label(resource_name(id)))
   assert_true(
     resource_name(id) !=
-    resource_name(@webide.workspace_id({ ..grant, subject_ref: "bob" })),
+    resource_name(@webide.workspace_id({ ..grant, subject_ref: "bob", })),
   )
 }
 
@@ -213,12 +215,12 @@ test "host accepts only bounded resources and immutable images" {
   }
   for
     config in [
-      { ..host_config(), storage_gib: 0 },
-      { ..host_config(), cpu_millis: 0 },
-      { ..host_config(), kubernetes_origin: "http://kubernetes.default.svc" },
-      { ..host_config(), namespace_name: "../../kube-system" },
-      { ..host_config(), controller_namespace: "../../kube-system" },
-      { ..host_config(), model_gateway_namespace: "*" },
+      { ..host_config(), storage_gib: 0, },
+      { ..host_config(), cpu_millis: 0, },
+      { ..host_config(), kubernetes_origin: "http://kubernetes.default.svc", },
+      { ..host_config(), namespace_name: "../../kube-system", },
+      { ..host_config(), controller_namespace: "../../kube-system", },
+      { ..host_config(), model_gateway_namespace: "*", },
     ] {
     try {
       ignore(WorkspaceHost::new(config))
@@ -284,7 +286,7 @@ async test "partial provisioning resumes deterministically and stale reconciliat
   let name = resource_name(@webide.workspace_id(grant))
   let resources : Map[String, Json] = Map([])
   let requests : Array[String] = []
-  let state = { "fail_secret": true, "active": true }
+  let state = { "fail_secret": true, "active": true, "outage": false }
   let secret : Json = {
     "metadata": { "name": name },
     "data": {
@@ -342,7 +344,9 @@ async test "partial provisioning resumes deterministically and stale reconciliat
     group.spawn_bg(no_wait=true, allow_failure=true, () => {
       controller.run_forever((_request, _body, connection) => {
         connection.send_response(
-          if state["active"] {
+          if state["outage"] {
+            503
+          } else if state["active"] {
             200
           } else {
             401
@@ -368,6 +372,21 @@ async test "partial provisioning resumes deterministically and stale reconciliat
     assert_eq(backend.http_url, "http://\{name}.webide.svc.cluster.local:8188")
     host.reconcile()
     assert_false(resources.keys().any(path => path.has_suffix("/scale")))
+    state["outage"] = true
+    try host.authorize(grant) catch {
+      @webide.BridgeError::AuthorityUnavailable => ()
+      error => fail("Unexpected authority error: \{error}")
+    } noraise {
+      _ =>
+        fail("Unavailable authority must not grant access or claim revocation")
+    }
+    host.reconcile()
+    assert_false(resources.keys().any(path => path.has_suffix("/scale")))
+    assert_false(
+      host.authorize({ ..grant, expires_unix_ms: @async.now() - 1L, }),
+    )
+    state["outage"] = false
+    assert_true(host.authorize(grant))
     state["active"] = false
     host.reconcile()
     let scales = resources
@@ -479,6 +498,16 @@ async test "pod-local model proxy injects scoped credentials and never bypasses 
       headers~,
     )
     assert_eq(duplicate.code, 403)
+    let multipart = "--editor\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nvideo.h3\r\n--editor\r\nContent-Disposition: form-data; name=\"prompt\"\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nTEST ONLY 中文\r\n--editor--\r\n"
+    let (converted, _) = @http.post(origin + "/v1/videos", multipart, headers={
+      "content-type": "multipart/form-data; boundary=editor",
+      "idempotency-key": "fixture-multipart-request",
+    })
+    assert_eq(converted.code, 200)
+    json_inspect(@json.parse(forwarded[1]), content={
+      "model": "video.h3",
+      "prompt": "TEST ONLY 中文",
+    })
     state["active"] = false
     let (revoked, _) = @http.post(
       origin + "/v1/videos",
@@ -486,6 +515,6 @@ async test "pod-local model proxy injects scoped credentials and never bypasses 
       headers~,
     )
     assert_eq(revoked.code, 401)
-    assert_eq(forwarded.length(), 1)
+    assert_eq(forwarded.length(), 2)
   }
 }

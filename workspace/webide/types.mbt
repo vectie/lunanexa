@@ -40,6 +40,7 @@ pub(all) suberror BridgeError {
   RequestTooLarge
   CapacityExceeded
   UpstreamUnavailable
+  AuthorityUnavailable
 } derive(Debug, Eq)
 
 ///|

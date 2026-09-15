@@ -74,6 +74,13 @@ profile has one active WebIDE identity; switching or logging out closes its old
 gateway session. Sessions are ephemeral and fail closed after a gateway restart;
 workflows and uploaded/generated files remain in the workspace volume.
 
+Authorization outages fail closed for HTTP, WebSocket and model access, but
+are not revocation evidence. A transient transport failure, rate limit or
+unexpected controller response must not invalidate a still-unexpired browser
+session or scale down its workspace. Subsequent requests recheck live authority;
+no cached allow decision bypasses an outage. Explicit denial and local expiry
+still invalidate access and stop the workspace while retaining its volume.
+
 Human identity has two supported deployment shapes. A public platform identity
 provider may allow any eligible person to create an account, while an enterprise
 deployment may federate a customer's existing identity provider. Both terminate
