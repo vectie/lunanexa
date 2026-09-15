@@ -189,6 +189,78 @@ async test "one access package intent is resumable and enables only after contra
     409,
   )
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let private_service = service.with_private_cloud_workspace_access(true)
+  let private_without_models = private_service.handle(
+    Post,
+    "/v1/onboarding/access-packages/\{account.account_id}:enable",
+    headers,
+    "",
+  )
+  assert_eq(private_without_models.status, 409)
+  assert_true(private_without_models.body.contains("ApprovedModelRequired"))
+  seed_access_package_model(registry)
+  assert_false(
+    private_service.private_workspace_authorized(
+      "tenant-friendly",
+      account.subject_ref,
+      @async.now(),
+    ),
+  )
+  assert_eq(
+    private_service.handle(
+      Post,
+      "/v1/onboarding/access-packages/\{account.account_id}:enable",
+      Map([]),
+      "",
+    ).status,
+    401,
+  )
+  let private_enabled = private_service.handle(
+    Post,
+    "/v1/onboarding/access-packages/\{account.account_id}:enable",
+    headers,
+    "",
+  )
+  assert_eq(private_enabled.status, 200)
+  assert_true(private_enabled.body.contains("\"ready\":true"))
+  assert_true(
+    private_service.private_workspace_authorized(
+      "tenant-friendly",
+      account.subject_ref,
+      @async.now(),
+    ),
+  )
+  assert_false(
+    private_service.private_workspace_authorized(
+      "another-tenant",
+      account.subject_ref,
+      @async.now(),
+    ),
+  )
+  assert_false(
+    private_service.private_workspace_authorized(
+      "tenant-friendly",
+      "another-subject",
+      @async.now(),
+    ),
+  )
+  assert_false(
+    service.private_workspace_authorized(
+      "tenant-friendly",
+      account.subject_ref,
+      @async.now(),
+    ),
+  )
+  // Selecting private-cloud mode does not change the commercial/default service.
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/onboarding/access-packages/\{account.account_id}:enable",
+      headers,
+      "",
+    ).status,
+    409,
+  )
   ignore(
     contracts.create_packet(
       {
@@ -209,7 +281,6 @@ async test "one access package intent is resumable and enables only after contra
       "operator",
     ),
   )
-  seed_access_package_model(registry)
   let enabled = service.handle(
     Post,
     "/v1/onboarding/access-packages/\{account.account_id}:enable",
@@ -233,6 +304,15 @@ async test "one access package intent is resumable and enables only after contra
   let audit = service.handle(Get, "/v1/audit", headers, "")
   assert_true(audit.body.contains("access-package.prepared"))
   assert_true(audit.body.contains("access-package.enabled"))
+  // Authorization reconciles expiry durably, so advance time only after the
+  // live-lease assertions above.
+  assert_false(
+    private_service.private_workspace_authorized(
+      "tenant-friendly",
+      account.subject_ref,
+      @async.now() + 31L * 86400000L,
+    ),
+  )
 }
 
 ///|

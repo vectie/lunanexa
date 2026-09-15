@@ -148,15 +148,21 @@ async fn ApiService::api_key_check(
             }
           None => self.allow_legacy_unbound_access
         }
-        let contract_active = match self.contract_document_store {
-          Some(contracts) =>
-            contracts.has_effective_master_lease(
-              preview.tenant_ref,
-              preview.subject_ref,
-              now,
-            )
-          None => self.allow_legacy_unbound_access
-        }
+        let contract_active = self.private_workspace_key_authorized(
+            preview.key_id,
+            preview.tenant_ref,
+            preview.subject_ref,
+            now,
+          ) ||
+          (match self.contract_document_store {
+            Some(contracts) =>
+              contracts.has_effective_master_lease(
+                preview.tenant_ref,
+                preview.subject_ref,
+                now,
+              )
+            None => self.allow_legacy_unbound_access
+          })
         let trial_active = match self.account_store {
           Some(accounts) =>
             match accounts.active_trial_for_subject(preview.subject_ref, now) {
@@ -242,15 +248,21 @@ async fn ApiService::api_key_check(
             }
           None => false
         }
-        let contract_active = match self.contract_document_store {
-          Some(contracts) =>
-            contracts.has_effective_master_lease(
-              value.tenant_ref,
-              value.subject_ref,
-              now,
-            )
-          None => false
-        }
+        let contract_active = self.private_workspace_key_authorized(
+            value.key_id,
+            value.tenant_ref,
+            value.subject_ref,
+            now,
+          ) ||
+          (match self.contract_document_store {
+            Some(contracts) =>
+              contracts.has_effective_master_lease(
+                value.tenant_ref,
+                value.subject_ref,
+                now,
+              )
+            None => false
+          })
         let account_active = match self.account_store {
           Some(accounts) =>
             accounts

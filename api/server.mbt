@@ -34,6 +34,7 @@ pub struct ApiService {
   open_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
+  private_cloud_workspace_access : Bool
   management_database : @database.PostgresDatabase?
   technical_store : @technical_store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
@@ -132,6 +133,7 @@ pub fn ApiService::new(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -227,6 +229,7 @@ pub fn ApiService::with_registry(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -323,6 +326,7 @@ pub fn ApiService::with_services(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -421,6 +425,7 @@ pub fn ApiService::with_control_plane(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -5118,7 +5123,9 @@ pub async fn ApiService::serve_on(
     if self.serve_artifact(request, connection) {
       return
     }
-    if request.meth == Get && request.path.has_prefix("/v1/videos/") && request.path.has_suffix("/content") {
+    if request.meth == Get &&
+      request.path.has_prefix("/v1/videos/") &&
+      request.path.has_suffix("/content") {
       self.serve_media_content(request, connection)
       return
     }

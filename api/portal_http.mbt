@@ -442,15 +442,20 @@ async fn ApiService::handle_enterprise_portal(
         )
       }
       let now = @async.now()
-      let contract_active = match self.contract_document_store {
-        Some(contract_store) =>
-          contract_store.has_effective_master_lease(
-            view.membership.tenant_ref,
-            subject_ref,
-            now,
-          )
-        None => false
-      }
+      let contract_active = self.private_workspace_authorized(
+          view.membership.tenant_ref,
+          subject_ref,
+          now,
+        ) ||
+        (match self.contract_document_store {
+          Some(contract_store) =>
+            contract_store.has_effective_master_lease(
+              view.membership.tenant_ref,
+              subject_ref,
+              now,
+            )
+          None => false
+        })
       let trial = match self.account_store {
         Some(accounts) => accounts.active_trial_for_subject(subject_ref, now)
         None => None
