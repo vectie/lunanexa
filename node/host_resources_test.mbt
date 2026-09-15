@@ -41,7 +41,10 @@ test "measured host resources replace static labels without mutating inventory" 
     taints: [],
   }
   assert_eq(@node.inventory_host_resources(base), None)
-  let measured : @node.HostResources = { cpu_count: 2, memory_total_mib: 4096L }
+  let measured : @node.HostResources = {
+    cpu_count: 2,
+    memory_total_mib: 4096L,
+  }
   let updated = measured.inventory(base)
   assert_eq(@node.inventory_host_resources(updated), Some(measured))
   assert_eq(base.labels.get("lunanexa.io/host-cpu-count"), Some("999"))

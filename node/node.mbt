@@ -61,7 +61,7 @@ fn secret_digest(secret : String) -> String {
 
 ///|
 pub fn EnrollmentService::new() -> EnrollmentService {
-  { tokens: Map([]), certificates: Map([]), authorities: Map([]) }
+  { tokens: Map([]), certificates: Map([]), authorities: Map([]), }
 }
 
 ///|
@@ -107,7 +107,7 @@ pub fn EnrollmentService::enroll(
   if node_auth_secret == "" {
     raise InvalidBootstrapToken
   }
-  self.tokens[token_id] = { ..token, used: true }
+  self.tokens[token_id] = { ..token, used: true, }
   let certificate : NodeCertificate = {
     node_id,
     serial: 1L,
@@ -137,7 +137,7 @@ pub fn EnrollmentService::snapshot(self : EnrollmentService) -> String {
       for _, authority in self.authorities => authority
     ],
   }
-  value.to_json().stringify()
+  ToJson::to_json(value).stringify()
 }
 
 ///|
@@ -279,7 +279,7 @@ pub fn assignment_signature(
   assignment : @contracts.DesiredAssignment,
   secret : String,
 ) -> String {
-  let unsigned = { ..assignment, signature: "" }
+  let unsigned = { ..assignment, signature: "", }
   let key = @utf8.encode(secret)
   let material = @utf8.encode(
     "lunanexa.assignment-mac.v1|\{unsigned.to_json().stringify()}",
@@ -294,7 +294,7 @@ pub fn heartbeat_signature(
   heartbeat : @contracts.NodeHeartbeat,
   secret : String,
 ) -> String {
-  let unsigned = { ..heartbeat, signature: "" }
+  let unsigned = { ..heartbeat, signature: "", }
   let key = @utf8.encode(secret)
   let material = @utf8.encode(
     "lunanexa.heartbeat-mac.v1|\{unsigned.to_json().stringify()}",

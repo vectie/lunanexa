@@ -72,7 +72,7 @@ pub fn OciRuntimeSupervisor::new(
   if pid_limit <= 0 || pid_limit > 1048576 {
     raise RuntimeSupervisorError::InvalidAssignmentIdentity("pid-limit")
   }
-  { engine, network, engine_endpoint, pid_limit }
+  { engine, network, engine_endpoint, pid_limit, }
 }
 
 ///|

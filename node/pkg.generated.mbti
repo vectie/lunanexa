@@ -7,6 +7,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
+  "vectie/lunanexa/node/kubernetes",
   "vectie/lunanexa/settings",
 }
 
@@ -156,6 +157,17 @@ pub(all) struct HostResources {
   memory_total_mib : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn HostResources::inventory(Self, @contracts.NodeInventory) -> @contracts.NodeInventory
+
+pub(all) enum ManagedRuntimeSupervisor {
+  Oci(OciRuntimeSupervisor)
+  Kubernetes(@kubernetes.RuntimeSupervisor)
+}
+pub fn ManagedRuntimeSupervisor::close(Self) -> Unit
+pub async fn ManagedRuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, MaterializedArtifact) -> RuntimeInstance
+pub async fn ManagedRuntimeSupervisor::reap_expired(Self, Int64) -> Unit
+pub async fn ManagedRuntimeSupervisor::remove_absent(Self, Array[String]) -> Unit
+pub fn ManagedRuntimeSupervisor::retained_artifact_digests(Self) -> Array[String]
+pub async fn ManagedRuntimeSupervisor::stop(Self, String) -> Unit
 
 pub struct MaterializedArtifact {
   digest : String

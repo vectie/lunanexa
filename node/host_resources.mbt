@@ -59,7 +59,7 @@ pub fn parse_linux_host_resources(
   guard total is Some(memory_total_mib) else {
     raise TelemetryCollectorError::MalformedSample("missing MemTotal")
   }
-  { cpu_count: processors.length(), memory_total_mib }
+  { cpu_count: processors.length(), memory_total_mib, }
 }
 
 ///|
@@ -103,7 +103,7 @@ pub fn inventory_host_resources(
     let cpu_count = @string.parse_int(cpu)
     let memory_total_mib = @string.parse_int64(memory)
     guard cpu_count > 0 && memory_total_mib > 0L else { return None }
-    Some({ cpu_count, memory_total_mib })
+    Some({ cpu_count, memory_total_mib, })
   } catch {
     _ => None
   }

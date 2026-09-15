@@ -2,7 +2,7 @@
 
 > **Implemented control-plane baseline.** LunaNexa now contains a native HTTP
 > controller, durable registry/scheduler/enrollment/telemetry/workspace state, a native
-> node reconciler and OCI supervisor, a provider-neutral client and CLI, a live
+> node reconciler with OCI and Kubernetes runtime backends, a provider-neutral client and CLI, a live
 > Rabbita console, and release evidence tooling. Production acceptance still
 > requires a named physical-cluster profile, private runtime, CA/identity, measurements,
 > and named human approvals in [the phased plan](docs/PLAN.md).

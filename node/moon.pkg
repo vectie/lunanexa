@@ -1,6 +1,7 @@
 import {
   "vectie/lunanexa/internal/signature",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/node/kubernetes",
   "vectie/lunanexa/database",
   "vectie/lunanexa/settings",
   "moonbitlang/core/encoding/utf8",
@@ -24,6 +25,8 @@ import {
 
 options(
   link: {
-    "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl" },
+    "native": {
+      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",
+    },
   },
 )
