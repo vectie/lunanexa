@@ -9,6 +9,7 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
     run_as_user: 1000,
     device_class_name: "gpu.nvidia.com",
     controller_addresses: ["192.168.2.175"],
+    runtime_secrets: None,
   }
 }
 

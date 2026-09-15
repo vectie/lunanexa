@@ -6,5 +6,6 @@
   "runtime_port": 8080,
   "run_as_user": 1000,
   "device_class_name": "gpu.nvidia.com",
-  "controller_addresses": ["192.168.0.10"]
+  "controller_addresses": ["192.168.0.10"],
+  "runtime_secrets": []
 }

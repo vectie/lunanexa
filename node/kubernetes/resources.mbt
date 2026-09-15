@@ -9,6 +9,7 @@ pub(all) struct RuntimeSettings {
   run_as_user : Int
   device_class_name : String
   controller_addresses : Array[String]
+  runtime_secrets : Array[RuntimeSecretBinding]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -317,16 +318,7 @@ pub fn render_runtime(
             "timeoutSeconds": 1,
             "failureThreshold": assignment.health.failure_threshold.to_json(),
           },
-          "env": [
-            {
-              "name": "LUNANEXA_MODEL_PATH",
-              "value": "/var/lib/lunanexa/model/model",
-            },
-            {
-              "name": "LUNANEXA_ARTIFACT_DIGEST",
-              "value": assignment.artifact.digest.to_json(),
-            },
-          ],
+          "env": runtime_environment(settings, assignment).to_json(),
           "volumeMounts": [
             {
               "name": "model",
