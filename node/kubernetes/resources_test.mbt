@@ -14,6 +14,51 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
 }
 
 ///|
+test "runtime quantities match Kubernetes canonical serialization" {
+  let base = runtime_assignment()
+  for
+    (cpu, memory, expected_cpu, expected_memory) in [
+      (100, 256, "100m", "256Mi"),
+      (1000, 2048, "1", "2Gi"),
+      (1500, 1536, "1500m", "1536Mi"),
+      (2000, 1048576, "2", "1Ti"),
+      (1, 1073741824, "1m", "1Pi"),
+    ] {
+    let assignment = {
+      ..base,
+      resources: { ..base.resources, cpu_millis: cpu, memory_mib: memory, },
+    }
+    let rendered = @kubernetes.render_runtime(
+      runtime_settings(),
+      assignment,
+      "/var/lib/lunanexa/models/model",
+      assignment.artifact.digest,
+      5L,
+      1000L,
+    )
+    guard rendered.pod
+      is {
+        "spec": {
+          "containers": [
+            { "resources": { "requests": requests, "limits": limits, .. }, .. },
+          ],
+          ..
+        },
+        ..
+      } else {
+      fail("runtime resource bounds missing")
+    }
+    assert_eq(requests, limits)
+    guard requests
+      is { "cpu": String(actual_cpu), "memory": String(actual_memory), .. } else {
+      fail("quantity strings missing")
+    }
+    assert_eq(actual_cpu, expected_cpu)
+    assert_eq(actual_memory, expected_memory)
+  }
+}
+
+///|
 fn runtime_assignment() -> @contracts.DesiredAssignment {
   {
     assignment_id: "assignment-1",
