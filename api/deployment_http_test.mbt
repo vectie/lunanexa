@@ -163,6 +163,7 @@ fn management_heartbeat(
       taints: [],
     },
     running_deployments: running,
+    runtime_endpoints: None,
     timestamp_unix_ms: @async.now(),
     signature: "test",
   }

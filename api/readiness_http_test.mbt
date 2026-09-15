@@ -43,6 +43,7 @@ async test "management readiness is protected, fail-closed, and component explic
       taints: [],
     },
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: enrollment_now,
     signature: "",
   })

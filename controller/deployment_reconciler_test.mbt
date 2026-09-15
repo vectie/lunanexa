@@ -4,7 +4,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
     version: @contracts.contract_version,
     idempotency_key: "deploy-1",
     deployment_id: "service-1",
-    template: { template_id: "template-1", version: "v1" },
+    template: { template_id: "template-1", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -15,7 +15,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
     intent,
     template: None,
     replicas: [
-      { replica_id: "service-1-r1", node_id: "node-a", devices: ["gpu-0"] },
+      { replica_id: "service-1-r1", node_id: "node-a", devices: ["gpu-0"], },
     ],
     findings: [],
     executable: false,
@@ -97,6 +97,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
       taints: [],
     },
     running_deployments: ["service-1"],
+    runtime_endpoints: None,
     timestamp_unix_ms: 1000L,
     signature: "signed",
   }
@@ -111,18 +112,18 @@ test "deployment readiness requires matching generation and live heartbeat" {
   assert_false(
     @controller.deployment_operation_ready(
       operation,
-      [{ ..assignment, generation: 1L }],
+      [{ ..assignment, generation: 1L, }],
       [heartbeat],
       1100L,
     ),
   )
   for
     hostile_heartbeat in [
-      { ..heartbeat, state: Cordoned },
-      { ..heartbeat, observed_generation: 1L },
-      { ..heartbeat, controller_epoch: 2L },
-      { ..heartbeat, inventory: { ..heartbeat.inventory, node_id: "node-b" } },
-      { ..heartbeat, timestamp_unix_ms: -20000L },
+      { ..heartbeat, state: Cordoned, },
+      { ..heartbeat, observed_generation: 1L, },
+      { ..heartbeat, controller_epoch: 2L, },
+      { ..heartbeat, inventory: { ..heartbeat.inventory, node_id: "node-b", }, },
+      { ..heartbeat, timestamp_unix_ms: -20000L, },
     ] {
     assert_false(
       @controller.deployment_operation_ready(
@@ -135,9 +136,9 @@ test "deployment readiness requires matching generation and live heartbeat" {
   }
   for
     hostile_assignment in [
-      { ..assignment, signature: "" },
-      { ..assignment, lease_expires_unix_ms: 1100L },
-      { ..assignment, controller_epoch: 2L },
+      { ..assignment, signature: "", },
+      { ..assignment, lease_expires_unix_ms: 1100L, },
+      { ..assignment, controller_epoch: 2L, },
     ] {
     assert_false(
       @controller.deployment_operation_ready(

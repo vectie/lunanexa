@@ -78,6 +78,7 @@ async fn exercise_media_api(
     .deployment(order.target_deployment_ref.unwrap())
     .unwrap()
   let binding : MediaBinding = {
+    instance_id: None,
     deployment_id: operation.deployment_id,
     deployment_generation: operation.generation,
     node_id: "managed-node-a",
@@ -136,6 +137,7 @@ async fn exercise_media_api(
   }.with_media_templates(jobs, [
     {
       template_id: operation.plan.template.unwrap().template_id,
+      runtime_route: None,
       template_version: operation.plan.template.unwrap().version,
       node_id: binding.node_id,
       origin: binding.origin,
@@ -143,6 +145,7 @@ async fn exercise_media_api(
       profile: binding.profile,
     },
   ])
+  exercise_runtime_route_discovery(service, operation, binding)
   let headers = {
     "Authorization": "Bearer " + secret,
     "Content-Type": "application/x-www-form-urlencoded",

@@ -251,6 +251,7 @@ pub(all) struct MediaBinding {
   origin : String
   bearer : String?
   profile : @provider.Profile
+  instance_id : String?
 } derive(@json.FromJson)
 
 pub struct MediaService {
@@ -267,6 +268,7 @@ pub(all) struct MediaTemplateBinding {
   origin : String
   bearer : String?
   profile : @provider.Profile
+  runtime_route : @contracts.RuntimeRoutePolicy?
 } derive(@json.FromJson)
 
 pub(all) struct OfflineArtifactView {

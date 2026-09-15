@@ -30,6 +30,7 @@ pub async fn ManagedRuntimeSupervisor::ensure_started(
         artifact_digest: assignment.artifact.digest,
         observed_state: observed.state,
         container_address: observed.address,
+        endpoint: observed.endpoint,
       }
     }
   }

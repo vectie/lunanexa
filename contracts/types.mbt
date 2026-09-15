@@ -298,9 +298,10 @@ pub(all) struct NodeHeartbeat {
   controller_epoch : Int64
   inventory : NodeInventory
   running_deployments : Array[String]
+  runtime_endpoints : Array[RuntimeEndpoint]?
   timestamp_unix_ms : Int64
   signature : String
-} derive(Debug, Eq, ToJson, FromJson)
+} derive(Debug, Eq, FromJson)
 
 ///|
 pub(all) struct NodeDirective {
