@@ -23,6 +23,8 @@ pub(all) suberror BridgeError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+type AuthorizationFlight
+
 pub(all) struct Backend {
   http_url : String
   websocket_url : String
@@ -35,6 +37,7 @@ pub struct Bridge {
   provision : async (String, Grant) -> Backend
   sessions : Map[String, Session]
   challenges : Map[String, Int64]
+  authorizations : Map[String, AuthorizationFlight]
   mutex : @async.Mutex
 }
 pub async fn Bridge::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit

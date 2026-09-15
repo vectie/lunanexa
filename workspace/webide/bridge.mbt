@@ -202,8 +202,12 @@ async fn Bridge::session(self : Bridge, token : String) -> Session {
     self.sessions.remove(token)
     raise BridgeError::Unauthorized
   }
-  if !(self.authorize)(session.grant) {
+  if !self.authorize_session(token, session.grant) {
     self.sessions.remove(token)
+    raise BridgeError::Unauthorized
+  }
+  if !self.sessions.contains(token) ||
+    session.grant.expires_unix_ms <= @async.now() {
     raise BridgeError::Unauthorized
   }
   session

@@ -50,6 +50,12 @@ struct Session {
 }
 
 ///|
+struct AuthorizationFlight {
+  gate : @async.Mutex
+  mut result : Bool?
+}
+
+///|
 pub struct Bridge {
   config : BridgeConfig
   redeem : async (String) -> Grant
@@ -57,5 +63,6 @@ pub struct Bridge {
   provision : async (String, Grant) -> Backend
   sessions : Map[String, Session]
   challenges : Map[String, Int64]
+  authorizations : Map[String, AuthorizationFlight]
   mutex : @async.Mutex
 }
