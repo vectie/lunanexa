@@ -145,12 +145,17 @@ async fn exercise_media_api(
       profile: binding.profile,
     },
   ])
-  exercise_runtime_route_discovery(service, operation, binding)
   let headers = {
     "Authorization": "Bearer " + secret,
     "Content-Type": "application/x-www-form-urlencoded",
     "Idempotency-Key": "fixture-video-request",
   }
+  exercise_runtime_route_discovery(
+    service,
+    operation,
+    binding,
+    service.media_owner(headers).unwrap().0,
+  )
   let state = { "submits": 0, "deletes": 0 }
   let listener = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   defer listener.close()

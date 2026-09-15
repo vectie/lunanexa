@@ -81,6 +81,17 @@ session or scale down its workspace. Subsequent requests recheck live authority;
 no cached allow decision bypasses an outage. Explicit denial and local expiry
 still invalidate access and stop the workspace while retaining its volume.
 
+Video jobs persist their immutable deployment generation and node attribution
+before submission. These placement facts support authorization and settlement
+after controller recovery; they are not cached endpoint addresses. Provider
+access still requires current evidence for the original runtime incarnation.
+Readiness loss alone must not cancel a job or release its quota. Explicit
+revocation or a durable local deadline records cancellation, and executing
+capacity remains occupied until upstream cancellation is confirmed. An unknown
+submission is never automatically resubmitted. Legacy jobs without placement
+facts are backfilled only from a currently verified matching binding; missing
+evidence remains unavailable, never guessed.
+
 Human identity has two supported deployment shapes. A public platform identity
 provider may allow any eligible person to create an account, while an enterprise
 deployment may federate a customer's existing identity provider. Both terminate

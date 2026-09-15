@@ -27,6 +27,12 @@ pub(all) enum Authority {
   PrivateWorkspace(String)
 } derive(Eq, @debug.Debug)
 
+pub(all) struct ExecutionContext {
+  deployment_id : String
+  generation : Int64
+  node_id : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub struct JobStore {
   mut jobs : Map[String, StoredJob]
   persist : async (Snapshot) -> Unit
@@ -37,10 +43,12 @@ pub async fn JobStore::acknowledge_deletion(Self, String, Owner, String, Int64) 
 pub async fn JobStore::attach_provider(Self, String, Owner, String, Int64) -> StoredJob
 pub async fn JobStore::begin_submission(Self, String, Owner, Int64) -> StoredJob
 pub async fn JobStore::cancel(Self, String, Owner, Bool, Int64) -> StoredJob
+pub async fn JobStore::context_for_binding(Self, String) -> ExecutionContext?
 pub async fn JobStore::get(Self, String, Owner) -> StoredJob
 pub async fn JobStore::observe(Self, String, Owner, State, Int?, Int64) -> StoredJob
 pub async fn JobStore::record_usage(Self, String, Owner, String) -> StoredJob
-pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int64, Int64, Int64, maximum_active? : Int, maximum_per_hour? : Int) -> (StoredJob, Bool)
+pub async fn JobStore::remember_execution(Self, String, ExecutionContext) -> Unit
+pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int64, Int64, Int64, maximum_active? : Int, maximum_per_hour? : Int, execution_context? : ExecutionContext) -> (StoredJob, Bool)
 pub async fn JobStore::restore(Snapshot, async (Snapshot) -> Unit, maximum_jobs? : Int) -> Self
 pub async fn JobStore::snapshot(Self) -> Snapshot
 pub async fn JobStore::submission_unknown(Self, String, Owner, Int64) -> StoredJob
@@ -80,6 +88,7 @@ pub(all) struct StoredJob {
   idempotency_digest : String
   model : String
   deployment_id : String
+  execution_context : ExecutionContext?
   provider_job_id : String?
   state : State
   progress : Int?
