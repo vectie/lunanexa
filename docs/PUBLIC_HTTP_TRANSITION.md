@@ -28,6 +28,22 @@ token. OIDC callback state, nonce, PKCE and one-time consumption remain enabled.
 
 ## Deployment checklist (not yet executed)
 
+Pre-deployment evidence, 2026-09-16:
+
+- Gateway strict native tests: 15/15; Linux release build completed.
+- Candidate binary SHA-256:
+  `e09be0a85d815f88127c40bee935bda4c2f78580ff0d4fb8916214f7637a9867`.
+- Candidate image digest:
+  `sha256:c74204ae057e716b2f1606e2f89225ede37ace8e1bd8f7f4f772eb403ca2b89b`.
+- An isolated restricted-security Pod on management failed before application
+  startup: `libdl.so.2` is absent from the previous minimal runtime image.
+  The new binary also declares `libpthread.so.0`; both require resolution
+  against the image's runtime library set before another smoke attempt.
+- This candidate must not be promoted. The failed smoke Pod was removed;
+  the candidate image and build artifacts remain for diagnosis.
+- No public listener, Keycloak realm/client, production gateway image, TLS
+  certificate, or internal trust setting was changed by this attempt.
+
 1. Back up non-secret ingress configuration and Keycloak client/realm settings.
 2. Build and smoke-test the gateway candidate with existing HTTPS configuration.
 3. Update Keycloak public hostname, realm SSL policy and exact client callbacks.
