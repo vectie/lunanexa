@@ -6,6 +6,14 @@ No actual model was deployed and no Spark inventory was fabricated.
 
 ## Confirmed checks
 
+- `sh scripts/release-gate.sh`: **passed** on the undertaking/recovery source
+  revision `531e76e`. The run completed process kill/restart, lease cleanup,
+  local four-node simulation, evidence export, strict JS checks, UI tests,
+  extension/docs tests, original 18-page preview fidelity, font wiring,
+  installer/preflight fixtures, secret generation and browser release bundles.
+  The four nodes are local simulators, not physical DGX devices. The optional
+  gate-controlled PostgreSQL script was not enabled; real PostgreSQL adapter
+  tests are recorded separately below.
 - `moon test --target native --warn-list +73 --deny-warn`: **858/858**
   passed after all fixes below, with no warning exclusions. Conditional
   PostgreSQL tests do not establish a fresh external-database integration run.
@@ -35,8 +43,8 @@ passed a strict targeted rerun. The final 858/858 whole-native rerun also passed
 The complete `release-gate.sh` additionally enables warning 73. It initially
 stopped on redundant constructor qualifiers in pre-existing and new code.
 Those have been removed with no warning suppression or semantic change;
-whole native and JS `moon check --warn-list +73 --deny-warn` passed. This
-document does not yet claim that complete release gate has passed.
+whole native and JS `moon check --warn-list +73 --deny-warn` passed. The complete
+release-gate sequence subsequently passed, including the final browser build.
 
 The local process-recovery script initially failed before node registration.
 Inspection found unconditional Linux procfs resource collection before every
@@ -49,6 +57,32 @@ The original `sh scripts/process-recovery-test.sh` then passed (exit 0): node
 and controller process kill/restart, persisted recovery plan and stale-epoch
 rejection. Temporary test processes and state were cleaned by its exit trap.
 This is local process evidence, not Linux capacity or Spark hardware acceptance.
+
+## Real PostgreSQL follow-up
+
+The existing database matrix passed **21/21 fixture files**, each with
+`LUNANEXA_TEST_DATABASE_URL` set to a distinct freshly created database and
+`--target native --warn-list +73 --deny-warn`. Together with the new contract
+fixture below, **22 distinct fixture files** were exercised against real
+PostgreSQL, not skipped because the environment variable was absent. Coverage
+includes SQL boundaries, database snapshots, accounts, client handoffs,
+technical/portal/workspace state, onboarding, leases/credentials, offline
+commerce, registry, scheduler, deployment, enrollment, telemetry,
+notifications, observability, media jobs, controller state and inference
+receipt-to-ledger replay. Some files also contain pure local assertions.
+All per-run databases were dropped by the harness; no production account,
+workspace or billing database was selected. No inference model was invoked.
+A final `pg_database` query found no `lnx_acceptance_%` databases remaining.
+The exact task-owned loopback SSH forward was stopped after both runs.
+
+A new `contractdoc/store/postgres_test.mbt` exercises the undertaking template
+against a fresh database in the isolated acceptance PostgreSQL instance, over
+an SSH-only loopback forward. Its strict `+73 --deny-warn` run passed 1/1:
+packet/field/event persistence and reopening; two closed-connection failures
+with unchanged in-memory state; exact replay without duplicate events; stale
+creation replay rejection; and successful retry/reopen through a fresh handle.
+Its disposable database was dropped afterwards. This does not exercise an
+ambiguous commit acknowledgement or certify a production PostgreSQL HA setup.
 
 ## Separate unfinished acceptance
 
