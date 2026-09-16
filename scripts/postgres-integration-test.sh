@@ -33,7 +33,7 @@ started=1
 psql "$database_url" -v ON_ERROR_STOP=1 \
   -f database/migrations/001_management.sql >/dev/null
 LUNANEXA_DATABASE_URL="$database_url" moon run cmd/database --target native
-test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "3"
+test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "4"
 case "${LUNANEXA_POSTGRES_TEST_SCOPE:-full}" in
   ha)
     test_packages='database store registry node scheduler telemetry deployment/store'

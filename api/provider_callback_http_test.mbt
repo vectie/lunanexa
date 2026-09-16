@@ -200,7 +200,7 @@ async test "provider callback requires signed bound replay-safe transport" {
     Post,
     "/v1/commercial/external-callbacks",
     { "Authorization": "Bearer operator-token" },
-    { ..callback, signature_verified: true }.to_json().stringify(),
+    { ..callback, signature_verified: true, }.to_json().stringify(),
   )
   assert_eq(direct.status, 409)
   assert_true(direct.body.contains("VerifiedTransportRequired"))

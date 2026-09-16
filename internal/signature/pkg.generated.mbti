@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/internal/signature"
+
+// Values
+pub async fn cosign_material_flag(String) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

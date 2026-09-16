@@ -102,6 +102,109 @@ test("coursebook renderer shows both concise and titled procedure steps", async 
   assert.match(source, /item\.text/);
 });
 
+test("current reader guides bind named actions to bilingual catalogs and actual UI handlers", async () => {
+  const contract = JSON.parse(await readFile(resolve(siteRoot, "coursebook-actions.json"), "utf8"));
+  assert.equal(contract.contract_version, "lunanexa.coursebook-ui-actions.v1");
+  assert.ok(contract.actions.length >= 7);
+  for (const action of contract.actions) {
+    assert.match(action.source, /^ui\/(?:[a-z_]+\/)?[a-z_]+\.mbt$/);
+    const source = await readFile(resolve(root, action.source), "utf8");
+    const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pair = `${escape(JSON.stringify(action.en))}\\s*,\\s*${escape(JSON.stringify(action.zh))}`;
+    let label;
+    if (action.catalog) {
+      assert.match(action.catalog, /^ui\/[a-z_]+\/(?:messages|static_messages|copy_catalog)\.mbt$/);
+      assert.match(action.message, /^[A-Z][A-Za-z]+$/);
+      const catalog = await readFile(resolve(root, action.catalog), "utf8");
+      assert.match(catalog, new RegExp(`\\b${action.message}\\s*=>\\s*(?:@i18n\\.copy\\(\\s*locale,|\\()\\s*${pair}\\s*,?\\s*\\)`), `${action.catalog}: changed message pair`);
+      const renderer = action.renderer ?? "machine_message";
+      assert.ok(["machine_message", "enterprise_copy", "static_message"].includes(renderer));
+      label = new RegExp(`\\b${renderer}\\(\\s*(?:state\\.)?locale,\\s*${action.message}\\s*,?\\s*\\)`);
+      assert.match(source, label, `${action.source}: missing actual catalog invocation`);
+      if (!action.binding && !action.route) assert.match(source, new RegExp(`copy_detail\\([^)]*${label.source}`), `${action.source}: catalog label is not wired to its copy action`);
+    } else {
+      const helper = action.helper ?? "copy";
+      assert.ok(["copy", "localized"].includes(helper));
+      label = new RegExp(`\\b${helper}\\(\\s*(?:state\\.)?locale,\\s*${pair}\\s*,?\\s*\\)`);
+      assert.match(source, label, `${action.source}: missing paired localized action`);
+    }
+    if (action.route) {
+        assert.match(action.route, /^[A-Z][A-Za-z]+$/);
+        assert.match(source, new RegExp(`\\b${action.route}\\s*=>\\s*${label.source}`), `${action.source}: label no longer belongs to named route`);
+        const navigation = source.split("///|").find((block) => /on_click=command\(emit, Navigate\(route\)\)/.test(block) && /route_label\((?:state\.)?locale, route\)/.test(block));
+        assert.ok(navigation?.includes("@html.button("), `${action.source}: route label is not wired to navigation`);
+    }
+    if (action.binding) {
+        const block = source.split("///|").find((candidate) => label.test(candidate));
+        const compact = (value) => value.replace(/\s+/g, "");
+        assert.ok(block?.includes("@html.button(") || block?.includes("@html.a("));
+        assert.ok(compact(block).includes(compact(action.binding)), `${action.source}: named action has no expected event binding`);
+    }
+    for (const id of action.page_ids) {
+      assert.ok(pageById.has(id));
+      assert.ok(JSON.stringify(pageById.get(id)).includes(action.en), `${id}: missing ${action.en}`);
+      assert.ok(JSON.stringify(zhBook.pages[id]).includes(action.zh), `${id}: missing ${action.zh}`);
+    }
+  }
+  const classified = new Set([...contract.excluded_evidence_pages, ...contract.conceptual_only_pages, ...contract.actions.flatMap((action) => action.page_ids)]);
+  assert.deepEqual([...classified].sort(), [...pageById.keys()].sort(), "Every page needs an explicit current-action or non-action audit classification");
+  assert.deepEqual(contract.excluded_evidence_pages, ["ui-end-to-end-sop", "production-ui-validation"]);
+  const siteSource = await readFile(resolve(siteRoot, "app.js"), "utf8");
+  const siteHtml = await readFile(resolve(siteRoot, "index.html"), "utf8");
+  for (const action of contract.site_actions) {
+    assert.equal(action.translation_key, "ask_guide");
+    assert.equal(action.selector, "data-open-pet");
+    assert.equal(action.handler, "openPet");
+    assert.equal(zhBook.ui[action.translation_key], action.zh);
+    assert.ok(siteHtml.includes(`<span data-ask-label>${action.en}</span>`));
+    assert.ok(siteHtml.includes('type="button" data-open-pet'));
+    assert.ok(siteSource.includes('$("[data-open-pet]").addEventListener("click", openPet)'));
+    assert.ok(siteSource.includes(`t("${action.translation_key}", "${action.en}")`));
+    for (const id of action.page_ids) {
+      assert.ok(JSON.stringify(pageById.get(id)).includes(action.en));
+      assert.ok(JSON.stringify(zhBook.pages[id]).includes(action.zh));
+    }
+  }
+});
+
+test("newcomer guidance does not invent renewal or conflate expiry authorities", () => {
+  for (const id of ["trial-quickstart", "enterprise-portal-day-one", "exclusive-machine-basics", "comfyui-quickstart"]) {
+    assert.equal(pageById.get(id).status, "documented");
+    for (const page of [pageById.get(id), zhBook.pages[id]]) {
+      assert.doesNotMatch(JSON.stringify(page), /choose Request renewal|select Request renewal|选择.{0,5}申请延期|点击.{0,5}申请延期/i);
+    }
+  }
+  assert.match(JSON.stringify(pageById.get("exclusive-machine-basics")), /staged tenant-account\/container\/volume cleanup/);
+  assert.match(JSON.stringify(pageById.get("exclusive-machine-basics")), /no self-service machine-renewal button/);
+  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /retained volume data/);
+  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /keyboard-only navigation, modal focus entry\/return/);
+  assert.match(JSON.stringify(pageById.get("trial-quickstart")), /waiting for expiry does not create another trial/);
+});
+
+test("first-call FAQ preserves exact public codes and avoids status-only diagnoses", async () => {
+  const source = await readFile(resolve(root, "api/portal_http.mbt"), "utf8");
+  for (const code of ["TrialApiKeyRejected", "PortalAccessDenied"]) {
+    assert.ok(source.includes(`"${code}"`));
+    for (const page of [pageById.get("error-reference"), zhBook.pages["error-reference"]]) {
+      assert.ok(JSON.stringify(page).includes(code));
+    }
+  }
+  const faq = JSON.stringify(pageById.get("error-reference"));
+  for (const status of [401, 403, 409, 429]) assert.ok(faq.includes(`HTTP ${status}`));
+  assert.match(faq, /does not uniquely mean a wrong URL/);
+  assert.match(faq, /a total allowance does not refill automatically/);
+  assert.match(faq, /mutation may still have committed/);
+});
+
+test("compact guide trigger keeps a visible glyph and localized accessible name", async () => {
+  const css = await readFile(resolve(siteRoot, "styles.css"), "utf8");
+  const source = await readFile(resolve(siteRoot, "app.js"), "utf8");
+  assert.match(css, /\.pet-trigger \[data-ask-label\] \{ font-size: 0; \}/);
+  assert.match(css, /\.pet-trigger \[data-ask-label\]::after \{ content: "\?"; font-size: 15px; \}/);
+  assert.ok(source.includes('$("[data-open-pet]").setAttribute("aria-label", t("ask_guide", "Ask guide"))'));
+  assert.ok(source.includes('$("[data-open-search]").setAttribute("aria-label", t("search", "Search"))'));
+});
+
 test("newcomer operations runbook connects both roles without exposing internals", () => {
   const page = pageById.get("daily-operations");
   assert.ok(page);
@@ -238,6 +341,24 @@ test("every page source exists in the evidence ledger", () => {
     assert.ok(page.source_ids.length > 0, `${page.id}: no sources`);
     for (const id of page.source_ids) assert.ok(sourceById.has(id), `${page.id}: missing source ${id}`);
   }
+});
+
+test("access journeys keep private approval separate from trial and commercial rental", () => {
+  for (const page of [pageById.get("access-flow"), zhBook.pages["access-flow"]]) {
+    const journeys = page.blocks.filter((block) => block.kind === "flow").slice(0, 3);
+    assert.equal(journeys.length, 3);
+    assert.deepEqual(journeys.map((journey) => journey.steps.length), [3, 3, 3]);
+    const deliveries = page.blocks.find((block) => block.kind === "table");
+    assert.deepEqual(deliveries.rows.map((row) => row[0]), ["IaaS", "PaaS", "MaaS"]);
+  }
+  const english = JSON.stringify(pageById.get("access-flow"));
+  const chinese = JSON.stringify(zhBook.pages["access-flow"]);
+  assert.match(english, /Private-cloud workspace access does not require a machine-rental contract/);
+  assert.match(chinese, /私有云工作空间访问不需要机器租赁合同/);
+  assert.match(english, /Registration creates an identity, not machine access/);
+  assert.match(chinese, /注册只建立身份，不自动授予机器访问权/);
+  assert.match(english, /do not certify/);
+  assert.match(chinese, /不代表某一安装环境已通过/);
 });
 
 test("published source digests match the inspected repository bytes", async () => {

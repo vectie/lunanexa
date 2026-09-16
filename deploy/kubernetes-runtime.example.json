@@ -1,0 +1,11 @@
+{
+  "namespace_name": "lunanexa-managed-runtime",
+  "node_name": "compute-01",
+  "node_id": "compute-01",
+  "model_cache_root": "/var/lib/lunanexa/models",
+  "runtime_port": 8080,
+  "run_as_user": 1000,
+  "device_class_name": "gpu.nvidia.com",
+  "controller_addresses": ["192.168.0.10"],
+  "runtime_secrets": []
+}

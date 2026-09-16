@@ -2,6 +2,66 @@
 let digest_a : String = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 ///|
+async test "order setup restores state after failed writes and releases replay locks" {
+  let directory = @fs.tmpdir(prefix="lunanexa-offline-write-fault-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/commerce.json"
+  let store = @store.OfflineCommerceStore::open(path)
+  for operation in ["template", "order", "quote"] {
+    let before = store.snapshot()
+    let disk = @fs.read_file(path).text()
+    @fs.mkdir(path + ".next")
+    try {
+      match operation {
+        "template" => ignore(store.register_template(contract_template()))
+        "order" => ignore(store.create_order(order("write-fault-order")))
+        _ =>
+          ignore(
+            store.quote_order("write-fault-order", quote(), "operator-a", 1200L),
+          )
+      }
+    } catch {
+      _ => ()
+    } noraise {
+      _ => fail("expected persistence failure")
+    }
+    assert_eq(store.snapshot(), before)
+    assert_eq(@fs.read_file(path).text(), disk)
+    @fs.rmdir(path + ".next")
+    match operation {
+      "template" => {
+        assert_eq(
+          store.register_template(contract_template()),
+          contract_template(),
+        )
+        assert_eq(
+          store.register_template(contract_template()),
+          contract_template(),
+        )
+      }
+      "order" => {
+        assert_eq(
+          store.create_order(order("write-fault-order")),
+          order("write-fault-order"),
+        )
+        assert_eq(
+          store.create_order(order("write-fault-order")),
+          order("write-fault-order"),
+        )
+      }
+      _ =>
+        ignore(
+          store.quote_order("write-fault-order", quote(), "operator-a", 1200L),
+        )
+    }
+    assert_eq(
+      @store.OfflineCommerceStore::open(path).snapshot(),
+      store.snapshot(),
+    )
+  }
+}
+
+///|
 let digest_b : String = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 ///|
@@ -11,7 +71,7 @@ fn temp_path(name : String) -> String {
 
 ///|
 fn money(value : Int64) -> @commercial.FixedMoney {
-  { minor_units: value, currency: "CNY", scale: 2 }
+  { minor_units: value, currency: "CNY", scale: 2, }
 }
 
 ///|
@@ -327,7 +387,7 @@ async test "expiry cancellation activation and reversal are durable sagas" {
   assert_eq(cancelled.state, Cancelled)
   ignore(
     try
-      store.create_order({ ..order("order-expire"), expires_unix_ms: 3000L })
+      store.create_order({ ..order("order-expire"), expires_unix_ms: 3000L, })
     catch {
       error => fail("create expiry failed: \{Repr(error)}")
     } noraise {
@@ -349,6 +409,17 @@ async test "expiry cancellation activation and reversal are durable sagas" {
   }
   let grant = upload_grant("order-reverse", "evidence-reverse")
   ignore(store.grant_upload(grant))
+  let before_upload = store.snapshot()
+  let upload_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  try ignore(store.complete_upload(callback(grant))) catch {
+    _ => ()
+  } noraise {
+    _ => fail("expected upload persistence failure")
+  }
+  assert_eq(store.snapshot(), before_upload)
+  assert_eq(@fs.read_file(path).text(), upload_disk)
+  @fs.rmdir(path + ".next")
   let uploaded = try store.complete_upload(callback(grant)) catch {
     error => fail("upload failed: \{Repr(error)}")
   } noraise {
@@ -385,6 +456,27 @@ async test "expiry cancellation activation and reversal are durable sagas" {
     },
   )
   ignore(store.claim_authority_work(2550L))
+  let before_activation = store.snapshot()
+  let activation_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  try
+    ignore(
+      store.complete_activation({
+        ..requested,
+        state: EntitlementActivationConfirmed,
+        entitlement_ref: Some("lease-reverse"),
+        authority_receipt: Some("lease-authority-receipt-reverse"),
+        completed_unix_ms: Some(2600L),
+      }),
+    )
+  catch {
+    _ => ()
+  } noraise {
+    _ => fail("expected activation persistence failure")
+  }
+  assert_eq(store.snapshot(), before_activation)
+  assert_eq(@fs.read_file(path).text(), activation_disk)
+  @fs.rmdir(path + ".next")
   let fulfilled = try
     store.complete_activation({
       ..requested,
@@ -433,6 +525,26 @@ async test "expiry cancellation activation and reversal are durable sagas" {
   let reversing = store.request_reversal(reversal)
   assert_eq(reversing.state, ReversalPending)
   ignore(store.claim_authority_work(2750L))
+  let before_reversal = store.snapshot()
+  let reversal_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  try
+    ignore(
+      store.complete_reversal({
+        ..reversal,
+        state: ReversalConfirmed,
+        authority_receipt: Some("revocation-receipt-a"),
+        completed_unix_ms: Some(2800L),
+      }),
+    )
+  catch {
+    _ => ()
+  } noraise {
+    _ => fail("expected reversal persistence failure")
+  }
+  assert_eq(store.snapshot(), before_reversal)
+  assert_eq(@fs.read_file(path).text(), reversal_disk)
+  @fs.rmdir(path + ".next")
   let revoked = store.complete_reversal({
     ..reversal,
     state: ReversalConfirmed,
@@ -494,7 +606,7 @@ async test "activation pending survives expiry and failed reversal is retryable"
   let expired_fulfilled = store.expire_orders(200002L)
   assert_eq(expired_fulfilled.length(), 1)
   assert_eq(expired_fulfilled[0].state, ReversalPending)
-  let fulfilled = { ..fulfilled, generation: expired_fulfilled[0].generation }
+  let fulfilled = { ..fulfilled, generation: expired_fulfilled[0].generation, }
   let reversal : @offline.CommercialReversal = {
     reversal_id: "expiry-order-saga-race-\{fulfilled.generation - 1L}",
     idempotency_key: "expiry-order-saga-race-\{fulfilled.generation - 1L}",
@@ -906,7 +1018,7 @@ async test "delayed generation result cannot mutate a changed order" {
 
 ///|
 test "quote validation rejects arithmetic drift overflow and mutable order reuse" {
-  @offline.validate_quote({ ..quote(), total: money(105999L) }) catch {
+  @offline.validate_quote({ ..quote(), total: money(105999L), }) catch {
     InvalidInput(_) => ()
     _ => fail("incorrect quote total was accepted")
   }

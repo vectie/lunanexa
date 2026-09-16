@@ -163,6 +163,7 @@ fn management_heartbeat(
       taints: [],
     },
     running_deployments: running,
+    runtime_endpoints: None,
     timestamp_unix_ms: @async.now(),
     signature: "test",
   }
@@ -206,7 +207,7 @@ async test "one request creates durable assignments and converges to ready" {
     version: @contracts.contract_version,
     idempotency_key: "deploy-text-small",
     deployment_id: "text-small-service",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -260,6 +261,50 @@ async test "one request creates durable assignments and converges to ready" {
   )
   assert_eq(repeated.status, 202)
   assert_eq(durable.assignments().length(), 1)
+  // Ready is a current observation, not a permanent success latch.
+  durable.put_heartbeat(management_heartbeat([]))
+  let lost = service.handle(Get, "/v1/service-deployments", headers, "")
+  let lost_operations : Array[@deployment.DeploymentOperation] = @json.from_json(
+    @json.parse(lost.body),
+  )
+  assert_eq(lost_operations[0].state, Degraded)
+  durable.put_heartbeat(management_heartbeat([intent.deployment_id]))
+  let recovered = service.handle(
+    Get,
+    "/v1/operations/\{operation.operation_id}",
+    headers,
+    "",
+  )
+  let recovered_operation : @deployment.DeploymentOperation = @json.from_json(
+    @json.parse(recovered.body),
+  )
+  assert_eq(recovered_operation.state, Ready)
+  // Promotion must check current evidence even without an intervening GET.
+  durable.put_assignment({
+    ..assignments[0],
+    lease_expires_unix_ms: @async.now() - 1L,
+  })
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/service-deployments/\{intent.deployment_id}/promote",
+      headers,
+      "",
+    ).status,
+    409,
+  )
+  let expired_retry = service.handle(
+    Post,
+    "/v1/service-deployments",
+    headers,
+    intent.to_json().stringify(),
+  )
+  let expired_operation : @deployment.DeploymentOperation = @json.from_json(
+    @json.parse(expired_retry.body),
+  )
+  assert_eq(expired_operation.state, Degraded)
+  assert_eq(durable.assignments().length(), 1)
+  assert_true(durable.assignments()[0].lease_expires_unix_ms < @async.now())
   let scale_absent = service.handle(
     Post,
     "/v1/service-deployments/\{intent.deployment_id}/scale",
@@ -354,7 +399,7 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
   }
   let hostile_template = {
     ..template,
-    artifact: { ..template.artifact, uri: "s3://models/../../private-key" },
+    artifact: { ..template.artifact, uri: "s3://models/../../private-key", },
   }
   let rejected_template = service.handle(
     Post,
@@ -378,7 +423,7 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
     version: @contracts.contract_version,
     idempotency_key: "console:service-1",
     deployment_id: "service-1",
-    template: { template_id: template.template_id, version: template.version },
+    template: { template_id: template.template_id, version: template.version, },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -386,12 +431,12 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
   }
   for
     hostile_intent in [
-      { ..intent, deployment_id: "../../service" },
-      { ..intent, deployment_id: "service<script>" },
-      { ..intent, replicas: 0 },
-      { ..intent, replicas: 65 },
-      { ..intent, lease_duration_ms: 0L },
-      { ..intent, idempotency_key: "x".repeat(257) },
+      { ..intent, deployment_id: "../../service", },
+      { ..intent, deployment_id: "service<script>", },
+      { ..intent, replicas: 0, },
+      { ..intent, replicas: 65, },
+      { ..intent, lease_duration_ms: 0L, },
+      { ..intent, idempotency_key: "x".repeat(257), },
     ] {
     let plan_reply = service.handle(
       Post,
@@ -442,7 +487,7 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
     Post,
     "/v1/service-deployments",
     headers,
-    { ..intent, replicas: 2 }.to_json().stringify(),
+    { ..intent, replicas: 2, }.to_json().stringify(),
   )
   assert_eq(invalid_capacity.status, 409)
   assert_true(invalid_capacity.body.contains("DeploymentRejected"))
@@ -452,7 +497,7 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
     Post,
     "/v1/service-deployments",
     headers,
-    { ..intent, lease_duration_ms: 120000L }.to_json().stringify(),
+    { ..intent, lease_duration_ms: 120000L, }.to_json().stringify(),
   )
   assert_eq(conflict.status, 409)
   assert_true(conflict.body.contains("IdempotencyConflict"))

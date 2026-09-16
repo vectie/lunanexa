@@ -57,6 +57,7 @@ case " $* " in
         "assignment-signing-secret",
         "audit-token",
         "catalog-signing-secret",
+        "machine-commerce-signing-secret",
         "commercial-provider-adapter-token",
         "credential-handoff-issuer-secret",
         "credential-issuer-adapter-token",

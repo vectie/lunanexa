@@ -367,6 +367,54 @@ async test "enterprise invitation self-registration is hashed durable and role b
 }
 
 ///|
+async test "an existing account accepts one email-bound invitation idempotently" {
+  let directory = @fs.tmpdir(prefix="lunanexa-account-accept-invitation-")
+  let store = @account.AccountStore::open(
+    "\{directory}/accounts.json",
+    "account-existing-invitation-secret-more-than-32-bytes",
+  )
+  let owner = store.register_open(
+    "https://identity.example/realms/lunanexa", "provider-subject-existing", "registration-existing",
+    "Existing User", "existing@example.invalid", 60000L, 100000L,
+  )
+  let other = store.register_open(
+    "https://identity.example/realms/lunanexa", "provider-subject-other", "registration-other",
+    "Other User", "other@example.invalid", 60000L, 100000L,
+  )
+  let issued = store.issue_invitation(
+    {
+      invitation_id: "invitation-existing",
+      email: "EXISTING@example.invalid",
+      organization_id: "organization-existing",
+      tenant_ref: "tenant-existing",
+      project_id: "project-existing",
+      created_by: "operator-one",
+      expires_unix_ms: 200000L,
+    },
+    100001L,
+  )
+  let accepted = store.accept_invitation(
+    issued.secret,
+    owner.account.account_id,
+    100002L,
+  )
+  assert_eq(accepted.consumed_account_id, Some(owner.account.account_id))
+  assert_eq(
+    store.accept_invitation(issued.secret, owner.account.account_id, 300000L),
+    accepted,
+  )
+  try
+    store.accept_invitation(issued.secret, other.account.account_id, 100003L)
+  catch {
+    @account.AccountError::Unauthorized => ()
+    error => fail("unexpected cross-account invitation error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a consumed invitation was replayed by another account")
+  }
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
 async test "open registration is idempotent and grants no privileged role" {
   let directory = @fs.tmpdir(prefix="lunanexa-account-open-registration-")
   let store = @account.AccountStore::open(
@@ -424,6 +472,14 @@ async test "free trial is single use, bounded, durable, and key bound" {
     100000L,
   )
   assert_eq(trial.api_key_id, None)
+  let legacy_json : Json = trial.to_json()
+  guard legacy_json is Object(fields) else { fail("expected trial object") }
+  ignore(fields.remove("consumed_requests"))
+  let legacy : @account.TrialEntitlement = @json.from_json(legacy_json)
+  assert_eq(legacy.consumed_requests, None)
+  assert_true(store.consume_trial_request(trial.trial_id, 98L, 100001L))
+  assert_true(store.consume_trial_request(trial.trial_id, 0L, 100001L))
+  assert_false(store.consume_trial_request(trial.trial_id, 0L, 100001L))
   let bound = store.bind_trial_api_key(trial.trial_id, "trial-key-one", 100001L)
   assert_eq(bound.api_key_id, Some("trial-key-one"))
   assert_true(
@@ -447,6 +503,11 @@ async test "free trial is single use, bounded, durable, and key bound" {
     87400000L,
   )
   let reopened = @account.AccountStore::open(path, secret)
+  assert_eq(
+    reopened.trial_for_account(registered.account.account_id).unwrap().consumed_requests,
+    Some(100L),
+  )
+  assert_false(reopened.consume_trial_request(trial.trial_id, 0L, 100002L))
   assert_eq(
     reopened.trial_for_account(registered.account.account_id).unwrap().api_key_id,
     Some("trial-key-one"),

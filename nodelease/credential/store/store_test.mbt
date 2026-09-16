@@ -24,6 +24,7 @@ fn active_lease(now : Int64) -> @nodelease.ExclusiveNodeLease {
 ///|
 async test "issuer outbox dispatch atomically creates one recoverable handoff" {
   let directory = @fs.tmpdir(prefix="lunanexa-credential-issuer-outbox-")
+  defer @fs.rmdir(directory, recursive=true)
   let path = "\{directory}/handoffs.json"
   let secret = "credential-handoff-test-secret-with-more-than-32-bytes"
   let now = @async.now()
@@ -37,6 +38,19 @@ async test "issuer outbox dispatch atomically creates one recoverable handoff" {
     ssh_port: 2222,
     host_key_fingerprint: "SHA256:abcdefghijklmnopqrstuvwxyzABCDEFG1234567890_-",
   }
+  let empty = store.snapshot()
+  let empty_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  for _ in 0..<2 {
+    try store.queue_issuer_request(intent, lease, now) catch {
+      _ => ()
+    } noraise {
+      _ => fail("issuer request unexpectedly persisted")
+    }
+    assert_eq(@async.with_timeout(1000, () => store.snapshot()), empty)
+    assert_eq(@fs.read_file(path).text(), empty_disk)
+  }
+  @fs.rmdir(path + ".next")
   let queued = store.queue_issuer_request(intent, lease, now)
   assert_eq(queued.issuer_redirect_url, None)
   assert_eq(store.pending_issuer_requests(now).length(), 1)
@@ -58,6 +72,18 @@ async test "issuer outbox dispatch atomically creates one recoverable handoff" {
     ..invalid,
     issuer_redirect_url: "https://ssh-ca.example/redeem/issuer-request-1",
   }
+  let queued_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  for _ in 0..<2 {
+    try store.accept_issuer_dispatch(receipt, lease) catch {
+      _ => ()
+    } noraise {
+      _ => fail("issuer dispatch unexpectedly persisted")
+    }
+    assert_eq(@async.with_timeout(1000, () => store.snapshot()), before)
+    assert_eq(@fs.read_file(path).text(), queued_disk)
+  }
+  @fs.rmdir(path + ".next")
   let (dispatched, handoff) = store.accept_issuer_dispatch(receipt, lease)
   assert_eq(dispatched.issuer_redirect_url, Some(receipt.issuer_redirect_url))
   assert_eq(handoff.request_id, intent.request_id)
@@ -68,7 +94,6 @@ async test "issuer outbox dispatch atomically creates one recoverable handoff" {
     restored.accept_issuer_dispatch(receipt, lease),
     (dispatched, handoff),
   )
-  @fs.rmdir(directory, recursive=true)
 }
 
 ///|
@@ -172,7 +197,7 @@ async test "handoff rejects stale generation expiry and idempotency mutation" {
   try {
     ignore(
       store.issue(
-        { ..issue_intent(), request_id: "duplicate-lease-generation" },
+        { ..issue_intent(), request_id: "duplicate-lease-generation", },
         lease,
         now + 1L,
       ),
@@ -185,7 +210,7 @@ async test "handoff rejects stale generation expiry and idempotency mutation" {
   try {
     ignore(
       store.issue(
-        { ..issue_intent(), host_alias: "changed.example" },
+        { ..issue_intent(), host_alias: "changed.example", },
         lease,
         now,
       ),
@@ -199,7 +224,7 @@ async test "handoff rejects stale generation expiry and idempotency mutation" {
     ignore(
       store.redeem(
         first.handoff_ref,
-        { ..lease, generation: 5L },
+        { ..lease, generation: 5L, },
         "subject-1",
         4L,
         now + 1L,
@@ -212,7 +237,7 @@ async test "handoff rejects stale generation expiry and idempotency mutation" {
   }
   let expired = {
     ..lease,
-    intent: { ..lease.intent, expires_unix_ms: now + 2L },
+    intent: { ..lease.intent, expires_unix_ms: now + 2L, },
   }
   let expiring_store = ready_store(
     "\{directory}/expiring.json",
@@ -220,7 +245,7 @@ async test "handoff rejects stale generation expiry and idempotency mutation" {
     now,
   )
   let expiring_record = expiring_store.issue(
-    { ..issue_intent(), request_id: "expiring-request" },
+    { ..issue_intent(), request_id: "expiring-request", },
     expired,
     now,
   )
@@ -351,7 +376,7 @@ async test "external issuer readiness is explicit and expires in process" {
   }
   @fs.write_file(
     path,
-    { ..evidence, adapter_id: "mutated-adapter" }.to_json().stringify(),
+    { ..evidence, adapter_id: "mutated-adapter", }.to_json().stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )

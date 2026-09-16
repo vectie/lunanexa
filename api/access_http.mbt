@@ -136,7 +136,10 @@ async fn ApiService::api_key_check(
         let membership_active = match self.portal_store {
           Some(portal) =>
             try {
-              let view = portal.self_view(preview.subject_ref)
+              let view = portal.self_view_for_organization(
+                preview.subject_ref,
+                preview.organization_id,
+              )
               view.membership.tenant_ref == preview.tenant_ref &&
               view.membership.active &&
               @portal.role_allows(view.membership.roles, Developer)
@@ -145,15 +148,21 @@ async fn ApiService::api_key_check(
             }
           None => self.allow_legacy_unbound_access
         }
-        let contract_active = match self.contract_document_store {
-          Some(contracts) =>
-            contracts.has_effective_master_lease(
-              preview.tenant_ref,
-              preview.subject_ref,
-              now,
-            )
-          None => self.allow_legacy_unbound_access
-        }
+        let contract_active = self.private_workspace_key_authorized(
+            preview.key_id,
+            preview.tenant_ref,
+            preview.subject_ref,
+            now,
+          ) ||
+          (match self.contract_document_store {
+            Some(contracts) =>
+              contracts.has_effective_master_lease(
+                preview.tenant_ref,
+                preview.subject_ref,
+                now,
+              )
+            None => self.allow_legacy_unbound_access
+          })
         let trial_active = match self.account_store {
           Some(accounts) =>
             match accounts.active_trial_for_subject(preview.subject_ref, now) {
@@ -174,7 +183,36 @@ async fn ApiService::api_key_check(
           (!contract_active && !trial_active) {
           return KeyDenied
         }
+        let (_, order_denied) = self.dedicated_order_binding(
+          preview, model, now,
+        )
+        if order_denied is Some(_) {
+          return KeyDenied
+        }
         let value = if consume {
+          if trial_active &&
+            !contract_active &&
+            self.account_store is Some(accounts) &&
+            accounts.active_trial_for_subject(preview.subject_ref, now)
+            is Some(trial) {
+            return KeyAuthorized(
+              store.authorize(
+                secret,
+                scope,
+                tenant_ref=preview.tenant_ref,
+                model?,
+                now,
+                true,
+                reserve_quota=legacy_consumed => {
+                  accounts.consume_trial_request(
+                    trial.trial_id,
+                    legacy_consumed,
+                    @async.now(),
+                  )
+                },
+              ),
+            )
+          }
           match (tenant_ref, model) {
             (Some(tenant), Some(selected_model)) =>
               store.authorize(
@@ -206,8 +244,8 @@ async fn ApiService::api_key_check(
       try {
         let value = match model {
           Some(selected_model) =>
-            store.authorize(secret, scope, model=selected_model, now, consume)
-          None => store.authorize(secret, scope, now, consume)
+            store.authorize(secret, scope, model=selected_model, now, false)
+          None => store.authorize(secret, scope, now, false)
         }
         if tenant_ref.map(tenant => tenant != value.tenant_ref).unwrap_or(false) {
           return KeyDenied
@@ -233,25 +271,77 @@ async fn ApiService::api_key_check(
             }
           None => false
         }
-        let contract_active = match self.contract_document_store {
-          Some(contracts) =>
-            contracts.has_effective_master_lease(
-              value.tenant_ref,
-              value.subject_ref,
-              now,
-            )
-          None => false
+        let contract_active = self.private_workspace_key_authorized(
+            value.key_id,
+            value.tenant_ref,
+            value.subject_ref,
+            now,
+          ) ||
+          (match self.contract_document_store {
+            Some(contracts) =>
+              contracts.has_effective_master_lease(
+                value.tenant_ref,
+                value.subject_ref,
+                now,
+              )
+            None => false
+          })
+        let account_active = match self.account_store {
+          Some(accounts) =>
+            accounts
+            .views()
+            .iter()
+            .any(account => {
+              account.subject_ref == value.subject_ref &&
+              account.state == Active &&
+              @account.role_allows(account.roles, EnterpriseUser)
+            })
+          None => self.allow_legacy_unbound_access
         }
-        if !workspace_active || !contract_active {
+        let membership_active = match self.portal_store {
+          Some(portal) =>
+            try {
+              let view = portal.self_view_for_organization(
+                value.subject_ref,
+                value.organization_id,
+              )
+              view.membership.active &&
+              view.membership.tenant_ref == value.tenant_ref &&
+              @portal.role_allows(view.membership.roles, Developer)
+            } catch {
+              _ => false
+            }
+          None => self.allow_legacy_unbound_access
+        }
+        if !workspace_active ||
+          !contract_active ||
+          !account_active ||
+          !membership_active {
           return KeyDenied
         }
-        KeyAuthorized({
+        let authority : @access.ApiAuthorization = {
           key_id: value.key_id,
           tenant_ref: value.tenant_ref,
           subject_ref: value.subject_ref,
           organization_id: value.organization_id,
           project_id: value.project_id,
-        })
+        }
+        let (_, order_denied) = self.dedicated_order_binding(
+          authority, model, now,
+        )
+        if order_denied is Some(_) {
+          return KeyDenied
+        }
+        if consume {
+          ignore(
+            match model {
+              Some(selected_model) =>
+                store.authorize(secret, scope, model=selected_model, now, true)
+              None => store.authorize(secret, scope, now, true)
+            },
+          )
+        }
+        KeyAuthorized(authority)
       } catch {
         @client_handoff.ClientHandoffError::QuotaExceeded => KeyQuotaExceeded
         _ => KeyDenied

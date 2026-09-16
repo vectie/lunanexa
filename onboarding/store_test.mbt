@@ -1,6 +1,7 @@
 ///|
 async test "journal survives restart and resumes without skipping steps" {
   let temp = @fs.tmpdir(prefix="lunanexa-onboarding-journal-")
+  defer @fs.rmdir(temp, recursive=true)
   let path = "\{temp}/journal.json"
   let intent : @onboarding.AccessOnboardingIntent = {
     operation_id: "access-account-demo",
@@ -22,19 +23,62 @@ async test "journal survives restart and resumes without skipping steps" {
     expires_unix_ms: 200000L,
   }
   let first = @onboarding.AccessOnboardingStore::open(path)
-  ignore(first.begin(intent, 1000L))
-  ignore(first.advance(intent.operation_id, AccountReady, 1001L))
-  let failed = first.fail(
-    intent.operation_id,
-    "PortalUnavailable",
-    "portal write failed",
-    false,
-    1002L,
-  )
-  assert_eq(failed.status, RecoverableFailure)
+  for stage in 0..<4 {
+    let before = first.snapshot()
+    let disk = @fs.read_file(path).text()
+    @fs.mkdir(path + ".next")
+    for _ in 0..<2 {
+      try {
+        match stage {
+          0 => ignore(first.begin(intent, 1000L))
+          1 => ignore(first.advance(intent.operation_id, AccountReady, 1001L))
+          2 =>
+            ignore(
+              first.fail(
+                intent.operation_id,
+                "PortalUnavailable",
+                "portal write failed",
+                false,
+                1002L,
+              ),
+            )
+          _ => ignore(first.retry(intent.operation_id, 1003L))
+        }
+      } catch {
+        _ => ()
+      } noraise {
+        _ => fail("onboarding write unexpectedly succeeded")
+      }
+      assert_eq(@async.with_timeout(1000, () => first.snapshot()), before)
+      assert_eq(@fs.read_file(path).text(), disk)
+    }
+    @fs.rmdir(path + ".next")
+    @async.with_timeout(1000, () => {
+      match stage {
+        0 => ignore(first.begin(intent, 1000L))
+        1 => ignore(first.advance(intent.operation_id, AccountReady, 1001L))
+        2 =>
+          assert_eq(
+            first.fail(
+              intent.operation_id,
+              "PortalUnavailable",
+              "portal write failed",
+              false,
+              1002L,
+            ).status,
+            RecoverableFailure,
+          )
+        _ => ignore(first.retry(intent.operation_id, 1003L))
+      }
+      assert_eq(
+        @onboarding.AccessOnboardingStore::open(path).snapshot(),
+        first.snapshot(),
+      )
+    })
+  }
   let reopened = @onboarding.AccessOnboardingStore::open(path)
   assert_eq(reopened.pending().length(), 1)
-  let resumed = reopened.retry(intent.operation_id, 1003L)
+  let resumed = reopened.pending()[0]
   assert_eq(resumed.step, AccountReady)
   assert_eq(resumed.attempts, 2)
   ignore(reopened.advance(intent.operation_id, MembershipReady, 1004L))
@@ -51,6 +95,7 @@ async test "journal survives restart and resumes without skipping steps" {
 ///|
 async test "journal rejects conflicting replay and terminal conflict is visible" {
   let temp = @fs.tmpdir(prefix="lunanexa-onboarding-conflict-")
+  defer @fs.rmdir(temp, recursive=true)
   let store = @onboarding.AccessOnboardingStore::open("\{temp}/journal.json")
   let intent : @onboarding.AccessOnboardingIntent = {
     operation_id: "access-account-demo",
@@ -72,7 +117,7 @@ async test "journal rejects conflicting replay and terminal conflict is visible"
     expires_unix_ms: 200000L,
   }
   ignore(store.begin(intent, 1000L))
-  try store.begin({ ..intent, tenant_ref: "tenant-other" }, 1001L) catch {
+  try store.begin({ ..intent, tenant_ref: "tenant-other", }, 1001L) catch {
     @onboarding.AccessOnboardingError::IdempotencyConflict(_) => ()
     _ => fail("unexpected error")
   } noraise {

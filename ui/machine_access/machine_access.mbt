@@ -11,6 +11,7 @@ pub(all) struct MachineAccessState {
 
 ///|
 pub(all) enum MachineAccessMessage {
+  CopyAccessDetail(String)
   RedeemCredential(String, Int64)
   BeginTermination(String)
   ConfirmationChanged(String)
@@ -37,13 +38,18 @@ pub fn MachineAccessState::update(
   message : MachineAccessMessage,
 ) -> MachineAccessState {
   match message {
-    RedeemCredential(_, _) => { ..self, loading: true }
+    CopyAccessDetail(_) => self
+    RedeemCredential(_, _) => { ..self, loading: true, }
     BeginTermination(lease_ref) =>
-      { ..self, confirmation_lease_ref: Some(lease_ref), confirmation_text: "" }
-    ConfirmationChanged(value) => { ..self, confirmation_text: value }
+      {
+        ..self,
+        confirmation_lease_ref: Some(lease_ref),
+        confirmation_text: "",
+      }
+    ConfirmationChanged(value) => { ..self, confirmation_text: value, }
     CancelTermination =>
-      { ..self, confirmation_lease_ref: None, confirmation_text: "" }
-    ConfirmTermination(_, _, _) => { ..self, loading: true }
+      { ..self, confirmation_lease_ref: None, confirmation_text: "", }
+    ConfirmTermination(_, _, _) => { ..self, loading: true, }
   }
 }
 
@@ -57,7 +63,7 @@ pub fn MachineAccessState::with_redeemed_credential(
     value.lease_ref => current
   ]
   next.push(value)
-  { ..self, redeemed_credentials: next, loading: false }
+  { ..self, redeemed_credentials: next, loading: false, }
 }
 
 ///|
@@ -66,9 +72,11 @@ fn remaining_label(
   expires : Int64,
   now : Int64,
 ) -> String {
+  // Counts are runtime values, not translatable catalog keys. Keep the
+  // explicitly typed numeric templates here; all static copy lives in messages.
   let remaining = expires - now
   if remaining <= 0L {
-    copy(locale, "Expired", "已到期")
+    machine_message(locale, LabelExpired)
   } else if remaining < 3600000L {
     let minutes = (remaining + 59999L) / 60000L
     copy(locale, "\{minutes} min remaining", "剩余 \{minutes} 分钟")
@@ -88,28 +96,19 @@ fn cleanup_label(
 ) -> String {
   match state {
     Active | Requested | Reserved | Provisioning =>
-      copy(locale, "Scheduled at closure", "将在关闭时执行")
+      machine_message(locale, LabelScheduledatclosure)
     Expiring | Draining | RevokingAccess =>
-      copy(locale, "Access lockdown in progress", "正在撤销访问")
-    Sanitizing =>
-      copy(locale, "Verified cleanup in progress", "正在验证清理")
-    Completed => copy(locale, "Cleanup verified", "清理已验证")
-    Cancelled =>
-      copy(locale, "Cancelled before access", "已在访问前取消")
-    Quarantined =>
-      copy(
-        locale, "Safety hold — contact support", "安全隔离，请联系支持",
-      )
+      machine_message(locale, LabelAccesslockdowninprogress)
+    Sanitizing => machine_message(locale, LabelVerifiedcleanupinprogress)
+    Completed => machine_message(locale, LabelCleanupverified)
+    Cancelled => machine_message(locale, LabelCancelledbeforeaccess)
+    Quarantined => machine_message(locale, SafetyHoldSupport)
   }
 }
 
 ///|
 fn copy(locale : @i18n.Locale, english : String, chinese : String) -> String {
-  if locale.is_chinese() {
-    chinese
-  } else {
-    english
-  }
+  @i18n.copy(locale, english, chinese)
 }
 
 ///|
@@ -139,17 +138,17 @@ fn state_label(
   state : @nodelease.ExclusiveLeaseState,
 ) -> String {
   match state {
-    Requested => copy(locale, "Requested", "已申请")
-    Reserved => copy(locale, "Reserved", "已预留")
-    Provisioning => copy(locale, "Preparing access", "正在准备访问")
-    Active => copy(locale, "Ready", "已就绪")
-    Expiring => copy(locale, "Expiring", "即将到期")
-    Draining => copy(locale, "Ending sessions", "正在结束会话")
-    RevokingAccess => copy(locale, "Revoking access", "正在撤销访问")
-    Sanitizing => copy(locale, "Sanitizing", "正在清理")
-    Completed => copy(locale, "Completed", "已结束")
-    Cancelled => copy(locale, "Cancelled", "已取消")
-    Quarantined => copy(locale, "Safety hold", "安全隔离")
+    Requested => machine_message(locale, LabelRequested)
+    Reserved => machine_message(locale, LabelReserved)
+    Provisioning => machine_message(locale, LabelPreparingaccess)
+    Active => machine_message(locale, LabelReady)
+    Expiring => machine_message(locale, LabelExpiring)
+    Draining => machine_message(locale, LabelEndingsessions)
+    RevokingAccess => machine_message(locale, LabelRevokingaccess)
+    Sanitizing => machine_message(locale, LabelSanitizing)
+    Completed => machine_message(locale, LabelCompleted)
+    Cancelled => machine_message(locale, LabelCancelled)
+    Quarantined => machine_message(locale, LabelSafetyhold)
   }
 }
 
@@ -159,9 +158,9 @@ fn reachability_label(
   reachability : @nodelease.CustomerMachineReachability,
 ) -> String {
   match reachability {
-    Online => copy(locale, "Online", "在线")
-    Delayed => copy(locale, "Status delayed", "状态延迟")
-    Unknown => copy(locale, "Status pending", "状态待确认")
+    Online => machine_message(locale, LabelOnline)
+    Delayed => machine_message(locale, LabelStatusdelayed)
+    Unknown => machine_message(locale, LabelStatuspending)
   }
 }
 
@@ -171,14 +170,10 @@ fn handoff_label(
   state : @nodelease.CustomerCredentialHandoffState,
 ) -> String {
   match state {
-    Pending =>
-      copy(
-        locale, "Credential issuer is preparing access", "凭据签发方正在准备访问",
-      )
-    Available => copy(locale, "Ready to redeem", "可领取")
-    Recoverable =>
-      copy(locale, "Access details recoverable", "可恢复访问详情")
-    Closed => copy(locale, "Closed", "已关闭")
+    Pending => machine_message(locale, CredentialPreparation)
+    Available => machine_message(locale, LabelReadytoredeem)
+    Recoverable => machine_message(locale, RecoverableDetailsStatus)
+    Closed => machine_message(locale, LabelClosed)
   }
 }
 
@@ -195,31 +190,15 @@ fn termination_panel(
       class="danger-button",
       disabled=state.loading,
       on_click=command(emit, BeginTermination(machine.lease_ref)),
-      copy(state.locale, "End access early", "提前结束访问"),
+      machine_message(state.locale, LabelEndaccessearly),
     )
   }
   @html.div(class="termination-panel", [
-    @html.strong(
-      copy(
-        state.locale,
-        "This interrupts sessions immediately",
-        "这将立即中断会话",
-      ),
-    ),
-    @html.p(
-      copy(
-        state.locale,
-        "New logins close, credentials are revoked, and the machine stays unavailable until sanitization succeeds.",
-        "新登录将被关闭，凭据会被撤销；机器仅在清理成功后才会恢复可用。",
-      ),
-    ),
+    @html.strong(machine_message(state.locale, ImmediateSessionInterruption)),
+    @html.p(machine_message(state.locale, TerminationConsequences)),
     @html.label(
       for_="machine-termination-confirmation",
-      copy(
-        state.locale,
-        "Type the exact confirmation",
-        "请输入完整确认文字",
-      ),
+      machine_message(state.locale, LabelTypetheexactconfirmation),
     ),
     @html.code(expected),
     @html.input(
@@ -233,7 +212,7 @@ fn termination_panel(
         type_="button",
         class="quiet-button",
         on_click=command(emit, CancelTermination),
-        copy(state.locale, "Cancel", "取消"),
+        machine_message(state.locale, LabelCancel),
       ),
       @html.button(
         type_="button",
@@ -243,7 +222,7 @@ fn termination_panel(
           emit,
           ConfirmTermination(machine.lease_ref, machine.generation, expected),
         ),
-        copy(state.locale, "Terminate access", "终止访问"),
+        machine_message(state.locale, LabelTerminateaccess),
       ),
     ]),
   ])
@@ -266,7 +245,7 @@ fn machine_card(
       @html.div([
         @html.p(
           class="machine-eyebrow",
-          copy(state.locale, "EXCLUSIVE MACHINE", "独占机器"),
+          machine_message(state.locale, LabelEXCLUSIVEMACHINE),
         ),
         @html.h3(machine.machine_ref),
       ]),
@@ -277,21 +256,19 @@ fn machine_card(
     ]),
     @html.dl(class="machine-facts", [
       @html.div([
-        @html.dt(copy(state.locale, "Live status", "实时状态")),
+        @html.dt(machine_message(state.locale, LabelLivestatus)),
         @html.dd(reachability_label(state.locale, machine.reachability)),
       ]),
       @html.div([
-        @html.dt(copy(state.locale, "Username", "用户名")),
+        @html.dt(machine_message(state.locale, LabelUsername)),
         @html.dd(machine.username),
       ]),
       @html.div([
-        @html.dt(copy(state.locale, "Access profile", "访问配置")),
-        @html.dd(
-          copy(state.locale, "Full machine · SSH", "整机访问 · SSH"),
-        ),
+        @html.dt(machine_message(state.locale, LabelAccessprofile)),
+        @html.dd(machine_message(state.locale, LabelFullmachineSSH)),
       ]),
       @html.div([
-        @html.dt(copy(state.locale, "Automatic expiry", "自动到期")),
+        @html.dt(machine_message(state.locale, MachineTime)),
         @html.dd(
           class="machine-mono",
           remaining_label(
@@ -302,77 +279,150 @@ fn machine_card(
         ),
       ]),
       @html.div([
-        @html.dt(copy(state.locale, "Credential handoff", "凭据交接")),
+        @html.dt(machine_message(state.locale, LabelCredentialhandoff)),
         @html.dd(handoff_label(state.locale, machine.credential_handoff.state)),
       ]),
       @html.div([
-        @html.dt(copy(state.locale, "Cleanup / support", "清理 / 支持")),
+        @html.dt(machine_message(state.locale, HandoffTime)),
+        @html.dd(
+          remaining_label(
+            state.locale,
+            match redeemed {
+              Some(access) => access.valid_until_unix_ms
+              None => machine.credential_handoff.valid_until_unix_ms
+            },
+            state.now_unix_ms,
+          ),
+        ),
+        @html.dd(machine_message(state.locale, HandoffLimit)),
+      ]),
+      @html.div([
+        @html.dt(machine_message(state.locale, LabelCleanupsupport)),
         @html.dd(cleanup_label(state.locale, machine.state)),
       ]),
     ]),
-    if redeemed is Some(access) {
+    @html.p(
+      class="machine-muted",
+      machine_message(state.locale, ExpiryConsequences),
+    ),
+    @html.p(
+      class="machine-muted",
+      machine_message(state.locale, ContinuedAccess),
+    ),
+    if redeemed is Some(access) &&
+      machine.state == Active &&
+      machine.expires_unix_ms > state.now_unix_ms &&
+      access.valid_until_unix_ms > state.now_unix_ms &&
+      !access.raw_secret_included &&
+      (
+        machine.credential_handoff.state == Available ||
+        machine.credential_handoff.state == Recoverable
+      ) {
       @html.section(class="handoff-panel", [
-        @html.strong(
-          copy(state.locale, "SSH access details", "SSH 访问详情"),
-        ),
+        @html.strong(machine_message(state.locale, LabelSSHaccessdetails)),
         @html.dl(class="credential-details", [
           @html.div([
-            @html.dt(copy(state.locale, "Host", "主机")),
+            @html.dt(machine_message(state.locale, LabelHost)),
             @html.dd(access.host_alias),
+            @html.dd(
+              copy_detail(
+                state.locale,
+                emit,
+                access.host_alias,
+                machine_message(state.locale, CopyHost),
+              ),
+            ),
           ]),
           @html.div([
-            @html.dt(copy(state.locale, "Port", "端口")),
+            @html.dt(machine_message(state.locale, LabelPort)),
             @html.dd(access.ssh_port.to_string()),
+            @html.dd(
+              copy_detail(
+                state.locale,
+                emit,
+                access.ssh_port.to_string(),
+                machine_message(state.locale, CopyPort),
+              ),
+            ),
           ]),
           @html.div([
-            @html.dt(copy(state.locale, "Host key", "主机密钥")),
+            @html.dt(machine_message(state.locale, LabelUsername)),
+            @html.dd(machine.username),
+            @html.dd(
+              copy_detail(
+                state.locale,
+                emit,
+                machine.username,
+                machine_message(state.locale, CopyUsername),
+              ),
+            ),
+          ]),
+          @html.div([
+            @html.dt(machine_message(state.locale, LabelHostkey)),
             @html.dd(class="machine-mono", access.host_key_fingerprint),
           ]),
         ]),
-        @html.code(access.connection_command),
-        @html.p(
-          copy(
-            state.locale,
-            "Continue through the approved credential issuer. Verify the host key before connecting; no password or private key is displayed here.",
-            "请继续前往已批准的凭据签发方。连接前请核对主机密钥；此处不会显示密码或私钥。",
-          ),
+        copy_detail(
+          state.locale,
+          emit,
+          access.host_key_fingerprint,
+          machine_message(state.locale, CopyFingerprint),
         ),
+        match
+          safe_connection_command(
+            machine.username,
+            access.host_alias,
+            access.ssh_port,
+          ) {
+          Some(connection) =>
+            @html.div([
+              @html.code(connection),
+              copy_detail(
+                state.locale,
+                emit,
+                connection,
+                machine_message(state.locale, CopyConnection),
+              ),
+            ])
+          None => @html.p(machine_message(state.locale, InvalidConnection))
+        },
+        @html.p(machine_message(state.locale, CredentialIssuerExplanation)),
         @html.a(
           class="issuer-link",
           href=access.issuer_redirect_url,
-          copy(
-            state.locale,
-            "Continue to credential issuer",
-            "前往凭据签发方",
-          ),
+          machine_message(state.locale, ContinueToIssuer),
         ),
+        next_steps(state, emit, machine, access),
       ])
-    } else if machine.credential_handoff.state == Available ||
-      machine.credential_handoff.state == Recoverable {
+    } else if machine.state == Active &&
+      machine.expires_unix_ms > state.now_unix_ms &&
+      machine.credential_handoff.valid_until_unix_ms > state.now_unix_ms &&
+      (
+        redeemed is None ||
+        (
+          redeemed is Some({ valid_until_unix_ms, .. }) &&
+          valid_until_unix_ms > state.now_unix_ms
+        )
+      ) &&
+      (
+        machine.credential_handoff.state == Available ||
+        machine.credential_handoff.state == Recoverable
+      ) {
       @html.section(class="handoff-panel", [
         @html.strong(
           if machine.credential_handoff.state == Recoverable {
-            copy(
-              state.locale,
-              "Access details can be recovered",
-              "可恢复访问详情",
-            )
+            machine_message(state.locale, RecoverableDetailsHeading)
           } else {
-            copy(state.locale, "Access is ready", "访问已就绪")
+            machine_message(state.locale, LabelAccessisready)
           },
         ),
         @html.p(
-          copy(
+          machine_message(
             state.locale,
             if machine.credential_handoff.state == Recoverable {
-              "Recover the same safe connection metadata after a reload; this does not issue another credential."
+              RecoveryExplanation
             } else {
-              "Redeem once to reveal safe connection metadata and continue to the short-lived certificate issuer."
-            },
-            if machine.credential_handoff.state == Recoverable {
-              "页面重载后可恢复相同的安全连接信息；不会再次签发凭据。"
-            } else {
-              "仅可领取一次；领取后将显示安全连接信息，并继续前往短期证书签发方。"
+              RedemptionExplanation
             },
           ),
         ),
@@ -385,20 +435,16 @@ fn machine_card(
             RedeemCredential(machine.lease_ref, machine.generation),
           ),
           if machine.credential_handoff.state == Recoverable {
-            copy(state.locale, "Recover access details", "恢复访问详情")
+            machine_message(state.locale, LabelRecoveraccessdetails)
           } else {
-            copy(state.locale, "Redeem SSH access", "领取 SSH 访问凭据")
+            machine_message(state.locale, LabelRedeemSSHaccess)
           },
         ),
       ])
     } else {
       @html.p(
         class="machine-muted",
-        copy(
-          state.locale,
-          "Credential handoff is unavailable until provisioning completes, and closes automatically at expiry or termination.",
-          "凭据交接仅在配置完成后可用，并会在到期或终止时自动关闭。",
-        ),
+        machine_message(state.locale, HandoffUnavailableExplanation),
       )
     },
     if machine.can_terminate {
@@ -406,11 +452,7 @@ fn machine_card(
     } else {
       @html.p(
         class="machine-muted",
-        copy(
-          state.locale,
-          "Access is closing or closed. The machine remains fenced until revocation and sanitization are verified.",
-          "访问正在关闭或已关闭。机器将在撤销访问并验证清理完成前保持隔离。",
-        ),
+        machine_message(state.locale, AccessClosingExplanation),
       )
     },
   ])
@@ -427,14 +469,8 @@ fn machine_access_view(
     @html.style_tag(stylesheet),
     @html.header(class="machine-access-intro", [
       @html.div([
-        @html.h2(copy(state.locale, "My machine access", "我的机器访问")),
-        @html.p(
-          copy(
-            state.locale,
-            "Follow provisioning, live reachability, credential handoff, automatic expiry, and verified cleanup without exposing physical cluster topology.",
-            "查看配置、实时连通性、凭据交接、自动到期与清理验证，同时不会暴露物理集群拓扑。",
-          ),
-        ),
+        @html.h2(machine_message(state.locale, LabelMymachineaccess)),
+        @html.p(machine_message(state.locale, ExclusiveAccessBoundary)),
       ]),
       @html.span(
         class="machine-count",
@@ -448,11 +484,7 @@ fn machine_access_view(
     if state.machines.length() == 0 {
       @html.p(
         class="machine-empty",
-        copy(
-          state.locale,
-          "No exclusive machine access has been assigned to your identity.",
-          "您的身份尚未获分配独占机器访问权限。",
-        ),
+        machine_message(state.locale, NoAssignedMachine),
       )
     } else {
       @html.div(

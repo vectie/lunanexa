@@ -311,6 +311,7 @@ async test "commercial API exposes tenant-scoped cost ledger vertical slice" {
     display_name: "Organization One",
     state: Active,
     verification_ref: Some("opaque-verification-reference"),
+    legal_profile: None,
     created_unix_ms: 1000L,
   }
   let organization_reply = service.handle(

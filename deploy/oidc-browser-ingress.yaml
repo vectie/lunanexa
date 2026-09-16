@@ -9,6 +9,11 @@ metadata:
 data:
   LUNANEXA_OIDC_PROVIDER_REF: "${LUNANEXA_OIDC_PROVIDER_REF}"
   LUNANEXA_OIDC_ISSUER_URL: "${LUNANEXA_OIDC_ISSUER_URL}"
+  # Backend-only origin for clusters that must not hairpin through the public
+  # issuer address. Browser redirects and token issuer validation still use
+  # LUNANEXA_OIDC_ISSUER_URL exactly. The platform-operated profile sets this
+  # to its cluster-local HTTPS identity edge.
+  LUNANEXA_OIDC_TRANSPORT_ORIGIN: "${LUNANEXA_OIDC_TRANSPORT_ORIGIN}"
   LUNANEXA_OIDC_OPERATOR_REDIRECT_URI: "https://${LUNANEXA_OPERATOR_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI: "https://${LUNANEXA_ENTERPRISE_HOST}/auth/oidc/callback"
   LUNANEXA_OIDC_ALLOWED_ORIGINS: "https://${LUNANEXA_OPERATOR_HOST},https://${LUNANEXA_ENTERPRISE_HOST}"
@@ -21,6 +26,7 @@ data:
   LUNANEXA_ENTERPRISE_UPSTREAM: "http://lunanexa-enterprise:8080"
   LUNANEXA_WORKBENCH_UPSTREAM: "http://lunanexa-workbench:8080"
   LUNANEXA_OIDC_SCOPES: "openid profile email"
+  LUNANEXA_OIDC_CA_FILE: "/var/run/secrets/lunanexa/oidc/ca.pem"
   LUNANEXA_OIDC_PKCE_METHOD: "S256"
   LUNANEXA_OIDC_REQUIRE_STATE: "1"
   LUNANEXA_OIDC_REQUIRE_NONCE: "1"
@@ -118,11 +124,20 @@ spec:
                 secretKeyRef:
                   name: lunanexa-identity-ingress-credentials
                   key: identity-assertion-secret
+            - name: LUNANEXA_IDENTITY_GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: lunanexa-database
+                  key: url
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: oidc-provider-ca
+              mountPath: /var/run/secrets/lunanexa/oidc
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -131,6 +146,13 @@ spec:
             httpGet:
               path: /health
               port: identity-http
+      volumes:
+        - name: oidc-provider-ca
+          secret:
+            secretName: lunanexa-oidc-provider-ca
+            items:
+              - key: ca.pem
+                path: ca.pem
 ---
 apiVersion: v1
 kind: Service
@@ -239,6 +261,18 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 8443
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lunanexa-postgres
+        - namespaceSelector:
+            matchLabels:
+              lunanexa.io/service: postgres-ha
+      ports:
+        - protocol: TCP
+          port: 5432
     - to:
         - namespaceSelector:
             matchLabels:
@@ -305,42 +339,3 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: lunanexa-oidc-browser
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - "${LUNANEXA_OPERATOR_HOST}"
-        - "${LUNANEXA_ENTERPRISE_HOST}"
-      secretName: lunanexa-oidc-ingress-tls
-  rules:
-    - host: "${LUNANEXA_OPERATOR_HOST}"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: lunanexa-identity-gateway
-                port:
-                  number: 8081
-    - host: "${LUNANEXA_ENTERPRISE_HOST}"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: lunanexa-identity-gateway
-                port:
-                  number: 8081

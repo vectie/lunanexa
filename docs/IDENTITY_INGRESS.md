@@ -21,15 +21,27 @@ short-lived sessions and API keys. A contract binds the stable LunaNexa
 `subject_ref`; it never binds an email address, OIDC cookie, client
 certificate DN, or bearer token.
 
+The browser cookie contains only a 256-bit opaque session identifier plus an
+HMAC. Authorization-flow state, verified identity claims, the bound LunaNexa
+browser bearer, and the CSRF token live in the shared PostgreSQL table
+`lunanexa.identity_gateway_sessions`. Both gateway replicas can therefore
+continue the same flow and survive pod replacement without putting provider or
+LunaNexa credentials in a browser cookie.
+
 The optional deployment profile combines
 `deploy/oidc-browser-ingress.yaml` with
-`deploy/oidc-browser-ingress-controller-patch.yaml`. It is a contract for a
-reviewed, deployment-supplied OIDC identity-gateway image, not a bundled
-identity provider. The public gateway runs in a separate Deployment with only
+`deploy/oidc-browser-ingress-controller-patch.yaml`. The reviewed MoonBit
+gateway executable and `images/Containerfile.identity-gateway` are bundled in
+this repository; deploy its image only by immutable digest. The identity
+provider remains a separate authority. The public gateway runs in a separate
+Deployment with only
 OIDC, UI, DNS, and identity-relay egress. The patch runs the same immutable
 image in `relay` mode as a minimal sidecar in every `lunanexa-control` pod. The
 relay admits only signed session-exchange and registration requests and forwards them to
-`http://127.0.0.1:8080`; it has no Secret mount and no permitted egress. This
+`http://127.0.0.1:8082`; it has no Secret mount and no permitted egress. Port
+8082 is a controller-owned loopback-only listener that accepts exactly
+`POST /v1/auth/register` and `POST /v1/auth/session:exchange`; it is never
+selected by a Service. This
 split preserves the controller's proven-loopback identity boundary without
 granting the controller pod the public gateway's IdP or UI egress.
 
@@ -43,8 +55,11 @@ The gateway must:
 
 - use the Authorization Code flow and require PKCE `S256`;
 - compare the discovered issuer exactly with the configured HTTPS issuer;
-- validate signature, issuer, audience, expiry, not-before, authorization-code
-  hash when present, and the configured client ID;
+- validate issuer, audience, expiry, not-before, nonce, and configured client
+  ID. The bundled gateway obtains the ID token only from the certificate-
+  verified token endpoint and then requires both certificate-verified userinfo
+  subject equality and active-token introspection bound to that client; it
+  rejects providers without an introspection endpoint;
 - generate cryptographically random, single-use `state` and `nonce` values,
   bind them to the initiating browser and exact redirect URI, and reject
   replay;
@@ -56,6 +71,17 @@ The gateway must:
 - reject an unregistered issuer, client, redirect, audience, or callback host;
 - keep client secrets and cookie/assertion keys in the deployment secret
   manager, never a ConfigMap, manifest, URL, browser bundle, or log.
+
+The repository includes a platform-operated public identity profile in
+`deploy/platform-identity.yaml`; see
+[`PLATFORM_IDENTITY.md`](PLATFORM_IDENTITY.md). It uses Keycloak 26.7.3 with
+open registration, verified email, password recovery and TOTP, or a deployment
+may use a customer's federated enterprise IdP. A person does not need a
+corporate directory to use the public profile: they create an identity at the
+platform IdP, then the first verified sign-in creates the LunaNexa account.
+Account creation alone grants only the bounded trial policy, when enabled; it
+does not create an organization, approve a company, accept machine terms, settle
+payment or allocate hardware.
 
 The upstream IdP should require MFA for operator accounts and support provider
 session revocation, recovery, and account suspension. LunaNexa still checks its
@@ -253,6 +279,12 @@ remain stored as digests.
 
 ## Deployment
 
+For the LunaNexa-operated issuer, use
+`scripts/deploy/render-platform-identity.sh`. It renders the resources below
+together with the dedicated Keycloak namespace, realm, exact clients,
+restricted Ingress and network path. Use the generic renderer only for an
+approved enterprise issuer or another reviewed platform IdP.
+
 Provision the following keys in a Secret named
 `lunanexa-identity-ingress-credentials` using the deployment's secret manager:
 
@@ -273,20 +305,48 @@ manifest before applying the result:
 scripts/deploy/render-oidc-browser-ingress.sh \
   --output /ABSOLUTE/PROTECTED/management-with-oidc.yaml \
   --management-manifest /ABSOLUTE/PROTECTED/management.yaml \
-  --provider-ref CORP_OIDC \
+  --provider-ref PLATFORM_OR_ENTERPRISE_OIDC \
   --issuer-url https://IDP_HOST/REALM_PATH \
-  --operator-host OPERATOR_HOST \
-  --enterprise-host ENTERPRISE_HOST \
-  --gateway-image REGISTRY/IDENTITY_GATEWAY@sha256:EXACT_64_HEX_DIGEST
+  --transport-origin https://INTERNAL_IDP_EDGE.svc.cluster.local:8443 \
+  --operator-host OPERATOR_AUTHORITY \
+  --enterprise-host ENTERPRISE_AUTHORITY \
+  --gateway-image REGISTRY/IDENTITY_GATEWAY@sha256:EXACT_64_HEX_DIGEST \
+  --identity-edge-image REGISTRY/NGINX_EDGE@sha256:EXACT_64_HEX_DIGEST
 ```
+
+`--transport-origin` is required by the platform-operated no-domain profile.
+An enterprise provider may omit it only when the gateway can reach the exact
+public issuer origin directly with the same strict TLS identity.
+The two browser values are exact HTTPS authorities. DNS-only hosts render the
+optional `deploy/oidc-browser-public-ingress.yaml`. The supported direct-IP
+profile requires one IPv4 address with operator port `5003` and enterprise
+port `5005`; it renders `deploy/oidc-browser-direct-ip-edge.yaml` instead and
+never writes an IP literal or port into a Kubernetes Ingress `host` field.
+`--identity-edge-image` is mandatory and digest-pinned for that direct-IP
+profile; DNS-only rendering may omit it.
+
+The direct-IP overlay runs two `lunanexa-identity-edge` replicas. They listen
+only with TLS on `8443`, use the existing `lunanexa-oidc-ingress-tls` Secret,
+preserve the exact browser authority, and proxy only to
+`lunanexa-identity-gateway`. It repoints the existing
+`lunanexa-console-public` LoadBalancer to those edge pods and replaces its
+ports with exactly `5003` and `5005`. The previous console and workbench
+public-gateway Deployments are set to zero replicas, and the old Workbench
+LoadBalancer is converted to an endpoint-less ClusterIP on `8080`; consequently
+`4174`, `3000`, and `5001` are absent from the rendered public surface. This
+mode must be rendered over the management-foundation manifest containing those
+named legacy resources so the transition is explicit and ordinary
+`kubectl apply` closes the old paths without requiring prune.
 
 The renderer verifies the existing management manifest has no unresolved or
 invalid deployment placeholders, injects the sidecar into its named controller
-Deployment, and includes the identity ConfigMap, Service, NetworkPolicy, and
-Ingress. It rejects non-HTTPS issuers, malformed or equal browser hosts,
-mutable images, unsafe substitution characters, and unresolved inputs. It
-writes the combined rendered file with mode `0600`. Apply the combined file;
-do not apply the source patch directly or use a mutable image tag.
+Deployment, and includes the identity ConfigMap, Services and NetworkPolicies.
+It then includes exactly one public transport: the DNS Ingress or the direct-IP
+TLS edge. It rejects non-HTTPS issuers, malformed or equal browser hosts,
+unsupported direct-IP ports, mutable images, unsafe substitution characters,
+and unresolved inputs. It writes the combined rendered file with mode `0600`.
+Apply the combined file; do not apply a source patch directly or use a mutable
+image tag.
 
 The controller's required `lunanexa-control-credentials` Secret must also
 contain an independent `account-session-issuer-secret`. The standard
@@ -295,11 +355,28 @@ distinct control-plane authorities. It is not mounted into the identity
 gateway. Conversely, `identity-assertion-secret` remains optional in the local
 static-token profile but is mandatory whenever this OIDC profile is enabled.
 
-The identity provider must be reachable on TCP 443 from a namespace labeled
-`lunanexa.io/service=oidc-provider`. Kubernetes NetworkPolicy cannot select an
-external DNS name; an external provider therefore needs a reviewed static-IP
-or CNI FQDN-policy overlay. Do not replace that fail-closed rule with arbitrary
-Internet egress.
+For a private transport origin, create Secret `lunanexa-oidc-provider-ca` in
+the gateway namespace with key `ca.pem` containing the CA that signed the
+transport edge certificate. That certificate must cover the exact
+`svc.cluster.local` name in `--transport-origin`. The gateway passes that CA
+file to strict TLS verification for discovery, token, userinfo, and
+introspection requests; it never enables an insecure TLS mode. Returned issuer
+metadata and ID-token `iss` must still equal the public `--issuer-url` exactly,
+including an IP literal and non-default port when configured. The gateway also
+reads the existing
+`lunanexa-database/url` Secret to persist opaque browser sessions across its two
+replicas.
+
+The platform-operated profile makes the transport origin
+`https://lunanexa-identity-internal.IDENTITY_NAMESPACE.svc.cluster.local:8443`.
+That two-replica edge accepts only `/realms/lunanexa/`, overwrites forwarding
+headers with the exact public issuer authority, and verifies the Keycloak
+backend certificate against
+`lunanexa-platform-idp-service.IDENTITY_NAMESPACE.svc.cluster.local`. The
+gateway is permitted to reach only this namespace-selected TLS edge; it needs
+no public-IP or arbitrary Internet egress. External enterprise providers still
+need a reviewed static-IP or CNI FQDN-policy overlay because Kubernetes
+NetworkPolicy cannot select an external DNS name.
 
 The base controller policy does not admit ingress-nginx to native controller
 port 8080. The OIDC overlay exposes the separate
@@ -313,11 +390,22 @@ gateway on ports 8081 and 8080 and adds no egress. Only stripped, cookie-bound
 identity-only relay and loopback hop. No public console, enterprise, or
 workbench pod may connect directly to controller port 8080.
 
-`LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` resides on the existing
-controller state PVC. Back it up and restore it with the workspace, portal,
-access-key, contract, and audit state. The file is an atomic `0600` fallback;
-move it to the approved transactional database profile before claiming highly
-available account/session storage.
+Run the focused direct-IP contract test before applying that profile:
+
+```sh
+scripts/deploy/oidc-browser-direct-ip-edge-manifest-test.sh
+```
+
+It verifies the two edge replicas, digest pin, `Never` pull policy, strict TLS
+listener, existing Secret reference, exact `5003`/`5005` LoadBalancer ports,
+legacy-port removal, old-gateway shutdown, NetworkPolicies, absence of Secrets,
+and mutual exclusion with the DNS-only Ingress.
+
+`LUNANEXA_ACCOUNT_PATH=/var/lib/lunanexa/accounts.json` is only the atomic
+`0600` local fallback. The production PostgreSQL profile commits the account,
+portal and related snapshot domains to the configured management database.
+Back up and restore those domains together. Controller leader fencing provides
+single-active failover; it is not a multi-writer account service.
 
 ## Local development compatibility
 

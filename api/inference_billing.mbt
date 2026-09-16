@@ -23,6 +23,30 @@ async fn ApiService::inference_billing_preflight(
   now_unix_ms : Int64,
 ) -> HttpReply? {
   guard self.management_database is Some(_) else { return None }
+  let (dedicated_order, binding_error) = self.dedicated_order_binding(
+    authority,
+    None,
+    now_unix_ms,
+  )
+  if binding_error is Some(reply) {
+    return Some(reply)
+  }
+  if !self.commercial_project_exists(
+      authority.organization_id,
+      authority.project_id,
+    ) {
+    return Some(
+      api_error(
+        409, "CommercialAttributionRequired", "the API credential is not bound to an active commercial project",
+        false,
+      ),
+    )
+  }
+  // Dedicated capacity was prepaid by the machine order. It still emits
+  // usage evidence below, but does not require or consume a shared-MaaS rate.
+  if dedicated_order is Some(_) {
+    return None
+  }
   guard self.inference_rate_card is Some(rate) else {
     return Some(
       api_error(
@@ -37,17 +61,6 @@ async fn ApiService::inference_billing_preflight(
       api_error(
         503, "InferenceRatingUnavailable", "the production inference rate card is not currently effective",
         true,
-      ),
-    )
-  }
-  if !self.commercial_project_exists(
-      authority.organization_id,
-      authority.project_id,
-    ) {
-    return Some(
-      api_error(
-        409, "CommercialAttributionRequired", "the API credential is not bound to an active commercial project",
-        false,
       ),
     )
   }
@@ -66,8 +79,24 @@ async fn ApiService::record_inference_charge(
   authority : @access.ApiAuthorization,
 ) -> Unit {
   guard self.management_database is Some(_) else { return }
-  guard self.inference_rate_card is Some(rate) else {
-    raise Failure::Failure("production inference rate card is unavailable")
+  let now = @async.now()
+  let (dedicated_order, binding_error) = self.dedicated_order_binding(
+    authority,
+    Some(request.model_selector),
+    now,
+  )
+  if binding_error is Some(_) {
+    raise Failure::Failure("dedicated machine order is not active")
+  }
+  let prepaid_dedicated = dedicated_order is Some(_)
+  let rate = if prepaid_dedicated {
+    None
+  } else {
+    match self.inference_rate_card {
+      Some(value) => Some(value)
+      None =>
+        raise Failure::Failure("production inference rate card is unavailable")
+    }
   }
   guard response.execution_node_id is Some(node_id) else {
     raise Failure::Failure("workload receipt has no execution node")
@@ -100,7 +129,13 @@ async fn ApiService::record_inference_charge(
   let before = self.commercial_store.durable_snapshot()
   try {
     ignore(self.commercial_store.ingest_usage(observation))
-    ignore(self.commercial_store.rate_usage(event_id, entry_id, rate, ended))
+    match rate {
+      Some(value) =>
+        ignore(
+          self.commercial_store.rate_usage(event_id, entry_id, value, ended),
+        )
+      None => ()
+    }
     self.persist_commercial_state()
   } catch {
     error => {

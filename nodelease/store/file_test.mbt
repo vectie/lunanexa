@@ -99,6 +99,104 @@ async test "expiry never releases a possibly provisioned node" {
 }
 
 ///|
+async test "paid activation persists one full interval after delayed preparation" {
+  let directory = @fs.tmpdir(prefix="lunanexa-paid-interval-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = directory + "/leases.json"
+  let store = @store.FileExclusiveLeaseStore::open(path, "lease-secret")
+  let intent = {
+    ..lease_intent("paid-1", "node-1", "paid-request"),
+    starts_unix_ms: 1000L,
+    expires_unix_ms: 11000L,
+  }
+  let reserved = store.issue(intent, 1000L)
+  let prepared = store.transition(
+    "paid-1",
+    {
+      expected_generation: reserved.generation,
+      state: Provisioning,
+      evidence_receipt: "node:drained",
+    },
+    2000L,
+  )
+  for duration in [0L, -1L, 31536000001L] {
+    try
+      store.transition(
+        "paid-1",
+        {
+          expected_generation: prepared.generation,
+          state: Active,
+          evidence_receipt: "node:ready",
+        },
+        9000L,
+        activation_duration_ms=duration,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("invalid activation duration accepted")
+    }
+    assert_eq(store.lease("paid-1"), Some(prepared))
+  }
+  try
+    store.transition(
+      "paid-1",
+      {
+        expected_generation: prepared.generation,
+        state: Active,
+        evidence_receipt: "node:ready",
+      },
+      11000L,
+      activation_duration_ms=10000L,
+    )
+  catch {
+    _ => ()
+  } noraise {
+    _ => fail("expired preparation must not activate")
+  }
+  assert_eq(store.lease("paid-1"), Some(prepared))
+  let active = store.transition(
+    "paid-1",
+    {
+      expected_generation: prepared.generation,
+      state: Active,
+      evidence_receipt: "node:ready",
+    },
+    9000L,
+    activation_duration_ms=10000L,
+  )
+  assert_eq(active.intent.starts_unix_ms, 9000L)
+  assert_eq(active.intent.expires_unix_ms, 19000L)
+  let view = @nodelease.customer_machine_view(
+    active,
+    Some(12000L),
+    12000L,
+    30000L,
+  )
+  assert_eq(view.expires_unix_ms, 19000L)
+  assert_eq(view.credential_handoff.valid_until_unix_ms, 19000L)
+  let reopened = @store.FileExclusiveLeaseStore::open(path, "lease-secret")
+  assert_eq(reopened.lease("paid-1"), Some(active))
+  try
+    reopened.transition(
+      "paid-1",
+      {
+        expected_generation: prepared.generation,
+        state: Active,
+        evidence_receipt: "node:ready",
+      },
+      10000L,
+      activation_duration_ms=10000L,
+    )
+  catch {
+    _ => ()
+  } noraise {
+    _ => fail("stale activation must not extend the interval")
+  }
+  assert_eq(reopened.lease("paid-1"), Some(active))
+}
+
+///|
 async test "expiry keeps even a reserved lease fenced until sanitization" {
   let directory = @fs.tmpdir(prefix="lunanexa-exclusive-reserved-expiry-")
   let store = @store.FileExclusiveLeaseStore::open(

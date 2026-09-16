@@ -8,6 +8,45 @@ test "enterprise lease model input is trimmed and empty entries are ignored" {
 }
 
 ///|
+test "demo one-time key walkthrough creates no authority and dismissal clears fixture" {
+  let portal = @enterprise_ui.demo_state()
+  let model : AppModel = {
+    endpoint: "https://unused.invalid",
+    token: "",
+    csrf_token: "",
+    subject_ref: "",
+    connecting: false,
+    bootstrap_started: true,
+    demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: { ..portal, route: AccountAccess, api_key_issue_open: true, },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (preview, _) = update(model, Portal(SubmitApiKeyIssue), emit)
+  assert_eq(preview.portal.api_keys, portal.api_keys)
+  assert_false(preview.portal.api_key_issue_open)
+  guard preview.portal.one_time_api_key_secret is Some(value) else {
+    fail("missing demo walkthrough")
+  }
+  assert_eq(value.secret, "DEMO-NOT-A-CREDENTIAL")
+  assert_true(
+    preview.portal.success_message
+    .unwrap_or("")
+    .contains("no API key was issued"),
+  )
+  let rendered = @enterprise_ui.render(preview.portal)
+  assert_true(rendered.contains("DEMO preview"))
+  assert_true(rendered.contains("cannot authorize any request"))
+  assert_true(rendered.contains("api-key-secret-dismiss"))
+  let (dismissed, _) = update(preview, Portal(DismissOneTimeApiKeySecret), emit)
+  assert_eq(dismissed.portal.one_time_api_key_secret, None)
+  assert_eq(dismissed.portal.api_keys, portal.api_keys)
+}
+
+///|
 test "enterprise demo lease submission never claims an operator mutation" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
@@ -21,7 +60,7 @@ test "enterprise demo lease submission never claims an operator mutation" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests },
+    portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let before = model.portal.lease_requests.length()
@@ -46,7 +85,7 @@ test "enterprise contract preview is reactive and generation fenced" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments },
+    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -94,7 +133,7 @@ test "demo machine termination mirrors the controller cleanup transition" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
+    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (begun, _) = update(
@@ -142,7 +181,7 @@ test "demo credential redemption is explicit and never contains a secret" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
+    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (redeemed, _) = update(
@@ -190,7 +229,7 @@ test "enterprise demo renews the selected effective contract packet" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments },
+    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -245,7 +284,7 @@ test "signed-out enterprise gate hides application navigation and actions" {
   assert_true(html.contains("Sign in or create an account"))
   assert_true(html.contains("bounded trial when trials are enabled"))
   assert_true(html.contains("href=\"/auth/oidc/start?audience=enterprise\""))
-  assert_true(html.contains("Development credential fallback"))
+  assert_false(html.contains("Development credential fallback"))
   assert_false(html.contains("session_token="))
   assert_false(html.contains("Enterprise navigation"))
   assert_false(html.contains("Request capacity"))
@@ -273,6 +312,10 @@ test "logout erases account key and one-time secret state and fences stale issue
         key_id: "key-new",
         display_name: "New integration",
         secret: "lnx_one_time",
+        allowed_models: ["text.default"],
+        api_base_url: None,
+        tenant_ref: "tenant-demo",
+        memory_ceiling_mib: Some(4096),
       }),
     },
   }
@@ -289,6 +332,7 @@ test "logout erases account key and one-time secret state and fences stale issue
   let issued : @enterprise_ui.IssuedApiKeyView = {
     credential: portal.api_keys[0],
     secret: "lnx_stale_secret",
+    api_base_url: None,
   }
   let (after_stale, _) = update(
     signed_out,
@@ -356,7 +400,7 @@ test "matching browser-session expiry clears the local session" {
     contract_preview_generation: 0L,
     portal: {
       ..portal,
-      machine_access: { ..portal.machine_access, now_unix_ms: 500L },
+      machine_access: { ..portal.machine_access, now_unix_ms: 500L, },
     },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -386,7 +430,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
     meter: "tokens",
     quantity: 10L,
     unit: "token",
-    amount: { minor_units: 12345L, currency: "CNY", scale: 2 },
+    amount: { minor_units: 12345L, currency: "CNY", scale: 2, },
     rate_card_id: "rate-one",
     rate_card_version: "v1",
     service_started_unix_ms: 1000L,
@@ -405,7 +449,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
       {
         ..entry,
         entry_id: "entry-two",
-        amount: { ..entry.amount, minor_units: 55L },
+        amount: { ..entry.amount, minor_units: 55L, },
         recorded_unix_ms: 4000L,
       },
     ],
@@ -417,7 +461,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
         ended_unix_ms: 2000L,
         billing_timezone: "UTC",
         entry_ids: ["entry-one", "entry-two"],
-        total: { minor_units: 12400L, currency: "CNY", scale: 2 },
+        total: { minor_units: 12400L, currency: "CNY", scale: 2, },
         finalized_unix_ms: 4000L,
         finalized_by: "billing-operator",
       },
@@ -451,7 +495,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
       {
         ..snapshot.finalized_periods[0],
         period_id: "period-two",
-        total: { minor_units: 2500L, currency: "USD", scale: 2 },
+        total: { minor_units: 2500L, currency: "USD", scale: 2, },
         finalized_unix_ms: 5000L,
       },
     ],
@@ -478,7 +522,7 @@ test "enterprise demo checkout requires an explicit provider-link click" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..portal, route: Costs },
+    portal: { ..portal, route: Costs, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (submitted, _) = update(model, Portal(SubmitPaymentCheckout), emit)
@@ -492,4 +536,308 @@ test "enterprise demo checkout requires an explicit provider-link click" {
   let html = @enterprise_ui.render(submitted.portal)
   assert_true(html.contains("Continue with payment provider"))
   assert_false(html.contains("location.assign"))
+}
+
+///|
+test "organization bootstrap honors an active saved choice and fails closed on ambiguity" {
+  let state = @enterprise_ui.demo_state()
+  let first = state.organizations[0]
+  let second : @enterprise_ui.SelfServiceOrganizationView = {
+    organization: {
+      ..first.organization,
+      organization_id: "org-second",
+      display_name: "Second organization",
+    },
+    membership: {
+      ..first.membership,
+      membership_id: "membership-second",
+      organization_id: "org-second",
+      tenant_ref: "tenant-second",
+    },
+    default_project_id: Some("project-second"),
+    verification: first.verification,
+  }
+  let organizations = [first, second]
+  assert_eq(
+    preferred_organization(organizations, "org-second").map(value => {
+      value.organization.organization_id
+    }),
+    Some("org-second"),
+  )
+  assert_eq(preferred_organization(organizations, ""), None)
+  assert_eq(
+    preferred_organization([first], "").map(value => {
+      value.organization.organization_id
+    }),
+    Some("org-northstar"),
+  )
+  let inactive = {
+    ..first,
+    membership: { ..first.membership, active: false, },
+  }
+  assert_eq(preferred_organization([inactive], "org-northstar"), None)
+}
+
+///|
+#warnings("-alert_unstable")
+test "authenticated users without a company reach organization self-service" {
+  let portal = {
+    ..@enterprise_ui.default_state(1000L),
+    route: SelfService,
+    membership: None,
+    self_service: {
+      ..@enterprise_ui.default_state(1000L).self_service,
+      step: Organization,
+    },
+  }
+  let model : AppModel = {
+    endpoint: "https://controller.example.test",
+    token: "lnxs_authenticated",
+    csrf_token: "csrf",
+    subject_ref: "user@example.test",
+    connecting: false,
+    bootstrap_started: true,
+    demo_mode: false,
+    session_generation: 1L,
+    session_expires_unix_ms: Some(100000L),
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("Create company"))
+  assert_true(html.contains("Join company"))
+  assert_false(html.contains("LunaNexa enterprise access"))
+}
+
+///|
+fn mock_machine_offering(
+  kind : @machinecommerce.MachineOfferingKind,
+) -> @machinecommerce.MachineOfferingView {
+  {
+    offering: {
+      offering_id: "offering-test",
+      sku: "gpu-test",
+      display_name: "Test GPU",
+      kind,
+      region: "cn-north-1",
+      accelerator_class: "NVIDIA Test GPU",
+      accelerator_count: 1L,
+      memory_mib: 16384L,
+      cpu_count: 16L,
+      meter: "machine-second",
+      unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
+      billing_quantum_seconds: 3600L,
+      minimum_duration_seconds: 86400L,
+      maximum_duration_seconds: 2592000L,
+      capacity_total: 2L,
+      allowed_model_template_refs: ["qwen"],
+      state: OfferingActive,
+      generation: 1L,
+      created_unix_ms: 1000L,
+      updated_unix_ms: 2000L,
+    },
+    availability: {
+      offering_id: "offering-test",
+      capacity_total: 2L,
+      capacity_reserved: 1L,
+      capacity_available: 1L,
+      observed_unix_ms: 3000L,
+    },
+  }
+}
+
+///|
+fn mock_machine_order(
+  state : @machinecommerce.MachineOrderState,
+) -> @machinecommerce.MachineOrder {
+  {
+    order_id: "machine-order-test",
+    idempotency_key: "order-create-test",
+    quote_id: "machine-quote-test",
+    tenant_ref: "tenant-test",
+    organization_id: "org-test",
+    project_id: "project-test",
+    purchaser_subject_ref: "subject-test",
+    offering_id: "offering-test",
+    offering_kind: DedicatedEndpoint,
+    quantity: 1L,
+    duration_seconds: 86400L,
+    unix_username: None,
+    requested_model_selector: Some("qwen3"),
+    model_template_ref: None,
+    quoted_total: { minor_units: 4800L, currency: "CNY", scale: 2, },
+    state,
+    generation: 3L,
+    payment_ref: Some("payment-test"),
+    payment_event_id: Some("payment-event-test"),
+    target_lease_ref: Some("lease-test"),
+    target_deployment_ref: Some("deployment-test"),
+    failure_code: if state == CompensationPending {
+      Some("CapacityUnavailableAfterPayment")
+    } else {
+      None
+    },
+    compensation_ref: None,
+    capacity_reserved: state == Provisioning || state == Active,
+    active_started_unix_ms: None,
+    last_metered_unix_ms: None,
+    ended_unix_ms: None,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 3000L,
+  }
+}
+
+///|
+test "machine quote request derives bare username and dedicated model without tenant claims" {
+  let state = @enterprise_ui.demo_state().self_service
+  let bare_offering = state.offerings
+    .iter()
+    .find_first(value => value.kind == BareGpu)
+    .unwrap()
+  let bare = machine_quote_intent(
+    {
+      ..state,
+      selected_product: Some(BareGpu),
+      selected_offering_id: bare_offering.offering_id,
+      project_id: " project-bare ",
+      unix_username: " alice ",
+      model_selector: "",
+      duration_hours: 24,
+    },
+    "quote-bare",
+    "request-bare",
+  )
+  assert_eq(bare.quantity, 1L)
+  assert_eq(bare.duration_seconds, 86400L)
+  assert_eq(bare.unix_username, Some("alice"))
+  assert_eq(bare.requested_model_selector, None)
+  let json = bare.to_json().stringify()
+  assert_false(json.contains("tenant_ref"))
+  assert_false(json.contains("organization_id"))
+  assert_false(json.contains("purchaser_subject_ref"))
+  let dedicated = machine_quote_intent(
+    { ..state, model_selector: " qwen3 ", },
+    "quote-dedicated",
+    "request-dedicated",
+  )
+  assert_eq(dedicated.unix_username, None)
+  assert_eq(dedicated.requested_model_selector, Some("qwen3"))
+  assert_eq(dedicated.model_template_ref, Some("qwen-template-v1"))
+}
+
+///|
+test "mock machine responses map inventory compensation and checkout without node identity" {
+  let raw_offering = mock_machine_offering(DedicatedEndpoint)
+  let offering = machine_offering_view(raw_offering)
+  assert_eq(offering.kind, DedicatedMaaS)
+  assert_eq(offering.regions, ["cn-north-1"])
+  assert_eq(offering.accelerator_count, 1)
+  assert_true(offering.available)
+  let order = machine_order_view(mock_machine_order(CompensationPending), [
+    offering,
+  ])
+  assert_eq(order.status, CompensationPending)
+  assert_eq(order.gpu_sku, "NVIDIA Test GPU")
+  assert_eq(order.region, "cn-north-1")
+  let checkout : @commercial_integrations.ExternalRecordView = {
+    record_id: "checkout-test",
+    organization_id: "org-test",
+    kind: Payment,
+    provider: "provider-test",
+    environment: "test",
+    external_ref_sha256: "sha256:" + "a".repeat(64),
+    state: Submitted,
+    expected_amount_minor: Some(4800L),
+    currency: Some("CNY"),
+    money_scale: Some(2),
+    expected_document_hash: None,
+    entitlement_transaction_ref_sha256: Some("sha256:" + "b".repeat(64)),
+    action_url: Some("https://pay.example.test/checkout"),
+    action_expires_unix_ms: Some(900000L),
+    updated_unix_ms: 3000L,
+  }
+  let mapped = machine_checkout_view(checkout)
+  assert_eq(mapped.state, "Submitted")
+  assert_eq(mapped.provider, "provider-test")
+  assert_eq(mapped.action_url, Some("https://pay.example.test/checkout"))
+}
+
+///|
+test "machine terms acceptance request binds the immutable document and hashed contexts" {
+  let terms : @enterprise_ui.SelfServiceTermsView = {
+    template_id: "machine-terms",
+    version: "v3",
+    locale: "zh-CN",
+    rendered_document_hash: "sha256:" + "c".repeat(64),
+    document_uri: "/docs/legal/machine-terms-v3.html",
+  }
+  let intent = machine_terms_acceptance_intent(
+    terms, "https://controller.example.test", "org-test", "terms-request-test",
+  )
+  assert_eq(intent.document_uri, "/docs/legal/machine-terms-v3.html")
+  assert_eq(intent.template_version, "v3")
+  assert_true(intent.presentation_context_hash.has_prefix("sha256:"))
+  assert_eq(intent.presentation_context_hash.length(), 71)
+  assert_true(intent.network_context_hash.has_prefix("sha256:"))
+  assert_eq(intent.network_context_hash.length(), 71)
+}
+
+///|
+test "machine order refresh recovers the newest submitted provider checkout URL" {
+  let order = machine_order_view(mock_machine_order(AwaitingPayment), [
+    machine_offering_view(mock_machine_offering(DedicatedEndpoint)),
+  ])
+  let digest = sha256_label("machine-order:" + order.order_id)
+  let pending : @commercial_integrations.ExternalRecordView = {
+    record_id: "checkout-pending",
+    organization_id: "org-test",
+    kind: Payment,
+    provider: "provider-test",
+    environment: "test",
+    external_ref_sha256: "sha256:" + "d".repeat(64),
+    state: Pending,
+    expected_amount_minor: Some(4800L),
+    currency: Some("CNY"),
+    money_scale: Some(2),
+    expected_document_hash: None,
+    entitlement_transaction_ref_sha256: Some(digest),
+    action_url: None,
+    action_expires_unix_ms: None,
+    updated_unix_ms: 1000L,
+  }
+  let submitted = {
+    ..pending,
+    record_id: "checkout-submitted",
+    state: Submitted,
+    action_url: Some("https://pay.example.test/resumed"),
+    action_expires_unix_ms: Some(900000L),
+    updated_unix_ms: 2000L,
+  }
+  guard checkout_for_order(Some(order), [pending, submitted]) is Some(checkout) else {
+    fail("expected correlated checkout")
+  }
+  assert_eq(checkout.state, "Submitted")
+  assert_eq(checkout.action_url, Some("https://pay.example.test/resumed"))
+  assert_eq(checkout_for_order(None, [submitted]), None)
+}
+
+///|
+test "organization mock response keeps verification provider action and redacted summary" {
+  let body = "{\"version\":\"lunanexa.enterprise-portal.v1\",\"organizations\":[{\"organization\":{\"organization_id\":\"org-test\",\"display_name\":\"Test Org\",\"state\":\"PendingVerification\"},\"membership\":{\"membership_id\":\"membership-test\",\"tenant_ref\":\"tenant-test\",\"organization_id\":\"org-test\",\"subject_ref\":\"subject-test\",\"roles\":[\"OrganizationAdministrator\",\"LegalSigner\",\"LeaseRequester\",\"Developer\"],\"active\":true,\"created_unix_ms\":\"1000\"},\"default_project_id\":\"project-test\",\"verification\":{\"required\":true,\"record\":{\"provider\":\"provider-test\",\"state\":\"Submitted\",\"action_url\":\"https://verify.example.test/start\",\"action_expires_unix_ms\":\"900000\",\"updated_unix_ms\":\"2000\"}}}]}"
+  let response : SelfServiceOrganizationsResponse = @json.from_json(
+    @json.parse(body),
+  )
+  assert_eq(response.organizations.length(), 1)
+  let organization = response.organizations[0]
+  assert_eq(organization.organization.state, PendingVerification)
+  guard organization.verification is Some(verification) &&
+    verification.record is Some(record) else {
+    fail("expected provider verification action")
+  }
+  assert_true(verification.required)
+  assert_eq(record.action_url, Some("https://verify.example.test/start"))
 }

@@ -24,7 +24,7 @@ pub struct FileExclusiveLeaseStore {
 
 ///|
 fn canonical_lease(lease : @nodelease.ExclusiveNodeLease) -> String {
-  { ..lease, authority_receipt: "" }.to_json().stringify()
+  { ..lease, authority_receipt: "", }.to_json().stringify()
 }
 
 ///|
@@ -47,7 +47,7 @@ fn sign_lease(
   lease : @nodelease.ExclusiveNodeLease,
   signing_secret : String,
 ) -> @nodelease.ExclusiveNodeLease {
-  { ..lease, authority_receipt: authority_receipt(lease, signing_secret) }
+  { ..lease, authority_receipt: authority_receipt(lease, signing_secret), }
 }
 
 ///|
@@ -249,80 +249,93 @@ pub async fn FileExclusiveLeaseStore::issue(
     raise LeaseExpired(intent.lease_id)
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.leases.copy()
-  try {
-    match self.by_idempotency_unlocked(intent.idempotency_key) {
-      Some(existing) if existing.intent == intent => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) => raise IdempotencyConflict(intent.idempotency_key)
-      None => ()
-    }
-    if self.leases.contains(intent.lease_id) {
-      raise DuplicateLease(intent.lease_id)
-    }
-    if self.node_blocked_unlocked(intent.node_id) {
-      raise NodeUnavailable(intent.node_id)
-    }
-    let lease = sign_lease(
-      {
-        intent,
-        state: Reserved,
-        generation: 1L,
-        created_unix_ms: now_unix_ms,
-        updated_unix_ms: now_unix_ms,
-        evidence_receipt: "controller:reserved",
-        authority_receipt: "",
-      },
-      self.signing_secret,
-    )
-    self.leases[intent.lease_id] = lease
-    self.persist()
-    self.mutex.release()
-    lease
-  } catch {
-    error => {
-      self.leases = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.leases = previous
   }
+  match self.by_idempotency_unlocked(intent.idempotency_key) {
+    Some(existing) if existing.intent == intent => return existing
+    Some(_) => raise IdempotencyConflict(intent.idempotency_key)
+    None => ()
+  }
+  if self.leases.contains(intent.lease_id) {
+    raise DuplicateLease(intent.lease_id)
+  }
+  if self.node_blocked_unlocked(intent.node_id) {
+    raise NodeUnavailable(intent.node_id)
+  }
+  let lease = sign_lease(
+    {
+      intent,
+      state: Reserved,
+      generation: 1L,
+      created_unix_ms: now_unix_ms,
+      updated_unix_ms: now_unix_ms,
+      evidence_receipt: "controller:reserved",
+      authority_receipt: "",
+    },
+    self.signing_secret,
+  )
+  self.leases[intent.lease_id] = lease
+  self.persist()
+  lease
 }
 
 ///|
+/// Persist and sign a generation-fenced lifecycle transition. A paid activation
+/// duration is valid only for an unexpired Provisioning-to-Active transition;
+/// it anchors the purchased interval at the accepted activation time atomically.
+/// Ordinary transitions preserve the original interval when the option is absent.
 pub async fn FileExclusiveLeaseStore::transition(
   self : FileExclusiveLeaseStore,
   lease_id : String,
   request : @nodelease.ExclusiveLeaseTransitionRequest,
   now_unix_ms : Int64,
+  activation_duration_ms? : Int64,
 ) -> @nodelease.ExclusiveNodeLease {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.leases.copy()
-  try {
-    guard self.leases.get(lease_id) is Some(lease) else {
-      raise LeaseNotFound(lease_id)
-    }
-    let transitioned = sign_lease(
-      lease.transition(
-        request.state,
-        request.expected_generation,
-        request.evidence_receipt,
-        now_unix_ms,
-      ),
-      self.signing_secret,
-    )
-    self.leases[lease_id] = transitioned
-    self.persist()
-    self.mutex.release()
-    transitioned
-  } catch {
-    error => {
-      self.leases = previous
-      self.mutex.release()
-      raise error
+  errdefer {
+    self.leases = previous
+  }
+  guard self.leases.get(lease_id) is Some(lease) else {
+    raise LeaseNotFound(lease_id)
+  }
+  let advanced = lease.transition(
+    request.state,
+    request.expected_generation,
+    request.evidence_receipt,
+    now_unix_ms,
+  )
+  let advanced = match activation_duration_ms {
+    None => advanced
+    Some(duration) => {
+      if lease.state != Provisioning ||
+        request.state != Active ||
+        now_unix_ms >= lease.intent.expires_unix_ms ||
+        duration <= 0L ||
+        duration > 31536000000L ||
+        now_unix_ms > 9223372036854775807L - duration {
+        raise @nodelease.ExclusiveLeaseError::InvalidIntent(
+          "invalid paid activation interval",
+        )
+      }
+      {
+        ..advanced,
+        intent: {
+          ..advanced.intent,
+          starts_unix_ms: now_unix_ms,
+          expires_unix_ms: now_unix_ms + duration,
+        },
+      }
     }
   }
+  let transitioned = sign_lease(advanced, self.signing_secret)
+  self.leases[lease_id] = transitioned
+  self.persist()
+  transitioned
 }
 
 ///|
@@ -392,48 +405,43 @@ pub async fn FileExclusiveLeaseStore::reconcile_expired(
   now_unix_ms : Int64,
 ) -> Bool {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.leases.copy()
   let mut changed = false
-  try {
-    for lease_id, lease in self.leases.copy() {
-      if now_unix_ms >= lease.intent.expires_unix_ms {
-        let next = match lease.state {
-          Requested => Some(@nodelease.ExclusiveLeaseState::Cancelled)
-          Reserved | Provisioning | Active => Some(Expiring)
-          Expiring
-          | Draining
-          | RevokingAccess
-          | Sanitizing
-          | Completed
-          | Cancelled
-          | Quarantined => None
-        }
-        if next is Some(state) {
-          self.leases[lease_id] = sign_lease(
-            lease.transition(
-              state,
-              lease.generation,
-              "controller:lease-expired",
-              now_unix_ms,
-            ),
-            self.signing_secret,
-          )
-          changed = true
-        }
+  errdefer {
+    self.leases = previous
+  }
+  for lease_id, lease in self.leases.copy() {
+    if now_unix_ms >= lease.intent.expires_unix_ms {
+      let next = match lease.state {
+        Requested => Some(@nodelease.ExclusiveLeaseState::Cancelled)
+        Reserved | Provisioning | Active => Some(Expiring)
+        Expiring
+        | Draining
+        | RevokingAccess
+        | Sanitizing
+        | Completed
+        | Cancelled
+        | Quarantined => None
+      }
+      if next is Some(state) {
+        self.leases[lease_id] = sign_lease(
+          lease.transition(
+            state,
+            lease.generation,
+            "controller:lease-expired",
+            now_unix_ms,
+          ),
+          self.signing_secret,
+        )
+        changed = true
       }
     }
-    if changed {
-      self.persist()
-    }
-    self.mutex.release()
-    changed
-  } catch {
-    error => {
-      self.leases = previous
-      self.mutex.release()
-      raise error
-    }
   }
+  if changed {
+    self.persist()
+  }
+  changed
 }
 
 ///|

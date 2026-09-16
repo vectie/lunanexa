@@ -32,6 +32,11 @@ docker build --platform linux/amd64 \
 docker build --platform linux/amd64 \
   --network host \
   "$@" \
+  --file images/Containerfile.identity-gateway \
+  --tag "lunanexa/identity-gateway:$tag" .
+docker build --platform linux/amd64 \
+  --network host \
+  "$@" \
   --file images/Containerfile.web \
   --tag "lunanexa/web:$tag" .
 docker build --platform linux/amd64 \

@@ -1,0 +1,947 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/shell",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+let root = "/data/models/.spark-preflight-20260914"
+
+///|
+let local_root = "/Users/kq/Workspace/aigc-spark-preflight"
+
+///|
+let target = "HwHiAiUser@106.39.18.146"
+
+///|
+suberror VerificationError {
+  ChecksumMismatch(String)
+}
+
+///|
+fn quote(s : String) -> String {
+  "'" + s.split("'").join("'\"'\"'") + "'"
+}
+
+///|
+fn remote(args : Array[String], input? : String = "") -> @shell.Cmd {
+  @shell.Cmd(
+    "ssh",
+    [
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=10",
+      "-p",
+      "32123",
+      target,
+      args.map(quote).join(" "),
+    ],
+    stdin=Text(input),
+  )
+}
+
+///|
+async fn read_remote(path : String) -> Json {
+  let out = remote(["cat", path]).output()
+  out.check()
+  @json.parse(out.stdout())
+}
+
+///|
+fn field(j : Json, key : String) -> Json raise {
+  guard j is Object(m) && m.get(key) is Some(v) else {
+    fail("missing field " + key)
+  }
+  v
+}
+
+///|
+fn string(j : Json) -> String raise {
+  guard j is String(s) else { fail("expected string") }
+  s
+}
+
+///|
+fn array(j : Json) -> Array[Json] raise {
+  guard j is Array(a) else { fail("expected array") }
+  a
+}
+
+///|
+fn digest(j : Json) -> String raise {
+  let value = string(j)
+  guard value is [.. "sha256:", .. tail] && tail.length() == 64 else {
+    fail("invalid digest")
+  }
+  let hex = tail.to_owned()
+  for c in hex {
+    if !(c is ('0'..='9' | 'a'..='f')) {
+      fail("invalid digest")
+    }
+  }
+  hex
+}
+
+///|
+async fn publish(name : String, value : Json) -> Unit {
+  let path = local_root + "/" + name.split("/").join("-")
+  @fs.write_file(path, value.stringify(indent=2) + "\n")
+  @shell.Cmd("scp", [
+    "-P",
+    "32123",
+    path,
+    target + ":" + root + "/" + name + ".next",
+  ]).run()
+  remote(["mv", root + "/" + name + ".next", root + "/" + name]).run()
+}
+
+///|
+async fn check_hashes(entries : Map[String, String], log_name : String) -> Unit {
+  let args = ["openssl", "dgst", "-sha256"]
+  let expected : Map[String, Unit] = Map([])
+  for path, hash in entries {
+    if path.contains("\n") || path.contains("\\") {
+      fail("unsafe checksum path")
+    }
+    args.push(path)
+    expected["SHA256(" + path + ")= " + hash] = ()
+  }
+  let lines : Array[String] = []
+  let code = remote(args).each_line(line => {
+    if !expected.contains(line) {
+      raise VerificationError::ChecksumMismatch(line)
+    }
+    expected.remove(line)
+    lines.push(line)
+    @fs.write_file(local_root + "/" + log_name, lines.join("\n") + "\n")
+    println("Hash verified \{lines.length()}/\{entries.length()}: " + line)
+  })
+  if code != 0 || expected.length() != 0 {
+    fail("checksum verification incomplete")
+  }
+  println("Verified \{entries.length()} hashes; " + log_name)
+}
+
+///|
+async fn images() -> Unit {
+  let base = root + "/images/blobs/sha256/"
+  let last = "5c04029b1239fd11e9779003e6bd46610f115cc00779d78227f6d4dd1a6fb2fd"
+  let exists = remote(["test", "-f", base + last]).status()
+  if exists != 0 {
+    check_hashes(
+      Map::from_array([(base + last + ".daocloud-download", last)]),
+      "last-layer-verification.log",
+    )
+    remote(["mv", "-n", base + last + ".daocloud-download", base + last]).run()
+  }
+  let plans = array(read_remote(root + "/images/plan.json"))
+  let hashes : Map[String, String] = Map([])
+  let blobs : Map[String, Json] = Map([])
+  let manifests : Array[Json] = []
+  for plan in plans {
+    let name = string(field(plan, "name"))
+    let top = digest(field(plan, "index_digest"))
+    let arm = digest(field(plan, "arm64_digest"))
+    hashes[base + top] = top
+    hashes[base + arm] = arm
+    let manifest = read_remote(base + arm)
+    let config = field(manifest, "config")
+    let descriptors = array(field(manifest, "layers"))
+    descriptors.push(config)
+    for item in descriptors {
+      let hash = digest(field(item, "digest"))
+      hashes[base + hash] = hash
+      blobs[hash] = item
+    }
+    let config_json = read_remote(base + digest(field(config, "digest")))
+    if string(field(config_json, "architecture")) != "arm64" ||
+      string(field(config_json, "os")) != "linux" {
+      fail("wrong platform: " + name)
+    }
+    let stat = remote(["stat", "-c", "%s", base + arm]).output()
+    stat.check()
+    let size = @json.parse(stat.stdout())
+    manifests.push({
+      "mediaType": field(manifest, "mediaType"),
+      "digest": field(plan, "arm64_digest"),
+      "size": size,
+      "platform": { "os": "linux", "architecture": "arm64" },
+      "annotations": { "org.opencontainers.image.ref.name": name },
+    })
+  }
+  check_hashes(hashes, "image-verification.log")
+  publish("images/oci-layout", { "imageLayoutVersion": "1.0.0" })
+  publish("images/index.json", { "schemaVersion": 2, "manifests": manifests })
+  publish("images/summary.json", {
+    "complete": true,
+    "verified_blobs": blobs.length(),
+    "total_blobs": blobs.length(),
+    "verified_manifest_and_blob_files": hashes.length(),
+    "platform": "linux/arm64",
+    "runtime_tested": false,
+  })
+  println("OCI layout ready; actual Spark execution remains unqualified")
+}
+
+///|
+async fn models() -> Unit {
+  let manifest = read_remote(root + "/modelscope-manifest.json")
+  let hashes : Map[String, String] = Map([])
+  for item in array(field(manifest, "files")) {
+    let path = string(field(item, "path"))
+    if path.contains("..") || path.has_prefix("/") {
+      fail("unsafe model path")
+    }
+    hashes[root + "/models/" + path] = string(field(item, "sha256"))
+  }
+  check_hashes(hashes, "model-verification.log")
+  publish("model-final-verification.json", {
+    "complete": true,
+    "verified_files": hashes.length(),
+    "hardware_tested": false,
+  })
+}
+
+///|
+async fn sources() -> Unit {
+  let hashes : Map[String, String] = Map([])
+  for item in array(read_remote(root + "/sources/archive-summary.json")) {
+    let path = string(field(item, "path"))
+    if !path.has_prefix(root + "/sources/") || path.contains("..") {
+      fail("unsafe archive path")
+    }
+    hashes[path] = string(field(item, "sha256"))
+    remote(["tar", "-tzf", path]).output().check()
+  }
+  check_hashes(hashes, "source-verification.log")
+  publish("source-final-verification.json", {
+    "complete": true,
+    "archive_checks": hashes.length(),
+    "hash_type": "download-receipt integrity, not publisher signature",
+  })
+}
+
+///|
+async fn wheels() -> Unit {
+  let listing = remote([
+    "find",
+    root + "/wheels",
+    "-type",
+    "f",
+    "-name",
+    "*.whl",
+    "-print",
+  ]).output()
+  listing.check()
+  let paths = listing
+    .stdout()
+    .split("\n")
+    .filter(p => p != "")
+    .map(p => p.to_owned())
+    .to_array()
+  let out = remote(
+    ["xargs", "-0", "-n", "1", "unzip", "-tq"],
+    input=paths.join("\u0000") + "\u0000",
+  ).output()
+  @fs.write_file(
+    local_root + "/wheel-verification.log",
+    out.stdout() + out.stderr(),
+  )
+  out.check()
+  publish("wheel-final-verification.json", {
+    "complete": true,
+    "zip_integrity_checked": paths.length(),
+    "spark_install_tested": false,
+  })
+}
+
+///|
+async fn offline(locked? : Bool = false) -> Unit {
+  let plans = [
+    (
+      "torch-cu130",
+      [
+        "torch==2.14.0+cu130", "torchvision==0.29.0+cu130", "torchaudio==2.11.0+cu130",
+      ],
+    ),
+    ("ray", ["ray[default]==2.56.1"]),
+    (
+      "comfy-tools",
+      [
+        "onnxruntime-gpu==1.29.0", "ninja", "packaging", "pip", "wheel", "setuptools",
+      ],
+    ),
+    (
+      "comfy-requirements",
+      [
+        "--constraint",
+        root + "/wheels/pytorch-pins.txt",
+        "-r",
+        root + "/sources/comfyui-local/requirements.txt",
+      ],
+    ),
+  ]
+  for plan in plans {
+    let (name, packages) = plan
+    let args = [
+      "env",
+      "PIP_CONFIG_FILE=/dev/null",
+      "PIP_EXTRA_INDEX_URL=",
+      "python3",
+      "-m",
+      "pip",
+      "install",
+      "--dry-run",
+      "--ignore-installed",
+      "--disable-pip-version-check",
+      "--no-index",
+      "--only-binary=:all:",
+      "--python-version",
+      "3.12",
+      "--implementation",
+      "cp",
+      "--abi",
+      "cp312",
+      "--report",
+      root + "/wheels/offline-" + name + ".json",
+    ]
+    for minor in 17..<=39 {
+      args.append(["--platform", "manylinux_2_\{minor}_aarch64"])
+    }
+    for platform in ["manylinux2014_aarch64", "linux_aarch64"] {
+      args.append(["--platform", platform])
+    }
+    args.append(["--find-links", root + "/wheels/" + name])
+    if name == "comfy-requirements" {
+      args.append(["--find-links", root + "/wheels/torch-cu130"])
+    }
+    if locked {
+      args.append([
+        "--require-hashes",
+        "-r",
+        root + "/wheels/requirements-offline-" + name + ".txt",
+      ])
+    } else {
+      args.append(packages)
+    }
+    let out = remote(args).output()
+    @fs.write_file(
+      local_root +
+      "/offline-" +
+      (if locked { "locked-" } else { "" }) +
+      name +
+      ".log",
+      out.stdout() + out.stderr(),
+    )
+    out.check()
+    println("Offline dependency resolution passed: " + name)
+  }
+  publish(
+    if locked {
+      "locked-offline-wheel-verification.json"
+    } else {
+      "offline-wheel-verification.json"
+    },
+    {
+      "complete": true,
+      "plans": 4,
+      "network_indexes_disabled": true,
+      "hash_lock_enforced": locked,
+      "note": "Cross-platform CPython 3.12 ARM64 resolution, not an actual Spark installation",
+    },
+  )
+}
+
+///|
+async fn archive() -> Unit {
+  let index = read_remote(root + "/images/index.json")
+  let paths : Array[String] = ["oci-layout", "index.json"]
+  let seen : Map[String, Unit] = Map([])
+  for item in array(field(index, "manifests")) {
+    let hash = digest(field(item, "digest"))
+    seen[hash] = ()
+    let manifest = read_remote(root + "/images/blobs/sha256/" + hash)
+    let descriptors = array(field(manifest, "layers"))
+    descriptors.push(field(manifest, "config"))
+    for descriptor in descriptors {
+      seen[digest(field(descriptor, "digest"))] = ()
+    }
+  }
+  for hash, _ in seen {
+    paths.push("blobs/sha256/" + hash)
+  }
+  remote(
+    [
+      "tar",
+      "-C",
+      root + "/images",
+      "-cf",
+      root + "/spark-arm64-images.oci.tar.next",
+      "--null",
+      "-T",
+      "-",
+    ],
+    input=paths.join("\u0000") + "\u0000",
+  ).run()
+  remote([
+    "mv",
+    root + "/spark-arm64-images.oci.tar.next",
+    root + "/spark-arm64-images.oci.tar",
+  ]).run()
+  let hash = remote(["sha256sum", root + "/spark-arm64-images.oci.tar"]).output()
+  hash.check()
+  @fs.write_file(
+    local_root + "/spark-arm64-images.oci.tar.sha256",
+    hash.stdout(),
+  )
+  @shell.Cmd("scp", [
+    "-P",
+    "32123",
+    local_root + "/spark-arm64-images.oci.tar.sha256",
+    target + ":" + root + "/spark-arm64-images.oci.tar.sha256",
+  ]).run()
+  println("Offline OCI archive ready")
+}
+
+///|
+async fn exports() -> Unit {
+  let index = read_remote(root + "/images/index.json")
+  let results : Array[Json] = []
+  for item in array(field(index, "manifests")) {
+    let name = string(
+      field(field(item, "annotations"), "org.opencontainers.image.ref.name"),
+    )
+    if name.contains("/") || name.contains("..") {
+      fail("unsafe image name")
+    }
+    let destination = root + "/exports/" + name
+    remote(["mkdir", "-p", destination]).run()
+    if remote(["test", "-d", destination + "/blobs"]).status() != 0 {
+      remote(["cp", "-al", root + "/images/blobs", destination + "/blobs"]).run()
+    }
+    let hash = digest(field(item, "digest"))
+    let manifest = read_remote(root + "/images/blobs/sha256/" + hash)
+    let config = "blobs/sha256/" +
+      digest(field(field(manifest, "config"), "digest"))
+    let layers = array(field(manifest, "layers")).map(layer => {
+      "blobs/sha256/" + digest(field(layer, "digest"))
+    })
+    let tag = "docker.io/lunanexa-cache/" + name + ":20260914"
+    publish("exports/" + name + "/index.json", {
+      "schemaVersion": 2,
+      "manifests": [
+        {
+          "mediaType": field(item, "mediaType"),
+          "digest": field(item, "digest"),
+          "size": field(item, "size"),
+          "platform": field(item, "platform"),
+          "annotations": { "org.opencontainers.image.ref.name": tag },
+        },
+      ],
+    })
+    publish("exports/" + name + "/oci-layout", { "imageLayoutVersion": "1.0.0" })
+    publish("exports/" + name + "/manifest.json", [
+      { "Config": config, "RepoTags": [tag], "Layers": layers },
+    ])
+    let paths : Array[String] = [
+      "oci-layout",
+      "index.json",
+      "manifest.json",
+      "blobs/sha256/" + hash,
+      config,
+    ]
+    for layer in layers {
+      if !paths.contains(layer) {
+        paths.push(layer)
+      }
+    }
+    let archive_path = "/home/HwHiAiUser/.cache/lunanexa-spark-exports-20260914/" +
+      name +
+      ".tar"
+    remote(
+      [
+        "tar",
+        "-C",
+        destination,
+        "-cf",
+        archive_path + ".next",
+        "--null",
+        "-T",
+        "-",
+      ],
+      input=paths.join("\u0000") + "\u0000",
+    ).run()
+    remote(["mv", archive_path + ".next", archive_path]).run()
+    let validation = remote([
+      root + "/tools/crane-v0.22.1/crane",
+      "validate",
+      "--fast",
+      "--tarball",
+      archive_path,
+    ]).output()
+    @fs.write_file(
+      local_root + "/archive-" + name + ".log",
+      validation.stdout() + validation.stderr(),
+    )
+    validation.check()
+    results.push({
+      "name": name,
+      "tag": tag,
+      "archive": archive_path,
+      "manifest_digest": field(item, "digest"),
+      "archive_metadata_validated": true,
+      "compressed_blob_hashes_validated": true,
+      "gpu_runtime_tested": false,
+    })
+    publish("exports/summary.json", results.to_json())
+    println("Import archive validated: " + name)
+  }
+}
+
+///|
+async fn selftest() -> Unit {
+  assert_eq(quote("a'b"), "'a'\"'\"'b'")
+  assert_eq(quote("a'b'c"), "'a'\"'\"'b'\"'\"'c'")
+  try digest("sha256:../../bad".to_json()) catch {
+    _ => ()
+  } noraise {
+    _ => fail("invalid digest accepted")
+  }
+  try field({ "present": 1 }, "absent") catch {
+    _ => ()
+  } noraise {
+    _ => fail("missing field accepted")
+  }
+  try
+    check_hashes(
+      Map::from_array([
+        (
+          root +
+          "/images/blobs/sha256/5c04029b1239fd11e9779003e6bd46610f115cc00779d78227f6d4dd1a6fb2fd",
+          "0000000000000000000000000000000000000000000000000000000000000000",
+        ),
+      ]),
+      "expected-failure.log",
+    )
+  catch {
+    VerificationError::ChecksumMismatch(_) =>
+      println("Expected checksum mismatch rejected")
+    other => raise other
+  } noraise {
+    _ => fail("checksum mismatch accepted")
+  }
+  println("Finalizer regression checks passed")
+}
+
+///|
+async fn locks() -> Unit {
+  for name in ["torch-cu130", "ray", "comfy-tools", "comfy-requirements"] {
+    let report = read_remote(root + "/wheels/offline-" + name + ".json")
+    let lines : Array[String] = [
+      "# CPython 3.12 linux/arm64; generated from verified offline pip resolution",
+    ]
+    for item in array(field(report, "install")) {
+      let metadata = field(item, "metadata")
+      let package_name = string(field(metadata, "name"))
+      let version = string(field(metadata, "version"))
+      let hash = string(
+        field(
+          field(field(field(item, "download_info"), "archive_info"), "hashes"),
+          "sha256",
+        ),
+      )
+      ignore(digest(("sha256:" + hash).to_json()))
+      for value in [package_name, version] {
+        if value.contains("\n") || value.contains(" ") || value.has_prefix("-") {
+          fail("unsafe requirement metadata")
+        }
+      }
+      lines.push(package_name + "==" + version + " --hash=sha256:" + hash)
+    }
+    let path = local_root + "/requirements-offline-" + name + ".txt"
+    @fs.write_file(path, lines.join("\n") + "\n")
+    @shell.Cmd("scp", [
+      "-P",
+      "32123",
+      path,
+      target + ":" + root + "/wheels/requirements-offline-" + name + ".txt",
+    ]).run()
+    println("Hashed offline lock written: " + name)
+  }
+}
+
+///|
+async fn source_trees() -> Unit {
+  let revisions : Map[String, String] = {
+    "spark-comfyui": "408a3d3c7c47725851358ec745efb255d5ff7316",
+    "single-spark": "7bd148f133e95733bb4994350cb34869a243440c",
+    "cfy": "e80c1570b6b44a2557d5d8e341e05782d18c9bbb",
+    "two-spark": "b2a1bf9414c78e5d98c67f0a625c16c03d3897cd",
+  }
+  for name, revision in revisions {
+    let path = root + "/sources/" + name
+    let head = remote(["git", "-C", path, "rev-parse", "HEAD"]).output()
+    head.check()
+    if head.stdout() != revision + "\n" {
+      fail("source revision changed: " + name)
+    }
+    let fsck = remote(["git", "-C", path, "fsck", "--no-reflogs"]).output()
+    if fsck.exit_code() != 0 {
+      fail("git fsck " + name + ": " + fsck.stderr() + fsck.stdout())
+    }
+    let status = remote(["git", "-C", path, "status", "--porcelain"]).output()
+    status.check()
+    if status.stdout() != "" {
+      fail("source checkout has local modifications: " + name)
+    }
+  }
+  let found = remote([
+    "find",
+    root + "/sources",
+    "-maxdepth",
+    "1",
+    "-type",
+    "f",
+    "-name",
+    "*.tar.gz",
+    "-print",
+  ]).output()
+  found.check()
+  let paths = found
+    .stdout()
+    .split("\n")
+    .filter(p => p != "")
+    .map(p => p.to_owned())
+    .to_array()
+  for path in paths {
+    let listing = remote(["tar", "-tzf", path]).output()
+    if listing.exit_code() != 0 {
+      fail("archive " + path + ": " + listing.stderr())
+    }
+  }
+  publish("source-tree-verification.json", {
+    "complete": true,
+    "clean_pinned_git_trees": revisions.length(),
+    "readable_archives": paths.length(),
+  })
+}
+
+///|
+fn number(j : Json) -> Double raise {
+  guard j is Number(n, ..) else { fail("expected number") }
+  n
+}
+
+///|
+async fn model_receipts() -> Unit {
+  let manifest = read_remote(root + "/modelscope-manifest.json")
+  let rehash : Map[String, String] = Map([])
+  let records : Array[Json] = []
+  for item in array(field(manifest, "files")) {
+    let relative = string(field(item, "path"))
+    if relative.contains("..") || relative.has_prefix("/") {
+      fail("unsafe model path")
+    }
+    let path = root + "/models/" + relative
+    let receipt = read_remote(
+      root + "/receipts/" + relative.split("/").join("__") + ".json",
+    )
+    if string(field(receipt, "state")) != "verified" ||
+      string(field(receipt, "path")) != path ||
+      field(receipt, "sha256") != field(item, "sha256") ||
+      field(receipt, "size") != field(item, "size") {
+      fail("model receipt mismatch: " + relative)
+    }
+    let stat = remote([
+      "stat", "-c", "{\"size\":%s,\"mtime\":%Y,\"ctime\":%Z}", path,
+    ]).output()
+    stat.check()
+    let current = @json.parse(stat.stdout())
+    if field(current, "size") != field(item, "size") {
+      fail("model size mismatch: " + relative)
+    }
+    let verified_at = match receipt {
+      { "verified_at": Number(n, ..), .. } => n
+      _ => 0.0
+    }
+    let changed = number(field(current, "mtime")) > verified_at ||
+      number(field(current, "ctime")) > verified_at
+    if changed {
+      rehash[path] = string(field(item, "sha256"))
+    }
+    records.push({
+      "path": relative,
+      "sha256": field(item, "sha256"),
+      "size": field(item, "size"),
+      "download_verified_at": verified_at,
+      "stat": current,
+      "needs_rehash": changed,
+    })
+  }
+  if rehash.length() > 0 {
+    check_hashes(rehash, "changed-model-verification.log")
+  }
+  publish("model-final-verification.json", {
+    "complete": true,
+    "verified_files": records.length(),
+    "reused_unchanged_sha256_receipts": records.length() - rehash.length(),
+    "freshly_rehashed_files": rehash.length(),
+    "verification_method": "match publisher-pinned manifest, original SHA256 receipt, current size and mtime/ctime; rehash changed files",
+    "files": records,
+    "hardware_tested": false,
+  })
+  println("Model receipts and current file state verified: \{records.length()}")
+}
+
+///|
+async fn main {
+  let mode = @env.args().last().unwrap_or("")
+  if ![
+      "images", "models", "sources", "wheels", "offline", "offline-locked", "archive",
+      "exports", "selftest", "locks", "source-trees", "model-receipts", "archive-checksums",
+      "cleanup-invalid", "retag-exports", "ready",
+    ].contains(mode) {
+    fail("unknown finalizer phase")
+  }
+  if mode != "ready" && mode != "selftest" {
+    publish("ready.json", {
+      "download_cache_ready": false,
+      "phase": mode,
+      "note": "Re-run the ready gate after this phase completes",
+      "started_unix_ms": @async.now().to_json(),
+    })
+  }
+  match mode {
+    "images" => images()
+    "models" => models()
+    "sources" => sources()
+    "wheels" => wheels()
+    "offline" => offline()
+    "offline-locked" => offline(locked=true)
+    "archive" => archive()
+    "exports" => exports()
+    "selftest" => selftest()
+    "locks" => locks()
+    "source-trees" => source_trees()
+    "model-receipts" => model_receipts()
+    "archive-checksums" => archive_checksums()
+    "cleanup-invalid" => cleanup_invalid()
+    "retag-exports" => retag_exports()
+    "ready" => ready()
+    _ =>
+      fail(
+        "choose images, models, sources, wheels, offline, archive, exports, or selftest",
+      )
+  }
+}
+
+///|
+async fn archive_checksums() -> Unit {
+  let entries = array(read_remote(root + "/exports/summary.json"))
+  if entries.length() != 5 {
+    fail("expected five import archives")
+  }
+  let args = ["openssl", "dgst", "-sha256"]
+  let names : Array[String] = []
+  for item in entries {
+    let name = string(field(item, "name"))
+    if name.contains("/") || name.contains("..") {
+      fail("unsafe archive name")
+    }
+    names.push(name)
+    args.push(string(field(item, "archive")))
+  }
+  let out = remote(args).output()
+  out.check()
+  let lines = out.stdout().split("\n").filter(s => s != "").to_array()
+  if lines.length() != names.length() {
+    fail("missing archive checksums")
+  }
+  let sums : Array[String] = []
+  for i, line in lines {
+    let parts = line.split("= ").to_array()
+    if parts.length() != 2 {
+      fail("invalid checksum output")
+    }
+    let hash = parts[1].to_owned()
+    ignore(digest(("sha256:" + hash).to_json()))
+    sums.push(hash + "  " + names[i] + ".tar")
+  }
+  @fs.write_file(local_root + "/SHA256SUMS", sums.join("\n") + "\n")
+  @shell.Cmd("scp", [
+    "-P",
+    "32123",
+    local_root + "/SHA256SUMS",
+    target +
+    ":/home/HwHiAiUser/.cache/lunanexa-spark-exports-20260914/SHA256SUMS",
+  ]).run()
+  println("All five archive transfer checksums written")
+}
+
+///|
+async fn cleanup_invalid() -> Unit {
+  let found = remote([
+    "find",
+    root + "/sources",
+    "-maxdepth",
+    "1",
+    "-type",
+    "f",
+    "-name",
+    "*.partial.invalid-*",
+    "-print",
+  ]).output()
+  found.check()
+  for view in found.stdout().split("\n") {
+    let path = view.to_owned()
+    if path == "" {
+      continue
+    }
+    if !path.has_prefix(root + "/sources/") || path.contains("..") {
+      fail("unsafe quarantine path")
+    }
+    let name = path.split("/").last().unwrap_or("").to_owned()
+    remote(["mv", "-n", path, root + "/quarantine/" + name]).run()
+    println("Quarantined old invalid source download: " + name)
+  }
+}
+
+///|
+async fn retag_exports() -> Unit {
+  let index = read_remote(root + "/images/index.json")
+  for item in array(field(index, "manifests")) {
+    let name = string(
+      field(field(item, "annotations"), "org.opencontainers.image.ref.name"),
+    )
+    if name.contains("/") || name.contains("..") {
+      fail("unsafe export name")
+    }
+    let tag = "docker.io/lunanexa-cache/" + name + ":20260914"
+    publish("exports/" + name + "/index.json", {
+      "schemaVersion": 2,
+      "manifests": [
+        {
+          "mediaType": field(item, "mediaType"),
+          "digest": field(item, "digest"),
+          "size": field(item, "size"),
+          "platform": field(item, "platform"),
+          "annotations": { "org.opencontainers.image.ref.name": tag },
+        },
+      ],
+    })
+    let archive_path = "/home/HwHiAiUser/.cache/lunanexa-spark-exports-20260914/" +
+      name +
+      ".tar"
+    remote(["cp", "--reflink=auto", archive_path, archive_path + ".retag-next"]).run()
+    remote([
+      "tar",
+      "--delete",
+      "--file",
+      archive_path + ".retag-next",
+      "index.json",
+    ]).run()
+    remote([
+      "tar",
+      "--append",
+      "--file",
+      archive_path + ".retag-next",
+      "-C",
+      root + "/exports/" + name,
+      "index.json",
+    ]).run()
+    let check = remote([
+      root + "/tools/crane-v0.22.1/crane",
+      "validate",
+      "--fast",
+      "--tarball",
+      archive_path + ".retag-next",
+    ]).output()
+    @fs.write_file(
+      local_root + "/retag-" + name + ".log",
+      check.stdout() + check.stderr(),
+    )
+    check.check()
+    remote(["mv", archive_path + ".retag-next", archive_path]).run()
+    println("OCI/Docker tags unified: " + tag)
+  }
+  publish("export-tags-verification.json", {
+    "complete": true,
+    "images": 5,
+    "tags": "docker.io/lunanexa-cache/<name>:20260914",
+  })
+}
+
+///|
+async fn ready() -> Unit {
+  let evidence : Map[String, Json] = Map([])
+  for
+    name in [
+      "images/summary.json", "model-final-verification.json", "wheel-final-verification.json",
+      "source-final-verification.json", "source-tree-verification.json", "locked-offline-wheel-verification.json",
+      "archive-full-verification.json", "export-tags-verification.json", "import-smoke.json",
+    ] {
+    let value = read_remote(root + "/" + name)
+    if !(value is { "complete": True, .. }) {
+      fail("incomplete gate: " + name)
+    }
+    evidence[name] = value
+  }
+  if number(field(evidence["images/summary.json"], "verified_blobs")) != 108.0 ||
+    number(field(evidence["model-final-verification.json"], "verified_files")) !=
+    26.0 ||
+    number(field(evidence["locked-offline-wheel-verification.json"], "plans")) !=
+    4.0 ||
+    number(
+      field(evidence["archive-full-verification.json"], "verified_archives"),
+    ) !=
+    5.0 ||
+    string(field(evidence["import-smoke.json"], "tag")) !=
+    "docker.io/lunanexa-cache/ubuntu-24.04:20260914" {
+    fail("unexpected preparation counts")
+  }
+  let exports = array(read_remote(root + "/exports/summary.json"))
+  if exports.length() != 5 {
+    fail("expected five exports")
+  }
+  let checksums = remote([
+    "cat", "/home/HwHiAiUser/.cache/lunanexa-spark-exports-20260914/SHA256SUMS",
+  ]).output()
+  checksums.check()
+  if checksums.stdout().split("\n").filter(s => s != "").count() != 5 {
+    fail("missing transfer checksums")
+  }
+  publish("ready.json", {
+    "download_cache_ready": true,
+    "completed_unix_ms": @async.now().to_json(),
+    "model_files": 26,
+    "model_bytes": 276854506911.0,
+    "image_blobs": 108,
+    "image_archives": 5,
+    "python_plans": 4,
+    "wheel_files_checked": field(
+      evidence["wheel-final-verification.json"],
+      "zip_integrity_checked",
+    ),
+    "model_verification": {
+      "reused_unchanged_receipts": field(
+        evidence["model-final-verification.json"],
+        "reused_unchanged_sha256_receipts",
+      ),
+      "freshly_rehashed": field(
+        evidence["model-final-verification.json"],
+        "freshly_rehashed_files",
+      ),
+    },
+    "archives": exports,
+    "sha256sums": checksums.stdout(),
+    "scope": "Offline download and cache preparation only; not production release evidence",
+    "gpu_model_deployment_tested": false,
+    "spark_hardware_tested": false,
+    "evidence_files": evidence.keys().to_array(),
+  })
+  println("Download/cache preparation gate COMPLETE")
+}

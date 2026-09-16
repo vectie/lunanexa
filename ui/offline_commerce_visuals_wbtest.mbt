@@ -48,7 +48,7 @@ test "offline commerce lifecycle localizes state and transition limits" {
     ChineseSimplified,
     OperatorCommerce,
   )
-  let state = { ..base, locale: ChineseSimplified, offline_commerce: commerce }
+  let state = { ..base, locale: ChineseSimplified, offline_commerce: commerce, }
   let html = render_offline_commerce_visual(
     offline_commerce_lifecycle_graph(state),
   )
@@ -70,7 +70,7 @@ test "offline commerce lifecycle escapes hostile current order evidence" {
   let order = commerce.orders[0]
   let hostile_commerce = {
     ..commerce,
-    orders: [{ ..order, order_id: hostile }],
+    orders: [{ ..order, order_id: hostile, }],
     selected_order_id: Some(hostile),
   }
   let html = render_offline_commerce_visual(

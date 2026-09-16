@@ -14,6 +14,8 @@ pub fn operation_transition_allowed(DeploymentOperationState, DeploymentOperatio
 
 pub fn preflight(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContext) -> DeploymentPlan
 
+pub fn preflight_on_node(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContext, String) -> DeploymentPlan
+
 pub fn validate_intent(ModelServiceIntent) -> Unit raise DeploymentError
 
 pub fn validate_template(ModelServiceTemplate, require_signature? : Bool) -> Unit raise DeploymentError

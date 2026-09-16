@@ -43,10 +43,10 @@ flowchart TB
     end
 
     subgraph Compute["DGX Spark workers"]
-      D1["DGX 1 · node agent · Podman"]
-      D2["DGX 2 · node agent · Podman"]
-      D3["DGX 3 · node agent · Podman"]
-      D4["DGX 4 · node agent · Podman"]
+      D1["DGX 1 · node agent · Kubernetes/containerd"]
+      D2["DGX 2 · node agent · Kubernetes/containerd"]
+      D3["DGX 3 · node agent · Kubernetes/containerd"]
+      D4["DGX 4 · node agent · Kubernetes/containerd"]
     end
 
     C <-->|"desired state and heartbeat"| D1
@@ -77,7 +77,7 @@ verified and cached locally before its runtime container starts.
 | DGX heartbeat, sensor telemetry and assignment reconciliation | Implemented | Deploy one protected agent per DGX with allowlisted `nvidia-smi` |
 | Selected-node model pull and local verification | Implemented | Controller serves only the object bound to the live node assignment from `/data/models` |
 | Batch jobs and autoscaling | Intentionally absent | Capacity is an explicitly inventoried fleet; operator placement and backpressure are explicit |
-| Digest-pinned runtime supervision | Implemented | Requires Podman/Docker, an OCI registry and an approved runtime image |
+| Digest-pinned runtime supervision | Implemented | Select Kubernetes/containerd on an existing cluster, or the legacy OCI engine adapter; requires a registry and an approved runtime image |
 | Controller/node transport mTLS termination | External | Provide a trusted service-mesh or loopback proxy; do not expose controller HTTP directly |
 | Exclusive lease reservation and managed-placement fence | Implemented | Safe for control-plane testing |
 | Exclusive lease watchdog and helper protocol | Implemented | Persists signed generation, expires offline, reports provision/revoke/sanitize/quarantine evidence |
@@ -295,6 +295,20 @@ lunanexa-node
 lunanexa-node.service
 admin-settings.json
 ```
+
+The Kubernetes DaemonSet now selects `LUNANEXA_RUNTIME_BACKEND=kubernetes`
+and does not mount a Podman/containerd socket. Include the reviewed resources
+from `deploy/node-kubernetes-rbac.yaml` in the management prerequisites before
+installing compute agents; the compute-only installer does not implicitly create
+those namespaces or permissions. Render the ServiceAccount namespaces for the
+selected cluster namespace. Provision a private per-node
+`/etc/lunanexa/kubernetes-runtime.json` from
+`deploy/kubernetes-runtime.example.json`, matching the actual node identity,
+agent UID, model cache root and controller source addresses. The agent receives
+a rotating projected Kubernetes token, not a cluster-admin kubeconfig.
+Keep the runtime namespace dedicated to managed inference. This new backend
+still requires live allocation, serving and failure-fencing acceptance before
+production promotion; source-level support is not deployment evidence.
 
 Each protected per-node directory for that layout additionally contains
 `node.env`, `lunanexa-controller-tunnel.service`, `tunnel-identity`, and
@@ -727,23 +741,59 @@ Each DGX needs:
 
 - a unique, stable Kubernetes node name such as `dgx-spark-01`;
 - the NVIDIA driver/toolkit required by the approved runtime image;
-- Podman or Docker at an allowlisted path;
-- a protected engine socket at `unix:///run/podman/podman.sock` or an approved
-  equivalent below `/run`;
+- the existing Kubernetes/containerd runtime and NVIDIA DRA device class
+  `gpu.nvidia.com` for the managed Kubernetes backend; no additional Podman or
+  Docker daemon/socket is required for that backend;
 - the root-owned `/usr/libexec/lunanexa-lease-helper` and unprivileged fixed
   client `/usr/libexec/lunanexa-lease-helper-client` for the recommended host
   systemd deployment, or a separately reviewed socket adapter when the node
   agent runs in Kubernetes;
-- a pre-created OCI network named `lunanexa-runtime`;
+- a dedicated managed-runtime namespace, scoped Kubernetes API credentials,
+  and reviewed controller-to-runtime network routes;
 - host directories `/etc/lunanexa` and `/var/lib/lunanexa`;
 - network access to the controller, artifact HTTPS endpoint, OCI registry and
   approved runtime route only;
 - synchronized time. Heartbeats outside the controller replay window are
   rejected.
 
-The supplied DaemonSet uses host paths for configuration, state and the Podman
-socket. Confirm that its non-root process identity can read the configuration
-files, write `/var/lib/lunanexa`, and access only the intended engine socket.
+The supplied DaemonSet selects `LUNANEXA_RUNTIME_BACKEND=kubernetes`, uses host
+paths for configuration/state and a projected Kubernetes token, and does not
+mount an engine socket. Confirm that its non-root process identity can read the
+configuration files and write the pre-created `/var/lib/lunanexa` directory.
+Prepare `deploy/node-kubernetes-rbac.yaml` and the per-node
+`deploy/kubernetes-runtime.example.json`; node identity and model-cache paths
+must match the agent configuration. The Role grants create/get/delete for
+Pods, NetworkPolicies and ResourceClaimTemplates in the dedicated runtime
+namespace, plus patch for Pods. The adapter restricts PATCH to a UID-conditional
+`activeDeadlineSeconds=1` stop request; it does not expose arbitrary patching.
+Upgrade this Role before the node binary. Stop/expiry first asks kubelet to end
+the workload, retains the Pod until explicit original-container exit reports
+are durable, then deletes resources. A missing Pod is not exit proof and may
+require operator investigation; never clear its journal to release capacity.
+Serving Pods receive neither this API token nor model-download
+credentials. Model bytes are materialized and verified before a read-only
+file mount is exposed to the runtime.
+
+`controller_addresses` contains exact private IPv4 **source addresses seen by
+the runtime**, not merely the management host's advertised address. For a
+host-based controller, inspect `ip route get POD_IP`: an overlay route can select
+a different source address. Validate actual connectivity and allow only the
+required `/32` sources and runtime port; do not open the whole Pod CIDR to fix a
+connection failure. A Pod's readiness probe does not prove that the controller
+can reach it. Controller source addresses can be updated in the persisted
+runtime journal only after all owned resources have been confirmed deleted;
+the owner nonce, node identity, namespace and cache boundaries are retained.
+Drain through the controller and wait for cleanup before changing this policy.
+Never remove the journal to bypass ownership checks.
+
+The legacy `oci` backend remains available for explicitly selected standalone
+deployments; only that backend requires an allowlisted Podman/Docker engine,
+protected socket and pre-created `lunanexa-runtime` network. It is not a
+prerequisite for the managed Kubernetes/containerd path.
+
+Run the [managed-runtime acceptance checklist](KUBERNETES_RUNTIME_ACCEPTANCE.md)
+before treating runtime readiness as customer-facing delivery evidence.
+
 Exclusive-machine actions are explicitly disabled in this DaemonSet with
 `LUNANEXA_EXCLUSIVE_LEASES_ENABLED=0`: the bundled sudo client is for the host
 systemd layout and is not runnable from a non-root pod. Do not change that flag
@@ -823,6 +873,45 @@ redirect for another HTTPS origin is rejected even while the issuer health
 evidence is current.
 
 ### Desktop WebIDE one-click integration
+
+Multiple approved WebIDEs (for example a code editor and a hosted ComfyUI
+launch bridge) may coexist. Set `LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON` to an
+array of `ClientLaunchConfig` objects; the first entry remains the legacy
+`GET /v1/portal/self/client` default. The portal uses authenticated
+`GET /v1/portal/self/clients` to select one client. IDs are unique, the catalog
+is bounded to 32 entries, and each client's handoff/redemption uses its own
+deployment-owned launch and API URLs. Unknown/removed clients fail closed.
+
+Example configuration shape (placeholders, not a running ComfyUI service):
+
+```json
+[
+  {
+    "client_id": "desktop-workspace",
+    "display_name": "Desktop WebIDE",
+    "launch_uri": "http://127.0.0.1:4188/?mode=mooncode",
+    "public_api_base_url": "https://gateway.example/v1",
+    "handoff_lifetime_ms": 120000,
+    "maximum_requests": 100000
+  },
+  {
+    "client_id": "comfyui",
+    "display_name": "ComfyUI",
+    "launch_uri": "https://creative.example/connect",
+    "public_api_base_url": "https://gateway.example/v1",
+    "handoff_lifetime_ms": 120000,
+    "maximum_requests": 100000
+  }
+]
+```
+
+Do not set the ComfyUI launch URI to its raw `8188` listener: it must be a
+qualified single-use handoff bridge with workspace isolation, lease-aware HTTP
+and WebSocket access, and server-side model credentials. Catalog `ready` reports
+existing access prerequisites, not runtime/process health. See
+[managed media generation](MEDIA_GENERATION.md) for the separate hosted-client
+and physical media-runtime acceptance gates. No production catalog entry is
+automatically added by this change.
 
 Set these controller values in the production overlay:
 
@@ -1071,6 +1160,8 @@ The `lunanexa-control-credentials` Secret must provide:
 - `monitoring-token`;
 - `assignment-signing-secret`;
 - `catalog-signing-secret`;
+- `machine-commerce-signing-secret` (at least 32 random bytes, used only to
+  bind tenant, SKU, model, price and expiry into immutable machine quotes);
 - `exclusive-lease-signing-secret`;
 - `provider-callback-secret` (at least 32 random bytes, independent of every
   other signing authority);
@@ -1132,6 +1223,16 @@ are rejected. Partial configuration keeps `/v1/readiness` red with
 fail closed. Never reuse this token as an operator, inference, callback,
 credential-issuer or node authority.
 
+The same adapter contract carries `PaymentRefund` requests created by machine
+order compensation. Treat that kind as a refund of the named settled payment,
+not as another checkout. Submit the action receipt, then complete compensation
+only through an authenticated `Refunded` callback. The controller deliberately
+keeps capacity reserved until that callback. Before publishing machine commerce,
+also seed one legally reviewed current `machine-self-service` agreement template
+with an immutable readable `document_uri`, and approved active offerings through
+`POST /v1/machine-commerce/operator/offerings`. See
+[the self-service machine runbook](SELF_SERVICE_MACHINE_ORDERING.md).
+
 Configure `LUNANEXA_CREDENTIAL_ISSUER_ADAPTER_TOKEN` independently. The issuer
 pulls `GET /internal/v1/credential-issuer/requests` and posts the origin-bound
 ceremony receipt to
@@ -1141,6 +1242,18 @@ for `credential_broker_configured=true`; repository code or an operator-entered
 redirect alone never makes production readiness green.
 
 ### TLS and Cosign trust
+
+For node agents with read-only root filesystems or no public egress, mount
+administrator-validated Sigstore trusted material and set
+`LUNANEXA_COSIGN_TRUSTED_ROOT_PATH` to its absolute file path. The node passes
+that reference explicitly to `cosign verify-blob --trusted-root`, alongside the
+configured public key and bundle. This avoids implicit writable TUF cache
+initialization; it does not disable bundle or transparency-log verification.
+Refresh the mounted trusted material through the deployment's verified trust
+update process. Do not put tenant-supplied trust files in this location.
+When omitted, Cosign retains its default trust-loading behavior, which may
+require a writable cache and network access. The reference is optional for
+backward compatibility, not a claim that the default works in a read-only Pod.
 
 Provision:
 
@@ -1163,6 +1276,14 @@ relay sidecar on port 8081 forwards signed identity to `127.0.0.1:8080`, while
 ordinary `lnxs_` and `lnx_` bearer calls use the stripped direct API path. The
 static-token path remains only for CLI, automation, localhost, and the
 explicitly local development foundation.
+
+For users without a corporate directory, deploy the LunaNexa-operated Keycloak
+26.7.3 profile described in
+[`PLATFORM_IDENTITY.md`](PLATFORM_IDENTITY.md). The profile provisions open
+registration, verified email, recovery, TOTP and the exact operator/enterprise
+OIDC clients on a separate identity namespace. It requires a digest-pinned
+Keycloak image, external HA PostgreSQL, SMTP, TLS and a reviewed identity
+gateway; none of those external runtime checks is replaced by manifest tests.
 
 ## 8. Prepare each selected compute host
 
@@ -1205,6 +1326,7 @@ Example inventory for `dgx-spark-01`:
     }
   ],
   "labels": {
+    "lunanexa.io/region": "cn-east-1",
     "lunanexa.models": "model.text@v1",
     "lunanexa.warm-models": "",
     "lunanexa.data-classes": "Public,Internal,Confidential",
@@ -1219,6 +1341,9 @@ Inventory must be generated from the real host. Do not copy memory or device
 values from this example without verifying them. Live utilization, used/total
 GPU memory, maximum temperature and aggregate power come from the fixed
 `nvidia-smi` sensor query; labels cannot override those measurements.
+`lunanexa.io/region` is a trusted placement input for customer machine SKUs.
+Missing or mismatched region labels make that node unavailable to quoting; a
+customer can never supply or override this label.
 
 ## 9. Render and apply the management plane
 

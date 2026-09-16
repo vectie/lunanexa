@@ -441,13 +441,19 @@ async fn send_heartbeat(
   inventory : @contracts.NodeInventory,
   agent : @node_agent.NodeAgent,
 ) -> Unit {
+  let runtime_endpoints = agent.runtime_endpoints(@async.now())
   let unsigned : @contracts.NodeHeartbeat = {
     node_id,
     state: agent.state(),
     observed_generation: agent.observed_generation(),
     controller_epoch: agent.controller_epoch(),
-    inventory,
+    inventory: @node_agent.collect_linux_host_resources().inventory(inventory),
     running_deployments: agent.running_deployments(),
+    runtime_endpoints: if runtime_endpoints.is_empty() {
+      None
+    } else {
+      Some(runtime_endpoints)
+    },
     timestamp_unix_ms: @async.now(),
     signature: "",
   }
@@ -499,7 +505,7 @@ async fn reconcile_once(
   inventory : @contracts.NodeInventory,
   agent : @node_agent.NodeAgent,
   verifier : @node_agent.SharedSecretAssignmentVerifier,
-  supervisor : @node_agent.OciRuntimeSupervisor,
+  supervisor : @node_agent.ManagedRuntimeSupervisor,
   materializer : @node_agent.ArtifactMaterializer,
   artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
   state_path : String,
@@ -511,7 +517,8 @@ async fn reconcile_once(
   lease_receipt_stale_after_ms : Int64,
   telemetry_limits : @settings.TelemetrySafetySettings,
 ) -> Unit {
-  if exclusive_leases_enabled {
+  if exclusive_leases_enabled &&
+    supervisor.retained_artifact_digests().is_empty() {
     reconcile_exclusive_lease(
       base, node_id, token, lease_helper, lease_guard, lease_state_path, lease_receipt_stale_after_ms,
     )
@@ -550,6 +557,7 @@ async fn reconcile_once(
   let desired_ids = [
     for assignment in assignments => assignment.assignment_id
   ]
+  supervisor.remove_absent(desired_ids)
   for assignment_id in agent.remove_absent(desired_ids) {
     supervisor.stop(assignment_id)
   }
@@ -568,17 +576,22 @@ async fn reconcile_once(
             assignment.assignment_id,
             instance.observed_state,
           )
+          if instance.endpoint is Some(endpoint) {
+            if !agent.observe_runtime_endpoint(endpoint, @async.now()) {
+              agent.observe_runtime(assignment.assignment_id, Failed)
+            }
+          }
         }
       } catch {
         _ => agent.observe_runtime(assignment.assignment_id, Failed)
       }
     }
   }
-  materializer.prune_unassigned(
-    [
-      for assignment in assignments => assignment.artifact.digest
-    ],
-  )
+  let retained = [ for assignment in assignments => assignment.artifact.digest ]
+  for digest in supervisor.retained_artifact_digests() {
+    retained.push(digest)
+  }
+  materializer.prune_unassigned(retained)
   persist_agent(state_path, agent)
   send_heartbeat(base, node_id, token, inventory, agent)
   let timestamp_unix_ms = @async.now()
@@ -703,6 +716,12 @@ async fn reconcile_once(
 
 ///|
 async fn main {
+  if @env.args().length() == 2 && @env.args()[1] == "--inspect-host-resources" {
+    println(
+      ToJson::to_json(@node_agent.collect_linux_host_resources()).stringify(),
+    )
+    return
+  }
   let global_settings = load_global_admin_settings()
   let base = environment("LUNANEXA_ENDPOINT")
   if !base.has_prefix("https://") &&
@@ -738,12 +757,11 @@ async fn main {
       "/etc/lunanexa/assignment-verification-key",
     ),
   )
-  let supervisor = @node_agent.OciRuntimeSupervisor::new(
-    environment("LUNANEXA_CONTAINER_ENGINE"),
-    environment("LUNANEXA_RUNTIME_NETWORK"),
-    environment("LUNANEXA_CONTAINER_ENGINE_ENDPOINT"),
-    pid_limit=global_settings.node_runtime.container_pid_limit,
+  let supervisor = load_runtime_supervisor(
+    node_id,
+    global_settings.node_runtime.container_pid_limit,
   )
+  defer supervisor.close()
   let maximum_artifact_size_bytes = @env.get_env_var(
       "LUNANEXA_ARTIFACT_MAX_SIZE_BYTES",
     )
@@ -798,10 +816,20 @@ async fn main {
         "unsupported LUNANEXA_ARTIFACT_TRANSPORT: \{value}",
       )
   }
-  let artifact_verifier = @node_agent.CosignArtifactSignatureVerifier::new(
-    environment("LUNANEXA_COSIGN_BINARY"),
-    environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
-  )
+  let artifact_verifier = match
+    @env.get_env_var("LUNANEXA_COSIGN_TRUSTED_ROOT_PATH") {
+    Some(path) =>
+      @node_agent.CosignArtifactSignatureVerifier::new(
+        environment("LUNANEXA_COSIGN_BINARY"),
+        environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
+        trusted_root_path=path,
+      )
+    None =>
+      @node_agent.CosignArtifactSignatureVerifier::new(
+        environment("LUNANEXA_COSIGN_BINARY"),
+        environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
+      )
+  }
   let lease_state_path = @env.get_env_var("LUNANEXA_LEASE_STATE_PATH").unwrap_or(
     "lunanexa-exclusive-lease-agent.json",
   )
@@ -818,38 +846,101 @@ async fn main {
         "LUNANEXA_EXCLUSIVE_LEASES_ENABLED must be exactly 0 or 1",
       )
   }
-  while true {
-    try {
-      ensure_certificate(
-        base,
-        node_id,
-        token,
-        certificate_path,
-        public_key_ref,
-        global_settings.control_timing.node_certificate_renewal_lead_ms,
-      )
-      reconcile_once(
-        base,
-        node_id,
-        token,
-        inventory,
-        agent,
-        verifier,
-        supervisor,
-        materializer,
-        artifact_verifier,
-        state_path,
-        lease_helper,
-        exclusive_leases_enabled,
-        lease_guard,
-        lease_state_path,
-        global_settings.control_timing.materialization_heartbeat_interval_ms,
-        global_settings.control_timing.lease_receipt_stale_after_ms,
-        global_settings.telemetry_safety,
-      )
-    } catch {
-      _ => println("LunaNexa node reconciliation failed; retrying")
+  @async.with_task_group(group => {
+    if supervisor is @node_agent.Kubernetes(kubernetes) {
+      // Independent delivery: a failed report must not block probes, heartbeats
+      // or local lease enforcement. The durable outbox retains failed batches.
+      group.spawn_bg(() => {
+        let termination_cursor = Ref(0)
+        while true {
+          send_pending_terminations(
+            kubernetes, base, node_id, token, termination_cursor,
+          ) catch {
+            _ =>
+              println("LunaNexa termination evidence remains pending delivery")
+          }
+          @async.sleep(5000)
+        }
+      })
+      group.spawn_bg(() => {
+        while true {
+          try {
+            let observations = kubernetes.probe_assignments(
+              agent.snapshot().assignments,
+            )
+            for observation in observations {
+              agent.observe_runtime(
+                observation.assignment_id,
+                observation.state,
+              )
+              if observation.endpoint is Some(endpoint) {
+                if !agent.observe_runtime_endpoint(endpoint, @async.now()) {
+                  agent.observe_runtime(observation.assignment_id, Failed)
+                }
+              }
+            }
+          } catch {
+            _ =>
+              println(
+                "LunaNexa runtime probes unavailable; route observations expire fail-closed",
+              )
+          }
+          @async.sleep(1000)
+        }
+      })
     }
-    @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)
-  }
+    group.spawn_bg(() => {
+      while true {
+        if supervisor is @node_agent.Kubernetes(_) {
+          for assignment_id in agent.reap_expired(@async.now()) {
+            supervisor.stop(assignment_id) catch {
+              _ =>
+                println(
+                  "LunaNexa expired runtime stop failed; retaining Kubernetes cleanup intent",
+                )
+            }
+          }
+        }
+        supervisor.reap_expired(@async.now()) catch {
+          _ =>
+            println("LunaNexa runtime cleanup failed; retaining cleanup intent")
+        }
+        @async.sleep(1000)
+      }
+    })
+    while true {
+      try {
+        ensure_certificate(
+          base,
+          node_id,
+          token,
+          certificate_path,
+          public_key_ref,
+          global_settings.control_timing.node_certificate_renewal_lead_ms,
+        )
+        reconcile_once(
+          base,
+          node_id,
+          token,
+          inventory,
+          agent,
+          verifier,
+          supervisor,
+          materializer,
+          artifact_verifier,
+          state_path,
+          lease_helper,
+          exclusive_leases_enabled,
+          lease_guard,
+          lease_state_path,
+          global_settings.control_timing.materialization_heartbeat_interval_ms,
+          global_settings.control_timing.lease_receipt_stale_after_ms,
+          global_settings.telemetry_safety,
+        )
+      } catch {
+        _ => println("LunaNexa node reconciliation failed; retrying")
+      }
+      @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)
+    }
+  })
 }

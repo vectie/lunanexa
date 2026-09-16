@@ -1,0 +1,123 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/media/jobs"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub let schema_version : String
+
+// Errors
+pub(all) suberror JobError {
+  InvalidInput
+  InvalidSnapshot
+  NotFound
+  Conflict
+  Busy
+  InvalidTransition
+  CapacityExceeded
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct AcceptedTermination {
+  node_id : String
+  evidence : @contracts.RuntimeTermination
+} derive(Eq, ToJson, @json.FromJson)
+pub fn AcceptedTermination::reference(Self) -> String
+
+pub(all) enum Authority {
+  DedicatedOrder(String)
+  PrivateWorkspace(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ExecutionContext {
+  deployment_id : String
+  generation : Int64
+  node_id : String
+  instance_id : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct JobStore {
+  mut jobs : Map[String, StoredJob]
+  mut terminations : Array[AcceptedTermination]
+  persist : async (Snapshot) -> Unit
+  mutex : @async.Mutex
+  maximum_jobs : Int
+}
+pub async fn JobStore::accept_termination(Self, AcceptedTermination) -> Unit
+pub async fn JobStore::acknowledge_deletion(Self, String, Owner, String, Int64) -> StoredJob
+pub async fn JobStore::acknowledge_instance_termination(Self, String, Owner, String, ExecutionContext, String, Int64, Int64) -> StoredJob
+pub async fn JobStore::attach_provider(Self, String, Owner, String, Int64) -> StoredJob
+pub async fn JobStore::begin_submission(Self, String, Owner, Int64) -> StoredJob
+pub async fn JobStore::cancel(Self, String, Owner, Bool, Int64) -> StoredJob
+pub async fn JobStore::context_for_binding(Self, String) -> ExecutionContext?
+pub async fn JobStore::get(Self, String, Owner) -> StoredJob
+pub async fn JobStore::observe(Self, String, Owner, State, Int?, Int64) -> StoredJob
+pub async fn JobStore::record_usage(Self, String, Owner, String) -> StoredJob
+pub async fn JobStore::remember_execution(Self, String, ExecutionContext) -> Unit
+pub async fn JobStore::reserve(Self, Owner, String, String, String, String, Int64, Int64, Int64, maximum_active? : Int, maximum_per_hour? : Int, execution_context? : ExecutionContext) -> (StoredJob, Bool)
+pub async fn JobStore::restore(Snapshot, async (Snapshot) -> Unit, maximum_jobs? : Int) -> Self
+pub async fn JobStore::snapshot(Self) -> Snapshot
+pub async fn JobStore::submission_unknown(Self, String, Owner, Int64) -> StoredJob
+pub async fn JobStore::termination_for_context(Self, ExecutionContext) -> AcceptedTermination?
+
+pub(all) struct Owner {
+  tenant_ref : String
+  subject_ref : String
+  organization_id : String
+  project_id : String
+  authority : Authority
+} derive(Eq)
+pub impl ToJson for Owner
+pub impl @json.FromJson for Owner
+
+pub(all) struct Snapshot {
+  schema_version : String
+  jobs : Array[StoredJob]
+  terminations : Array[AcceptedTermination]?
+} derive(Eq, ToJson, @json.FromJson)
+
+pub(all) enum State {
+  Intent
+  Submitting
+  SubmissionUnknown
+  Queued
+  Running
+  Completed
+  Failed
+  Cancelling
+  Cancelled
+  Expired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct StoredJob {
+  job_id : String
+  owner : Owner
+  request_digest : String
+  idempotency_digest : String
+  model : String
+  deployment_id : String
+  execution_context : ExecutionContext?
+  provider_job_id : String?
+  state : State
+  progress : Int?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+  deadline_unix_ms : Int64
+  retain_until_unix_ms : Int64
+  expiry_requested : Bool
+  execution_terminal : Bool
+  terminal_unix_ms : Int64?
+  usage_receipt : String?
+  termination_evidence_ref : String?
+  termination_observed_unix_ms : Int64?
+} derive(Eq, ToJson, @json.FromJson)
+pub fn StoredJob::public_view(Self, Int64) -> Json
+
+// Type aliases
+
+// Traits

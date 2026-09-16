@@ -22,6 +22,7 @@ pub(all) struct CancellationReceipt {
 
 ///|
 pub struct ApiService {
+  media : MediaService?
   global_settings : @settings.GlobalAdminSettings
   store : @store.FileStore
   account_store : @account.AccountStore?
@@ -33,6 +34,7 @@ pub struct ApiService {
   open_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
+  private_cloud_workspace_access : Bool
   management_database : @database.PostgresDatabase?
   technical_store : @technical_store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
@@ -40,6 +42,7 @@ pub struct ApiService {
   commercial_mutex : @async.Mutex
   inference_rate_card : @commercial.RateCard?
   offline_commerce_store : @offline_store.OfflineCommerceStore?
+  machine_commerce_store : @machinecommerce_store.MachineCommerceStore?
   contract_document_store : @contractdoc_store.ContractDocumentStore?
   contract_document_worker_token : String
   // Four-eyes approval threshold in CNY minor units: operator execute/close on
@@ -51,6 +54,7 @@ pub struct ApiService {
   credential_issuer_adapter_token : String?
   client_handoff_store : @client_handoff_store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
+  additional_client_launch_configs : Array[@client_handoff.ClientLaunchConfig]
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -129,6 +133,7 @@ pub fn ApiService::new(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -136,6 +141,8 @@ pub fn ApiService::new(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -145,6 +152,7 @@ pub fn ApiService::new(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -172,7 +180,7 @@ pub fn ApiService::new(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -221,6 +229,7 @@ pub fn ApiService::with_registry(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -228,6 +237,8 @@ pub fn ApiService::with_registry(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -237,6 +248,7 @@ pub fn ApiService::with_registry(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -264,7 +276,7 @@ pub fn ApiService::with_registry(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -314,6 +326,7 @@ pub fn ApiService::with_services(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -321,6 +334,8 @@ pub fn ApiService::with_services(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -330,6 +345,7 @@ pub fn ApiService::with_services(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -357,7 +373,7 @@ pub fn ApiService::with_services(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -409,6 +425,7 @@ pub fn ApiService::with_control_plane(
     open_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
+    private_cloud_workspace_access: false,
     management_database: None,
     technical_store: None,
     commercial_store: @commercial.CommercialStore::new(),
@@ -416,6 +433,8 @@ pub fn ApiService::with_control_plane(
     commercial_mutex: Mutex(),
     inference_rate_card: None,
     offline_commerce_store: None,
+    machine_commerce_store: None,
+    media: None,
     contract_document_store: None,
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
@@ -425,6 +444,7 @@ pub fn ApiService::with_control_plane(
     credential_issuer_adapter_token: None,
     client_handoff_store: None,
     client_launch_config: None,
+    additional_client_launch_configs: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -452,7 +472,7 @@ pub fn ApiService::with_control_plane(
     monitoring_token: operator_token,
     assignment_signing_secret: node_token,
     artifact_root: None,
-    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2 },
+    exclusive_lease_unit_price: { minor_units: 0L, currency: "CNY", scale: 2, },
     provider_callback_secrets: Map([]),
     commercial_provider_adapter_token: None,
     commercial_provider_name: None,
@@ -507,7 +527,7 @@ pub fn ApiService::with_retired_bootstrap_operator_token(
   self : ApiService,
   enabled : Bool,
 ) -> ApiService {
-  { ..self, retire_bootstrap_operator_token: enabled }
+  { ..self, retire_bootstrap_operator_token: enabled, }
 }
 
 ///|
@@ -518,7 +538,7 @@ pub fn ApiService::with_account_store(
   account_store : @account.AccountStore,
   identity_assertion_secret : String,
 ) -> ApiService {
-  { ..self, account_store: Some(account_store), identity_assertion_secret }
+  { ..self, account_store: Some(account_store), identity_assertion_secret, }
 }
 
 ///|
@@ -528,7 +548,7 @@ pub fn ApiService::with_access_onboarding_store(
   self : ApiService,
   store : @onboarding.AccessOnboardingStore,
 ) -> ApiService {
-  { ..self, access_onboarding_store: Some(store) }
+  { ..self, access_onboarding_store: Some(store), }
 }
 
 ///|
@@ -567,7 +587,7 @@ pub fn ApiService::with_workspace_directory(
   directory : @directory.FileWorkspaceDirectory,
   require_workspace_lease : Bool,
 ) -> ApiService {
-  { ..self, workspace_directory: Some(directory), require_workspace_lease }
+  { ..self, workspace_directory: Some(directory), require_workspace_lease, }
 }
 
 ///|
@@ -577,7 +597,7 @@ pub fn ApiService::with_access_store(
   self : ApiService,
   access_store : @access.AccessStore,
 ) -> ApiService {
-  { ..self, access_store: Some(access_store) }
+  { ..self, access_store: Some(access_store), }
 }
 
 ///|
@@ -587,7 +607,7 @@ pub fn ApiService::with_access_store(
 pub fn ApiService::with_legacy_unbound_access_for_local_testing(
   self : ApiService,
 ) -> ApiService {
-  { ..self, allow_legacy_unbound_access: true }
+  { ..self, allow_legacy_unbound_access: true, }
 }
 
 ///|
@@ -621,7 +641,7 @@ pub fn ApiService::with_inference_rate_card(
     rate_card.effective_until_unix_ms <= rate_card.effective_from_unix_ms {
     raise Failure("invalid inference rate card")
   }
-  { ..self, inference_rate_card: Some(rate_card) }
+  { ..self, inference_rate_card: Some(rate_card), }
 }
 
 ///|
@@ -630,7 +650,16 @@ pub fn ApiService::with_offline_commerce_store(
   self : ApiService,
   offline_commerce_store : @offline_store.OfflineCommerceStore,
 ) -> ApiService {
-  { ..self, offline_commerce_store: Some(offline_commerce_store) }
+  { ..self, offline_commerce_store: Some(offline_commerce_store), }
+}
+
+///|
+/// Enables the durable machine catalog, quote, payment and order authority.
+pub fn ApiService::with_machine_commerce_store(
+  self : ApiService,
+  machine_commerce_store : @machinecommerce_store.MachineCommerceStore,
+) -> ApiService {
+  { ..self, machine_commerce_store: Some(machine_commerce_store), }
 }
 
 ///|
@@ -639,7 +668,7 @@ pub fn ApiService::with_contract_document_store(
   self : ApiService,
   contract_document_store : @contractdoc_store.ContractDocumentStore,
 ) -> ApiService {
-  { ..self, contract_document_store: Some(contract_document_store) }
+  { ..self, contract_document_store: Some(contract_document_store), }
 }
 
 ///|
@@ -669,7 +698,7 @@ pub fn ApiService::with_contract_document_worker_token(
     token == self.inference_token {
     self
   } else {
-    { ..self, contract_document_worker_token: token }
+    { ..self, contract_document_worker_token: token, }
   }
 }
 
@@ -714,7 +743,7 @@ pub fn ApiService::with_entitlement_authority_callback_token(
     self.artifact_scanner_callback_token == Some(token) {
     self
   } else {
-    { ..self, entitlement_authority_callback_token: Some(token) }
+    { ..self, entitlement_authority_callback_token: Some(token), }
   }
 }
 
@@ -883,7 +912,7 @@ pub fn ApiService::with_technical_store(
   self : ApiService,
   technical_store : @technical_store.TechnicalStore,
 ) -> ApiService {
-  { ..self, technical_store: Some(technical_store) }
+  { ..self, technical_store: Some(technical_store), }
 }
 
 ///|
@@ -893,7 +922,7 @@ pub fn ApiService::with_deployment_store(
   deployment_store : @deployment_store.FileDeploymentStore,
   available_secret_refs? : Array[String] = [],
 ) -> ApiService {
-  { ..self, deployment_store: Some(deployment_store), available_secret_refs }
+  { ..self, deployment_store: Some(deployment_store), available_secret_refs, }
 }
 
 ///|
@@ -903,7 +932,7 @@ pub fn ApiService::with_exclusive_lease_store(
   self : ApiService,
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore,
 ) -> ApiService {
-  { ..self, exclusive_lease_store: Some(exclusive_lease_store) }
+  { ..self, exclusive_lease_store: Some(exclusive_lease_store), }
 }
 
 ///|
@@ -912,7 +941,7 @@ pub fn ApiService::with_credential_handoff_store(
   self : ApiService,
   credential_handoff_store : @credential_store.CredentialHandoffStore,
 ) -> ApiService {
-  { ..self, credential_handoff_store: Some(credential_handoff_store) }
+  { ..self, credential_handoff_store: Some(credential_handoff_store), }
 }
 
 ///|
@@ -927,7 +956,7 @@ pub fn ApiService::with_credential_issuer_adapter_token(
       "credential issuer adapter token must contain 32 to 4096 bytes",
     )
   }
-  { ..self, credential_issuer_adapter_token: Some(token) }
+  { ..self, credential_issuer_adapter_token: Some(token), }
 }
 
 ///|
@@ -945,6 +974,28 @@ pub fn ApiService::with_client_handoff_store(
     ..self,
     client_handoff_store: Some(client_handoff_store),
     client_launch_config: Some(client_launch_config),
+    additional_client_launch_configs: [],
+  }
+}
+
+///|
+/// Configures multiple approved WebIDE launch bridges while preserving the
+/// first entry as the legacy /self/client default.
+pub fn ApiService::with_client_launch_catalog(
+  self : ApiService,
+  configs : Array[@client_handoff.ClientLaunchConfig],
+) -> ApiService raise Failure {
+  guard self.client_handoff_store is Some(_) &&
+    @client_handoff.valid_client_launch_catalog(configs) &&
+    configs.get(0) is Some(first) else {
+    raise Failure(
+      "client launch catalog is invalid or handoff store is missing",
+    )
+  }
+  {
+    ..self,
+    client_launch_config: Some(first),
+    additional_client_launch_configs: configs[1:].to_owned(),
   }
 }
 
@@ -958,7 +1009,7 @@ pub fn ApiService::with_lease_helper_receipt_secret(
   if secret.length() < 32 {
     raise Failure("lease helper receipt secret must contain at least 32 bytes")
   }
-  { ..self, lease_helper_receipt_secret: secret }
+  { ..self, lease_helper_receipt_secret: secret, }
 }
 
 ///|
@@ -974,7 +1025,7 @@ pub fn ApiService::with_machine_helper_adapter_evidence(
     ) {
     raise Failure("machine helper adapter evidence is invalid")
   }
-  { ..self, machine_helper_adapter_evidence: Some(evidence) }
+  { ..self, machine_helper_adapter_evidence: Some(evidence), }
 }
 
 ///|
@@ -986,7 +1037,7 @@ pub fn ApiService::with_guide_diagnostics_token(
   if token.length() < 32 {
     raise Failure("guide diagnostics token must contain at least 32 bytes")
   }
-  { ..self, guide_diagnostics_token: token }
+  { ..self, guide_diagnostics_token: token, }
 }
 
 ///|
@@ -996,7 +1047,7 @@ pub fn ApiService::with_portal_store(
   self : ApiService,
   portal_store : @portal_store.FilePortalStore,
 ) -> ApiService {
-  { ..self, portal_store: Some(portal_store) }
+  { ..self, portal_store: Some(portal_store), }
 }
 
 ///|
@@ -1005,7 +1056,7 @@ pub fn ApiService::with_notification_store(
   self : ApiService,
   notification_store : @notification_store.NotificationStore,
 ) -> ApiService {
-  { ..self, notification_store: Some(notification_store) }
+  { ..self, notification_store: Some(notification_store), }
 }
 
 ///|
@@ -1014,7 +1065,7 @@ pub fn ApiService::with_observability_store(
   self : ApiService,
   observability_store : @observability.ObservabilityStore,
 ) -> ApiService {
-  { ..self, observability_store: Some(observability_store) }
+  { ..self, observability_store: Some(observability_store), }
 }
 
 ///|
@@ -1023,7 +1074,7 @@ pub fn ApiService::with_notification_delivery_adapter_configured(
   self : ApiService,
   configured : Bool,
 ) -> ApiService {
-  { ..self, notification_delivery_adapter_configured: configured }
+  { ..self, notification_delivery_adapter_configured: configured, }
 }
 
 ///| Marks the external collector configured only after deployment explicitly
@@ -1034,7 +1085,7 @@ pub fn ApiService::with_external_observability_collector_configured(
   self : ApiService,
   configured : Bool,
 ) -> ApiService {
-  { ..self, external_observability_collector_configured: configured }
+  { ..self, external_observability_collector_configured: configured, }
 }
 
 ///| Installs the single-purpose collector-to-sink proof authority. Metrics and
@@ -1048,7 +1099,7 @@ pub fn ApiService::with_external_export_proof_token(
   if token.length() < 32 || token.length() > 4096 {
     return self
   }
-  { ..self, external_export_proof_token: token }
+  { ..self, external_export_proof_token: token, }
 }
 
 ///|
@@ -1056,7 +1107,7 @@ pub fn ApiService::with_signature_verifier(
   self : ApiService,
   verifier : @registry.CosignVerifier,
 ) -> ApiService {
-  { ..self, signature_verifier: Some(verifier) }
+  { ..self, signature_verifier: Some(verifier), }
 }
 
 ///|
@@ -1064,7 +1115,7 @@ pub fn ApiService::with_reconciliation_only(
   self : ApiService,
   enabled : Bool,
 ) -> ApiService {
-  { ..self, reconciliation_only: enabled }
+  { ..self, reconciliation_only: enabled, }
 }
 
 ///|
@@ -1073,7 +1124,7 @@ pub fn ApiService::with_role_tokens(
   audit_token : String,
   monitoring_token : String,
 ) -> ApiService {
-  { ..self, audit_token, monitoring_token }
+  { ..self, audit_token, monitoring_token, }
 }
 
 ///|
@@ -1081,7 +1132,7 @@ pub fn ApiService::with_assignment_signing_secret(
   self : ApiService,
   secret : String,
 ) -> ApiService {
-  { ..self, assignment_signing_secret: secret }
+  { ..self, assignment_signing_secret: secret, }
 }
 
 ///|
@@ -1091,7 +1142,7 @@ pub fn ApiService::with_artifact_root(
   self : ApiService,
   artifact_root : String,
 ) -> ApiService {
-  { ..self, artifact_root: Some(artifact_root) }
+  { ..self, artifact_root: Some(artifact_root), }
 }
 
 ///| Configures the fixed price per exclusive machine-second used for the
@@ -1114,7 +1165,7 @@ pub fn ApiService::with_exclusive_lease_unit_price(
       unit_price.scale,
     ),
   )
-  { ..self, exclusive_lease_unit_price: unit_price }
+  { ..self, exclusive_lease_unit_price: unit_price, }
 }
 
 ///| Installs transport-authentication secrets keyed by `provider|environment`.
@@ -1130,7 +1181,7 @@ pub fn ApiService::with_provider_callback_secrets(
       raise Failure::Failure("invalid provider callback secret configuration")
     }
   }
-  { ..self, provider_callback_secrets: secrets }
+  { ..self, provider_callback_secrets: secrets, }
 }
 
 ///|
@@ -1222,7 +1273,7 @@ async fn ApiService::cache_result(
 fn topology_free_workload_response(
   response : @contracts.WorkloadResponse,
 ) -> @contracts.WorkloadResponse {
-  { ..response, execution_node_id: None }
+  { ..response, execution_node_id: None, }
 }
 
 ///|
@@ -1293,7 +1344,7 @@ priv struct VerificationRequest {
 
 ///|
 fn json_reply(status : Int, value : Json) -> HttpReply {
-  { status, body: value.stringify(), content_type: "application/json" }
+  { status, body: value.stringify(), content_type: "application/json", }
 }
 
 ///|
@@ -1502,7 +1553,7 @@ async fn ApiService::next_audit(
     previous_hash,
     event_hash: "",
   }
-  { ..event, event_hash: @store.audit_event_hash(event) }
+  { ..event, event_hash: @store.audit_event_hash(event), }
 }
 
 ///|
@@ -1651,7 +1702,7 @@ async fn ApiService::managed_scheduler_node(
   )
   match self.exclusive_lease_store {
     Some(leases) if leases.node_blocks_managed_placement(heartbeat.node_id) =>
-      { ..snapshot, state: Cordoned }
+      { ..snapshot, state: Cordoned, }
     _ => snapshot
   }
 }
@@ -1690,6 +1741,7 @@ fn placement_runtime_estimate_ms(
 async fn ApiService::schedule_and_admit(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
+  required_deployment_id : String?,
 ) -> (HttpReply?, Array[String]) {
   let now = @async.now()
   let budgets = self.global_settings.request_budgets
@@ -1726,6 +1778,18 @@ async fn ApiService::schedule_and_admit(
       Some(
         api_error(
           409, "NoPlacement", "model selector has no approved schedulable target",
+          false,
+        ),
+      ),
+      [],
+    )
+  }
+  if required_deployment_id is Some(_) &&
+    !self.runtime.uses_direct_node_routing() {
+    return (
+      Some(
+        api_error(
+          503, "DedicatedRoutingUnavailable", "the serving adapter cannot enforce dedicated deployment routing",
           false,
         ),
       ),
@@ -1777,6 +1841,9 @@ async fn ApiService::schedule_and_admit(
             assignment.runtime.name == target.runtime.name &&
             assignment.runtime.version == target.runtime.version &&
             assignment.runtime.image_digest == target.runtime.image_digest &&
+            required_deployment_id.map_or(true, required => {
+              assignment.deployment_id == required
+            }) &&
             assignment.lease_expires_unix_ms > now &&
             heartbeat.running_deployments.any(deployment_id => {
               deployment_id == assignment.deployment_id
@@ -2234,7 +2301,21 @@ async fn ApiService::invoke_workload(
     }
     None => ()
   }
-  let (admission_error, routing_nodes) = self.schedule_and_admit(request)
+  let (dedicated_order, binding_error) = self.dedicated_order_binding(
+    authority,
+    Some(request.model_selector),
+    @async.now(),
+  )
+  if binding_error is Some(reply) {
+    return reply
+  }
+  let required_deployment_id = match dedicated_order {
+    Some(order) => order.target_deployment_ref
+    None => None
+  }
+  let (admission_error, routing_nodes) = self.schedule_and_admit(
+    request, required_deployment_id,
+  )
   if admission_error is Some(reply) {
     return reply
   }
@@ -2369,7 +2450,7 @@ async fn ApiService::invoke_workload(
         )
         self.store.commit_workload(
           idempotency_key,
-          { ..response, output: None },
+          { ..response, output: None, },
           audit,
         )
       })
@@ -2429,7 +2510,7 @@ async fn ApiService::invoke_workload(
     )
     self.store.commit_workload(
       idempotency_key,
-      { ..response, output: None },
+      { ..response, output: None, },
       audit,
     )
   })
@@ -2651,7 +2732,27 @@ async fn ApiService::stream_workload(
     connection.end_response()
     return
   }
-  let (admission_error, routing_nodes) = self.schedule_and_admit(request)
+  let (dedicated_order, binding_error) = self.dedicated_order_binding(
+    authority,
+    Some(request.model_selector),
+    @async.now(),
+  )
+  if binding_error is Some(reply) {
+    connection.send_response(reply.status, reason(reply.status), extra_headers={
+      "Content-Type": reply.content_type,
+      "Cache-Control": "no-store",
+    })
+    connection.write_string(reply.body)
+    connection.end_response()
+    return
+  }
+  let required_deployment_id = match dedicated_order {
+    Some(order) => order.target_deployment_ref
+    None => None
+  }
+  let (admission_error, routing_nodes) = self.schedule_and_admit(
+    request, required_deployment_id,
+  )
   if admission_error is Some(reply) {
     connection.send_response(reply.status, reason(reply.status), extra_headers={
       "Content-Type": reply.content_type,
@@ -2897,7 +2998,7 @@ async fn ApiService::stream_workload(
     )
     self.store.commit_workload(
       idempotency_key,
-      { ..response, output: None },
+      { ..response, output: None, },
       audit,
     )
   })
@@ -2967,6 +3068,14 @@ async fn ApiService::dispatch_with_transport(
   if access_onboarding_path(path) {
     return self.handle_access_onboarding(verb, path, headers, body)
   }
+  if path == "/v1/portal/self/trial/workloads" {
+    if verb != Post {
+      return api_error(
+        405, "MethodNotAllowed", "trial invocation requires POST", false,
+      )
+    }
+    return self.invoke_trial_session(headers, body)
+  }
   if account_path(path) {
     return self.handle_accounts(
       verb, path, headers, body, allow_asserted_subject,
@@ -2975,11 +3084,22 @@ async fn ApiService::dispatch_with_transport(
   if access_management_path(path) {
     return self.handle_access_management(verb, path, headers, body)
   }
-  if openai_compatibility_path(path) {
+  if openai_compatibility_path(path) && !(verb == Post && path == "/v1/models") {
     return self.handle_openai_compatibility(verb, path, headers, body)
+  }
+  if path == "/v1/videos" || path.has_prefix("/v1/videos/") {
+    return self.handle_media(verb, path, headers, body)
+  }
+  if path.has_prefix("/v1/media/operator/") {
+    return self.handle_media_operator(verb, path, headers, body)
   }
   if client_handoff_path(path) {
     return self.handle_client_handoff(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
+  if machine_commerce_path(path) {
+    return self.handle_machine_commerce(
       verb, path, headers, body, allow_asserted_subject,
     )
   }
@@ -3299,7 +3419,40 @@ async fn ApiService::dispatch_with_transport(
       } noraise {
         value => value
       }
-      json_reply(200, view.to_json())
+      let allowed_models : Array[String] = []
+      if view.authorized &&
+        self.account_store is Some(accounts) &&
+        accounts.active_trial_for_subject(subject_ref, @async.now())
+        is Some(trial) {
+        for model in trial.allowed_models {
+          allowed_models.push(model)
+        }
+      }
+      if view.authorized &&
+        self.access_store is Some(access) &&
+        view.active_lease is Some(lease) {
+        for
+          credential in access.views_for_subject(lease.tenant_ref, subject_ref) {
+          if credential.revoked_unix_ms is None &&
+            credential.expires_unix_ms > @async.now() &&
+            credential.scopes.contains(Inference) &&
+            credential.consumed_requests < credential.maximum_requests {
+            for model in credential.allowed_models {
+              if !allowed_models.contains(model) {
+                allowed_models.push(model)
+              }
+            }
+          }
+        }
+      }
+      let projection = view.to_json()
+      guard projection is Object(fields) else {
+        return api_error(
+          500, "InvalidProjection", "workspace projection is unavailable", false,
+        )
+      }
+      fields["allowed_models"] = allowed_models.to_json()
+      json_reply(200, projection)
     }
     (Post, "/v1/workspace/users") => {
       if !self.operator_authorized(headers) {
@@ -3853,6 +4006,8 @@ async fn ApiService::dispatch_with_transport(
       )
       json_reply(200, certificate.to_json())
     }
+    (Post, "/v1/nodes/runtime-terminations") =>
+      self.accept_runtime_terminations(headers, body)
     (Put, "/v1/nodes/heartbeat") => {
       guard decode_heartbeat(body) is Some(heartbeat) else {
         return api_error(400, "InvalidRequest", "invalid node heartbeat", false)
@@ -3891,6 +4046,12 @@ async fn ApiService::dispatch_with_transport(
         ) {
         return api_error(
           409, "StaleGeneration", "heartbeat replay was rejected", false,
+        )
+      }
+      if !self.heartbeat_runtime_endpoints_valid(heartbeat, now) {
+        return api_error(
+          409, "InvalidRuntimeEndpoint", "runtime endpoint does not match current node assignments",
+          false,
         )
       }
       self.store.put_heartbeat(heartbeat)
@@ -4432,6 +4593,7 @@ async fn ApiService::dispatch_with_transport(
       if workspace_error is Some(reply) {
         return reply
       }
+      defer self.release_workspace_admission(request, reserved)
       let authority : @access.ApiAuthorization = if bearer_authorized(
           headers,
           self.inference_token,
@@ -4454,7 +4616,7 @@ async fn ApiService::dispatch_with_transport(
             Inference,
             Some(request.tenant_ref),
             Some(request.model_selector),
-            true,
+            !(self.require_workspace_lease && !reserved),
           ) {
           KeyAuthorized(value) => value
           KeyQuotaExceeded =>
@@ -4468,17 +4630,7 @@ async fn ApiService::dispatch_with_transport(
             )
         }
       }
-      try self.invoke_workload(request, authority) catch {
-        error => {
-          self.release_workspace_admission(request, reserved)
-          raise error
-        }
-      } noraise {
-        reply => {
-          self.release_workspace_admission(request, reserved)
-          reply
-        }
-      }
+      self.invoke_workload(request, authority)
     }
     (Get, _) if path.has_prefix("/v1/workloads/") => {
       if !bearer_authorized(headers, self.inference_token) {
@@ -4934,6 +5086,65 @@ async fn send_listener_reply(
 }
 
 ///|
+/// Serve only the two gateway-to-controller identity mutations on a listener
+/// that the controller binds to loopback. This does not depend on
+/// `ServerConnection::client_addr`: moonbitlang/async 0.20.3 currently exposes
+/// the accepted socket's local address there instead of the peer returned by
+/// `Server::accept`. The ordinary API listener therefore remains untrusted,
+/// while this separate socket is trusted by construction and is never exposed
+/// by a Kubernetes Service.
+pub async fn ApiService::serve_identity_on(
+  self : ApiService,
+  server : @http.Server,
+) -> Unit {
+  server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    if request.meth != Post ||
+      (
+        request.path != "/v1/auth/register" &&
+        request.path != "/v1/auth/session:exchange"
+      ) {
+      send_listener_reply(
+        connection,
+        api_error(
+          404, "NotFound", "identity listener route was not found", false,
+        ),
+      )
+      return
+    }
+    let body = match read_bounded_request_body(reader, 256) {
+      RequestBody(value) => value
+      RequestBodyTooLarge => {
+        send_listener_reply(
+          connection,
+          api_error(
+            413, "PayloadTooLarge", "identity request body exceeds the relay contract limit",
+            false,
+          ),
+        )
+        return
+      }
+      RequestBodyInvalidUtf8 => {
+        send_listener_reply(
+          connection,
+          api_error(
+            400, "InvalidRequest", "identity request body is not valid UTF-8", false,
+          ),
+        )
+        return
+      }
+    }
+    let reply = self.handle_with_transport(
+      Post,
+      request.path,
+      request.headers,
+      body,
+      true,
+    )
+    send_listener_reply(connection, reply)
+  })
+}
+
+///|
 fn loopback_client(address : @socket.Addr) -> Bool {
   let rendered = address.to_string()
   rendered.has_prefix("127.") ||
@@ -4950,6 +5161,12 @@ pub async fn ApiService::serve_on(
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
     let allow_asserted_subject = loopback_client(connection.client_addr())
     if self.serve_artifact(request, connection) {
+      return
+    }
+    if request.meth == Get &&
+      request.path.has_prefix("/v1/videos/") &&
+      request.path.has_suffix("/content") {
+      self.serve_media_content(request, connection)
       return
     }
     if request.meth == Post && request.path == "/v1/chat/completions" {

@@ -29,13 +29,53 @@ async test "invited account registration restores from PostgreSQL" {
     60000L,
     100001L,
   )
+  let before = store.snapshot()
+  database.close()
+  for _ in 0..<2 {
+    try
+      store.set_state(registered.account.account_id, Suspended, 100002L)
+    catch {
+      @database.DatabaseError::QueryFailed(_) => ()
+      error => fail("unexpected disconnected write: \{Repr(error)}")
+    } noraise {
+      _ => fail("closed database accepted suspension")
+    }
+    assert_eq(store.snapshot(), before)
+  }
+  let recovered_database = @database.PostgresDatabase::open(url)
+  defer recovered_database.close()
   let reopened = @account.AccountStore::open_postgres(
-    database, "postgres-account-invitation-secret-more-than-32-bytes",
+    recovered_database, "postgres-account-invitation-secret-more-than-32-bytes",
   )
+  assert_eq(reopened.snapshot(), before)
   assert_eq(reopened.views().length(), 1)
   assert_eq(
     reopened.invitation_views()[0].consumed_account_id,
     Some(registered.account.account_id),
   )
-  database.close()
+  ignore(
+    reopened.authorize(
+      registered.session.secret,
+      100003L,
+      required_role=EnterpriseUser,
+    ),
+  )
+  ignore(reopened.set_state(registered.account.account_id, Suspended, 100004L))
+  let third_database = @database.PostgresDatabase::open(url)
+  defer third_database.close()
+  let suspended = @account.AccountStore::open_postgres(
+    third_database, "postgres-account-invitation-secret-more-than-32-bytes",
+  )
+  try
+    suspended.authorize(
+      registered.session.secret,
+      100005L,
+      required_role=EnterpriseUser,
+    )
+  catch {
+    @account.AccountError::Unauthorized => ()
+    error => fail("unexpected suspension error: \{Repr(error)}")
+  } noraise {
+    _ => fail("suspended session survived fresh database connection")
+  }
 }

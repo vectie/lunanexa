@@ -86,6 +86,32 @@ async fn ensure_certificate(
         "simulated node certificate has the wrong identity",
       )
     }
+    if certificate_needs_renewal(certificate, @async.now()) {
+      let body : Json = {
+        "node_id": node_id,
+        "public_key_ref": certificate.public_key_ref,
+        "current_serial": certificate.serial,
+      }
+      let (response, response_body) = @http.post(
+        endpoint(base, "/v1/enrollment/rotate"),
+        body,
+        headers=node_headers(node_id, node_token),
+      )
+      if response.code != 200 {
+        raise Failure::Failure(
+          "simulated node certificate rotation was rejected",
+        )
+      }
+      let renewed : @node_agent.NodeCertificate = @json.from_json(
+        @json.parse(response_body.text()),
+      )
+      if renewed.node_id != node_id ||
+        renewed.serial <= certificate.serial ||
+        renewed.expires_unix_ms <= @async.now() {
+        raise Failure::Failure("invalid simulated node certificate rotation")
+      }
+      persist_certificate(certificate_path, renewed)
+    }
     return
   }
   let body : Json = {
@@ -106,6 +132,15 @@ async fn ensure_certificate(
     @json.parse(response_body.text()),
   )
   persist_certificate(certificate_path, certificate)
+}
+
+///|
+fn certificate_needs_renewal(
+  certificate : @node_agent.NodeCertificate,
+  now_unix_ms : Int64,
+) -> Bool {
+  certificate.expires_unix_ms <= now_unix_ms ||
+  certificate.expires_unix_ms - now_unix_ms <= 300000L
 }
 
 ///|
@@ -180,6 +215,7 @@ async fn reconcile_once(
     controller_epoch: agent.controller_epoch(),
     inventory,
     running_deployments: agent.running_deployments(),
+    runtime_endpoints: None,
     timestamp_unix_ms: now,
     signature: "",
   }
@@ -233,12 +269,8 @@ async fn main {
     !runtime_health_endpoint.has_prefix("http://localhost:") {
     raise Failure::Failure("simulated runtime health must use loopback")
   }
-  ensure_certificate(
-    base,
-    node_id,
-    token,
-    required_environment("LUNANEXA_NODE_CERTIFICATE_PATH"),
-  )
+  let certificate_path = required_environment("LUNANEXA_NODE_CERTIFICATE_PATH")
+  ensure_certificate(base, node_id, token, certificate_path)
   let poll_ms = @string.parse_int64(
     @env.get_env_var("LUNANEXA_SIM_POLL_MS").unwrap_or("250"),
   ).to_int()
@@ -247,10 +279,13 @@ async fn main {
   }
   println("simulated DGX node \{node_id} connected to \{base}")
   while true {
-    reconcile_once(
-      base, node_id, token, inventory, agent, verifier, runtime_health_endpoint,
-      state_path,
-    ) catch {
+    try {
+      ensure_certificate(base, node_id, token, certificate_path)
+      reconcile_once(
+        base, node_id, token, inventory, agent, verifier, runtime_health_endpoint,
+        state_path,
+      )
+    } catch {
       _ => println("simulated node reconciliation failed; retrying")
     }
     @async.sleep(poll_ms)

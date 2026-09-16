@@ -31,10 +31,36 @@ pub(all) enum IdempotencyResult {
 
 ///|
 pub(all) enum OrganizationState {
+  Draft
   PendingVerification
   Active
+  Rejected
   Suspended
   Closed
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) enum OrganizationSubjectKind {
+  Individual
+  Company
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct BillingContact {
+  display_name : String
+  email : String
+  phone : String?
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct OrganizationLegalProfile {
+  subject_kind : OrganizationSubjectKind
+  legal_name : String
+  country_code : String
+  registration_number : String?
+  tax_identifier : String?
+  registered_address : String
+  billing_contact : BillingContact
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -43,6 +69,7 @@ pub(all) struct Organization {
   display_name : String
   state : OrganizationState
   verification_ref : String?
+  legal_profile : OrganizationLegalProfile?
   created_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -252,6 +279,9 @@ pub(all) struct AgreementTemplate {
   locale : String
   effective_unix_ms : Int64
   rendered_document_hash : String
+  /// Immutable readable terms. Ready templates require either HTTPS or the
+  /// platform-owned `/docs/` namespace; legacy draft snapshots may omit it.
+  document_uri : String?
   state : AgreementTemplateState
   created_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)

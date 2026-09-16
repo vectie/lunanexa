@@ -24,7 +24,7 @@ spec:
             - name: LUNANEXA_LISTEN_ADDRESS
               value: 0.0.0.0:8081
             - name: LUNANEXA_CONTROL_ENDPOINT
-              value: http://127.0.0.1:8080
+              value: http://127.0.0.1:8082
             - name: LUNANEXA_IDENTITY_EXCHANGE_PATH
               value: /v1/auth/session:exchange
             - name: LUNANEXA_IDENTITY_REGISTRATION_PATH

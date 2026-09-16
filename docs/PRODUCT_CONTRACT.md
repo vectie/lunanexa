@@ -43,6 +43,7 @@ The initial distribution may produce several binaries or services:
 | Deployment manager | Catalog, preflight, durable model-service operations and service readiness | No |
 | Enterprise portal | Rabbita onboarding, agreements, lease requests, cost/model views | No |
 | Developer workbench | Rabbita user workspace and provider-neutral model tooling inside the enterprise site | No |
+| Hosted WebIDE gateway | Single-use launch, live lease checks and isolated customer ComfyUI HTTP/WebSocket access | No |
 | Exclusive lease manager | Node reservation, access lifecycle, expiry and sanitization authority | No |
 | Node agent | Inventory, assignment-scoped model materialization, runtime supervision and heartbeats | Yes |
 | Runtime adapter | Starts and observes an approved serving runtime | Yes |
@@ -62,6 +63,63 @@ The sites run in the management role. A constrained profile may explicitly
 co-locate that role with compute, but co-location never makes management
 services compute capacity. Enterprise users cannot select or activate a
 hardware node.
+
+Hosted ComfyUI is a customer WebIDE, not a managed-node runtime or a second
+LunaNexa creative editor. Each tenant/subject/organization/project tuple receives
+its own process and persistent storage. A lease-aware gateway is the only
+browser ingress; the bare ComfyUI port is private. Model credentials stay in
+server-side services and model traffic uses the deployment-owned provider
+gateway. Installing custom nodes is an operator-reviewed image change. A browser
+profile has one active WebIDE identity; switching or logging out closes its old
+gateway session. Sessions are ephemeral and fail closed after a gateway restart;
+workflows and uploaded/generated files remain in the workspace volume.
+
+Authorization outages fail closed for HTTP, WebSocket and model access, but
+are not revocation evidence. A transient transport failure, rate limit or
+unexpected controller response must not invalidate a still-unexpired browser
+session or scale down its workspace. Subsequent requests recheck live authority;
+no cached allow decision bypasses an outage. Explicit denial and local expiry
+still invalidate access and stop the workspace while retaining its volume.
+
+Video jobs persist their immutable deployment generation and node attribution
+before submission. These placement facts support authorization and settlement
+after controller recovery; they are not cached endpoint addresses. Provider
+access still requires current evidence for the original runtime incarnation.
+Readiness loss alone must not cancel a job or release its quota. Explicit
+revocation or a durable local deadline records cancellation, and executing
+capacity remains occupied until upstream cancellation is confirmed. An unknown
+submission is never automatically resubmitted. Legacy jobs without placement
+facts are backfilled only from a currently verified matching binding; missing
+evidence remains unavailable, never guessed.
+
+Human identity has two supported deployment shapes. A public platform identity
+provider may allow any eligible person to create an account, while an enterprise
+deployment may federate a customer's existing identity provider. Both terminate
+at the same signed OIDC assertion boundary; LunaNexa does not store passwords.
+The standard public profile is LunaNexa-operated Keycloak 26.7.3 with verified
+email, recovery, TOTP and exact PKCE clients. Keycloak owns credentials and OIDC
+sessions; it grants no LunaNexa role, organization, contract or machine access.
+An account is not a customer organization and grants no machine authority by
+itself. After sign-in, a person may create an `Individual` or `Company` legal
+customer record, or join an existing organization with a one-time invitation.
+Organization verification, membership roles, agreements, budgets, projects and
+orders remain LunaNexa authorities. Multi-organization requests must carry an
+explicit selected organization and fail closed when selection is ambiguous.
+
+The enterprise portal accepts only tenant-scoped commercial intent. It never
+accepts a node ID, GPU ID, host address or raw access secret. It offers shared
+MaaS, a prepaid dedicated model endpoint, and a prepaid bare accelerator
+machine. For the two machine-backed paths the customer selects an active SKU and
+duration, receives an immutable signed quote, accepts the current readable
+machine terms, and completes an external checkout. Capacity is assigned only
+after an authenticated exact-amount payment callback. `DedicatedEndpoint`
+creates a managed deployment and never an exclusive lease; `BareMachine`
+creates an exclusive-node lease. Cancellation, provisioning failure and
+capacity timeout enter durable compensation. Prepaid usage remains evidence and
+is not rated into a second payable ledger. A dedicated API key is durably bound
+to the exact active order and deployment; inference cannot fall back to shared
+capacity when that order ends or its routing cannot be enforced. See
+`docs/SELF_SERVICE_MACHINE_ORDERING.md`.
 
 ### Topology contract
 
@@ -152,6 +210,16 @@ have produced accepted receipts.
 
 ## 6. Authority and security
 
+Private-cloud workspace admission is administrator-granted, not a commercial
+machine rental. An explicit deployment policy may admit WebIDE and ComfyUI
+without a MasterLease, but still requires an active account, Developer
+membership, administrator-issued workspace grant and bounded active workspace
+lease. Registration alone never activates these resources. Commercial machine
+orders retain their agreement, payment and lifecycle checks in either mode.
+The workspace is one role-aware experience, not a shared unisolated process or
+filesystem: organization/project boundaries remain enforced. Platform
+administration does not disclose passwords or raw user secrets.
+
 - Mutual authentication is required between controller and nodes.
 - Node agents initiate or maintain a narrow management channel. Interactive
   access exists only in explicit exclusive-node mode and is provisioned through
@@ -191,7 +259,12 @@ Moongate S3-compatible HTTPS origin and authenticate with node-local,
 least-privilege SigV4 credentials that are never passed to runtimes. A detached
 signature may have its own reference; an opaque Cosign evidence reference
 resolves to the sibling `<model-object>.sig` object. OCI remains the
-digest-pinned runtime-image transport. Artifact transfer is pull-based by the
+digest-pinned runtime-image transport. Signature objects may contain a detached
+signature or a Sigstore JSON bundle. Controller and node select the Cosign
+verification format from content, not the cache filename; malformed bundles
+are rejected without falling back to bare-signature verification. Public-key,
+transparency-log and artifact-digest checks remain required. Artifact transfer is
+pull-based by the
 selected node and bound to its live signed assignment; the controller never
 opens an SSH, copy or arbitrary shell channel and does not mount model bytes in
 the production HA profile.

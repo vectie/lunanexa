@@ -1,6 +1,7 @@
 ///|
 async test "signature and lease approval survive restart" {
   let directory = @fs.tmpdir(prefix="lunanexa-portal-store-")
+  defer @fs.rmdir(directory, recursive=true)
   let path = "\{directory}/portal.json"
   let store = @store.FilePortalStore::open(path)
   ignore(
@@ -32,6 +33,32 @@ async test "signature and lease approval survive restart" {
       updated_unix_ms: 1000L,
     }),
   )
+  let before_signature = store.snapshot()
+  let signature_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  for _ in 0..<2 {
+    try
+      store.request_signature(
+        "subject-a",
+        {
+          agreement_id: "agreement-a",
+          expected_generation: 1L,
+          idempotency_key: "sign-a",
+        },
+        1100L,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("signature request unexpectedly persisted")
+    }
+    assert_eq(
+      @async.with_timeout(1000, () => store.snapshot()),
+      before_signature,
+    )
+    assert_eq(@fs.read_file(path).text(), signature_disk)
+  }
+  @fs.rmdir(path + ".next")
   let requested = store.request_signature(
     "subject-a",
     {
@@ -69,6 +96,31 @@ async test "signature and lease approval survive restart" {
     },
     1300L,
   )
+  let before_review = store.snapshot()
+  let review_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  for _ in 0..<2 {
+    try
+      store.review_lease_request(
+        {
+          request_id: "request-a",
+          expected_generation: submitted.generation,
+          decision: Approve,
+          node_id: Some("spark-01"),
+          evidence_receipt: "operator:approved:a",
+        },
+        Some("exclusive-request-a"),
+        1400L,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("lease approval unexpectedly persisted")
+    }
+    assert_eq(@async.with_timeout(1000, () => store.snapshot()), before_review)
+    assert_eq(@fs.read_file(path).text(), review_disk)
+  }
+  @fs.rmdir(path + ".next")
   ignore(
     store.review_lease_request(
       {
@@ -86,7 +138,6 @@ async test "signature and lease approval survive restart" {
   let view = reopened.self_view("subject-a")
   assert_eq(view.agreements[0].state, Executed)
   assert_eq(view.lease_requests[0].state, Approved)
-  @fs.rmdir(directory, recursive=true)
 }
 
 ///|
@@ -230,7 +281,7 @@ async test "lease idempotency is tenant scoped and conflicting replay is isolate
   try
     store.submit_lease_request(
       "subject-a",
-      { ..submission_a, request_id: "request-conflict" },
+      { ..submission_a, request_id: "request-conflict", },
       1302L,
     )
   catch {
@@ -246,8 +297,71 @@ async test "lease idempotency is tenant scoped and conflicting replay is isolate
 }
 
 ///|
-async test "corrupted portal snapshot cannot forge a second active identity" {
+async test "multi-organization membership is explicit and tenant isolated" {
   let directory = @fs.tmpdir(prefix="lunanexa-portal-corrupt-")
+  let path = "\{directory}/portal.json"
+  let store = @store.FilePortalStore::open(path)
+  ignore(
+    store.put_membership({
+      membership_id: "member-a",
+      tenant_ref: "tenant-a",
+      organization_id: "org-a",
+      subject_ref: "subject-multi",
+      roles: [OrganizationAdministrator],
+      active: true,
+      created_unix_ms: 1000L,
+    }),
+  )
+  ignore(
+    store.put_membership({
+      membership_id: "member-b",
+      tenant_ref: "tenant-b",
+      organization_id: "org-b",
+      subject_ref: "subject-multi",
+      roles: [Developer],
+      active: true,
+      created_unix_ms: 1001L,
+    }),
+  )
+  assert_eq(store.memberships_for_subject("subject-multi").length(), 2)
+  assert_eq(
+    store.self_view_for_organization("subject-multi", "org-a").membership.tenant_ref,
+    "tenant-a",
+  )
+  assert_eq(
+    store.self_view_for_organization("subject-multi", "org-b").membership.tenant_ref,
+    "tenant-b",
+  )
+  try store.self_view("subject-multi") catch {
+    @portal.PortalError::OrganizationSelectionRequired => ()
+    error => fail("unexpected organization selection error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an ambiguous organization was selected implicitly")
+  }
+  try
+    store.put_membership({
+      membership_id: "member-cross-tenant",
+      tenant_ref: "tenant-forged",
+      organization_id: "org-a",
+      subject_ref: "subject-other",
+      roles: [Developer],
+      active: true,
+      created_unix_ms: 1002L,
+    })
+  catch {
+    @portal.PortalError::TenantMismatch => ()
+    error => fail("unexpected tenant isolation error: \{Repr(error)}")
+  } noraise {
+    _ => fail("an organization was attached to a second tenant")
+  }
+  let reopened = @store.FilePortalStore::open(path)
+  assert_eq(reopened.memberships_for_subject("subject-multi").length(), 2)
+  @fs.rmdir(directory, recursive=true)
+}
+
+///|
+async test "corrupted portal snapshot cannot duplicate an active organization membership" {
+  let directory = @fs.tmpdir(prefix="lunanexa-portal-duplicate-")
   let path = "\{directory}/portal.json"
   let snapshot : @portal.PortalSnapshot = {
     schema_version: @portal.snapshot_schema_version,
@@ -263,8 +377,8 @@ async test "corrupted portal snapshot cannot forge a second active identity" {
       },
       {
         membership_id: "member-b",
-        tenant_ref: "tenant-b",
-        organization_id: "org-b",
+        tenant_ref: "tenant-a",
+        organization_id: "org-a",
         subject_ref: "subject-collision",
         roles: [LeaseRequester],
         active: true,
@@ -284,7 +398,7 @@ async test "corrupted portal snapshot cannot forge a second active identity" {
     @portal.PortalError::InvalidInput(_) => ()
     error => fail("unexpected snapshot error: \{Repr(error)}")
   } noraise {
-    _ => fail("duplicate active subject was restored")
+    _ => fail("duplicate active organization membership was restored")
   }
   @fs.rmdir(directory, recursive=true)
 }

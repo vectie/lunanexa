@@ -108,6 +108,8 @@ test "one-node enroll deploy invoke restart reconciliation" {
   agent.observe_runtime(desired.assignment_id, Ready)
   assert_eq(agent.running_deployments(), [desired.deployment_id])
   let restored_agent = @node.NodeAgent::from_snapshot(agent.snapshot())
+  assert_eq(restored_agent.running_deployments(), [])
+  restored_agent.observe_runtime(desired.assignment_id, Ready)
   assert_eq(restored_agent.running_deployments(), [desired.deployment_id])
   let response = control.invoke(runtime, workload(), 1000L)
   assert_eq(response.state, Succeeded)
@@ -150,7 +152,7 @@ test "bootstrap tokens are one use and stale controller epochs are fenced" {
   agent.activate()
   let current = assignment()
   assert_true(
-    agent.reconcile({ ..current, controller_epoch: 2L }, verifier, 1L),
+    agent.reconcile({ ..current, controller_epoch: 2L, }, verifier, 1L),
   )
   try agent.reconcile(current, verifier, 1L) catch {
     StaleControllerEpoch => ()

@@ -1,0 +1,49 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/machinecommerce/store"
+
+import {
+  "moonbitlang/async",
+  "vectie/lunanexa/database",
+  "vectie/lunanexa/machinecommerce",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+type MachineCommercePersistence
+
+pub struct MachineCommerceStore {
+  persistence : MachineCommercePersistence
+  signing_secret : String
+  mut core : @machinecommerce.MachineCommerceStore
+  mutex : @async.Mutex
+}
+pub async fn MachineCommerceStore::activate_settled_payment(Self, String, @machinecommerce.MachinePaymentSettlement, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::active_offerings(Self) -> Array[@machinecommerce.MachineOffering]
+pub async fn MachineCommerceStore::availability(Self, String, Int64) -> @machinecommerce.MachineAvailability
+pub async fn MachineCommerceStore::bind_access_key(Self, String, String, String, Int64) -> @machinecommerce.MachineActionReceipt
+pub async fn MachineCommerceStore::complete_compensation(Self, String, String, Int64, String, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::complete_provisioning(Self, String, String, Int64, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::complete_termination_with_usage(Self, String, String, Int64, String, Int64, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.MachineUsageReceipt, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::create_order(Self, @machinecommerce.MachineOrderIntent, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::create_quote(Self, @machinecommerce.MachineQuoteIntent, Int64) -> (@machinecommerce.MachineQuote, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::open(String, String) -> Self
+pub async fn MachineCommerceStore::open_postgres(@database.PostgresDatabase, String) -> Self
+pub async fn MachineCommerceStore::order(Self, String) -> @machinecommerce.MachineOrder?
+pub async fn MachineCommerceStore::order_for_access_key(Self, String) -> @machinecommerce.MachineOrder?
+pub async fn MachineCommerceStore::orders_for_subject(Self, String) -> Array[@machinecommerce.MachineOrder]
+pub async fn MachineCommerceStore::put_offering(Self, @machinecommerce.MachineOffering) -> (@machinecommerce.MachineOffering, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::quote(Self, String) -> @machinecommerce.MachineQuote?
+pub async fn MachineCommerceStore::record_failure(Self, String, String, Int64, String, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::record_usage(Self, String, @machinecommerce.MachineMeterIntent, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.MachineUsageReceipt, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::replace_from_snapshot(Self, @machinecommerce.MachineCommerceSnapshot) -> Unit
+pub async fn MachineCommerceStore::request_cancel(Self, String, String, @machinecommerce.MachineOrderAction, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::request_termination(Self, String, String, @machinecommerce.MachineOrderAction, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn MachineCommerceStore::snapshot(Self) -> @machinecommerce.MachineCommerceSnapshot
+pub async fn MachineCommerceStore::start_provisioning(Self, String, @machinecommerce.MachineProvisioningIntent, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+
+// Type aliases
+
+// Traits

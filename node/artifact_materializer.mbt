@@ -46,6 +46,7 @@ pub(open) trait ArtifactSignatureVerifier {
 pub struct CosignArtifactSignatureVerifier {
   binary : String
   public_key_path : String
+  trusted_root_path : String?
 }
 
 ///|
@@ -60,12 +61,33 @@ struct S3SigV4Configuration {
 pub fn CosignArtifactSignatureVerifier::new(
   binary : String,
   public_key_path : String,
+  trusted_root_path? : String,
 ) -> CosignArtifactSignatureVerifier raise ArtifactMaterializationError {
   if !(binary == "/usr/bin/cosign" || binary == "/usr/local/bin/cosign") ||
-    !safe_absolute_path(public_key_path) {
+    !safe_absolute_path(public_key_path) ||
+    trusted_root_path.map_or(false, path => !safe_absolute_path(path)) {
     raise InvalidConfiguration
   }
-  { binary, public_key_path }
+  { binary, public_key_path, trusted_root_path, }
+}
+
+///|
+fn artifact_cosign_arguments(
+  public_key_path : String,
+  trusted_root_path : String?,
+  material_flag : String,
+  signature_path : String,
+  artifact_path : String,
+) -> Array[String] {
+  let args = ["verify-blob", "--key", public_key_path]
+  if trusted_root_path is Some(path) {
+    args.push("--trusted-root")
+    args.push(path)
+  }
+  args.push(material_flag)
+  args.push(signature_path)
+  args.push(artifact_path)
+  args
 }
 
 ///|
@@ -80,16 +102,16 @@ pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier with fn v
     !@contracts.valid_sha256_digest(digest) {
     raise ArtifactSignatureInvalid
   }
+  let material_flag = @signature.cosign_material_flag(signature_path)
   let (status, _, _) = @process.collect_output(
     self.binary,
-    [
-      "verify-blob",
-      "--key",
+    artifact_cosign_arguments(
       self.public_key_path,
-      "--signature",
+      self.trusted_root_path,
+      material_flag,
       signature_path,
       artifact_path,
-    ],
+    ),
     inherit_env=false,
   )
   if status != 0 {
@@ -301,7 +323,7 @@ pub async fn ArtifactMaterializer::open_s3(
   {
     ..base,
     node_id,
-    s3_sigv4: Some({ access_key_id, secret_access_key, region, session_token }),
+    s3_sigv4: Some({ access_key_id, secret_access_key, region, session_token, }),
   }
 }
 
@@ -585,7 +607,11 @@ async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::verify_cached(
     artifact.digest,
   )
   self.verified[artifact.digest] = true
-  { digest: artifact.digest, host_path: artifact_path, size_bytes: actual_size }
+  {
+    digest: artifact.digest,
+    host_path: artifact_path,
+    size_bytes: actual_size,
+  }
 }
 
 ///|
@@ -680,7 +706,11 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   )
   @fs.rename(ready_partial, ready_path, replace=true)
   self.verified[artifact.digest] = true
-  { digest: artifact.digest, host_path: artifact_path, size_bytes: actual_size }
+  {
+    digest: artifact.digest,
+    host_path: artifact_path,
+    size_bytes: actual_size,
+  }
 }
 
 ///|

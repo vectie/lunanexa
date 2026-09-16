@@ -18,6 +18,8 @@ pub fn default_state(Int64) -> WorkbenchState
 
 pub fn demo_state() -> WorkbenchState
 
+pub fn export_drafts(WorkbenchState) -> String
+
 pub fn interactive_view(WorkbenchState, @cmd.Emit[WorkbenchMessage]) -> @html.Html
 
 pub fn lease_ready(WorkbenchState) -> Bool
@@ -59,6 +61,8 @@ pub(all) enum WorkbenchMessage {
   SelectEditor(@workspace.EditorConnectionKind)
   SelectIntegration(@workspace.IntegrationProvider)
   ClearNotice
+  ExportDrafts
+  CopyDiagnostic(String)
 } derive(Eq)
 
 pub(all) struct WorkbenchState {
@@ -68,6 +72,7 @@ pub(all) struct WorkbenchState {
   files : Array[DraftFile]
   active_path : String
   model_selector : String
+  allowed_models : Array[String]
   instruction : String
   output_text : String
   receipt : String

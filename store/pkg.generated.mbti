@@ -51,6 +51,7 @@ pub struct FileStore {
   mutex : @async.Mutex
   requires_epoch_advance : Bool
   mut controller_fenced : Bool
+  mut leadership_lost : Bool
 }
 pub async fn FileStore::append_audit(Self, @contracts.AuditEvent) -> Unit
 pub async fn FileStore::assignment(Self, String) -> @contracts.DesiredAssignment?

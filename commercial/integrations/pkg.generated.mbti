@@ -84,6 +84,7 @@ pub(all) struct ExternalRecord {
 pub(all) enum ExternalRecordKind {
   IdentityVerification
   Payment
+  PaymentRefund
   TaxInvoice
   QualifiedSignature
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)

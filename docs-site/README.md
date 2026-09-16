@@ -258,6 +258,25 @@ coursebook availability signal and does not claim the protected adapter works.
 
 ## Refresh workflow
 
+### Reader-guide action contracts
+
+Current reader guides are documented journeys, not live deployment acceptance.
+Every page has an explicit action-bearing, conceptual-only or historical-evidence
+classification in `coursebook-actions.json`. Named buttons and navigation actions
+carry exact English/Chinese labels, owning source, catalog enum and actual event
+or route binding. The Node suite verifies these connections and published prose;
+new pages require classification. Keep this manifest synchronized when renaming
+actions. Lifecycle/API verbs are not automatically UI buttons. Historical
+`ui-end-to-end-sop` and `production-ui-validation` remain separately dated evidence
+records, explicitly excluded from current-action assertions. Do not turn
+contract-document renewal into a machine-renewal button.
+
+After changes, run `node --test docs-site/*.test.mjs`. Source assertions cannot
+prove accessibility: deployed desktop and narrow-screen scrolling, long text,
+keyboard-only operation, modal focus entry/return, and downloads remain manual
+release checks. Record unobserved cases as pending; never mark them passed from
+markup or these Node tests alone.
+
 Use the MoonBook skill against the LunaNexa repository:
 
 1. re-read repository instructions and authoritative product/architecture,

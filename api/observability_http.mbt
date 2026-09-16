@@ -82,7 +82,7 @@ pub async fn ApiService::trusted_operational_tenant_hash(
     self.portal_subject(headers, allow_asserted_subject) is Some(subject_ref) else {
     return None
   }
-  try portal.self_view(subject_ref) catch {
+  try portal_view_for_request(portal, subject_ref, headers) catch {
     _ => None
   } noraise {
     view => Some("sha256:\{digest_hex(view.membership.tenant_ref)}")

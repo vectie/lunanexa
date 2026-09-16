@@ -20,11 +20,15 @@ pub fn account_roles_after_toggle(Array[UiAccountRole], UiAccountRole) -> Array[
 
 pub fn all_routes() -> Array[OperatorRoute]
 
+pub fn announcement_ready(AnnouncementDraft) -> Bool
+
 pub fn confirmation_receipt(DestructiveAction, String) -> Confirmation
 
 pub fn default_state() -> ConsoleState
 
 pub fn demo_state() -> ConsoleState
+
+pub fn empty_announcement_draft() -> AnnouncementDraft
 
 pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage]) -> @html.Html
 
@@ -115,6 +119,14 @@ pub(all) struct AgreementRow {
   state : String
   evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct AnnouncementDraft {
+  announcement_id : String
+  tenant_ref : String
+  title : String
+  body : String
+  expires_unix_ms : String
+} derive(Eq, @debug.Debug)
 
 pub(all) struct AuditRow {
   actor : String
@@ -207,6 +219,13 @@ pub(all) enum ConsoleMessage {
   AccountInviteReceiptChanged(String)
   AccountInviteRoleToggled(UiAccountRole)
   SubmitAccountInvite
+  AnnouncementIdChanged(String)
+  AnnouncementTenantChanged(String)
+  AnnouncementTitleChanged(String)
+  AnnouncementBodyChanged(String)
+  AnnouncementExpiryChanged(String)
+  AnnouncementLifetimeChosen(Int)
+  SubmitAnnouncement
   AccessPackageIssuerChanged(String)
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
@@ -243,6 +262,8 @@ pub(all) struct ConsoleState {
   notifications : Array[NotificationRow]
   notification_deliveries : Array[NotificationDeliveryRow]
   accounts : Array[AccountView]
+  trial_summary : TrialSummary?
+  announcement_draft : AnnouncementDraft
   authenticated_account : AccountView?
   account_sessions : Array[BrowserSessionView]
   account_invite : AccountInviteDraft
@@ -544,6 +565,13 @@ pub(all) struct StreamEventView {
   text : String
   receipt : String
 } derive(Eq)
+
+pub(all) struct TrialSummary {
+  registered_trials : Int
+  active_trials : Int
+  expired_trials : Int
+  converted_trials : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum UiAccountRole {
   PlatformOperator

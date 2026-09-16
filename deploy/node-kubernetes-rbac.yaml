@@ -1,0 +1,61 @@
+# Runtime-only namespace. Do not place customer workspaces or general secrets
+# here. hostPath permission is needed for the node-verified model cache; the
+# rendered serving Pod itself remains non-root/read-only with capabilities dropped.
+# Review namespace/ServiceAccount names for the deployment before applying.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lunanexa-managed-runtime
+  labels:
+    app.kubernetes.io/managed-by: lunanexa
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: lunanexa-managed-runtime
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+# The node agent runs outside the runtime namespace. Only its projected token
+# is used by the Kubernetes adapter, never mounted into a serving container.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lunanexa-managed-node
+  namespace: lunanexa
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lunanexa-managed-node
+  namespace: lunanexa-managed-runtime
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, patch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [create, get, delete]
+  - apiGroups: [resource.k8s.io]
+    resources: [resourceclaimtemplates]
+    verbs: [create, get, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lunanexa-managed-node
+  namespace: lunanexa-managed-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lunanexa-managed-node
+subjects:
+  - kind: ServiceAccount
+    name: lunanexa-managed-node
+    namespace: lunanexa

@@ -7,6 +7,24 @@ desktop forms.
 
 ## Product journey
 
+### Private-cloud workspace
+
+The customer-facing path is **sign in/register → administrator grants resources
+→ open ComfyUI or WebIDE**. In the explicit private-cloud profile, no rental
+contract is requested for the owner's resources. The administrator selects an
+existing account, resource scope and expiry; dependent grant, lease and handoff
+records remain behind that action. The existing raw identity/tenant form is an
+advanced bootstrap path, not the target normal journey.
+
+One role-aware workspace preserves three delivery mechanisms: IaaS bare-machine
+rentals, PaaS WebIDE/ComfyUI workspaces, and MaaS model APIs. Sharing the interface
+does not share all users' processes or files. Project collaboration must be
+explicit. Administrator controls are visible by role, not granted by a UI switch.
+
+Backend private-cloud admission is implemented; the simplified existing-account
+selection, unified role-aware navigation and live browser journey still require
+implementation/acceptance. Do not present this target journey as already tested.
+
 ### Individual trial user
 
 1. Choose **Sign in / register** and complete the external OIDC login.
@@ -28,7 +46,9 @@ desktop forms.
 3. Review the derived scope and create the package. LunaNexa derives stable
    identifiers and creates the account, enterprise membership, workspace user,
    Developer grant and requested workspace lease as one durable saga.
-4. When the customer's MasterLease is effective, choose **Enable WebIDE**.
+4. Choose **Enable WebIDE** after resource readiness. In the commercial profile,
+   the customer's MasterLease must also be effective; private-cloud access does
+   not require that contract.
 
 ### Enterprise user
 
@@ -82,7 +102,8 @@ this evidence. The journal stores the OIDC subject digest, not the raw subject.
   may reduce these bounds through reviewed environment configuration.
 - LunaNexa never fabricates an effective MasterLease or a model approval.
 - WebIDE access is enabled only when account, Developer membership, active
-  grant, effective MasterLease, requested lease and approved model alias agree.
+  grant, requested lease and approved model alias agree. An effective MasterLease
+  is additionally required by commercial admission, not private-cloud admission.
 - Model prompts travel through MoonGate. OIDC, contract and handoff control
   traffic remains on its separate authenticated control path.
 - Ending a lease, closing the MasterLease, removing EnterpriseUser authority or

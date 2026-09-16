@@ -589,6 +589,16 @@ async fn main {
   let address = @env.get_env_var("LUNANEXA_LISTEN_ADDRESS").unwrap_or(
     "127.0.0.1:8080",
   )
+  let identity_address = @env.get_env_var("LUNANEXA_IDENTITY_LISTEN_ADDRESS").unwrap_or(
+    "127.0.0.1:8082",
+  )
+  if !identity_address.has_prefix("127.") &&
+    !identity_address.has_prefix("[::1]:") &&
+    !identity_address.has_prefix("::1:") {
+    raise Failure::Failure(
+      "LUNANEXA_IDENTITY_LISTEN_ADDRESS must be an explicit loopback address",
+    )
+  }
   let state_path = @env.get_env_var("LUNANEXA_STATE_PATH").unwrap_or(
     "lunanexa-state.json",
   )
@@ -624,6 +634,9 @@ async fn main {
   )
   let offline_commerce_path = @env.get_env_var("LUNANEXA_OFFLINE_COMMERCE_PATH").unwrap_or(
     "lunanexa-offline-commerce.json",
+  )
+  let machine_commerce_path = @env.get_env_var("LUNANEXA_MACHINE_COMMERCE_PATH").unwrap_or(
+    "lunanexa-machine-commerce.json",
   )
   let contract_document_path = @env.get_env_var(
     "LUNANEXA_CONTRACT_DOCUMENT_PATH",
@@ -807,6 +820,9 @@ async fn main {
   let catalog_signing_secret = required_environment(
     "LUNANEXA_CATALOG_SIGNING_SECRET",
   )
+  let machine_commerce_signing_secret = required_environment(
+    "LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET",
+  )
   let deployment_store = match management_database {
     Some(database) =>
       @deployment_store.FileDeploymentStore::open_postgres(
@@ -958,6 +974,16 @@ async fn main {
       @offline_store.OfflineCommerceStore::open_postgres(database)
     None => @offline_store.OfflineCommerceStore::open(offline_commerce_path)
   }
+  let machine_commerce_store = match management_database {
+    Some(database) =>
+      @machinecommerce_store.MachineCommerceStore::open_postgres(
+        database, machine_commerce_signing_secret,
+      )
+    None =>
+      @machinecommerce_store.MachineCommerceStore::open(
+        machine_commerce_path, machine_commerce_signing_secret,
+      )
+  }
   let contract_document_store = match management_database {
     Some(database) =>
       @contractdoc_store.ContractDocumentStore::open_postgres(database)
@@ -1025,19 +1051,34 @@ async fn main {
         client_handoff_path, client_handoff_issuer_secret,
       )
   }
-  let client_launch_config : @client_handoff.ClientLaunchConfig = {
-    client_id: required_environment("LUNANEXA_CLIENT_ID"),
-    display_name: required_environment("LUNANEXA_CLIENT_DISPLAY_NAME"),
-    launch_uri: required_environment("LUNANEXA_CLIENT_LAUNCH_URI"),
-    public_api_base_url: required_environment("LUNANEXA_PUBLIC_API_BASE_URL"),
-    handoff_lifetime_ms: @string.parse_int64(
-      @env.get_env_var("LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS").unwrap_or(
-        "120000",
-      ),
-    ),
-    maximum_requests: @string.parse_int64(
-      @env.get_env_var("LUNANEXA_CLIENT_MAXIMUM_REQUESTS").unwrap_or("100000"),
-    ),
+  let client_launch_catalog : Array[@client_handoff.ClientLaunchConfig] = match
+    @env.get_env_var("LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON") {
+    Some(document) => @json.from_json(@json.parse(document))
+    None =>
+      [
+        {
+          client_id: required_environment("LUNANEXA_CLIENT_ID"),
+          display_name: required_environment("LUNANEXA_CLIENT_DISPLAY_NAME"),
+          launch_uri: required_environment("LUNANEXA_CLIENT_LAUNCH_URI"),
+          public_api_base_url: required_environment(
+            "LUNANEXA_PUBLIC_API_BASE_URL",
+          ),
+          handoff_lifetime_ms: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS").unwrap_or(
+              "120000",
+            ),
+          ),
+          maximum_requests: @string.parse_int64(
+            @env.get_env_var("LUNANEXA_CLIENT_MAXIMUM_REQUESTS").unwrap_or(
+              "100000",
+            ),
+          ),
+        },
+      ]
+  }
+  guard @client_handoff.valid_client_launch_catalog(client_launch_catalog) &&
+    client_launch_catalog.get(0) is Some(client_launch_config) else {
+    raise Failure("client launch catalog is invalid")
   }
   let technical_operations = match management_database {
     Some(database) => @technical_store.TechnicalStore::open_postgres(database)
@@ -1129,6 +1170,9 @@ async fn main {
     ("LUNANEXA_MONITORING_TOKEN", monitoring_token),
     ("LUNANEXA_ASSIGNMENT_SIGNING_SECRET", assignment_signing_secret),
     ("LUNANEXA_CATALOG_SIGNING_SECRET", catalog_signing_secret),
+    (
+      "LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET", machine_commerce_signing_secret,
+    ),
     ("LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET", exclusive_lease_signing_secret),
     ("LUNANEXA_API_KEY_ISSUER_SECRET", api_key_issuer_secret),
     ("LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET", account_session_issuer_secret),
@@ -1321,6 +1365,7 @@ async fn main {
     .with_exclusive_lease_store(exclusive_lease_store)
     .with_credential_handoff_store(credential_handoff_store)
     .with_client_handoff_store(client_handoff_store, client_launch_config)
+    .with_client_launch_catalog(client_launch_catalog)
     .with_lease_helper_receipt_secret(lease_helper_receipt_secret)
     .with_portal_store(portal_store)
     .with_notification_store(notification_store)
@@ -1333,7 +1378,11 @@ async fn main {
     )
     .with_external_export_proof_token(external_export_proof_token)
     .with_offline_commerce_store(offline_commerce_store)
+    .with_machine_commerce_store(machine_commerce_store)
     .with_contract_document_store(contract_document_store)
+    .with_private_cloud_workspace_access(
+      @env.get_env_var("LUNANEXA_PRIVATE_CLOUD_WORKSPACE_ACCESS") == Some("1"),
+    )
     .with_reconciliation_only(
       @env.get_env_var("LUNANEXA_RECONCILIATION_ONLY") == Some("1"),
     )
@@ -1465,8 +1514,35 @@ async fn main {
       )
     None => authority_service
   }
+  let service = match @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") {
+    Some(path) => {
+      guard management_database is Some(database) else {
+        raise Failure("media jobs require PostgreSQL persistence")
+      }
+      let file = @fs.open(path, mode=ReadOnly)
+      defer file.close()
+      if file.size() > 1048576L {
+        raise Failure("media binding configuration is too large")
+      }
+      let bindings : Array[@api.MediaTemplateBinding] = @json.from_json(
+        @json.parse(@io.Reader::read_all(file).text()),
+      )
+      service.with_media_templates(
+        @media_job_store.open_postgres(database),
+        bindings,
+      )
+    }
+    None => service
+  }
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
+  let identity_server = @http.Server(
+    @socket.Addr::parse(identity_address),
+    reuse_addr=true,
+  )
   @async.with_task_group <| group => {
+    group.spawn_bg(allow_failure=false) <| () => {
+      service.serve_identity_on(identity_server)
+    }
     match (management_database, controller_leadership) {
       (Some(database), Some((holder_id, token))) =>
         group.spawn_bg(allow_failure=false) <| () => {
@@ -1483,11 +1559,28 @@ async fn main {
         ).to_int(),
       )
     }
+    if @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") is Some(_) {
+      group.spawn_bg(allow_failure=false) <| () => {
+        while true {
+          ignore(service.reconcile_media_jobs())
+          @async.sleep(15000)
+        }
+      }
+    }
     group.spawn_bg(allow_failure=false) <| () => {
       notification_delivery_worker.run_forever()
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_offline_commerce_reconciler(service)
+    }
+    group.spawn_bg(allow_failure=false) <| () => {
+      service.run_machine_commerce_reconciler_forever(
+        @string.parse_int64(
+          @env.get_env_var("LUNANEXA_MACHINE_COMMERCE_RECONCILE_INTERVAL_MS").unwrap_or(
+            "30000",
+          ),
+        ).to_int(),
+      )
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_contract_governance_reconciler(service)

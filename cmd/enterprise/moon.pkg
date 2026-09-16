@@ -4,6 +4,7 @@ import {
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/notifications",
+  "vectie/lunanexa/machinecommerce",
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/nodelease/credential",
   "vectie/lunanexa/portal",

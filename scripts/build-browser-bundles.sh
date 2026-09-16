@@ -9,6 +9,8 @@ moon build cmd/console cmd/enterprise cmd/workbench cmd/installer-ui --target js
 
 mkdir -p "$output_root/console" "$output_root/enterprise" "$output_root/workbench" "$output_root/installer" "$output_root/assets/contracts/youthpolicy/v1" "$output_root/assets/fonts/private"
 cp cmd/console/index.html "$output_root/console/index.html"
+cp assets/platform-logo.png "$output_root/assets/platform-logo.png"
+cp assets/platform-logo-light.png "$output_root/assets/platform-logo-light.png"
 cp _build/js/release/build/cmd/console/console.js "$output_root/console/console.js"
 cp cmd/enterprise/index.html "$output_root/enterprise/index.html"
 cp _build/js/release/build/cmd/enterprise/enterprise.js "$output_root/enterprise/enterprise.js"

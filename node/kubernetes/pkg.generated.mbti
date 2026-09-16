@@ -1,0 +1,141 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/node/kubernetes"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn authenticated_transport(String, String, String) -> (async (String, String, Json?) -> (Int, Json)) raise LifecycleError
+
+pub fn observe_container_termination(PodIdentity, String, Json) -> Bool raise ObservationError
+
+pub fn observe_pod(PodIdentity, Json) -> @contracts.DeploymentState raise ObservationError
+
+pub fn render_runtime(RuntimeSettings, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeResources raise LifecycleError
+
+// Errors
+pub(all) suberror LifecycleError {
+  ApiRejected(Int)
+  InvalidResource
+  OwnershipConflict
+  LeaseExpired
+} derive(Eq, @debug.Debug)
+
+pub(all) suberror ObservationError {
+  InvalidIdentity
+  IdentityMismatch
+  InvalidObservation
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct AuxiliaryIdentity {
+  kind : AuxiliaryKind
+  namespace_name : String
+  name : String
+  uid : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AuxiliaryKind {
+  NetworkPolicy
+  ClaimTemplate
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+type ObservedContainer derive(Eq, ToJson, @json.FromJson)
+
+pub(all) struct PodIdentity {
+  namespace_name : String
+  pod_name : String
+  uid : String
+  node_name : String
+  assignment_id : String
+  generation : Int64
+  artifact_digest : String
+  image_ref : String
+  image_digest : String
+  container_name : String
+} derive(Eq, @debug.Debug)
+
+pub struct PodManager {
+  transport : async (String, String, Json?) -> (Int, Json)
+  namespace_name : String
+}
+pub async fn PodManager::create(Self, Json) -> String
+pub async fn PodManager::create_auxiliary(Self, Json) -> AuxiliaryIdentity
+pub fn PodManager::new(String, async (String, String, Json?) -> (Int, Json)) -> Self raise LifecycleError
+pub async fn PodManager::observe(Self, PodIdentity) -> @contracts.DeploymentState
+pub async fn PodManager::remove_auxiliary(Self, AuxiliaryIdentity) -> @contracts.DeploymentState
+pub async fn PodManager::stop(Self, PodIdentity) -> @contracts.DeploymentState
+
+type ResourceRecord derive(ToJson, @json.FromJson)
+
+type RuntimeJournal derive(ToJson, @json.FromJson)
+
+pub(all) struct RuntimeObservation {
+  assignment_id : String
+  pod_name : String
+  state : @contracts.DeploymentState
+  address : String
+  endpoint : @contracts.RuntimeEndpoint?
+} derive(Eq, @debug.Debug)
+
+type RuntimeRecord derive(ToJson, @json.FromJson)
+
+pub(all) struct RuntimeResources {
+  name : String
+  pod : Json
+  claim_template : Json?
+  network_policy : Json
+} derive(Eq, @debug.Debug)
+
+pub(all) struct RuntimeSecretBinding {
+  image_ref : String
+  environment_name : String
+  secret_name : String
+  secret_key : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RuntimeSettings {
+  namespace_name : String
+  node_name : String
+  node_id : String
+  model_cache_root : String
+  runtime_port : Int
+  run_as_user : Int
+  device_class_name : String
+  controller_addresses : Array[String]
+  runtime_secrets : Array[RuntimeSecretBinding]?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct RuntimeSupervisor {
+  journal : RuntimeJournal
+  transport : async (String, String, Json?) -> (Int, Json)
+  commit : async (String) -> Unit
+  mutex : @async.Mutex
+  file_lock : @fs.File?
+  mut closed : Bool
+  clock : () -> Int64
+}
+pub async fn RuntimeSupervisor::acknowledge_terminations(Self, Array[@contracts.RuntimeTermination]) -> Unit
+pub fn RuntimeSupervisor::close(Self) -> Unit
+pub async fn RuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, String, String, Int64, Int64) -> RuntimeObservation
+pub async fn RuntimeSupervisor::open_file(RuntimeSettings, async (String, String, Json?) -> (Int, Json), String) -> Self
+pub async fn RuntimeSupervisor::pending_terminations(Self) -> Array[@contracts.RuntimeTermination]
+pub async fn RuntimeSupervisor::probe_assignments(Self, Array[@contracts.DesiredAssignment]) -> Array[RuntimeObservation]
+pub async fn RuntimeSupervisor::reap_expired(Self, Int64) -> Unit
+pub async fn RuntimeSupervisor::remove_absent(Self, Array[String]) -> Unit
+pub fn RuntimeSupervisor::restore(RuntimeSettings, async (String, String, Json?) -> (Int, Json), async (String) -> Unit, String?, String, clock? : () -> Int64) -> Self raise
+pub fn RuntimeSupervisor::retained_artifact_digests(Self) -> Array[String]
+pub fn RuntimeSupervisor::snapshot(Self) -> String
+pub async fn RuntimeSupervisor::stop(Self, String) -> @contracts.DeploymentState
+
+// Type aliases
+pub type JournalCommit = async (String) -> Unit
+
+pub type Transport = async (String, String, Json?) -> (Int, Json)
+
+// Traits

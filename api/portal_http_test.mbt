@@ -5,6 +5,7 @@ async test "enterprise user signs, requests, and operator assigns exactly one no
   durable.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: [],
+    runtime_endpoints: None,
   })
   let runtime = @runtimes.OpenAiTextRuntime::new(
     "http://127.0.0.1:1/v1/responses",

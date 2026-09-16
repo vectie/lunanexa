@@ -128,6 +128,7 @@ pub(all) struct TrialEntitlement {
   expires_unix_ms : Int64
   api_key_id : String?
   revoked_unix_ms : Int64?
+  consumed_requests : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

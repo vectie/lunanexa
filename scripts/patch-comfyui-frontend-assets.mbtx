@@ -1,0 +1,58 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+}
+
+// Reviewed compatibility patch for the opaque ComfyUI frontend 1.51.9 adapter.
+// Refuse all other builds. Never apply this to user workflows or live volumes.
+fn replace_once(source : String, before : String, after : String) -> String raise {
+  let parts = source.split(before).to_array()
+  guard parts.length() == 2 else { fail("Pinned frontend patch anchor mismatch") }
+  parts[0].to_owned() + after + parts[1].to_owned()
+}
+
+async fn main {
+  let args = @env.args()
+  guard args.length() == 2 else { fail("Usage: moon run scripts/patch-comfyui-frontend-assets.mbtx <staged-settingStore-KkBYyEnh.js>") }
+  let path = args[1]
+  let digest = @shell.Cmd("openssl", ["dgst", "-sha256", path]).output()
+  digest.check()
+  guard digest.stdout().trim().has_suffix("8c7ffdcbb2cb0ee5db8e102d575f366f69edbe9ac124be0b2965deef36238684") else {
+    fail("Unreviewed ComfyUI frontend: expected the original 1.51.9 adapter")
+  }
+  let source = @fs.read_file(path).text()
+  let start = "function useAssetsApi(e){"
+  let end = "function normalizeMarqueeRect(e,t){"
+  let begin = source.find(start).unwrap()
+  let finish = source.find(end).unwrap()
+  guard begin < finish else { fail("Invalid frontend function boundaries") }
+  let original = source[begin:finish].to_owned()
+  let mut adapted = original
+  for pair in [
+    ("t.historyAssets", "t.flatOutputAssets"),
+    ("t.historyLoading", "t.flatOutputLoading"),
+    ("t.historyError", "t.flatOutputError"),
+    ("t.updateHistory()", "t.updateFlatOutputs()"),
+    ("t.loadMoreHistory()", "t.loadMoreFlatOutputs()"),
+    ("t.hasMoreHistory", "t.flatOutputHasMore"),
+    ("t.isLoadingMore", "t.flatOutputIsLoadingMore"),
+  ] {
+    let (before, after) = pair
+    // historyAssets appears in both the computed list and refresh return.
+    adapted = adapted.replace(old=before, new=after)
+  }
+  let patched = replace_once(source, original, adapted)
+  // Existing execution/status events refresh history. Refresh the durable
+  // output index too, retaining legacy job-history behavior for other panels.
+  let patched = replace_once(
+    patched,
+    "updateHistory=async()=>{m.value=!0,h.value=null;try{await fetchHistoryAssets(!1)",
+    "updateHistory=async()=>{m.value=!0,h.value=null;try{await updateFlatOutputs(),await fetchHistoryAssets(!1)",
+  )
+  @fs.write_file(path, patched)
+  let syntax = @shell.Cmd("node", ["--check", path]).output()
+  syntax.check()
+  println("Applied pinned ComfyUI 1.51.9 durable output-list adapter; JavaScript syntax checked.")
+}

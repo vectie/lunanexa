@@ -9,6 +9,7 @@ fn base_store() -> @commercial.CommercialStore raise {
     display_name: "Alpha Research",
     state: Active,
     verification_ref: Some("verify:alpha"),
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   store.add_cost_center({
@@ -121,6 +122,7 @@ test "hierarchy rejects cross-tenant parentage" {
     display_name: "Beta Research",
     state: Active,
     verification_ref: None,
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   let mut rejected = false
@@ -446,6 +448,7 @@ test "admission rejects inactive or unverified organizations" {
       display_name: organization_id,
       state,
       verification_ref,
+      legal_profile: None,
       created_unix_ms: 1000L,
     })
     store.add_cost_center({
@@ -488,6 +491,7 @@ test "verified identity evidence activates pending organization idempotently" {
     display_name: "Verify Me",
     state: PendingVerification,
     verification_ref: None,
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   let verified = store.record_identity_verification(
@@ -514,6 +518,61 @@ test "verified identity evidence activates pending organization idempotently" {
 }
 
 ///|
+test "formal organization legal profiles validate while legacy snapshots remain readable" {
+  let store = @commercial.CommercialStore::new()
+  let profile : @commercial.OrganizationLegalProfile = {
+    subject_kind: Company,
+    legal_name: "Luna Research Limited",
+    country_code: "CN",
+    registration_number: Some("91310000LUNA000001"),
+    tax_identifier: None,
+    registered_address: "Shanghai",
+    billing_contact: {
+      display_name: "Luna Billing",
+      email: "billing@example.invalid",
+      phone: Some("+86-21-5555-0100"),
+    },
+  }
+  store.add_organization({
+    organization_id: "org-formal",
+    display_name: "Luna Research",
+    state: PendingVerification,
+    verification_ref: None,
+    legal_profile: Some(profile),
+    created_unix_ms: 1000L,
+  })
+  assert_eq(
+    store.organization("org-formal").unwrap().legal_profile,
+    Some(profile),
+  )
+  try
+    store.add_organization({
+      organization_id: "org-company-without-registration",
+      display_name: "Missing registration",
+      state: Draft,
+      verification_ref: None,
+      legal_profile: Some({
+        ..profile,
+        registration_number: None,
+        tax_identifier: None,
+      }),
+      created_unix_ms: 1000L,
+    })
+  catch {
+    InvalidInput(_) => ()
+    error => fail("unexpected legal profile error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a company without registration evidence was accepted")
+  }
+  let legacy : @commercial.Organization = @json.from_json(
+    @json.parse(
+      "{\"organization_id\":\"org-legacy\",\"display_name\":\"Legacy\",\"state\":\"Active\",\"created_unix_ms\":\"1000\"}",
+    ),
+  )
+  assert_eq(legacy.legal_profile, None)
+}
+
+///|
 test "clickwrap and signature evidence are version and tenant bound" {
   let store = base_store()
   store.register_agreement_template({
@@ -523,6 +582,7 @@ test "clickwrap and signature evidence are version and tenant bound" {
     locale: "en-US",
     effective_unix_ms: 1000L,
     rendered_document_hash: document_hash,
+    document_uri: Some("/docs/acceptable-use/1.0.0"),
     state: DraftTemplate,
     created_unix_ms: 1000L,
   })
@@ -636,6 +696,7 @@ test "tenant-scoped snapshot and privacy-safe CSV resist formula injection" {
     display_name: "Beta",
     state: Active,
     verification_ref: None,
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   ignore(add_rated_usage(store, "event-export", "entry-export", 10L))
@@ -664,6 +725,7 @@ test "durable commercial snapshot restores tenant hierarchy and idempotency inde
     display_name: "Durable Organization",
     state: Active,
     verification_ref: Some("identity-evidence"),
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   store.add_cost_center({

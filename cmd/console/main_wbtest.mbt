@@ -80,7 +80,7 @@ test "console quick-deployment fuzz matches the public intent boundary" {
   let base = @ui.demo_state()
   for length in 0..<=140 {
     let candidate = quick_deployment_intent(
-      { ..base, quick_deployment_id: "a".repeat(length) },
+      { ..base, quick_deployment_id: "a".repeat(length), },
       length.to_int64(),
     )
     assert_eq(candidate is Some(_), length > 0 && length <= 128)
@@ -91,12 +91,12 @@ test "console quick-deployment fuzz matches the public intent boundary" {
       "服务",
     ] {
     assert_true(
-      quick_deployment_intent({ ..base, quick_deployment_id: hostile }, 1L)
+      quick_deployment_intent({ ..base, quick_deployment_id: hostile, }, 1L)
       is None,
     )
   }
   guard quick_deployment_intent(
-      { ..base, quick_deployment_id: "service-1" },
+      { ..base, quick_deployment_id: "service-1", },
       1L,
     )
     is Some(intent) else {
@@ -265,7 +265,7 @@ test "loaded controller state keeps the selected route and locale" {
     ..@ui.default_state(),
     locale: English,
     route: Overview,
-    overview: { ..@ui.default_state().overview, total_nodes: 2 },
+    overview: { ..@ui.default_state().overview, total_nodes: 2, },
   }
   let merged = merge_loaded_console(current, loaded)
   assert_eq(merged.locale, ChineseSimplified)
@@ -438,7 +438,7 @@ test "changing an operator credential clears authenticated UI authority" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
-    console: { ..@ui.default_state(), operator_authenticated: true },
+    console: { ..@ui.default_state(), operator_authenticated: true, },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -455,10 +455,13 @@ test "changing an operator credential clears authenticated UI authority" {
 
 ///|
 test "console document titles use the shared locale contract" {
-  assert_eq(console_document_title(English), "LunaNexa | Cluster Operations")
+  assert_eq(
+    console_document_title(English),
+    "能源谷“创未来”街区算力平台 | Cluster Operations",
+  )
   assert_eq(
     console_document_title(ChineseSimplified),
-    "LunaNexa | 集群运维",
+    "能源谷“创未来”街区算力平台 | 集群运维",
   )
 }
 
@@ -544,7 +547,7 @@ test "unauthenticated operator sees login gate instead of console shell" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
-    console: { ..@ui.default_state(), locale: English },
+    console: { ..@ui.default_state(), locale: English, },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -731,7 +734,7 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: Leases },
+    console: { ..@ui.demo_state(), route: Leases, },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -771,7 +774,7 @@ test "demo mode previews every destructive node operation without mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: Nodes },
+    console: { ..@ui.demo_state(), route: Nodes, },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -804,7 +807,7 @@ test "demo mode exercises one-click preflight without controller mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: Catalog },
+    console: { ..@ui.demo_state(), route: Catalog, },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -872,7 +875,7 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: ContractDocuments },
+    console: { ..@ui.demo_state(), route: ContractDocuments, },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,

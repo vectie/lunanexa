@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn copy(Locale, String, String) -> String
+
 pub fn default_locale() -> Locale
 
 pub fn parse_locale(String) -> Locale

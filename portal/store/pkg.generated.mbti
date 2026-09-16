@@ -20,6 +20,7 @@ pub struct FilePortalStore {
   mutex : @async.Mutex
 }
 pub async fn FilePortalStore::lease_request(Self, String) -> @portal.EnterpriseLeaseRequest?
+pub async fn FilePortalStore::memberships_for_subject(Self, String) -> Array[@portal.EnterpriseMembership]
 pub async fn FilePortalStore::open(String) -> Self
 pub async fn FilePortalStore::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn FilePortalStore::publish_agreement(Self, @portal.PortalAgreement) -> @portal.PortalAgreement
@@ -29,6 +30,7 @@ pub async fn FilePortalStore::replace_trial_membership(Self, String, @portal.Ent
 pub async fn FilePortalStore::request_signature(Self, String, @portal.SignatureRequest, Int64) -> @portal.PortalAgreement
 pub async fn FilePortalStore::review_lease_request(Self, @portal.LeaseReview, String?, Int64) -> @portal.EnterpriseLeaseRequest
 pub async fn FilePortalStore::self_view(Self, String) -> @portal.EnterpriseSelfView
+pub async fn FilePortalStore::self_view_for_organization(Self, String, String) -> @portal.EnterpriseSelfView
 pub async fn FilePortalStore::snapshot(Self) -> @portal.PortalSnapshot
 pub async fn FilePortalStore::submit_lease_request(Self, String, @portal.LeaseRequestSubmission, Int64) -> @portal.EnterpriseLeaseRequest
 

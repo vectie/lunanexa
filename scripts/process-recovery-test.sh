@@ -70,6 +70,7 @@ start_controller() {
     LUNANEXA_NOTIFICATION_PATH="$test_directory/notifications.json" \
     LUNANEXA_OBSERVABILITY_PATH="$test_directory/observability.json" \
     LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
+    LUNANEXA_MACHINE_COMMERCE_PATH="$test_directory/machine-commerce.json" \
     LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
     LUNANEXA_ACCOUNT_PATH="$test_directory/accounts.json" \
     LUNANEXA_ACCESS_ONBOARDING_PATH="$test_directory/access-onboarding.json" \
@@ -93,6 +94,7 @@ start_controller() {
     LUNANEXA_MONITORING_TOKEN="process-test-monitoring-authority" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
     LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority-01" \
+    LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET="process-test-machine-commerce-authority" \
     LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
     LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
     LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET="process-test-account-session-authority" \
@@ -220,6 +222,7 @@ env \
   LUNANEXA_NOTIFICATION_PATH="$test_directory/notifications.json" \
   LUNANEXA_OBSERVABILITY_PATH="$test_directory/observability.json" \
   LUNANEXA_OFFLINE_COMMERCE_PATH="$test_directory/offline-commerce.json" \
+  LUNANEXA_MACHINE_COMMERCE_PATH="$test_directory/machine-commerce.json" \
   LUNANEXA_ACCESS_PATH="$test_directory/access.json" \
   LUNANEXA_ACCOUNT_PATH="$test_directory/accounts.json" \
   LUNANEXA_ACCESS_ONBOARDING_PATH="$test_directory/access-onboarding.json" \
@@ -243,6 +246,7 @@ env \
   LUNANEXA_MONITORING_TOKEN="process-test-monitoring-authority" \
   LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
   LUNANEXA_CATALOG_SIGNING_SECRET="process-test-catalog-authority-01" \
+  LUNANEXA_MACHINE_COMMERCE_SIGNING_SECRET="process-test-machine-commerce-authority" \
   LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET="process-test-exclusive-lease-authority" \
   LUNANEXA_API_KEY_ISSUER_SECRET="process-test-api-key-authority-0123456789" \
   LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET="process-test-account-session-authority" \

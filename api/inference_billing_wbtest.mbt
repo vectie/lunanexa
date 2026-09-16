@@ -4,6 +4,7 @@ async test "durable inference receipt is rated exactly once" {
     return
   }
   let directory = @fs.tmpdir(prefix="lunanexa-inference-billing-")
+  defer @fs.rmdir(directory, recursive=true)
   let durable = @store.FileStore::open("\{directory}/control.json")
   durable.fence_controller(1L)
   let database = @database.PostgresDatabase::open(url)
@@ -13,6 +14,7 @@ async test "durable inference receipt is rated exactly once" {
     display_name: "Inference billing organization",
     state: Active,
     verification_ref: Some("verification-inference-billing"),
+    legal_profile: None,
     created_unix_ms: 1000L,
   })
   commercial.add_cost_center({
@@ -118,5 +120,59 @@ async test "durable inference receipt is rated exactly once" {
   assert_eq(snapshot.ledger_entries.length(), 1)
   assert_eq(snapshot.ledger_entries[0].amount.minor_units, 50L)
   database.close()
-  @fs.rmdir(directory, recursive=true)
+
+  // Reconstruct the service from a new database connection, as startup does.
+  // Reusing the original in-memory commercial store would not test recovery.
+  let recovered_database = @database.PostgresDatabase::open(url)
+  defer recovered_database.close()
+  let payload = recovered_database
+    .load_snapshot("commercial", @commercial.snapshot_schema_version)
+    .unwrap()
+  let recovered_commercial = @commercial.CommercialStore::from_durable_snapshot(
+    @json.from_json(@json.parse(payload)),
+  )
+  let integrations_payload = recovered_database
+    .load_snapshot(
+      "commercial_integrations", @commercial_integrations.integration_schema_version,
+    )
+    .unwrap()
+  let recovered_integrations = @commercial_integrations.IntegrationStore::from_durable_snapshot(
+    @json.from_json(@json.parse(integrations_payload)),
+  )
+  let recovered_service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "test",
+    )
+    .with_commercial_persistence(
+      recovered_commercial, recovered_integrations, recovered_database,
+    )
+    .with_inference_rate_card(rate)
+  recovered_service.record_inference_charge(request, response, authority)
+  recovered_service.record_inference_charge(request, response, authority)
+  let conflicting_response = {
+    ..response,
+    usage: { ..response.usage, accelerator_ms: 3501L, },
+  }
+  try
+    recovered_service.record_inference_charge(
+      request, conflicting_response, authority,
+    )
+  catch {
+    @commercial.CommercialError::IdempotencyConflict(_) => ()
+    error => raise error
+  } noraise {
+    _ => fail("changed replay must not replace a recovered charge")
+  }
+  recovered_service.record_inference_charge(request, response, authority)
+  let after_recovery = recovered_commercial.snapshot(authority.organization_id)
+  assert_eq(after_recovery.usage_observations.length(), 1)
+  assert_eq(after_recovery.ledger_entries.length(), 1)
+  assert_eq(after_recovery.usage_observations[0].quantity, 2L)
+  assert_eq(after_recovery.ledger_entries[0].amount.minor_units, 50L)
+  // Verify the persisted bytes, not just the reconstructed process state.
+  assert_eq(
+    recovered_database
+    .load_snapshot("commercial", @commercial.snapshot_schema_version)
+    .unwrap(),
+    payload,
+  )
 }

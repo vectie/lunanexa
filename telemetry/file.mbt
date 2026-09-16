@@ -45,7 +45,7 @@ async fn write_telemetry(path : String, snapshot : TelemetrySnapshot) -> Unit {
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -167,7 +167,7 @@ async fn FileTelemetry::persist(self : FileTelemetry) -> Unit {
       database.save_opaque_snapshot(
         "telemetry",
         "lunanexa.telemetry.v1",
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -181,18 +181,19 @@ pub async fn FileTelemetry::record_sample(
     raise PayloadMetricRejected
   }
   self.mutex.acquire()
+  defer self.mutex.release()
+  let previous = self.samples.copy()
+  let mut committed = false
+  defer (if !committed {
+    self.samples.clear()
+    self.samples.push_iter(previous.iter())
+  })
   self.samples.push(sample)
   while self.samples.length() > self.sample_history_limit {
     ignore(self.samples.remove(0))
   }
-  try self.persist() catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
+  committed = true
 }
 
 ///|
@@ -202,20 +203,24 @@ pub async fn FileTelemetry::record_benchmark(
 ) -> BenchmarkSummary {
   let summary = summarize(run)
   self.mutex.acquire()
+  defer self.mutex.release()
+  let previous_runs = self.benchmark_runs.copy()
+  let previous_summaries = self.benchmark_summaries.copy()
+  let mut committed = false
+  defer (if !committed {
+    self.benchmark_runs.clear()
+    self.benchmark_runs.push_iter(previous_runs.iter())
+    self.benchmark_summaries.clear()
+    self.benchmark_summaries.push_iter(previous_summaries.iter())
+  })
   self.benchmark_runs.push(run)
   self.benchmark_summaries.push(summary)
   while self.benchmark_runs.length() > self.benchmark_history_limit {
     ignore(self.benchmark_runs.remove(0))
     ignore(self.benchmark_summaries.remove(0))
   }
-  try self.persist() catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
+  committed = true
   summary
 }
 

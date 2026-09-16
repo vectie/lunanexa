@@ -128,6 +128,26 @@ Its callbacks are replay-, sequence-, tenant- and aggregate-checked, but its
 test MAC is explicitly not a qualified signature. It cannot satisfy a
 production trust, payment or tax requirement.
 
+The machine-commerce authority is a separate durable aggregate layered on this
+commercial plane. It owns active sellable SKUs, live-capacity projections,
+HMAC-bound quotes, prepaid orders, lifecycle generations, reservations and usage
+receipts. Public requests derive tenant, organization, project and purchaser
+from the selected account membership. They cannot name physical infrastructure.
+The supervised reconciler waits for authenticated settlement before it selects
+a matching fresh heartbeat, creates either an exclusive lease or managed model
+deployment, and advances the order. Its provider outbox has an explicit
+`PaymentRefund` kind so compensation is observable, retryable and distinct from
+a new checkout. File snapshots are a local fallback; the production profile
+uses the PostgreSQL snapshot domain `machine_commerce`.
+
+Dedicated endpoint access keys are recorded only as key identifiers in the
+machine aggregate; raw secrets remain in the access authority and are shown once.
+At inference admission the binding constrains eligible assignments to the exact
+paid deployment and rejects serving adapters that cannot enforce direct-node
+routing. Early termination immediately invalidates that binding. Dedicated
+requests still create usage evidence, but skip shared-MaaS rating because the
+capacity interval was prepaid.
+
 ### Technical decision plane
 
 Prewarm transitions, health-probe evaluation, safe cache telemetry, bounded
@@ -143,14 +163,18 @@ LunaNexa ships two Rabbita browser sites from shared public contracts:
 - the management console presents cluster health, users, access grants,
   capacity leases, models, deployments, policy and audit evidence;
 - the enterprise site presents onboarding, agreement signing requests, lease
-  requests/status, tenant cost/model views and a local-browser WebIDE with
-  generic model invocation and approved editor handoffs.
+  requests/status, tenant cost/model views, self-service organization creation,
+  prepaid machine ordering and a local-browser WebIDE with generic model
+  invocation and approved editor handoffs.
 
 An approved desktop handoff crosses the browser boundary with only a
 short-lived, single-use code in a URL fragment. The local client removes that
 fragment, redeems through an administrator-pinned issuer and keeps the resulting
 lease-scoped API credential in its local provider gateway. LunaNexa stores only
-digests and rechecks lease plus contract authority on every credential use.
+digests and rechecks active workspace authority on every credential use.
+The explicit private-cloud profile replaces the rental-contract prerequisite
+with administrator-granted workspace access; commercial order-bound credentials
+never acquire that exemption. The default profile retains contract admission.
 Product-specific translation stays outside LunaNexa's source boundary.
 
 The enterprise portal writes only tenant-scoped intent. It does not accept a
@@ -253,13 +277,17 @@ does not gain general Internet egress or write access to the model store. The
 first source profile is ModelScope and is specified in
 [`MODELSCOPE_MODEL_ONBOARDING.md`](MODELSCOPE_MODEL_ONBOARDING.md).
 
-PostgreSQL schema v1 is implemented for enterprise memberships, agreements,
+PostgreSQL schema v3 is implemented for enterprise memberships, agreements,
 tenant lease requests, workspace users, grants, leases and admission
 reservations. Each mutation commits a canonical typed snapshot and normalized
 indexed projections together. File persistence for these domains is now an
-explicit development fallback. Remaining controller, registry, commercial and
-technical-policy stores retain their existing adapters and must be migrated
-before claiming a fully database-backed control plane.
+explicit development fallback. Production controller, registry, enrollment,
+scheduler, telemetry, deployment, commercial and technical-policy authority
+also uses PostgreSQL snapshots. Exactly one controller holds the session
+leadership lock; standby processes restore these stores after election under a
+new fencing token. See `docs/DATABASE.md` for the complete domain inventory and
+migration procedure. This implementation does not prove external database HA,
+backup recovery or interruption-free failover.
 
 The artifact store is authoritative; node-local materializations are disposable
 assignment-scoped cache entries. This keeps model transfer out of the management API
@@ -284,8 +312,9 @@ Controller placement is a deployment-profile decision. Separation is preferred
 when the profile needs compute-failure isolation; constrained labs may
 explicitly co-locate management and compute. In either case, loss of any node
 covered by the profile's failure claim must not destroy desired state or the
-registry. A later highly available controller can be added without changing
-the node protocol.
+registry. The single-active, standby-controller design retains the node
+protocol; the database and deployed failure domains still require separate
+availability acceptance.
 
 ## Model lifecycle
 

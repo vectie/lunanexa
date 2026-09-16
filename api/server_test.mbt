@@ -399,7 +399,7 @@ async test "bounded retry does not repeat a non-retryable upstream rejection" {
       Post,
       "/v1/workloads",
       { "Authorization": "Bearer inference-token" },
-      { ..api_request(), idempotency_key: "no-retry-idem" }
+      { ..api_request(), idempotency_key: "no-retry-idem", }
       .to_json()
       .stringify(),
     )
@@ -515,7 +515,7 @@ async test "controller signs validated desired assignments for nodes" {
     store, registry, runtime, "operator-token", "inference-token", "node-signing-secret",
     "0.1.0",
   )
-  let unsigned = { ..api_assignment(), signature: "" }
+  let unsigned = { ..api_assignment(), signature: "", }
   let reply = service.handle(
     Put,
     "/v1/assignments",
@@ -539,7 +539,7 @@ async test "controller signs validated desired assignments for nodes" {
     Put,
     "/v1/assignments",
     { "Authorization": "Bearer operator-token" },
-    { ..unsigned, assignment_id: "../runtime" }.to_json().stringify(),
+    { ..unsigned, assignment_id: "../runtime", }.to_json().stringify(),
   )
   assert_eq(unsafe_identity.status, 400)
   assert_eq(store.assignment("../runtime"), None)
@@ -555,6 +555,7 @@ async test "reconciliation-only recovery plan exposes missing and unreachable st
   store.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: 1L,
   })
   let runtime = @runtimes.OpenAiTextRuntime::new(
@@ -852,7 +853,7 @@ async test "streaming proxy emits bounded canonical chunks before completion" {
       },
     )
     defer client.close()
-    client.write({ ..api_request(), idempotency_key: "stream-idem" }.to_json())
+    client.write({ ..api_request(), idempotency_key: "stream-idem", }.to_json())
     let response = client.end_request()
     assert_eq(response.code, 200)
     let first = client.read_until("\n\n").unwrap()
@@ -988,6 +989,7 @@ fn schedulable_heartbeat(
       taints: [],
     },
     running_deployments: ["deployment-1"],
+    runtime_endpoints: None,
     timestamp_unix_ms: @async.now(),
     signature: "",
   }
@@ -1201,7 +1203,7 @@ async test "admitted work waits in a bounded runtime queue and reports queue tim
       Post,
       "/v1/workloads",
       headers,
-      { ..api_request(), workload_id: "queued-1", idempotency_key: "queued-1" }
+      { ..api_request(), workload_id: "queued-1", idempotency_key: "queued-1", }
       .to_json()
       .stringify(),
     )
@@ -1316,10 +1318,12 @@ async test "bounded pre-output retry fails over to the next deterministic node" 
     store.put_heartbeat({
       ..schedulable_heartbeat(Active, node_id="node-a"),
       running_deployments: ["deployment-a"],
+      runtime_endpoints: None,
     })
     store.put_heartbeat({
       ..schedulable_heartbeat(Active, node_id="node-b"),
       running_deployments: ["deployment-b"],
+      runtime_endpoints: None,
     })
     let runtime = @runtimes.OpenAiTextRuntime::new(
       "http://\{primary_server.addr}/v1/responses",
@@ -1349,7 +1353,7 @@ async test "bounded pre-output retry fails over to the next deterministic node" 
         "Authorization": "Bearer inference-token",
         "Content-Type": "application/json",
       },
-      { ..api_request(), idempotency_key: "failover-idem" }
+      { ..api_request(), idempotency_key: "failover-idem", }
       .to_json()
       .stringify(),
     )
@@ -1441,7 +1445,7 @@ async test "streaming retry fails over before emitting the first event" {
     )
     defer client.close()
     client.write(
-      { ..api_request(), idempotency_key: "stream-failover-idem" }.to_json(),
+      { ..api_request(), idempotency_key: "stream-failover-idem", }.to_json(),
     )
     let response = client.end_request()
     assert_eq(response.code, 200)
@@ -1524,7 +1528,7 @@ async test "node heartbeat requires a canonical message authentication code" {
   let service = @api.ApiService::new(
     store, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
   )
-  let unsigned = { ..schedulable_heartbeat(Active), signature: "" }
+  let unsigned = { ..schedulable_heartbeat(Active), signature: "", }
   let headers = {
     "Authorization": "Node node-token",
     "X-LunaNexa-Node-Id": "node-a",
@@ -1534,7 +1538,7 @@ async test "node heartbeat requires a canonical message authentication code" {
     Put,
     "/v1/nodes/heartbeat",
     headers,
-    { ..unsigned, signature: "present-but-forged" }.to_json().stringify(),
+    { ..unsigned, signature: "present-but-forged", }.to_json().stringify(),
   )
   assert_eq(forged.status, 401)
   assert_eq(store.heartbeats().length(), 0)
@@ -1600,7 +1604,7 @@ async test "settings views preserve admin and enterprise authority boundaries" {
     allow_http_loopback=true,
   )
   let defaults = @settings.default_global_admin_settings()
-  let configured = { ..defaults, generation: 7L }
+  let configured = { ..defaults, generation: 7L, }
   let service = @api.ApiService::new(
     store, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
   ).with_global_admin_settings(configured)

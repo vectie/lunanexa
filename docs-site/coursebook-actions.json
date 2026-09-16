@@ -1,0 +1,243 @@
+{
+  "contract_version": "lunanexa.coursebook-ui-actions.v1",
+  "scope": "All current reader guides audited for explicitly named clickable UI actions. Historical acceptance SOP and production observation pages are separately dated evidence records, excluded from current-button claims. API operations, lifecycle milestones and generic prose are not button labels.",
+  "excluded_evidence_pages": [
+    "ui-end-to-end-sop",
+    "production-ui-validation"
+  ],
+  "conceptual_only_pages": [
+    "welcome",
+    "readiness",
+    "boundaries",
+    "feature-map",
+    "architecture",
+    "state-ownership",
+    "request-flow",
+    "deployment-flow",
+    "enrollment-flow",
+    "access-flow",
+    "local-quickstart",
+    "client-api",
+    "dgx-runtimes",
+    "observability-recovery",
+    "debug-controller",
+    "debug-node-runtime",
+    "debug-access-database",
+    "configuration",
+    "error-reference",
+    "future-expansion",
+    "source-ledger",
+    "comfyui-quickstart",
+    "choose-your-path",
+    "comfyui-first-image",
+    "comfyui-next-steps",
+    "planned-interactive-access",
+    "planned-app-catalog",
+    "planned-workload-exposure",
+    "planned-elastic-batch",
+    "planned-storage-registry",
+    "planned-commerce-identity",
+    "planned-chat-playground"
+  ],
+  "site_actions": [
+    {
+      "page_ids": [
+        "daily-operations"
+      ],
+      "en": "Ask guide",
+      "zh": "问指南",
+      "translation_key": "ask_guide",
+      "selector": "data-open-pet",
+      "handler": "openPet"
+    }
+  ],
+  "actions": [
+    {
+      "page_ids": [
+        "operator-console"
+      ],
+      "source": "ui/console.mbt",
+      "helper": "localized",
+      "route": "Overview",
+      "en": "Overview",
+      "zh": "概览"
+    },
+    {
+      "page_ids": [
+        "developer-workbench"
+      ],
+      "source": "ui/workbench/workbench.mbt",
+      "catalog": "ui/workbench/static_messages.mbt",
+      "message": "SendRequest",
+      "renderer": "static_message",
+      "binding": "on_click=command(emit, SendRequest)",
+      "en": "Send request",
+      "zh": "发送请求"
+    },
+    {
+      "page_ids": [
+        "daily-operations"
+      ],
+      "source": "ui/console.mbt",
+      "helper": "localized",
+      "route": "Alerts",
+      "en": "Alerts",
+      "zh": "告警"
+    },
+    {
+      "page_ids": [
+        "daily-operations"
+      ],
+      "source": "ui/enterprise/enterprise.mbt",
+      "catalog": "ui/enterprise/copy_catalog.mbt",
+      "message": "Notifications",
+      "renderer": "enterprise_copy",
+      "route": "Notifications",
+      "en": "Notifications",
+      "zh": "通知"
+    },
+    {
+      "page_ids": [
+        "daily-operations"
+      ],
+      "source": "ui/enterprise/enterprise.mbt",
+      "catalog": "ui/enterprise/copy_catalog.mbt",
+      "message": "MyMachine",
+      "renderer": "enterprise_copy",
+      "route": "MachineAccess",
+      "en": "My machine",
+      "zh": "我的机器"
+    },
+    {
+      "page_ids": [
+        "daily-operations"
+      ],
+      "source": "ui/enterprise/enterprise.mbt",
+      "catalog": "ui/enterprise/copy_catalog.mbt",
+      "message": "MarkAsRead",
+      "renderer": "enterprise_copy",
+      "binding": "MarkNotificationRead(",
+      "en": "Mark as read",
+      "zh": "标记为已读"
+    },
+    {
+      "page_ids": [
+        "tomorrow-deployment"
+      ],
+      "source": "ui/installer/installer.mbt",
+      "binding": "on_click=emit(PreviewRequested)",
+      "en": "Preview and verify",
+      "zh": "预览并验证"
+    },
+    {
+      "page_ids": [
+        "tomorrow-deployment"
+      ],
+      "source": "ui/installer/installer.mbt",
+      "binding": "on_click=emit(ApplyRequested)",
+      "en": "Deploy management foundation",
+      "zh": "部署管理基础"
+    },
+    {
+      "page_ids": [
+        "tomorrow-deployment"
+      ],
+      "source": "ui/console.mbt",
+      "helper": "localized",
+      "binding": "on_click=command(emit, DownloadModelSource(candidate.id))",
+      "en": "Download",
+      "zh": "下载"
+    },
+    {
+      "page_ids": [
+        "trial-quickstart"
+      ],
+      "source": "ui/enterprise/enterprise.mbt",
+      "catalog": "ui/enterprise/copy_catalog.mbt",
+      "message": "CreateTrialApiKey",
+      "renderer": "enterprise_copy",
+      "binding": "on_click=command(emit, Navigate(AccountAccess))",
+      "en": "Create trial API key",
+      "zh": "创建体验 API 密钥"
+    },
+    {
+      "page_ids": [
+        "trial-quickstart"
+      ],
+      "source": "ui/enterprise/enterprise.mbt",
+      "catalog": "ui/enterprise/copy_catalog.mbt",
+      "message": "TryAPromptInTheWorkbench",
+      "renderer": "enterprise_copy",
+      "binding": "href=\"/workbench/?trial=1\"",
+      "en": "Try a prompt in the workbench",
+      "zh": "先在工作台试一句"
+    },
+    {
+      "page_ids": [
+        "trial-quickstart",
+        "enterprise-portal-day-one"
+      ],
+      "source": "ui/enterprise/enterprise.mbt",
+      "catalog": "ui/enterprise/copy_catalog.mbt",
+      "message": "CopyFirstCallExample",
+      "renderer": "enterprise_copy",
+      "binding": "on_click=command(emit, CopyFirstCallExample)",
+      "en": "Copy first-call example",
+      "zh": "复制首次调用示例"
+    },
+    {
+      "page_ids": [
+        "exclusive-machine-basics"
+      ],
+      "source": "ui/machine_access/machine_access.mbt",
+      "catalog": "ui/machine_access/messages.mbt",
+      "message": "LabelRedeemSSHaccess",
+      "renderer": "machine_message",
+      "binding": "RedeemCredential(machine.lease_ref, machine.generation)",
+      "en": "Redeem SSH access",
+      "zh": "领取 SSH 访问凭据"
+    },
+    {
+      "page_ids": [
+        "exclusive-machine-basics"
+      ],
+      "source": "ui/machine_access/machine_access.mbt",
+      "catalog": "ui/machine_access/messages.mbt",
+      "message": "CopyConnection",
+      "en": "Copy SSH command",
+      "zh": "复制 SSH 命令"
+    },
+    {
+      "page_ids": [
+        "exclusive-machine-basics"
+      ],
+      "source": "ui/machine_access/machine_access.mbt",
+      "catalog": "ui/machine_access/messages.mbt",
+      "message": "CopyFingerprint",
+      "en": "Copy host fingerprint",
+      "zh": "复制主机指纹"
+    },
+    {
+      "page_ids": [
+        "exclusive-machine-basics"
+      ],
+      "source": "ui/machine_access/connection_help.mbt",
+      "catalog": "ui/machine_access/messages.mbt",
+      "message": "CopyTunnel",
+      "en": "Copy tunnel command",
+      "zh": "复制隧道命令"
+    },
+    {
+      "page_ids": [
+        "exclusive-machine-basics"
+      ],
+      "source": "ui/machine_access/machine_access.mbt",
+      "catalog": "ui/machine_access/messages.mbt",
+      "message": "LabelEndaccessearly",
+      "renderer": "machine_message",
+      "binding": "on_click=command(emit, BeginTermination(machine.lease_ref))",
+      "en": "End access early",
+      "zh": "提前结束访问"
+    }
+  ]
+}

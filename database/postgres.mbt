@@ -43,7 +43,7 @@ pub fn PostgresDatabase::open(
       raise MigrationFailed("\{Repr(error)}")
     }
   }
-  { connection, mutex: Mutex() }
+  { connection, mutex: Mutex(), }
 }
 
 ///|
@@ -92,6 +92,7 @@ fn allowed_domain(domain : String) -> Bool {
   domain == "access_onboarding" ||
   domain == "accounts" ||
   domain == "client_handoffs" ||
+  domain == "media_jobs" ||
   domain == "enterprise_portal" ||
   domain == "workspace_directory" ||
   domain == "workspace_admissions" ||
@@ -99,6 +100,7 @@ fn allowed_domain(domain : String) -> Bool {
   domain == "commercial" ||
   domain == "commercial_integrations" ||
   domain == "offline_commerce" ||
+  domain == "machine_commerce" ||
   domain == "contract_documents" ||
   domain == "notifications" ||
   domain == "observability" ||
@@ -128,73 +130,67 @@ pub async fn PostgresDatabase::try_acquire_controller_leadership(
     raise QueryFailed("controller holder id is invalid")
   }
   self.mutex.acquire()
-  try {
-    let locked = run(
-      self.connection,
-      "SELECT pg_try_advisory_lock($1::bigint)::text",
-      parameters=[Some(controller_advisory_lock_id)],
-    )
-    if locked.value(0, 0) != Some("true") && locked.value(0, 0) != Some("t") {
-      self.mutex.release()
-      return None
-    }
-    ignore(run(self.connection, "BEGIN"))
-    let elected = run(
-      self.connection,
-      (
-        #|INSERT INTO lunanexa.controller_leadership
-        #|  (singleton, fencing_token, holder_id, backend_pid, acquired_at)
-        #|VALUES (
-        #|  true,
-        #|  GREATEST(
-        #|    1,
-        #|    COALESCE((
-        #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
-        #|      FROM lunanexa.snapshots WHERE domain = 'control'
-        #|    ), 1)
-        #|  ),
-        #|  $1,
-        #|  pg_backend_pid(),
-        #|  now()
-        #|)
-        #|ON CONFLICT (singleton) DO UPDATE SET
-        #|  fencing_token = GREATEST(
-        #|    lunanexa.controller_leadership.fencing_token + 1,
-        #|    COALESCE((
-        #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
-        #|      FROM lunanexa.snapshots WHERE domain = 'control'
-        #|    ), 1)
-        #|  ),
-        #|  holder_id = EXCLUDED.holder_id,
-        #|  backend_pid = pg_backend_pid(),
-        #|  acquired_at = now()
-        #|RETURNING fencing_token::text
-      ),
-      parameters=[Some(holder_id.trim().to_owned())],
-    )
-    guard elected.value(0, 0) is Some(raw_token) else {
-      raise QueryFailed("controller leadership token is missing")
-    }
-    let token = @string.parse_int64(raw_token) catch {
-      _ => raise QueryFailed("controller leadership token is invalid")
-    }
-    ignore(run(self.connection, "COMMIT"))
-    self.mutex.release()
-    Some(token)
-  } catch {
-    error => {
-      rollback(self.connection)
-      ignore(
-        run(self.connection, "SELECT pg_advisory_unlock($1::bigint)", parameters=[
-          Some(controller_advisory_lock_id),
-        ]),
-      ) catch {
-        _ => ()
-      }
-      self.mutex.release()
-      raise error
+  defer self.mutex.release()
+  errdefer {
+    rollback(self.connection)
+    ignore(
+      run(self.connection, "SELECT pg_advisory_unlock($1::bigint)", parameters=[
+        Some(controller_advisory_lock_id),
+      ]),
+    ) catch {
+      _ => ()
     }
   }
+  let locked = run(
+    self.connection,
+    "SELECT pg_try_advisory_lock($1::bigint)::text",
+    parameters=[Some(controller_advisory_lock_id)],
+  )
+  if locked.value(0, 0) != Some("true") && locked.value(0, 0) != Some("t") {
+    return None
+  }
+  ignore(run(self.connection, "BEGIN"))
+  let elected = run(
+    self.connection,
+    (
+      #|INSERT INTO lunanexa.controller_leadership
+      #|  (singleton, fencing_token, holder_id, backend_pid, acquired_at)
+      #|VALUES (
+      #|  true,
+      #|  GREATEST(
+      #|    1,
+      #|    COALESCE((
+      #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
+      #|      FROM lunanexa.snapshots WHERE domain = 'control'
+      #|    ), 1)
+      #|  ),
+      #|  $1,
+      #|  pg_backend_pid(),
+      #|  now()
+      #|)
+      #|ON CONFLICT (singleton) DO UPDATE SET
+      #|  fencing_token = GREATEST(
+      #|    lunanexa.controller_leadership.fencing_token + 1,
+      #|    COALESCE((
+      #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
+      #|      FROM lunanexa.snapshots WHERE domain = 'control'
+      #|    ), 1)
+      #|  ),
+      #|  holder_id = EXCLUDED.holder_id,
+      #|  backend_pid = pg_backend_pid(),
+      #|  acquired_at = now()
+      #|RETURNING fencing_token::text
+    ),
+    parameters=[Some(holder_id.trim().to_owned())],
+  )
+  guard elected.value(0, 0) is Some(raw_token) else {
+    raise QueryFailed("controller leadership token is missing")
+  }
+  let token = @string.parse_int64(raw_token) catch {
+    _ => raise QueryFailed("controller leadership token is invalid")
+  }
+  ignore(run(self.connection, "COMMIT"))
+  Some(token)
 }
 
 ///|
@@ -209,6 +205,7 @@ pub async fn PostgresDatabase::controller_leadership_is_current(
     return false
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let result = try {
     let checked = run(
       self.connection,
@@ -230,7 +227,6 @@ pub async fn PostgresDatabase::controller_leadership_is_current(
   } catch {
     _ => false
   }
-  self.mutex.release()
   result
 }
 
@@ -244,31 +240,23 @@ pub async fn PostgresDatabase::load_snapshot(
     raise UnsupportedSnapshot(domain)
   }
   self.mutex.acquire()
-  try {
-    let result = run(
-      self.connection,
-      "SELECT schema_version, payload::text FROM lunanexa.snapshots WHERE domain = $1",
-      parameters=[Some(domain)],
-    )
-    if result.row_count() == 0 {
-      self.mutex.release()
-      return None
-    }
-    guard result.value(0, 0) is Some(schema) &&
-      result.value(0, 1) is Some(payload) else {
-      raise QueryFailed("snapshot row is incomplete")
-    }
-    if schema != expected_schema_version {
-      raise UnsupportedSnapshot(schema)
-    }
-    self.mutex.release()
-    Some(payload)
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let result = run(
+    self.connection,
+    "SELECT schema_version, payload::text FROM lunanexa.snapshots WHERE domain = $1",
+    parameters=[Some(domain)],
+  )
+  if result.row_count() == 0 {
+    return None
   }
+  guard result.value(0, 0) is Some(schema) &&
+    result.value(0, 1) is Some(payload) else {
+    raise QueryFailed("snapshot row is incomplete")
+  }
+  if schema != expected_schema_version {
+    raise UnsupportedSnapshot(schema)
+  }
+  Some(payload)
 }
 
 ///|
@@ -307,18 +295,11 @@ pub async fn PostgresDatabase::save_opaque_snapshot(
   }
   ignore(@json.parse(payload) catch { _ => raise UnsupportedSnapshot(domain) })
   self.mutex.acquire()
-  try {
-    ignore(run(self.connection, "BEGIN"))
-    write_snapshot_row(self.connection, domain, version, payload)
-    ignore(run(self.connection, "COMMIT"))
-    self.mutex.release()
-  } catch {
-    error => {
-      rollback(self.connection)
-      self.mutex.release()
-      raise error
-    }
-  }
+  defer self.mutex.release()
+  errdefer rollback(self.connection)
+  ignore(run(self.connection, "BEGIN"))
+  write_snapshot_row(self.connection, domain, version, payload)
+  ignore(run(self.connection, "COMMIT"))
 }
 
 ///|
@@ -347,21 +328,14 @@ pub async fn PostgresDatabase::save_opaque_snapshots(
     domains[domain] = ()
   }
   self.mutex.acquire()
-  try {
-    ignore(run(self.connection, "BEGIN"))
-    for snapshot in snapshots {
-      let (domain, version, payload) = snapshot
-      write_snapshot_row(self.connection, domain, version, payload)
-    }
-    ignore(run(self.connection, "COMMIT"))
-    self.mutex.release()
-  } catch {
-    error => {
-      rollback(self.connection)
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  errdefer rollback(self.connection)
+  ignore(run(self.connection, "BEGIN"))
+  for snapshot in snapshots {
+    let (domain, version, payload) = snapshot
+    write_snapshot_row(self.connection, domain, version, payload)
   }
+  ignore(run(self.connection, "COMMIT"))
 }
 
 ///|
@@ -373,93 +347,86 @@ pub async fn PostgresDatabase::save_portal_snapshot(
     raise UnsupportedSnapshot(snapshot.schema_version)
   }
   self.mutex.acquire()
-  try {
-    ignore(run(self.connection, "BEGIN"))
-    write_snapshot_row(
-      self.connection,
-      "enterprise_portal",
-      snapshot.schema_version,
-      snapshot.to_json().stringify(),
+  defer self.mutex.release()
+  errdefer rollback(self.connection)
+  ignore(run(self.connection, "BEGIN"))
+  write_snapshot_row(
+    self.connection,
+    "enterprise_portal",
+    snapshot.schema_version,
+    snapshot.to_json().stringify(),
+  )
+  ignore(run(self.connection, "DELETE FROM lunanexa.portal_lease_requests"))
+  ignore(run(self.connection, "DELETE FROM lunanexa.portal_agreements"))
+  ignore(run(self.connection, "DELETE FROM lunanexa.enterprise_memberships"))
+  for membership in snapshot.memberships {
+    ignore(
+      run(
+        self.connection,
+        (
+          #|INSERT INTO lunanexa.enterprise_memberships
+          #|  (membership_id, tenant_ref, organization_id, subject_ref, active, created_unix_ms, payload)
+          #|VALUES ($1, $2, $3, $4, $5::boolean, $6::bigint, $7::jsonb)
+        ),
+        parameters=[
+          Some(membership.membership_id),
+          Some(membership.tenant_ref),
+          Some(membership.organization_id),
+          Some(membership.subject_ref),
+          Some(membership.active.to_string()),
+          Some(membership.created_unix_ms.to_string()),
+          Some(membership.to_json().stringify()),
+        ],
+      ),
     )
-    ignore(run(self.connection, "DELETE FROM lunanexa.portal_lease_requests"))
-    ignore(run(self.connection, "DELETE FROM lunanexa.portal_agreements"))
-    ignore(run(self.connection, "DELETE FROM lunanexa.enterprise_memberships"))
-    for membership in snapshot.memberships {
-      ignore(
-        run(
-          self.connection,
-          (
-            #|INSERT INTO lunanexa.enterprise_memberships
-            #|  (membership_id, tenant_ref, organization_id, subject_ref, active, created_unix_ms, payload)
-            #|VALUES ($1, $2, $3, $4, $5::boolean, $6::bigint, $7::jsonb)
-          ),
-          parameters=[
-            Some(membership.membership_id),
-            Some(membership.tenant_ref),
-            Some(membership.organization_id),
-            Some(membership.subject_ref),
-            Some(membership.active.to_string()),
-            Some(membership.created_unix_ms.to_string()),
-            Some(membership.to_json().stringify()),
-          ],
-        ),
-      )
-    }
-    for agreement in snapshot.agreements {
-      ignore(
-        run(
-          self.connection,
-          (
-            #|INSERT INTO lunanexa.portal_agreements
-            #|  (agreement_id, tenant_ref, organization_id, state, generation, signer_subject_ref, updated_unix_ms, payload)
-            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6, $7::bigint, $8::jsonb)
-          ),
-          parameters=[
-            Some(agreement.agreement_id),
-            Some(agreement.tenant_ref),
-            Some(agreement.organization_id),
-            Some(agreement.state.to_json().stringify()),
-            Some(agreement.generation.to_string()),
-            agreement.signer_subject_ref,
-            Some(agreement.updated_unix_ms.to_string()),
-            Some(agreement.to_json().stringify()),
-          ],
-        ),
-      )
-    }
-    for request in snapshot.lease_requests {
-      ignore(
-        run(
-          self.connection,
-          (
-            #|INSERT INTO lunanexa.portal_lease_requests
-            #|  (request_id, idempotency_key, tenant_ref, organization_id, subject_ref, state, generation, assigned_node_id, updated_unix_ms, payload)
-            #|VALUES ($1, $2, $3, $4, $5, $6::jsonb #>> '{}', $7::bigint, $8, $9::bigint, $10::jsonb)
-          ),
-          parameters=[
-            Some(request.submission.request_id),
-            Some(request.submission.idempotency_key),
-            Some(request.submission.tenant_ref),
-            Some(request.submission.organization_id),
-            Some(request.subject_ref),
-            Some(request.state.to_json().stringify()),
-            Some(request.generation.to_string()),
-            request.assigned_node_id,
-            Some(request.updated_unix_ms.to_string()),
-            Some(request.to_json().stringify()),
-          ],
-        ),
-      )
-    }
-    ignore(run(self.connection, "COMMIT"))
-    self.mutex.release()
-  } catch {
-    error => {
-      rollback(self.connection)
-      self.mutex.release()
-      raise error
-    }
   }
+  for agreement in snapshot.agreements {
+    ignore(
+      run(
+        self.connection,
+        (
+          #|INSERT INTO lunanexa.portal_agreements
+          #|  (agreement_id, tenant_ref, organization_id, state, generation, signer_subject_ref, updated_unix_ms, payload)
+          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6, $7::bigint, $8::jsonb)
+        ),
+        parameters=[
+          Some(agreement.agreement_id),
+          Some(agreement.tenant_ref),
+          Some(agreement.organization_id),
+          Some(agreement.state.to_json().stringify()),
+          Some(agreement.generation.to_string()),
+          agreement.signer_subject_ref,
+          Some(agreement.updated_unix_ms.to_string()),
+          Some(agreement.to_json().stringify()),
+        ],
+      ),
+    )
+  }
+  for request in snapshot.lease_requests {
+    ignore(
+      run(
+        self.connection,
+        (
+          #|INSERT INTO lunanexa.portal_lease_requests
+          #|  (request_id, idempotency_key, tenant_ref, organization_id, subject_ref, state, generation, assigned_node_id, updated_unix_ms, payload)
+          #|VALUES ($1, $2, $3, $4, $5, $6::jsonb #>> '{}', $7::bigint, $8, $9::bigint, $10::jsonb)
+        ),
+        parameters=[
+          Some(request.submission.request_id),
+          Some(request.submission.idempotency_key),
+          Some(request.submission.tenant_ref),
+          Some(request.submission.organization_id),
+          Some(request.subject_ref),
+          Some(request.state.to_json().stringify()),
+          Some(request.generation.to_string()),
+          request.assigned_node_id,
+          Some(request.updated_unix_ms.to_string()),
+          Some(request.to_json().stringify()),
+        ],
+      ),
+    )
+  }
+  ignore(run(self.connection, "COMMIT"))
 }
 
 ///|
@@ -471,85 +438,78 @@ pub async fn PostgresDatabase::save_workspace_snapshot(
     raise UnsupportedSnapshot(snapshot.schema_version)
   }
   self.mutex.acquire()
-  try {
-    ignore(run(self.connection, "BEGIN"))
-    write_snapshot_row(
-      self.connection,
-      "workspace_directory",
-      snapshot.schema_version,
-      snapshot.to_json().stringify(),
+  defer self.mutex.release()
+  errdefer rollback(self.connection)
+  ignore(run(self.connection, "BEGIN"))
+  write_snapshot_row(
+    self.connection,
+    "workspace_directory",
+    snapshot.schema_version,
+    snapshot.to_json().stringify(),
+  )
+  ignore(run(self.connection, "DELETE FROM lunanexa.workspace_access_grants"))
+  ignore(run(self.connection, "DELETE FROM lunanexa.workspace_leases"))
+  ignore(run(self.connection, "DELETE FROM lunanexa.workspace_users"))
+  for user in snapshot.users {
+    ignore(
+      run(
+        self.connection,
+        (
+          #|INSERT INTO lunanexa.workspace_users
+          #|  (user_id, subject_ref, email, state, created_unix_ms, payload)
+          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
+        ),
+        parameters=[
+          Some(user.user_id),
+          Some(user.subject_ref),
+          Some(user.email),
+          Some(user.state.to_json().stringify()),
+          Some(user.created_unix_ms.to_string()),
+          Some(user.to_json().stringify()),
+        ],
+      ),
     )
-    ignore(run(self.connection, "DELETE FROM lunanexa.workspace_access_grants"))
-    ignore(run(self.connection, "DELETE FROM lunanexa.workspace_leases"))
-    ignore(run(self.connection, "DELETE FROM lunanexa.workspace_users"))
-    for user in snapshot.users {
-      ignore(
-        run(
-          self.connection,
-          (
-            #|INSERT INTO lunanexa.workspace_users
-            #|  (user_id, subject_ref, email, state, created_unix_ms, payload)
-            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
-          ),
-          parameters=[
-            Some(user.user_id),
-            Some(user.subject_ref),
-            Some(user.email),
-            Some(user.state.to_json().stringify()),
-            Some(user.created_unix_ms.to_string()),
-            Some(user.to_json().stringify()),
-          ],
-        ),
-      )
-    }
-    for grant in snapshot.access_grants {
-      ignore(
-        run(
-          self.connection,
-          (
-            #|INSERT INTO lunanexa.workspace_access_grants
-            #|  (grant_id, user_id, tenant_ref, state, expires_unix_ms, payload)
-            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
-          ),
-          parameters=[
-            Some(grant.grant_id),
-            Some(grant.user_id),
-            Some(grant.tenant_ref),
-            Some(grant.state.to_json().stringify()),
-            Some(grant.expires_unix_ms.to_string()),
-            Some(grant.to_json().stringify()),
-          ],
-        ),
-      )
-    }
-    for lease in snapshot.leases {
-      ignore(
-        run(
-          self.connection,
-          (
-            #|INSERT INTO lunanexa.workspace_leases
-            #|  (lease_id, tenant_ref, subject_ref, state, starts_unix_ms, expires_unix_ms, payload)
-            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::bigint, $7::jsonb)
-          ),
-          parameters=[
-            Some(lease.lease_id),
-            Some(lease.tenant_ref),
-            Some(lease.subject_ref),
-            Some(lease.state.to_json().stringify()),
-            Some(lease.starts_unix_ms.to_string()),
-            Some(lease.expires_unix_ms.to_string()),
-            Some(lease.to_json().stringify()),
-          ],
-        ),
-      )
-    }
-    ignore(run(self.connection, "COMMIT"))
-    self.mutex.release()
-  } catch {
-    error => {
-      rollback(self.connection)
-      self.mutex.release()
-      raise error
-    }
   }
+  for grant in snapshot.access_grants {
+    ignore(
+      run(
+        self.connection,
+        (
+          #|INSERT INTO lunanexa.workspace_access_grants
+          #|  (grant_id, user_id, tenant_ref, state, expires_unix_ms, payload)
+          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
+        ),
+        parameters=[
+          Some(grant.grant_id),
+          Some(grant.user_id),
+          Some(grant.tenant_ref),
+          Some(grant.state.to_json().stringify()),
+          Some(grant.expires_unix_ms.to_string()),
+          Some(grant.to_json().stringify()),
+        ],
+      ),
+    )
+  }
+  for lease in snapshot.leases {
+    ignore(
+      run(
+        self.connection,
+        (
+          #|INSERT INTO lunanexa.workspace_leases
+          #|  (lease_id, tenant_ref, subject_ref, state, starts_unix_ms, expires_unix_ms, payload)
+          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::bigint, $7::jsonb)
+        ),
+        parameters=[
+          Some(lease.lease_id),
+          Some(lease.tenant_ref),
+          Some(lease.subject_ref),
+          Some(lease.state.to_json().stringify()),
+          Some(lease.starts_unix_ms.to_string()),
+          Some(lease.expires_unix_ms.to_string()),
+          Some(lease.to_json().stringify()),
+        ],
+      ),
+    )
+  }
+  ignore(run(self.connection, "COMMIT"))
 }

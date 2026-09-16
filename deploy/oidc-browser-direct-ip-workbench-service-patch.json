@@ -1,0 +1,28 @@
+[
+  {
+    "op": "add",
+    "path": "/metadata/annotations/lunanexa.io~1exposure",
+    "value": "disabled-after-oidc"
+  },
+  {
+    "op": "replace",
+    "path": "/spec/type",
+    "value": "ClusterIP"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/externalTrafficPolicy"
+  },
+  {
+    "op": "replace",
+    "path": "/spec/ports",
+    "value": [
+      {
+        "name": "disabled",
+        "protocol": "TCP",
+        "port": 8080,
+        "targetPort": "http"
+      }
+    ]
+  }
+]

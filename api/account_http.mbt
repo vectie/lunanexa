@@ -453,6 +453,7 @@ async fn ApiService::ensure_open_trial(
           display_name: "Trial — \{account.display_name}",
           state: Active,
           verification_ref: Some("trial:\{trial.trial_id}"),
+          legal_profile: None,
           created_unix_ms: trial.starts_unix_ms,
         })
       }
@@ -783,6 +784,8 @@ async fn ApiService::handle_accounts(
     )
   }
   match (verb, path) {
+    (Get, "/v1/accounts/trial-summary") =>
+      json_reply(200, self.trial_summary(@async.now()))
     (Get, "/v1/account-invitations") =>
       json_reply(200, accounts.invitation_views().to_json())
     (Post, "/v1/account-invitations") => {

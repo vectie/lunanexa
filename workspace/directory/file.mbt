@@ -57,7 +57,7 @@ async fn write_directory(
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -246,21 +246,18 @@ pub async fn FileWorkspaceDirectory::snapshot(
   self.mutex.acquire()
   let previous_grants = self.access_grants.copy()
   let previous_leases = self.leases.copy()
-  try {
-    if self.reconcile_expiry_unlocked(now_unix_ms) {
-      self.persist()
-    }
-    let snapshot = self.snapshot_unlocked()
-    self.mutex.release()
-    snapshot
-  } catch {
-    error => {
-      self.access_grants = previous_grants
-      self.leases = previous_leases
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed {
+    self.access_grants = previous_grants
+    self.leases = previous_leases
+  })
+  if self.reconcile_expiry_unlocked(now_unix_ms) {
+    self.persist()
   }
+  let snapshot = self.snapshot_unlocked()
+  committed = true
+  snapshot
 }
 
 ///|
@@ -290,16 +287,12 @@ pub async fn FileWorkspaceDirectory::create_user(
     self.mutex.release()
     raise @workspace.WorkspaceDirectoryError::SubjectConflict(user.subject_ref)
   }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed { ignore(self.users.remove(user.user_id)) })
   self.users[user.user_id] = user
-  try self.persist() catch {
-    error => {
-      ignore(self.users.remove(user.user_id))
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
+  committed = true
   user
 }
 
@@ -380,16 +373,12 @@ pub async fn FileWorkspaceDirectory::issue_access_grant(
       "user:\{grant.user_id}",
     )
   }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed { ignore(self.access_grants.remove(grant.grant_id)) })
   self.access_grants[grant.grant_id] = grant
-  try self.persist() catch {
-    error => {
-      ignore(self.access_grants.remove(grant.grant_id))
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
+  committed = true
   grant
 }
 
@@ -429,16 +418,12 @@ pub async fn FileWorkspaceDirectory::issue_lease(
     self.mutex.release()
     raise @workspace.WorkspaceDirectoryError::AccessDenied(AccessUnavailable)
   }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed { ignore(self.leases.remove(lease.lease_id)) })
   self.leases[lease.lease_id] = lease
-  try self.persist() catch {
-    error => {
-      ignore(self.leases.remove(lease.lease_id))
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
+  committed = true
   lease
 }
 
@@ -451,34 +436,31 @@ pub async fn FileWorkspaceDirectory::activate_lease_with_prior(
   self.mutex.acquire()
   let previous_grants = self.access_grants.copy()
   let previous_leases = self.leases.copy()
-  try {
-    ignore(self.reconcile_expiry_unlocked(now_unix_ms))
-    guard self.leases.get(lease_id) is Some(lease) else {
-      raise @workspace.WorkspaceDirectoryError::RecordNotFound(
-        "lease:\{lease_id}",
-      )
-    }
-    guard user_for_subject(self.users, lease.subject_ref) is Some(user) else {
-      raise @workspace.WorkspaceDirectoryError::RecordNotFound(
-        "subject:\{lease.subject_ref}",
-      )
-    }
-    if !self.has_grant_for_lease_unlocked(user, lease, now_unix_ms) {
-      raise @workspace.WorkspaceDirectoryError::AccessDenied(AccessUnavailable)
-    }
-    let active = lease.transition(Active, now_unix_ms)
-    self.leases[lease_id] = active
-    self.persist()
-    self.mutex.release()
-    (lease, active)
-  } catch {
-    error => {
-      self.access_grants = previous_grants
-      self.leases = previous_leases
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed {
+    self.access_grants = previous_grants
+    self.leases = previous_leases
+  })
+  ignore(self.reconcile_expiry_unlocked(now_unix_ms))
+  guard self.leases.get(lease_id) is Some(lease) else {
+    raise @workspace.WorkspaceDirectoryError::RecordNotFound(
+      "lease:\{lease_id}",
+    )
   }
+  guard user_for_subject(self.users, lease.subject_ref) is Some(user) else {
+    raise @workspace.WorkspaceDirectoryError::RecordNotFound(
+      "subject:\{lease.subject_ref}",
+    )
+  }
+  if !self.has_grant_for_lease_unlocked(user, lease, now_unix_ms) {
+    raise @workspace.WorkspaceDirectoryError::AccessDenied(AccessUnavailable)
+  }
+  let active = lease.transition(Active, now_unix_ms)
+  self.leases[lease_id] = active
+  self.persist()
+  committed = true
+  (lease, active)
 }
 
 ///|
@@ -500,26 +482,23 @@ pub async fn FileWorkspaceDirectory::revoke_access_grant(
   self.mutex.acquire()
   let previous_grants = self.access_grants.copy()
   let previous_leases = self.leases.copy()
-  try {
-    ignore(self.reconcile_expiry_unlocked(now_unix_ms))
-    guard self.access_grants.get(grant_id) is Some(grant) else {
-      raise @workspace.WorkspaceDirectoryError::RecordNotFound(
-        "access_grant:\{grant_id}",
-      )
-    }
-    let revoked = grant.transition(GrantRevoked, now_unix_ms)
-    self.access_grants[grant_id] = revoked
-    self.persist()
-    self.mutex.release()
-    revoked
-  } catch {
-    error => {
-      self.access_grants = previous_grants
-      self.leases = previous_leases
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed {
+    self.access_grants = previous_grants
+    self.leases = previous_leases
+  })
+  ignore(self.reconcile_expiry_unlocked(now_unix_ms))
+  guard self.access_grants.get(grant_id) is Some(grant) else {
+    raise @workspace.WorkspaceDirectoryError::RecordNotFound(
+      "access_grant:\{grant_id}",
+    )
   }
+  let revoked = grant.transition(GrantRevoked, now_unix_ms)
+  self.access_grants[grant_id] = revoked
+  self.persist()
+  committed = true
+  revoked
 }
 
 ///|
@@ -531,24 +510,21 @@ pub async fn FileWorkspaceDirectory::revoke_lease(
   self.mutex.acquire()
   let previous_grants = self.access_grants.copy()
   let previous_leases = self.leases.copy()
-  try {
-    ignore(self.reconcile_expiry_unlocked(now_unix_ms))
-    guard self.leases.get(lease_id) is Some(lease) else {
-      raise @workspace.WorkspaceDirectoryError::RecordNotFound(
-        "lease:\{lease_id}",
-      )
-    }
-    let revoked = lease.transition(Revoked, now_unix_ms)
-    self.leases[lease_id] = revoked
-    self.persist()
-    self.mutex.release()
-    revoked
-  } catch {
-    error => {
-      self.access_grants = previous_grants
-      self.leases = previous_leases
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let mut committed = false
+  defer (if !committed {
+    self.access_grants = previous_grants
+    self.leases = previous_leases
+  })
+  ignore(self.reconcile_expiry_unlocked(now_unix_ms))
+  guard self.leases.get(lease_id) is Some(lease) else {
+    raise @workspace.WorkspaceDirectoryError::RecordNotFound(
+      "lease:\{lease_id}",
+    )
   }
+  let revoked = lease.transition(Revoked, now_unix_ms)
+  self.leases[lease_id] = revoked
+  self.persist()
+  committed = true
+  revoked
 }

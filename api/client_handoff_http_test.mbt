@@ -82,8 +82,40 @@ async fn seed_client_handoff_model(registry : @registry.FileRegistry) -> Unit {
 
 ///|
 async test "enterprise desktop handoff redeems once and lease loss blocks inference" {
+  check_workspace_handoff(false)
+}
+
+///|
+async test "private cloud desktop and ComfyUI handoffs need no rental contract but retain revocation" {
+  check_workspace_handoff(true)
+}
+
+///|
+async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
   let temp = @fs.tmpdir(prefix="lunanexa-client-handoff-api-")
   let now = @async.now()
+  let accounts = @account.AccountStore::open(
+    "\{temp}/accounts.json",
+    "client-account-session-secret-more-than-32-bytes",
+  )
+  ignore(
+    accounts.create({
+      version: @account.contract_version,
+      account_id: "account-client",
+      subject_ref: "subject-client",
+      identity_issuer: "https://identity.example",
+      identity_subject_sha256: @account.identity_subject_digest(
+        "https://identity.example", "client-user",
+      ),
+      display_name: "Client user",
+      email: "client@example.invalid",
+      identity_receipt: "identity-proof:client",
+      roles: [EnterpriseUser],
+      state: Active,
+      created_unix_ms: now,
+      updated_unix_ms: now,
+    }),
+  )
   let durable = @store.FileStore::open("\{temp}/state.json")
   let registry = @registry.FileRegistry::open("\{temp}/registry.json")
   seed_client_handoff_model(registry)
@@ -102,26 +134,28 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
   let documents = @contractdoc_store.ContractDocumentStore::open(
     "\{temp}/contracts.json",
   )
-  ignore(
-    documents.create_packet(
-      {
-        ..@contractdoc.new_packet(
-          @contractdoc.youthpolicy_remote_lease_manifest(),
-          "packet-client",
-          "packet-client-key",
-          "tenant-client",
-          "org-client",
-          "subject-client",
-          "order-client",
-          None,
-          [MasterLease],
-          now,
-        ),
-        state: Effective,
-      },
-      "operator",
-    ),
-  )
+  if !private_cloud {
+    ignore(
+      documents.create_packet(
+        {
+          ..@contractdoc.new_packet(
+            @contractdoc.youthpolicy_remote_lease_manifest(),
+            "packet-client",
+            "packet-client-key",
+            "tenant-client",
+            "org-client",
+            "subject-client",
+            "order-client",
+            None,
+            [MasterLease],
+            now,
+          ),
+          state: Effective,
+        },
+        "operator",
+      ),
+    )
+  }
   let directory = @directory.FileWorkspaceDirectory::open(
     "\{temp}/workspace.json",
     now_unix_ms=now,
@@ -201,7 +235,11 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
       "0.1.0",
     )
     .with_portal_store(portal)
+    .with_account_store(
+      accounts, "client-account-assertion-secret-more-than-32-bytes",
+    )
     .with_contract_document_store(documents)
+    .with_private_cloud_workspace_access(private_cloud)
     .with_workspace_directory(directory, true)
     .with_client_handoff_store(handoffs, {
       client_id: "desktop-client",
@@ -215,6 +253,41 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     "Authorization": "Bearer inference-token",
     "X-LunaNexa-Subject": "subject-client",
   }
+  let desktop_config : @client_handoff.ClientLaunchConfig = {
+    client_id: "desktop-client",
+    display_name: "Desktop workspace",
+    launch_uri: "http://127.0.0.1:4188/connect",
+    public_api_base_url: "https://models.example.invalid",
+    handoff_lifetime_ms: 120000L,
+    maximum_requests: 100L,
+  }
+  let comfy_config = {
+    ..desktop_config,
+    client_id: "comfyui",
+    display_name: "ComfyUI",
+    launch_uri: "https://creative.example.invalid/connect",
+    public_api_base_url: "https://moongate.example.invalid/v1",
+  }
+  let service = service.with_client_launch_catalog([
+    desktop_config, comfy_config,
+  ])
+  let catalog = service.handle(
+    Get,
+    "/v1/portal/self/clients",
+    enterprise_headers,
+    "",
+  )
+  assert_eq(catalog.status, 200)
+  guard @json.parse(catalog.body) is Array(clients) else {
+    fail("expected WebIDE catalog")
+  }
+  assert_eq(clients.length(), 2)
+  assert_true(catalog.body.contains("ComfyUI"))
+  assert_false(catalog.body.contains("api_secret"))
+  assert_eq(
+    service.handle(Get, "/v1/portal/self/clients", Map([]), "").status,
+    401,
+  )
   let client_readiness = service.handle(
     Get,
     "/v1/portal/self/client",
@@ -227,6 +300,7 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     fail("expected desktop client readiness")
   }
   assert_eq(client_fields["contract_ready"], true)
+  assert_eq(client_fields["contract_required"], (!private_cloud).to_json())
   assert_eq(client_fields["workspace_ready"], true)
   assert_eq(client_fields["models_ready"], true)
   assert_eq(client_fields["ready"], true)
@@ -274,6 +348,51 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     redeemed_fields["api_secret"] is String(api_secret) else {
     fail("expected one-time API secret")
   }
+  // The second WebIDE uses its own launch bridge and provider address; neither
+  // an unknown client nor another configured client can redeem its code.
+  let comfy_issued = service.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    enterprise_headers,
+    (
+      {
+        "request_id": "comfy-request-1",
+        "client_id": "comfyui",
+        "project_id": "project-client",
+        "allowed_models": ["text.default"],
+      } : Json).stringify(),
+  )
+  assert_eq(comfy_issued.status, 201)
+  guard @json.parse(comfy_issued.body)
+    is {
+      "handoff_code": String(comfy_code),
+      "launch_uri": String(comfy_uri),
+      ..
+    } else {
+    fail("expected ComfyUI bridge handoff")
+  }
+  assert_eq(comfy_uri, comfy_config.launch_uri)
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/client-handoffs:redeem",
+      Map([]),
+      ({ "client_id": "desktop-client", "handoff_code": comfy_code } : Json).stringify(),
+    ).status,
+    403,
+  )
+  let comfy_redeemed = service.handle(
+    Post,
+    "/v1/client-handoffs:redeem",
+    Map([]),
+    ({ "client_id": "comfyui", "handoff_code": comfy_code } : Json).stringify(),
+  )
+  assert_eq(comfy_redeemed.status, 200)
+  guard @json.parse(comfy_redeemed.body)
+    is { "api_base_url": String(comfy_api), .. } else {
+    fail("missing provider binding")
+  }
+  assert_eq(comfy_api, comfy_config.public_api_base_url)
   assert_eq(
     service.handle(
       Post,
@@ -283,6 +402,26 @@ async test "enterprise desktop handoff redeems once and lease loss blocks infere
     ).status,
     409,
   )
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{api_secret}" },
+      "",
+    ).status,
+    200,
+  )
+  ignore(accounts.set_state("account-client", Suspended, now + 1L))
+  assert_eq(
+    service.handle(
+      Get,
+      "/v1/models",
+      { "Authorization": "Bearer \{api_secret}" },
+      "",
+    ).status,
+    401,
+  )
+  ignore(accounts.set_state("account-client", Active, now + 2L))
   assert_eq(
     service.handle(
       Get,
