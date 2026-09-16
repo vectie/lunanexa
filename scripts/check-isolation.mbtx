@@ -1,0 +1,184 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+}
+
+// A source heuristic, not a data-flow proof. Node-adapter private records and
+// function parameters do not themselves publish response fields. Serialized
+// spellings, public records and object construction still require review.
+struct Token {
+  text : String
+  line : Int
+  literal : Bool
+}
+
+fn forbidden(value : String) -> Bool {
+  ["container_id", "stack_trace", "node_address", "filesystem_path", "provider_credential"].contains(value)
+}
+
+fn word(c : Char) -> Bool {
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+  (c >= '0' && c <= '9') || c == '_'
+}
+
+fn tokenize(source : String) -> Array[Token] {
+  let chars = source.to_array()
+  let tokens : Array[Token] = []
+  let mut index = 0
+  let mut line = 1
+  while index < chars.length() {
+    let c = chars[index]
+    let next = chars.get(index + 1)
+    if c == '\n' { line += 1; index += 1; continue }
+    if c == ' ' || c == '\t' || c == '\r' { index += 1; continue }
+    if c == '/' && next == Some('/') {
+      if chars.get(index + 2) == Some('/') && chars.get(index + 3) == Some('|') {
+        tokens.push({ text: "block", line, literal: false })
+      }
+      while index < chars.length() && chars[index] != '\n' { index += 1 }
+      continue
+    }
+    let start_line = line
+    let text = StringBuilder()
+    if c == '"' || c == '\'' || ((c == '#' || c == '$') && next == Some('|')) {
+      let multiline = c != '"' && c != '\''
+      text.write_char(c)
+      index += 1
+      while index < chars.length() {
+        let current = chars[index]
+        if multiline && current == '\n' { break }
+        text.write_char(current)
+        index += 1
+        if !multiline && current == '\\' && index < chars.length() {
+          text.write_char(chars[index])
+          if chars[index] == '\n' { line += 1 }
+          index += 1
+        } else if !multiline && current == c { break }
+        else if current == '\n' { line += 1 }
+      }
+      tokens.push({ text: text.to_string(), line: start_line, literal: true })
+    } else if word(c) {
+      while index < chars.length() && word(chars[index]) {
+        text.write_char(chars[index])
+        index += 1
+      }
+      tokens.push({ text: text.to_string(), line: start_line, literal: false })
+    } else {
+      text.write_char(c)
+      index += 1
+      tokens.push({ text: text.to_string(), line: start_line, literal: false })
+    }
+  }
+  tokens
+}
+
+fn literal_field(value : String) -> Bool {
+  // Keep detecting serialized JSON embedded in a string, not only map keys.
+  for name in ["container_id", "stack_trace", "node_address", "filesystem_path", "provider_credential"] {
+    let parts = value.split(name).collect()
+    for index in 1..<parts.length() {
+      let suffix = parts[index]
+      if suffix.has_prefix("\"") || suffix.has_prefix("\\\"") || suffix.trim_start().has_prefix(":") {
+        return true
+      }
+    }
+  }
+  false
+}
+
+fn scan_source(source : String, internal_records~ : Bool) -> Array[Int] {
+  let tokens = tokenize(source)
+  let failures : Array[Int] = []
+  let mut braces = 0
+  let mut parens = 0
+  let mut public_decl = false
+  let mut pending_struct = false
+  let mut internal_struct_depth : Int? = None
+  let mut pending_fn = false
+  let mut fn_params : (Int, Int)? = None
+  for index, token in tokens {
+    if token.literal {
+      if literal_field(token.text) { failures.push(token.line) }
+      continue
+    }
+    let value = token.text
+    if value == "block" && braces == 0 {
+      public_decl = false
+      pending_struct = false
+      pending_fn = false
+    }
+    if value == "pub" && braces == 0 { public_decl = true }
+    if value == "struct" && braces == 0 { pending_struct = true }
+    if value == "fn" { pending_fn = true }
+    if value == "(" {
+      parens += 1
+      if pending_fn {
+        fn_params = Some((parens, braces))
+        pending_fn = false
+      }
+    }
+    if value == ")" {
+      if fn_params is Some((depth, _)) && depth == parens { fn_params = None }
+      parens -= 1
+    }
+    if value == "{" {
+      braces += 1
+      if pending_struct {
+        if internal_records && !public_decl { internal_struct_depth = Some(braces) }
+        pending_struct = false
+      }
+    }
+    if forbidden(value) && tokens.get(index + 1) is Some({ text: ":", .. }) {
+      let parameter = match fn_params {
+        Some((depth, body_depth)) => depth == parens && body_depth == braces
+        None => false
+      }
+      if !parameter && internal_struct_depth != Some(braces) {
+        failures.push(token.line)
+      }
+    }
+    if value == "}" {
+      if internal_struct_depth == Some(braces) { internal_struct_depth = None }
+      braces -= 1
+      if braces == 0 { public_decl = false }
+    }
+  }
+  failures
+}
+
+async fn main {
+  let args = @env.args()
+  let mut root = "."
+  for index, arg in args {
+    if arg == "--root" {
+      guard args.get(index + 1) is Some(value) && value != "" else { fail("Missing scan root") }
+      root = value
+    }
+  }
+  // --no-ignore preserves the old find-based coverage, including untracked
+  // source files. Only build outputs and Git's own storage are omitted.
+  let files = @shell.Cmd("rg", ["--files", "--hidden", "--no-ignore", "--null",
+    "-g", "*.mbt", "-g", "moon.pkg", "-g", "moon.mod",
+    "-g", "!_build/**", "-g", "!target/**", "-g", "!.git/**", root]).output()
+  guard files.exit_code() == 0 else { fail("Isolation scan could not enumerate source files") }
+  let paths = files.stdout().split("\u0000").filter(path => path != "").map(path => path.to_owned()).collect()
+  let mut failed = false
+  let dependency_args = ["-i", "-l", "(^|[\"/])(moongate|moonsuite|moonclaw|moondesk|moontown)([\"/]|$)"]
+  for path in paths { dependency_args.push(path) }
+  let dependency = @shell.Cmd("rg", dependency_args).output()
+  if dependency.exit_code() == 0 {
+    println("Product-specific dependency found in: " + dependency.stdout())
+    failed = true
+  } else if dependency.exit_code() != 1 { fail("Dependency scan could not read source files") }
+  for path in paths {
+    let source = @fs.read_file(path).text()
+    for line in scan_source(source, internal_records=path.has_prefix(root + "/node/kubernetes/")) {
+      println(path + ":" + line.to_string() + ": possible public-response field (value withheld)")
+      failed = true
+    }
+  }
+  if failed { fail("Isolation/public-response heuristic failed") }
+  println("Isolation and public-response heuristics passed; runtime response tests remain required")
+}

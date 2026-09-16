@@ -113,14 +113,14 @@ test "alert graph keeps an unknown node reference explicit" {
 test "placement visuals localize labels in Chinese" {
   let demo = demo_state()
   let deployments = render_visual(
-    deployment_placement_graph({ ..demo, locale: ChineseSimplified }),
+    deployment_placement_graph({ ..demo, locale: ChineseSimplified, }),
   )
   assert_true(deployments.contains("部署放置关系"))
   assert_true(deployments.contains("期望状态"))
   assert_true(deployments.contains("观测状态"))
   assert_true(deployments.contains("分配节点"))
   let alerts = render_visual(
-    alert_impact_graph({ ..demo, locale: ChineseSimplified, notifications: [] }),
+    alert_impact_graph({ ..demo, locale: ChineseSimplified, notifications: [], }),
   )
   assert_true(alerts.contains("告警影响图"))
   assert_true(alerts.contains("暂无通知记录"))

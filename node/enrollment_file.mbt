@@ -33,7 +33,7 @@ pub async fn FileEnrollmentService::open(
   } else {
     EnrollmentService::new()
   }
-  let durable = { persistence: EnrollmentFile(path), service, mutex: Mutex() }
+  let durable = { persistence: EnrollmentFile(path), service, mutex: Mutex(), }
   if !@fs.exists(path) {
     write_enrollment(path, service.snapshot())
   }

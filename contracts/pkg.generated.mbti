@@ -204,9 +204,11 @@ pub(all) struct NodeHeartbeat {
   controller_epoch : Int64
   inventory : NodeInventory
   running_deployments : Array[String]
+  runtime_endpoints : Array[RuntimeEndpoint]?
   timestamp_unix_ms : Int64
   signature : String
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+} derive(Eq, @debug.Debug, @json.FromJson)
+pub impl ToJson for NodeHeartbeat
 
 pub(all) struct NodeInventory {
   node_id : String
@@ -286,6 +288,28 @@ pub(all) enum RetentionPolicy {
   EvaluationCapture(consent_receipt~ : String)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct RuntimeEndpoint {
+  assignment_id : String
+  deployment_id : String
+  generation : Int64
+  controller_epoch : Int64
+  instance_id : String
+  address : String
+  port : Int
+  artifact_digest : String
+  image_digest : String
+  observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RuntimeEndpoint::matches(Self, DesiredAssignment, Int64) -> Bool
+
+pub(all) struct RuntimeRoutePolicy {
+  network : String
+  prefix_length : Int
+  port : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RuntimeRoutePolicy::allows(Self, RuntimeEndpoint) -> Bool
+pub fn RuntimeRoutePolicy::valid(Self) -> Bool
+
 pub(all) struct RuntimeSpec {
   name : String
   image_digest : String
@@ -294,6 +318,25 @@ pub(all) struct RuntimeSpec {
   capabilities : Array[Capability]
   supports_batching : Bool
   supports_multi_node : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RuntimeTermination {
+  original_assignment : DesiredAssignment?
+  assignment_id : String
+  deployment_id : String
+  generation : Int64
+  controller_epoch : Int64
+  instance_id : String
+  artifact_digest : String
+  image_digest : String
+  observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RuntimeTerminationReport {
+  node_id : String
+  timestamp_unix_ms : Int64
+  records : Array[RuntimeTermination]
+  signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct SchedulerReadContract {

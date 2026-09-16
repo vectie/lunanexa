@@ -14,6 +14,10 @@ import {
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
+  "vectie/lunanexa/machinecommerce",
+  "vectie/lunanexa/media/jobs",
+  "vectie/lunanexa/media/provider",
+  "vectie/lunanexa/media/runtime",
   "vectie/lunanexa/node",
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/notifications",
@@ -48,6 +52,7 @@ pub(all) enum ApiMethod {
 } derive(Eq, @debug.Debug)
 
 pub struct ApiService {
+  media : MediaService?
   global_settings : @settings.GlobalAdminSettings
   store : @vectie/lunanexa/store.FileStore
   account_store : @account.AccountStore?
@@ -59,6 +64,7 @@ pub struct ApiService {
   open_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
+  private_cloud_workspace_access : Bool
   management_database : @database.PostgresDatabase?
   technical_store : @vectie/lunanexa/technical/store.TechnicalStore?
   commercial_store : @commercial.CommercialStore
@@ -66,6 +72,7 @@ pub struct ApiService {
   commercial_mutex : @async.Mutex
   inference_rate_card : @commercial.RateCard?
   offline_commerce_store : @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore?
+  machine_commerce_store : @vectie/lunanexa/machinecommerce/store.MachineCommerceStore?
   contract_document_store : @vectie/lunanexa/contractdoc/store.ContractDocumentStore?
   contract_document_worker_token : String
   contract_approval_threshold_minor_units : Int64?
@@ -75,6 +82,7 @@ pub struct ApiService {
   credential_issuer_adapter_token : String?
   client_handoff_store : @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
+  additional_client_launch_configs : Array[@client_handoff.ClientLaunchConfig]
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -127,6 +135,7 @@ pub struct ApiService {
   audit_mutex : @async.Mutex
   execution_slots : @semaphore.Semaphore
 }
+pub async fn ApiService::activate_machine_order_settled_payment(Self, String, @machinecommerce.MachinePaymentSettlement, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
 pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], String) -> HttpReply
 pub async fn ApiService::internal_component_ready(Self) -> Bool
 pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadiness
@@ -136,14 +145,18 @@ pub async fn ApiService::reconcile_access_onboarding(Self, Int64) -> Int
 pub async fn ApiService::reconcile_contract_governance(Self, Int64) -> Unit
 pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
 pub async fn ApiService::reconcile_expiring_contracts(Self, Int64, Int64) -> Unit
+pub async fn ApiService::reconcile_machine_commerce(Self) -> Unit
+pub async fn ApiService::reconcile_media_jobs(Self) -> (Int, Int)
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
 pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
 pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int, Int64) -> Unit
 pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int) -> Unit
+pub async fn ApiService::run_machine_commerce_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit
+pub async fn ApiService::serve_identity_on(Self, @http.Server) -> Unit
 pub async fn ApiService::serve_on(Self, @http.Server) -> Unit
 pub async fn ApiService::trusted_operational_tenant_hash(Self, Map[String, String], Bool) -> String?
 pub fn ApiService::with_access_onboarding_store(Self, @onboarding.AccessOnboardingStore) -> Self
@@ -152,6 +165,7 @@ pub fn ApiService::with_account_store(Self, @account.AccountStore, String) -> Se
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig) -> Self raise Failure
+pub fn ApiService::with_client_launch_catalog(Self, Array[@client_handoff.ClientLaunchConfig]) -> Self raise Failure
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_commercial_provider_adapter(Self, String, String, String, String) -> Self raise Failure
 pub fn ApiService::with_contract_approval_threshold(Self, Int64) -> Self
@@ -171,7 +185,10 @@ pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Fail
 pub fn ApiService::with_inference_rate_card(Self, @commercial.RateCard) -> Self raise Failure
 pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
 pub fn ApiService::with_legacy_unbound_access_for_local_testing(Self) -> Self
+pub fn ApiService::with_machine_commerce_store(Self, @vectie/lunanexa/machinecommerce/store.MachineCommerceStore) -> Self
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
+pub fn ApiService::with_media_jobs(Self, @jobs.JobStore, Array[MediaBinding]) -> Self raise
+pub fn ApiService::with_media_templates(Self, @jobs.JobStore, Array[MediaTemplateBinding]) -> Self raise
 pub fn ApiService::with_model_source_adapter(Self, String, String) -> Self raise Failure
 pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
@@ -183,6 +200,7 @@ pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -
 pub fn ApiService::with_open_registration_trial(Self, Int64, Int64, Array[String]) -> Self raise Failure
 pub fn ApiService::with_operator_tokens(Self, Array[(String, String)]) -> Self
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
+pub fn ApiService::with_private_cloud_workspace_access(Self, Bool) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
@@ -225,6 +243,33 @@ pub(all) struct ManagementReadiness {
   guide_diagnostics_configured : Bool
   exclusive_lease_expiry_reconciler_healthy : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MediaBinding {
+  deployment_id : String
+  deployment_generation : Int64
+  node_id : String
+  origin : String
+  bearer : String?
+  profile : @provider.Profile
+  instance_id : String?
+} derive(@json.FromJson)
+
+pub struct MediaService {
+  jobs : @jobs.JobStore
+  runtime : @runtime.VideoRuntime
+  bindings : Array[MediaBinding]
+  templates : Array[MediaTemplateBinding]
+}
+
+pub(all) struct MediaTemplateBinding {
+  template_id : String
+  template_version : String
+  node_id : String
+  origin : String
+  bearer : String?
+  profile : @provider.Profile
+  runtime_route : @contracts.RuntimeRoutePolicy?
+} derive(@json.FromJson)
 
 pub(all) struct OfflineArtifactView {
   artifact_id : String

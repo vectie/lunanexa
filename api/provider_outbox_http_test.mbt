@@ -11,6 +11,7 @@ async fn configure_provider_test_period(service : @api.ApiService) -> Unit {
         display_name: "Organization A",
         state: Active,
         verification_ref: Some("verified:org-a"),
+        legal_profile: None,
         created_unix_ms: 1000L,
       }
       .to_json()

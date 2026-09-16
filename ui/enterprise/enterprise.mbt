@@ -1,6 +1,7 @@
 ///|
 pub(all) enum EnterpriseRoute {
   Overview
+  SelfService
   AccountAccess
   Agreements
   LeaseRequests
@@ -67,6 +68,10 @@ pub(all) struct OneTimeApiKeySecret {
   key_id : String
   display_name : String
   secret : String
+  allowed_models : Array[String]
+  api_base_url : String?
+  tenant_ref : String
+  memory_ceiling_mib : Int?
 } derive(Debug, Eq)
 
 ///|
@@ -98,6 +103,7 @@ pub(all) struct ApiCredentialView {
 pub(all) struct IssuedApiKeyView {
   credential : ApiCredentialView
   secret : String
+  api_base_url : String?
 } derive(Debug, Eq, FromJson)
 
 ///|
@@ -155,9 +161,12 @@ pub(all) struct TrialEntitlementView {
 
 ///|
 pub(all) struct EnterpriseState {
+  docs_base_url : String?
   route : EnterpriseRoute
   locale : @i18n.Locale
   membership : @portal.EnterpriseMembership?
+  organizations : Array[SelfServiceOrganizationView]
+  selected_organization_id : String?
   account : AccountView?
   trial : TrialEntitlementView?
   browser_sessions : Array[BrowserSessionView]
@@ -181,6 +190,9 @@ pub(all) struct EnterpriseState {
   payment_checkout_loading : Bool
   model_catalog : Array[@portal.EnterpriseModelSummary]
   desktop_client : EnterpriseDesktopClient?
+  desktop_clients : Array[EnterpriseDesktopClient]
+  webide_order_id : String?
+  self_service : SelfServiceState
   project_id : String
   unix_username : String
   model_ids : String
@@ -195,6 +207,7 @@ pub(all) struct EnterpriseState {
 ///|
 pub(all) enum EnterpriseMessage {
   Navigate(EnterpriseRoute)
+  SelfService(SelfServiceMessage)
   LocaleChanged(@i18n.Locale)
   OpenApiKeyIssue
   CancelApiKeyIssue
@@ -206,6 +219,9 @@ pub(all) enum EnterpriseMessage {
   ApiKeyMaximumRequestsChanged(Int64)
   SubmitApiKeyIssue
   CopyOneTimeApiKeySecret
+  CopyFirstCallExample
+  CopyDetail(String)
+  ExportCosts
   DismissOneTimeApiKeySecret
   BeginRevokeApiKey(String)
   CancelRevokeApiKey
@@ -219,6 +235,8 @@ pub(all) enum EnterpriseMessage {
   SubmitPaymentCheckout
   SubmitLease
   LaunchDesktopClient
+  SelectWebIde(String)
+  SelectWebIdeOrder(String)
   MarkNotificationRead(String, Int64)
   SetNotificationEmail(@notifications.NotificationTopic, Bool)
   MachineAccess(@machine_access.MachineAccessMessage)
@@ -229,19 +247,18 @@ pub(all) enum EnterpriseMessage {
 
 ///|
 fn copy(locale : @i18n.Locale, english : String, chinese : String) -> String {
-  if locale.is_chinese() {
-    chinese
-  } else {
-    english
-  }
+  @i18n.copy(locale, english, chinese)
 }
 
 ///|
 pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
   {
+    docs_base_url: None,
     route: Overview,
     locale: @i18n.default_locale(),
     membership: None,
+    organizations: [],
+    selected_organization_id: None,
     account: None,
     trial: None,
     browser_sessions: [],
@@ -277,6 +294,9 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     payment_checkout_loading: false,
     model_catalog: [],
     desktop_client: None,
+    desktop_clients: [],
+    webide_order_id: None,
+    self_service: default_self_service_state(),
     project_id: "",
     unix_username: "",
     model_ids: "",
@@ -336,9 +356,9 @@ pub fn demo_state() -> EnterpriseState {
     preceding_packet_ref: Some("packet-demo-youthpolicy"),
     active_forms: [MasterLease],
     values: [
-      { field_id: "lessee.name", value: "Northstar Research" },
-      { field_id: "lease.start_date", value: "2025-09-01" },
-      { field_id: "lease.end_date", value: "2026-08-31" },
+      { field_id: "lessee.name", value: "Northstar Research", },
+      { field_id: "lease.start_date", value: "2025-09-01", },
+      { field_id: "lease.end_date", value: "2026-08-31", },
     ],
     values_sha256: Some(
       "sha256:7ca7d84d5b028ed5825a0e87104737c15d6f4c71463d8c567ce17e108075eb41",
@@ -392,7 +412,7 @@ pub fn demo_state() -> EnterpriseState {
     updated_unix_ms: now - 86400000L,
     revision: 1L,
   }
-  {
+  let state = {
     ..default_state(now),
     membership: Some({
       membership_id: "membership-northstar",
@@ -403,6 +423,51 @@ pub fn demo_state() -> EnterpriseState {
       active: true,
       created_unix_ms: now - 2592000000L,
     }),
+    organizations: [
+      {
+        organization: {
+          organization_id: "org-northstar",
+          display_name: "Northstar Research",
+          state: Active,
+          verification_ref: Some("verification-demo"),
+          legal_profile: Some({
+            subject_kind: Company,
+            legal_name: "Northstar Research Ltd.",
+            country_code: "CN",
+            registration_number: Some("REG-DEMO"),
+            tax_identifier: Some("TAX-DEMO"),
+            registered_address: "100 Science Road, Beijing",
+            billing_contact: {
+              display_name: "Alice Chen",
+              email: "alice@example.invalid",
+              phone: None,
+            },
+          }),
+        },
+        membership: {
+          membership_id: "membership-northstar",
+          tenant_ref: "tenant-northstar",
+          organization_id: "org-northstar",
+          subject_ref: "subject-alice",
+          roles: [
+            OrganizationAdministrator,
+            LegalSigner,
+            LeaseRequester,
+            BillingViewer,
+            Developer,
+          ],
+          active: true,
+          created_unix_ms: now - 2592000000L,
+        },
+        default_project_id: Some("project-vision-lab"),
+        verification: Some({
+          required: false,
+          record: None,
+          blocker_code: None,
+        }),
+      },
+    ],
+    selected_organization_id: Some("org-northstar"),
     account: Some({
       account_id: "account-alice",
       subject_ref: "subject-alice",
@@ -720,11 +785,30 @@ pub fn demo_state() -> EnterpriseState {
       blocker_codes: [],
       approved_model_aliases: ["text.default"],
     }),
+    self_service: demo_self_service_state(now),
     project_id: "project-vision-lab",
     unix_username: "alice",
     model_ids: "qwen3-32b, bge-m3",
     justification: "Private evaluation and adapter validation.",
   }
+  let clients = match state.desktop_client {
+    Some(desktop) =>
+      [
+        desktop,
+        {
+          ..desktop,
+          client_id: "comfyui",
+          display_name: "ComfyUI",
+          launch_uri: "https://creative.example.invalid/connect",
+          models_ready: false,
+          ready: false,
+          blocker_codes: ["ApprovedModelRequired"],
+          approved_model_aliases: [],
+        },
+      ]
+    None => []
+  }
+  { ..state, desktop_clients: clients, }
 }
 
 ///|
@@ -733,8 +817,65 @@ pub fn EnterpriseState::update(
   message : EnterpriseMessage,
 ) -> EnterpriseState {
   match message {
-    Navigate(route) =>
-      { ..self, route, success_message: None, error_message: None }
+    SelectWebIdeOrder(order_id) => {
+      if self.loading {
+        return self
+      }
+      {
+        ..self,
+        webide_order_id: if order_id == "" {
+          None
+        } else {
+          Some(order_id)
+        },
+        success_message: None,
+        error_message: None,
+      }
+    }
+    SelectWebIde(client_id) => {
+      if self.loading {
+        return self
+      }
+      match
+        self.desktop_clients
+        .filter(client => client.client_id == client_id)
+        .get(0) {
+        Some(client) =>
+          {
+            ..self,
+            desktop_client: Some(client),
+            success_message: None,
+            error_message: None,
+          }
+        None => self
+      }
+    }
+    Navigate(route) => {
+      let dedicated = if route == AccountAccess {
+        self.self_service.order.filter(order => {
+          order.kind == DedicatedMaaS && order.status == ActiveOrder
+        })
+      } else {
+        None
+      }
+      match dedicated {
+        Some(order) =>
+          {
+            ..self,
+            route,
+            api_key_issue_draft: {
+              ..self.api_key_issue_draft,
+              display_name: "Dedicated · \{order.order_id}",
+              allowed_models: order.model_selector.unwrap_or(""),
+              lifetime_days: ((order.duration_hours + 23) / 24).max(1),
+            },
+            api_key_issue_open: true,
+            success_message: None,
+            error_message: None,
+          }
+        None => { ..self, route, success_message: None, error_message: None, }
+      }
+    }
     LocaleChanged(locale) =>
       {
         ..self,
@@ -745,6 +886,93 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
+    SelfService(SelectProduct(product)) => {
+      let selected = self.self_service.update(SelectProduct(product))
+      let organization_ready = self.membership is Some(membership) &&
+        membership.active
+      {
+        ..self,
+        route: SelfService,
+        self_service: {
+          ..selected,
+          step: if product == SharedMaaS || organization_ready {
+            Capacity
+          } else {
+            Organization
+          },
+        },
+        success_message: None,
+        error_message: None,
+      }
+    }
+    SelfService(SelectOrganization(organization_id)) => {
+      let selection = self.organizations
+        .iter()
+        .find_first(value => {
+          value.organization.organization_id == organization_id &&
+          value.membership.active
+        })
+      match selection {
+        Some(value) => {
+          let project_id = value.default_project_id.unwrap_or("")
+          {
+            ..self,
+            membership: Some(value.membership),
+            selected_organization_id: Some(organization_id),
+            project_id,
+            self_service: {
+              ..self.self_service,
+              project_id,
+              quote: None,
+              order: None,
+              orders: [],
+              checkout: None,
+              terms_accepted: false,
+              terms_reviewed: false,
+              action_error: None,
+            },
+            success_message: None,
+            error_message: None,
+          }
+        }
+        None =>
+          {
+            ..self,
+            selected_organization_id: None,
+            membership: None,
+            self_service: {
+              ..self.self_service,
+              quote: None,
+              order: None,
+              orders: [],
+              checkout: None,
+              terms_accepted: false,
+              terms_reviewed: false,
+              action_error: Some(
+                enterprise_copy(
+                  self.locale,
+                  SelectAnActiveOrganizationBeforeContinuing,
+                ),
+              ),
+            },
+          }
+      }
+    }
+    SelfService(RequestQuote) =>
+      {
+        ..self,
+        self_service: { ..self.self_service.update(RequestQuote), step: Quote, },
+      }
+    SelfService(CreateMachineOrder) =>
+      {
+        ..self,
+        self_service: {
+          ..self.self_service.update(CreateMachineOrder),
+          step: ContractPayment,
+        },
+      }
+    SelfService(message) =>
+      { ..self, self_service: self.self_service.update(message), }
     OpenApiKeyIssue =>
       {
         ..self,
@@ -755,11 +983,14 @@ pub fn EnterpriseState::update(
         error_message: None,
       }
     CancelApiKeyIssue =>
-      { ..self, api_key_issue_open: false, error_message: None }
+      { ..self, api_key_issue_open: false, error_message: None, }
     ApiKeyDisplayNameChanged(value) =>
       {
         ..self,
-        api_key_issue_draft: { ..self.api_key_issue_draft, display_name: value },
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          display_name: value,
+        },
       }
     ToggleApiKeyModelListScope =>
       {
@@ -802,9 +1033,12 @@ pub fn EnterpriseState::update(
         },
       }
     SubmitApiKeyIssue =>
-      { ..self, loading: true, success_message: None, error_message: None }
-    CopyOneTimeApiKeySecret => self
-    DismissOneTimeApiKeySecret => { ..self, one_time_api_key_secret: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
+    CopyOneTimeApiKeySecret
+    | CopyFirstCallExample
+    | CopyDetail(_)
+    | ExportCosts => self
+    DismissOneTimeApiKeySecret => { ..self, one_time_api_key_secret: None, }
     BeginRevokeApiKey(key_id) =>
       {
         ..self,
@@ -814,15 +1048,15 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
-    CancelRevokeApiKey => { ..self, api_key_revoke_id: None }
+    CancelRevokeApiKey => { ..self, api_key_revoke_id: None, }
     ConfirmRevokeApiKey(_) =>
-      { ..self, loading: true, success_message: None, error_message: None }
-    ProjectChanged(value) => { ..self, project_id: value }
-    UsernameChanged(value) => { ..self, unix_username: value }
-    ModelsChanged(value) => { ..self, model_ids: value }
-    JustificationChanged(value) => { ..self, justification: value }
+      { ..self, loading: true, success_message: None, error_message: None, }
+    ProjectChanged(value) => { ..self, project_id: value, }
+    UsernameChanged(value) => { ..self, unix_username: value, }
+    ModelsChanged(value) => { ..self, model_ids: value, }
+    JustificationChanged(value) => { ..self, justification: value, }
     SignAgreement(_) =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     RefreshProviderRequests =>
       {
         ..self,
@@ -838,19 +1072,19 @@ pub fn EnterpriseState::update(
         error_message: None,
       }
     SubmitLease =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     LaunchDesktopClient =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     MarkNotificationRead(_, _) => self
     SetNotificationEmail(_, _) =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     MachineAccess(message) =>
-      { ..self, machine_access: self.machine_access.update(message) }
+      { ..self, machine_access: self.machine_access.update(message), }
     OfflineCommerce(message) =>
-      { ..self, offline_commerce: self.offline_commerce.update(message) }
+      { ..self, offline_commerce: self.offline_commerce.update(message), }
     ContractDocuments(message) =>
-      { ..self, contract_documents: self.contract_documents.update(message) }
-    ClearNotice => { ..self, success_message: None, error_message: None }
+      { ..self, contract_documents: self.contract_documents.update(message), }
+    ClearNotice => { ..self, success_message: None, error_message: None, }
   }
 }
 
@@ -933,17 +1167,18 @@ fn text_command(
 ///|
 fn route_label(locale : @i18n.Locale, route : EnterpriseRoute) -> String {
   match route {
-    Overview => copy(locale, "Overview", "概览")
-    AccountAccess => copy(locale, "Account & API keys", "账户与 API 密钥")
-    Agreements => copy(locale, "Agreements", "协议")
-    LeaseRequests => copy(locale, "Lease requests", "租用申请")
-    Notifications => copy(locale, "Notifications", "通知")
-    Costs => copy(locale, "Usage & costs", "用量与成本")
-    Models => copy(locale, "Model catalog", "模型目录")
-    DesktopIde => copy(locale, "WebIDE", "WebIDE")
-    MachineAccess => copy(locale, "My machine", "我的机器")
-    OfflineCommerce => copy(locale, "Orders & documents", "订单与材料")
-    ContractDocuments => copy(locale, "Contract forms", "合同表单")
+    Overview => enterprise_copy(locale, Overview)
+    SelfService => enterprise_copy(locale, GetStarted)
+    AccountAccess => enterprise_copy(locale, AccountApiKeys)
+    Agreements => enterprise_copy(locale, Agreements)
+    LeaseRequests => enterprise_copy(locale, ManagedRequests)
+    Notifications => enterprise_copy(locale, Notifications)
+    Costs => enterprise_copy(locale, UsageCosts)
+    Models => enterprise_copy(locale, ModelCatalog)
+    DesktopIde => enterprise_copy(locale, Webide)
+    MachineAccess => enterprise_copy(locale, MyMachine)
+    OfflineCommerce => enterprise_copy(locale, OrdersDocuments)
+    ContractDocuments => enterprise_copy(locale, ContractForms)
   }
 }
 
@@ -953,11 +1188,11 @@ fn state_label(
   state : @portal.PortalAgreementState,
 ) -> String {
   match state {
-    ReviewRequired => copy(locale, "Review required", "待审阅")
-    SignatureRequested => copy(locale, "Signature in progress", "签署中")
-    Executed => copy(locale, "Executed", "已签署")
-    Declined => copy(locale, "Declined", "已拒绝")
-    Superseded => copy(locale, "Superseded", "已替代")
+    ReviewRequired => enterprise_copy(locale, ReviewRequired)
+    SignatureRequested => enterprise_copy(locale, SignatureInProgress)
+    Executed => enterprise_copy(locale, Executed)
+    Declined => enterprise_copy(locale, Declined)
+    Superseded => enterprise_copy(locale, Superseded)
   }
 }
 
@@ -967,17 +1202,17 @@ fn provider_state_label(
   state : @commercial_integrations.ExternalRecordState,
 ) -> String {
   match state {
-    Pending => copy(locale, "Preparing secure link", "正在准备安全链接")
-    Submitted => copy(locale, "Ready to continue", "可继续办理")
-    Verified => copy(locale, "Verified", "已验证")
-    Authorized => copy(locale, "Authorized", "已授权")
-    Settled => copy(locale, "Paid", "已支付")
-    Issued => copy(locale, "Issued", "已开具")
-    Failed => copy(locale, "Failed", "失败")
-    Expired => copy(locale, "Expired", "已过期")
-    Voided => copy(locale, "Voided", "已作废")
-    Credited => copy(locale, "Credited", "已贷记")
-    Refunded => copy(locale, "Refunded", "已退款")
+    Pending => enterprise_copy(locale, PreparingSecureLink)
+    Submitted => enterprise_copy(locale, ReadyToContinue)
+    Verified => enterprise_copy(locale, Verified)
+    Authorized => enterprise_copy(locale, Authorized)
+    Settled => enterprise_copy(locale, Paid)
+    Issued => enterprise_copy(locale, Issued)
+    Failed => enterprise_copy(locale, Failed)
+    Expired => enterprise_copy(locale, Expired)
+    Voided => enterprise_copy(locale, Voided)
+    Credited => enterprise_copy(locale, Credited)
+    Refunded => enterprise_copy(locale, Refunded)
   }
 }
 
@@ -1123,10 +1358,10 @@ fn request_state_label(
   state : @portal.LeaseRequestState,
 ) -> String {
   match state {
-    Submitted => copy(locale, "Awaiting operator", "等待运维审核")
-    Approved => copy(locale, "Node reserved", "节点已预留")
-    Rejected => copy(locale, "Rejected", "已拒绝")
-    Cancelled => copy(locale, "Cancelled", "已取消")
+    Submitted => enterprise_copy(locale, AwaitingOperator)
+    Approved => enterprise_copy(locale, NodeReserved)
+    Rejected => enterprise_copy(locale, Rejected)
+    Cancelled => enterprise_copy(locale, Cancelled)
   }
 }
 
@@ -1138,7 +1373,8 @@ fn navigation(
   let items = [
     for
       route in [
-        Overview,
+        EnterpriseRoute::Overview,
+        EnterpriseRoute::SelfService,
         AccountAccess,
         Agreements,
         LeaseRequests,
@@ -1171,27 +1407,32 @@ fn navigation(
   ]
   @html.aside(class="enterprise-sidebar", [
     @html.a(class="enterprise-brand", href="/enterprise/", [
-      @html.span(class="brand-mark", "LN"),
+      @html.span(
+        class="brand-mark",
+        style=[
+          "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+        ],
+        [
+          @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+            "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+            "transform: scale(1.22)", "transform-origin: center",
+          ]),
+        ],
+      ),
       @html.span([
-        @html.strong("LunaNexa"),
-        @html.small(copy(state.locale, "Enterprise", "企业平台")),
+        @html.strong("能源谷“创未来”街区算力平台"),
+        @html.small(enterprise_copy(state.locale, Enterprise)),
       ]),
     ]),
     @html.nav(
       attrs=@html.Attrs::build().aria_label(
-        copy(state.locale, "Enterprise navigation", "企业导航"),
+        enterprise_copy(state.locale, EnterpriseNavigation),
       ),
       items,
     ),
     @html.div(class="trust-note", [
-      @html.strong(copy(state.locale, "Customer boundary", "客户边界")),
-      @html.p(
-        copy(
-          state.locale,
-          "You request capacity here. LunaNexa operators select and prepare the assigned DGX node.",
-          "您在此申请容量；LunaNexa 运维人员选择并准备分配的 DGX 节点。",
-        ),
-      ),
+      @html.strong(enterprise_copy(state.locale, CustomerBoundary)),
+      @html.p(enterprise_copy(state.locale, CatalogOrdersAreSelfServiceManaged)),
     ]),
   ])
 }
@@ -1203,13 +1444,30 @@ fn page_header(
 ) -> @rabbita.Html {
   let organization = match state.membership {
     Some(value) => value.organization_id
-    None => copy(state.locale, "Not connected", "未连接")
+    None => enterprise_copy(state.locale, NotConnected)
+  }
+  let organization_options : Array[@rabbita.Html] = [
+    @html.option(
+      value="",
+      selected=state.selected_organization_id is None,
+      enterprise_copy(state.locale, SelectOrganization),
+    ),
+  ]
+  for value in state.organizations {
+    organization_options.push(
+      @html.option(
+        value=value.organization.organization_id,
+        selected=state.selected_organization_id ==
+          Some(value.organization.organization_id),
+        "\{value.organization.display_name} · \{value.organization.organization_id}",
+      ),
+    )
   }
   @html.header(class="enterprise-topbar", [
     @html.div([
       @html.p(
         class="eyebrow",
-        copy(state.locale, "ENTERPRISE CONTROL CENTER", "企业控制中心"),
+        enterprise_copy(state.locale, EnterpriseControlCenter),
       ),
       @html.h1(route_label(state.locale, state.route)),
     ]),
@@ -1217,7 +1475,7 @@ fn page_header(
       @html.div(class="locale-control", [
         @html.label(
           for_="enterprise-locale",
-          copy(state.locale, "Language", "语言"),
+          enterprise_copy(state.locale, Language),
         ),
         @html.select(
           id="enterprise-locale",
@@ -1225,7 +1483,7 @@ fn page_header(
             LocaleChanged(@i18n.parse_locale(value))
           }),
           attrs=@html.Attrs::build().aria_label(
-            copy(state.locale, "Interface language", "界面语言"),
+            enterprise_copy(state.locale, InterfaceLanguage),
           ),
           [
             @html.option(
@@ -1241,12 +1499,32 @@ fn page_header(
           ],
         ),
       ]),
+      if state.organizations.length() > 1 {
+        @html.div(class="organization-control", [
+          @html.label(
+            for_="enterprise-organization",
+            enterprise_copy(state.locale, Organization),
+          ),
+          @html.select(
+            id="enterprise-organization",
+            attrs=@html.Attrs::build().aria_label(
+              enterprise_copy(state.locale, ActiveOrganizationForScopedRequests),
+            ),
+            on_change=self_service_text_command(emit, value => {
+              SelectOrganization(value)
+            }),
+            organization_options,
+          ),
+        ])
+      } else {
+        @html.nothing
+      },
       @html.div(class="topbar-meta", [
         @html.span(class="status-dot", ""),
         @html.span(organization),
         @html.span(
           class="role-pill",
-          copy(state.locale, "Tenant scoped", "限定租户范围"),
+          enterprise_copy(state.locale, TenantScoped),
         ),
       ]),
     ]),
@@ -1280,42 +1558,36 @@ fn overview_view(
         @html.div([
           @html.p(
             class="eyebrow",
-            copy(
-              state.locale,
-              "FREE SHARED-INFERENCE TRIAL",
-              "免费共享推理体验",
-            ),
+            enterprise_copy(state.locale, FreeSharedInferenceTrial),
           ),
           @html.h2(
             if active {
-              copy(state.locale, "Your trial is ready", "您的体验已就绪")
+              enterprise_copy(state.locale, YourTrialIsReady)
             } else {
-              copy(
-                state.locale,
-                "Your trial has ended",
-                "您的体验已结束",
-              )
+              enterprise_copy(state.locale, YourTrialHasEnded)
             },
           ),
           @html.p(
             if active {
-              copy(
-                state.locale,
-                "Use the approved model through a quota-bound API key. This trial never grants SSH or exclusive machine access.",
-                "通过受额度约束的 API 密钥使用已批准模型。体验不会授予 SSH 或独占机器权限。",
-              )
+              enterprise_copy(state.locale, UseTheApprovedModelThroughA)
             } else {
-              copy(
-                state.locale,
-                "Your account remains active. Ask your organization for an invitation to continue with governed enterprise access.",
-                "您的账户仍然有效。如需继续，请向组织申请邀请并升级为受治理的企业访问。",
-              )
+              enterprise_copy(state.locale, YourAccountRemainsActiveAskYour)
             },
           ),
           @html.p(
             class="secondary",
-            "\{copy(state.locale, "Expires", "到期时间")} · \{@contractdoc.format_unix_ms_utc(trial.expires_unix_ms)} · \{copy(state.locale, "Requests", "请求数")} \{consumed}/\{trial.maximum_requests} · \{trial.allowed_models.join(", ")}",
+            "\{expiry_label(state.locale, trial.expires_unix_ms, state.machine_access.now_unix_ms)} · \{enterprise_copy(state.locale, Requests)} \{consumed}/\{trial.maximum_requests} · \{trial.allowed_models.join(", ")}",
           ),
+          @html.p(message(state.locale, TrialSecret)),
+          if active {
+            @html.a(
+              class="quiet-button external-action",
+              href="/workbench/?trial=1",
+              enterprise_copy(state.locale, TryAPromptInTheWorkbench),
+            )
+          } else {
+            @html.nothing
+          },
         ]),
         @html.button(
           type_="button",
@@ -1323,13 +1595,9 @@ fn overview_view(
           disabled=!active,
           on_click=command(emit, Navigate(AccountAccess)),
           if trial.api_key_id is None {
-            copy(
-              state.locale,
-              "Create trial API key",
-              "创建体验 API 密钥",
-            )
+            enterprise_copy(state.locale, CreateTrialApiKey)
           } else {
-            copy(state.locale, "View trial API key", "查看体验 API 密钥")
+            enterprise_copy(state.locale, ViewTrialApiKey)
           },
         ),
       ])
@@ -1338,86 +1606,56 @@ fn overview_view(
   }
   @html.div(class="page-stack", [
     trial_panel,
+    product_choices(state, emit, true),
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
           class="eyebrow",
-          copy(state.locale, "YOUR LUNANEXA TENANT", "您的 LUNANEXA 租户"),
+          enterprise_copy(state.locale, YourLunanexaTenant),
         ),
-        @html.h2(
-          copy(
-            state.locale,
-            "From agreement to an isolated GPU workspace",
-            "从协议签署到隔离 GPU 工作区",
-          ),
-        ),
-        @html.p(
-          copy(
-            state.locale,
-            "Review required agreements, request a time window, then follow preparation status. Node selection and activation remain operator-controlled.",
-            "审阅必需协议、申请使用时段，然后跟踪准备状态。节点选择与激活仍由运维人员控制。",
-          ),
-        ),
+        @html.h2(enterprise_copy(state.locale, NeedAManagedCapacityException)),
+        @html.p(enterprise_copy(state.locale, UseThisPathWhenTheSelf)),
       ]),
       @html.button(
         type_="button",
         class="primary-action",
         on_click=command(emit, Navigate(LeaseRequests)),
-        copy(state.locale, "Request capacity", "申请容量"),
+        enterprise_copy(state.locale, RequestManagedCapacity),
       ),
     ]),
     @html.div(class="metric-grid", [
       @html.div(class="metric", [
-        @html.span(
-          copy(state.locale, "Agreements to review", "待审阅协议"),
-        ),
+        @html.span(enterprise_copy(state.locale, AgreementsToReview)),
         @html.strong("\{pending}"),
-        @html.small(
-          copy(
-            state.locale,
-            "Legal signer action",
-            "需要法定签署人操作",
-          ),
-        ),
+        @html.small(enterprise_copy(state.locale, LegalSignerAction)),
       ]),
       @html.div(class="metric", [
-        @html.span(
-          copy(state.locale, "Open lease requests", "待处理租用申请"),
-        ),
+        @html.span(enterprise_copy(state.locale, OpenLeaseRequests)),
         @html.strong("\{open_requests}"),
-        @html.small(
-          copy(state.locale, "Operator review queue", "运维审核队列"),
-        ),
+        @html.small(enterprise_copy(state.locale, OperatorReviewQueue)),
       ]),
       @html.div(class="metric", [
-        @html.span(copy(state.locale, "Models entitled", "可用模型")),
+        @html.span(enterprise_copy(state.locale, ModelsEntitled)),
         @html.strong(state.model_catalog.length().to_string()),
-        @html.small(
-          copy(state.locale, "Shared central catalog", "中央共享目录"),
-        ),
+        @html.small(enterprise_copy(state.locale, SharedCentralCatalog)),
       ]),
       @html.div(class="metric", [
-        @html.span(copy(state.locale, "Current spend", "当前支出")),
+        @html.span(enterprise_copy(state.locale, CurrentSpend)),
         @html.strong(state.provisional_spend),
-        @html.small(
-          copy(state.locale, "Provisional central ledger", "中央台账暂计"),
-        ),
+        @html.small(enterprise_copy(state.locale, ProvisionalCentralLedger)),
       ]),
     ]),
     @html.section(class="workflow-panel", [
-      @html.h2(copy(state.locale, "Lease readiness", "租用准备流程")),
+      @html.h2(enterprise_copy(state.locale, LeaseReadiness)),
       @html.ol(class="workflow-steps", [
         @html.li(class="is-complete", [
           @html.span("1"),
           @html.div([
-            @html.strong(
-              copy(state.locale, "Enterprise verified", "企业已验证"),
-            ),
+            @html.strong(enterprise_copy(state.locale, EnterpriseVerified)),
             @html.p(
-              copy(
+              enterprise_copy(
                 state.locale,
-                "Organization membership and signer authority recorded.",
-                "组织成员身份与签署权限已记录。",
+                OrganizationMembershipAndSignerAuthorityRecorded,
               ),
             ),
           ]),
@@ -1428,17 +1666,12 @@ fn overview_view(
             @html.span("2"),
             @html.div([
               @html.strong(
-                copy(
-                  state.locale,
-                  "Execute required agreements",
-                  "签署必需协议",
-                ),
+                enterprise_copy(state.locale, ExecuteRequiredAgreements),
               ),
               @html.p(
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "External signature evidence is verified before execution.",
-                  "外部签名证据验证后才标记为已签署。",
+                  ExternalSignatureEvidenceIsVerifiedBefore,
                 ),
               ),
             ]),
@@ -1447,32 +1680,18 @@ fn overview_view(
         @html.li(class=if open_requests > 0 { "is-current" } else { "" }, [
           @html.span("3"),
           @html.div([
-            @html.strong(copy(state.locale, "Request capacity", "申请容量")),
+            @html.strong(enterprise_copy(state.locale, RequestCapacity)),
             @html.p(
-              copy(
-                state.locale,
-                "Choose project, time window, username and required models.",
-                "选择项目、时段、用户名与所需模型。",
-              ),
+              enterprise_copy(state.locale, ChooseProjectTimeWindowUsernameAnd),
             ),
           ]),
         ]),
         @html.li([
           @html.span("4"),
           @html.div([
-            @html.strong(
-              copy(
-                state.locale,
-                "Operator assigns one node",
-                "运维分配一个节点",
-              ),
-            ),
+            @html.strong(enterprise_copy(state.locale, OperatorAssignsOneNode)),
             @html.p(
-              copy(
-                state.locale,
-                "A credential reference is created; no raw password is stored.",
-                "系统创建凭据引用，不存储明文密码。",
-              ),
+              enterprise_copy(state.locale, ACredentialReferenceIsCreatedNo),
             ),
           ]),
         ]),
@@ -1488,38 +1707,38 @@ fn enterprise_role_label(
 ) -> String {
   match role {
     OrganizationAdministrator =>
-      copy(locale, "Organization administrator", "组织管理员")
-    LegalSigner => copy(locale, "Legal signer", "法定签署人")
-    LeaseRequester => copy(locale, "Lease requester", "租用申请人")
-    BillingViewer => copy(locale, "Billing viewer", "账单查看者")
-    Developer => copy(locale, "Developer", "开发者")
+      enterprise_copy(locale, OrganizationAdministrator)
+    LegalSigner => enterprise_copy(locale, LegalSigner)
+    LeaseRequester => enterprise_copy(locale, LeaseRequester)
+    BillingViewer => enterprise_copy(locale, BillingViewer)
+    Developer => enterprise_copy(locale, Developer)
   }
 }
 
 ///|
 fn account_role_label(locale : @i18n.Locale, role : AccountRole) -> String {
   match role {
-    PlatformOperator => copy(locale, "Platform operator", "平台运维人员")
-    AuditReader => copy(locale, "Audit reader", "审计查看者")
-    EnterpriseUser => copy(locale, "Enterprise user", "企业用户")
+    PlatformOperator => enterprise_copy(locale, PlatformOperator)
+    AuditReader => enterprise_copy(locale, AuditReader)
+    EnterpriseUser => enterprise_copy(locale, EnterpriseUser)
   }
 }
 
 ///|
 fn account_state_label(locale : @i18n.Locale, state : AccountState) -> String {
   match state {
-    Invited => copy(locale, "Invited", "已邀请")
-    Active => copy(locale, "Active", "有效")
-    Suspended => copy(locale, "Suspended", "已暂停")
-    Revoked => copy(locale, "Revoked", "已撤销")
+    Invited => enterprise_copy(locale, Invited)
+    Active => enterprise_copy(locale, Active)
+    Suspended => enterprise_copy(locale, Suspended)
+    Revoked => enterprise_copy(locale, Revoked)
   }
 }
 
 ///|
 fn api_key_scope_label(locale : @i18n.Locale, scope : ApiKeyScope) -> String {
   match scope {
-    ModelList => copy(locale, "Model list", "模型列表")
-    Inference => copy(locale, "Inference", "推理")
+    ModelList => enterprise_copy(locale, ModelList)
+    Inference => enterprise_copy(locale, Inference)
   }
 }
 
@@ -1530,13 +1749,13 @@ fn api_key_state(
   now_unix_ms : Int64,
 ) -> (String, String) {
   if key.revoked_unix_ms is Some(_) {
-    (copy(locale, "Revoked", "已撤销"), "revoked")
+    (enterprise_copy(locale, Revoked), "revoked")
   } else if key.expires_unix_ms <= now_unix_ms {
-    (copy(locale, "Expired", "已过期"), "expired")
+    (enterprise_copy(locale, Expired), "expired")
   } else if key.consumed_requests >= key.maximum_requests {
-    (copy(locale, "Quota exhausted", "配额已用尽"), "expired")
+    (enterprise_copy(locale, QuotaExhausted), "expired")
   } else {
-    (copy(locale, "Active", "有效"), "active")
+    (enterprise_copy(locale, Active), "active")
   }
 }
 
@@ -1560,21 +1779,17 @@ fn api_key_issue_dialog(
       [
         @html.h2(
           id="api-key-issue-title",
-          copy(state.locale, "Create API key", "创建 API 密钥"),
+          enterprise_copy(state.locale, CreateApiKey),
         ),
         @html.p(
           id="api-key-issue-description",
-          copy(
-            state.locale,
-            "The secret is shown once. Issuance also requires an effective MasterLease and Developer role.",
-            "密钥仅显示一次。签发还要求有效的主租约和开发者角色。",
-          ),
+          enterprise_copy(state.locale, TheSecretIsShownOnceTrial),
         ),
         @html.div(class="account-form", [
           @html.div(class="field", [
             @html.label(
               for_="api-key-project-id",
-              copy(state.locale, "Billing project", "计费项目"),
+              enterprise_copy(state.locale, BillingProject),
             ),
             @html.input(
               id="api-key-project-id",
@@ -1587,7 +1802,7 @@ fn api_key_issue_dialog(
           @html.div(class="field", [
             @html.label(
               for_="api-key-display-name",
-              copy(state.locale, "Key name", "密钥名称"),
+              enterprise_copy(state.locale, KeyName),
             ),
             @html.input(
               id="api-key-display-name",
@@ -1600,7 +1815,7 @@ fn api_key_issue_dialog(
             ),
           ]),
           @html.fieldset(class="scope-picker", [
-            @html.legend(copy(state.locale, "Scopes", "权限范围")),
+            @html.legend(enterprise_copy(state.locale, Scopes)),
             @html.button(
               type_="button",
               class=if draft.model_list_scope {
@@ -1616,7 +1831,7 @@ fn api_key_issue_dialog(
                 },
               ),
               on_click=command(emit, ToggleApiKeyModelListScope),
-              copy(state.locale, "Model list", "模型列表"),
+              enterprise_copy(state.locale, ModelList),
             ),
             @html.button(
               type_="button",
@@ -1633,39 +1848,34 @@ fn api_key_issue_dialog(
                 },
               ),
               on_click=command(emit, ToggleApiKeyInferenceScope),
-              copy(state.locale, "Inference", "推理"),
+              enterprise_copy(state.locale, Inference),
             ),
           ]),
           @html.div(class="field", [
             @html.label(
               for_="api-key-models",
-              copy(state.locale, "Allowed models", "允许的模型"),
+              enterprise_copy(state.locale, AllowedModels),
             ),
             @html.input(
               id="api-key-models",
               value=draft.allowed_models,
-              placeholder=copy(
+              placeholder=enterprise_copy(
                 state.locale,
-                "Optional, comma-separated aliases",
-                "可选，使用英文逗号分隔别名",
+                OptionalCommaSeparatedAliases,
               ),
               on_input=text_command(emit, value => {
                 ApiKeyAllowedModelsChanged(value)
               }),
             ),
             @html.small(
-              copy(
-                state.locale,
-                "Leave empty to allow every model granted by the account contract.",
-                "留空表示允许账户合同授予的所有模型。",
-              ),
+              enterprise_copy(state.locale, LeaveEmptyToAllowEveryModel),
             ),
           ]),
           @html.div(class="account-form-grid", [
             @html.div(class="field", [
               @html.label(
                 for_="api-key-lifetime",
-                copy(state.locale, "Lifetime", "有效期"),
+                enterprise_copy(state.locale, Lifetime),
               ),
               @html.select(
                 id="api-key-lifetime",
@@ -1684,27 +1894,27 @@ fn api_key_issue_dialog(
                   @html.option(
                     value="1",
                     selected=draft.lifetime_days == 1,
-                    copy(state.locale, "1 day", "1 天"),
+                    enterprise_copy(state.locale, Day),
                   ),
                   @html.option(
                     value="7",
                     selected=draft.lifetime_days == 7,
-                    copy(state.locale, "7 days", "7 天"),
+                    enterprise_copy(state.locale, Days),
                   ),
                   @html.option(
                     value="30",
                     selected=draft.lifetime_days == 30,
-                    copy(state.locale, "30 days", "30 天"),
+                    enterprise_copy(state.locale, Days101),
                   ),
                   @html.option(
                     value="90",
                     selected=draft.lifetime_days == 90,
-                    copy(state.locale, "90 days", "90 天"),
+                    enterprise_copy(state.locale, Days102),
                   ),
                   @html.option(
                     value="365",
                     selected=draft.lifetime_days == 365,
-                    copy(state.locale, "1 year", "1 年"),
+                    enterprise_copy(state.locale, Year),
                   ),
                 ],
               ),
@@ -1712,7 +1922,7 @@ fn api_key_issue_dialog(
             @html.div(class="field", [
               @html.label(
                 for_="api-key-maximum-requests",
-                copy(state.locale, "Request quota", "请求配额"),
+                enterprise_copy(state.locale, RequestQuota),
               ),
               @html.select(
                 id="api-key-maximum-requests",
@@ -1758,7 +1968,8 @@ fn api_key_issue_dialog(
             class="quiet-button",
             disabled=state.loading,
             on_click=command(emit, CancelApiKeyIssue),
-            copy(state.locale, "Cancel", "取消"),
+            id="api-key-issue-cancel",
+            enterprise_copy(state.locale, Cancel),
           ),
           @html.button(
             type_="button",
@@ -1766,9 +1977,9 @@ fn api_key_issue_dialog(
             disabled=!api_key_issue_valid(state),
             on_click=command(emit, SubmitApiKeyIssue),
             if state.loading {
-              copy(state.locale, "Creating…", "正在创建…")
+              enterprise_copy(state.locale, Creating)
             } else {
-              copy(state.locale, "Create key", "创建密钥")
+              enterprise_copy(state.locale, CreateKey)
             },
           ),
         ]),
@@ -1796,43 +2007,61 @@ fn one_time_secret_dialog(
       [
         @html.h2(
           id="api-key-secret-title",
-          copy(state.locale, "Save this secret now", "请立即保存此密钥"),
+          enterprise_copy(state.locale, SaveThisSecretNow),
         ),
+        if value.secret == "DEMO-NOT-A-CREDENTIAL" {
+          @html.p(
+            class="notice",
+            enterprise_copy(state.locale, DemoPreviewThisIsNotA),
+          )
+        } else {
+          @html.nothing
+        },
         @html.p(
           id="api-key-secret-description",
-          copy(
-            state.locale,
-            "LunaNexa stores only its hash. This secret cannot be retrieved after you close this dialog.",
-            "LunaNexa 仅存储其哈希值。关闭此对话框后将无法再次获取该密钥。",
-          ),
+          enterprise_copy(state.locale, LunanexaStoresOnlyItsHashThis),
         ),
         @html.dl(class="account-facts", [
           @html.div([
-            @html.dt(copy(state.locale, "Name", "名称")),
+            @html.dt(enterprise_copy(state.locale, Name)),
             @html.dd(value.display_name),
           ]),
           @html.div([
-            @html.dt(copy(state.locale, "Key ID", "密钥 ID")),
-            @html.dd(class="mono", value.key_id),
+            @html.dt(enterprise_copy(state.locale, KeyId)),
+            @html.dd([copy_detail(state, emit, value.key_id)]),
           ]),
         ]),
         @html.pre(class="one-time-secret", value.secret),
+        @html.section(class="first-call-guide", [
+          @html.h3(enterprise_copy(state.locale, MakeYourFirstCall)),
+          @html.p(message(state.locale, FirstCallSetup)),
+          if value.api_base_url is None {
+            @html.p(message(state.locale, MissingApiEntrance))
+          } else {
+            @html.nothing
+          },
+          @html.pre(class="mono", first_call_example(value)),
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            on_click=command(emit, CopyFirstCallExample),
+            enterprise_copy(state.locale, CopyFirstCallExample),
+          ),
+          @html.p(message(state.locale, FirstCallErrors)),
+        ]),
         @html.div(class="dialog-actions", [
           @html.button(
             type_="button",
             class="quiet-button",
             on_click=command(emit, CopyOneTimeApiKeySecret),
-            copy(state.locale, "Copy secret", "复制密钥"),
+            enterprise_copy(state.locale, CopySecret),
           ),
           @html.button(
             type_="button",
             class="primary-button",
             on_click=command(emit, DismissOneTimeApiKeySecret),
-            copy(
-              state.locale,
-              "I saved it — clear secret",
-              "我已保存 — 清除密钥",
-            ),
+            id="api-key-secret-dismiss",
+            enterprise_copy(state.locale, ISavedItClearSecret),
           ),
         ]),
       ],
@@ -1863,15 +2092,11 @@ fn revoke_api_key_dialog(
       [
         @html.h2(
           id="api-key-revoke-title",
-          copy(state.locale, "Revoke API key?", "撤销 API 密钥？"),
+          enterprise_copy(state.locale, RevokeApiKey),
         ),
         @html.p(
           id="api-key-revoke-description",
-          copy(
-            state.locale,
-            "Requests using this key will fail immediately. This action cannot be undone.",
-            "使用此密钥的请求将立即失败。此操作无法撤销。",
-          ),
+          enterprise_copy(state.locale, RequestsUsingThisKeyWillFail),
         ),
         @html.p(class="confirmation-scope mono", scope),
         @html.div(class="dialog-actions", [
@@ -1880,7 +2105,8 @@ fn revoke_api_key_dialog(
             class="quiet-button",
             disabled=state.loading,
             on_click=command(emit, CancelRevokeApiKey),
-            copy(state.locale, "Cancel", "取消"),
+            id="api-key-revoke-cancel",
+            enterprise_copy(state.locale, Cancel),
           ),
           @html.button(
             type_="button",
@@ -1888,9 +2114,9 @@ fn revoke_api_key_dialog(
             disabled=state.loading,
             on_click=command(emit, ConfirmRevokeApiKey(key_id)),
             if state.loading {
-              copy(state.locale, "Revoking…", "正在撤销…")
+              enterprise_copy(state.locale, Revoking)
             } else {
-              copy(state.locale, "Revoke key", "撤销密钥")
+              enterprise_copy(state.locale, RevokeKey)
             },
           ),
         ]),
@@ -1907,11 +2133,7 @@ fn account_access_view(
   guard state.membership is Some(membership) else {
     return @html.p(
       class="empty-state",
-      copy(
-        state.locale,
-        "Account identity is unavailable.",
-        "账户身份不可用。",
-      ),
+      enterprise_copy(state.locale, AccountIdentityIsUnavailable),
     )
   }
   let can_issue = membership.active &&
@@ -1926,9 +2148,9 @@ fn account_access_view(
   let browser_session_rows = [
     for browser_session in state.browser_sessions => {
       @html.div(class="browser-session-row", [
-        @html.span(class="mono", browser_session.session_id),
+        copy_detail(state, emit, browser_session.session_id),
         @html.span(
-          "\{copy(state.locale, "Expires", "到期时间")} · \{@contractdoc.format_unix_ms_utc(browser_session.expires_unix_ms)}",
+          "\{enterprise_copy(state.locale, Expires)} · \{@contractdoc.format_unix_ms_utc(browser_session.expires_unix_ms)}",
         ),
       ])
     }
@@ -1939,17 +2161,11 @@ fn account_access_view(
         @html.div([
           @html.p(
             class="eyebrow",
-            copy(state.locale, "AUTHENTICATED ACCOUNT", "已认证账户"),
+            enterprise_copy(state.locale, AuthenticatedAccount),
           ),
-          @html.h2(
-            copy(state.locale, "Identity & membership", "身份与成员资格"),
-          ),
+          @html.h2(enterprise_copy(state.locale, IdentityMembership)),
           @html.p(
-            copy(
-              state.locale,
-              "Authentication is supplied by the trusted ingress. LunaNexa stores only the opaque subject and authorization records.",
-              "身份验证由受信任入口提供。LunaNexa 仅存储不透明主体和授权记录。",
-            ),
+            enterprise_copy(state.locale, AuthenticationIsSuppliedByTheTrusted),
           ),
         ]),
         @html.span(
@@ -1959,9 +2175,9 @@ fn account_access_view(
             "state-pill account-state-inactive"
           },
           if membership.active {
-            copy(state.locale, "Active membership", "有效成员资格")
+            enterprise_copy(state.locale, ActiveMembership)
           } else {
-            copy(state.locale, "Inactive membership", "成员资格已停用")
+            enterprise_copy(state.locale, InactiveMembership)
           },
         ),
       ]),
@@ -1970,19 +2186,19 @@ fn account_access_view(
           @html.div([
             @html.dl(class="account-facts", [
               @html.div([
-                @html.dt(copy(state.locale, "Account", "账户")),
+                @html.dt(enterprise_copy(state.locale, Account)),
                 @html.dd(account.display_name),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Email", "电子邮箱")),
+                @html.dt(enterprise_copy(state.locale, Email)),
                 @html.dd(account.email),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Account ID", "账户 ID")),
-                @html.dd(class="mono", account.account_id),
+                @html.dt(enterprise_copy(state.locale, AccountId)),
+                @html.dd([copy_detail(state, emit, account.account_id)]),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Account state", "账户状态")),
+                @html.dt(enterprise_copy(state.locale, AccountState)),
                 @html.dd(account_state_label(state.locale, account.state)),
               ]),
             ]),
@@ -2001,35 +2217,28 @@ fn account_access_view(
         None =>
           @html.p(
             class="development-warning",
-            copy(
+            enterprise_copy(
               state.locale,
-              "Development fallback: the gateway account profile is unavailable; only portal membership is shown.",
-              "开发后备方式：网关账户资料不可用；仅显示门户成员资格。",
+              DevelopmentFallbackTheGatewayAccountProfile,
             ),
           )
       },
       @html.dl(class="account-facts", [
         @html.div([
-          @html.dt(copy(state.locale, "Organization", "组织")),
-          @html.dd(class="mono", membership.organization_id),
+          @html.dt(enterprise_copy(state.locale, Organization)),
+          @html.dd([copy_detail(state, emit, membership.organization_id)]),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Tenant", "租户")),
-          @html.dd(class="mono", membership.tenant_ref),
+          @html.dt(enterprise_copy(state.locale, Tenant)),
+          @html.dd([copy_detail(state, emit, membership.tenant_ref)]),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Subject", "主体")),
-          @html.dd(class="mono", membership.subject_ref),
+          @html.dt(enterprise_copy(state.locale, Subject)),
+          @html.dd([copy_detail(state, emit, membership.subject_ref)]),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Browser session", "浏览器会话")),
-          @html.dd(
-            copy(
-              state.locale,
-              "Ends on logout or reload",
-              "退出登录或重新加载时结束",
-            ),
-          ),
+          @html.dt(enterprise_copy(state.locale, BrowserSession)),
+          @html.dd(enterprise_copy(state.locale, EndsOnLogoutOrReload)),
         ]),
       ]),
       @html.div(
@@ -2049,7 +2258,7 @@ fn account_access_view(
         @html.div(
           class="browser-session-list",
           [
-            @html.h3(copy(state.locale, "Browser sessions", "浏览器会话")),
+            @html.h3(enterprise_copy(state.locale, BrowserSessions)),
             ..browser_session_rows,
           ],
         )
@@ -2058,13 +2267,9 @@ fn account_access_view(
     @html.section(class="api-key-panel", [
       @html.div(class="section-heading", [
         @html.div([
-          @html.h2(copy(state.locale, "API keys", "API 密钥")),
+          @html.h2(enterprise_copy(state.locale, ApiKeys)),
           @html.p(
-            copy(
-              state.locale,
-              "Keys are subject-bound, expiring, model-scoped credentials for API clients.",
-              "密钥是绑定主体、具有有效期并限定模型范围的 API 客户端凭据。",
-            ),
+            enterprise_copy(state.locale, KeysAreSubjectBoundExpiringModel),
           ),
         ]),
         @html.button(
@@ -2072,50 +2277,42 @@ fn account_access_view(
           class="primary-button",
           disabled=!can_issue || state.loading,
           title=if can_issue {
-            copy(
-              state.locale,
-              "Create a scoped API key",
-              "创建限定范围的 API 密钥",
-            )
+            enterprise_copy(state.locale, CreateAScopedApiKey)
           } else {
             match state.trial {
               Some(trial) if trial.organization_id == membership.organization_id &&
                 trial.api_key_id is Some(_) =>
-                copy(
-                  state.locale,
-                  "The one-time trial API key has already been issued",
-                  "一次性体验 API 密钥已经签发",
-                )
+                enterprise_copy(state.locale, TheOneTimeTrialApiKey)
               _ =>
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "An active Developer membership or available trial is required",
-                  "需要有效的开发者成员资格或可用体验权益",
+                  AnActiveDeveloperMembershipOrAvailable,
                 )
             }
           },
           on_click=command(emit, OpenApiKeyIssue),
-          copy(state.locale, "Create API key", "创建 API 密钥"),
+          enterprise_copy(state.locale, CreateApiKey),
         ),
       ]),
       @html.p(class="rotation-note", [
-        @html.strong(copy(state.locale, "Rotation", "轮换")),
+        @html.strong(enterprise_copy(state.locale, Rotation)),
         @html.span(
-          copy(
-            state.locale,
-            "Atomic rotation is not available yet. Create a replacement, update the client, then revoke the old key.",
-            "原子轮换暂不可用。请先创建替代密钥、更新客户端，再撤销旧密钥。",
-          ),
+          if state.trial is Some(trial) && trial.revoked_unix_ms is None {
+            message(state.locale, TrialSecret)
+          } else {
+            enterprise_copy(state.locale, AtomicRotationIsNotAvailableYet)
+          },
         ),
       ]),
+      if state.trial is Some(_) {
+        @html.p(message(state.locale, TrialSecret))
+      } else {
+        @html.nothing
+      },
       if state.api_keys.length() == 0 {
         @html.p(
           class="empty-state",
-          copy(
-            state.locale,
-            "No API keys exist for this account.",
-            "此账户尚无 API 密钥。",
-          ),
+          enterprise_copy(state.locale, NoApiKeysExistForThis),
         )
       } else {
         @html.div(
@@ -2131,7 +2328,7 @@ fn account_access_view(
                 @html.div(class="api-key-card-heading", [
                   @html.div([
                     @html.h3(key.display_name),
-                    @html.span(class="mono secondary", key.key_id),
+                    copy_detail(state, emit, key.key_id),
                   ]),
                   @html.span(
                     class="state-pill api-key-state-\{status_class}",
@@ -2140,7 +2337,7 @@ fn account_access_view(
                 ]),
                 @html.dl(class="account-facts api-key-facts", [
                   @html.div([
-                    @html.dt(copy(state.locale, "Scopes", "权限范围")),
+                    @html.dt(enterprise_copy(state.locale, Scopes)),
                     @html.dd(
                       key.scopes
                       .map(scope => api_key_scope_label(state.locale, scope))
@@ -2148,30 +2345,42 @@ fn account_access_view(
                     ),
                   ]),
                   @html.div([
-                    @html.dt(copy(state.locale, "Models", "模型")),
+                    @html.dt(enterprise_copy(state.locale, Models)),
                     @html.dd(
                       if key.allowed_models.length() == 0 {
-                        copy(
-                          state.locale,
-                          "All entitled models",
-                          "所有已授权模型",
-                        )
+                        enterprise_copy(state.locale, AllEntitledModels)
                       } else {
                         key.allowed_models.join(", ")
                       },
                     ),
                   ]),
                   @html.div([
-                    @html.dt(copy(state.locale, "Expires", "到期时间")),
+                    @html.dt(enterprise_copy(state.locale, Expires)),
                     @html.dd(
-                      @contractdoc.format_unix_ms_utc(key.expires_unix_ms),
+                      expiry_label(
+                        state.locale,
+                        key.expires_unix_ms,
+                        state.machine_access.now_unix_ms,
+                      ),
                     ),
                   ]),
                   @html.div([
-                    @html.dt(copy(state.locale, "Requests", "请求数")),
+                    @html.dt(enterprise_copy(state.locale, Requests)),
                     @html.dd(
                       "\{key.consumed_requests} / \{key.maximum_requests}",
                     ),
+                    @html.dd(
+                      if key.maximum_requests <= 0L ||
+                        key.consumed_requests >= key.maximum_requests {
+                        enterprise_copy(state.locale, QuotaExhausted148)
+                      } else if key.consumed_requests >=
+                        key.maximum_requests - key.maximum_requests / 5L {
+                        enterprise_copy(state.locale, WarningLessThanRemaining)
+                      } else {
+                        enterprise_copy(state.locale, QuotaAvailable)
+                      },
+                    ),
+                    @html.dd([quota_indicator(state.locale, key)]),
                   ]),
                 ]),
                 @html.div(class="api-key-actions", [
@@ -2182,7 +2391,7 @@ fn account_access_view(
                       key.expires_unix_ms <= state.machine_access.now_unix_ms ||
                       state.loading,
                     on_click=command(emit, BeginRevokeApiKey(key.key_id)),
-                    copy(state.locale, "Revoke…", "撤销…"),
+                    enterprise_copy(state.locale, Revoke),
                   ),
                 ]),
               ])
@@ -2209,18 +2418,10 @@ fn agreements_view(
     @html.section(class="section-heading provider-section-heading", [
       @html.div([
         @html.h2(
-          copy(
-            state.locale,
-            "Agreements requiring your organization",
-            "您组织需要处理的协议",
-          ),
+          enterprise_copy(state.locale, AgreementsRequiringYourOrganization),
         ),
         @html.p(
-          copy(
-            state.locale,
-            "Review the immutable document hash before opening the external signature ceremony.",
-            "在打开外部签署流程前，请核对不可变文档哈希。",
-          ),
+          enterprise_copy(state.locale, ReviewTheImmutableDocumentHashBefore),
         ),
       ]),
       @html.div(class="section-actions", [
@@ -2231,9 +2432,9 @@ fn agreements_view(
           disabled=state.provider_requests_loading,
           on_click=command(emit, RefreshProviderRequests),
           if state.provider_requests_loading {
-            copy(state.locale, "Refreshing…", "正在刷新…")
+            enterprise_copy(state.locale, Refreshing)
           } else {
-            copy(state.locale, "Refresh status", "刷新状态")
+            enterprise_copy(state.locale, RefreshStatus)
           },
         ),
       ]),
@@ -2258,17 +2459,13 @@ fn agreement_card(
           disabled=state.loading,
           on_click=command(emit, SignAgreement(agreement.agreement_id)),
           if state.loading {
-            copy(state.locale, "Requesting…", "正在发起…")
+            enterprise_copy(state.locale, Requesting)
           } else {
-            copy(state.locale, "Review & sign", "审阅并签署")
+            enterprise_copy(state.locale, ReviewSign)
           },
         ),
         @html.small(
-          copy(
-            state.locale,
-            "LunaNexa requests a provider handoff and never collects signing credentials.",
-            "LunaNexa 仅请求服务商交接，不会收集签署凭据。",
-          ),
+          enterprise_copy(state.locale, LunanexaRequestsAProviderHandoffAnd),
         ),
       ])
     SignatureRequested =>
@@ -2287,11 +2484,7 @@ fn agreement_card(
               class=provider_state_class(record.state),
               attrs=@html.Attrs::build().role("status").aria_live("polite"),
               if expired {
-                copy(
-                  state.locale,
-                  "Signing link expired",
-                  "签署链接已过期",
-                )
+                enterprise_copy(state.locale, SigningLinkExpired)
               } else {
                 provider_state_label(state.locale, record.state)
               },
@@ -2304,11 +2497,7 @@ fn agreement_card(
                   target=Blank,
                   rel="noopener noreferrer",
                   escape=true,
-                  copy(
-                    state.locale,
-                    "Continue with signature provider",
-                    "前往签署服务商继续办理",
-                  ),
+                  enterprise_copy(state.locale, ContinueWithSignatureProvider),
                 )
               None if record.state == Submitted && expired =>
                 @html.button(
@@ -2316,32 +2505,19 @@ fn agreement_card(
                   class="primary-action",
                   disabled=state.loading,
                   on_click=command(emit, SignAgreement(agreement.agreement_id)),
-                  copy(
-                    state.locale,
-                    "Renew signing session",
-                    "重新发起签署会话",
-                  ),
+                  enterprise_copy(state.locale, RenewSigningSession),
                 )
               None =>
                 @html.small(
                   if record.action_url is Some(_) {
-                    copy(
+                    enterprise_copy(
                       state.locale,
-                      "The provider link was blocked because it is not a valid, unexpired HTTPS action.",
-                      "服务商链接不是有效且未过期的 HTTPS 操作地址，已被 LunaNexa 阻止。",
+                      TheProviderLinkWasBlockedBecause,
                     )
                   } else if expired {
-                    copy(
-                      state.locale,
-                      "The provider link is no longer usable. Refresh until the provider marks it expired, then renew the session.",
-                      "服务商链接已不可用。请刷新；服务商标记过期后即可重新发起会话。",
-                    )
+                    enterprise_copy(state.locale, TheProviderLinkIsNoLonger)
                   } else {
-                    copy(
-                      state.locale,
-                      "The provider is preparing a secure HTTPS link. Refresh in a moment.",
-                      "服务商正在准备安全 HTTPS 链接，请稍后刷新。",
-                    )
+                    enterprise_copy(state.locale, TheProviderIsPreparingASecure)
                   },
                 )
             },
@@ -2354,18 +2530,14 @@ fn agreement_card(
           @html.div(class="record-actions provider-actions", [
             @html.span(
               class="state-pill provider-state-pending",
-              copy(
-                state.locale,
-                "Provider request missing",
-                "缺少服务商请求",
-              ),
+              enterprise_copy(state.locale, ProviderRequestMissing),
             ),
             @html.button(
               type_="button",
               class="primary-action",
               disabled=state.loading || state.provider_requests_loading,
               on_click=command(emit, SignAgreement(agreement.agreement_id)),
-              copy(state.locale, "Repair signing session", "修复签署会话"),
+              enterprise_copy(state.locale, RepairSigningSession),
             ),
           ])
       }
@@ -2383,15 +2555,15 @@ fn agreement_card(
       @html.p(agreement.summary),
       @html.dl(class="record-meta", [
         @html.div([
-          @html.dt(copy(state.locale, "Template", "模板")),
-          @html.dd(agreement.template_ref),
+          @html.dt(enterprise_copy(state.locale, Template)),
+          @html.dd([copy_detail(state, emit, agreement.template_ref)]),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Document hash", "文档哈希")),
-          @html.dd(class="mono", agreement.rendered_document_hash),
+          @html.dt(enterprise_copy(state.locale, DocumentHash)),
+          @html.dd([copy_detail(state, emit, agreement.rendered_document_hash)]),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Generation", "版本代")),
+          @html.dt(enterprise_copy(state.locale, Generation)),
           @html.dd("\{agreement.generation}"),
         ]),
       ]),
@@ -2409,31 +2581,18 @@ fn lease_requests_view(
     @html.section(class="request-form", [
       @html.p(
         class="eyebrow",
-        copy(
-          state.locale,
-          "NEW EXCLUSIVE CAPACITY REQUEST",
-          "新建独占容量申请",
-        ),
+        enterprise_copy(state.locale, ManagedCapacityRequest),
       ),
-      @html.h2(
-        copy(
-          state.locale,
-          "Request a time-bounded workspace",
-          "申请有时限的工作区",
-        ),
-      ),
+      @html.h2(enterprise_copy(state.locale, RequestAManuallyAssignedWorkspace)),
       @html.p(
-        copy(
-          state.locale,
-          "Request requirements, not a specific machine. An operator selects one eligible DGX Spark node after policy and availability checks.",
-          "请提交需求，而不是指定机器。运维人员将在策略与可用性检查后选择一个符合条件的 DGX Spark 节点。",
-        ),
+        enterprise_copy(state.locale, RequestRequirementsNotASpecificMachine),
       ),
+      @html.p(enterprise_copy(state.locale, DescribeYourWorkloadAndModelsThe)),
       @html.div(class="form-grid", [
         @html.div(class="field", [
           @html.label(
             for_="lease-project",
-            copy(state.locale, "Project ID", "项目 ID"),
+            enterprise_copy(state.locale, ProjectId),
           ),
           @html.input(
             id="lease-project",
@@ -2445,7 +2604,7 @@ fn lease_requests_view(
         @html.div(class="field", [
           @html.label(
             for_="lease-username",
-            copy(state.locale, "Unix username", "Unix 用户名"),
+            enterprise_copy(state.locale, UnixUsername),
           ),
           @html.input(
             id="lease-username",
@@ -2476,17 +2635,13 @@ fn lease_requests_view(
             } else {
               ""
             },
-            copy(
-              state.locale,
-              "Password is not accepted. Use a non-reserved lowercase Unix username; access uses a short-lived credential reference.",
-              "请使用非保留的小写 Unix 用户名；不接受密码。访问使用短期凭据引用。",
-            ),
+            enterprise_copy(state.locale, PasswordIsNotAcceptedUseA),
           ),
         ]),
         @html.div(class="field field-wide", [
           @html.label(
             for_="lease-models",
-            copy(state.locale, "Model IDs", "模型 ID"),
+            enterprise_copy(state.locale, ModelIds),
           ),
           @html.input(
             id="lease-models",
@@ -2495,17 +2650,13 @@ fn lease_requests_view(
             on_input=text_command(emit, value => ModelsChanged(value)),
           ),
           @html.small(
-            copy(
-              state.locale,
-              "Comma-separated models from the shared catalog.",
-              "使用共享目录中的模型，逗号分隔。",
-            ),
+            enterprise_copy(state.locale, CommaSeparatedModelsFromTheShared),
           ),
         ]),
         @html.div(class="field field-wide", [
           @html.label(
             for_="lease-justification",
-            copy(state.locale, "Business justification", "业务说明"),
+            enterprise_copy(state.locale, BusinessJustification),
           ),
           @html.textarea(
             id="lease-justification",
@@ -2517,30 +2668,21 @@ fn lease_requests_view(
         ]),
       ]),
       @html.div(class="request-boundary", [
-        @html.strong(copy(state.locale, "What happens next", "后续流程")),
-        @html.p(
-          copy(
-            state.locale,
-            "The request enters the operator queue. Approval reserves exactly one node, then provisioning, access issuance and sanitization follow the exclusive-lease state machine.",
-            "申请进入运维队列。批准后只预留一个节点，随后按独占租用状态机完成配置、访问授权与清理。",
-          ),
-        ),
+        @html.strong(enterprise_copy(state.locale, WhatHappensNext)),
+        @html.p(enterprise_copy(state.locale, TheRequestEntersTheOperatorQueue)),
       ]),
       @html.button(
         type_="button",
         class="primary-action",
         disabled=!lease_form_valid(state),
         on_click=command(emit, SubmitLease),
-        copy(state.locale, "Submit lease request", "提交租用申请"),
+        enterprise_copy(state.locale, SubmitLeaseRequest),
       ),
     ]),
     @html.section(class="request-history", [
-      @html.h2(copy(state.locale, "Request history", "申请记录")),
+      @html.h2(enterprise_copy(state.locale, RequestHistory)),
       if state.lease_requests.length() == 0 {
-        @html.p(
-          class="empty",
-          copy(state.locale, "No requests yet.", "暂无申请。"),
-        )
+        @html.p(class="empty", enterprise_copy(state.locale, NoRequestsYet))
       } else {
         @html.div(
           class="record-list compact",
@@ -2554,23 +2696,27 @@ fn lease_requests_view(
                     request_state_label(state.locale, request.state),
                   ),
                 ]),
+                @html.p(
+                  enterprise_copy(
+                    state.locale,
+                    AnOperatorReviewsPolicyHealthAnd,
+                  ),
+                ),
                 @html.p(request.submission.justification),
                 @html.dl(class="record-meta", [
                   @html.div([
-                    @html.dt(copy(state.locale, "Project", "项目")),
+                    @html.dt(enterprise_copy(state.locale, Project)),
                     @html.dd(request.submission.project_id),
                   ]),
                   @html.div([
-                    @html.dt(copy(state.locale, "Models", "模型")),
+                    @html.dt(enterprise_copy(state.locale, Models)),
                     @html.dd(request.submission.requested_model_ids.join(", ")),
                   ]),
                   @html.div([
-                    @html.dt(
-                      copy(state.locale, "Assigned node", "已分配节点"),
-                    ),
+                    @html.dt(enterprise_copy(state.locale, AssignedNode)),
                     @html.dd(
                       request.assigned_node_id.unwrap_or(
-                        copy(state.locale, "Not assigned", "尚未分配"),
+                        enterprise_copy(state.locale, NotAssigned),
                       ),
                     ),
                   ]),
@@ -2603,26 +2749,26 @@ fn payment_provider_record(
       @html.div([
         @html.strong(
           record.expected_amount_minor.map_or(
-            copy(state.locale, "Payment request", "支付请求"),
+            enterprise_copy(state.locale, PaymentRequest),
             amount => {
               "\{record.currency.unwrap_or("—")} \{amount} · scale \{record.money_scale.unwrap_or(0)}"
             },
           ),
         ),
-        @html.span(class="mono secondary", record.record_id),
+        copy_detail(state, emit, record.record_id),
       ]),
       @html.span(
         class=provider_state_class(record.state),
         attrs=@html.Attrs::build().role("status").aria_live("polite"),
         if expired {
-          copy(state.locale, "Checkout link expired", "支付链接已过期")
+          enterprise_copy(state.locale, CheckoutLinkExpired)
         } else {
           provider_state_label(state.locale, record.state)
         },
       ),
     ]),
     @html.p(
-      "\{record.provider} · \{record.environment} · \{copy(state.locale, "Updated", "更新时间")} \{@contractdoc.format_unix_ms_utc(record.updated_unix_ms)}",
+      "\{record.provider} · \{record.environment} · \{enterprise_copy(state.locale, Updated)} \{@contractdoc.format_unix_ms_utc(record.updated_unix_ms)}",
     ),
     match action_url {
       Some(url) =>
@@ -2632,11 +2778,7 @@ fn payment_provider_record(
           target=Blank,
           rel="noopener noreferrer",
           escape=true,
-          copy(
-            state.locale,
-            "Continue with payment provider",
-            "前往支付服务商继续办理",
-          ),
+          enterprise_copy(state.locale, ContinueWithPaymentProvider),
         )
       None if record.state == Submitted && expired =>
         @html.button(
@@ -2644,38 +2786,18 @@ fn payment_provider_record(
           class="primary-action",
           disabled=state.payment_checkout_loading,
           on_click=command(emit, SubmitPaymentCheckout),
-          copy(
-            state.locale,
-            "Renew secure checkout",
-            "续期安全支付会话",
-          ),
+          enterprise_copy(state.locale, RenewSecureCheckout),
         )
       None =>
         @html.small(
           if record.action_url is Some(_) {
-            copy(
-              state.locale,
-              "The provider link was blocked because it is not a valid, unexpired HTTPS action.",
-              "服务商链接不是有效且未过期的 HTTPS 操作地址，已被 LunaNexa 阻止。",
-            )
+            enterprise_copy(state.locale, TheProviderLinkWasBlockedBecause)
           } else if expired {
-            copy(
-              state.locale,
-              "This link cannot be opened. Refresh before creating a replacement checkout.",
-              "此链接无法继续使用。请先刷新状态，再创建新的支付请求。",
-            )
+            enterprise_copy(state.locale, ThisLinkCannotBeOpenedRefresh)
           } else if record.state == Pending {
-            copy(
-              state.locale,
-              "A secure HTTPS checkout link is being prepared.",
-              "正在准备安全 HTTPS 支付链接。",
-            )
+            enterprise_copy(state.locale, ASecureHttpsCheckoutLinkIs)
           } else {
-            copy(
-              state.locale,
-              "No browser action is required for this state.",
-              "当前状态无需浏览器操作。",
-            )
+            enterprise_copy(state.locale, NoBrowserActionIsRequiredFor)
           },
         )
     },
@@ -2692,7 +2814,7 @@ fn costs_view(
       @html.tr([
         @html.td([
           @html.strong(center.display_name),
-          @html.span(class="mono secondary", center.cost_center_id),
+          copy_detail(state, emit, center.cost_center_id),
         ]),
         @html.td(center.project_count.to_string()),
         @html.td(center.provisional_spend),
@@ -2706,58 +2828,39 @@ fn costs_view(
   let checkout_in_progress = payment_request_in_progress(state)
   let checkout_record = payment_request_for_quote(state)
   @html.div(class="page-stack", [
+    @html.button(
+      type_="button",
+      class="quiet-button",
+      on_click=command(emit, ExportCosts),
+      enterprise_copy(state.locale, ExportCostsCsv),
+    ),
     @html.section(class="section-heading", [
       @html.div([
-        @html.h2(
-          copy(
-            state.locale,
-            "Usage and cost allocation",
-            "用量与成本分摊",
-          ),
-        ),
+        @html.h2(enterprise_copy(state.locale, UsageAndCostAllocation)),
         @html.p(
-          copy(
-            state.locale,
-            "Tenant-scoped projections from the central commercial ledger.",
-            "来自中央商业台账的限定租户范围视图。",
-          ),
+          enterprise_copy(state.locale, TenantScopedProjectionsFromTheCentral),
         ),
       ]),
     ]),
     @html.div(class="metric-grid", [
       @html.div(class="metric", [
-        @html.span(copy(state.locale, "Provisional charges", "暂计费用")),
+        @html.span(enterprise_copy(state.locale, ProvisionalCharges)),
         @html.strong(state.provisional_spend),
-        @html.small(
-          copy(state.locale, "Central ledger projection", "中央台账视图"),
-        ),
+        @html.small(enterprise_copy(state.locale, CentralLedgerProjection)),
       ]),
       @html.div(class="metric", [
-        @html.span(copy(state.locale, "Cost centers", "成本中心")),
+        @html.span(enterprise_copy(state.locale, CostCenters)),
         @html.strong(state.cost_centers.length().to_string()),
-        @html.small(copy(state.locale, "Tenant scoped", "限定租户范围")),
+        @html.small(enterprise_copy(state.locale, TenantScoped)),
       ]),
     ]),
     @html.section(class="checkout-panel", [
       @html.div(class="section-heading", [
         @html.div([
+          @html.p(class="eyebrow", enterprise_copy(state.locale, OnlinePayment)),
+          @html.h3(enterprise_copy(state.locale, PayAFinalizedBillingPeriod)),
           @html.p(
-            class="eyebrow",
-            copy(state.locale, "ONLINE PAYMENT", "在线支付"),
-          ),
-          @html.h3(
-            copy(
-              state.locale,
-              "Pay a finalized billing period",
-              "支付已结算账期",
-            ),
-          ),
-          @html.p(
-            copy(
-              state.locale,
-              "Amount, currency, scale and retry-safe idempotency are derived from the finalized billing period. You confirm before leaving LunaNexa.",
-              "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生。离开 LunaNexa 前由您确认。",
-            ),
+            enterprise_copy(state.locale, AmountCurrencyScaleAndRetrySafe),
           ),
         ]),
         @html.button(
@@ -2766,9 +2869,9 @@ fn costs_view(
           disabled=state.provider_requests_loading,
           on_click=command(emit, RefreshProviderRequests),
           if state.provider_requests_loading {
-            copy(state.locale, "Refreshing…", "正在刷新…")
+            enterprise_copy(state.locale, Refreshing)
           } else {
-            copy(state.locale, "Refresh payment status", "刷新支付状态")
+            enterprise_copy(state.locale, RefreshPaymentStatus)
           },
         ),
       ]),
@@ -2777,35 +2880,31 @@ fn costs_view(
           @html.div(class="checkout-summary", [
             @html.dl(class="checkout-facts", [
               @html.div([
-                @html.dt(copy(state.locale, "Checkout total", "支付金额")),
+                @html.dt(enterprise_copy(state.locale, CheckoutTotal)),
                 @html.dd(class="checkout-total", quote.display_amount),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Billing period", "账期")),
-                @html.dd(class="mono", quote.period_id),
+                @html.dt(enterprise_copy(state.locale, BillingPeriod)),
+                @html.dd([copy_detail(state, emit, quote.period_id)]),
               ]),
               @html.div([
-                @html.dt(
-                  copy(state.locale, "Authoritative amount", "权威金额"),
-                ),
+                @html.dt(enterprise_copy(state.locale, AuthoritativeAmount)),
                 @html.dd(
                   class="mono",
-                  "\{quote.expected_amount_minor} \{copy(state.locale, "minor units", "最小货币单位")}",
+                  "\{quote.expected_amount_minor} \{enterprise_copy(state.locale, MinorUnits)}",
                 ),
               ]),
               @html.div([
-                @html.dt(
-                  copy(state.locale, "Currency / scale", "币种 / 精度"),
-                ),
+                @html.dt(enterprise_copy(state.locale, CurrencyScale)),
                 @html.dd(
                   class="mono",
                   "\{quote.currency} / \{quote.money_scale}",
                 ),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Ledger revision", "台账版本")),
+                @html.dt(enterprise_copy(state.locale, LedgerRevision)),
                 @html.dd(
-                  "\{quote.ledger_entry_count} \{copy(state.locale, "entries", "条记录")} · \{@contractdoc.format_unix_ms_utc(quote.ledger_revision_unix_ms)}",
+                  "\{quote.ledger_entry_count} \{enterprise_copy(state.locale, Entries)} · \{@contractdoc.format_unix_ms_utc(quote.ledger_revision_unix_ms)}",
                 ),
               ]),
             ]),
@@ -2819,31 +2918,14 @@ fn costs_view(
                 ),
                 on_click=command(emit, SubmitPaymentCheckout),
                 if state.payment_checkout_loading {
-                  copy(
-                    state.locale,
-                    "Creating secure checkout…",
-                    "正在创建安全支付请求…",
-                  )
+                  enterprise_copy(state.locale, CreatingSecureCheckout)
                 } else if checkout_in_progress {
-                  copy(
-                    state.locale,
-                    "Checkout already in progress",
-                    "支付请求正在处理中",
-                  )
+                  enterprise_copy(state.locale, CheckoutAlreadyInProgress)
                 } else if payment_checkout_terminal(state) {
                   match checkout_record {
                     Some(record) if record.state == Settled =>
-                      copy(
-                        state.locale,
-                        "Billing period paid",
-                        "该账期已支付",
-                      )
-                    _ =>
-                      copy(
-                        state.locale,
-                        "Checkout is not renewable",
-                        "支付请求不可续期",
-                      )
+                      enterprise_copy(state.locale, BillingPeriodPaid)
+                    _ => enterprise_copy(state.locale, CheckoutIsNotRenewable)
                   }
                 } else if checkout_record
                   .map(record => {
@@ -2854,62 +2936,36 @@ fn costs_view(
                     )
                   })
                   .unwrap_or(false) {
-                  copy(
-                    state.locale,
-                    "Renew secure checkout",
-                    "续期安全支付会话",
-                  )
+                  enterprise_copy(state.locale, RenewSecureCheckout)
                 } else {
-                  copy(
-                    state.locale,
-                    "Create secure checkout",
-                    "创建安全支付请求",
-                  )
+                  enterprise_copy(state.locale, CreateSecureCheckout)
                 },
               ),
               @html.small(
                 id="checkout-action-help",
-                copy(
-                  state.locale,
-                  "Creating a checkout does not charge funds. Payment completes only after independently verified provider evidence.",
-                  "创建支付请求不会直接扣款；仅在服务商独立验证证据后才会完成支付。",
-                ),
+                enterprise_copy(state.locale, CreatingACheckoutDoesNotCharge),
               ),
             ]),
           ])
         None =>
           @html.p(
             class="empty-state",
-            copy(
-              state.locale,
-              "No positive finalized billing period is available for online checkout.",
-              "当前没有可用于在线支付的正数已结算账期。",
-            ),
+            enterprise_copy(state.locale, NoPositiveFinalizedBillingPeriodIs),
           )
       },
     ]),
     @html.section(class="provider-history", [
-      @html.h3(
-        copy(state.locale, "Online payment activity", "在线支付记录"),
-      ),
+      @html.h3(enterprise_copy(state.locale, OnlinePaymentActivity)),
       if state.provider_requests_loading {
         @html.p(
           class="provider-loading",
           attrs=@html.Attrs::build().role("status").aria_live("polite"),
-          copy(
-            state.locale,
-            "Loading provider status…",
-            "正在加载服务商状态…",
-          ),
+          enterprise_copy(state.locale, LoadingProviderStatus),
         )
       } else if payment_records.length() == 0 {
         @html.p(
           class="empty",
-          copy(
-            state.locale,
-            "No online payment requests yet.",
-            "暂无在线支付请求。",
-          ),
+          enterprise_copy(state.locale, NoOnlinePaymentRequestsYet),
         )
       } else {
         @html.div(
@@ -2925,22 +2981,18 @@ fn costs_view(
     if rows.length() == 0 {
       @html.p(
         class="empty",
-        copy(
-          state.locale,
-          "Commercial state is not configured for this organization.",
-          "此组织尚未配置商业状态。",
-        ),
+        enterprise_copy(state.locale, CommercialStateIsNotConfiguredFor),
       )
     } else {
       @html.section(class="data-table-panel", [
-        @html.h3(copy(state.locale, "Cost centers", "成本中心")),
+        @html.h3(enterprise_copy(state.locale, CostCenters)),
         @html.table([
           @html.thead([
             @html.tr([
-              @html.th(copy(state.locale, "Cost center", "成本中心")),
-              @html.th(copy(state.locale, "Projects", "项目数")),
-              @html.th(copy(state.locale, "Spend", "支出")),
-              @html.th(copy(state.locale, "Status", "状态")),
+              @html.th(enterprise_copy(state.locale, CostCenter)),
+              @html.th(enterprise_copy(state.locale, Projects)),
+              @html.th(enterprise_copy(state.locale, Spend)),
+              @html.th(enterprise_copy(state.locale, Status)),
             ]),
           ]),
           @html.tbody(rows),
@@ -2951,45 +3003,92 @@ fn costs_view(
 }
 
 ///|
-fn models_view(state : EnterpriseState) -> @rabbita.Html {
+fn models_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
   let cards = [
     for model in state.model_catalog => {
       model_card(
         state,
+        emit,
         model.model_id,
         model.alias_name.unwrap_or(model.version),
         "\{model.minimum_memory_mib} MiB",
+        model.alias_name is Some(_),
       )
     }
   ]
   @html.div(class="page-stack", [
     @html.section(class="section-heading", [
       @html.div([
-        @html.h2(
-          copy(state.locale, "Shared model catalog", "共享模型目录"),
-        ),
+        @html.h2(enterprise_copy(state.locale, SharedModelCatalog)),
         @html.p(
-          copy(
-            state.locale,
-            "One management-plane catalog feeds portal requests, one-click deployments and WebIDE selectors.",
-            "同一个管理平面目录为企业申请、一键部署与 WebIDE 选择器提供数据。",
-          ),
+          enterprise_copy(state.locale, OneManagementPlaneCatalogFeedsPortal),
         ),
       ]),
     ]),
     if cards.length() == 0 {
       @html.p(
         class="empty",
-        copy(
-          state.locale,
-          "No approved models are entitled for this tenant.",
-          "此租户暂无已批准模型。",
-        ),
+        enterprise_copy(state.locale, NoApprovedModelsAreEntitledFor),
       )
     } else {
       @html.div(class="model-grid", cards)
     },
   ])
+}
+
+///|
+/// Resolves the user's explicit model source without silently falling back
+/// from a missing, terminated or stale dedicated order to shared inference.
+pub fn webide_launch_selection(
+  state : EnterpriseState,
+) -> (String?, String, Array[String])? {
+  guard state.desktop_client is Some(client) &&
+    client.ready &&
+    !client.approved_model_aliases.is_empty() else {
+    return None
+  }
+  match state.webide_order_id {
+    None =>
+      if state.project_id.is_empty() {
+        None
+      } else {
+        Some((None, state.project_id, client.approved_model_aliases))
+      }
+    Some(order_id) => {
+      let orders = webide_orders(state)
+      guard orders.filter(order => order.order_id == order_id).get(0)
+        is Some(order) &&
+        order.kind == DedicatedMaaS &&
+        order.status == ActiveOrder &&
+        order.deployment_ref is Some(_) &&
+        order.model_selector is Some(model) &&
+        client.approved_model_aliases.contains(model) else {
+        return None
+      }
+      Some((Some(order_id), order.project_id, [model]))
+    }
+  }
+}
+
+///|
+fn webide_orders(state : EnterpriseState) -> Array[SelfServiceOrderView] {
+  let values : Map[String, SelfServiceOrderView] = Map([])
+  for order in state.self_service.orders {
+    values[order.order_id] = order
+  }
+  if state.self_service.order is Some(order) {
+    if values
+      .get(order.order_id)
+      .map_or(true, previous => previous.updated_unix_ms < order.updated_unix_ms) {
+      values[order.order_id] = order
+    }
+  }
+  let result = values.values().to_array()
+  result.sort_by_key(order => order.order_id)
+  result
 }
 
 ///|
@@ -3020,7 +3119,7 @@ fn desktop_ide_view(
       )
     None =>
       (
-        copy(state.locale, "Desktop client", "桌面客户端"),
+        enterprise_copy(state.locale, DesktopClient),
         0L,
         0,
         false,
@@ -3030,44 +3129,117 @@ fn desktop_ide_view(
         [],
       )
   }
-  let available = ready && !state.loading
+  let available = ready &&
+    !state.loading &&
+    webide_launch_selection(state) is Some(_)
   let next_action = if state.desktop_client is None {
-    copy(
-      state.locale,
-      "Your operator must finish desktop integration setup.",
-      "需要运维人员完成桌面集成设置。",
-    )
+    enterprise_copy(state.locale, YourOperatorMustFinishDesktopIntegration)
   } else if !contract_ready {
-    copy(
-      state.locale,
-      "Complete the MasterLease. Everything else stays saved.",
-      "请完成主租约，其余设置会保留。",
-    )
+    enterprise_copy(state.locale, CompleteTheMasterleaseEverythingElseStays)
   } else if !workspace_ready {
-    copy(
-      state.locale,
-      "Your operator needs to enable the prepared workspace lease.",
-      "需要运维人员启用已准备的工作区租约。",
-    )
+    enterprise_copy(state.locale, YourOperatorNeedsToEnableThe)
   } else if !models_ready {
-    copy(
-      state.locale,
-      "Your operator needs to approve at least one model alias.",
-      "需要运维人员批准至少一个模型别名。",
-    )
+    enterprise_copy(state.locale, YourOperatorNeedsToApproveAt)
+  } else if state.webide_order_id is Some(_) &&
+    webide_launch_selection(state) is None {
+    enterprise_copy(state.locale, TheSelectedPaidEndpointIsUnavailable)
   } else {
-    copy(
-      state.locale,
-      "Everything is ready. Open the desktop and start working.",
-      "所有项目均已就绪。打开桌面并开始工作。",
-    )
+    enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
   }
   @html.div(class="page-stack", [
+    if state.desktop_clients.length() > 1 {
+      @html.section(class="workflow-panel", [
+        @html.h2(enterprise_copy(state.locale, ChooseYourWebide)),
+        @html.p(
+          enterprise_copy(
+            state.locale,
+            OpenYourPreferredWorkspaceCreativeWorkflows,
+          ),
+        ),
+        @html.div(
+          class="api-key-actions",
+          [
+            for client in state.desktop_clients => {
+              let selected = state.desktop_client.map_or(false, current => {
+                current.client_id == client.client_id
+              })
+              @html.button(
+                type_="button",
+                class=if selected {
+                  "scope-toggle is-selected"
+                } else {
+                  "scope-toggle"
+                },
+                disabled=state.loading,
+                attrs=@html.Attrs::build().aria_pressed(
+                  if selected {
+                    "true"
+                  } else {
+                    "false"
+                  },
+                ),
+                on_click=command(emit, SelectWebIde(client.client_id)),
+                client.display_name,
+              )
+            }
+          ],
+        ),
+      ])
+    } else {
+      @html.span("")
+    },
+    @html.section(class="workflow-panel", [
+      @html.label(
+        for_="webide-model-source",
+        enterprise_copy(state.locale, ModelSource),
+      ),
+      @html.select(
+        id="webide-model-source",
+        disabled=state.loading,
+        on_change=text_command(emit, value => SelectWebIdeOrder(value)),
+        [
+          @html.option(
+            value="",
+            selected=state.webide_order_id is None,
+            enterprise_copy(state.locale, AuthorizedSharedModels),
+          ),
+          ..match state.webide_order_id {
+            Some(id) if !webide_orders(state).any(order => {
+                order.order_id == id && order.kind == DedicatedMaaS
+              }) =>
+              [
+                @html.option(
+                  value=id,
+                  disabled=true,
+                  selected=true,
+                  enterprise_copy(state.locale, SelectedOrderIsUnavailable),
+                ),
+              ]
+            _ => []
+          },
+          ..[
+            for order in webide_orders(state) if order.kind == DedicatedMaaS => {
+              @html.option(
+                value=order.order_id,
+                disabled=order.status != ActiveOrder,
+                selected=state.webide_order_id == Some(order.order_id),
+                order.gpu_sku +
+                " · " +
+                order.model_selector.unwrap_or("") +
+                " · " +
+                order.order_id,
+              )
+            }
+          ],
+        ],
+      ),
+      @html.p(enterprise_copy(state.locale, DedicatedOrdersStayBoundToTheir)),
+    ]),
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
           class="eyebrow",
-          copy(state.locale, "SECURE DESKTOP HANDOFF", "安全桌面交接"),
+          enterprise_copy(state.locale, SecureWebideHandoff),
         ),
         @html.h2(
           copy(
@@ -3083,7 +3255,7 @@ fn desktop_ide_view(
           type_="button",
           class="primary-action",
           on_click=command(emit, Navigate(ContractDocuments)),
-          copy(state.locale, "Complete MasterLease", "完成主租约"),
+          enterprise_copy(state.locale, CompleteMasterlease),
         )
       } else {
         @html.button(
@@ -3092,25 +3264,24 @@ fn desktop_ide_view(
           disabled=!available,
           on_click=command(emit, LaunchDesktopClient),
           if state.loading {
-            copy(state.locale, "Connecting…", "正在连接…")
+            enterprise_copy(state.locale, Connecting)
           } else {
-            copy(state.locale, "Open desktop WebIDE", "打开桌面 WebIDE")
+            copy(state.locale, "Open \{name}", "打开 \{name}")
           },
         )
       },
     ]),
     @html.section(class="workflow-panel", [
-      @html.h2(copy(state.locale, "Your access journey", "您的访问流程")),
+      @html.h2(enterprise_copy(state.locale, YourAccessJourney)),
       @html.ul(class="workflow-steps", [
         @html.li(class="is-complete", [
           @html.span("1"),
           @html.div([
-            @html.strong(copy(state.locale, "Signed in", "已登录")),
+            @html.strong(enterprise_copy(state.locale, SignedIn)),
             @html.p(
-              copy(
+              enterprise_copy(
                 state.locale,
-                "Your identity and Developer membership are verified.",
-                "您的身份和开发者成员资格已验证。",
+                YourIdentityAndDeveloperMembershipAre,
               ),
             ),
           ]),
@@ -3120,19 +3291,14 @@ fn desktop_ide_view(
           [
             @html.span("2"),
             @html.div([
-              @html.strong(copy(state.locale, "MasterLease", "主租约")),
+              @html.strong(enterprise_copy(state.locale, Masterlease)),
               @html.p(
                 if contract_ready {
-                  copy(
-                    state.locale,
-                    "Contract is effective.",
-                    "合同已生效。",
-                  )
+                  enterprise_copy(state.locale, ContractIsEffective)
                 } else {
-                  copy(
+                  enterprise_copy(
                     state.locale,
-                    "Review and complete the contract template.",
-                    "查看并完成合同模板。",
+                    ReviewAndCompleteTheContractTemplate,
                   )
                 },
               ),
@@ -3150,22 +3316,12 @@ fn desktop_ide_view(
           [
             @html.span("3"),
             @html.div([
-              @html.strong(
-                copy(state.locale, "Workspace access", "工作区访问"),
-              ),
+              @html.strong(enterprise_copy(state.locale, WorkspaceAccess)),
               @html.p(
                 if workspace_ready {
-                  copy(
-                    state.locale,
-                    "Developer lease is active.",
-                    "开发者租约已生效。",
-                  )
+                  enterprise_copy(state.locale, DeveloperLeaseIsActive)
                 } else {
-                  copy(
-                    state.locale,
-                    "Waiting for operator enablement.",
-                    "等待运维人员启用。",
-                  )
+                  enterprise_copy(state.locale, WaitingForOperatorEnablement)
                 },
               ),
             ]),
@@ -3182,18 +3338,12 @@ fn desktop_ide_view(
           [
             @html.span("4"),
             @html.div([
-              @html.strong(
-                copy(state.locale, "Approved models", "已批准模型"),
-              ),
+              @html.strong(enterprise_copy(state.locale, ApprovedModels)),
               @html.p(
                 if models_ready {
                   aliases.join(", ")
                 } else {
-                  copy(
-                    state.locale,
-                    "No model alias is ready yet.",
-                    "尚无可用模型别名。",
-                  )
+                  enterprise_copy(state.locale, NoModelAliasIsReadyYet)
                 },
               ),
             ]),
@@ -3202,7 +3352,7 @@ fn desktop_ide_view(
         @html.li(class=if ready { "is-current" } else { "" }, [
           @html.span("5"),
           @html.div([
-            @html.strong(copy(state.locale, "Open WebIDE", "打开 WebIDE")),
+            @html.strong(enterprise_copy(state.locale, OpenWebide)),
             @html.p(
               copy(
                 state.locale,
@@ -3228,66 +3378,95 @@ fn desktop_ide_view(
 ///|
 fn model_card(
   state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
   name : String,
   kind : String,
   size : String,
+  callable : Bool,
 ) -> @rabbita.Html {
   @html.article(class="model-card", [
     @html.div(class="model-icon", "M"),
     @html.h3(name),
     @html.p(kind),
+    if callable {
+      @html.button(
+        type_="button",
+        class="quiet-button",
+        on_click=command(emit, CopyDetail(kind)),
+        enterprise_copy(state.locale, CopyModelAlias),
+      )
+    } else {
+      @html.p(enterprise_copy(state.locale, NoCallableAliasPublished))
+    },
+    @html.p(
+      if kind.has_prefix("text.") {
+        enterprise_copy(state.locale, TextGeneration)
+      } else if kind.has_prefix("video.") {
+        enterprise_copy(state.locale, VideoGeneration)
+      } else if kind.has_prefix("image.") {
+        enterprise_copy(state.locale, ImageGeneration)
+      } else {
+        enterprise_copy(state.locale, CheckTheApprovedCapabilityBeforeCalling)
+      },
+    ),
     @html.dl([
       @html.div([
-        @html.dt(copy(state.locale, "Availability", "可用性")),
-        @html.dd(copy(state.locale, "Managed centrally", "中央托管")),
+        @html.dt(enterprise_copy(state.locale, Availability)),
+        @html.dd(enterprise_copy(state.locale, ManagedCentrally)),
       ]),
       @html.div([
-        @html.dt(copy(state.locale, "Artifact", "制品")),
+        @html.dt(enterprise_copy(state.locale, Artifact)),
         @html.dd(size),
       ]),
     ]),
-    @html.span(class="entitled", copy(state.locale, "Entitled", "已授权")),
+    @html.span(
+      class="entitled",
+      if callable &&
+        state.api_keys.any(key => {
+          key.revoked_unix_ms is None &&
+          key.expires_unix_ms > state.machine_access.now_unix_ms &&
+          key.scopes.contains(Inference) &&
+          key.consumed_requests < key.maximum_requests &&
+          (key.allowed_models.is_empty() || key.allowed_models.contains(kind))
+        }) {
+        enterprise_copy(state.locale, AllowedByAnActiveApiKey)
+      } else {
+        enterprise_copy(state.locale, NoActiveApiKeyAllowsThis)
+      },
+    ),
   ])
 }
 
 ///|
 fn notification_code_label(locale : @i18n.Locale, code : String) -> String {
   match code {
-    "LeaseRequestApproved" =>
-      copy(locale, "Capacity request approved", "容量申请已批准")
-    "LeaseAccessReady" =>
-      copy(locale, "Machine access is ready", "机器访问已就绪")
-    "LeaseExpiring" =>
-      copy(locale, "Machine access expires soon", "机器访问即将到期")
-    "LeaseTerminating" =>
-      copy(locale, "Machine access is terminating", "机器访问正在终止")
-    "LeaseCompleted" =>
-      copy(locale, "Machine access ended", "机器访问已结束")
+    "LeaseRequestApproved" => enterprise_copy(locale, CapacityRequestApproved)
+    "LeaseAccessReady" => enterprise_copy(locale, MachineAccessIsReady)
+    "LeaseExpiring" => enterprise_copy(locale, MachineAccessExpiresSoon)
+    "TrialExpiring" | "TrialExpirySoon" =>
+      enterprise_copy(locale, YourTrialExpiresSoon)
+    "Announcement" | "PlatformAnnouncement" =>
+      enterprise_copy(locale, PlatformAnnouncement)
+    "LeaseTerminating" => enterprise_copy(locale, MachineAccessIsTerminating)
+    "LeaseCompleted" => enterprise_copy(locale, MachineAccessEnded)
     "AgreementActionRequired" =>
-      copy(locale, "Agreement action required", "协议需要处理")
+      enterprise_copy(locale, AgreementActionRequired)
     "OfflineDocumentsRequired" =>
-      copy(locale, "Offline documents required", "需要线下文件")
-    "QuoteReady" => copy(locale, "Quote is ready", "报价已生成")
+      enterprise_copy(locale, OfflineDocumentsRequired)
+    "QuoteReady" => enterprise_copy(locale, QuoteIsReady)
     "OfflinePacketReady" =>
-      copy(
-        locale, "Offline contract packet is ready", "线下合同文件包已生成",
-      )
-    "EvidenceReviewStarted" =>
-      copy(locale, "Evidence review started", "凭证审核已开始")
+      enterprise_copy(locale, OfflineContractPacketIsReady)
+    "EvidenceReviewStarted" => enterprise_copy(locale, EvidenceReviewStarted)
     "EvidenceCorrectionRequired" =>
-      copy(locale, "Evidence needs correction", "凭证需要修正")
-    "FulfillmentReady" =>
-      copy(locale, "Resource fulfillment is ready", "资源交付已就绪")
+      enterprise_copy(locale, EvidenceNeedsCorrection)
+    "FulfillmentReady" => enterprise_copy(locale, ResourceFulfillmentIsReady)
     "CommercialReversalStarted" =>
-      copy(locale, "Commercial reversal started", "商务撤销已开始")
+      enterprise_copy(locale, CommercialReversalStarted)
     "ContractObligationOverdue" =>
-      copy(
-        locale, "Contract obligation is overdue", "合同履约义务已逾期",
-      )
-    "ContractExpiring" =>
-      copy(locale, "Contract expires soon", "合同即将到期")
+      enterprise_copy(locale, ContractObligationIsOverdue)
+    "ContractExpiring" => enterprise_copy(locale, ContractExpiresSoon)
     "AccessCredentialsRevoked" =>
-      copy(locale, "Contract access was revoked", "合同访问权限已撤销")
+      enterprise_copy(locale, ContractAccessWasRevoked)
     _ => code
   }
 }
@@ -3298,9 +3477,9 @@ fn notification_severity_label(
   severity : @notifications.NotificationSeverity,
 ) -> String {
   match severity {
-    Information => copy(locale, "Information", "提示")
-    Warning => copy(locale, "Warning", "警告")
-    Critical => copy(locale, "Critical", "严重")
+    Information => enterprise_copy(locale, Information)
+    Warning => enterprise_copy(locale, Warning)
+    Critical => enterprise_copy(locale, Critical)
   }
 }
 
@@ -3310,10 +3489,10 @@ fn notification_lifecycle_label(
   lifecycle : @notifications.NotificationLifecycle,
 ) -> String {
   match lifecycle {
-    Unread => copy(locale, "Unread", "未读")
-    Read => copy(locale, "Read", "已读")
-    Acknowledged => copy(locale, "Acknowledged", "已确认")
-    Resolved => copy(locale, "Resolved", "已解决")
+    Unread => enterprise_copy(locale, Unread)
+    Read => enterprise_copy(locale, Read)
+    Acknowledged => enterprise_copy(locale, Acknowledged)
+    Resolved => enterprise_copy(locale, Resolved)
   }
 }
 
@@ -3328,39 +3507,23 @@ fn notification_detail(
   }
   let explanation = match record.event.code {
     "LeaseRequestApproved" =>
-      copy(
-        locale, "An operator approved your capacity request. Provisioning starts next.",
-        "运维人员已批准您的容量申请，接下来将开始配置。",
-      )
+      enterprise_copy(locale, AnOperatorApprovedYourCapacityRequest)
     "LeaseAccessReady" =>
-      copy(
-        locale, "Your exclusive machine is ready. Open its access details before the credential expires.",
-        "您的独占机器已就绪。请在凭据到期前查看访问详情。",
-      )
+      enterprise_copy(locale, YourExclusiveMachineIsReadyOpen)
     "LeaseExpiring" =>
-      copy(
-        locale, "Save your work and request an extension if needed. Access closes automatically at the lease boundary.",
-        "请保存工作；如有需要请申请延期。访问权限将在租约边界自动关闭。",
-      )
-    "LeaseTerminating" =>
-      copy(
-        locale, "New sessions are blocked while the node is drained and sanitized.",
-        "节点正在排空并清理，新的会话已被阻止。",
-      )
-    "LeaseCompleted" =>
-      copy(
-        locale, "Credentials are revoked and the node has left your tenant boundary.",
-        "凭据已撤销，节点已离开您的租户边界。",
-      )
+      enterprise_copy(locale, DownloadYourWorkBeforeExpiryContact)
+    "TrialExpiring" | "TrialExpirySoon" =>
+      enterprise_copy(locale, YourTrialEndsWithinOneHour)
+    "Announcement" | "PlatformAnnouncement" =>
+      record.event.parameters
+      .get("body")
+      .unwrap_or(enterprise_copy(locale, OpenTheAnnouncementForDetails))
+    "LeaseTerminating" => enterprise_copy(locale, NewSessionsAreBlockedWhileThe)
+    "LeaseCompleted" => enterprise_copy(locale, CredentialsAreRevokedAndTheNode)
     "AgreementActionRequired" =>
-      copy(
-        locale, "Review the agreement and complete the requested action.", "请审阅协议并完成所需操作。",
-      )
+      enterprise_copy(locale, ReviewTheAgreementAndCompleteThe)
     "OfflineDocumentsRequired" =>
-      copy(
-        locale, "Upload the executed contract, payment receipt, and invoice evidence to continue.",
-        "请上传已签署合同、付款回执和发票证据以继续流程。",
-      )
+      enterprise_copy(locale, UploadTheExecutedContractPaymentReceipt)
     "ContractExpiring" =>
       copy(
         locale,
@@ -3368,14 +3531,8 @@ fn notification_detail(
         "您的合同将于 \{record.event.parameters.get("end_date").unwrap_or("未知日期")} 到期（剩余 \{record.event.parameters.get("days_remaining").unwrap_or("?")} 天）。请联系运营方，或在合同页面发起续约。",
       )
     "AccessCredentialsRevoked" =>
-      copy(
-        locale, "Your API credentials were revoked because the master lease closed.",
-        "由于主租赁合同已关闭，您的 API 访问凭据已被撤销。",
-      )
-    _ =>
-      copy(
-        locale, "Open the related record for details.", "请打开相关记录查看详情。",
-      )
+      enterprise_copy(locale, YourApiCredentialsWereRevokedBecause)
+    _ => enterprise_copy(locale, OpenTheRelatedRecordForDetails)
   }
   if reference == "" {
     explanation
@@ -3454,12 +3611,11 @@ fn notifications_view(
   @html.div(class="page-stack", [
     @html.section(class="section-heading", [
       @html.div([
-        @html.h2(copy(state.locale, "Notification inbox", "通知收件箱")),
+        @html.h2(enterprise_copy(state.locale, NotificationInbox)),
         @html.p(
-          copy(
+          enterprise_copy(
             state.locale,
-            "Durable updates for agreements, machine access, expiry, and offline reconciliation.",
-            "查看协议、机器访问、到期与线下对账的持久化更新。",
+            DurableUpdatesForAgreementsMachineAccess,
           ),
         ),
       ]),
@@ -3475,14 +3631,10 @@ fn notifications_view(
       [
         @html.h2(
           id="notification-preferences-title",
-          copy(state.locale, "Delivery preferences", "投递偏好"),
+          enterprise_copy(state.locale, DeliveryPreferences),
         ),
         @html.p(
-          copy(
-            state.locale,
-            "In-app delivery always remains enabled. External delivery starts only when the platform adapter is configured.",
-            "站内通知始终开启。仅在平台配置外部投递适配器后，外部投递才会生效。",
-          ),
+          enterprise_copy(state.locale, InAppDeliveryAlwaysRemainsEnabled),
         ),
         @html.ul(class="record-list", [
           notification_preference_row(
@@ -3499,14 +3651,18 @@ fn notifications_view(
             "Contracts and commercial actions",
             "合同与商务操作",
           ),
+          notification_preference_row(
+            state,
+            emit,
+            Announcement,
+            "Platform announcements",
+            "平台公告",
+          ),
         ]),
       ],
     ),
     if state.notifications.length() == 0 {
-      @html.p(
-        class="empty",
-        copy(state.locale, "No notifications yet.", "暂无通知。"),
-      )
+      @html.p(class="empty", enterprise_copy(state.locale, NoNotificationsYet))
     } else {
       @html.div(
         class="record-list",
@@ -3522,7 +3678,19 @@ fn notifications_view(
                 @html.div(class="record-main", [
                   @html.div(class="record-title", [
                     @html.h3(
-                      notification_code_label(state.locale, record.event.code),
+                      if record.event.code == "Announcement" ||
+                        record.event.topic == Announcement {
+                        record.event.parameters
+                        .get("title")
+                        .unwrap_or(
+                          notification_code_label(
+                            state.locale,
+                            record.event.code,
+                          ),
+                        )
+                      } else {
+                        notification_code_label(state.locale, record.event.code)
+                      },
                     ),
                     @html.span(
                       class="state-pill",
@@ -3542,7 +3710,7 @@ fn notifications_view(
                   @html.p(notification_detail(state.locale, record)),
                   @html.dl(class="record-meta", [
                     @html.div([
-                      @html.dt(copy(state.locale, "Received", "接收时间")),
+                      @html.dt(enterprise_copy(state.locale, Received)),
                       @html.dd(
                         class="mono",
                         @contractdoc.format_unix_ms_utc(
@@ -3551,8 +3719,10 @@ fn notifications_view(
                       ),
                     ]),
                     @html.div([
-                      @html.dt(copy(state.locale, "Receipt", "回执")),
-                      @html.dd(class="mono", record.event.source_receipt),
+                      @html.dt(enterprise_copy(state.locale, Receipt)),
+                      @html.dd([
+                        copy_detail(state, emit, record.event.source_receipt),
+                      ]),
                     ]),
                   ]),
                 ]),
@@ -3568,7 +3738,7 @@ fn notifications_view(
                           record.generation,
                         ),
                       ),
-                      copy(state.locale, "Mark as read", "标记为已读"),
+                      enterprise_copy(state.locale, MarkAsRead),
                     ),
                   ])
                 } else {
@@ -3590,15 +3760,16 @@ fn content(
 ) -> @rabbita.Html {
   match state.route {
     Overview => overview_view(state, emit)
+    SelfService => self_service_view(state, emit)
     AccountAccess => account_access_view(state, emit)
     Agreements => agreements_view(state, emit)
     LeaseRequests => lease_requests_view(state, emit)
     Notifications => notifications_view(state, emit)
     Costs => costs_view(state, emit)
-    Models => models_view(state)
+    Models => models_view(state, emit)
     DesktopIde => desktop_ide_view(state, emit)
     MachineAccess => {
-      let machine = { ..state.machine_access, locale: state.locale }
+      let machine = { ..state.machine_access, locale: state.locale, }
       match emit {
         Some(send) =>
           @machine_access.interactive_view(
@@ -3609,7 +3780,7 @@ fn content(
       }
     }
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale }
+      let commerce = { ..state.offline_commerce, locale: state.locale, }
       match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -3620,7 +3791,7 @@ fn content(
       }
     }
     ContractDocuments => {
-      let documents = { ..state.contract_documents, locale: state.locale }
+      let documents = { ..state.contract_documents, locale: state.locale, }
       match emit {
         Some(send) =>
           @contract_documents.interactive_view(
@@ -3666,17 +3837,27 @@ fn enterprise_view(
     @html.style_tag(stylesheet),
     @html.style_tag(account_styles),
     @html.style_tag(provider_styles),
+    @html.style_tag(self_service_styles()),
+    @html.style_tag(
+      ".confirmation-dialog{max-height:calc(100dvh - 2rem);overflow:auto}.first-call-guide pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:.75rem}.copy-detail{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.5rem}.copy-detail .quiet-button{min-height:44px}.quota-track{display:block;height:.55rem;background:#223743;min-width:8rem;border-radius:.3rem;overflow:hidden}.quota-fill{display:block;height:100%;background:#7ee0bd}.quota-warning .quota-fill{background:#f1c66c}",
+    ),
     @html.a(
       class="skip-link",
       href="#enterprise-main",
-      copy(state.locale, "Skip to content", "跳到内容"),
+      enterprise_copy(state.locale, SkipToContent),
     ),
     navigation(state, emit),
     @html.div(class="enterprise-main", [
       page_header(state, emit),
       success_notice,
       error_notice,
+      if state.error_message is Some(_) {
+        guide_link(state, "error-reference", true)
+      } else {
+        @html.nothing
+      },
       @html.main_(id="enterprise-main", class="enterprise-content", [
+        guide_link(state, tutorial_page(state.route), false),
         content(state, emit),
       ]),
     ]),

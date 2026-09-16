@@ -1,0 +1,32 @@
+[
+  {
+    "op": "add",
+    "path": "/metadata/annotations/lunanexa.io~1exposure",
+    "value": "oidc-browser-https"
+  },
+  {
+    "op": "replace",
+    "path": "/spec/selector",
+    "value": { "app": "lunanexa-identity-edge" }
+  },
+  {
+    "op": "replace",
+    "path": "/spec/ports",
+    "value": [
+      {
+        "name": "operator-https",
+        "protocol": "TCP",
+        "appProtocol": "https",
+        "port": 5003,
+        "targetPort": "edge-https"
+      },
+      {
+        "name": "enterprise-https",
+        "protocol": "TCP",
+        "appProtocol": "https",
+        "port": 5005,
+        "targetPort": "edge-https"
+      }
+    ]
+  }
+]

@@ -13,6 +13,7 @@ pub(all) struct RuntimeInstance {
   artifact_digest : String
   observed_state : @contracts.DeploymentState
   container_address : String
+  endpoint : @contracts.RuntimeEndpoint?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -72,7 +73,7 @@ pub fn OciRuntimeSupervisor::new(
   if pid_limit <= 0 || pid_limit > 1048576 {
     raise RuntimeSupervisorError::InvalidAssignmentIdentity("pid-limit")
   }
-  { engine, network, engine_endpoint, pid_limit }
+  { engine, network, engine_endpoint, pid_limit, }
 }
 
 ///|
@@ -341,6 +342,7 @@ pub async fn OciRuntimeSupervisor::ensure_started(
     artifact_digest: assignment.artifact.digest,
     observed_state,
     container_address,
+    endpoint: None,
   }
 }
 

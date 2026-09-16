@@ -118,7 +118,7 @@ async test "assigned node materializes verifies reuses and prunes its model" {
       })
     }
     let directory = @fs.tmpdir(prefix="lunanexa-materializer-")
-    let verifier = { calls: 0 }
+    let verifier = { calls: 0, }
     let materializer = @node.ArtifactMaterializer::open(
       directory,
       "http://\{server.addr}",
@@ -241,7 +241,7 @@ async test "digest mismatch quarantines the selected node download" {
       allow_http_loopback=true,
     )
     try
-      materializer.materialize(materialization_assignment(), { calls: 0 })
+      materializer.materialize(materialization_assignment(), { calls: 0, })
     catch {
       @node.ArtifactMaterializationError::ArtifactDigestMismatch => ()
       error => fail("unexpected error: \{Repr(error)}")
@@ -299,9 +299,9 @@ async test "selected node resumes an incomplete model transfer" {
     let artifact = materializer.materialize(
       {
         ..assignment,
-        artifact: { ..assignment.artifact, signature_ref: "cosign:model" },
+        artifact: { ..assignment.artifact, signature_ref: "cosign:model", },
       },
-      { calls: 0 },
+      { calls: 0, },
     )
     assert_true(saw_range.val)
     assert_eq(@fs.read_file(artifact.host_path()).text(), "artifact-bytes")
@@ -360,8 +360,8 @@ async test "declared artifact size is enforced before transfer" {
   let assignment = materialization_assignment()
   try
     materializer.materialize(
-      { ..assignment, artifact: { ..assignment.artifact, size_bytes: 2048L } },
-      { calls: 0 },
+      { ..assignment, artifact: { ..assignment.artifact, size_bytes: 2048L, }, },
+      { calls: 0, },
     )
   catch {
     @node.ArtifactMaterializationError::ArtifactTooLarge => ()
@@ -484,8 +484,8 @@ async test "assignment materializes on only the selected node cache" {
     ]
     let selected = 2
     let artifact = materializers[selected].materialize(
-      { ..materialization_assignment(), node_id: "node-c" },
-      { calls: 0 },
+      { ..materialization_assignment(), node_id: "node-c", },
+      { calls: 0, },
     )
     assert_true(@fs.exists(artifact.host_path()))
     assert_eq(request_count.val, 2)

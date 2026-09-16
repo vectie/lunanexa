@@ -1,5 +1,6 @@
 import {
   "vectie/lunanexa/node" @node_agent,
+  "vectie/lunanexa/node/kubernetes",
   "vectie/lunanexa/nodelease",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/settings",
@@ -9,6 +10,7 @@ import {
   "moonbitlang/async/process",
   "moonbitlang/async/io",
   "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/json",
   "moonbitlang/core/string",
 }
@@ -18,5 +20,5 @@ supported_targets = "native"
 pkgtype(kind: "executable")
 
 options(
-  link: { "native": { "cc-link-flags": "-pthread" } },
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
 )

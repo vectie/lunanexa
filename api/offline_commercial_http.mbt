@@ -913,7 +913,7 @@ async fn ApiService::handle_offline_commerce(
         false,
       )
     }
-    let completed = { ..result, completed_unix_ms: Some(@async.now()) }
+    let completed = { ..result, completed_unix_ms: Some(@async.now()), }
     let reply = try
       json_reply(200, store.complete_activation(completed).to_json())
     catch {
@@ -964,7 +964,7 @@ async fn ApiService::handle_offline_commerce(
         false,
       )
     }
-    let completed = { ..result, completed_unix_ms: Some(@async.now()) }
+    let completed = { ..result, completed_unix_ms: Some(@async.now()), }
     let reply = try
       json_reply(200, store.complete_reversal(completed).to_json())
     catch {
@@ -1396,7 +1396,7 @@ async fn ApiService::handle_offline_commerce(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
   }
-  let view = try portal.self_view(subject_ref) catch {
+  let view = try portal_view_for_request(portal, subject_ref, headers) catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value

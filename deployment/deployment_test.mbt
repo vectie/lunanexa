@@ -133,6 +133,91 @@ test "preflight blocks missing evidence secrets and capacity" {
 }
 
 ///|
+test "dedicated preflight is pinned to the controller-reserved node" {
+  let catalog = template()
+  let evidence : @deployment.RegistryEvidence = {
+    model_id: catalog.model_id,
+    model_version: catalog.model_version,
+    model_state: Approved,
+    artifact_digest: catalog.artifact.digest,
+    runtime_name: catalog.runtime.name,
+    runtime_version: catalog.runtime.version,
+    runtime_image_digest: catalog.runtime.image_digest,
+    model_selector: catalog.model_selector,
+    license_accepted: true,
+    artifact_verified: true,
+    runtime_verified: true,
+    evaluation_passed: true,
+    alias_points_to_model: true,
+  }
+  let node_a : @deployment.ManagementNode = {
+    node_id: "node-a",
+    state: Active,
+    architecture: "nvidia-gb10",
+    memory_free_mib: 8000,
+    runtime_names: ["text-runtime"],
+    device_ids: ["gpu-a"],
+    allowed_data_classes: [Internal],
+  }
+  let plan = @deployment.preflight_on_node(
+    [catalog],
+    intent(),
+    {
+      registry: [evidence],
+      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"] }],
+      available_secret_refs: ["runtime-token"],
+    },
+    "node-b",
+  )
+  assert_true(plan.executable)
+  assert_eq(plan.replicas.length(), 1)
+  assert_eq(plan.replicas[0].node_id, "node-b")
+}
+
+///|
+test "dedicated preflight cannot waive node eligibility" {
+  let catalog = template()
+  let blocked = @deployment.preflight_on_node(
+    [catalog],
+    intent(),
+    {
+      registry: [
+        {
+          model_id: catalog.model_id,
+          model_version: catalog.model_version,
+          model_state: Approved,
+          artifact_digest: catalog.artifact.digest,
+          runtime_name: catalog.runtime.name,
+          runtime_version: catalog.runtime.version,
+          runtime_image_digest: catalog.runtime.image_digest,
+          model_selector: catalog.model_selector,
+          license_accepted: true,
+          artifact_verified: true,
+          runtime_verified: true,
+          evaluation_passed: true,
+          alias_points_to_model: true,
+        },
+      ],
+      nodes: [
+        {
+          node_id: "node-a",
+          state: Active,
+          architecture: "nvidia-gb10",
+          memory_free_mib: 8000,
+          runtime_names: ["text-runtime"],
+          device_ids: ["gpu-a"],
+          allowed_data_classes: [Internal],
+        },
+      ],
+      available_secret_refs: ["runtime-token"],
+    },
+    "node-missing",
+  )
+  assert_false(blocked.executable)
+  assert_true(blocked.findings.any(value => value.code == NoCompatibleNode))
+}
+
+///|
 test "one-click catalog rejects container-managed artifact downloads" {
   let unsupported = {
     ..template(),

@@ -1,0 +1,20 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/async/websocket",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/x/crypto",
+}
+
+import {
+  "moonbitlang/async/socket",
+} for "wbtest"
+
+supported_targets = "native"
+
+options(
+  "native-stub": [ "secure_random.c" ],
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

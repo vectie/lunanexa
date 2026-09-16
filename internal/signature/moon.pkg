@@ -1,0 +1,9 @@
+import {
+  "moonbitlang/async/fs",
+}
+
+supported_targets = "native"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

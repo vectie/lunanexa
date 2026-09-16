@@ -23,6 +23,7 @@ async test "exclusive lease reserves only the named node and fences managed work
   durable.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: [],
+    runtime_endpoints: None,
   })
   let registry = @registry.FileRegistry::open("\{directory}/registry.json")
   let enrollment = @node.FileEnrollmentService::open(
@@ -76,7 +77,7 @@ async test "exclusive lease reserves only the named node and fences managed work
     @json.parse(forecast.body),
   )
   assert_eq(capacity.schedulable_nodes, 0)
-  let assignment = { ..api_assignment(), signature: "" }
+  let assignment = { ..api_assignment(), signature: "", }
   let rejected_assignment = service.handle(
     Put,
     "/v1/assignments",
@@ -111,6 +112,7 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
   durable.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: [],
+    runtime_endpoints: None,
   })
   let runtime = @runtimes.OpenAiTextRuntime::new(
     "http://127.0.0.1:1/v1/responses",
@@ -179,6 +181,7 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
   durable.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: ["managed-service-still-draining"],
+    runtime_endpoints: None,
   })
   let still_reserved_reply = service.handle(
     Get,
@@ -194,6 +197,7 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
   durable.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: [],
+    runtime_endpoints: None,
   })
   let provisioning_reply = service.handle(
     Get,
@@ -576,6 +580,7 @@ async test "node polling converts a naturally expired active lease into cleanup"
   durable.put_heartbeat({
     ..schedulable_heartbeat(Active),
     running_deployments: [],
+    runtime_endpoints: None,
   })
   let lease_store = @nodelease_store.FileExclusiveLeaseStore::open(
     "\{directory}/exclusive-leases.json",
@@ -745,7 +750,7 @@ async test "exclusive lease also blocks one-click deployment planning" {
     version: @contracts.contract_version,
     idempotency_key: "blocked-deploy",
     deployment_id: "blocked-service",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,

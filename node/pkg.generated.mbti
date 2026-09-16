@@ -7,6 +7,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
+  "vectie/lunanexa/node/kubernetes",
   "vectie/lunanexa/settings",
 }
 
@@ -19,15 +20,23 @@ pub fn classify_runtime_inspection(String, String, String) -> @contracts.Deploym
 
 pub async fn collect_accelerator_sensors(String, limits? : @settings.TelemetrySafetySettings) -> AcceleratorSensorSnapshot
 
+pub async fn collect_linux_host_resources() -> HostResources
+
 pub fn health(String) -> @contracts.HealthResponse
 
 pub fn heartbeat_signature(@contracts.NodeHeartbeat, String) -> String
+
+pub fn inventory_host_resources(@contracts.NodeInventory) -> HostResources?
+
+pub fn parse_linux_host_resources(String, String) -> HostResources raise
 
 pub fn parse_nvidia_smi_csv(String) -> AcceleratorSensorSnapshot raise
 
 pub fn parse_nvidia_smi_csv_with_limits(String, @settings.TelemetrySafetySettings) -> AcceleratorSensorSnapshot raise
 
 pub fn private_runtime_container_address(String) -> String raise RuntimeSupervisorError
+
+pub fn termination_report_signature(@contracts.RuntimeTerminationReport, String) -> String
 
 // Errors
 pub(all) suberror ArtifactMaterializationError {
@@ -102,8 +111,9 @@ pub(all) struct BootstrapToken {
 pub struct CosignArtifactSignatureVerifier {
   binary : String
   public_key_path : String
+  trusted_root_path : String?
 }
-pub fn CosignArtifactSignatureVerifier::new(String, String) -> Self raise ArtifactMaterializationError
+pub fn CosignArtifactSignatureVerifier::new(String, String, trusted_root_path? : String) -> Self raise ArtifactMaterializationError
 pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier
 
 type EnrollmentPersistence
@@ -145,6 +155,23 @@ pub async fn FileEnrollmentService::renew(Self, String, String, String, Int64, I
 pub async fn FileEnrollmentService::rotate(Self, String, String, Int64, certificate_lifetime_ms? : Int64) -> NodeCertificate
 pub async fn FileEnrollmentService::snapshot(Self) -> String
 
+pub(all) struct HostResources {
+  cpu_count : Int
+  memory_total_mib : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn HostResources::inventory(Self, @contracts.NodeInventory) -> @contracts.NodeInventory
+
+pub(all) enum ManagedRuntimeSupervisor {
+  Oci(OciRuntimeSupervisor)
+  Kubernetes(@kubernetes.RuntimeSupervisor)
+}
+pub fn ManagedRuntimeSupervisor::close(Self) -> Unit
+pub async fn ManagedRuntimeSupervisor::ensure_started(Self, @contracts.DesiredAssignment, MaterializedArtifact) -> RuntimeInstance
+pub async fn ManagedRuntimeSupervisor::reap_expired(Self, Int64) -> Unit
+pub async fn ManagedRuntimeSupervisor::remove_absent(Self, Array[String]) -> Unit
+pub fn ManagedRuntimeSupervisor::retained_artifact_digests(Self) -> Array[String]
+pub async fn ManagedRuntimeSupervisor::stop(Self, String) -> Unit
+
 pub struct MaterializedArtifact {
   digest : String
   host_path : String
@@ -161,6 +188,7 @@ pub struct NodeAgent {
   mut state : @contracts.NodeState
   assignments : Map[String, @contracts.DesiredAssignment]
   ready_assignments : Map[String, Bool]
+  runtime_routes : Map[String, @contracts.RuntimeEndpoint]
   mut directive_generation : Int64
 }
 pub fn NodeAgent::activate(Self) -> Unit
@@ -172,12 +200,14 @@ pub fn NodeAgent::drain(Self) -> Unit
 pub fn NodeAgent::from_snapshot(NodeAgentSnapshot) -> Self raise NodeError
 pub fn NodeAgent::new(String) -> Self
 pub fn NodeAgent::observe_runtime(Self, String, @contracts.DeploymentState) -> Unit
+pub fn NodeAgent::observe_runtime_endpoint(Self, @contracts.RuntimeEndpoint, Int64) -> Bool
 pub fn NodeAgent::observed_generation(Self) -> Int64
 pub fn NodeAgent::reap_expired(Self, Int64) -> Array[String]
 pub fn[V : AssignmentVerifier] NodeAgent::reconcile(Self, @contracts.DesiredAssignment, V, Int64) -> Bool raise NodeError
 pub fn[V : AssignmentVerifier] NodeAgent::recover(String, Array[@contracts.DesiredAssignment], V, Int64) -> Self raise NodeError
 pub fn NodeAgent::remove_absent(Self, Array[String]) -> Array[String]
 pub fn NodeAgent::running_deployments(Self) -> Array[String]
+pub fn NodeAgent::runtime_endpoints(Self, Int64) -> Array[@contracts.RuntimeEndpoint]
 pub fn NodeAgent::snapshot(Self) -> NodeAgentSnapshot
 pub fn NodeAgent::state(Self) -> @contracts.NodeState
 
@@ -222,6 +252,7 @@ pub(all) struct RuntimeInstance {
   artifact_digest : String
   observed_state : @contracts.DeploymentState
   container_address : String
+  endpoint : @contracts.RuntimeEndpoint?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 type S3SigV4Configuration

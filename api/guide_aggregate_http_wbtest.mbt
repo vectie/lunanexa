@@ -17,6 +17,7 @@ async test "guide diagnostics token receives aggregate-only controller evidence"
       taints: [],
     },
     running_deployments: [],
+    runtime_endpoints: None,
     timestamp_unix_ms: @async.now(),
     signature: "",
   })

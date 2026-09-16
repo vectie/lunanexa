@@ -12,6 +12,15 @@ pub fn default_locale() -> Locale {
 }
 
 ///|
+/// Shared locale selection; feature packages own their bilingual messages.
+pub fn copy(locale : Locale, english : String, chinese : String) -> String {
+  match locale {
+    English => english
+    ChineseSimplified => chinese
+  }
+}
+
+///|
 pub fn Locale::storage_value(self : Locale) -> String {
   match self {
     English => "en"

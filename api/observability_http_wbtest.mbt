@@ -136,7 +136,7 @@ async test "external collector proof is bounded fresh and durable" {
   )
   ignore(
     service.record_external_export_proof(
-      { proof_receipt: "collector-proof-api", exported_unix_ms: 1000L },
+      { proof_receipt: "collector-proof-api", exported_unix_ms: 1000L, },
       1001L,
     ),
   )
@@ -146,7 +146,7 @@ async test "external collector proof is bounded fresh and durable" {
   )
   try
     service.record_external_export_proof(
-      { proof_receipt: "collector-proof-stale", exported_unix_ms: 1000L },
+      { proof_receipt: "collector-proof-stale", exported_unix_ms: 1000L, },
       400001L,
     )
   catch {

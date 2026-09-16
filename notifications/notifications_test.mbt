@@ -125,7 +125,7 @@ test "notification receipts and parameters reject secret-shaped material" {
       "Bearer production-token", "authorization: private", "private key data", "raw_prompt customer text",
       "model_output private text",
     ] {
-    let event = { ..subject_event(), source_receipt: value }
+    let event = { ..subject_event(), source_receipt: value, }
     try @notifications.validate_event(event) catch {
       InvalidInput(_) => ()
       error => fail("unexpected error: \{Repr(error)}")

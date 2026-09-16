@@ -61,7 +61,7 @@ fn secret_digest(secret : String) -> String {
 
 ///|
 pub fn EnrollmentService::new() -> EnrollmentService {
-  { tokens: Map([]), certificates: Map([]), authorities: Map([]) }
+  { tokens: Map([]), certificates: Map([]), authorities: Map([]), }
 }
 
 ///|
@@ -107,7 +107,7 @@ pub fn EnrollmentService::enroll(
   if node_auth_secret == "" {
     raise InvalidBootstrapToken
   }
-  self.tokens[token_id] = { ..token, used: true }
+  self.tokens[token_id] = { ..token, used: true, }
   let certificate : NodeCertificate = {
     node_id,
     serial: 1L,
@@ -137,7 +137,7 @@ pub fn EnrollmentService::snapshot(self : EnrollmentService) -> String {
       for _, authority in self.authorities => authority
     ],
   }
-  value.to_json().stringify()
+  ToJson::to_json(value).stringify()
 }
 
 ///|
@@ -279,7 +279,7 @@ pub fn assignment_signature(
   assignment : @contracts.DesiredAssignment,
   secret : String,
 ) -> String {
-  let unsigned = { ..assignment, signature: "" }
+  let unsigned = { ..assignment, signature: "", }
   let key = @utf8.encode(secret)
   let material = @utf8.encode(
     "lunanexa.assignment-mac.v1|\{unsigned.to_json().stringify()}",
@@ -294,10 +294,16 @@ pub fn heartbeat_signature(
   heartbeat : @contracts.NodeHeartbeat,
   secret : String,
 ) -> String {
-  let unsigned = { ..heartbeat, signature: "" }
+  let unsigned = { ..heartbeat, signature: "", }
+  let payload = unsigned.to_json()
+  // Preserve the exact v1 MAC material for legacy heartbeats. Endpoint-bearing
+  // heartbeats authenticate the additional field and cannot be downgraded.
+  if heartbeat.runtime_endpoints is None && payload is Object(fields) {
+    ignore(fields.remove("runtime_endpoints"))
+  }
   let key = @utf8.encode(secret)
   let material = @utf8.encode(
-    "lunanexa.heartbeat-mac.v1|\{unsigned.to_json().stringify()}",
+    "lunanexa.heartbeat-mac.v1|\{payload.stringify()}",
   )
   @crypto.bytes_to_hex_string(
     @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
@@ -336,6 +342,7 @@ pub struct NodeAgent {
   mut state : @contracts.NodeState
   assignments : Map[String, @contracts.DesiredAssignment]
   ready_assignments : Map[String, Bool]
+  runtime_routes : Map[String, @contracts.RuntimeEndpoint]
   mut directive_generation : Int64
 }
 
@@ -360,6 +367,7 @@ pub fn NodeAgent::new(node_id : String) -> NodeAgent {
     state: Enrolling,
     assignments: Map([]),
     ready_assignments: Map([]),
+    runtime_routes: Map([]),
     directive_generation: 0L,
   }
 }
@@ -417,6 +425,9 @@ pub fn NodeAgent::observe_runtime(
   if self.assignments.contains(assignment_id) {
     self.ready_assignments[assignment_id] = state == Ready
   }
+  if state != Ready {
+    ignore(self.runtime_routes.remove(assignment_id))
+  }
 }
 
 ///|
@@ -473,12 +484,10 @@ pub fn NodeAgent::from_snapshot(
   for assignment in snapshot.assignments {
     assignments[assignment.assignment_id] = assignment
   }
+  // Persisted readiness is historical evidence, not a fresh runtime probe.
+  // Keep assignments across restart but require inspection before advertising
+  // either ready deployments or their network routes again.
   let ready_assignments : Map[String, Bool] = Map([])
-  for assignment_id in snapshot.ready_assignment_ids.unwrap_or([]) {
-    if assignments.contains(assignment_id) {
-      ready_assignments[assignment_id] = true
-    }
-  }
   {
     node_id: snapshot.node_id,
     controller_epoch: snapshot.controller_epoch,
@@ -486,6 +495,8 @@ pub fn NodeAgent::from_snapshot(
     state: snapshot.state,
     assignments,
     ready_assignments,
+    // Addresses require fresh runtime inspection after process restart.
+    runtime_routes: Map([]),
     directive_generation: snapshot.directive_generation,
   }
 }
@@ -502,6 +513,7 @@ pub fn NodeAgent::reap_expired(
   for assignment_id in expired {
     ignore(self.assignments.remove(assignment_id))
     ignore(self.ready_assignments.remove(assignment_id))
+    ignore(self.runtime_routes.remove(assignment_id))
   }
   expired
 }
@@ -519,6 +531,7 @@ pub fn NodeAgent::remove_absent(
   for assignment_id in absent {
     ignore(self.assignments.remove(assignment_id))
     ignore(self.ready_assignments.remove(assignment_id))
+    ignore(self.runtime_routes.remove(assignment_id))
   }
   absent
 }
@@ -551,6 +564,11 @@ pub fn[V : AssignmentVerifier] NodeAgent::reconcile(
   }
   self.controller_epoch = assignment.controller_epoch
   self.observed_generation = assignment.generation
+  if self.assignments.get(assignment.assignment_id) is Some(previous) &&
+    previous != assignment {
+    ignore(self.runtime_routes.remove(assignment.assignment_id))
+    ignore(self.ready_assignments.remove(assignment.assignment_id))
+  }
   self.assignments[assignment.assignment_id] = assignment
   true
 }

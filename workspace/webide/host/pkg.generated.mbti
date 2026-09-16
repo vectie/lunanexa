@@ -1,0 +1,61 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/workspace/webide/host"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/workspace/webide",
+}
+
+// Values
+pub async fn handle_model_proxy(String, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
+
+pub async fn initialize_workspace(String, String) -> Unit
+
+// Errors
+pub(all) suberror HostError {
+  InvalidConfiguration
+  ControllerRejected
+  WorkspaceUnavailable
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) struct HostConfig {
+  namespace_name : String
+  controller_namespace : String
+  model_gateway_namespace : String
+  comfyui_image : String
+  model_proxy_image : String
+  storage_class : String
+  storage_gib : Int
+  cpu_millis : Int
+  memory_mib : Int
+  controller_origin : String
+  model_gateway_origin : String
+  trusted_ca_config_map : String?
+  controller_port : Int
+  model_gateway_port : Int
+  kubernetes_origin : String
+  kubernetes_ca_file : String
+  kubernetes_token_file : String
+} derive(@json.FromJson)
+
+type ModelProxyConfig derive(ToJson, @json.FromJson)
+
+pub struct WorkspaceHost {
+  config : HostConfig
+  locks : Map[String, @async.Mutex]
+  kubernetes_override : (async (@http.RequestMethod, String, Json?) -> (Int, Json))?
+}
+pub async fn WorkspaceHost::authorize(Self, @webide.Grant) -> Bool
+pub fn WorkspaceHost::new(HostConfig) -> Self raise HostError
+pub async fn WorkspaceHost::provision(Self, String, @webide.Grant) -> @webide.Backend
+pub async fn WorkspaceHost::reconcile(Self) -> Unit
+pub async fn WorkspaceHost::redeem(Self, String, String) -> @webide.Grant
+
+// Type aliases
+
+// Traits

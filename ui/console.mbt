@@ -416,6 +416,8 @@ pub(all) struct ConsoleState {
   notifications : Array[NotificationRow]
   notification_deliveries : Array[NotificationDeliveryRow]
   accounts : Array[AccountView]
+  trial_summary : TrialSummary?
+  announcement_draft : AnnouncementDraft
   authenticated_account : AccountView?
   account_sessions : Array[BrowserSessionView]
   account_invite : AccountInviteDraft
@@ -508,6 +510,13 @@ pub(all) enum ConsoleMessage {
   AccountInviteReceiptChanged(String)
   AccountInviteRoleToggled(UiAccountRole)
   SubmitAccountInvite
+  AnnouncementIdChanged(String)
+  AnnouncementTenantChanged(String)
+  AnnouncementTitleChanged(String)
+  AnnouncementBodyChanged(String)
+  AnnouncementExpiryChanged(String)
+  AnnouncementLifetimeChosen(Int)
+  SubmitAnnouncement
   AccessPackageIssuerChanged(String)
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
@@ -557,7 +566,7 @@ pub fn default_state() -> ConsoleState {
     deployments: [],
     catalog_templates: [],
     service_deployments: [],
-    requests: { count: 0, p95_ms: 0, throughput_per_second: 0, errors: 0 },
+    requests: { count: 0, p95_ms: 0, throughput_per_second: 0, errors: 0, },
     request_details: [],
     stream_events: [],
     benchmark_evidence: [],
@@ -571,6 +580,8 @@ pub fn default_state() -> ConsoleState {
     notifications: [],
     notification_deliveries: [],
     accounts: [],
+    trial_summary: None,
+    announcement_draft: empty_announcement_draft(),
     authenticated_account: None,
     account_sessions: [],
     account_invite: {
@@ -660,7 +671,7 @@ pub fn demo_state() -> ConsoleState {
     order_ref: "order-demo-2026-001",
     preceding_packet_ref: None,
     active_forms: contract_manifest.forms.map(form => form.form),
-    values: [{ field_id: "lessee.name", value: "Northstar Research" }],
+    values: [{ field_id: "lessee.name", value: "Northstar Research", }],
     assignments: [
       {
         field_id: "lessee.name",
@@ -690,9 +701,9 @@ pub fn demo_state() -> ConsoleState {
     idempotency_key: "contract-packet-effective-demo-key",
     order_ref: "order-demo-2026-000",
     values: [
-      { field_id: "lessee.name", value: "Northstar Research" },
-      { field_id: "lease.start_date", value: "2026-08-01" },
-      { field_id: "lease.end_date", value: "2027-07-31" },
+      { field_id: "lessee.name", value: "Northstar Research", },
+      { field_id: "lease.start_date", value: "2026-08-01", },
+      { field_id: "lease.end_date", value: "2027-07-31", },
     ],
     values_sha256: Some(
       "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -940,7 +951,7 @@ pub fn demo_state() -> ConsoleState {
     version: @contracts.contract_version,
     idempotency_key: "demo:text-service:1",
     deployment_id: "text-service",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 86400000L,
@@ -1009,7 +1020,12 @@ pub fn demo_state() -> ConsoleState {
     ],
     catalog_templates: templates,
     service_deployments: [service_operation],
-    requests: { count: 1842, p95_ms: 142, throughput_per_second: 38, errors: 3 },
+    requests: {
+      count: 1842,
+      p95_ms: 142,
+      throughput_per_second: 38,
+      errors: 3,
+    },
     request_details: [
       {
         timestamp_unix_ms: 1786500320000L,
@@ -1060,6 +1076,8 @@ pub fn demo_state() -> ConsoleState {
     ],
     notifications: [],
     notification_deliveries: [],
+    trial_summary: None,
+    announcement_draft: empty_announcement_draft(),
     accounts: [
       {
         account_id: "account-alice",
@@ -1364,11 +1382,7 @@ fn localized(
   english : String,
   chinese : String,
 ) -> String {
-  if locale.is_chinese() {
-    chinese
-  } else {
-    english
-  }
+  @i18n.copy(locale, english, chinese)
 }
 
 ///|
@@ -2001,7 +2015,7 @@ fn overview_view(
             localized(
               state.locale,
               "This live gate mirrors the final operator checks in the deployment guide. The controller still performs the authoritative preflight on click.",
-              "此实时门禁对应部署指南中的最终运维检查。点击后控制器仍会执行权威预检。",
+              "此实时检查对应部署指南中的最终运维检查。点击后控制器仍会执行权威预检。",
             ),
           ),
           @html.button(
@@ -2024,7 +2038,7 @@ fn overview_view(
             localized(
               state.locale,
               "Production acceptance gate",
-              "生产验收门禁",
+              "生产验收检查",
             ),
             if state.production_readiness.loading {
               localized(
@@ -2647,6 +2661,7 @@ fn users_view(
         ),
       ),
     ]),
+    trial_summary_view(state),
     match state.authenticated_account {
       Some(account) =>
         @html.section(
@@ -6232,6 +6247,7 @@ fn alerts_view(
       ),
     ]),
     alert_impact_graph(state),
+    announcement_form(state, emit),
     if state.notifications.length() == 0 {
       @html.nothing
     } else {
@@ -8369,7 +8385,7 @@ fn console_view(
     CostCenters => cost_centers_view(state)
     Agreements => agreements_view(state, emit)
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale }
+      let commerce = { ..state.offline_commerce, locale: state.locale, }
       let page = match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -8381,7 +8397,7 @@ fn console_view(
       @html.div([offline_commerce_lifecycle_graph(state), page])
     }
     ContractDocuments => {
-      let documents = { ..state.contract_documents, locale: state.locale }
+      let documents = { ..state.contract_documents, locale: state.locale, }
       match emit {
         Some(send) =>
           @contract_documents.interactive_view(
@@ -8420,14 +8436,28 @@ fn console_view(
         attrs=@html.Attrs::build().aria_label(
           localized(
             state.locale,
-            "LunaNexa Cluster Operations",
-            "LunaNexa 集群运维",
+            "能源谷“创未来”街区算力平台 Cluster Operations",
+            "能源谷“创未来”街区算力平台 集群运维",
           ),
         ),
         [
-          @html.span(class="brand-mark", "LN"),
+          @html.span(
+            class="brand-mark",
+            style=[
+              "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+            ],
+            [
+              @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+                "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+                "transform: scale(1.22)", "transform-origin: center",
+              ]),
+            ],
+          ),
           @html.div(class="brand-copy", [
-            @html.span(class="brand-name", "LunaNexa"),
+            @html.span(
+              class="brand-name",
+              "能源谷“创未来”街区算力平台",
+            ),
             @html.span(
               class="brand-product",
               localized(state.locale, "Cluster operations", "集群运维"),

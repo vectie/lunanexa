@@ -1,7 +1,9 @@
 ///|
 test "ready lease renders the dense Web IDE and client-side handoffs" {
   let html = @workbench.render(@workbench.demo_state())
-  assert_true(html.contains("LunaNexa Workbench"))
+  assert_true(
+    html.contains("能源谷“创未来”街区算力平台 Workbench"),
+  )
   assert_true(html.contains("lease-demo-01"))
   assert_true(html.contains("src/main.mbt"))
   assert_true(html.contains("id=\"code-editor\""))
@@ -26,7 +28,7 @@ test "expired and absent leases fail closed with explicit boundaries" {
   guard state.lease is Some(lease) else { fail("missing demo lease") }
   let expired = @workbench.render({
     ..state,
-    lease: Some({ ..lease, state: Expired }),
+    lease: Some({ ..lease, state: Expired, }),
   })
   let absent = @workbench.render(@workbench.default_state(state.now_unix_ms))
   assert_true(expired.contains("Your workspace is not ready"))
@@ -48,7 +50,7 @@ test "draft editing is browser-local and send enters a loading state" {
   assert_true(sending.loading)
   assert_eq(sending.output_text, "")
   assert_eq(sending.receipt, "")
-  assert_false(@workbench.can_send({ ..edited, files: [], active_path: "" }))
+  assert_false(@workbench.can_send({ ..edited, files: [], active_path: "", }))
   assert_false(
     @workbench.can_send({
       ..edited,
@@ -60,14 +62,14 @@ test "draft editing is browser-local and send enters a loading state" {
 ///|
 test "empty, output, loading, narrow, and accessible states are rendered" {
   let base = @workbench.demo_state()
-  let empty = @workbench.render({ ..base, files: [], active_path: "" })
+  let empty = @workbench.render({ ..base, files: [], active_path: "", })
   let output = @workbench.render({
     ..base,
     output_text: "{\"text\":\"ok\"}",
     receipt: "receipt-public-1",
     success_message: Some("Workload completed with a public receipt."),
   })
-  let loading = @workbench.render({ ..base, loading: true })
+  let loading = @workbench.render({ ..base, loading: true, })
   assert_true(empty.contains("No browser-local draft files"))
   assert_true(output.contains("receipt-public-1"))
   assert_true(output.contains("Workload completed with a public receipt"))
@@ -100,6 +102,57 @@ test "VS Code handoff uses the typed editor selection path" {
   assert_true(html.contains("Prepare VS Code handoff"))
   assert_true(html.contains("VS Code handoff requested"))
   assert_true(html.contains("Only opaque, expiring client metadata"))
+}
+
+///|
+test "authorized choices and manual disclosure preserve lease authorization" {
+  let base = @workbench.demo_state()
+  let state = {
+    ..base,
+    allowed_models: ["text.qwen", "text.other"],
+    model_selector: "text.qwen",
+  }
+  let html = @workbench.render(state)
+  assert_true(html.contains("<select"))
+  assert_true(html.contains("text.qwen"))
+  assert_true(html.contains("Advanced: manual model alias"))
+  assert_true(html.contains("Manual input never grants access"))
+  assert_true(html.contains("Copy lease ID"))
+  assert_false(
+    @workbench.can_send(
+      { ..state, lease: None, }.update(ModelChanged("text.qwen")),
+    ),
+  )
+  assert_true(state.update(CopyDiagnostic("receipt-1")) == state)
+  assert_true(state.update(ExportDrafts) == state)
+}
+
+///|
+test "draft export contains only authored files and escapes hostile content" {
+  let state = {
+    ..@workbench.demo_state(),
+    files: [
+      {
+        path: "../../private\".mbt",
+        language: "MoonBit",
+        content: "草稿\n\"quoted\"",
+      },
+    ],
+    output_text: "PRIVATE-OUTPUT",
+    receipt: "PRIVATE-RECEIPT",
+    instruction: "PRIVATE-INSTRUCTION",
+  }
+  let exported = @workbench.export_drafts(state)
+  assert_true(exported.contains("lunanexa.browser-drafts.v1"))
+  assert_true(exported.contains("草稿"))
+  assert_true(exported.contains("\\\"quoted\\\""))
+  assert_false(exported.contains("PRIVATE-OUTPUT"))
+  assert_false(exported.contains("PRIVATE-RECEIPT"))
+  assert_false(exported.contains("PRIVATE-INSTRUCTION"))
+  assert_false(exported.contains("lease-demo-01"))
+  let html = @workbench.render(state)
+  assert_true(html.contains("Export drafts"))
+  assert_true(html.contains("Export before closing"))
 }
 
 ///|

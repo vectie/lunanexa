@@ -103,13 +103,14 @@ pub async fn CosignVerifier::verify_blob(
   if file_digest(artifact_path) != digest {
     raise SubjectDigestMismatch
   }
+  let material_flag = @signature.cosign_material_flag(signature_path)
   let (status, _, _) = @process.collect_output(
     self.binary,
     [
       "verify-blob",
       "--key",
       self.public_key_path,
-      "--signature",
+      material_flag,
       signature_path,
       artifact_path,
     ],

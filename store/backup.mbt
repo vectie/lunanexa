@@ -34,7 +34,7 @@ pub fn create_backup(
     audit_tail_hash,
     signature_ref,
   }
-  bundle.to_json().stringify()
+  ToJson::to_json(bundle).stringify()
 }
 
 ///|
@@ -142,7 +142,7 @@ pub fn create_full_backup(
     manifest_digest,
     signature_ref,
   }
-  bundle.to_json().stringify()
+  ToJson::to_json(bundle).stringify()
 }
 
 ///|

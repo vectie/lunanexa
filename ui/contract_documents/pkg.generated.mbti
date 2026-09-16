@@ -45,6 +45,7 @@ pub(all) enum ContractDocumentConfirmation {
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ContractDocumentsMessage {
+  CopyPublicIdentifier(String)
   SelectPacket(String)
   SelectTenant(String)
   SearchChanged(String)

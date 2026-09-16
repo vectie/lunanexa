@@ -22,6 +22,92 @@ priv struct GatewayBrowserBootstrap {
 } derive(FromJson)
 
 ///|
+priv struct SelfServiceOrganizationsResponse {
+  version : String
+  organizations : Array[@enterprise_ui.SelfServiceOrganizationView]
+} derive(FromJson)
+
+///|
+priv struct SelfServiceOrganizationCreateIntent {
+  idempotency_key : String
+  display_name : String
+  legal_profile : @commercial.OrganizationLegalProfile
+} derive(ToJson)
+
+///|
+extend SelfServiceOrganizationCreateIntent with ToJson::{to_json}
+
+///|
+priv struct SelfServiceInvitationAcceptIntent {
+  invitation_secret : String
+} derive(ToJson)
+
+///|
+extend SelfServiceInvitationAcceptIntent with ToJson::{to_json}
+
+///|
+priv struct SelfServiceInvitationAcceptView {
+  invitation : Json
+  membership : @portal.EnterpriseMembership
+} derive(FromJson)
+
+///|
+priv struct SelfServiceMachineQuoteIntent {
+  quote_id : String
+  idempotency_key : String
+  project_id : String
+  offering_id : String
+  quantity : Int64
+  duration_seconds : Int64
+  unix_username : String?
+  requested_model_selector : String?
+  model_template_ref : String?
+} derive(ToJson)
+
+///|
+extend SelfServiceMachineQuoteIntent with ToJson::{to_json}
+
+///|
+priv struct SelfServiceMachineOrderIntent {
+  order_id : String
+  idempotency_key : String
+  quote_id : String
+} derive(ToJson)
+
+///|
+extend SelfServiceMachineOrderIntent with ToJson::{to_json}
+
+///|
+priv struct SelfServiceMachineOrderAction {
+  idempotency_key : String
+  expected_generation : Int64
+  reason : String
+} derive(ToJson)
+
+///|
+extend SelfServiceMachineOrderAction with ToJson::{to_json}
+
+///|
+priv struct SelfServiceMachineTermsAcceptanceIntent {
+  idempotency_key : String
+  template_version : String
+  rendered_document_hash : String
+  document_uri : String
+  presentation_context_hash : String
+  network_context_hash : String
+} derive(ToJson)
+
+///|
+extend SelfServiceMachineTermsAcceptanceIntent with ToJson::{to_json}
+
+///|
+priv struct SelfServiceMachineOrderResponse {
+  order : @machinecommerce.MachineOrder
+  checkout : @commercial_integrations.ExternalRecordView
+  entitlement_transaction_ref : String
+} derive(FromJson)
+
+///|
 priv struct PortalApiKeyIssueIntent {
   key_id : String
   project_id : String
@@ -192,6 +278,23 @@ priv struct DesktopClientHandoffLaunch {
 
 ///|
 priv enum Outcome {
+  OrganizationsLoaded(
+    Int64,
+    Array[@enterprise_ui.SelfServiceOrganizationView],
+    String?
+  )
+  OrganizationCreated(@enterprise_ui.SelfServiceOrganizationView)
+  OrganizationJoined
+  MachineCommerceLoaded(
+    Array[@machinecommerce.MachineOfferingView],
+    Array[@machinecommerce.MachineOrder],
+    @commercial.AgreementTemplate?,
+    Array[@commercial_integrations.ExternalRecordView]
+  )
+  MachineQuoteLoaded(@machinecommerce.MachineQuote)
+  MachineTermsAccepted
+  MachineOrderCreated(SelfServiceMachineOrderResponse)
+  MachineOrderUpdated(@machinecommerce.MachineOrder, String)
   Loaded(
     Int64,
     @portal.EnterpriseSelfView,
@@ -210,7 +313,7 @@ priv enum Outcome {
     Array[@contractdoc.ContractPacket],
     Array[@contractdoc.ContractPacketEvent],
     ContractSelfGovernance,
-    @enterprise_ui.EnterpriseDesktopClient?,
+    Array[@enterprise_ui.EnterpriseDesktopClient],
     Array[@enterprise_ui.ApiCredentialView],
     Array[@commercial_integrations.ExternalRecordView],
     @enterprise_ui.PaymentCheckoutQuote?
@@ -263,6 +366,28 @@ extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
 ///|
+extern "js" fn configured_docs_url() -> String =
+  #| () => { try { const u = new URL(globalThis.LUNANEXA_DOCS_URL); if (u.username || u.password) return ''; u.search=''; u.hash=''; return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(u.hostname)) ? u.href : ''; } catch (_) { return ''; } }
+
+///|
+extern "js" fn install_dialog_focus() -> Unit =
+  #| () => {
+  #|   if (globalThis.__lunanexaEnterpriseDialogFocus) return;
+  #|   globalThis.__lunanexaEnterpriseDialogFocus = true;
+  #|   let active = null, previous = null;
+  #|   const tabbables = d => [...d.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]')].filter(e => e.getClientRects().length && e.tabIndex >= 0);
+  #|   const sync = () => { const dialogs = document.querySelectorAll('[aria-modal="true"]'); const next = dialogs[dialogs.length - 1] || null; if (next === active) return; if (!active && next) previous = document.activeElement; active = next; if (active) { active.tabIndex = -1; (tabbables(active)[0] || active).focus(); } else if (previous?.isConnected) { previous.focus(); previous = null; } };
+  #|   new MutationObserver(sync).observe(document.documentElement, {childList:true, subtree:true});
+  #|   document.addEventListener('keydown', e => { if (!active) return; if (e.key === 'Tab') { const els = tabbables(active); const first = els[0] || active, last = els[els.length - 1] || active; if (e.shiftKey && (document.activeElement === first || !active.contains(document.activeElement))) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && (document.activeElement === last || !active.contains(document.activeElement))) { e.preventDefault(); first.focus(); } } else if (e.key === 'Escape') { const cancel = active.querySelector('#api-key-issue-cancel,#api-key-revoke-cancel,#api-key-secret-dismiss'); if (cancel && !cancel.disabled) { e.preventDefault(); cancel.click(); } } });
+  #|   document.addEventListener('focusin', e => { if (active && !active.contains(e.target)) (tabbables(active)[0] || active).focus(); });
+  #|   sync();
+  #| }
+
+///|
+extern "js" fn download_costs_csv(value : String) -> Bool =
+  #| (value) => { try { const url = URL.createObjectURL(new Blob(['\ufeff', value], {type:'text/csv;charset=utf-8'})); const a = document.createElement('a'); a.href=url; a.download='lunanexa-costs.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); return true; } catch (_) { return false; } }
+
+///|
 extern "js" fn demo_mode() -> Bool =
   #| () => {
   #|   try {
@@ -278,6 +403,23 @@ extern "js" fn stored_locale_preference() -> String =
   #| () => {
   #|   try { return globalThis.localStorage?.getItem("lunanexa.locale") || ""; }
   #|   catch (_) { return ""; }
+  #| }
+
+///|
+extern "js" fn stored_organization_preference() -> String =
+  #| () => {
+  #|   try { return globalThis.localStorage?.getItem("lunanexa.organization") || ""; }
+  #|   catch (_) { return ""; }
+  #| }
+
+///|
+extern "js" fn commit_enterprise_organization(organization_id : String) -> Unit =
+  #| organizationId => {
+  #|   globalThis.LUNANEXA_ACTIVE_ORGANIZATION = organizationId || "";
+  #|   try {
+  #|     if (organizationId) globalThis.localStorage?.setItem("lunanexa.organization", organizationId);
+  #|     else globalThis.localStorage?.removeItem("lunanexa.organization");
+  #|   } catch (_) {}
   #| }
 
 ///|
@@ -316,7 +458,7 @@ fn apply_enterprise_locale(locale : @i18n.Locale) -> Unit {
     locale.storage_value(),
     locale.language_tag(),
     portal_copy(
-      locale, "LunaNexa | Enterprise Portal", "LunaNexa | 企业门户",
+      locale, "能源谷“创未来”街区算力平台 | Enterprise Portal", "能源谷“创未来”街区算力平台 | 企业门户",
     ),
   )
 }
@@ -403,6 +545,8 @@ extern "js" fn request_promise(
   #|     "Authorization": `Bearer ${token}`
   #|   };
   #|   if (subject) headers["X-LunaNexa-Subject"] = subject;
+  #|   const organization = globalThis.LUNANEXA_ACTIVE_ORGANIZATION || "";
+  #|   if (organization) headers["X-LunaNexa-Organization"] = organization;
   #|   const response = await fetch(url, {
   #|     method: verb,
   #|     headers,
@@ -471,12 +615,15 @@ extern "js" fn upload_file_promise(
   #|       if (BigInt(file.size) > maximumByteCount) throw new Error("Selected file exceeds the authorized size");
   #|       const accepted = acceptedMediaTypes.split(",").filter(Boolean);
   #|       if (accepted.length && !accepted.includes(file.type)) throw new Error("Selected file type is not authorized");
+  #|       const headers = {
+  #|         "Authorization": `Bearer ${sessionToken}`,
+  #|         "Content-Type": file.type,
+  #|       };
+  #|       const organization = globalThis.LUNANEXA_ACTIVE_ORGANIZATION || "";
+  #|       if (organization) headers["X-LunaNexa-Organization"] = organization;
   #|       const response = await fetch(url, {
   #|         method: "PUT",
-  #|         headers: {
-  #|           "Authorization": `Bearer ${sessionToken}`,
-  #|           "Content-Type": file.type,
-  #|         },
+  #|         headers,
   #|         body: file,
   #|         cache: "no-store",
   #|         credentials: "omit",
@@ -499,9 +646,12 @@ extern "js" fn download_file_promise(
   filename : String,
 ) -> @js.Promise =
   #| async (url, sessionToken, maximumByteCount, expectedSha256, filename) => {
+  #|   const headers = { "Authorization": `Bearer ${sessionToken}` };
+  #|   const organization = globalThis.LUNANEXA_ACTIVE_ORGANIZATION || "";
+  #|   if (organization) headers["X-LunaNexa-Organization"] = organization;
   #|   const response = await fetch(url, {
   #|     method: "GET",
-  #|     headers: { "Authorization": `Bearer ${sessionToken}` },
+  #|     headers,
   #|     cache: "no-store",
   #|     credentials: "omit",
   #|     redirect: "error",
@@ -541,20 +691,722 @@ async fn request(
 }
 
 ///|
+async fn load_self_service_organizations(
+  model : AppModel,
+) -> Array[@enterprise_ui.SelfServiceOrganizationView] {
+  let response : SelfServiceOrganizationsResponse = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/portal/self/organizations",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  if response.version == "" {
+    raise Failure("organization response omitted its contract version")
+  }
+  response.organizations
+}
+
+///|
+fn preferred_organization(
+  organizations : Array[@enterprise_ui.SelfServiceOrganizationView],
+  requested_id : String,
+) -> @enterprise_ui.SelfServiceOrganizationView? {
+  match
+    organizations
+    .iter()
+    .find_first(value => {
+      value.organization.organization_id == requested_id &&
+      value.membership.active
+    }) {
+    Some(value) => Some(value)
+    None =>
+      if organizations.length() == 1 && organizations[0].membership.active {
+        Some(organizations[0])
+      } else {
+        None
+      }
+  }
+}
+
+///|
+fn organization_bootstrap_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let generation = model.session_generation
+  let requested = model.portal.selected_organization_id.unwrap_or(
+    stored_organization_preference(),
+  )
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try load_self_service_organizations(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to load your organizations: \{Repr(error)}",
+            "无法加载您的组织：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      organizations =>
+        OrganizationsLoaded(generation, organizations, Some(requested))
+    }
+  })
+}
+
+///|
+fn optional_trimmed(value : String) -> String? {
+  let normalized = value.trim().to_owned()
+  if normalized == "" {
+    None
+  } else {
+    Some(normalized)
+  }
+}
+
+///|
+async fn create_self_service_organization(
+  model : AppModel,
+) -> @enterprise_ui.SelfServiceOrganizationView {
+  let draft = model.portal.self_service
+  let intent : SelfServiceOrganizationCreateIntent = {
+    idempotency_key: random_identifier("organization-create"),
+    display_name: draft.display_name.trim().to_owned(),
+    legal_profile: {
+      subject_kind: if draft.subject_kind == "Individual" {
+        Individual
+      } else {
+        Company
+      },
+      legal_name: draft.legal_name.trim().to_owned(),
+      country_code: draft.country_region.trim().to_owned().to_upper(),
+      registration_number: optional_trimmed(draft.registration_number),
+      tax_identifier: optional_trimmed(draft.tax_identifier),
+      registered_address: draft.registered_address.trim().to_owned(),
+      billing_contact: {
+        display_name: draft.billing_contact_name.trim().to_owned(),
+        email: draft.billing_email.trim().to_owned().to_lower(),
+        phone: None,
+      },
+    },
+  }
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/portal/self/organizations",
+    model.token,
+    model.subject_ref,
+    body=intent.to_json().stringify(),
+  )
+  @json.from_json(@json.parse(response))
+}
+
+///|
+async fn join_self_service_organization(
+  model : AppModel,
+) -> @portal.EnterpriseMembership {
+  let response = request(
+    "POST",
+    model.endpoint,
+    "/v1/portal/self/invitations:accept",
+    model.token,
+    model.subject_ref,
+    body=SelfServiceInvitationAcceptIntent::{
+        invitation_secret: model.portal.self_service.invitation_code
+        .trim()
+        .to_owned(),
+      }
+      .to_json()
+      .stringify(),
+  )
+  let accepted : SelfServiceInvitationAcceptView = @json.from_json(
+    @json.parse(response),
+  )
+  ignore(accepted.invitation)
+  accepted.membership
+}
+
+///|
+fn organization_create_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try create_self_service_organization(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to create the company: \{Repr(error)}",
+            "无法创建公司：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => OrganizationCreated(value)
+    }
+  })
+}
+
+///|
+fn organization_join_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try join_self_service_organization(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to accept the company invitation: \{Repr(error)}",
+            "无法接受公司邀请：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      _ => OrganizationJoined
+    }
+  })
+}
+
+///|
+fn machine_product(
+  kind : @machinecommerce.MachineOfferingKind,
+) -> @enterprise_ui.SelfServiceProduct {
+  match kind {
+    BareMachine => BareGpu
+    DedicatedEndpoint => DedicatedMaaS
+  }
+}
+
+///|
+fn machine_order_status(
+  state : @machinecommerce.MachineOrderState,
+) -> @enterprise_ui.MachineOrderStatus {
+  match state {
+    AwaitingPayment => AwaitingPayment
+    PaymentSettled => PaymentSettled
+    Provisioning => ProvisioningOrder
+    Active => ActiveOrder
+    CancellationPending => CancellationPending
+    TerminationPending => TerminationPending
+    CompensationPending => CompensationPending
+    Cancelled => CancelledOrder
+    Terminated => TerminatedOrder
+    Failed => FailedOrder
+  }
+}
+
+///|
+fn machine_money(value : @commercial.FixedMoney) -> String {
+  if value.currency == "CNY" && value.scale == 2 {
+    "CNY " + @contractdoc.format_cny_minor_units(value.minor_units)
+  } else {
+    value.currency +
+    " " +
+    value.minor_units.to_string() +
+    " minor units · scale " +
+    value.scale.to_string()
+  }
+}
+
+///|
+fn machine_offering_view(
+  value : @machinecommerce.MachineOfferingView,
+) -> @enterprise_ui.SelfServiceOfferingView {
+  let offering = value.offering
+  {
+    offering_id: offering.offering_id,
+    kind: machine_product(offering.kind),
+    display_name: offering.display_name,
+    gpu_sku: offering.accelerator_class,
+    accelerator_count: offering.accelerator_count.to_int(),
+    accelerator_memory_mib: offering.memory_mib.to_int(),
+    regions: [offering.region],
+    minimum_duration_hours: (offering.minimum_duration_seconds / 3600L).to_int(),
+    maximum_duration_hours: (offering.maximum_duration_seconds / 3600L).to_int(),
+    price_summary: machine_money(offering.unit_price) + " / second",
+    allowed_model_template_refs: offering.allowed_model_template_refs,
+    available: value.availability.capacity_available > 0L,
+  }
+}
+
+///|
+fn machine_quote_view(
+  quote : @machinecommerce.MachineQuote,
+) -> @enterprise_ui.SelfServiceQuoteView {
+  {
+    quote_id: quote.quote_id,
+    offering_id: quote.offering_id,
+    display_amount: machine_money(quote.total),
+    expected_amount_minor: quote.total.minor_units,
+    currency: quote.total.currency,
+    money_scale: quote.total.scale,
+    valid_until_unix_ms: quote.valid_until_unix_ms,
+    terms_digest: quote.terms_digest,
+  }
+}
+
+///|
+fn machine_order_view(
+  order : @machinecommerce.MachineOrder,
+  offerings : Array[@enterprise_ui.SelfServiceOfferingView],
+) -> @enterprise_ui.SelfServiceOrderView {
+  let offering = offerings
+    .iter()
+    .find_first(value => value.offering_id == order.offering_id)
+  {
+    order_id: order.order_id,
+    kind: machine_product(order.offering_kind),
+    status: machine_order_status(order.state),
+    project_id: order.project_id,
+    gpu_sku: offering.map(value => value.gpu_sku).unwrap_or(order.offering_id),
+    region: match offering {
+      Some(value) => value.regions[0]
+      None => "—"
+    },
+    duration_hours: (order.duration_seconds / 3600L).to_int(),
+    model_selector: order.requested_model_selector,
+    display_amount: machine_money(order.quoted_total),
+    lease_ref: order.target_lease_ref,
+    deployment_ref: order.target_deployment_ref,
+    generation: order.generation,
+    updated_unix_ms: order.updated_unix_ms,
+  }
+}
+
+///|
+fn checkout_state(
+  state : @commercial_integrations.ExternalRecordState,
+) -> String {
+  match state {
+    Pending => "Pending"
+    Submitted => "Submitted"
+    Verified => "Verified"
+    Authorized => "Authorized"
+    Settled => "Settled"
+    Issued => "Issued"
+    Failed => "Failed"
+    Expired => "Expired"
+    Voided => "Voided"
+    Credited => "Credited"
+    Refunded => "Refunded"
+  }
+}
+
+///|
+fn machine_checkout_view(
+  checkout : @commercial_integrations.ExternalRecordView,
+) -> @enterprise_ui.SelfServiceCheckoutView {
+  {
+    state: checkout_state(checkout.state),
+    provider: checkout.provider,
+    action_url: checkout.action_url,
+    action_expires_unix_ms: checkout.action_expires_unix_ms,
+  }
+}
+
+///|
+fn machine_terms_view(
+  terms : @commercial.AgreementTemplate,
+) -> @enterprise_ui.SelfServiceTermsView? {
+  match terms.document_uri {
+    Some(document_uri) =>
+      Some({
+        template_id: terms.template_id,
+        version: terms.version,
+        locale: terms.locale,
+        rendered_document_hash: terms.rendered_document_hash,
+        document_uri,
+      })
+    None => None
+  }
+}
+
+///|
+fn sha256_label(value : String) -> String {
+  "sha256:" + @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(value)))
+}
+
+///|
+fn machine_terms_acceptance_intent(
+  terms : @enterprise_ui.SelfServiceTermsView,
+  endpoint : String,
+  organization_id : String,
+  idempotency_key : String,
+) -> SelfServiceMachineTermsAcceptanceIntent {
+  {
+    idempotency_key,
+    template_version: terms.version,
+    rendered_document_hash: terms.rendered_document_hash,
+    document_uri: terms.document_uri,
+    presentation_context_hash: sha256_label(
+      "enterprise-ui:" +
+      terms.template_id +
+      ":" +
+      terms.version +
+      ":" +
+      terms.rendered_document_hash,
+    ),
+    network_context_hash: sha256_label(
+      "browser-session:" + endpoint + ":" + organization_id,
+    ),
+  }
+}
+
+///|
+fn checkout_for_order(
+  order : @enterprise_ui.SelfServiceOrderView?,
+  records : Array[@commercial_integrations.ExternalRecordView],
+) -> @enterprise_ui.SelfServiceCheckoutView? {
+  guard order is Some(value) else { return None }
+  let digest = sha256_label("machine-order:" + value.order_id)
+  let mut selected : @commercial_integrations.ExternalRecordView? = None
+  for record in records {
+    if record.entitlement_transaction_ref_sha256 == Some(digest) {
+      match selected {
+        Some(current) if current.updated_unix_ms >= record.updated_unix_ms => ()
+        _ => selected = Some(record)
+      }
+    }
+  }
+  selected.map(machine_checkout_view)
+}
+
+///|
+async fn accept_machine_terms(
+  model : AppModel,
+) -> @commercial.ClickwrapAcceptance {
+  guard model.portal.self_service.terms is Some(terms) &&
+    @enterprise_ui.selected_organization_header(model.portal)
+    is Some(organization_id) else {
+    fail("machine terms or organization scope is unavailable")
+  }
+  let intent = machine_terms_acceptance_intent(
+    terms,
+    model.endpoint,
+    organization_id,
+    random_identifier("machine-terms"),
+  )
+  @json.from_json(
+    @json.parse(
+      request(
+        "POST",
+        model.endpoint,
+        "/v1/portal/self/machine-terms/accept",
+        model.token,
+        model.subject_ref,
+        body=intent.to_json().stringify(),
+      ),
+    ),
+  )
+}
+
+///|
+fn machine_terms_acceptance_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try accept_machine_terms(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to record machine terms acceptance: \{Repr(error)}",
+            "无法记录机器条款接受证据：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      _ => MachineTermsAccepted
+    }
+  })
+}
+
+///|
+async fn load_machine_commerce(
+  model : AppModel,
+) -> (
+  Array[@machinecommerce.MachineOfferingView],
+  Array[@machinecommerce.MachineOrder],
+  @commercial.AgreementTemplate?,
+  Array[@commercial_integrations.ExternalRecordView],
+) {
+  let terms : @commercial.AgreementTemplate? = try {
+    let value : @commercial.AgreementTemplate = @json.from_json(
+      @json.parse(
+        request(
+          "GET",
+          model.endpoint,
+          "/v1/portal/self/machine-terms",
+          model.token,
+          model.subject_ref,
+        ),
+      ),
+    )
+    value
+  } catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+  let offerings : Array[@machinecommerce.MachineOfferingView] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/portal/self/machine-offerings",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  let orders : Array[@machinecommerce.MachineOrder] = @json.from_json(
+    @json.parse(
+      request(
+        "GET",
+        model.endpoint,
+        "/v1/portal/self/machine-orders",
+        model.token,
+        model.subject_ref,
+      ),
+    ),
+  )
+  let provider_requests = request_provider_requests(model)
+  (offerings, orders, terms, provider_requests)
+}
+
+///|
+fn machine_commerce_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try load_machine_commerce(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to load machine inventory and orders: \{Repr(error)}",
+            "无法加载机器库存与订单：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => MachineCommerceLoaded(value.0, value.1, value.2, value.3)
+    }
+  })
+}
+
+///|
+fn machine_quote_intent(
+  state : @enterprise_ui.SelfServiceState,
+  quote_id : String,
+  idempotency_key : String,
+) -> SelfServiceMachineQuoteIntent {
+  let product = state.selected_product.unwrap_or(BareGpu)
+  {
+    quote_id,
+    idempotency_key,
+    project_id: state.project_id.trim().to_owned(),
+    offering_id: state.selected_offering_id,
+    quantity: 1L,
+    duration_seconds: state.duration_hours.to_int64() * 3600L,
+    unix_username: if product == BareGpu {
+      Some(state.unix_username.trim().to_owned())
+    } else {
+      None
+    },
+    requested_model_selector: if product == DedicatedMaaS {
+      optional_trimmed(state.model_selector)
+    } else {
+      None
+    },
+    model_template_ref: if product == DedicatedMaaS {
+      optional_trimmed(state.model_template_ref)
+    } else {
+      None
+    },
+  }
+}
+
+///|
+async fn request_machine_quote(
+  model : AppModel,
+) -> @machinecommerce.MachineQuote {
+  let intent = machine_quote_intent(
+    model.portal.self_service,
+    random_identifier("machine-quote"),
+    random_identifier("quote-request"),
+  )
+  @json.from_json(
+    @json.parse(
+      request(
+        "POST",
+        model.endpoint,
+        "/v1/portal/self/machine-quotes",
+        model.token,
+        model.subject_ref,
+        body=intent.to_json().stringify(),
+      ),
+    ),
+  )
+}
+
+///|
+fn machine_quote_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try request_machine_quote(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to create the signed machine quote: \{Repr(error)}",
+            "无法创建签名机器报价：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      quote => MachineQuoteLoaded(quote)
+    }
+  })
+}
+
+///|
+async fn create_machine_order(
+  model : AppModel,
+) -> SelfServiceMachineOrderResponse {
+  guard model.portal.self_service.quote is Some(quote) else {
+    fail("machine quote is unavailable")
+  }
+  let intent : SelfServiceMachineOrderIntent = {
+    order_id: random_identifier("machine-order"),
+    idempotency_key: random_identifier("order-create"),
+    quote_id: quote.quote_id,
+  }
+  let response : SelfServiceMachineOrderResponse = @json.from_json(
+    @json.parse(
+      request(
+        "POST",
+        model.endpoint,
+        "/v1/portal/self/machine-orders",
+        model.token,
+        model.subject_ref,
+        body=intent.to_json().stringify(),
+      ),
+    ),
+  )
+  if response.entitlement_transaction_ref !=
+    "machine-order:" + response.order.order_id {
+    fail("machine checkout returned an invalid entitlement binding")
+  }
+  response
+}
+
+///|
+fn machine_order_create_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try create_machine_order(model) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to create the machine order: \{Repr(error)}",
+            "无法创建机器订单：\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      value => MachineOrderCreated(value)
+    }
+  })
+}
+
+///|
+async fn update_machine_order(
+  model : AppModel,
+  order_id : String,
+  generation : Int64,
+  action : String,
+) -> @machinecommerce.MachineOrder {
+  let intent : SelfServiceMachineOrderAction = {
+    idempotency_key: random_identifier("order-" + action),
+    expected_generation: generation,
+    reason: if action == "cancel" {
+      "Customer requested cancellation from enterprise self-service"
+    } else {
+      "Customer requested termination from enterprise self-service"
+    },
+  }
+  @json.from_json(
+    @json.parse(
+      request(
+        "POST",
+        model.endpoint,
+        "/v1/portal/self/machine-orders/" + order_id + "/" + action,
+        model.token,
+        model.subject_ref,
+        body=intent.to_json().stringify(),
+      ),
+    ),
+  )
+}
+
+///|
+fn machine_order_action_command(
+  model : AppModel,
+  order_id : String,
+  generation : Int64,
+  action : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try update_machine_order(model, order_id, generation, action) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to \{action} the machine order: \{Repr(error)}",
+            (if action == "cancel" {
+              "无法取消机器订单："
+            } else {
+              "无法终止机器订单："
+            }) +
+            "\{Repr(error)}",
+          ),
+        )
+    } noraise {
+      order => MachineOrderUpdated(order, action)
+    }
+  })
+}
+
+///|
 async fn launch_desktop_client(model : AppModel) -> String {
   guard model.portal.desktop_client is Some(client) else {
     raise Failure("desktop workspace integration is not configured")
   }
-  let allowed_models : Array[String] = []
-  for entry in model.portal.model_catalog {
-    match entry.alias_name {
-      Some(model_alias) if !allowed_models.contains(model_alias) =>
-        allowed_models.push(model_alias)
-      _ => ()
-    }
+  if !client.ready {
+    raise Failure("selected WebIDE access is not ready")
   }
-  if allowed_models.length() == 0 {
-    raise Failure("no approved model alias is available for the desktop client")
+  guard @enterprise_ui.webide_launch_selection(model.portal)
+    is Some((order_id, project_id, allowed_models)) else {
+    raise Failure("the selected WebIDE model source is not active and ready")
   }
   let response = request(
     "POST",
@@ -566,7 +1418,8 @@ async fn launch_desktop_client(model : AppModel) -> String {
       {
         "request_id": random_identifier("desktop-handoff"),
         "client_id": client.client_id,
-        "project_id": model.portal.project_id,
+        "project_id": project_id,
+        "order_id": order_id.to_json(),
         "allowed_models": allowed_models.to_json(),
       } : Json).stringify(),
   )
@@ -685,7 +1538,7 @@ async fn load_self(
   Array[@contractdoc.ContractPacket],
   Array[@contractdoc.ContractPacketEvent],
   ContractSelfGovernance,
-  @enterprise_ui.EnterpriseDesktopClient?,
+  Array[@enterprise_ui.EnterpriseDesktopClient],
   Array[@enterprise_ui.ApiCredentialView],
   Array[@commercial_integrations.ExternalRecordView],
   @enterprise_ui.PaymentCheckoutQuote?,
@@ -929,34 +1782,36 @@ async fn load_self(
       ),
     ),
   )
-  let desktop_client : @enterprise_ui.EnterpriseDesktopClient? = try {
-    let response : DesktopClientResponse = @json.from_json(
+  let desktop_client : Array[@enterprise_ui.EnterpriseDesktopClient] = try {
+    let responses : Array[DesktopClientResponse] = @json.from_json(
       @json.parse(
         request(
           "GET",
           model.endpoint,
-          "/v1/portal/self/client",
+          "/v1/portal/self/clients",
           model.token,
           model.subject_ref,
         ),
       ),
     )
-    let client_view : @enterprise_ui.EnterpriseDesktopClient = {
-      client_id: response.client_id,
-      display_name: response.display_name,
-      launch_uri: response.launch_uri,
-      handoff_lifetime_ms: response.handoff_lifetime_ms,
-      connected_handoffs: response.handoffs.length(),
-      contract_ready: response.contract_ready,
-      workspace_ready: response.workspace_ready,
-      models_ready: response.models_ready,
-      ready: response.ready,
-      blocker_codes: response.blocker_codes,
-      approved_model_aliases: response.approved_model_aliases,
-    }
-    Some(client_view)
+    responses.map(response => {
+      (
+        {
+          client_id: response.client_id,
+          display_name: response.display_name,
+          launch_uri: response.launch_uri,
+          handoff_lifetime_ms: response.handoff_lifetime_ms,
+          connected_handoffs: response.handoffs.length(),
+          contract_ready: response.contract_ready,
+          workspace_ready: response.workspace_ready,
+          models_ready: response.models_ready,
+          ready: response.ready,
+          blocker_codes: response.blocker_codes,
+          approved_model_aliases: response.approved_model_aliases,
+        } : @enterprise_ui.EnterpriseDesktopClient)
+    })
   } catch {
-    _ => None
+    _ => []
   } noraise {
     value => value
   }
@@ -2016,7 +2871,7 @@ async fn update_contract_information(
     "/v1/contract-documents/self/\{packet_id}:information",
     model.token,
     model.subject_ref,
-    body=ContractInformationUpdate::{ expected_revision, changes }
+    body=ContractInformationUpdate::{ expected_revision, changes, }
       .to_json()
       .stringify(),
   )
@@ -2037,7 +2892,7 @@ async fn contract_revision_action(
     "/v1/contract-documents/self/\{packet_id}:\{suffix}",
     model.token,
     model.subject_ref,
-    body=ContractRevisionAction::{ expected_revision, expected_values_sha256 }
+    body=ContractRevisionAction::{ expected_revision, expected_values_sha256, }
       .to_json()
       .stringify(),
   )
@@ -2079,7 +2934,7 @@ async fn contract_preview(
     "/v1/contract-documents/self/\{packet_id}:preview",
     model.token,
     model.subject_ref,
-    body=ContractPreviewIntent::{ expected_revision, form, changes }
+    body=ContractPreviewIntent::{ expected_revision, form, changes, }
       .to_json()
       .stringify(),
   )
@@ -2201,7 +3056,7 @@ fn demo_contract_action(
     ConfirmAction(ConfirmInformation(packet_id, _)) => packet_id
     ConfirmAction(RequestGeneration(packet_id, _, _)) => packet_id
     ConfirmAction(RequestRenewal(packet_id)) => packet_id
-    _ => return { ..documents, loading: false }
+    _ => return { ..documents, loading: false, }
   }
   guard documents.manifest is Some(manifest) &&
     documents.packets.search_by(packet => packet.packet_id == packet_id)
@@ -2368,7 +3223,7 @@ fn schedule_contract_preview(
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
     return (
-      { ..model, portal: { ..model.portal, contract_documents: documents } },
+      { ..model, portal: { ..model.portal, contract_documents: documents, }, },
       @rabbita.none,
     )
   }
@@ -2377,7 +3232,7 @@ fn schedule_contract_preview(
   let next = {
     ..model,
     contract_preview_generation: generation,
-    portal: { ..model.portal, contract_documents: pending },
+    portal: { ..model.portal, contract_documents: pending, },
   }
   let command = @rabbita.perform(message => emit(message), async fn() noraise {
     try contract_preview_delay_promise(delay_ms).wait() catch {
@@ -2427,6 +3282,7 @@ fn upsert_provider_request(
 
 ///|
 fn signed_out_model(model : AppModel) -> AppModel {
+  commit_enterprise_organization("")
   let locale = model.portal.locale
   {
     ..model,
@@ -2464,9 +3320,9 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
-    EndpointChanged(value) => ({ ..model, endpoint: value }, @rabbita.none)
-    TokenChanged(value) => ({ ..model, token: value }, @rabbita.none)
-    SubjectChanged(value) => ({ ..model, subject_ref: value }, @rabbita.none)
+    EndpointChanged(value) => ({ ..model, endpoint: value, }, @rabbita.none)
+    TokenChanged(value) => ({ ..model, token: value, }, @rabbita.none)
+    SubjectChanged(value) => ({ ..model, subject_ref: value, }, @rabbita.none)
     Connect =>
       if model.token == "" || model.endpoint == "" {
         (
@@ -2493,13 +3349,13 @@ fn update(
           session_expires_unix_ms: None,
           session_generation: model.session_generation + 1L,
         }
-        (next, load_command(next, emit))
+        (next, organization_bootstrap_command(next, emit))
       }
     Bootstrap =>
       if model.demo_mode || model.bootstrap_started {
         (model, @rabbita.none)
       } else {
-        let next = { ..model, bootstrap_started: true, connecting: true }
+        let next = { ..model, bootstrap_started: true, connecting: true, }
         (next, bootstrap_command(next, emit))
       }
     BootstrapReady(generation, browser_session) =>
@@ -2516,11 +3372,11 @@ fn update(
           session_generation: model.session_generation + 1L,
           session_expires_unix_ms: Some(browser_session.expires_unix_ms),
         }
-        (next, load_command(next, emit))
+        (next, organization_bootstrap_command(next, emit))
       }
     BootstrapUnavailable(generation) =>
       if generation == model.session_generation {
-        ({ ..model, connecting: false }, @rabbita.none)
+        ({ ..model, connecting: false, }, @rabbita.none)
       } else {
         (model, @rabbita.none)
       }
@@ -2539,7 +3395,7 @@ fn update(
     Portal(LocaleChanged(locale)) => {
       apply_enterprise_locale(locale)
       (
-        { ..model, portal: model.portal.update(LocaleChanged(locale)) },
+        { ..model, portal: model.portal.update(LocaleChanged(locale)), },
         @rabbita.none,
       )
     }
@@ -2549,7 +3405,306 @@ fn update(
       match route {
         ContractDocuments =>
           schedule_contract_preview(next, portal.contract_documents, 0, emit)
+        SelfService if !model.demo_mode &&
+          @enterprise_ui.selected_organization_header(portal) is Some(_) => {
+          let loading = {
+            ..next,
+            portal: {
+              ..portal,
+              self_service: {
+                ..portal.self_service,
+                offerings_loading: true,
+                offerings_error: None,
+              },
+            },
+          }
+          (loading, machine_commerce_command(loading, emit))
+        }
         _ => (next, @rabbita.none)
+      }
+    }
+    Portal(SelfService(SelectOrganization(organization_id))) => {
+      let portal = model.portal.update(
+        SelfService(SelectOrganization(organization_id)),
+      )
+      let next = { ..model, portal, }
+      match @enterprise_ui.selected_organization_header(portal) {
+        Some(selected) if !model.demo_mode => {
+          commit_enterprise_organization(selected)
+          let loading = { ..next, connecting: true, }
+          (loading, load_command(loading, emit))
+        }
+        Some(selected) => {
+          commit_enterprise_organization(selected)
+          (next, @rabbita.none)
+        }
+        None => {
+          commit_enterprise_organization("")
+          (next, @rabbita.none)
+        }
+      }
+    }
+    Portal(SelfService(SubmitCreateCompany)) => {
+      if !@enterprise_ui.company_creation_valid(model.portal.self_service) ||
+        !model.token.has_prefix("lnxs_") {
+        return (model, @rabbita.none)
+      }
+      let next = {
+        ..model,
+        portal: model.portal.update(SelfService(SubmitCreateCompany)),
+      }
+      if model.demo_mode {
+        (
+          {
+            ..next,
+            portal: {
+              ..next.portal,
+              self_service: {
+                ..next.portal.self_service,
+                action_loading: false,
+              },
+              success_message: Some(
+                portal_copy(
+                  next.portal.locale,
+                  "Demo preview only; no company was created.",
+                  "仅为演示预览；未创建公司。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (next, organization_create_command(next, emit))
+      }
+    }
+    Portal(SelfService(SubmitJoinCompany)) => {
+      if !@enterprise_ui.company_join_valid(model.portal.self_service) ||
+        !model.token.has_prefix("lnxs_") {
+        return (model, @rabbita.none)
+      }
+      let next = {
+        ..model,
+        portal: model.portal.update(SelfService(SubmitJoinCompany)),
+      }
+      if model.demo_mode {
+        (
+          {
+            ..next,
+            portal: {
+              ..next.portal,
+              self_service: {
+                ..next.portal.self_service,
+                action_loading: false,
+              },
+              success_message: Some(
+                portal_copy(
+                  next.portal.locale,
+                  "Demo preview only; no invitation was consumed.",
+                  "仅为演示预览；未使用邀请码。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (next, organization_join_command(next, emit))
+      }
+    }
+    Portal(SelfService(RefreshOrganizations)) => {
+      let portal = model.portal.update(SelfService(RefreshOrganizations))
+      let next = { ..model, portal, connecting: true, }
+      if model.demo_mode {
+        (
+          {
+            ..next,
+            connecting: false,
+            portal: {
+              ..portal,
+              self_service: { ..portal.self_service, action_loading: false, },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (next, organization_bootstrap_command(next, emit))
+      }
+    }
+    Portal(SelfService(RefreshOfferings))
+    | Portal(SelfService(RefreshMachineOrders)) => {
+      if model.demo_mode {
+        let portal = model.portal.update(SelfService(RefreshMachineOrders))
+        return (
+          {
+            ..model,
+            portal: {
+              ..portal,
+              self_service: {
+                ..portal.self_service,
+                offerings_loading: false,
+                action_loading: false,
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      guard @enterprise_ui.selected_organization_header(model.portal) is Some(_) else {
+        return (model, @rabbita.none)
+      }
+      let portal = model.portal.update(SelfService(RefreshOfferings))
+      let next = { ..model, portal, }
+      (next, machine_commerce_command(next, emit))
+    }
+    Portal(SelfService(RequestQuote)) => {
+      if !@enterprise_ui.self_service_configuration_valid(
+          model.portal.self_service,
+        ) {
+        return (model, @rabbita.none)
+      }
+      let portal = model.portal.update(SelfService(RequestQuote))
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        (
+          {
+            ..next,
+            portal: {
+              ..portal,
+              self_service: { ..portal.self_service, action_loading: false, },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (next, machine_quote_command(next, emit))
+      }
+    }
+    Portal(SelfService(AcceptMachineTerms)) => {
+      if !model.portal.self_service.terms_reviewed {
+        return (model, @rabbita.none)
+      }
+      let portal = model.portal.update(SelfService(AcceptMachineTerms))
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        (
+          {
+            ..next,
+            portal: {
+              ..portal,
+              self_service: {
+                ..portal.self_service,
+                terms_accepted: true,
+                action_loading: false,
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (next, machine_terms_acceptance_command(next, emit))
+      }
+    }
+    Portal(SelfService(CreateMachineOrder)) => {
+      guard model.portal.self_service.quote is Some(quote) &&
+        quote.valid_until_unix_ms > current_unix_ms() &&
+        (
+          model.portal.self_service.terms_accepted ||
+          model.portal.agreements.any(value => value.state == Executed)
+        ) else {
+        return (model, @rabbita.none)
+      }
+      let portal = model.portal.update(SelfService(CreateMachineOrder))
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        (
+          {
+            ..next,
+            portal: {
+              ..portal,
+              self_service: { ..portal.self_service, action_loading: false, },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (next, machine_order_create_command(next, emit))
+      }
+    }
+    Portal(SelfService(CancelMachineOrder(order_id, generation))) => {
+      let portal = model.portal.update(
+        SelfService(CancelMachineOrder(order_id, generation)),
+      )
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        let order = portal.self_service.order.map(value => {
+          if value.order_id == order_id && value.generation == generation {
+            { ..value, status: CancelledOrder, generation: generation + 1L, }
+          } else {
+            value
+          }
+        })
+        (
+          {
+            ..next,
+            portal: {
+              ..portal,
+              self_service: {
+                ..portal.self_service,
+                order,
+                action_loading: false,
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (
+          next,
+          machine_order_action_command(
+            next, order_id, generation, "cancel", emit,
+          ),
+        )
+      }
+    }
+    Portal(SelfService(TerminateMachineOrder(order_id, generation))) => {
+      let portal = model.portal.update(
+        SelfService(TerminateMachineOrder(order_id, generation)),
+      )
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        let order = portal.self_service.order.map(value => {
+          if value.order_id == order_id && value.generation == generation {
+            {
+              ..value,
+              status: TerminationPending,
+              generation: generation + 1L,
+            }
+          } else {
+            value
+          }
+        })
+        (
+          {
+            ..next,
+            portal: {
+              ..portal,
+              self_service: {
+                ..portal.self_service,
+                order,
+                action_loading: false,
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      } else {
+        (
+          next,
+          machine_order_action_command(
+            next, order_id, generation, "terminate", emit,
+          ),
+        )
       }
     }
     Portal(SubmitApiKeyIssue) => {
@@ -2561,6 +3716,16 @@ fn update(
             portal: {
               ..next,
               loading: false,
+              api_key_issue_open: false,
+              one_time_api_key_secret: Some({
+                key_id: "demo-preview-only",
+                display_name: "DEMO — no credential issued",
+                secret: "DEMO-NOT-A-CREDENTIAL",
+                allowed_models: ["text.default"],
+                api_base_url: Some("https://api.example.invalid"),
+                tenant_ref: "demo-tenant",
+                memory_ceiling_mib: Some(8192),
+              }),
               success_message: Some(
                 portal_copy(
                   next.locale,
@@ -2575,7 +3740,7 @@ fn update(
       } else if !@enterprise_ui.api_key_issue_valid(model.portal) {
         (model, @rabbita.none)
       } else {
-        ({ ..model, portal: next }, api_key_issue_command(model, emit))
+        ({ ..model, portal: next, }, api_key_issue_command(model, emit))
       }
     }
     Portal(ConfirmRevokeApiKey(key_id)) => {
@@ -2600,15 +3765,69 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, api_key_revoke_command(model, key_id, emit))
+        (
+          { ..model, portal: next, },
+          api_key_revoke_command(model, key_id, emit),
+        )
       }
     }
     Portal(CopyOneTimeApiKeySecret) =>
       match model.portal.one_time_api_key_secret {
-        Some(value) if !model.demo_mode =>
+        Some(value) =>
           (model, copy_api_key_secret_command(model, value.secret, emit))
         _ => (model, @rabbita.none)
       }
+    Portal(CopyFirstCallExample) =>
+      match model.portal.one_time_api_key_secret {
+        Some(value) =>
+          (
+            model,
+            copy_api_key_secret_command(
+              model,
+              @enterprise_ui.first_call_example(value),
+              emit,
+            ),
+          )
+        None => (model, @rabbita.none)
+      }
+    Portal(CopyDetail(value))
+    | Portal(MachineAccess(CopyAccessDetail(value)))
+    | Portal(ContractDocuments(CopyPublicIdentifier(value))) =>
+      (model, copy_api_key_secret_command(model, value, emit))
+    Portal(ExportCosts) => {
+      let started = download_costs_csv(@enterprise_ui.costs_csv(model.portal))
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            success_message: if started {
+              Some(
+                portal_copy(
+                  model.portal.locale,
+                  "CSV download started. Check your browser downloads.",
+                  "CSV 下载已发起，请查看浏览器下载列表。",
+                ),
+              )
+            } else {
+              None
+            },
+            error_message: if started {
+              None
+            } else {
+              Some(
+                portal_copy(
+                  model.portal.locale,
+                  "The download could not start. Check browser download permissions and retry.",
+                  "无法发起下载，请检查浏览器下载权限后重试。",
+                ),
+              )
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    }
     ContractPreviewDue(generation, request) =>
       if generation != model.contract_preview_generation {
         (model, @rabbita.none)
@@ -2675,7 +3894,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           signature_command(model, agreement_id, emit),
         )
       }
@@ -2701,7 +3920,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, provider_requests_command(model, emit))
+        ({ ..model, portal: next, }, provider_requests_command(model, emit))
       }
     }
     Portal(SubmitPaymentCheckout) => {
@@ -2771,7 +3990,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, payment_checkout_command(model, emit))
+        ({ ..model, portal: next, }, payment_checkout_command(model, emit))
       }
     }
     Portal(SubmitLease) => {
@@ -2795,7 +4014,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, lease_command(model, emit))
+        ({ ..model, portal: next, }, lease_command(model, emit))
       }
     }
     Portal(LaunchDesktopClient) => {
@@ -2824,7 +4043,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, desktop_client_command(model, emit))
+        ({ ..model, portal: next, }, desktop_client_command(model, emit))
       }
     }
     Portal(MarkNotificationRead(notification_id, generation)) =>
@@ -2843,7 +4062,10 @@ fn update(
             }
           }
         ]
-        ({ ..model, portal: { ..model.portal, notifications, } }, @rabbita.none)
+        (
+          { ..model, portal: { ..model.portal, notifications, }, },
+          @rabbita.none,
+        )
       } else {
         (
           model,
@@ -3009,7 +4231,7 @@ fn update(
           @rabbita.none,
         )
       } else {
-        ({ ..model, portal: next }, offline_order_command(model, emit))
+        ({ ..model, portal: next, }, offline_order_command(model, emit))
       }
     }
     Portal(OfflineCommerce(RequestEvidenceUpload(order_id, kind))) => {
@@ -3039,7 +4261,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           offline_upload_grant_command(model, order_id, kind, emit),
         )
       }
@@ -3071,7 +4293,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           offline_artifact_download_command(model, artifact_id, emit),
         )
       }
@@ -3099,10 +4321,10 @@ fn update(
         OfflineCommerce(ConfirmAction(CancelOrder(order_id, generation))),
       )
       if model.demo_mode {
-        ({ ..model, portal: next }, @rabbita.none)
+        ({ ..model, portal: next, }, @rabbita.none)
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           offline_order_cancellation_command(model, order_id, generation, emit),
         )
       }
@@ -3201,7 +4423,10 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: { ..model.portal, contract_documents: documents } },
+          {
+            ..model,
+            portal: { ..model.portal, contract_documents: documents, },
+          },
           contract_approval_nudge_command(model, approval_id, emit),
         )
       }
@@ -3229,7 +4454,7 @@ fn update(
         )
       } else {
         (
-          { ..model, portal: next },
+          { ..model, portal: next, },
           contract_packet_command(
             model,
             model.contract_preview_generation,
@@ -3281,7 +4506,7 @@ fn update(
         )
       }
     Portal(portal_message) =>
-      ({ ..model, portal: model.portal.update(portal_message) }, @rabbita.none)
+      ({ ..model, portal: model.portal.update(portal_message), }, @rabbita.none)
     Outcome(ApiKeyIssued(generation, issued)) =>
       if generation != model.session_generation {
         (model, @rabbita.none)
@@ -3312,6 +4537,21 @@ fn update(
                 key_id: issued.credential.key_id,
                 display_name: issued.credential.display_name,
                 secret: issued.secret,
+                allowed_models: issued.credential.allowed_models,
+                api_base_url: issued.api_base_url,
+                tenant_ref: issued.credential.tenant_ref,
+                memory_ceiling_mib: match
+                  issued.credential.allowed_models.get(0) {
+                  Some(model_alias) =>
+                    model.portal.model_catalog
+                    .iter()
+                    .find_first(item => {
+                      item.alias_name == Some(model_alias) &&
+                      item.minimum_memory_mib > 0
+                    })
+                    .map(item => item.minimum_memory_mib)
+                  None => None
+                },
               }),
               loading: false,
               success_message: None,
@@ -3328,7 +4568,7 @@ fn update(
         let revoked_at = revoked_unix_ms.unwrap_or(current_unix_ms())
         let api_keys = model.portal.api_keys.map(key => {
           if key.key_id == key_id {
-            { ..key, revoked_unix_ms: Some(revoked_at) }
+            { ..key, revoked_unix_ms: Some(revoked_at), }
           } else {
             key
           }
@@ -3366,8 +4606,8 @@ fn update(
               success_message: Some(
                 portal_copy(
                   model.portal.locale,
-                  "Secret copied. Save it securely, then clear this dialog.",
-                  "密钥已复制。请安全保存，然后清除此对话框。",
+                  "Copied. Keep any credentials private.",
+                  "已复制。请妥善保管所有凭据。",
                 ),
               ),
               error_message: None,
@@ -3376,6 +4616,299 @@ fn update(
           @rabbita.none,
         )
       }
+    Outcome(OrganizationsLoaded(generation, organizations, preferred_id)) => {
+      if generation != model.session_generation {
+        return (model, @rabbita.none)
+      }
+      let requested_id = preferred_id.unwrap_or("")
+      match preferred_organization(organizations, requested_id) {
+        Some(selection) => {
+          let organization_id = selection.organization.organization_id
+          commit_enterprise_organization(organization_id)
+          let base = {
+            ..model.portal,
+            organizations,
+            selected_organization_id: Some(organization_id),
+          }
+          let portal = base.update(
+            SelfService(SelectOrganization(organization_id)),
+          )
+          let next = { ..model, connecting: true, portal, }
+          (next, load_command(next, emit))
+        }
+        None => {
+          commit_enterprise_organization("")
+          let empty = organizations.length() == 0
+          (
+            {
+              ..model,
+              connecting: false,
+              portal: {
+                ..model.portal,
+                route: SelfService,
+                organizations,
+                selected_organization_id: None,
+                membership: None,
+                self_service: {
+                  ..model.portal.self_service,
+                  step: Organization,
+                  action_loading: false,
+                  action_error: None,
+                },
+                success_message: None,
+                error_message: Some(
+                  if empty {
+                    portal_copy(
+                      model.portal.locale,
+                      "Create a company or accept an invitation to continue.",
+                      "请创建公司或接受邀请后继续。",
+                    )
+                  } else {
+                    portal_copy(
+                      model.portal.locale,
+                      "Choose the organization for this session. Scoped requests remain blocked until you do.",
+                      "请选择本次会话使用的组织；选择前，限定组织范围的请求保持关闭。",
+                    )
+                  },
+                ),
+              },
+            },
+            @rabbita.none,
+          )
+        }
+      }
+    }
+    Outcome(OrganizationCreated(created)) => {
+      let organization_id = created.organization.organization_id
+      let organizations = [
+        created,
+        ..model.portal.organizations.filter(value => {
+          value.organization.organization_id != organization_id
+        }),
+      ]
+      commit_enterprise_organization(organization_id)
+      let base = {
+        ..model.portal,
+        organizations,
+        selected_organization_id: Some(organization_id),
+        self_service: {
+          ..model.portal.self_service,
+          step: Organization,
+          action_loading: false,
+          action_error: None,
+        },
+      }
+      let portal = base.update(SelfService(SelectOrganization(organization_id)))
+      let next = {
+        ..model,
+        connecting: true,
+        portal: {
+          ..portal,
+          success_message: Some(
+            portal_copy(
+              model.portal.locale,
+              "Company created. Machine ordering remains blocked until verification succeeds.",
+              "公司已创建；完成验证前，机器下单保持关闭。",
+            ),
+          ),
+          error_message: None,
+        },
+      }
+      (next, load_command(next, emit))
+    }
+    Outcome(OrganizationJoined) => {
+      let next = {
+        ..model,
+        connecting: true,
+        portal: {
+          ..model.portal,
+          self_service: {
+            ..model.portal.self_service,
+            action_loading: false,
+            action_error: None,
+          },
+        },
+      }
+      (next, organization_bootstrap_command(next, emit))
+    }
+    Outcome(
+      MachineCommerceLoaded(
+        raw_offerings,
+        raw_orders,
+        raw_terms,
+        provider_requests
+      )
+    ) => {
+      let offerings = raw_offerings.map(machine_offering_view)
+      let orders = raw_orders.map(order => machine_order_view(order, offerings))
+      let preferred_id = model.portal.self_service.order.map(value => {
+        value.order_id
+      })
+      let mut current = match preferred_id {
+        Some(order_id) =>
+          orders.iter().find_first(order => order.order_id == order_id)
+        None => None
+      }
+      if current is None {
+        for order in orders {
+          match current {
+            Some(selected) if selected.updated_unix_ms >= order.updated_unix_ms =>
+              ()
+            _ => current = Some(order)
+          }
+        }
+      }
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            self_service: {
+              ..model.portal.self_service,
+              offerings,
+              offerings_loading: false,
+              offerings_loaded: true,
+              offerings_error: None,
+              terms: match raw_terms {
+                Some(value) => machine_terms_view(value)
+                None => None
+              },
+              orders,
+              order: current,
+              checkout: checkout_for_order(current, provider_requests),
+              action_loading: false,
+              action_error: None,
+            },
+            provider_requests,
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Outcome(MachineQuoteLoaded(quote)) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            self_service: {
+              ..model.portal.self_service,
+              quote: Some(machine_quote_view(quote)),
+              step: Quote,
+              action_loading: false,
+              action_error: None,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(MachineTermsAccepted) =>
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            self_service: {
+              ..model.portal.self_service,
+              terms_accepted: true,
+              action_loading: false,
+              action_error: None,
+            },
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Machine terms accepted. You can now create the order.",
+                "机器条款已接受，现在可以创建订单。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(MachineOrderCreated(response)) => {
+      let order = machine_order_view(
+        response.order,
+        model.portal.self_service.offerings,
+      )
+      let orders = [
+        order,
+        ..model.portal.self_service.orders.filter(value => {
+          value.order_id != order.order_id
+        }),
+      ]
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            self_service: {
+              ..model.portal.self_service,
+              order: Some(order),
+              orders,
+              checkout: Some(machine_checkout_view(response.checkout)),
+              step: ContractPayment,
+              action_loading: false,
+              action_error: None,
+            },
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Machine order created. Payment remains untrusted until provider settlement is verified.",
+                "机器订单已创建；支付服务商结算验证完成前，付款状态保持不可信。",
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Outcome(MachineOrderUpdated(raw_order, action)) => {
+      let order = machine_order_view(
+        raw_order,
+        model.portal.self_service.offerings,
+      )
+      let orders = [
+        order,
+        ..model.portal.self_service.orders.filter(value => {
+          value.order_id != order.order_id
+        }),
+      ]
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            self_service: {
+              ..model.portal.self_service,
+              order: Some(order),
+              orders,
+              step: Provisioning,
+              action_loading: false,
+              action_error: None,
+            },
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                if action == "cancel" {
+                  "Cancellation request recorded. Cleanup continues asynchronously."
+                } else {
+                  "Termination request recorded. Cleanup continues asynchronously."
+                },
+                if action == "cancel" {
+                  "取消请求已记录；清理将在后台继续。"
+                } else {
+                  "终止请求已记录；清理将在后台继续。"
+                },
+              ),
+            ),
+            error_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    }
     Outcome(
       Loaded(
         dispatched_session_generation,
@@ -3439,7 +4972,18 @@ fn update(
           provider_requests_loading: false,
           payment_checkout_loading: false,
           model_catalog: models,
-          desktop_client,
+          desktop_clients: desktop_client,
+          desktop_client: match model.portal.desktop_client {
+            Some(selected) =>
+              match
+                desktop_client
+                .filter(client => client.client_id == selected.client_id)
+                .get(0) {
+                Some(client) => Some(client)
+                None => desktop_client.get(0)
+              }
+            None => desktop_client.get(0)
+          },
           project_id: match active_trial {
             Some(value) => value.project_id
             None => model.portal.project_id
@@ -3502,7 +5046,13 @@ fn update(
           error_message: None,
         },
       }
-      (next, machine_clock_command(next, emit))
+      (
+        next,
+        @rabbita.batch([
+          machine_clock_command(next, emit),
+          machine_commerce_command(next, emit),
+        ]),
+      )
     }
     Outcome(DesktopClientLaunched(name)) =>
       (
@@ -3890,7 +5440,12 @@ fn update(
           (next, machine_clock_command(next, emit))
         }
       }
-    Outcome(Failed(dispatched_locale, message)) =>
+    Outcome(Failed(dispatched_locale, message)) => {
+      let message = @enterprise_ui.friendly_failure(
+        model.portal.locale,
+        portal_copy(model.portal.locale, "Operation", "操作"),
+        message,
+      )
       (
         {
           ..model,
@@ -3916,6 +5471,22 @@ fn update(
             loading: false,
             provider_requests_loading: false,
             payment_checkout_loading: false,
+            self_service: {
+              ..model.portal.self_service,
+              offerings_loading: false,
+              action_loading: false,
+              action_error: Some(
+                if dispatched_locale == model.portal.locale {
+                  message
+                } else {
+                  portal_copy(
+                    model.portal.locale,
+                    "The self-service operation failed. Retry the operation.",
+                    "自助操作失败。请重试。",
+                  )
+                },
+              ),
+            },
             success_message: None,
             error_message: Some(
               if dispatched_locale == model.portal.locale {
@@ -3932,6 +5503,7 @@ fn update(
         },
         @rabbita.none,
       )
+    }
   }
 }
 
@@ -3940,8 +5512,8 @@ extern "js" fn development_transport_allowed(endpoint : String) -> Bool =
   #| (endpoint) => {
   #|   try {
   #|     const url = new URL(endpoint, globalThis.location?.href || "http://localhost/");
-  #|     return url.protocol === "https:" || url.hostname === "localhost" ||
-  #|       url.hostname === "127.0.0.1" || url.hostname === "::1";
+  #|     return url.hostname === "localhost" || url.hostname === "127.0.0.1" ||
+  #|       url.hostname === "::1" || url.hostname === "[::1]";
   #|   } catch (_) { return false; }
   #| }
 
@@ -3964,12 +5536,19 @@ fn app_view(
         ),
       ),
       @enterprise_ui.interactive_view(
-        model.portal,
+        {
+          ..model.portal,
+          docs_base_url: if configured_docs_url() == "" {
+            None
+          } else {
+            Some(configured_docs_url())
+          },
+        },
         emit.map(message => Portal(message)),
       ),
     ])
   }
-  guard model.portal.membership is Some(membership) else {
+  if model.token == "" {
     return @html.main_(class="login-gate", [
       @html.style_tag(shell_styles),
       @html.section(
@@ -3987,6 +5566,12 @@ fn app_view(
             portal_copy(
               locale, "Sign in with an existing identity or register a new account through the trusted identity ingress.",
               "使用现有身份登录，或通过受信任的身份入口注册新账户。",
+            ),
+          ),
+          @html.p(
+            portal_copy(
+              locale, "This is the customer portal for workspaces, model APIs and machine orders. The operator console has a separate application session, even when you use the same identity.",
+              "这里是用于工作空间、模型 API 和机器订单的用户门户。运维控制台使用独立的应用会话，即使登录的是同一身份。",
             ),
           ),
           @html.p(
@@ -4023,103 +5608,114 @@ fn app_view(
               )
             None => @html.nothing
           },
-          @html.details(class="development-fallback", [
-            @html.summary(
-              portal_copy(
-                locale, "Development credential fallback", "开发凭据后备方式",
-              ),
-            ),
-            @html.div(class="development-form", [
-              @html.p(
-                class="development-warning",
+          if transport_allowed {
+            @html.details(class="development-fallback", [
+              @html.summary(
                 portal_copy(
-                  locale, "Local acceptance only. Enter a short-lived scoped token and opaque test subject. Public plain HTTP is blocked.",
-                  "仅用于本地验收。请输入短期限定范围令牌和不透明测试主体。公共明文 HTTP 已被阻止。",
+                  locale, "Development credential fallback", "开发凭据后备方式",
                 ),
               ),
-              @html.div([
-                @html.label(
-                  for_="portal-token",
+              @html.div(class="development-form", [
+                @html.p(
+                  class="development-warning",
                   portal_copy(
-                    locale, "Scoped development token", "限定范围开发令牌",
+                    locale, "Local acceptance only. Enter a short-lived scoped token and opaque test subject. Public plain HTTP is blocked.",
+                    "仅用于本地验收。请输入短期限定范围令牌和不透明测试主体。公共明文 HTTP 已被阻止。",
                   ),
                 ),
-                @html.input(
-                  id="portal-token",
-                  input_type=Password,
-                  value=model.token,
-                  auto_complete=Off,
-                  on_input=emit.map(value => TokenChanged(value)),
-                ),
-              ]),
-              @html.div([
-                @html.label(
-                  for_="portal-subject",
-                  portal_copy(
-                    locale, "Opaque test subject", "不透明测试主体",
+                @html.div([
+                  @html.label(
+                    for_="portal-token",
+                    portal_copy(
+                      locale, "Scoped development token", "限定范围开发令牌",
+                    ),
                   ),
+                  @html.input(
+                    id="portal-token",
+                    input_type=Password,
+                    value=model.token,
+                    auto_complete=Off,
+                    on_input=emit.map(value => TokenChanged(value)),
+                  ),
+                ]),
+                @html.div([
+                  @html.label(
+                    for_="portal-subject",
+                    portal_copy(
+                      locale, "Opaque test subject", "不透明测试主体",
+                    ),
+                  ),
+                  @html.input(
+                    id="portal-subject",
+                    value=model.subject_ref,
+                    maxlength=256,
+                    auto_complete=Off,
+                    on_input=emit.map(value => SubjectChanged(value)),
+                  ),
+                ]),
+                @html.div([
+                  @html.label(
+                    for_="portal-endpoint",
+                    portal_copy(
+                      locale, "Controller endpoint", "控制器端点",
+                    ),
+                  ),
+                  @html.input(
+                    id="portal-endpoint",
+                    value=model.endpoint,
+                    on_input=emit.map(value => EndpointChanged(value)),
+                  ),
+                ]),
+                @html.button(
+                  type_="button",
+                  disabled=model.connecting ||
+                    model.token == "" ||
+                    model.subject_ref == "" ||
+                    !transport_allowed,
+                  on_click=emit(Connect),
+                  if model.connecting {
+                    portal_copy(locale, "Connecting…", "正在连接…")
+                  } else {
+                    portal_copy(
+                      locale, "Connect development identity", "连接开发身份",
+                    )
+                  },
                 ),
-                @html.input(
-                  id="portal-subject",
-                  value=model.subject_ref,
-                  maxlength=256,
-                  auto_complete=Off,
-                  on_input=emit.map(value => SubjectChanged(value)),
-                ),
-              ]),
-              @html.div([
-                @html.label(
-                  for_="portal-endpoint",
-                  portal_copy(locale, "Controller endpoint", "控制器端点"),
-                ),
-                @html.input(
-                  id="portal-endpoint",
-                  value=model.endpoint,
-                  on_input=emit.map(value => EndpointChanged(value)),
-                ),
-              ]),
-              @html.button(
-                type_="button",
-                disabled=model.connecting ||
-                  model.token == "" ||
-                  model.subject_ref == "" ||
-                  !transport_allowed,
-                on_click=emit(Connect),
-                if model.connecting {
-                  portal_copy(locale, "Connecting…", "正在连接…")
+                if transport_allowed {
+                  @html.nothing
                 } else {
-                  portal_copy(
-                    locale, "Connect development identity", "连接开发身份",
+                  @html.p(
+                    class="login-error",
+                    attrs=@html.Attrs::build().role("alert"),
+                    portal_copy(
+                      locale, "Development credentials are restricted to localhost or loopback.",
+                      "开发凭据仅限 localhost 或环回地址。",
+                    ),
                   )
                 },
-              ),
-              if transport_allowed {
-                @html.nothing
-              } else {
-                @html.p(
-                  class="login-error",
-                  attrs=@html.Attrs::build().role("alert"),
-                  portal_copy(
-                    locale, "Use HTTPS, localhost, or loopback for development credentials.",
-                    "开发凭据仅可通过 HTTPS、localhost 或环回地址使用。",
-                  ),
-                )
-              },
-            ]),
-          ]),
+              ]),
+            ])
+          } else {
+            @html.nothing
+          },
         ],
       ),
     ])
+  }
+  let session_scope = match model.portal.membership {
+    Some(membership) =>
+      "\{membership.subject_ref} · \{membership.organization_id}"
+    None => portal_copy(locale, "Organization setup", "组织设置")
   }
   @html.div([
     @html.style_tag(shell_styles),
     @html.header(class="session-strip", [
       @html.p([
-        @html.strong(membership.subject_ref),
+        @html.strong(session_scope),
         @html.span(
-          " · \{membership.organization_id} · " +
+          " · " +
           portal_copy(
-            locale, "development browser session; ends on logout or reload", "开发浏览器会话；退出或重新加载时结束",
+            locale, "secure browser session; ends on logout or expiry", "安全浏览器会话；退出或到期时结束",
           ),
         ),
       ]),
@@ -4130,7 +5726,14 @@ fn app_view(
       ),
     ]),
     @enterprise_ui.interactive_view(
-      model.portal,
+      {
+        ..model.portal,
+        docs_base_url: if configured_docs_url() == "" {
+          None
+        } else {
+          Some(configured_docs_url())
+        },
+      },
       emit.map(message => Portal(message)),
     ),
   ])
@@ -4150,8 +5753,10 @@ fn subscriptions(
 
 ///|
 fn main {
+  install_dialog_focus()
   let is_demo = demo_mode()
   let initial_locale = @i18n.parse_locale(stored_locale_preference())
+  commit_enterprise_organization(stored_organization_preference())
   apply_enterprise_locale(initial_locale)
   @rabbita.elmish(
     model={
@@ -4169,6 +5774,11 @@ fn main {
       portal: if is_demo {
         {
           ..@enterprise_ui.demo_state(),
+          docs_base_url: if configured_docs_url() == "" {
+            None
+          } else {
+            Some(configured_docs_url())
+          },
           locale: initial_locale,
           machine_access: {
             ..@enterprise_ui.demo_state().machine_access,
@@ -4186,6 +5796,11 @@ fn main {
       } else {
         {
           ..@enterprise_ui.default_state(current_unix_ms()),
+          docs_base_url: if configured_docs_url() == "" {
+            None
+          } else {
+            Some(configured_docs_url())
+          },
           locale: initial_locale,
           machine_access: {
             ..@enterprise_ui.default_state(current_unix_ms()).machine_access,

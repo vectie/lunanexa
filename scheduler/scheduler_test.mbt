@@ -115,7 +115,7 @@ test "drain prevents new work and impossible workloads reject before launch" {
 test "licensed inventory without a ready assigned runtime fails the hard filter" {
   let node = node_snapshot("node-a", Active, "nvidia-gb10", 12000, true, 0)
   let decision = @scheduler.place(
-    [{ ..node, ready_models: [] }],
+    [{ ..node, ready_models: [], }],
     requirements(),
     score_policy(),
   )
@@ -207,6 +207,85 @@ test "priority policy reserves bounded capacity for interactive work" {
   assert_eq(
     @scheduler.priority_capacity_limit_with_policy(100, Normal, 60, 80),
     80,
+  )
+}
+
+///|
+async test "scheduler persistence failures preserve authority usage and retryability" {
+  let directory = @fs.tmpdir(prefix="lunanexa-scheduler-rollback-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/scheduler.json"
+  let scheduler = @scheduler.FileScheduler::open(path, 2)
+  let quota : @scheduler.TenantQuota = {
+    tenant_ref: "tenant",
+    max_inflight: 1,
+    max_accelerator_ms: 1000L,
+    window_ms: 60000L,
+  }
+  scheduler.set_quota(quota)
+  for operation in ["quota", "admit", "start", "complete", "cancel", "place"] {
+    if ["start", "complete", "cancel"].contains(operation) {
+      assert_eq(scheduler.admit(request(), 1L), Accepted(queue_position=0))
+    }
+    let before = scheduler.snapshot()
+    let disk = @fs.read_file(path).text()
+    if operation == "start" {
+      assert_eq(
+        scheduler.admit(
+          {
+            ..request(),
+            workload_id: "blocked-new-window",
+            deadline_unix_ms: 90000L,
+          },
+          70000L,
+        ),
+        Rejected(reason=QuotaExceeded),
+      )
+      assert_eq(scheduler.snapshot(), before)
+      assert_eq(@fs.read_file(path).text(), disk)
+    }
+    @fs.mkdir(path + ".next")
+    try {
+      match operation {
+        "quota" => scheduler.set_quota({ ..quota, max_inflight: 2, })
+        "admit" => ignore(scheduler.admit(request(), 1L))
+        "start" => scheduler.mark_started("workload", 2L)
+        "complete" => scheduler.complete("workload", 125L)
+        "cancel" => ignore(scheduler.cancel("workload"))
+        _ => ignore(scheduler.place([], requirements(), score_policy()))
+      }
+    } catch {
+      _ => ()
+    } noraise {
+      _ => fail("expected write failure for " + operation)
+    }
+    assert_eq(scheduler.snapshot(), before)
+    assert_eq(@fs.read_file(path).text(), disk)
+    @fs.rmdir(path + ".next")
+    match operation {
+      "quota" => scheduler.set_quota(quota)
+      "admit" => {
+        assert_eq(scheduler.admit(request(), 1L), Accepted(queue_position=0))
+        assert_true(scheduler.cancel("workload"))
+      }
+      "start" => {
+        scheduler.mark_started("workload", 2L)
+        assert_eq(scheduler.snapshot().active[0].started_unix_ms, Some(2L))
+        assert_true(scheduler.cancel("workload"))
+      }
+      "complete" => {
+        scheduler.complete("workload", 125L)
+        scheduler.complete("workload", 125L)
+        assert_eq(scheduler.snapshot().usage[0].accelerator_ms, 125L)
+        assert_eq(scheduler.snapshot().usage[0].completed_workloads, 1L)
+      }
+      "cancel" => assert_true(scheduler.cancel("workload"))
+      _ => ignore(scheduler.place([], requirements(), score_policy()))
+    }
+  }
+  assert_eq(
+    @scheduler.FileScheduler::open(path, 2).snapshot(),
+    scheduler.snapshot(),
   )
 }
 

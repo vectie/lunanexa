@@ -23,6 +23,9 @@ pub(all) enum ReconciliationResult {
 pub(all) enum ExternalRecordKind {
   IdentityVerification
   Payment
+  /// Explicit outbound reversal of a settled payment. Keeping this distinct
+  /// prevents a refund request from being interpreted as another charge.
+  PaymentRefund
   TaxInvoice
   QualifiedSignature
 } derive(Debug, Eq, ToJson, FromJson)

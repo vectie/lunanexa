@@ -1,0 +1,283 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/machinecommerce"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/commercial",
+}
+
+// Values
+pub let contract_version : String
+
+pub let snapshot_schema_version : String
+
+pub fn validate_offering(MachineOffering) -> Unit raise MachineCommerceError
+
+pub fn validate_order_intent(MachineOrderIntent) -> Unit raise MachineCommerceError
+
+pub fn validate_quote_intent(MachineQuoteIntent) -> Unit raise MachineCommerceError
+
+// Errors
+pub(all) suberror MachineCommerceError {
+  InvalidInput(String)
+  NotFound(String)
+  AlreadyExists(String)
+  Unauthorized(String)
+  TenantMismatch
+  IdempotencyConflict(String)
+  StaleGeneration
+  InvalidTransition(String)
+  QuoteExpired
+  QuoteIntegrityFailed
+  PriceMismatch
+  CapacityUnavailable
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub(all) enum IdempotencyResult {
+  Created
+  Replayed
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineActionReceipt {
+  order_id : String
+  idempotency_key : String
+  action : String
+  outcome_generation : Int64
+  recorded_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineAvailability {
+  offering_id : String
+  capacity_total : Int64
+  capacity_reserved : Int64
+  capacity_available : Int64
+  observed_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineCommerceSnapshot {
+  schema_version : String
+  offerings : Array[MachineOffering]
+  quotes : Array[MachineQuote]
+  orders : Array[MachineOrder]
+  usage_receipts : Array[MachineUsageReceipt]
+  action_receipts : Array[MachineActionReceipt]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub struct MachineCommerceStore {
+  signing_secret : String
+  offerings : Map[String, MachineOffering]
+  quotes : Map[String, MachineQuote]
+  quote_keys : Map[String, String]
+  orders : Map[String, MachineOrder]
+  order_keys : Map[String, String]
+  quote_orders : Map[String, String]
+  payment_events : Map[String, String]
+  action_receipts : Map[String, MachineActionReceipt]
+  usage_receipts : Map[String, MachineUsageReceipt]
+  meter_keys : Map[String, String]
+}
+pub fn MachineCommerceStore::activate_settled_payment(Self, String, MachinePaymentSettlement, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::active_offerings(Self) -> Array[MachineOffering]
+pub fn MachineCommerceStore::availability(Self, String, Int64) -> MachineAvailability raise MachineCommerceError
+pub fn MachineCommerceStore::bind_access_key(Self, String, String, String, Int64) -> MachineActionReceipt raise MachineCommerceError
+pub fn MachineCommerceStore::complete_compensation(Self, String, String, Int64, String, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::complete_provisioning(Self, String, String, Int64, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::complete_termination_with_usage(Self, String, String, Int64, String, Int64, Int64) -> (MachineOrder, MachineUsageReceipt, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::create_order(Self, MachineOrderIntent, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::create_quote(Self, MachineQuoteIntent, Int64) -> (MachineQuote, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::from_snapshot(String, MachineCommerceSnapshot) -> Self raise MachineCommerceError
+pub fn MachineCommerceStore::new(String) -> Self raise MachineCommerceError
+pub fn MachineCommerceStore::order(Self, String) -> MachineOrder?
+pub fn MachineCommerceStore::order_for_access_key(Self, String) -> MachineOrder?
+pub fn MachineCommerceStore::orders_for_subject(Self, String) -> Array[MachineOrder]
+pub fn MachineCommerceStore::put_offering(Self, MachineOffering) -> (MachineOffering, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::quote(Self, String) -> MachineQuote?
+pub fn MachineCommerceStore::record_failure(Self, String, String, Int64, String, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::record_usage(Self, String, MachineMeterIntent, Int64) -> (MachineOrder, MachineUsageReceipt, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::request_cancel(Self, String, String, MachineOrderAction, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::request_termination(Self, String, String, MachineOrderAction, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+pub fn MachineCommerceStore::snapshot(Self) -> MachineCommerceSnapshot
+pub fn MachineCommerceStore::start_provisioning(Self, String, MachineProvisioningIntent, Int64) -> (MachineOrder, IdempotencyResult) raise MachineCommerceError
+
+pub(all) struct MachineMeterIntent {
+  idempotency_key : String
+  expected_generation : Int64
+  ended_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineOffering {
+  offering_id : String
+  sku : String
+  display_name : String
+  kind : MachineOfferingKind
+  region : String
+  accelerator_class : String
+  accelerator_count : Int64
+  memory_mib : Int64
+  cpu_count : Int64
+  meter : String
+  unit_price : @commercial.FixedMoney
+  billing_quantum_seconds : Int64
+  minimum_duration_seconds : Int64
+  maximum_duration_seconds : Int64
+  capacity_total : Int64
+  allowed_model_template_refs : Array[String]
+  state : MachineOfferingState
+  generation : Int64
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum MachineOfferingKind {
+  BareMachine
+  DedicatedEndpoint
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum MachineOfferingState {
+  OfferingActive
+  OfferingRetired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineOfferingView {
+  offering : MachineOffering
+  availability : MachineAvailability
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineOrder {
+  order_id : String
+  idempotency_key : String
+  quote_id : String
+  tenant_ref : String
+  organization_id : String
+  project_id : String
+  purchaser_subject_ref : String
+  offering_id : String
+  offering_kind : MachineOfferingKind
+  quantity : Int64
+  duration_seconds : Int64
+  unix_username : String?
+  requested_model_selector : String?
+  model_template_ref : String?
+  quoted_total : @commercial.FixedMoney
+  state : MachineOrderState
+  generation : Int64
+  payment_ref : String?
+  payment_event_id : String?
+  target_lease_ref : String?
+  target_deployment_ref : String?
+  failure_code : String?
+  compensation_ref : String?
+  capacity_reserved : Bool
+  active_started_unix_ms : Int64?
+  last_metered_unix_ms : Int64?
+  ended_unix_ms : Int64?
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineOrderAction {
+  idempotency_key : String
+  expected_generation : Int64
+  reason : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineOrderIntent {
+  order_id : String
+  idempotency_key : String
+  quote_id : String
+  tenant_ref : String
+  organization_id : String
+  project_id : String
+  purchaser_subject_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum MachineOrderState {
+  AwaitingPayment
+  PaymentSettled
+  Provisioning
+  Active
+  CancellationPending
+  TerminationPending
+  CompensationPending
+  Cancelled
+  Terminated
+  Failed
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachinePaymentSettlement {
+  provider_event_id : String
+  payment_ref : String
+  settled_amount : @commercial.FixedMoney
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineProvisioningIntent {
+  idempotency_key : String
+  expected_generation : Int64
+  target_lease_ref : String?
+  target_deployment_ref : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineQuote {
+  quote_id : String
+  idempotency_key : String
+  tenant_ref : String
+  organization_id : String
+  project_id : String
+  purchaser_subject_ref : String
+  offering_id : String
+  offering_kind : MachineOfferingKind
+  quantity : Int64
+  duration_seconds : Int64
+  unix_username : String?
+  requested_model_selector : String?
+  model_template_ref : String?
+  meter : String
+  unit_price : @commercial.FixedMoney
+  subtotal : @commercial.FixedMoney
+  total : @commercial.FixedMoney
+  terms_digest : String
+  signature : String
+  created_unix_ms : Int64
+  valid_until_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineQuoteIntent {
+  quote_id : String
+  idempotency_key : String
+  tenant_ref : String
+  organization_id : String
+  project_id : String
+  purchaser_subject_ref : String
+  offering_id : String
+  quantity : Int64
+  duration_seconds : Int64
+  unix_username : String?
+  requested_model_selector : String?
+  model_template_ref : String?
+  valid_for_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct MachineUsageReceipt {
+  receipt_id : String
+  idempotency_key : String
+  event_id : String
+  order_id : String
+  organization_id : String
+  project_id : String
+  subject_ref : String
+  resource_ref : String
+  meter : String
+  quantity : Int64
+  unit : String
+  started_unix_ms : Int64
+  ended_unix_ms : Int64
+  observed_unix_ms : Int64
+  receipt_digest : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineUsageReceipt::commercial_observation(Self) -> @commercial.UsageObservation
+
+// Type aliases
+
+// Traits

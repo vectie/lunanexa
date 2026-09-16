@@ -54,6 +54,17 @@ test "parameter mutation corpus cannot become executable SQL" {
     return
   }
   let connection = @postgres.connect(url)
+  defer connection.close()
+  ignore(
+    connection.execute(
+      "CREATE TEMP TABLE lunanexa_parameter_guard (value text)",
+    ),
+  )
+  ignore(
+    connection.execute(
+      "INSERT INTO lunanexa_parameter_guard VALUES ('retained')",
+    ),
+  )
   let corpus = [
     "'; DROP SCHEMA lunanexa CASCADE; --",
     "\"; DELETE FROM lunanexa.snapshots; --",
@@ -67,7 +78,7 @@ test "parameter mutation corpus cannot become executable SQL" {
   ]
   for payload in corpus {
     let result = connection.execute(
-      "SELECT $1::text, to_regclass('lunanexa.snapshots') IS NOT NULL",
+      "SELECT $1::text, to_regclass('pg_temp.lunanexa_parameter_guard') IS NOT NULL",
       parameters=[Some(payload)],
     )
     assert_eq(result.row_count(), 1)
@@ -77,5 +88,8 @@ test "parameter mutation corpus cannot become executable SQL" {
     assert_eq(result.value(-1, 0), None)
     assert_eq(result.value(0, 2), None)
   }
-  connection.close()
+  assert_eq(
+    connection.execute("SELECT value FROM lunanexa_parameter_guard").value(0, 0),
+    Some("retained"),
+  )
 }

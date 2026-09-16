@@ -2,7 +2,7 @@
 
 > **Implemented control-plane baseline.** LunaNexa now contains a native HTTP
 > controller, durable registry/scheduler/enrollment/telemetry/workspace state, a native
-> node reconciler and OCI supervisor, a provider-neutral client and CLI, a live
+> node reconciler with OCI and Kubernetes runtime backends, a provider-neutral client and CLI, a live
 > Rabbita console, and release evidence tooling. Production acceptance still
 > requires a named physical-cluster profile, private runtime, CA/identity, measurements,
 > and named human approvals in [the phased plan](docs/PLAN.md).
@@ -38,6 +38,11 @@ LunaNexa owns:
   decisions for an explicitly inventoried, operator-managed fleet;
 - organizations, cost centers, projects, budgets, quotas, capacity commitments,
   rated usage, ledger evidence and versioned digital agreements;
+- public account onboarding through a LunaNexa-operated, open-registration
+  Keycloak profile or a deployment-approved enterprise identity provider,
+  self-service individual/company customer records, and organization switching;
+- prepaid self-service bare-machine and dedicated-endpoint offers with live
+  capacity, signed quotes, payment settlement, provisioning and compensation;
 - one Rabbita operator console for models, deployments, nodes, commercial
   governance, qualified-service evidence, jobs and alerts.
 
@@ -48,6 +53,11 @@ LunaNexa does **not** own:
 - MoonGate's provider selection, client compatibility or product authority;
 - MoonDesk orchestration or MoonTown scheduling;
 - a home-grown model server, object store, container engine or metrics database.
+
+The platform identity profile is documented in
+[`docs/PLATFORM_IDENTITY.md`](docs/PLATFORM_IDENTITY.md). It self-hosts the
+password, verified-email, recovery and MFA authority without moving those
+secrets into the LunaNexa controller.
 
 It is one product with multiple deployable components. The controller, API,
 scheduler, registry, node agent, runtime adapters and console are components,
@@ -138,6 +148,7 @@ signature, payment or tax-invoice providers.
 - [Standalone source-grounded LunaNexa coursebook](docs-site/README.md)
 - [Product contract](docs/PRODUCT_CONTRACT.md)
 - [Enterprise portal and lease workflow](docs/ENTERPRISE_PORTAL.md)
+- [Self-service organization and machine ordering](docs/SELF_SERVICE_MACHINE_ORDERING.md)
 - [PostgreSQL management database](docs/DATABASE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Phased implementation plan](docs/PLAN.md)

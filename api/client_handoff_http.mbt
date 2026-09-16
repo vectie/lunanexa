@@ -2,6 +2,7 @@
 fn client_handoff_path(path : String) -> Bool {
   path == "/v1/client-handoffs:redeem" ||
   path == "/v1/portal/self/client" ||
+  path == "/v1/portal/self/clients" ||
   path == "/v1/portal/self/client-handoffs" ||
   (
     path.has_prefix("/v1/portal/self/client-handoffs/") &&
@@ -15,6 +16,7 @@ priv struct PortalClientHandoffIntent {
   client_id : String
   project_id : String
   allowed_models : Array[String]
+  order_id : String?
 } derive(FromJson)
 
 ///|
@@ -109,6 +111,7 @@ async fn ApiService::handle_client_handoff(
       true,
     )
   }
+  let configs = [config, ..self.additional_client_launch_configs]
   if path == "/v1/client-handoffs:redeem" {
     if verb != Post {
       return api_error(405, "MethodNotAllowed", "POST required", false)
@@ -117,6 +120,10 @@ async fn ApiService::handle_client_handoff(
       return api_error(
         400, "InvalidRequest", "invalid client handoff redemption", false,
       )
+    }
+    guard configs.filter(config => config.client_id == request.client_id).get(0)
+      is Some(config) else {
+      return api_error(403, "ClientMismatch", "client is not configured", false)
     }
     let now = @async.now()
     let redeemed = try
@@ -146,15 +153,21 @@ async fn ApiService::handle_client_handoff(
         }
       None => false
     }
-    let contracted = match self.contract_document_store {
-      Some(contracts) =>
-        contracts.has_effective_master_lease(
-          redeemed.tenant_ref,
-          redeemed.subject_ref,
-          now,
-        )
-      None => false
-    }
+    let contracted = self.private_workspace_key_authorized(
+        redeemed.api_key_id,
+        redeemed.tenant_ref,
+        redeemed.subject_ref,
+        now,
+      ) ||
+      (match self.contract_document_store {
+        Some(contracts) =>
+          contracts.has_effective_master_lease(
+            redeemed.tenant_ref,
+            redeemed.subject_ref,
+            now,
+          )
+        None => false
+      })
     if !authorized || !contracted {
       ignore(
         try
@@ -197,6 +210,9 @@ async fn ApiService::handle_client_handoff(
       "api_secret": redeemed.api_secret,
       "api_base_url": config.public_api_base_url,
       "tenant_ref": redeemed.tenant_ref,
+      "subject_ref": redeemed.subject_ref,
+      "organization_id": redeemed.organization_id,
+      "project_id": redeemed.project_id,
       "allowed_models": redeemed.allowed_models.to_json(),
       "expires_unix_ms": redeemed.expires_unix_ms.to_json(),
       "maximum_requests": redeemed.maximum_requests.to_json(),
@@ -209,7 +225,9 @@ async fn ApiService::handle_client_handoff(
       401, "Unauthenticated", "verified enterprise identity is required", false,
     )
   }
-  let portal_view = try portal.self_view(subject_ref) catch {
+  let portal_view = try
+    portal_view_for_request(portal, subject_ref, headers)
+  catch {
     error => return portal_error_reply(error)
   } noraise {
     value => value
@@ -220,17 +238,18 @@ async fn ApiService::handle_client_handoff(
     )
   }
   match (verb, path) {
-    (Get, "/v1/portal/self/client") => {
+    (Get, "/v1/portal/self/client" | "/v1/portal/self/clients") => {
       let now = @async.now()
-      let contract_ready = match self.contract_document_store {
-        Some(contracts) =>
-          contracts.has_effective_master_lease(
-            portal_view.membership.tenant_ref,
-            subject_ref,
-            now,
-          )
-        None => false
-      }
+      let contract_ready = self.private_cloud_workspace_access ||
+        (match self.contract_document_store {
+          Some(contracts) =>
+            contracts.has_effective_master_lease(
+              portal_view.membership.tenant_ref,
+              subject_ref,
+              now,
+            )
+          None => false
+        })
       let workspace_ready = match self.workspace_directory {
         Some(directory) =>
           try {
@@ -259,25 +278,39 @@ async fn ApiService::handle_client_handoff(
       if aliases.length() == 0 {
         blockers.push("ApprovedModelRequired")
       }
-      json_reply(200, {
-        "client_id": config.client_id,
-        "display_name": config.display_name,
-        "launch_uri": config.launch_uri,
-        "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
-        "contract_ready": contract_ready,
-        "workspace_ready": workspace_ready,
-        "models_ready": aliases.length() > 0,
-        "ready": blockers.length() == 0,
-        "blocker_codes": blockers.to_json(),
-        "approved_model_aliases": aliases.to_json(),
-        "handoffs": handoffs
-        .views_for_subject(portal_view.membership.tenant_ref, subject_ref)
-        .to_json(),
+      let subject_handoffs = handoffs.views_for_subject(
+        portal_view.membership.tenant_ref,
+        subject_ref,
+      )
+      let views = configs.map(config => {
+        (
+          {
+            "client_id": config.client_id,
+            "display_name": config.display_name,
+            "launch_uri": config.launch_uri,
+            "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
+            "contract_required": !self.private_cloud_workspace_access,
+            "contract_ready": contract_ready,
+            "workspace_ready": workspace_ready,
+            "models_ready": aliases.length() > 0,
+            "ready": blockers.length() == 0,
+            "blocker_codes": blockers.to_json(),
+            "approved_model_aliases": aliases.to_json(),
+            "handoffs": subject_handoffs
+            .filter(handoff => handoff.client_id == config.client_id)
+            .to_json(),
+          } : Json)
       })
+      if path == "/v1/portal/self/client" {
+        json_reply(200, views[0])
+      } else {
+        json_reply(200, views.to_json())
+      }
     }
     (Post, "/v1/portal/self/client-handoffs") => {
       guard decode_portal_client_handoff(body) is Some(intent) &&
-        intent.client_id == config.client_id &&
+        configs.filter(config => config.client_id == intent.client_id).get(0)
+        is Some(config) &&
         intent.allowed_models.length() > 0 else {
         return api_error(
           400, "InvalidRequest", "invalid client handoff intent", false,
@@ -302,11 +335,46 @@ async fn ApiService::handle_client_handoff(
         )
       }
       let now = @async.now()
-      guard self.contract_document_store is Some(contract_store) &&
-        contract_store.has_effective_master_lease(
-          portal_view.membership.tenant_ref,
-          subject_ref,
-          now,
+      let paid_order = match intent.order_id {
+        Some(order_id) => {
+          guard self.machine_commerce_store is Some(machine_store) &&
+            machine_store.order(order_id) is Some(order) &&
+            order.tenant_ref == portal_view.membership.tenant_ref &&
+            order.organization_id == portal_view.membership.organization_id &&
+            order.project_id == intent.project_id &&
+            order.purchaser_subject_ref == subject_ref else {
+            return api_error(
+              404, "NotFound", "dedicated machine order was not found", false,
+            )
+          }
+          guard order.offering_kind == DedicatedEndpoint &&
+            order.state == Active &&
+            order.requested_model_selector is Some(selected) &&
+            intent.allowed_models == [selected] &&
+            order.active_started_unix_ms is Some(started) &&
+            started + order.duration_seconds * 1000L > now &&
+            order.target_deployment_ref is Some(deployment_id) &&
+            self.deployment_store is Some(deployments) &&
+            deployments.deployment(deployment_id) is Some(operation) &&
+            operation.state == Ready &&
+            operation.endpoint is Some(_) else {
+            return api_error(
+              409, "DedicatedEndpointUnavailable", "the selected paid endpoint is not active and ready",
+              true,
+            )
+          }
+          Some(order)
+        }
+        None => None
+      }
+      guard (self.private_cloud_workspace_access && paid_order is None) ||
+        (
+          self.contract_document_store is Some(contract_store) &&
+          contract_store.has_effective_master_lease(
+            portal_view.membership.tenant_ref,
+            subject_ref,
+            now,
+          )
         ) else {
         return api_error(
           409, "MasterLeaseRequired", "an effective master lease is required", false,
@@ -333,12 +401,22 @@ async fn ApiService::handle_client_handoff(
       } noraise {
         value => value
       }
+      let credential_expiry = match paid_order {
+        Some(order) =>
+          (order.active_started_unix_ms.unwrap() +
+          order.duration_seconds * 1000L).min(workspace.lease.expires_unix_ms)
+        None => workspace.lease.expires_unix_ms
+      }
       let requested_handoff_expiry = now + config.handoff_lifetime_ms
-      let handoff_expiry = if requested_handoff_expiry <
-        workspace.lease.expires_unix_ms {
+      let handoff_expiry = if requested_handoff_expiry < credential_expiry {
         requested_handoff_expiry
       } else {
-        workspace.lease.expires_unix_ms
+        credential_expiry - 1L
+      }
+      if handoff_expiry <= now {
+        return api_error(
+          409, "ActiveLeaseRequired", "the workspace lease is ending", false,
+        )
       }
       let issued = try
         handoffs.issue(
@@ -352,7 +430,7 @@ async fn ApiService::handle_client_handoff(
             display_name: config.display_name,
             allowed_models: intent.allowed_models,
             handoff_expires_unix_ms: handoff_expiry,
-            credential_expires_unix_ms: workspace.lease.expires_unix_ms,
+            credential_expires_unix_ms: credential_expiry,
             maximum_requests: config.maximum_requests,
           },
           now,
@@ -361,6 +439,59 @@ async fn ApiService::handle_client_handoff(
         error => return client_handoff_error_reply(error)
       } noraise {
         value => value
+      }
+      // The one-time code is not exposed until the identifier binding is
+      // durable. A partial failure leaves an unusable, revoked credential,
+      // never an accidentally shared-model fallback for a paid launch.
+      if paid_order is Some(order) {
+        let binding_ok = try {
+          guard self.machine_commerce_store is Some(machine_store) &&
+            handoffs
+            .views_for_subject(order.tenant_ref, subject_ref)
+            .filter(view => view.handoff_id == issued.handoff_id)
+            .get(0)
+            is Some(view) else {
+            raise Failure("handoff binding unavailable")
+          }
+          ignore(
+            machine_store.bind_access_key(
+              order.order_id,
+              subject_ref,
+              view.api_key_id,
+              now,
+            ),
+          )
+          let (_, denied) = self.dedicated_order_binding(
+            {
+              key_id: view.api_key_id,
+              tenant_ref: order.tenant_ref,
+              subject_ref,
+              organization_id: order.organization_id,
+              project_id: order.project_id,
+            },
+            order.requested_model_selector,
+            @async.now(),
+          )
+          denied is None
+        } catch {
+          _ => false
+        }
+        if !binding_ok {
+          ignore(
+            handoffs.revoke_for_subject(
+              issued.handoff_id,
+              order.tenant_ref,
+              subject_ref,
+              @async.now(),
+            ),
+          ) catch {
+            _ => ()
+          }
+          return api_error(
+            503, "DedicatedHandoffBindingFailed", "the paid workspace handoff could not be bound",
+            true,
+          )
+        }
       }
       json_reply(201, {
         "handoff_id": issued.handoff_id,

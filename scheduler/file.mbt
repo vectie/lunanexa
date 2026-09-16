@@ -75,11 +75,32 @@ fn FileScheduler::snapshot_unlocked(self : FileScheduler) -> SchedulerSnapshot {
 }
 
 ///|
+fn FileScheduler::restore_unlocked(
+  self : FileScheduler,
+  snapshot : SchedulerSnapshot,
+) -> Unit {
+  self.quotas.clear()
+  for value in snapshot.quotas {
+    self.quotas[value.tenant_ref] = value
+  }
+  self.active.clear()
+  for value in snapshot.active {
+    self.active[value.workload_id] = value
+  }
+  self.usage.clear()
+  for value in snapshot.usage {
+    self.usage[value.tenant_ref] = value
+  }
+  self.decisions.clear()
+  self.decisions.push_iter(snapshot.decisions.iter())
+}
+
+///|
 async fn write_scheduler(path : String, snapshot : SchedulerSnapshot) -> Unit {
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -228,7 +249,7 @@ async fn FileScheduler::persist(self : FileScheduler) -> Unit {
       database.save_opaque_snapshot(
         "scheduler",
         "lunanexa.scheduler.v2",
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -245,17 +266,11 @@ pub async fn FileScheduler::set_quota(
     raise InvalidSchedulerState("tenant quota must have positive limits")
   }
   self.mutex.acquire()
-  try {
-    self.quotas[quota.tenant_ref] = quota
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  defer self.mutex.release()
+  let previous = self.snapshot_unlocked()
+  errdefer self.restore_unlocked(previous)
+  self.quotas[quota.tenant_ref] = quota
+  self.persist()
 }
 
 ///|
@@ -265,16 +280,16 @@ pub async fn FileScheduler::admit(
   now_unix_ms : Int64,
 ) -> AdmissionResult {
   self.mutex.acquire()
+  defer self.mutex.release()
+  let previous = self.snapshot_unlocked()
+  errdefer self.restore_unlocked(previous)
   if self.active.contains(request.workload_id) {
-    self.mutex.release()
     return Rejected(reason=WorkloadAlreadyActive)
   }
   if request.deadline_unix_ms <= now_unix_ms {
-    self.mutex.release()
     return Rejected(reason=DeadlineImpossible)
   }
   guard self.quotas.get(request.tenant_ref) is Some(quota) else {
-    self.mutex.release()
     return Rejected(reason=QuotaExceeded)
   }
   let tenant_inflight = self.active
@@ -300,11 +315,9 @@ pub async fn FileScheduler::admit(
   } else {
     current_usage
   }
-  self.usage[request.tenant_ref] = current_usage
   let consumed = current_usage.accelerator_ms
   if tenant_inflight >= quota.max_inflight ||
     consumed >= quota.max_accelerator_ms {
-    self.mutex.release()
     return Rejected(reason=QuotaExceeded)
   }
   if self.active.length() >=
@@ -314,10 +327,10 @@ pub async fn FileScheduler::admit(
       self.background_capacity_percent,
       self.normal_capacity_percent,
     ) {
-    self.mutex.release()
     return Rejected(reason=AdmissionCapacityExceeded)
   }
   let queue_position = self.active.length()
+  self.usage[request.tenant_ref] = current_usage
   self.active[request.workload_id] = {
     workload_id: request.workload_id,
     tenant_ref: request.tenant_ref,
@@ -326,15 +339,7 @@ pub async fn FileScheduler::admit(
     priority: request.priority,
     started_unix_ms: None,
   }
-  try self.persist() catch {
-    error => {
-      ignore(self.active.remove(request.workload_id))
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
   Accepted(queue_position~)
 }
 
@@ -345,22 +350,15 @@ pub async fn FileScheduler::mark_started(
   started_unix_ms : Int64,
 ) -> Unit {
   self.mutex.acquire()
-  guard self.active.get(workload_id) is Some(admission) else {
-    self.mutex.release()
-    return
-  }
+  defer self.mutex.release()
+  let previous = self.snapshot_unlocked()
+  errdefer self.restore_unlocked(previous)
+  guard self.active.get(workload_id) is Some(admission) else { return }
   self.active[workload_id] = {
     ..admission,
     started_unix_ms: Some(started_unix_ms),
   }
-  try self.persist() catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
 }
 
 ///|
@@ -370,10 +368,10 @@ pub async fn FileScheduler::complete(
   accelerator_ms : Int64,
 ) -> Unit {
   self.mutex.acquire()
-  guard self.active.get(workload_id) is Some(admission) else {
-    self.mutex.release()
-    return
-  }
+  defer self.mutex.release()
+  let previous = self.snapshot_unlocked()
+  errdefer self.restore_unlocked(previous)
+  guard self.active.get(workload_id) is Some(admission) else { return }
   ignore(self.active.remove(workload_id))
   let current = self.usage
     .get(admission.tenant_ref)
@@ -388,14 +386,7 @@ pub async fn FileScheduler::complete(
     accelerator_ms: current.accelerator_ms + accelerator_ms.max(0L),
     completed_workloads: current.completed_workloads + 1L,
   }
-  try self.persist() catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
 }
 
 ///|
@@ -404,19 +395,14 @@ pub async fn FileScheduler::cancel(
   workload_id : String,
 ) -> Bool {
   self.mutex.acquire()
+  defer self.mutex.release()
+  let previous = self.snapshot_unlocked()
+  errdefer self.restore_unlocked(previous)
   let removed = self.active.contains(workload_id)
   if removed {
     ignore(self.active.remove(workload_id))
-    try self.persist() catch {
-      error => {
-        self.mutex.release()
-        raise error
-      }
-    } noraise {
-      _ => ()
-    }
+    self.persist()
   }
-  self.mutex.release()
   removed
 }
 
@@ -429,18 +415,14 @@ pub async fn FileScheduler::place(
 ) -> PlacementDecision {
   let decision = place(nodes, requirements, policy)
   self.mutex.acquire()
+  defer self.mutex.release()
+  let previous = self.snapshot_unlocked()
+  errdefer self.restore_unlocked(previous)
   self.decisions.push(decision)
   while self.decisions.length() > self.decision_history_limit {
     ignore(self.decisions.remove(0))
   }
-  try self.persist() catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.persist()
   decision
 }
 

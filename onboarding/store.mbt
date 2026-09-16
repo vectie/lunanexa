@@ -89,7 +89,7 @@ async fn write_snapshot(
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -166,7 +166,7 @@ pub async fn AccessOnboardingStore::open_postgres(
       database.save_opaque_snapshot(
         "access_onboarding",
         snapshot_schema_version,
-        store.snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(store.snapshot_unlocked()).stringify(),
       )
   }
   store
@@ -181,7 +181,7 @@ async fn AccessOnboardingStore::persist(self : AccessOnboardingStore) -> Unit {
       database.save_opaque_snapshot(
         "access_onboarding",
         snapshot_schema_version,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -197,37 +197,29 @@ pub async fn AccessOnboardingStore::begin(
     raise InvalidIntent("access onboarding time window is invalid")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.operations.copy()
-  try {
-    match self.operations.get(intent.operation_id) {
-      Some(record) if record.intent == intent => {
-        self.mutex.release()
-        return record
-      }
-      Some(_) => raise IdempotencyConflict(intent.operation_id)
-      None => ()
-    }
-    let record : AccessOnboardingRecord = {
-      intent,
-      step: IntentRecorded,
-      status: Running,
-      attempts: 1,
-      last_error_code: None,
-      last_error_message: None,
-      created_unix_ms: now_unix_ms,
-      updated_unix_ms: now_unix_ms,
-    }
-    self.operations[intent.operation_id] = record
-    self.persist()
-    self.mutex.release()
-    record
-  } catch {
-    error => {
-      self.operations = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.operations = previous
   }
+  match self.operations.get(intent.operation_id) {
+    Some(record) if record.intent == intent => return record
+    Some(_) => raise IdempotencyConflict(intent.operation_id)
+    None => ()
+  }
+  let record : AccessOnboardingRecord = {
+    intent,
+    step: IntentRecorded,
+    status: Running,
+    attempts: 1,
+    last_error_code: None,
+    last_error_message: None,
+    created_unix_ms: now_unix_ms,
+    updated_unix_ms: now_unix_ms,
+  }
+  self.operations[intent.operation_id] = record
+  self.persist()
+  record
 }
 
 ///|
@@ -270,34 +262,28 @@ pub async fn AccessOnboardingStore::retry(
   now_unix_ms : Int64,
 ) -> AccessOnboardingRecord {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.operations.copy()
-  try {
-    guard self.operations.get(operation_id) is Some(record) else {
-      raise OperationNotFound(operation_id)
-    }
-    if record.status == Conflicted || record.status == Completed {
-      self.mutex.release()
-      return record
-    }
-    let resumed = {
-      ..record,
-      status: Running,
-      attempts: record.attempts + 1,
-      last_error_code: None,
-      last_error_message: None,
-      updated_unix_ms: now_unix_ms,
-    }
-    self.operations[operation_id] = resumed
-    self.persist()
-    self.mutex.release()
-    resumed
-  } catch {
-    error => {
-      self.operations = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.operations = previous
   }
+  guard self.operations.get(operation_id) is Some(record) else {
+    raise OperationNotFound(operation_id)
+  }
+  if record.status == Conflicted || record.status == Completed {
+    return record
+  }
+  let resumed = {
+    ..record,
+    status: Running,
+    attempts: record.attempts + 1,
+    last_error_code: None,
+    last_error_message: None,
+    updated_unix_ms: now_unix_ms,
+  }
+  self.operations[operation_id] = resumed
+  self.persist()
+  resumed
 }
 
 ///|
@@ -308,47 +294,41 @@ pub async fn AccessOnboardingStore::advance(
   now_unix_ms : Int64,
 ) -> AccessOnboardingRecord {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.operations.copy()
-  try {
-    guard self.operations.get(operation_id) is Some(record) else {
-      raise OperationNotFound(operation_id)
-    }
-    if record.status == Conflicted {
-      raise InvalidTransition("a conflicted onboarding cannot advance")
-    }
-    let current_rank = step_rank(record.step)
-    let next_rank = step_rank(step)
-    if next_rank < current_rank {
-      self.mutex.release()
-      return record
-    }
-    if next_rank > current_rank + 1 {
-      raise InvalidTransition("access onboarding step was skipped")
-    }
-    let status = match step {
-      Prepared => PreparedForEnablement
-      Enabled => Completed
-      _ => Running
-    }
-    let advanced = {
-      ..record,
-      step,
-      status,
-      last_error_code: None,
-      last_error_message: None,
-      updated_unix_ms: now_unix_ms,
-    }
-    self.operations[operation_id] = advanced
-    self.persist()
-    self.mutex.release()
-    advanced
-  } catch {
-    error => {
-      self.operations = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.operations = previous
   }
+  guard self.operations.get(operation_id) is Some(record) else {
+    raise OperationNotFound(operation_id)
+  }
+  if record.status == Conflicted {
+    raise InvalidTransition("a conflicted onboarding cannot advance")
+  }
+  let current_rank = step_rank(record.step)
+  let next_rank = step_rank(step)
+  if next_rank < current_rank {
+    return record
+  }
+  if next_rank > current_rank + 1 {
+    raise InvalidTransition("access onboarding step was skipped")
+  }
+  let status = match step {
+    Prepared => PreparedForEnablement
+    Enabled => Completed
+    _ => Running
+  }
+  let advanced = {
+    ..record,
+    step,
+    status,
+    last_error_code: None,
+    last_error_message: None,
+    updated_unix_ms: now_unix_ms,
+  }
+  self.operations[operation_id] = advanced
+  self.persist()
+  advanced
 }
 
 ///|
@@ -373,31 +353,26 @@ pub async fn AccessOnboardingStore::fail(
     raise InvalidTransition("invalid onboarding failure code")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.operations.copy()
-  try {
-    guard self.operations.get(operation_id) is Some(record) else {
-      raise OperationNotFound(operation_id)
-    }
-    let failed = {
-      ..record,
-      status: if terminal {
-        Conflicted
-      } else {
-        RecoverableFailure
-      },
-      last_error_code: Some(code),
-      last_error_message: Some(bounded_message(message)),
-      updated_unix_ms: now_unix_ms,
-    }
-    self.operations[operation_id] = failed
-    self.persist()
-    self.mutex.release()
-    failed
-  } catch {
-    error => {
-      self.operations = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.operations = previous
   }
+  guard self.operations.get(operation_id) is Some(record) else {
+    raise OperationNotFound(operation_id)
+  }
+  let failed = {
+    ..record,
+    status: if terminal {
+      Conflicted
+    } else {
+      RecoverableFailure
+    },
+    last_error_code: Some(code),
+    last_error_message: Some(bounded_message(message)),
+    updated_unix_ms: now_unix_ms,
+  }
+  self.operations[operation_id] = failed
+  self.persist()
+  failed
 }

@@ -1,0 +1,14 @@
+import {
+  "vectie/lunanexa/workspace/webide/host",
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/socket",
+  "moonbitlang/core/env",
+  "moonbitlang/x/sys",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
+
+options(link: { "native": { "cc-link-flags": "-pthread -ldl" } })

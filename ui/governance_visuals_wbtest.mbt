@@ -133,7 +133,7 @@ test "agreement graph shows actual state and conservative request handoff" {
 
 ///|
 test "governance graphs localize Chinese evidence qualifiers" {
-  let state = { ..demo_state(), locale: ChineseSimplified }
+  let state = { ..demo_state(), locale: ChineseSimplified, }
   let leases = render_governance_visual(lease_lifecycle_graph(state))
   let centers = render_governance_visual(cost_center_hierarchy_graph(state))
   let agreements = render_governance_visual(agreement_lifecycle_graph(state))
@@ -154,20 +154,20 @@ test "governance graphs escape hostile labels and references" {
     lease_lifecycle_graph({
       ..base,
       exclusive_node_leases: [
-        { ..base.exclusive_node_leases[0], lease_id: hostile },
+        { ..base.exclusive_node_leases[0], lease_id: hostile, },
       ],
     }),
   )
   let centers = render_governance_visual(
     cost_center_hierarchy_graph({
       ..base,
-      cost_centers: [{ ..base.cost_centers[0], display_name: hostile }],
+      cost_centers: [{ ..base.cost_centers[0], display_name: hostile, }],
     }),
   )
   let agreements = render_governance_visual(
     agreement_lifecycle_graph({
       ..base,
-      agreements: [{ ..base.agreements[0], evidence_receipt: hostile }],
+      agreements: [{ ..base.agreements[0], evidence_receipt: hostile, }],
       enterprise_lease_requests: [],
     }),
   )

@@ -695,28 +695,20 @@ pub async fn OfflineCommerceStore::register_template(
 ) -> @offline.DocumentTemplate {
   @offline.validate_template(template)
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.templates.copy()
-  try {
-    let key = template_key(template.template_id, template.version)
-    match self.templates.get(key) {
-      Some(existing) if existing == template => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) => raise @offline.OfflineCommerceError::IdempotencyConflict(key)
-      None => ()
-    }
-    self.templates[key] = template
-    self.persist()
-    self.mutex.release()
-    template
-  } catch {
-    error => {
-      self.templates = before
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.templates = before
   }
+  let key = template_key(template.template_id, template.version)
+  match self.templates.get(key) {
+    Some(existing) if existing == template => return existing
+    Some(_) => raise @offline.OfflineCommerceError::IdempotencyConflict(key)
+    None => ()
+  }
+  self.templates[key] = template
+  self.persist()
+  template
 }
 
 ///|
@@ -736,42 +728,36 @@ pub async fn OfflineCommerceStore::create_order(
   self.mutex.acquire()
   let before_orders = self.orders.copy()
   let before_keys = self.order_keys.copy()
-  try {
-    let key = scoped_key(order.organization_id, order.idempotency_key)
-    match self.order_keys.get(key) {
-      Some(existing_id) => {
-        guard self.orders.get(existing_id) is Some(existing) else {
-          raise @offline.OfflineCommerceError::InvalidInput(
-            "broken order idempotency index",
-          )
-        }
-        if existing == order ||
-          (existing.state == Draft && same_order_intent(existing, order)) {
-          self.mutex.release()
-          return existing
-        }
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          order.idempotency_key,
+  defer self.mutex.release()
+  errdefer {
+    self.orders = before_orders
+    self.order_keys = before_keys
+  }
+  let key = scoped_key(order.organization_id, order.idempotency_key)
+  match self.order_keys.get(key) {
+    Some(existing_id) => {
+      guard self.orders.get(existing_id) is Some(existing) else {
+        raise @offline.OfflineCommerceError::InvalidInput(
+          "broken order idempotency index",
         )
       }
-      None => ()
+      if existing == order ||
+        (existing.state == Draft && same_order_intent(existing, order)) {
+        return existing
+      }
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        order.idempotency_key,
+      )
     }
-    if self.orders.contains(order.order_id) {
-      raise @offline.OfflineCommerceError::AlreadyExists(order.order_id)
-    }
-    self.orders[order.order_id] = order
-    self.order_keys[key] = order.order_id
-    self.persist()
-    self.mutex.release()
-    order
-  } catch {
-    error => {
-      self.orders = before_orders
-      self.order_keys = before_keys
-      self.mutex.release()
-      raise error
-    }
+    None => ()
   }
+  if self.orders.contains(order.order_id) {
+    raise @offline.OfflineCommerceError::AlreadyExists(order.order_id)
+  }
+  self.orders[order.order_id] = order
+  self.order_keys[key] = order.order_id
+  self.persist()
+  order
 }
 
 ///|
@@ -781,21 +767,16 @@ async fn OfflineCommerceStore::replace_order(
   transform : (@offline.CommercialOrder) -> @offline.CommercialOrder raise,
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.orders.copy()
-  try {
-    let updated = transform(self.require_order_unlocked(order_id))
-    @offline.validate_order(updated)
-    self.orders[order_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.orders = before
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.orders = before
   }
+  let updated = transform(self.require_order_unlocked(order_id))
+  @offline.validate_order(updated)
+  self.orders[order_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -829,52 +810,44 @@ pub async fn OfflineCommerceStore::request_generation(
   request : @offline.ArtifactGenerationRequest,
 ) -> @offline.ArtifactGenerationRequest {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.generation_requests.copy()
   let before_claims = self.work_claims.copy()
-  try {
-    self.validate_generation_request_unlocked(request)
-    let order = self.require_order_unlocked(request.order_id)
-    if order.state != PendingInternalApproval &&
-      order.state != PendingOfflineExecution {
-      raise @offline.OfflineCommerceError::InvalidTransition(
-        "order is not accepting document generation",
-      )
-    }
-    match self.generation_requests.get(request.request_id) {
-      Some(existing) if existing == request => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          request.request_id,
-        )
-      None => ()
-    }
-    if self.artifacts.contains(request.artifact_id) {
-      raise @offline.OfflineCommerceError::AlreadyExists(request.artifact_id)
-    }
-    self.generation_requests[request.request_id] = request
-    self.work_claims[artifact_work_id(request.request_id)] = {
-      work_id: artifact_work_id(request.request_id),
-      worker_kind: ArtifactDispatcher,
-      expected_order_generation: order.generation,
-      attempt: 0,
-      claimed_unix_ms: request.requested_unix_ms,
-      retry_after_unix_ms: request.requested_unix_ms,
-      completed_unix_ms: None,
-    }
-    self.persist()
-    self.mutex.release()
-    request
-  } catch {
-    error => {
-      self.generation_requests = before
-      self.work_claims = before_claims
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.generation_requests = before
+    self.work_claims = before_claims
   }
+  self.validate_generation_request_unlocked(request)
+  let order = self.require_order_unlocked(request.order_id)
+  if order.state != PendingInternalApproval &&
+    order.state != PendingOfflineExecution {
+    raise @offline.OfflineCommerceError::InvalidTransition(
+      "order is not accepting document generation",
+    )
+  }
+  match self.generation_requests.get(request.request_id) {
+    Some(existing) if existing == request => return existing
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        request.request_id,
+      )
+    None => ()
+  }
+  if self.artifacts.contains(request.artifact_id) {
+    raise @offline.OfflineCommerceError::AlreadyExists(request.artifact_id)
+  }
+  self.generation_requests[request.request_id] = request
+  self.work_claims[artifact_work_id(request.request_id)] = {
+    work_id: artifact_work_id(request.request_id),
+    worker_kind: ArtifactDispatcher,
+    expected_order_generation: order.generation,
+    attempt: 0,
+    claimed_unix_ms: request.requested_unix_ms,
+    retry_after_unix_ms: request.requested_unix_ms,
+    completed_unix_ms: None,
+  }
+  self.persist()
+  request
 }
 
 ///|
@@ -883,138 +856,126 @@ pub async fn OfflineCommerceStore::complete_generation(
   result : @offline.ArtifactGenerationResult,
 ) -> @offline.DocumentArtifact {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_artifacts = self.artifacts.copy()
   let before_orders = self.orders.copy()
   let before_claims = self.work_claims.copy()
   let before_health = self.worker_health
-  try {
-    guard self.generation_requests.get(result.request_id) is Some(request) else {
-      raise @offline.OfflineCommerceError::NotFound("generation request")
-    }
-    guard self.orders.get(request.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("generation order")
-    }
-    guard self.work_claims.get(artifact_work_id(request.request_id))
-      is Some(claim) else {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "generation request has no durable order binding",
-      )
-    }
-    if claim.completed_unix_ms is Some(completed_unix_ms) {
-      guard self.artifacts.get(request.artifact_id) is Some(existing) &&
-        result.verified &&
-        !result.active_content_detected &&
-        result.render_verified &&
-        @offline.valid_sha256(result.visual_evidence_sha256) &&
-        result.artifact_id == request.artifact_id &&
-        result.expected_object_ref == request.expected_object_ref &&
-        result.media_type == existing.media_type &&
-        existing.sha256 == result.sha256 &&
-        existing.byte_count == result.byte_count &&
-        existing.creator_receipt == result.worker_receipt &&
-        completed_unix_ms == result.completed_unix_ms else {
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          result.request_id,
-        )
-      }
-      self.mutex.release()
-      return existing
-    }
-    if claim.worker_kind != ArtifactDispatcher ||
-      claim.attempt <= 0 ||
-      order.generation != claim.expected_order_generation {
-      raise @offline.OfflineCommerceError::StaleGeneration
-    }
-    if !result.verified ||
-      result.active_content_detected ||
-      !result.render_verified ||
-      result.formula_error_count < 0 ||
-      !@offline.valid_sha256(result.visual_evidence_sha256) ||
-      result.artifact_id != request.artifact_id ||
-      result.expected_object_ref != request.expected_object_ref ||
-      !@offline.expected_media_type(request.kind).contains(result.media_type) ||
-      result.byte_count <= 0L ||
-      result.byte_count > 100000000L ||
-      !@offline.valid_sha256(result.sha256) ||
-      !@contracts.valid_identifier(result.worker_receipt) ||
-      result.completed_unix_ms < request.requested_unix_ms {
-      raise @offline.OfflineCommerceError::ArtifactUnavailable(
-        "artifact worker result failed verification",
-      )
-    }
-    if (
-        request.kind == EditableContractDocx ||
-        request.kind == QuoteScheduleXlsx
-      ) &&
-      !result.moonleaf_verified {
-      raise @offline.OfflineCommerceError::ArtifactUnavailable(
-        "OOXML artifact did not pass MoonLeaf reopen verification",
-      )
-    }
-    if request.kind == QuoteScheduleXlsx && result.formula_error_count != 0 {
-      raise @offline.OfflineCommerceError::ArtifactUnavailable(
-        "XLSX artifact contains formula errors",
-      )
-    }
-    let artifact : @offline.DocumentArtifact = {
-      artifact_id: request.artifact_id,
-      order_id: request.order_id,
-      organization_id: request.organization_id,
-      kind: request.kind,
-      revision: 1,
-      template_id: Some(request.template_id),
-      template_version: Some(request.template_version),
-      locale: request.locale,
-      media_type: result.media_type,
-      byte_count: result.byte_count,
-      sha256: result.sha256,
-      object_ref: request.expected_object_ref,
-      generation_state: ArtifactGenerated,
-      scan_state: ScanPassed,
-      review_state: ReviewNotRequired,
-      submitted_by: request.requested_by,
-      creator_receipt: result.worker_receipt,
-      created_unix_ms: result.completed_unix_ms,
-    }
-    self.validate_artifact_unlocked(artifact)
-    match self.artifacts.get(artifact.artifact_id) {
-      Some(existing) if existing == artifact => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          artifact.artifact_id,
-        )
-      None => ()
-    }
-    self.artifacts[artifact.artifact_id] = artifact
-    self.orders[order.order_id] = with_artifact_id(
-      order,
-      artifact.artifact_id,
-      result.completed_unix_ms,
-    )
-    self.work_claims[claim.work_id] = {
-      ..claim,
-      completed_unix_ms: Some(result.completed_unix_ms),
-    }
-    self.worker_health = {
-      ..self.worker_health,
-      artifact_dispatcher_success_unix_ms: Some(result.completed_unix_ms),
-    }
-    self.persist()
-    self.mutex.release()
-    artifact
-  } catch {
-    error => {
-      self.artifacts = before_artifacts
-      self.orders = before_orders
-      self.work_claims = before_claims
-      self.worker_health = before_health
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.artifacts = before_artifacts
+    self.orders = before_orders
+    self.work_claims = before_claims
+    self.worker_health = before_health
   }
+  guard self.generation_requests.get(result.request_id) is Some(request) else {
+    raise @offline.OfflineCommerceError::NotFound("generation request")
+  }
+  guard self.orders.get(request.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("generation order")
+  }
+  guard self.work_claims.get(artifact_work_id(request.request_id))
+    is Some(claim) else {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "generation request has no durable order binding",
+    )
+  }
+  if claim.completed_unix_ms is Some(completed_unix_ms) {
+    guard self.artifacts.get(request.artifact_id) is Some(existing) &&
+      result.verified &&
+      !result.active_content_detected &&
+      result.render_verified &&
+      @offline.valid_sha256(result.visual_evidence_sha256) &&
+      result.artifact_id == request.artifact_id &&
+      result.expected_object_ref == request.expected_object_ref &&
+      result.media_type == existing.media_type &&
+      existing.sha256 == result.sha256 &&
+      existing.byte_count == result.byte_count &&
+      existing.creator_receipt == result.worker_receipt &&
+      completed_unix_ms == result.completed_unix_ms else {
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        result.request_id,
+      )
+    }
+    return existing
+  }
+  if claim.worker_kind != ArtifactDispatcher ||
+    claim.attempt <= 0 ||
+    order.generation != claim.expected_order_generation {
+    raise @offline.OfflineCommerceError::StaleGeneration
+  }
+  if !result.verified ||
+    result.active_content_detected ||
+    !result.render_verified ||
+    result.formula_error_count < 0 ||
+    !@offline.valid_sha256(result.visual_evidence_sha256) ||
+    result.artifact_id != request.artifact_id ||
+    result.expected_object_ref != request.expected_object_ref ||
+    !@offline.expected_media_type(request.kind).contains(result.media_type) ||
+    result.byte_count <= 0L ||
+    result.byte_count > 100000000L ||
+    !@offline.valid_sha256(result.sha256) ||
+    !@contracts.valid_identifier(result.worker_receipt) ||
+    result.completed_unix_ms < request.requested_unix_ms {
+    raise @offline.OfflineCommerceError::ArtifactUnavailable(
+      "artifact worker result failed verification",
+    )
+  }
+  if (request.kind == EditableContractDocx || request.kind == QuoteScheduleXlsx) &&
+    !result.moonleaf_verified {
+    raise @offline.OfflineCommerceError::ArtifactUnavailable(
+      "OOXML artifact did not pass MoonLeaf reopen verification",
+    )
+  }
+  if request.kind == QuoteScheduleXlsx && result.formula_error_count != 0 {
+    raise @offline.OfflineCommerceError::ArtifactUnavailable(
+      "XLSX artifact contains formula errors",
+    )
+  }
+  let artifact : @offline.DocumentArtifact = {
+    artifact_id: request.artifact_id,
+    order_id: request.order_id,
+    organization_id: request.organization_id,
+    kind: request.kind,
+    revision: 1,
+    template_id: Some(request.template_id),
+    template_version: Some(request.template_version),
+    locale: request.locale,
+    media_type: result.media_type,
+    byte_count: result.byte_count,
+    sha256: result.sha256,
+    object_ref: request.expected_object_ref,
+    generation_state: ArtifactGenerated,
+    scan_state: ScanPassed,
+    review_state: ReviewNotRequired,
+    submitted_by: request.requested_by,
+    creator_receipt: result.worker_receipt,
+    created_unix_ms: result.completed_unix_ms,
+  }
+  self.validate_artifact_unlocked(artifact)
+  match self.artifacts.get(artifact.artifact_id) {
+    Some(existing) if existing == artifact => return existing
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        artifact.artifact_id,
+      )
+    None => ()
+  }
+  self.artifacts[artifact.artifact_id] = artifact
+  self.orders[order.order_id] = with_artifact_id(
+    order,
+    artifact.artifact_id,
+    result.completed_unix_ms,
+  )
+  self.work_claims[claim.work_id] = {
+    ..claim,
+    completed_unix_ms: Some(result.completed_unix_ms),
+  }
+  self.worker_health = {
+    ..self.worker_health,
+    artifact_dispatcher_success_unix_ms: Some(result.completed_unix_ms),
+  }
+  self.persist()
+  artifact
 }
 
 ///|
@@ -1048,58 +1009,52 @@ pub async fn OfflineCommerceStore::grant_upload(
   grant : @offline.EvidenceUploadGrant,
 ) -> @offline.EvidenceUploadGrant {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_grants = self.upload_grants.copy()
   let before_keys = self.upload_keys.copy()
-  try {
-    self.validate_upload_grant_unlocked(grant)
-    let order = self.require_order_unlocked(grant.order_id)
-    if order.state != PendingEvidenceUpload &&
-      order.state != NeedsCorrection &&
-      order.state != PendingInternalApproval {
-      raise @offline.OfflineCommerceError::InvalidTransition(
-        "order is not accepting offline evidence",
-      )
-    }
-    if grant.state != UploadGranted {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "new upload grant has invalid state",
-      )
-    }
-    let key = scoped_key(grant.organization_id, grant.idempotency_key)
-    match self.upload_keys.get(key) {
-      Some(existing_id) => {
-        guard self.upload_grants.get(existing_id) is Some(existing) else {
-          raise @offline.OfflineCommerceError::InvalidInput(
-            "broken upload idempotency index",
-          )
-        }
-        if existing == grant {
-          self.mutex.release()
-          return existing
-        }
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          grant.idempotency_key,
+  errdefer {
+    self.upload_grants = before_grants
+    self.upload_keys = before_keys
+  }
+  self.validate_upload_grant_unlocked(grant)
+  let order = self.require_order_unlocked(grant.order_id)
+  if order.state != PendingEvidenceUpload &&
+    order.state != NeedsCorrection &&
+    order.state != PendingInternalApproval {
+    raise @offline.OfflineCommerceError::InvalidTransition(
+      "order is not accepting offline evidence",
+    )
+  }
+  if grant.state != UploadGranted {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "new upload grant has invalid state",
+    )
+  }
+  let key = scoped_key(grant.organization_id, grant.idempotency_key)
+  match self.upload_keys.get(key) {
+    Some(existing_id) => {
+      guard self.upload_grants.get(existing_id) is Some(existing) else {
+        raise @offline.OfflineCommerceError::InvalidInput(
+          "broken upload idempotency index",
         )
       }
-      None => ()
+      if existing == grant {
+        return existing
+      }
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        grant.idempotency_key,
+      )
     }
-    if self.upload_grants.contains(grant.grant_id) ||
-      self.artifacts.contains(grant.artifact_id) {
-      raise @offline.OfflineCommerceError::AlreadyExists(grant.grant_id)
-    }
-    self.upload_grants[grant.grant_id] = grant
-    self.upload_keys[key] = grant.grant_id
-    self.persist()
-    self.mutex.release()
-    grant
-  } catch {
-    error => {
-      self.upload_grants = before_grants
-      self.upload_keys = before_keys
-      self.mutex.release()
-      raise error
-    }
+    None => ()
   }
+  if self.upload_grants.contains(grant.grant_id) ||
+    self.artifacts.contains(grant.artifact_id) {
+    raise @offline.OfflineCommerceError::AlreadyExists(grant.grant_id)
+  }
+  self.upload_grants[grant.grant_id] = grant
+  self.upload_keys[key] = grant.grant_id
+  self.persist()
+  grant
 }
 
 ///|
@@ -1108,122 +1063,115 @@ pub async fn OfflineCommerceStore::complete_upload(
   callback : @offline.EvidenceUploadCallback,
 ) -> @offline.DocumentArtifact {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_grants = self.upload_grants.copy()
   let before_callbacks = self.upload_callbacks.copy()
   let before_artifacts = self.artifacts.copy()
   let before_orders = self.orders.copy()
-  try {
-    guard self.upload_grants.get(callback.grant_id) is Some(grant) else {
-      raise @offline.OfflineCommerceError::NotFound("upload grant")
-    }
-    match self.upload_callbacks.get(callback.callback_id) {
-      Some(existing) if existing == callback => {
-        guard self.artifacts.get(grant.artifact_id) is Some(artifact) else {
-          raise @offline.OfflineCommerceError::InvalidInput(
-            "callback artifact is missing",
-          )
-        }
-        self.mutex.release()
-        return artifact
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          callback.callback_id,
+  errdefer {
+    self.upload_grants = before_grants
+    self.upload_callbacks = before_callbacks
+    self.artifacts = before_artifacts
+    self.orders = before_orders
+  }
+  guard self.upload_grants.get(callback.grant_id) is Some(grant) else {
+    raise @offline.OfflineCommerceError::NotFound("upload grant")
+  }
+  match self.upload_callbacks.get(callback.callback_id) {
+    Some(existing) if existing == callback => {
+      guard self.artifacts.get(grant.artifact_id) is Some(artifact) else {
+        raise @offline.OfflineCommerceError::InvalidInput(
+          "callback artifact is missing",
         )
-      None => ()
+      }
+      return artifact
     }
-    if grant.state != UploadGranted ||
-      callback.completed_unix_ms < grant.created_unix_ms ||
-      callback.completed_unix_ms > grant.expires_unix_ms ||
-      callback.expected_object_ref != grant.expected_object_ref ||
-      !grant.allowed_media_types.contains(callback.media_type) ||
-      callback.byte_count <= 0L ||
-      callback.byte_count > grant.maximum_byte_count ||
-      !@offline.valid_sha256(callback.sha256) ||
-      !@contracts.valid_identifier(callback.callback_id) ||
-      !@contracts.valid_identifier(callback.scanner_receipt) ||
-      !callback.verified {
-      raise @offline.OfflineCommerceError::ArtifactUnavailable(
-        "upload callback failed grant verification",
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        callback.callback_id,
       )
-    }
-    let accepted_scan = callback.scan_passed &&
-      !callback.active_content_detected
-    let artifact : @offline.DocumentArtifact = {
-      artifact_id: grant.artifact_id,
-      order_id: grant.order_id,
-      organization_id: grant.organization_id,
-      kind: grant.kind,
-      revision: grant.revision,
-      template_id: None,
-      template_version: None,
-      locale: "und",
-      media_type: callback.media_type,
-      byte_count: callback.byte_count,
-      sha256: callback.sha256,
-      object_ref: grant.expected_object_ref,
-      generation_state: UserUploaded,
-      scan_state: if accepted_scan {
-        ScanPassed
-      } else {
-        ScanRejected
-      },
-      review_state: if accepted_scan {
-        AwaitingReview
-      } else {
-        ReviewRejected
-      },
-      submitted_by: grant.subject_ref,
-      creator_receipt: callback.scanner_receipt,
-      created_unix_ms: callback.completed_unix_ms,
-    }
-    self.validate_artifact_unlocked(artifact)
-    self.artifacts[artifact.artifact_id] = artifact
-    self.upload_callbacks[callback.callback_id] = callback
-    self.upload_grants[grant.grant_id] = {
-      ..grant,
-      state: if accepted_scan {
-        UploadCompleted
-      } else {
-        UploadRejected
-      },
-    }
-    let updated_order = with_artifact_id(
-      self.require_order_unlocked(grant.order_id),
-      artifact.artifact_id,
+    None => ()
+  }
+  if grant.state != UploadGranted ||
+    callback.completed_unix_ms < grant.created_unix_ms ||
+    callback.completed_unix_ms > grant.expires_unix_ms ||
+    callback.expected_object_ref != grant.expected_object_ref ||
+    !grant.allowed_media_types.contains(callback.media_type) ||
+    callback.byte_count <= 0L ||
+    callback.byte_count > grant.maximum_byte_count ||
+    !@offline.valid_sha256(callback.sha256) ||
+    !@contracts.valid_identifier(callback.callback_id) ||
+    !@contracts.valid_identifier(callback.scanner_receipt) ||
+    !callback.verified {
+    raise @offline.OfflineCommerceError::ArtifactUnavailable(
+      "upload callback failed grant verification",
+    )
+  }
+  let accepted_scan = callback.scan_passed && !callback.active_content_detected
+  let artifact : @offline.DocumentArtifact = {
+    artifact_id: grant.artifact_id,
+    order_id: grant.order_id,
+    organization_id: grant.organization_id,
+    kind: grant.kind,
+    revision: grant.revision,
+    template_id: None,
+    template_version: None,
+    locale: "und",
+    media_type: callback.media_type,
+    byte_count: callback.byte_count,
+    sha256: callback.sha256,
+    object_ref: grant.expected_object_ref,
+    generation_state: UserUploaded,
+    scan_state: if accepted_scan {
+      ScanPassed
+    } else {
+      ScanRejected
+    },
+    review_state: if accepted_scan {
+      AwaitingReview
+    } else {
+      ReviewRejected
+    },
+    submitted_by: grant.subject_ref,
+    creator_receipt: callback.scanner_receipt,
+    created_unix_ms: callback.completed_unix_ms,
+  }
+  self.validate_artifact_unlocked(artifact)
+  self.artifacts[artifact.artifact_id] = artifact
+  self.upload_callbacks[callback.callback_id] = callback
+  self.upload_grants[grant.grant_id] = {
+    ..grant,
+    state: if accepted_scan {
+      UploadCompleted
+    } else {
+      UploadRejected
+    },
+  }
+  let updated_order = with_artifact_id(
+    self.require_order_unlocked(grant.order_id),
+    artifact.artifact_id,
+    callback.completed_unix_ms,
+  )
+  self.orders[grant.order_id] = if accepted_scan &&
+    (
+      updated_order.state == PendingEvidenceUpload ||
+      updated_order.state == NeedsCorrection
+    ) {
+    updated_order.mark_reconciling(
+      updated_order.generation,
       callback.completed_unix_ms,
     )
-    self.orders[grant.order_id] = if accepted_scan &&
-      (
-        updated_order.state == PendingEvidenceUpload ||
-        updated_order.state == NeedsCorrection
-      ) {
-      updated_order.mark_reconciling(
-        updated_order.generation,
-        callback.completed_unix_ms,
-      )
-    } else if !accepted_scan && updated_order.state != PendingInternalApproval {
-      {
-        ..updated_order,
-        state: NeedsCorrection,
-        generation: updated_order.generation + 1L,
-      }
-    } else {
-      updated_order
+  } else if !accepted_scan && updated_order.state != PendingInternalApproval {
+    {
+      ..updated_order,
+      state: NeedsCorrection,
+      generation: updated_order.generation + 1L,
     }
-    self.persist()
-    self.mutex.release()
-    artifact
-  } catch {
-    error => {
-      self.upload_grants = before_grants
-      self.upload_callbacks = before_callbacks
-      self.artifacts = before_artifacts
-      self.orders = before_orders
-      self.mutex.release()
-      raise error
-    }
+  } else {
+    updated_order
   }
+  self.persist()
+  artifact
 }
 
 ///|
@@ -1252,91 +1200,81 @@ pub async fn OfflineCommerceStore::review_evidence(
   review : @offline.EvidenceReview,
 ) -> @offline.DocumentArtifact {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_reviews = self.reviews.copy()
   let before_artifacts = self.artifacts.copy()
   let before_orders = self.orders.copy()
-  try {
-    match self.reviews.get(review.review_id) {
-      Some(existing) if existing == review => {
-        guard self.artifacts.get(review.artifact_id) is Some(artifact) else {
-          raise @offline.OfflineCommerceError::NotFound("review artifact")
-        }
-        self.mutex.release()
-        return artifact
+  errdefer {
+    self.reviews = before_reviews
+    self.artifacts = before_artifacts
+    self.orders = before_orders
+  }
+  match self.reviews.get(review.review_id) {
+    Some(existing) if existing == review => {
+      guard self.artifacts.get(review.artifact_id) is Some(artifact) else {
+        raise @offline.OfflineCommerceError::NotFound("review artifact")
       }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          review.review_id,
-        )
-      None => ()
+      return artifact
     }
-    guard self.artifacts.get(review.artifact_id) is Some(artifact) else {
-      raise @offline.OfflineCommerceError::NotFound("review artifact")
-    }
-    guard self.orders.get(review.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("review order")
-    }
-    if artifact.order_id != order.order_id ||
-      artifact.sha256 != review.expected_artifact_sha256 ||
-      artifact.scan_state != ScanPassed ||
-      artifact.review_state != AwaitingReview ||
-      !@contracts.valid_identifier(review.review_id) ||
-      !@contracts.valid_identifier(review.reviewer_ref) ||
-      !@contracts.valid_identifier(review.reason_code) ||
-      !@contracts.valid_identifier(review.audit_receipt) ||
-      review.reviewed_unix_ms < artifact.created_unix_ms {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "invalid evidence review",
-      )
-    }
-    if artifact.submitted_by == review.reviewer_ref {
-      raise @offline.OfflineCommerceError::SeparationOfDuties
-    }
-    let updated_artifact = {
-      ..artifact,
-      review_state: if review.accepted {
-        ReviewAccepted
-      } else {
-        ReviewRejected
-      },
-    }
-    self.artifacts[artifact.artifact_id] = updated_artifact
-    self.reviews[review.review_id] = review
-    let updated_order = if !review.accepted {
-      {
-        ..order,
-        state: NeedsCorrection,
-        generation: order.generation + 1L,
-        updated_unix_ms: review.reviewed_unix_ms,
-      }
-    } else if order.state == PendingInternalApproval &&
-      @offline.evidence_kind(artifact.kind) == Some(InternalApproval) {
-      {
-        ..order,
-        state: PendingOfflineExecution,
-        generation: order.generation + 1L,
-        updated_unix_ms: review.reviewed_unix_ms,
-      }
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(review.review_id)
+    None => ()
+  }
+  guard self.artifacts.get(review.artifact_id) is Some(artifact) else {
+    raise @offline.OfflineCommerceError::NotFound("review artifact")
+  }
+  guard self.orders.get(review.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("review order")
+  }
+  if artifact.order_id != order.order_id ||
+    artifact.sha256 != review.expected_artifact_sha256 ||
+    artifact.scan_state != ScanPassed ||
+    artifact.review_state != AwaitingReview ||
+    !@contracts.valid_identifier(review.review_id) ||
+    !@contracts.valid_identifier(review.reviewer_ref) ||
+    !@contracts.valid_identifier(review.reason_code) ||
+    !@contracts.valid_identifier(review.audit_receipt) ||
+    review.reviewed_unix_ms < artifact.created_unix_ms {
+    raise @offline.OfflineCommerceError::InvalidInput("invalid evidence review")
+  }
+  if artifact.submitted_by == review.reviewer_ref {
+    raise @offline.OfflineCommerceError::SeparationOfDuties
+  }
+  let updated_artifact = {
+    ..artifact,
+    review_state: if review.accepted {
+      ReviewAccepted
     } else {
-      {
-        ..order,
-        generation: order.generation + 1L,
-        updated_unix_ms: review.reviewed_unix_ms,
-      }
+      ReviewRejected
+    },
+  }
+  self.artifacts[artifact.artifact_id] = updated_artifact
+  self.reviews[review.review_id] = review
+  let updated_order = if !review.accepted {
+    {
+      ..order,
+      state: NeedsCorrection,
+      generation: order.generation + 1L,
+      updated_unix_ms: review.reviewed_unix_ms,
     }
-    self.orders[order.order_id] = updated_order
-    self.persist()
-    self.mutex.release()
-    updated_artifact
-  } catch {
-    error => {
-      self.reviews = before_reviews
-      self.artifacts = before_artifacts
-      self.orders = before_orders
-      self.mutex.release()
-      raise error
+  } else if order.state == PendingInternalApproval &&
+    @offline.evidence_kind(artifact.kind) == Some(InternalApproval) {
+    {
+      ..order,
+      state: PendingOfflineExecution,
+      generation: order.generation + 1L,
+      updated_unix_ms: review.reviewed_unix_ms,
+    }
+  } else {
+    {
+      ..order,
+      generation: order.generation + 1L,
+      updated_unix_ms: review.reviewed_unix_ms,
     }
   }
+  self.orders[order.order_id] = updated_order
+  self.persist()
+  updated_artifact
 }
 
 ///|
@@ -1348,60 +1286,52 @@ pub async fn OfflineCommerceStore::fulfill(
   now_unix_ms : Int64,
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_orders = self.orders.copy()
   let before_activations = self.entitlement_activations.copy()
-  try {
-    let order = self.require_order_unlocked(order_id)
-    @offline.validate_activation(activation)
-    if activation.order_id != order.order_id ||
-      activation.organization_id != order.organization_id ||
-      activation.purchaser_subject_ref != order.purchaser_subject_ref ||
-      activation.expected_order_generation != expected_generation ||
-      activation.state != EntitlementActivationRequested {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "entitlement activation is not bound to the order",
-      )
-    }
-    match self.entitlement_activations.get(activation.activation_id) {
-      Some(existing) if existing == activation => {
-        self.mutex.release()
-        return order
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          activation.activation_id,
-        )
-      None => ()
-    }
-    if order.generation != expected_generation {
-      raise @offline.OfflineCommerceError::StaleGeneration
-    }
-    if order.state != UnderReconciliation {
-      raise @offline.OfflineCommerceError::InvalidTransition(
-        "order is not under reconciliation",
-      )
-    }
-    let accepted = self.accepted_evidence_unlocked(order)
-    let missing = @offline.required_evidence(order.policy).filter(kind => {
-      !accepted.contains(kind)
-    })
-    if missing.length() > 0 {
-      raise @offline.OfflineCommerceError::EvidenceMissing(missing)
-    }
-    let updated = order.request_activation(expected_generation, now_unix_ms)
-    self.orders[order_id] = updated
-    self.entitlement_activations[activation.activation_id] = activation
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.orders = before_orders
-      self.entitlement_activations = before_activations
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.orders = before_orders
+    self.entitlement_activations = before_activations
   }
+  let order = self.require_order_unlocked(order_id)
+  @offline.validate_activation(activation)
+  if activation.order_id != order.order_id ||
+    activation.organization_id != order.organization_id ||
+    activation.purchaser_subject_ref != order.purchaser_subject_ref ||
+    activation.expected_order_generation != expected_generation ||
+    activation.state != EntitlementActivationRequested {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "entitlement activation is not bound to the order",
+    )
+  }
+  match self.entitlement_activations.get(activation.activation_id) {
+    Some(existing) if existing == activation => return order
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        activation.activation_id,
+      )
+    None => ()
+  }
+  if order.generation != expected_generation {
+    raise @offline.OfflineCommerceError::StaleGeneration
+  }
+  if order.state != UnderReconciliation {
+    raise @offline.OfflineCommerceError::InvalidTransition(
+      "order is not under reconciliation",
+    )
+  }
+  let accepted = self.accepted_evidence_unlocked(order)
+  let missing = @offline.required_evidence(order.policy).filter(kind => {
+    !accepted.contains(kind)
+  })
+  if missing.length() > 0 {
+    raise @offline.OfflineCommerceError::EvidenceMissing(missing)
+  }
+  let updated = order.request_activation(expected_generation, now_unix_ms)
+  self.orders[order_id] = updated
+  self.entitlement_activations[activation.activation_id] = activation
+  self.persist()
+  updated
 }
 
 ///|
@@ -1411,107 +1341,100 @@ pub async fn OfflineCommerceStore::complete_activation(
   completed : @offline.EntitlementActivation,
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_orders = self.orders.copy()
   let before_activations = self.entitlement_activations.copy()
   let before_claims = self.work_claims.copy()
   let before_health = self.worker_health
-  try {
-    @offline.validate_activation(completed)
-    guard self.entitlement_activations.get(completed.activation_id)
-      is Some(pending) else {
-      raise @offline.OfflineCommerceError::NotFound("entitlement activation")
-    }
-    guard self.orders.get(completed.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("activation order")
-    }
-    if pending.state != EntitlementActivationRequested {
-      if pending ==
-        { ..completed, completed_unix_ms: pending.completed_unix_ms } {
-        self.mutex.release()
-        return order
-      }
-      raise @offline.OfflineCommerceError::IdempotencyConflict(
-        completed.activation_id,
-      )
-    }
-    guard self.work_claims.get(activation_work_id(completed.activation_id))
-      is Some(claim) &&
-      claim.worker_kind == EntitlementDispatcher &&
-      claim.attempt > 0 &&
-      claim.completed_unix_ms is None &&
-      claim.expected_order_generation == pending.expected_order_generation else {
-      raise @offline.OfflineCommerceError::Unauthorized
-    }
-    if completed.activation_id != pending.activation_id ||
-      completed.idempotency_key != pending.idempotency_key ||
-      completed.order_id != pending.order_id ||
-      completed.organization_id != pending.organization_id ||
-      completed.purchaser_subject_ref != pending.purchaser_subject_ref ||
-      completed.kind != pending.kind ||
-      completed.authority_target_ref != pending.authority_target_ref ||
-      completed.expected_order_generation != pending.expected_order_generation ||
-      completed.requested_by != pending.requested_by ||
-      completed.requested_unix_ms != pending.requested_unix_ms {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "entitlement authority result does not match the pending request",
-      )
-    }
-    let updated = match completed.state {
-      EntitlementActivationConfirmed => {
-        guard completed.entitlement_ref is Some(entitlement_ref) &&
-          completed.completed_unix_ms is Some(completed_unix_ms) else {
-          raise @offline.OfflineCommerceError::InvalidInput(
-            "confirmed activation is incomplete",
-          )
-        }
-        order.confirm_activation(
-          order.generation,
-          entitlement_ref,
-          completed_unix_ms,
-        )
-      }
-      EntitlementActivationRejected => {
-        guard completed.completed_unix_ms is Some(completed_unix_ms) else {
-          raise @offline.OfflineCommerceError::InvalidInput(
-            "rejected activation is incomplete",
-          )
-        }
-        {
-          ..order,
-          state: UnderReconciliation,
-          generation: order.generation + 1L,
-          updated_unix_ms: completed_unix_ms,
-        }
-      }
-      EntitlementActivationRequested =>
-        raise @offline.OfflineCommerceError::InvalidTransition(
-          "activation result remains pending",
-        )
-    }
-    self.entitlement_activations[completed.activation_id] = completed
-    self.orders[order.order_id] = updated
-    let completed_unix_ms = completed.completed_unix_ms.unwrap()
-    self.work_claims[claim.work_id] = {
-      ..claim,
-      completed_unix_ms: Some(completed_unix_ms),
-    }
-    self.worker_health = {
-      ..self.worker_health,
-      entitlement_dispatcher_success_unix_ms: Some(completed_unix_ms),
-    }
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.orders = before_orders
-      self.entitlement_activations = before_activations
-      self.work_claims = before_claims
-      self.worker_health = before_health
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.orders = before_orders
+    self.entitlement_activations = before_activations
+    self.work_claims = before_claims
+    self.worker_health = before_health
   }
+  @offline.validate_activation(completed)
+  guard self.entitlement_activations.get(completed.activation_id)
+    is Some(pending) else {
+    raise @offline.OfflineCommerceError::NotFound("entitlement activation")
+  }
+  guard self.orders.get(completed.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("activation order")
+  }
+  if pending.state != EntitlementActivationRequested {
+    if pending == { ..completed, completed_unix_ms: pending.completed_unix_ms, } {
+      return order
+    }
+    raise @offline.OfflineCommerceError::IdempotencyConflict(
+      completed.activation_id,
+    )
+  }
+  guard self.work_claims.get(activation_work_id(completed.activation_id))
+    is Some(claim) &&
+    claim.worker_kind == EntitlementDispatcher &&
+    claim.attempt > 0 &&
+    claim.completed_unix_ms is None &&
+    claim.expected_order_generation == pending.expected_order_generation else {
+    raise @offline.OfflineCommerceError::Unauthorized
+  }
+  if completed.activation_id != pending.activation_id ||
+    completed.idempotency_key != pending.idempotency_key ||
+    completed.order_id != pending.order_id ||
+    completed.organization_id != pending.organization_id ||
+    completed.purchaser_subject_ref != pending.purchaser_subject_ref ||
+    completed.kind != pending.kind ||
+    completed.authority_target_ref != pending.authority_target_ref ||
+    completed.expected_order_generation != pending.expected_order_generation ||
+    completed.requested_by != pending.requested_by ||
+    completed.requested_unix_ms != pending.requested_unix_ms {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "entitlement authority result does not match the pending request",
+    )
+  }
+  let updated = match completed.state {
+    EntitlementActivationConfirmed => {
+      guard completed.entitlement_ref is Some(entitlement_ref) &&
+        completed.completed_unix_ms is Some(completed_unix_ms) else {
+        raise @offline.OfflineCommerceError::InvalidInput(
+          "confirmed activation is incomplete",
+        )
+      }
+      order.confirm_activation(
+        order.generation,
+        entitlement_ref,
+        completed_unix_ms,
+      )
+    }
+    EntitlementActivationRejected => {
+      guard completed.completed_unix_ms is Some(completed_unix_ms) else {
+        raise @offline.OfflineCommerceError::InvalidInput(
+          "rejected activation is incomplete",
+        )
+      }
+      {
+        ..order,
+        state: UnderReconciliation,
+        generation: order.generation + 1L,
+        updated_unix_ms: completed_unix_ms,
+      }
+    }
+    EntitlementActivationRequested =>
+      raise @offline.OfflineCommerceError::InvalidTransition(
+        "activation result remains pending",
+      )
+  }
+  self.entitlement_activations[completed.activation_id] = completed
+  self.orders[order.order_id] = updated
+  let completed_unix_ms = completed.completed_unix_ms.unwrap()
+  self.work_claims[claim.work_id] = {
+    ..claim,
+    completed_unix_ms: Some(completed_unix_ms),
+  }
+  self.worker_health = {
+    ..self.worker_health,
+    entitlement_dispatcher_success_unix_ms: Some(completed_unix_ms),
+  }
+  self.persist()
+  updated
 }
 
 ///|
@@ -1533,58 +1456,53 @@ pub async fn OfflineCommerceStore::expire_orders(
   now_unix_ms : Int64,
 ) -> Array[@offline.CommercialOrder] {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.orders.copy()
   let before_reversals = self.reversals.copy()
-  try {
-    let expired = []
-    for order_id, order in self.orders {
-      let updated = if order.state == Fulfilled &&
-        order.expires_unix_ms <= now_unix_ms {
-        guard order.entitlement_ref is Some(entitlement_ref) else {
-          raise @offline.OfflineCommerceError::InvalidInput(
-            "expired fulfilled order lacks entitlement",
-          )
-        }
-        let reversal_id = "expiry-\{order.order_id}-\{order.generation}"
-        let reversal : @offline.CommercialReversal = {
-          reversal_id,
-          idempotency_key: reversal_id,
-          order_id: order.order_id,
-          organization_id: order.organization_id,
-          entitlement_ref,
-          reason: ContractExpired,
-          expected_order_generation: order.generation,
-          state: ReversalRequested,
-          authority_receipt: None,
-          reason_code: None,
-          requested_by: "offline-expiry-reconciler",
-          requested_unix_ms: now_unix_ms,
-          completed_unix_ms: None,
-        }
-        @offline.validate_reversal(reversal)
-        self.reversals[reversal_id] = reversal
-        order.request_reversal(order.generation, now_unix_ms)
-      } else {
-        order.expire(now_unix_ms)
+  errdefer {
+    self.orders = before
+    self.reversals = before_reversals
+  }
+  let expired = []
+  for order_id, order in self.orders {
+    let updated = if order.state == Fulfilled &&
+      order.expires_unix_ms <= now_unix_ms {
+      guard order.entitlement_ref is Some(entitlement_ref) else {
+        raise @offline.OfflineCommerceError::InvalidInput(
+          "expired fulfilled order lacks entitlement",
+        )
       }
-      if updated != order {
-        self.orders[order_id] = updated
-        expired.push(updated)
+      let reversal_id = "expiry-\{order.order_id}-\{order.generation}"
+      let reversal : @offline.CommercialReversal = {
+        reversal_id,
+        idempotency_key: reversal_id,
+        order_id: order.order_id,
+        organization_id: order.organization_id,
+        entitlement_ref,
+        reason: ContractExpired,
+        expected_order_generation: order.generation,
+        state: ReversalRequested,
+        authority_receipt: None,
+        reason_code: None,
+        requested_by: "offline-expiry-reconciler",
+        requested_unix_ms: now_unix_ms,
+        completed_unix_ms: None,
       }
+      @offline.validate_reversal(reversal)
+      self.reversals[reversal_id] = reversal
+      order.request_reversal(order.generation, now_unix_ms)
+    } else {
+      order.expire(now_unix_ms)
     }
-    if expired.length() > 0 {
-      self.persist()
-    }
-    self.mutex.release()
-    expired
-  } catch {
-    error => {
-      self.orders = before
-      self.reversals = before_reversals
-      self.mutex.release()
-      raise error
+    if updated != order {
+      self.orders[order_id] = updated
+      expired.push(updated)
     }
   }
+  if expired.length() > 0 {
+    self.persist()
+  }
+  expired
 }
 
 ///|
@@ -1593,51 +1511,43 @@ pub async fn OfflineCommerceStore::request_reversal(
   reversal : @offline.CommercialReversal,
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_orders = self.orders.copy()
   let before_reversals = self.reversals.copy()
-  try {
-    @offline.validate_reversal(reversal)
-    guard self.orders.get(reversal.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("reversal order")
-    }
-    if reversal.organization_id != order.organization_id ||
-      order.entitlement_ref != Some(reversal.entitlement_ref) ||
-      reversal.state != ReversalRequested {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "commercial reversal is not bound to the fulfilled order",
-      )
-    }
-    match self.reversals.get(reversal.reversal_id) {
-      Some(existing) if existing == reversal => {
-        self.mutex.release()
-        return order
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          reversal.reversal_id,
-        )
-      None => ()
-    }
-    if reversal.expected_order_generation != order.generation {
-      raise @offline.OfflineCommerceError::StaleGeneration
-    }
-    let updated = order.request_reversal(
-      reversal.expected_order_generation,
-      reversal.requested_unix_ms,
-    )
-    self.reversals[reversal.reversal_id] = reversal
-    self.orders[order.order_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.orders = before_orders
-      self.reversals = before_reversals
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.orders = before_orders
+    self.reversals = before_reversals
   }
+  @offline.validate_reversal(reversal)
+  guard self.orders.get(reversal.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("reversal order")
+  }
+  if reversal.organization_id != order.organization_id ||
+    order.entitlement_ref != Some(reversal.entitlement_ref) ||
+    reversal.state != ReversalRequested {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "commercial reversal is not bound to the fulfilled order",
+    )
+  }
+  match self.reversals.get(reversal.reversal_id) {
+    Some(existing) if existing == reversal => return order
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        reversal.reversal_id,
+      )
+    None => ()
+  }
+  if reversal.expected_order_generation != order.generation {
+    raise @offline.OfflineCommerceError::StaleGeneration
+  }
+  let updated = order.request_reversal(
+    reversal.expected_order_generation,
+    reversal.requested_unix_ms,
+  )
+  self.reversals[reversal.reversal_id] = reversal
+  self.orders[order.order_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -1646,87 +1556,80 @@ pub async fn OfflineCommerceStore::complete_reversal(
   completed : @offline.CommercialReversal,
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_orders = self.orders.copy()
   let before_reversals = self.reversals.copy()
   let before_claims = self.work_claims.copy()
   let before_health = self.worker_health
-  try {
-    @offline.validate_reversal(completed)
-    guard self.reversals.get(completed.reversal_id) is Some(pending) else {
-      raise @offline.OfflineCommerceError::NotFound("commercial reversal")
-    }
-    guard self.orders.get(completed.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("reversal order")
-    }
-    if pending.state != ReversalRequested {
-      if pending ==
-        { ..completed, completed_unix_ms: pending.completed_unix_ms } {
-        self.mutex.release()
-        return order
-      }
-      raise @offline.OfflineCommerceError::IdempotencyConflict(
-        completed.reversal_id,
-      )
-    }
-    guard self.work_claims.get(reversal_work_id(completed.reversal_id))
-      is Some(claim) &&
-      claim.worker_kind == EntitlementDispatcher &&
-      claim.attempt > 0 &&
-      claim.completed_unix_ms is None &&
-      claim.expected_order_generation == pending.expected_order_generation else {
-      raise @offline.OfflineCommerceError::Unauthorized
-    }
-    if completed.reversal_id != pending.reversal_id ||
-      completed.idempotency_key != pending.idempotency_key ||
-      completed.order_id != pending.order_id ||
-      completed.organization_id != pending.organization_id ||
-      completed.entitlement_ref != pending.entitlement_ref ||
-      completed.reason != pending.reason ||
-      completed.expected_order_generation != pending.expected_order_generation ||
-      completed.requested_by != pending.requested_by ||
-      completed.requested_unix_ms != pending.requested_unix_ms {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "reversal authority result does not match the pending request",
-      )
-    }
-    guard completed.completed_unix_ms is Some(completed_unix_ms) else {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "reversal authority result is incomplete",
-      )
-    }
-    let updated = match completed.state {
-      ReversalConfirmed =>
-        order.confirm_reversal(order.generation, completed_unix_ms)
-      ReversalFailed =>
-        order.hold_failed_reversal(order.generation, completed_unix_ms)
-      ReversalRequested =>
-        raise @offline.OfflineCommerceError::InvalidTransition(
-          "reversal result remains pending",
-        )
-    }
-    self.reversals[completed.reversal_id] = completed
-    self.orders[order.order_id] = updated
-    self.work_claims[claim.work_id] = {
-      ..claim,
-      completed_unix_ms: Some(completed_unix_ms),
-    }
-    self.worker_health = {
-      ..self.worker_health,
-      entitlement_dispatcher_success_unix_ms: Some(completed_unix_ms),
-    }
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.orders = before_orders
-      self.reversals = before_reversals
-      self.work_claims = before_claims
-      self.worker_health = before_health
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.orders = before_orders
+    self.reversals = before_reversals
+    self.work_claims = before_claims
+    self.worker_health = before_health
   }
+  @offline.validate_reversal(completed)
+  guard self.reversals.get(completed.reversal_id) is Some(pending) else {
+    raise @offline.OfflineCommerceError::NotFound("commercial reversal")
+  }
+  guard self.orders.get(completed.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("reversal order")
+  }
+  if pending.state != ReversalRequested {
+    if pending == { ..completed, completed_unix_ms: pending.completed_unix_ms, } {
+      return order
+    }
+    raise @offline.OfflineCommerceError::IdempotencyConflict(
+      completed.reversal_id,
+    )
+  }
+  guard self.work_claims.get(reversal_work_id(completed.reversal_id))
+    is Some(claim) &&
+    claim.worker_kind == EntitlementDispatcher &&
+    claim.attempt > 0 &&
+    claim.completed_unix_ms is None &&
+    claim.expected_order_generation == pending.expected_order_generation else {
+    raise @offline.OfflineCommerceError::Unauthorized
+  }
+  if completed.reversal_id != pending.reversal_id ||
+    completed.idempotency_key != pending.idempotency_key ||
+    completed.order_id != pending.order_id ||
+    completed.organization_id != pending.organization_id ||
+    completed.entitlement_ref != pending.entitlement_ref ||
+    completed.reason != pending.reason ||
+    completed.expected_order_generation != pending.expected_order_generation ||
+    completed.requested_by != pending.requested_by ||
+    completed.requested_unix_ms != pending.requested_unix_ms {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "reversal authority result does not match the pending request",
+    )
+  }
+  guard completed.completed_unix_ms is Some(completed_unix_ms) else {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "reversal authority result is incomplete",
+    )
+  }
+  let updated = match completed.state {
+    ReversalConfirmed =>
+      order.confirm_reversal(order.generation, completed_unix_ms)
+    ReversalFailed =>
+      order.hold_failed_reversal(order.generation, completed_unix_ms)
+    ReversalRequested =>
+      raise @offline.OfflineCommerceError::InvalidTransition(
+        "reversal result remains pending",
+      )
+  }
+  self.reversals[completed.reversal_id] = completed
+  self.orders[order.order_id] = updated
+  self.work_claims[claim.work_id] = {
+    ..claim,
+    completed_unix_ms: Some(completed_unix_ms),
+  }
+  self.worker_health = {
+    ..self.worker_health,
+    entitlement_dispatcher_success_unix_ms: Some(completed_unix_ms),
+  }
+  self.persist()
+  updated
 }
 
 ///| Resolves a failed entitlement reversal without discarding either the
@@ -1738,92 +1641,84 @@ pub async fn OfflineCommerceStore::recover_failed_reversal(
   recovery : @offline.ReversalRecovery,
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_orders = self.orders.copy()
   let before_reversals = self.reversals.copy()
   let before_recoveries = self.reversal_recoveries.copy()
-  try {
-    @offline.validate_reversal_recovery(recovery)
-    guard self.orders.get(recovery.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("reversal recovery order")
-    }
-    match self.reversal_recoveries.get(recovery.recovery_id) {
-      Some(existing) if existing == recovery => {
-        self.mutex.release()
-        return order
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          recovery.recovery_id,
-        )
-      None => ()
-    }
-    if self.reversal_recoveries
-      .values()
-      .any(existing => {
-        existing.organization_id == recovery.organization_id &&
-        existing.idempotency_key == recovery.idempotency_key
-      }) {
-      raise @offline.OfflineCommerceError::IdempotencyConflict(
-        recovery.idempotency_key,
-      )
-    }
-    guard self.reversals.get(recovery.failed_reversal_id) is Some(failed) else {
-      raise @offline.OfflineCommerceError::NotFound("failed reversal")
-    }
-    if recovery.organization_id != order.organization_id ||
-      failed.order_id != order.order_id ||
-      failed.organization_id != order.organization_id ||
-      failed.state != ReversalFailed ||
-      order.entitlement_ref != Some(failed.entitlement_ref) {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "recovery is not bound to the failed reversal",
-      )
-    }
-    if recovery.expected_order_generation != order.generation {
-      raise @offline.OfflineCommerceError::StaleGeneration
-    }
-    let updated = order.recover_failed_reversal(
-      recovery.expected_order_generation,
-      recovery.decision,
-      recovery.recovered_unix_ms,
-    )
-    if recovery.decision == RetryReversal {
-      let replacement_id = recovery.replacement_reversal_id.unwrap()
-      if self.reversals.contains(replacement_id) {
-        raise @offline.OfflineCommerceError::IdempotencyConflict(replacement_id)
-      }
-      let replacement : @offline.CommercialReversal = {
-        reversal_id: replacement_id,
-        idempotency_key: recovery.idempotency_key,
-        order_id: order.order_id,
-        organization_id: order.organization_id,
-        entitlement_ref: failed.entitlement_ref,
-        reason: failed.reason,
-        expected_order_generation: order.generation,
-        state: ReversalRequested,
-        authority_receipt: None,
-        reason_code: None,
-        requested_by: recovery.recovered_by,
-        requested_unix_ms: recovery.recovered_unix_ms,
-        completed_unix_ms: None,
-      }
-      @offline.validate_reversal(replacement)
-      self.reversals[replacement_id] = replacement
-    }
-    self.reversal_recoveries[recovery.recovery_id] = recovery
-    self.orders[order.order_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.orders = before_orders
-      self.reversals = before_reversals
-      self.reversal_recoveries = before_recoveries
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.orders = before_orders
+    self.reversals = before_reversals
+    self.reversal_recoveries = before_recoveries
   }
+  @offline.validate_reversal_recovery(recovery)
+  guard self.orders.get(recovery.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("reversal recovery order")
+  }
+  match self.reversal_recoveries.get(recovery.recovery_id) {
+    Some(existing) if existing == recovery => return order
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        recovery.recovery_id,
+      )
+    None => ()
+  }
+  if self.reversal_recoveries
+    .values()
+    .any(existing => {
+      existing.organization_id == recovery.organization_id &&
+      existing.idempotency_key == recovery.idempotency_key
+    }) {
+    raise @offline.OfflineCommerceError::IdempotencyConflict(
+      recovery.idempotency_key,
+    )
+  }
+  guard self.reversals.get(recovery.failed_reversal_id) is Some(failed) else {
+    raise @offline.OfflineCommerceError::NotFound("failed reversal")
+  }
+  if recovery.organization_id != order.organization_id ||
+    failed.order_id != order.order_id ||
+    failed.organization_id != order.organization_id ||
+    failed.state != ReversalFailed ||
+    order.entitlement_ref != Some(failed.entitlement_ref) {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "recovery is not bound to the failed reversal",
+    )
+  }
+  if recovery.expected_order_generation != order.generation {
+    raise @offline.OfflineCommerceError::StaleGeneration
+  }
+  let updated = order.recover_failed_reversal(
+    recovery.expected_order_generation,
+    recovery.decision,
+    recovery.recovered_unix_ms,
+  )
+  if recovery.decision == RetryReversal {
+    let replacement_id = recovery.replacement_reversal_id.unwrap()
+    if self.reversals.contains(replacement_id) {
+      raise @offline.OfflineCommerceError::IdempotencyConflict(replacement_id)
+    }
+    let replacement : @offline.CommercialReversal = {
+      reversal_id: replacement_id,
+      idempotency_key: recovery.idempotency_key,
+      order_id: order.order_id,
+      organization_id: order.organization_id,
+      entitlement_ref: failed.entitlement_ref,
+      reason: failed.reason,
+      expected_order_generation: order.generation,
+      state: ReversalRequested,
+      authority_receipt: None,
+      reason_code: None,
+      requested_by: recovery.recovered_by,
+      requested_unix_ms: recovery.recovered_unix_ms,
+      completed_unix_ms: None,
+    }
+    @offline.validate_reversal(replacement)
+    self.reversals[replacement_id] = replacement
+  }
+  self.reversal_recoveries[recovery.recovery_id] = recovery
+  self.orders[order.order_id] = updated
+  self.persist()
+  updated
 }
 
 ///| Issues one bounded transfer capability. The raw token is returned only by
@@ -1841,65 +1736,57 @@ pub async fn OfflineCommerceStore::issue_transfer_session(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.transfer_sessions.copy()
-  try {
-    guard self.orders.get(session.order_id) is Some(order) else {
-      raise @offline.OfflineCommerceError::NotFound("transfer order")
-    }
-    if order.organization_id != session.organization_id ||
-      order.purchaser_subject_ref != session.subject_ref {
-      raise @offline.OfflineCommerceError::TenantMismatch
-    }
-    match session.direction {
-      UploadTransfer => {
-        guard self.upload_grants
-          .values()
-          .any(grant => {
-            grant.order_id == session.order_id &&
-            grant.artifact_id == session.artifact_id &&
-            grant.organization_id == session.organization_id &&
-            grant.subject_ref == session.subject_ref &&
-            grant.state == UploadGranted &&
-            grant.expires_unix_ms >= session.expires_unix_ms
-          }) else {
-          raise @offline.OfflineCommerceError::InvalidTransition(
-            "upload transfer has no live evidence grant",
-          )
-        }
-      }
-      DownloadTransfer => {
-        guard self.artifacts.get(session.artifact_id) is Some(artifact) &&
-          artifact.order_id == session.order_id &&
-          artifact.organization_id == session.organization_id &&
-          artifact.scan_state == ScanPassed else {
-          raise @offline.OfflineCommerceError::ArtifactUnavailable(
-            "download artifact is unavailable",
-          )
-        }
-      }
-    }
-    match self.transfer_sessions.get(session.session_id) {
-      Some(existing) if existing == session => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) =>
-        raise @offline.OfflineCommerceError::IdempotencyConflict(
-          session.session_id,
+  errdefer {
+    self.transfer_sessions = before
+  }
+  guard self.orders.get(session.order_id) is Some(order) else {
+    raise @offline.OfflineCommerceError::NotFound("transfer order")
+  }
+  if order.organization_id != session.organization_id ||
+    order.purchaser_subject_ref != session.subject_ref {
+    raise @offline.OfflineCommerceError::TenantMismatch
+  }
+  match session.direction {
+    UploadTransfer => {
+      guard self.upload_grants
+        .values()
+        .any(grant => {
+          grant.order_id == session.order_id &&
+          grant.artifact_id == session.artifact_id &&
+          grant.organization_id == session.organization_id &&
+          grant.subject_ref == session.subject_ref &&
+          grant.state == UploadGranted &&
+          grant.expires_unix_ms >= session.expires_unix_ms
+        }) else {
+        raise @offline.OfflineCommerceError::InvalidTransition(
+          "upload transfer has no live evidence grant",
         )
-      None => ()
+      }
     }
-    self.transfer_sessions[session.session_id] = session
-    self.persist()
-    self.mutex.release()
-    session
-  } catch {
-    error => {
-      self.transfer_sessions = before
-      self.mutex.release()
-      raise error
+    DownloadTransfer => {
+      guard self.artifacts.get(session.artifact_id) is Some(artifact) &&
+        artifact.order_id == session.order_id &&
+        artifact.organization_id == session.organization_id &&
+        artifact.scan_state == ScanPassed else {
+        raise @offline.OfflineCommerceError::ArtifactUnavailable(
+          "download artifact is unavailable",
+        )
+      }
     }
   }
+  match self.transfer_sessions.get(session.session_id) {
+    Some(existing) if existing == session => return existing
+    Some(_) =>
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        session.session_id,
+      )
+    None => ()
+  }
+  self.transfer_sessions[session.session_id] = session
+  self.persist()
+  session
 }
 
 ///| Consumes the one-time capability after the transfer adapter confirms the
@@ -1917,50 +1804,45 @@ pub async fn OfflineCommerceStore::consume_transfer_session(
   now_unix_ms : Int64,
 ) -> @offline.OfflineTransferSession {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.transfer_sessions.copy()
   let before_evidence = self.transfer_evidence.copy()
-  try {
-    guard self.transfer_sessions.get(session_id) is Some(session) else {
-      raise @offline.OfflineCommerceError::NotFound("transfer session")
-    }
-    if session.state != TransferIssued ||
-      !constant_time_string_equal(session.session_token_sha256, token_sha256) ||
-      !session.media_types.contains(media_type) ||
-      byte_count <= 0L ||
-      byte_count > session.maximum_byte_count ||
-      !@offline.valid_sha256(sha256) ||
-      session.expected_sha256.map_or(false, digest => digest != sha256) ||
-      !@contracts.valid_identifier(provider_receipt, maximum_length=512) ||
-      now_unix_ms < session.issued_unix_ms ||
-      now_unix_ms > session.expires_unix_ms {
-      raise @offline.OfflineCommerceError::Unauthorized
-    }
-    let consumed = {
-      ..session,
-      state: TransferConsumed,
-      consumed_unix_ms: Some(now_unix_ms),
-    }
-    @offline.validate_transfer_session(consumed)
-    self.transfer_sessions[session_id] = consumed
-    self.transfer_evidence[session_id] = {
-      session_id,
-      media_type,
-      byte_count,
-      sha256,
-      provider_receipt,
-      completed_unix_ms: now_unix_ms,
-    }
-    self.persist()
-    self.mutex.release()
-    consumed
-  } catch {
-    error => {
-      self.transfer_sessions = before
-      self.transfer_evidence = before_evidence
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.transfer_sessions = before
+    self.transfer_evidence = before_evidence
   }
+  guard self.transfer_sessions.get(session_id) is Some(session) else {
+    raise @offline.OfflineCommerceError::NotFound("transfer session")
+  }
+  if session.state != TransferIssued ||
+    !constant_time_string_equal(session.session_token_sha256, token_sha256) ||
+    !session.media_types.contains(media_type) ||
+    byte_count <= 0L ||
+    byte_count > session.maximum_byte_count ||
+    !@offline.valid_sha256(sha256) ||
+    session.expected_sha256.map_or(false, digest => digest != sha256) ||
+    !@contracts.valid_identifier(provider_receipt, maximum_length=512) ||
+    now_unix_ms < session.issued_unix_ms ||
+    now_unix_ms > session.expires_unix_ms {
+    raise @offline.OfflineCommerceError::Unauthorized
+  }
+  let consumed = {
+    ..session,
+    state: TransferConsumed,
+    consumed_unix_ms: Some(now_unix_ms),
+  }
+  @offline.validate_transfer_session(consumed)
+  self.transfer_sessions[session_id] = consumed
+  self.transfer_evidence[session_id] = {
+    session_id,
+    media_type,
+    byte_count,
+    sha256,
+    provider_receipt,
+    completed_unix_ms: now_unix_ms,
+  }
+  self.persist()
+  consumed
 }
 
 ///|
@@ -1969,28 +1851,22 @@ pub async fn OfflineCommerceStore::expire_transfer_sessions(
   now_unix_ms : Int64,
 ) -> Int {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.transfer_sessions.copy()
-  try {
-    let mut expired = 0
-    for id, session in self.transfer_sessions {
-      if session.state == TransferIssued &&
-        session.expires_unix_ms < now_unix_ms {
-        self.transfer_sessions[id] = { ..session, state: TransferExpired }
-        expired += 1
-      }
-    }
-    if expired > 0 {
-      self.persist()
-    }
-    self.mutex.release()
-    expired
-  } catch {
-    error => {
-      self.transfer_sessions = before
-      self.mutex.release()
-      raise error
+  errdefer {
+    self.transfer_sessions = before
+  }
+  let mut expired = 0
+  for id, session in self.transfer_sessions {
+    if session.state == TransferIssued && session.expires_unix_ms < now_unix_ms {
+      self.transfer_sessions[id] = { ..session, state: TransferExpired, }
+      expired += 1
     }
   }
+  if expired > 0 {
+    self.persist()
+  }
+  expired
 }
 
 ///| Returns one transfer authority only within the exact organization and
@@ -2034,47 +1910,41 @@ pub async fn OfflineCommerceStore::claim_generation_requests(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_claims = self.work_claims.copy()
   let before_health = self.worker_health
-  try {
-    let pending = []
-    for request in sorted_values(self.generation_requests) {
-      if pending.length() >= limit ||
-        self.artifacts.contains(request.artifact_id) {
-        continue
-      }
-      let key = artifact_work_id(request.request_id)
-      guard self.work_claims.get(key) is Some(claim) else { continue }
-      guard self.orders.get(request.order_id) is Some(order) &&
-        order.generation == claim.expected_order_generation &&
-        claim.completed_unix_ms is None &&
-        claim.attempt < 5 &&
-        now_unix_ms >= claim.retry_after_unix_ms else {
-        continue
-      }
-      self.work_claims[key] = {
-        ..claim,
-        attempt: claim.attempt + 1,
-        claimed_unix_ms: now_unix_ms,
-        retry_after_unix_ms: now_unix_ms + 60000L,
-      }
-      pending.push(request)
-    }
-    self.worker_health = {
-      ..self.worker_health,
-      artifact_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
-    }
-    self.persist()
-    self.mutex.release()
-    pending
-  } catch {
-    error => {
-      self.work_claims = before_claims
-      self.worker_health = before_health
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.work_claims = before_claims
+    self.worker_health = before_health
   }
+  let pending = []
+  for request in sorted_values(self.generation_requests) {
+    if pending.length() >= limit || self.artifacts.contains(request.artifact_id) {
+      continue
+    }
+    let key = artifact_work_id(request.request_id)
+    guard self.work_claims.get(key) is Some(claim) else { continue }
+    guard self.orders.get(request.order_id) is Some(order) &&
+      order.generation == claim.expected_order_generation &&
+      claim.completed_unix_ms is None &&
+      claim.attempt < 5 &&
+      now_unix_ms >= claim.retry_after_unix_ms else {
+      continue
+    }
+    self.work_claims[key] = {
+      ..claim,
+      attempt: claim.attempt + 1,
+      claimed_unix_ms: now_unix_ms,
+      retry_after_unix_ms: now_unix_ms + 60000L,
+    }
+    pending.push(request)
+  }
+  self.worker_health = {
+    ..self.worker_health,
+    artifact_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
+  }
+  self.persist()
+  pending
 }
 
 ///| Claims pending activation/reversal authority work. The exact persisted
@@ -2092,85 +1962,80 @@ pub async fn OfflineCommerceStore::claim_authority_work(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let before_claims = self.work_claims.copy()
   let before_health = self.worker_health
-  try {
-    let activations = []
-    let reversals = []
-    let claims = []
-    for activation in sorted_values(self.entitlement_activations) {
-      if claims.length() >= limit {
-        break
-      }
-      if activation.state != EntitlementActivationRequested {
-        continue
-      }
-      let key = activation_work_id(activation.activation_id)
-      let prior = self.work_claims.get(key)
-      let attempt = prior.map(value => value.attempt).unwrap_or(0)
-      let retry_after = prior
-        .map(value => value.retry_after_unix_ms)
-        .unwrap_or(0L)
-      if attempt >= 5 || now_unix_ms < retry_after {
-        continue
-      }
-      let claim : @offline.OfflineWorkClaim = {
-        work_id: key,
-        worker_kind: EntitlementDispatcher,
-        expected_order_generation: activation.expected_order_generation,
-        attempt: attempt + 1,
-        claimed_unix_ms: now_unix_ms,
-        retry_after_unix_ms: now_unix_ms + 60000L,
-        completed_unix_ms: None,
-      }
-      self.work_claims[key] = claim
-      activations.push(activation)
-      claims.push(claim)
-    }
-    for reversal in sorted_values(self.reversals) {
-      if claims.length() >= limit {
-        break
-      }
-      if reversal.state != ReversalRequested {
-        continue
-      }
-      let key = reversal_work_id(reversal.reversal_id)
-      let prior = self.work_claims.get(key)
-      let attempt = prior.map(value => value.attempt).unwrap_or(0)
-      let retry_after = prior
-        .map(value => value.retry_after_unix_ms)
-        .unwrap_or(0L)
-      if attempt >= 5 || now_unix_ms < retry_after {
-        continue
-      }
-      let claim : @offline.OfflineWorkClaim = {
-        work_id: key,
-        worker_kind: EntitlementDispatcher,
-        expected_order_generation: reversal.expected_order_generation,
-        attempt: attempt + 1,
-        claimed_unix_ms: now_unix_ms,
-        retry_after_unix_ms: now_unix_ms + 60000L,
-        completed_unix_ms: None,
-      }
-      self.work_claims[key] = claim
-      reversals.push(reversal)
-      claims.push(claim)
-    }
-    self.worker_health = {
-      ..self.worker_health,
-      entitlement_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
-    }
-    self.persist()
-    self.mutex.release()
-    { activations, reversals, claims, heartbeat_unix_ms: now_unix_ms }
-  } catch {
-    error => {
-      self.work_claims = before_claims
-      self.worker_health = before_health
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.work_claims = before_claims
+    self.worker_health = before_health
   }
+  let activations = []
+  let reversals = []
+  let claims = []
+  for activation in sorted_values(self.entitlement_activations) {
+    if claims.length() >= limit {
+      break
+    }
+    if activation.state != EntitlementActivationRequested {
+      continue
+    }
+    let key = activation_work_id(activation.activation_id)
+    let prior = self.work_claims.get(key)
+    let attempt = prior.map(value => value.attempt).unwrap_or(0)
+    let retry_after = prior
+      .map(value => value.retry_after_unix_ms)
+      .unwrap_or(0L)
+    if attempt >= 5 || now_unix_ms < retry_after {
+      continue
+    }
+    let claim : @offline.OfflineWorkClaim = {
+      work_id: key,
+      worker_kind: EntitlementDispatcher,
+      expected_order_generation: activation.expected_order_generation,
+      attempt: attempt + 1,
+      claimed_unix_ms: now_unix_ms,
+      retry_after_unix_ms: now_unix_ms + 60000L,
+      completed_unix_ms: None,
+    }
+    self.work_claims[key] = claim
+    activations.push(activation)
+    claims.push(claim)
+  }
+  for reversal in sorted_values(self.reversals) {
+    if claims.length() >= limit {
+      break
+    }
+    if reversal.state != ReversalRequested {
+      continue
+    }
+    let key = reversal_work_id(reversal.reversal_id)
+    let prior = self.work_claims.get(key)
+    let attempt = prior.map(value => value.attempt).unwrap_or(0)
+    let retry_after = prior
+      .map(value => value.retry_after_unix_ms)
+      .unwrap_or(0L)
+    if attempt >= 5 || now_unix_ms < retry_after {
+      continue
+    }
+    let claim : @offline.OfflineWorkClaim = {
+      work_id: key,
+      worker_kind: EntitlementDispatcher,
+      expected_order_generation: reversal.expected_order_generation,
+      attempt: attempt + 1,
+      claimed_unix_ms: now_unix_ms,
+      retry_after_unix_ms: now_unix_ms + 60000L,
+      completed_unix_ms: None,
+    }
+    self.work_claims[key] = claim
+    reversals.push(reversal)
+    claims.push(claim)
+  }
+  self.worker_health = {
+    ..self.worker_health,
+    entitlement_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
+  }
+  self.persist()
+  { activations, reversals, claims, heartbeat_unix_ms: now_unix_ms, }
 }
 
 ///| Persists the start of every clock-driven reconciliation pass. If the pass
@@ -2187,21 +2052,16 @@ pub async fn OfflineCommerceStore::record_reconciler_attempt(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.worker_health
-  try {
-    self.worker_health = {
-      ..self.worker_health,
-      reconciler_attempt_unix_ms: Some(now_unix_ms),
-    }
-    self.persist()
-    self.mutex.release()
-  } catch {
-    error => {
-      self.worker_health = before
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.worker_health = before
   }
+  self.worker_health = {
+    ..self.worker_health,
+    reconciler_attempt_unix_ms: Some(now_unix_ms),
+  }
+  self.persist()
 }
 
 ///| Records a deployment acceptance proof after a verified dispatcher
@@ -2221,31 +2081,26 @@ pub async fn OfflineCommerceStore::record_worker_acceptance(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.worker_health
-  try {
-    self.worker_health = match worker_kind {
-      ArtifactDispatcher =>
-        {
-          ..self.worker_health,
-          artifact_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
-          artifact_dispatcher_success_unix_ms: Some(now_unix_ms),
-        }
-      EntitlementDispatcher =>
-        {
-          ..self.worker_health,
-          entitlement_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
-          entitlement_dispatcher_success_unix_ms: Some(now_unix_ms),
-        }
-    }
-    self.persist()
-    self.mutex.release()
-  } catch {
-    error => {
-      self.worker_health = before
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.worker_health = before
   }
+  self.worker_health = match worker_kind {
+    ArtifactDispatcher =>
+      {
+        ..self.worker_health,
+        artifact_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
+        artifact_dispatcher_success_unix_ms: Some(now_unix_ms),
+      }
+    EntitlementDispatcher =>
+      {
+        ..self.worker_health,
+        entitlement_dispatcher_heartbeat_unix_ms: Some(now_unix_ms),
+        entitlement_dispatcher_success_unix_ms: Some(now_unix_ms),
+      }
+  }
+  self.persist()
 }
 
 ///|
@@ -2254,28 +2109,23 @@ pub async fn OfflineCommerceStore::record_reconciler_success(
   now_unix_ms : Int64,
 ) -> Unit {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.worker_health
-  try {
-    guard self.worker_health.reconciler_attempt_unix_ms is Some(attempt) &&
-      now_unix_ms >= attempt else {
-      raise @offline.OfflineCommerceError::InvalidInput(
-        "reconciler success has no attempt",
-      )
-    }
-    self.worker_health = {
-      ..self.worker_health,
-      reconciler_success_unix_ms: Some(now_unix_ms),
-      reconciler_failure_code: None,
-    }
-    self.persist()
-    self.mutex.release()
-  } catch {
-    error => {
-      self.worker_health = before
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.worker_health = before
   }
+  guard self.worker_health.reconciler_attempt_unix_ms is Some(attempt) &&
+    now_unix_ms >= attempt else {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "reconciler success has no attempt",
+    )
+  }
+  self.worker_health = {
+    ..self.worker_health,
+    reconciler_success_unix_ms: Some(now_unix_ms),
+    reconciler_failure_code: None,
+  }
+  self.persist()
 }
 
 ///|
@@ -2289,21 +2139,16 @@ pub async fn OfflineCommerceStore::record_reconciler_failure(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.worker_health
-  try {
-    self.worker_health = {
-      ..self.worker_health,
-      reconciler_failure_code: Some(code),
-    }
-    self.persist()
-    self.mutex.release()
-  } catch {
-    error => {
-      self.worker_health = before
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.worker_health = before
   }
+  self.worker_health = {
+    ..self.worker_health,
+    reconciler_failure_code: Some(code),
+  }
+  self.persist()
 }
 
 ///| Returns only stable blocker codes; no work IDs, tenant IDs, or provider

@@ -302,15 +302,16 @@ async fn ApiService::access_package_view_for_membership(
       value.expires_unix_ms > now &&
       (value.state == Requested || value.state == Active)
     })
-  let contract_ready = match self.contract_document_store {
-    Some(contracts) =>
-      contracts.has_effective_master_lease(
-        membership.tenant_ref,
-        account.subject_ref,
-        now,
-      )
-    None => false
-  }
+  let contract_ready = self.private_cloud_workspace_access ||
+    (match self.contract_document_store {
+      Some(contracts) =>
+        contracts.has_effective_master_lease(
+          membership.tenant_ref,
+          account.subject_ref,
+          now,
+        )
+      None => false
+    })
   let aliases = access_package_approved_aliases(self.registry)
   let account_active = account.state == Active &&
     @account.role_allows(account.roles, EnterpriseUser)
@@ -339,6 +340,7 @@ async fn ApiService::access_package_view_for_membership(
     "approved_model_aliases": aliases.to_json(),
     "account_ready": account_active,
     "membership_ready": membership_ready,
+    "contract_required": !self.private_cloud_workspace_access,
     "contract_ready": contract_ready,
     "workspace_ready": workspace_user_ready && grant_ready,
     "models_ready": models_ready,
@@ -482,10 +484,25 @@ async fn ApiService::execute_webide_access_package(
       )
   }
   let portal_snapshot = portal.snapshot()
-  match
-    portal_snapshot.memberships
+  let derived_membership = portal_snapshot.memberships
     .iter()
-    .find_first(value => value.membership_id == membership_id) {
+    .find_first(value => value.membership_id == membership_id)
+  let existing_membership = match derived_membership {
+    Some(value) => Some(value)
+    None =>
+      portal_snapshot.memberships
+      .iter()
+      .find_first(value => {
+        value.subject_ref == subject_ref &&
+        value.organization_id == intent.organization_id &&
+        value.active
+      })
+  }
+  let resolved_membership_id = match existing_membership {
+    Some(existing) => existing.membership_id
+    None => membership_id
+  }
+  match existing_membership {
     Some(existing) =>
       if existing.subject_ref != subject_ref ||
         existing.tenant_ref != intent.tenant_ref ||
@@ -537,8 +554,19 @@ async fn ApiService::execute_webide_access_package(
       )
   }
   let initial_workspace = directory.snapshot(now)
-  match
+  let existing_user = match
     initial_workspace.users.iter().find_first(value => value.user_id == user_id) {
+    Some(user) => Some(user)
+    None =>
+      initial_workspace.users
+      .iter()
+      .find_first(value => value.subject_ref == subject_ref)
+  }
+  let user_id = match existing_user {
+    Some(user) => user.user_id
+    None => user_id
+  }
+  match existing_user {
     Some(existing) => {
       if existing.subject_ref != subject_ref || existing.email != intent.email {
         return api_error(
@@ -753,7 +781,7 @@ async fn ApiService::execute_webide_access_package(
   }
   let membership = portal.snapshot().memberships
     .iter()
-    .find_first(value => value.membership_id == membership_id)
+    .find_first(value => value.membership_id == resolved_membership_id)
     .unwrap()
   let account = accounts
     .views()
@@ -877,7 +905,20 @@ async fn ApiService::enable_webide_access_package(
     is Some(account) else {
     return api_error(404, "NotFound", "access package was not found", false)
   }
-  let membership = try portal.self_view(account.subject_ref).membership catch {
+  let operation_id = "access-\{account_id}"
+  guard journal.record(operation_id) is Some(record) &&
+    (record.step == Prepared || record.step == Enabled) else {
+    return api_error(
+      409, "AccessPackageNotReady", "the onboarding journal is not prepared for enablement",
+      false,
+    )
+  }
+  let membership = try
+    portal.self_view_for_organization(
+      account.subject_ref,
+      record.intent.organization_id,
+    ).membership
+  catch {
     _ =>
       return api_error(
         409, "AccessPackageNotReady", "an active Developer membership is required",
@@ -896,11 +937,14 @@ async fn ApiService::enable_webide_access_package(
       false,
     )
   }
-  guard self.contract_document_store is Some(contracts) &&
-    contracts.has_effective_master_lease(
-      membership.tenant_ref,
-      account.subject_ref,
-      now,
+  guard self.private_cloud_workspace_access ||
+    (
+      self.contract_document_store is Some(contracts) &&
+      contracts.has_effective_master_lease(
+        membership.tenant_ref,
+        account.subject_ref,
+        now,
+      )
     ) else {
     return api_error(
       409, "MasterLeaseRequired", "complete the MasterLease before enabling WebIDE access",
@@ -951,14 +995,6 @@ async fn ApiService::enable_webide_access_package(
     is Some(lease) else {
     return api_error(
       409, "AccessPackageNotReady", "a requested workspace lease is required", false,
-    )
-  }
-  let operation_id = "access-\{account_id}"
-  guard journal.record(operation_id) is Some(record) &&
-    (record.step == Prepared || record.step == Enabled) else {
-    return api_error(
-      409, "AccessPackageNotReady", "the onboarding journal is not prepared for enablement",
-      false,
     )
   }
   if lease.state == Requested {

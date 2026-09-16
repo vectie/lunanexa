@@ -100,6 +100,7 @@ pub(all) struct ContractDocumentsState {
 
 ///|
 pub(all) enum ContractDocumentsMessage {
+  CopyPublicIdentifier(String)
   SelectPacket(String)
   SelectTenant(String)
   SearchChanged(String)
@@ -147,11 +148,7 @@ pub(all) enum ContractConfirmationField {
 
 ///|
 fn copy(locale : @i18n.Locale, en : String, zh : String) -> String {
-  if locale.is_chinese() {
-    zh
-  } else {
-    en
-  }
+  @i18n.copy(locale, en, zh)
 }
 
 ///|
@@ -205,8 +202,8 @@ fn upsert_value(
 ) -> Array[@contractdoc.ContractFieldValue] {
   let updated = values.copy()
   match updated.search_by(item => item.field_id == field_id) {
-    Some(index) => updated[index] = { field_id, value }
-    None => updated.push({ field_id, value })
+    Some(index) => updated[index] = { field_id, value, }
+    None => updated.push({ field_id, value, })
   }
   updated.sort_by((left, right) => left.field_id.compare(right.field_id))
   updated
@@ -240,6 +237,7 @@ pub fn ContractDocumentsState::update(
   message : ContractDocumentsMessage,
 ) -> ContractDocumentsState {
   match message {
+    CopyPublicIdentifier(_) => self
     SelectPacket(packet_id) => {
       let packet = find_packet(self.packets, packet_id)
       {
@@ -312,9 +310,9 @@ pub fn ContractDocumentsState::update(
         confirmation: None,
       }
     }
-    ExportGovernance(_) => { ..self, loading: true, error_message: None }
-    NudgeApproval(_) => { ..self, loading: true, error_message: None }
-    SelectForm(form) => { ..self, selected_form: Some(form), preview: None }
+    ExportGovernance(_) => { ..self, loading: true, error_message: None, }
+    NudgeApproval(_) => { ..self, loading: true, error_message: None, }
+    SelectForm(form) => { ..self, selected_form: Some(form), preview: None, }
     RequestPreview(_, _, form, _) =>
       {
         ..self,
@@ -330,7 +328,7 @@ pub fn ContractDocumentsState::update(
         error_message: None,
       }
     PreviewFailed(message) =>
-      { ..self, preview_loading: false, error_message: Some(message) }
+      { ..self, preview_loading: false, error_message: Some(message), }
     FieldChanged(field_id, value) =>
       {
         ..self,
@@ -340,9 +338,9 @@ pub fn ContractDocumentsState::update(
         error_message: None,
       }
     SaveInformation(_, _, _) =>
-      { ..self, loading: true, success_message: None, error_message: None }
+      { ..self, loading: true, success_message: None, error_message: None, }
     BeginConfirmInformation(packet_id, revision) =>
-      { ..self, confirmation: Some(ConfirmInformation(packet_id, revision)) }
+      { ..self, confirmation: Some(ConfirmInformation(packet_id, revision)), }
     BeginRequestGeneration(packet_id, revision, digest) =>
       {
         ..self,
@@ -364,7 +362,7 @@ pub fn ContractDocumentsState::update(
         confirmation: Some(SupersedePacket(packet_id, revision, "", "")),
       }
     BeginRequestRenewal(packet_id) =>
-      { ..self, confirmation: Some(RequestRenewal(packet_id)) }
+      { ..self, confirmation: Some(RequestRenewal(packet_id)), }
     ApproveApproval(approval_id) =>
       {
         ..self,
@@ -373,7 +371,7 @@ pub fn ContractDocumentsState::update(
         error_message: None,
       }
     BeginRejectApproval(approval_id) =>
-      { ..self, confirmation: Some(RejectApproval(approval_id, "")) }
+      { ..self, confirmation: Some(RejectApproval(approval_id, "")), }
     ConfirmationInputChanged(field, value) =>
       {
         ..self,
@@ -397,7 +395,7 @@ pub fn ContractDocumentsState::update(
           }
         }),
       }
-    DismissConfirmation => { ..self, confirmation: None }
+    DismissConfirmation => { ..self, confirmation: None, }
     ConfirmAction(_) =>
       {
         ..self,
@@ -406,8 +404,8 @@ pub fn ContractDocumentsState::update(
         success_message: None,
         error_message: None,
       }
-    Refresh => { ..self, loading: true, error_message: None }
-    ClearNotice => { ..self, success_message: None, error_message: None }
+    Refresh => { ..self, loading: true, error_message: None, }
+    ClearNotice => { ..self, success_message: None, error_message: None, }
   }
 }
 
@@ -1533,6 +1531,7 @@ fn packet_editor(
   let timeline_item = fn(
     title : String,
     detail : String,
+    actor_ref : String,
     done : Bool,
   ) -> @rabbita.Html {
     @html.li(
@@ -1550,7 +1549,11 @@ fn packet_editor(
             "·"
           },
         ),
-        @html.div([@html.strong(title), @html.span(detail)]),
+        @html.div([
+          @html.strong(title),
+          @html.span(detail),
+          public_identifier_copy(state.locale, emit, actor_ref, true),
+        ]),
       ],
     )
   }
@@ -1644,6 +1647,7 @@ fn packet_editor(
                   "\{@contractdoc.format_unix_ms_utc(event.occurred_unix_ms)} · actor \{event.actor_ref} · revision \{event.revision}",
                   "\{@contractdoc.format_unix_ms_utc(event.occurred_unix_ms)} · 操作人 \{event.actor_ref} · 版本 \{event.revision}",
                 ),
+                event.actor_ref,
                 true,
               )
             }
@@ -2487,28 +2491,11 @@ fn customer_governance_status(
     value.status == Pending || value.status == Approved
   })
   let expiry = packet.value("lease.end_date")
-  let countdown = match expiry {
-    Some(date) =>
-      match @contractdoc.calendar_date_days(date) {
-        Some(days) => {
-          let today = state.now_unix_ms / 86400000L
-          let remaining = days - today
-          if remaining < 0L {
-            copy(state.locale, "Expired", "已到期")
-          } else if remaining == 0L {
-            copy(state.locale, "Expires today", "今天到期")
-          } else {
-            copy(
-              state.locale,
-              "\{remaining} days remaining",
-              "剩余 \{remaining} 天",
-            )
-          }
-        }
-        None => copy(state.locale, "Date unavailable", "日期不可用")
-      }
-    None => copy(state.locale, "Not yet recorded", "尚未登记")
-  }
+  let countdown = contract_expiry_countdown(
+    state.locale,
+    expiry,
+    state.now_unix_ms,
+  )
   let approval_label = fn(
     status : @contractdoc.ContractApprovalStatus,
   ) -> String {
@@ -2553,8 +2540,18 @@ fn customer_governance_status(
       ]),
       @html.div(class="contract-expiry-card", [
         @html.span(copy(state.locale, "Contract expiry", "合同到期")),
-        @html.strong(expiry.unwrap_or("—")),
-        @html.small(countdown),
+        @html.strong(countdown),
+        @html.small(
+          match expiry {
+            Some(date) =>
+              copy(
+                state.locale,
+                "\{date} · UTC calendar date",
+                "\{date} · UTC 日历日期",
+              )
+            None => "—"
+          },
+        ),
       ]),
     ]),
     if pending.is_empty() {
@@ -2754,7 +2751,7 @@ fn packet_switcher(
         copy(state.locale, "No matching contract.", "没有匹配的合同。"),
       )
     } else {
-      @html.nothing
+      public_identifier_copy(state.locale, emit, selected, false)
     },
   ])
 }
