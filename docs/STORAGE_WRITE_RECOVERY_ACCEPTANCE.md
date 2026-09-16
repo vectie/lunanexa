@@ -176,3 +176,30 @@ scoped formatting pass without public interface changes. The three older
 handoff fixtures now also remove their temporary directories on exit. These
 tests establish file-failure/retry behavior, not mid-write cancellation,
 database failover or live controller rollout of this source change.
+
+## Account, transfer and handoff fresh-connection PostgreSQL follow-up
+
+The live acceptance PostgreSQL matrix now includes dedicated technical-store
+and client-handoff-store fixtures, rather than only their snapshot-domain
+allowlist. Three selected fixture files passed against isolated fresh databases;
+the subsequently strengthened account fixture also passed its separate rerun.
+
+- Account registration/invitation/session state survives a fresh connection.
+  Two suspension writes on the closed original connection fail with QueryFailed
+  without changing either account or session snapshots. Retried suspension on
+  a fresh connection persists, and a third connection rejects the old session.
+- Handoff redemption and one consumed request survive a fresh connection.
+  Two closed-connection revocations fail without changing state; the redeemed
+  code still rejects replay. Retried revocation persists and a third connection
+  rejects credential authorization.
+- A consumed transfer nonce survives reconnect. Two failed attempts to consume
+  another nonce on the closed connection leave the snapshot unchanged. The new
+  connection rejects the first nonce, accepts the second, and a third connection
+  observes exactly two consumed nonces and rejects the second nonce's replay.
+
+The combined strict local package suite passes 19/19 (its conditional database
+tests alone are not the live evidence). Interface generation and formatting
+pass. Every matrix database was dropped, an independent catalog query found
+zero `lnx_acceptance_%` databases, and the dedicated SSH tunnel was closed.
+The acceptance PostgreSQL service was not stopped. These tests do not establish
+server failover, interruption during COMMIT, or actual model transfer.
