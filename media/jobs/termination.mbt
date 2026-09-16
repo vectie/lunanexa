@@ -33,9 +33,10 @@ pub async fn JobStore::acknowledge_instance_termination(
     }
     return job
   }
-  // Preserve completed/previously terminal outcomes; never turn a lost worker
-  // into a successful generation or overwrite prior settlement.
-  if job.execution_terminal || now < job.updated_unix_ms || job.state == Intent {
+  // Exit evidence may arrive after completion. Preserve the original outcome,
+  // execution timestamp and settlement; only an already requested cleanup
+  // becomes Cancelled/Expired. Never infer this proof from provider absence.
+  if now < job.updated_unix_ms || job.state == Intent {
     raise InvalidTransition
   }
   self.commit({
@@ -44,11 +45,13 @@ pub async fn JobStore::acknowledge_instance_termination(
       Expired
     } else if job.state == Cancelling {
       Cancelled
+    } else if job.execution_terminal {
+      job.state
     } else {
       Failed
     },
     execution_terminal: true,
-    terminal_unix_ms: Some(now),
+    terminal_unix_ms: Some(job.terminal_unix_ms.unwrap_or(now)),
     updated_unix_ms: now,
     termination_evidence_ref: Some(evidence_ref),
     termination_observed_unix_ms: Some(observed_unix_ms),

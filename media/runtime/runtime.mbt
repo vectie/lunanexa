@@ -115,8 +115,7 @@ async fn VideoRuntime::refresh_internal(
   if job.termination_evidence_ref is Some(_) && job.execution_terminal {
     return self.record_terminal(job)
   }
-  if !job.execution_terminal &&
-    job.execution_context is Some(context) &&
+  if job.execution_context is Some(context) &&
     self.store.termination_for_context(context) is Some(accepted) {
     if job.state == @jobs.Intent {
       return self.record_terminal(
@@ -284,6 +283,7 @@ pub async fn VideoRuntime::content(
 ) -> Int64 {
   let job = self.get(id, owner)
   guard job.state == Completed &&
+    job.termination_evidence_ref is None &&
     (self.now)() < job.retain_until_unix_ms &&
     job.provider_job_id is Some(provider_id) else {
     raise ContentUnavailable
@@ -292,6 +292,7 @@ pub async fn VideoRuntime::content(
   provider.content(provider_id, maximum_bytes, bytes => {
     let current = self.store.get(id, owner)
     if current.state != Completed ||
+      current.termination_evidence_ref is Some(_) ||
       (self.now)() >= current.retain_until_unix_ms ||
       !(self.authorized)(owner, current.model, current.deployment_id) {
       raise Unauthorized

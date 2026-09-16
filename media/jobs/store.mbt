@@ -125,7 +125,9 @@ pub async fn JobStore::restore(
         record.execution_context.map_or(true, context => {
           context.instance_id is None
         }) ||
-        ![Failed, Cancelled, Expired, Cancelling].contains(record.state)
+        ![Completed, Failed, Cancelled, Expired, Cancelling].contains(
+          record.state,
+        )
       }) ||
       record.execution_context.map_or(false, value => {
         !execution_context_valid(value)
@@ -207,7 +209,11 @@ pub async fn JobStore::restore(
       recovered = true
       jobs[record.job_id] = {
         ..record,
-        state: if record.expiry_requested { Expired } else { Cancelled },
+        state: if record.expiry_requested {
+          Expired
+        } else {
+          Cancelled
+        },
       }
     } else {
       jobs[record.job_id] = record
@@ -654,6 +660,8 @@ pub fn StoredJob::public_view(self : StoredJob, now : Int64) -> Json {
     "error": error_code.map_or(Json::null(), code => {
       ({ "code": code, "message": code } : Json)
     }),
-    "content_available": self.state == Completed && !expired,
+    "content_available": self.state == Completed &&
+    !expired &&
+    self.termination_evidence_ref is None,
   }
 }

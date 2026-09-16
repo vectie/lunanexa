@@ -1,5 +1,30 @@
 # Platform acceptance follow-up
 
+## Completed-job exit evidence correction — local regression passed
+
+The completed-job cleanup defect identified below is corrected in source.
+Verified original-instance termination can now attach after execution completed,
+preserving its original terminal timestamp, outcome and usage receipt. An
+already requested cancellation/expiry finishes without calling the dead or
+replacement provider. Completed artifacts whose runtime has verifiably exited
+are no longer advertised as downloadable. Tenant authorization, original
+instance/context matching and durable evidence checks are unchanged.
+
+Native media jobs/runtime strict tests passed 30/30, including completed,
+pending-cancel and expiry cases, persistence failure, replacement rejection,
+snapshot restoration, duplicate cleanup and no provider calls or duplicate
+settlement. Full native functional tests passed 822/822 with warnings 92/20
+disabled. This is not a strict whole-repository release claim.
+
+Compatibility caveat: older readers reject a Completed job carrying termination
+evidence. Do not downgrade only the controller binary after such records have
+been persisted; use a compatible reader or reviewed state recovery. Before the
+isolated acceptance rollout, a PostgreSQL custom-format backup was written to
+`/tmp/completed-exit-before-20260916.dump` inside the acceptance database Pod,
+restricted to mode 0600, and its table of contents was readable with pg_restore.
+This is not a restore drill. The previous controller binary will also be retained.
+The Linux candidate and original failed live task still require verification.
+
 ## Natural runtime expiry during packet loss — passed; completed-job cleanup gap found
 
 The first 90-second lease attempt did not exercise in-flight expiry: background
