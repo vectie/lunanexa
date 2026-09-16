@@ -55,14 +55,15 @@ or physical-hardware evidence.
   isolated controller. Preserve backup/reader compatibility constraints.
 - [ ] Review unresolved r12 cleanup evidence and production node-agent ownership
   before activating any older agent. Never let two agents manage the same node.
-- [ ] Finish strict source gate through reviewed cleanup/compatibility fixes and
+- [x] Finish strict source gate through reviewed cleanup/compatibility fixes and
   regression coverage. Cancellation-safe cleanup and deprecated API fixes have
   removed the earlier strict-check failures. Native 858/858 and JS 153/153 tests
   now pass with warning 73 enabled and no exclusions. Local process kill/restart
   recovery also passed after fixing procfs failure blocking the node heartbeat.
-  The remaining complete release-gate sequence is still being verified; see
-  `NON_MODEL_SOURCE_GATE_20260916.md`. No blanket warning suppression counts as
-  closure.
+  The complete repository release gate also passed, including four-node local
+  simulation, evidence export and browser bundles; see
+  `NON_MODEL_SOURCE_GATE_20260916.md`. These are not physical-cluster or final
+  deployed-journey acceptance. No blanket warning suppression was used.
 - [ ] Complete scoped browser responsive/accessibility/error-state checks and
   final temporary-resource inventory, preserving saved user work and evidence.
 - [ ] Run one final integrated non-model campaign against the recorded versions,

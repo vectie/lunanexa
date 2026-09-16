@@ -29,3 +29,12 @@ Follow-up API regression passed 129/129 with the same warning exclusions.
 `moon info api` completed without public-interface changes; the touched files
 were formatted and `git diff --check` passed. The temporary loopback SSH
 database forward was stopped after the real database test completed.
+
+## Strict current-source revalidation
+
+After the cancellation/compatibility gate cleanup, the same real PostgreSQL
+fixture passed 1/1 again with `--warn-list +73 --deny-warn`, without warning
+exclusions, as part of the 2026-09-16 isolated database matrix. Its temporary
+database was dropped. The complete repository release gate also passed; see
+`NON_MODEL_SOURCE_GATE_20260916.md`. This still does not mean these changes have
+been deployed to a running controller or that a real provider was billed.

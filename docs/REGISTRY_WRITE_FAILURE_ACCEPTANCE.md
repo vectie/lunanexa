@@ -30,6 +30,13 @@ They do not prove cancellation during a PostgreSQL commit, resolution of an
 ambiguous commit acknowledgement, multi-controller consistency, or deployment
 of this change to the acceptance or production controller.
 
+## Strict current-source revalidation
+
+The real PostgreSQL fixture passed 1/1 again in a fresh disposable database with
+`--warn-list +73 --deny-warn`, without warning exclusions, in the 2026-09-16
+matrix. The full repository release gate passed separately; see
+`NON_MODEL_SOURCE_GATE_20260916.md`. Runtime deployment remains a separate check.
+
 ## Live PostgreSQL adapter regression follow-up
 
 On 2026-09-16 the PostgreSQL fixture was expanded beyond opening an empty store.
