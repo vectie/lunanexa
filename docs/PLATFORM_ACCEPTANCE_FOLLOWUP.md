@@ -1,7 +1,8 @@
 # Platform acceptance follow-up
 
-Source baseline: main `732f50e`. These are repository tests, not real browser,
-identity-provider, payment, or Spark hardware acceptance.
+Initial source baseline: main `732f50e`; subsequent dated sections record later
+source and live acceptance checks. Repository tests and live checks are
+distinguished below; neither establishes Spark hardware qualification.
 
 ## Additional customer-surface checks
 
@@ -22,9 +23,23 @@ The evidence ledger still records an August inspection. Do not merely refresh
 hashes: review affected claims and bilingual user instructions against these
 sources, then update provenance and validate both rendered languages.
 
-The static isolation scan also remains failing on internal Kubernetes
-container identity declarations, as recorded in MACHINE_LEASE_TIME_ALIGNMENT.md.
-Neither failed gate is waived by the passing customer-surface tests.
+The earlier static isolation failure on internal Kubernetes container identity
+declarations was subsequently corrected with scope-aware scanning (see below).
+At main `3fa0fc2`, a fresh repository scan and all 25 scanner process fixtures
+passed. This does not waive the stale documentation evidence gate or replace
+runtime customer-response checks.
+
+## Current strict source gate — 2026-09-16
+
+A fresh `moon check --target native --deny-warn` at main `3fa0fc2` exited 255
+with 110 errors (warnings promoted to errors), including deprecated implicit
+ToJson method promotion and fragile asynchronous catch-based cleanup. In
+particular, commercial/offline/store, scheduler/file and telemetry/file still
+contain cleanup paths flagged by the compiler. This is not evidence that each
+path has failed at runtime, but it prevents declaring the strict source gate
+complete. Functional test runs that disable warnings 92 and 20 are not an
+equivalent substitute. Cancellation-safe persistence and lock release need
+review and regression testing before those warnings can be removed honestly.
 
 ## Still outside this evidence
 
@@ -467,3 +482,131 @@ These are test-constructed records exercising the internal persistence
 primitive. They do not constitute authenticated live node termination evidence
 and do not close the provider-network-partition acceptance gap. No real job,
 node inventory or historical missing evidence was altered.
+
+### Provider-pause preflight did not reach fault injection (2026-09-16)
+
+Attempted a fresh bounded TEST ONLY deployment
+`managed-test-video-disconnect-1789523474870` before a planned original-process
+pause/resume scenario. The deployment operation rolled back with
+`assignments removed after readiness timeout`; no ready runtime was observed,
+so the pause helper was never invoked and no process received a signal.
+The runner deleted the bounded deployment on failure; the operation ended
+Deleted and the runtime namespace contained no Pods or warning events.
+
+The acceptance node-agent Pod remained Running/Ready with two historical
+restarts, while its heartbeat remained present. This does not establish the
+readiness-timeout cause. Its image does not contain `cat`, so an attempted
+read-only journal inspection via Kubernetes exec could not run; no files or
+permissions were changed. Diagnose the failed assignment/materialization path
+before reattempting the fault. The local runner now reports operation state
+transitions and recognizes RolledBack/Deleted/Cancelled as terminal instead of
+waiting to exhaust its polling budget. That harness change awaits a live rerun.
+
+The proposed pause scenario tests provider unresponsiveness, not packet-level
+network partition. Neither is claimed complete by this failed preflight.
+
+Follow-up bounded deployments did reach Ready with unchanged real compute
+inventory, so the original timeout is intermittent and its cause remains
+unproven. The first follow-up stopped on a local harness parse error before
+invoking any signal; that error was corrected and `moon check` passed. Two
+subsequent attempts created private jobs, but capability preflight failed before
+STOP: the pinned minimal TEST ONLY runtime image has no `/bin/kill` executable.
+The final diagnostic explicitly reported `stat /bin/kill: no such file or
+directory`. No signal was sent and no container privilege was expanded.
+The harness cleanup deleted the created jobs, revoked handoffs/sessions and
+stopped each bounded deployment. A suitable unprivileged fault-injection helper
+is still needed; process-pause recovery is not yet verified.
+
+Restricted ephemeral-container preflight was subsequently admitted without
+additional capabilities, host namespaces, mounted credentials or privilege
+escalation. Historical Pod image IDs proved insufficient cache evidence: the
+klipper-lb and CUDA helper attempts failed `ErrImageNeverPull`. Direct compute
+containerd inventory identified the current NVIDIA DRA image
+`sha256:83730194d4e76c0f6b645e3eca732b09770916f6401f7c6927a299f6aea2b65d`.
+Its tools are under `/busybox`, not `/bin`; using the observed paths allowed
+the helper to start as the runtime's own non-root UID. PID 1's executable was
+observed as `/bin/test-video-provider` before any signal attempt.
+
+The same-user STOP/CONT commands returned success, but a subsequent job poll
+still returned `in_progress` rather than unavailability, including after moving
+helper preparation before job creation. Command success is not proof that PID 1
+stopped. These runs therefore do **not** establish an outage or successful
+outage recovery. The harness now requires `/proc/1/status` to report stopped
+before checking outage behavior; this new assertion compiles but awaits a live
+run. Every attempted bounded deployment and helper was cleaned; no namespace
+security policy was relaxed. The fault mechanism still needs verification.
+
+### Provider process unresponsiveness and recovery — verified 2026-09-16
+
+The signal approach above was superseded: `/proc/1/status` remained sleeping,
+so successful `kill` exit codes were not treated as outage evidence. An
+operator-level containerd task pause then confirmed the exact TEST ONLY task
+as `PAUSED`, without changing workload capabilities or namespace policy.
+Initial assertions incorrectly expected LunaNexa's `retryable` field on a
+MoonGate response; source inspection established that MoonGate intentionally
+returns only a bounded error code and message. The harness now requires
+`ManagedVideoUnavailable` and same-request-key recovery guidance, rather than
+assuming that absent field. No MoonGate product change was required.
+
+The completed live campaign used job
+`video-7da543772a18a6a37e2b8615c0a8adc350136b479857f933c0dde0632c73f131`:
+
+- Exact containerd task was confirmed paused; the MoonGate poll failed with
+  bounded `ManagedVideoUnavailable`.
+- PostgreSQL contained exactly one matching job, still nonterminal, with no
+  invented termination evidence or usage receipt during the outage.
+- The original task was resumed; the same job completed through MoonGate and
+  its explicitly marked test MP4 passed the expected hash check.
+- Pod UID, container identity and restart count were unchanged throughout.
+- Temporary download, job and handoff cleanup completed; the bounded deployment
+  was stopped and its runtime namespace contained no Pods.
+
+This establishes process-unresponsiveness recovery with a CPU test provider,
+not packet-level network partition, GPU inference, or Spark qualification.
+
+### Live workspace authority outage and same-cookie recovery — 2026-09-16
+
+The workstation's missing 5875 SSH forward initially prevented this campaign
+from reaching fault injection. The management-side kubectl listener was still
+healthy (connect page 200); restoring only the local SSH forward recovered it.
+No public domain, certificate or trust setting changed.
+
+A first outage attempt returned workspace HTTP 503 and retained the Pod UID,
+but its recovery command failed because stopping a transient systemd unit
+removed that unit. The acceptance controller was restored using its original
+systemd-run command, protected EnvironmentFile, working directory and namespace
+launcher; its health endpoint returned ok. A new handoff then reopened both
+existing outputs and verified the retained video hash. This first attempt was
+not counted as an automatic-recovery pass.
+
+After correcting that environment-specific recovery command, a complete rerun
+passed: connect 204/root 200; stop isolated acceptance authority; same cookie
+receives 503 while workspace Pod UID remains unchanged; recreate the original
+authority and wait for health; same cookie again receives 200 with the same
+Pod UID. Both saved outputs were listed and the second downloaded video retained
+SHA256 `8b4bc945cb35c2dff26e566c525a30fa91649f473aef41a657c9e96bdacb7148`.
+No managed-runtime Pods existed before injection. The controller is restored;
+the local workspace forward and bounded successful handoff remain for continued
+acceptance. This is live HTTP/session/persistence recovery, not a WebSocket
+outage test or production identity-provider acceptance.
+
+The subsequent WebSocket campaign also passed. An established authenticated
+socket closed with policy code 1008 during the same bounded authority outage;
+a new upgrade request with the same cookie returned 503. After the authority
+was recreated and healthy, that cookie established a new WebSocket and received
+a nonempty message. HTTP returned 200, the workspace Pod UID remained unchanged,
+both saved videos remained listed, and the retained download hash matched.
+The controller is healthy again. This supersedes only the WebSocket gap in the
+preceding paragraph, not the real identity-provider/browser UI or Spark gates.
+
+### Post-restart commercial tenant isolation and capacity
+
+Fresh signed TEST ONLY sessions queried the customer machine-order and offering
+endpoints after the authority recovery campaign. The original organization saw
+its five historical orders, all Failed or Terminated with capacity_reserved=false.
+The independent second organization saw zero orders. Both saw the intentionally
+shared test catalog: no-capacity offering available=0, simulated-machine
+offering available=1, both reserved=0. Sessions were logged out afterwards.
+No new order, payment callback, refund or real payment was issued. This verifies
+list isolation and retained terminal capacity state, not checkout UI or every
+individual-order authorization route.
