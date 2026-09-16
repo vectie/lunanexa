@@ -29,3 +29,20 @@ These are local native regressions, not model inference or hardware acceptance.
 They do not prove cancellation during a PostgreSQL commit, resolution of an
 ambiguous commit acknowledgement, multi-controller consistency, or deployment
 of this change to the acceptance or production controller.
+
+## Live PostgreSQL adapter regression follow-up
+
+On 2026-09-16 the PostgreSQL fixture was expanded beyond opening an empty store.
+It acquired primary leadership, rejected a standby acquisition, persisted a
+candidate and verified reopen equality. Closing the primary database session
+allowed the standby to acquire a higher fencing token. Two writes through the
+disconnected original registry then failed without changing its in-memory
+snapshot. The successor restored exactly the last committed state, added a
+second candidate and verified the new state through another reopen.
+
+The expanded fixture passed 1/1 against a fresh disposable database in the
+actual isolated acceptance PostgreSQL Pod, reached only through a loopback SSH
+forward. The harness deleted the generated database afterwards. No live model
+registry, account, workspace or model file was changed. This proves the tested
+closed-connection handoff and failed-write behavior, not PostgreSQL server HA,
+unacknowledged commits, a connected stale writer, or runtime deployment.
