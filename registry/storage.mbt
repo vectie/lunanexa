@@ -26,7 +26,7 @@ pub fn S3ArtifactStore::new(
   if endpoint_ref == "" || !require_tls {
     raise UntrustedEndpoint
   }
-  { endpoint_ref, bucket, credential_ref, require_tls }
+  { endpoint_ref, bucket, credential_ref, require_tls, }
 }
 
 ///|
@@ -56,7 +56,7 @@ pub fn S3HttpVerifier::new(
   if !secure && !loopback {
     raise UntrustedEndpoint
   }
-  { endpoint, credential_value }
+  { endpoint, credential_value, }
 }
 
 ///|
@@ -114,7 +114,7 @@ pub async fn S3HttpVerifier::verify(
   if actual != expected_digest {
     raise DigestMismatch
   }
-  { digest: actual, size_bytes: size }
+  { digest: actual, size_bytes: size, }
 }
 
 ///|
