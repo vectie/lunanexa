@@ -181,7 +181,7 @@ async test "changed secret references preserve journal cleanup and require a new
   }
   let replacement = { ..assignment, generation: assignment.generation + 1L, }
   let mut ready = false
-  for _ in 0..<5 {
+  for _ in 0..<6 {
     let result = restored.ensure_started(
       replacement,
       "/var/lib/lunanexa/models/model",

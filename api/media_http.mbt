@@ -778,7 +778,21 @@ async fn ApiService::handle_media(
         )
       }
       if verb == Delete {
-        let job = media.runtime.cancel(id, owner)
+        // A stopped deployment cannot authorize provider traffic, but its
+        // still-authorized owner may clear an already evidenced and settled
+        // terminal job. This path performs no provider call or new settlement.
+        let job = if stored.execution_terminal &&
+          stored.termination_evidence_ref is Some(_) &&
+          stored.usage_receipt is Some(_) {
+          if !self.media_owner_authorized(owner, stored.model) {
+            return api_error(
+              403, "VideoAccessEnded", "video authority has ended", false,
+            )
+          }
+          media.jobs.cancel(id, owner, false, @async.now())
+        } else {
+          media.runtime.cancel(id, owner)
+        }
         let deleted = job.state == Cancelled || job.state == Expired
         return json_reply(if deleted { 200 } else { 409 }, {
           "id": id,

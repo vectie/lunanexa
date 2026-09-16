@@ -40,6 +40,12 @@ pub fn authenticated_transport(
         "GET" => Get
         "POST" => Post
         "DELETE" => Delete
+        "PATCH" => {
+          if !valid_stop_patch(path, body) {
+            raise LifecycleError::InvalidResource
+          }
+          Patch
+        }
         _ => raise LifecycleError::InvalidResource
       }
       let file = @fs.open(token_file, mode=ReadOnly)
@@ -55,7 +61,11 @@ pub fn authenticated_transport(
       defer client.close()
       client.request(request_method, path, extra_headers={
         "authorization": "Bearer " + token,
-        "content-type": "application/json",
+        "content-type": if verb == "PATCH" {
+          "application/json-patch+json"
+        } else {
+          "application/json"
+        },
       })
       if body is Some(value) {
         client.write(value)

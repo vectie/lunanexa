@@ -47,6 +47,7 @@ fn RuntimeSupervisor::new_record(
     resources,
     stopping: false,
     observed_containers: None,
+    original_assignment: Some(assignment),
   }
 }
 
@@ -158,6 +159,13 @@ pub async fn RuntimeSupervisor::ensure_started(
       self.journal.runtimes.push(candidate)
       candidate
     }
+  }
+  if record.original_assignment is None {
+    record.original_assignment = Some(assignment)
+    errdefer {
+      record.original_assignment = None
+    }
+    self.persist()
   }
   if record.stopping {
     let state = self.stop_record(record)
@@ -351,6 +359,14 @@ async fn RuntimeSupervisor::stop_record(
     let path = resource.collection + "/" + record.name
     let (status, actual) = (self.transport)("GET", path, None)
     if status == 404 {
+      if resource.collection.has_suffix("/pods") &&
+        record.observed_containers
+        .unwrap_or([])
+        .any(container => container.termination_observed_unix_ms is None) {
+        // A missing status object cannot prove a published instance exited.
+        // Preserve its signed assignment and identities for later reconciliation.
+        return Draining
+      }
       resource.gone = true
       self.persist()
       continue
@@ -361,6 +377,11 @@ async fn RuntimeSupervisor::stop_record(
     let uid = cleanup_uid(self.journal, record, resource, actual)
     resource.uid = Some(uid)
     self.persist()
+    if resource.collection.has_suffix("/pods") {
+      if !self.prepare_pod_deletion(record, actual, path, uid) {
+        return Draining
+      }
+    }
     let options : Json = {
       "apiVersion": "v1",
       "kind": "DeleteOptions",

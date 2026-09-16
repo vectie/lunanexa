@@ -352,7 +352,84 @@ async fn exercise_media_api(
       commercial.durable_snapshot().commercial.usage_observations.length(),
       1,
     )
+    // Deleting the deployment removes execution authority, not the active
+    // owner's right to clear an already settled, proven-terminated record.
+    let stopped_cleanup = if private_cloud {
+      let owner = service.media_owner(headers).unwrap().0
+      let context = {
+        ..binding.execution_context(),
+        instance_id: Some("a".repeat(64)),
+      }
+      let terminal_now = @async.now()
+      let (stopped, _) = jobs.reserve(
+        owner,
+        "stopped-deployment-job",
+        "sha256:" + "b".repeat(64),
+        binding.profile.model,
+        binding.identity(),
+        terminal_now,
+        terminal_now + 60000L,
+        terminal_now + 120000L,
+        execution_context=context,
+      )
+      ignore(jobs.begin_submission(stopped.job_id, owner, terminal_now))
+      ignore(
+        jobs.attach_provider(
+          stopped.job_id,
+          owner,
+          "stopped-fixture",
+          terminal_now,
+        ),
+      )
+      let terminal = jobs.acknowledge_instance_termination(
+        stopped.job_id,
+        owner,
+        binding.identity(),
+        context,
+        "fixture-verified-exit",
+        terminal_now,
+        terminal_now,
+      )
+      let receipt = service.settle_media_job(terminal, binding.node_id)
+      ignore(jobs.record_usage(stopped.job_id, owner, receipt))
+      let no_deployment = { ..service, deployment_store: None, }.with_media_jobs(
+        jobs,
+        [],
+      )
+      let stopped_path = "/v1/videos/" + stopped.job_id
+      assert_eq(
+        no_deployment.handle(Get, stopped_path, headers, "").status,
+        403,
+      )
+      assert_eq(
+        no_deployment.handle(Delete, stopped_path, Map([]), "").status,
+        403,
+      )
+      assert_eq(
+        no_deployment.handle(Delete, stopped_path, headers, "").status,
+        200,
+      )
+      assert_eq(
+        no_deployment.handle(Delete, stopped_path, headers, "").status,
+        200,
+      )
+      assert_eq(jobs.get(stopped.job_id, owner).state, @media_jobs.Cancelled)
+      assert_eq(state["deletes"], 1)
+      assert_eq(
+        commercial.durable_snapshot().commercial.usage_observations.length(),
+        2,
+      )
+      Some((no_deployment, stopped_path))
+    } else {
+      None
+    }
     ignore(accounts.set_state("media-account", Suspended, @async.now()))
+    if stopped_cleanup is Some((no_deployment, stopped_path)) {
+      assert_eq(
+        no_deployment.handle(Delete, stopped_path, headers, "").status,
+        403,
+      )
+    }
     assert_eq(service.handle(Get, "/v1/videos/" + id, headers, "").status, 403)
     let (revoked, _) = @http.get(content_url, headers={
       "Authorization": "Bearer " + secret,

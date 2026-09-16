@@ -18,7 +18,7 @@ async test "controller routes change only after complete runtime cleanup" {
     ),
   )
   // Both running resources and partly completed deletion retain old policy.
-  for phase in 0..<4 {
+  for phase in 0..<5 {
     try
       @kubernetes.RuntimeSupervisor::restore(
         changed,
@@ -34,7 +34,7 @@ async test "controller routes change only after complete runtime cleanup" {
       _ => fail("changed controller routes while resources remain")
     }
     let state = supervisor.stop(assignment.assignment_id)
-    if phase < 3 {
+    if phase < 4 {
       assert_eq(state, @contracts.Draining)
     } else {
       assert_eq(state, @contracts.Stopped)

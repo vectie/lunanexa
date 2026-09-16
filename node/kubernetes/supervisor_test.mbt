@@ -10,11 +10,18 @@ struct FakeApi {
   calls : Array[String]
   checkpoint : Ref[String?]
   mut lose_pod_response : Bool
+  mut hold_running : Bool
 }
 
 ///|
 fn fake_api(checkpoint : Ref[String?]) -> FakeApi {
-  { objects: Map([]), calls: [], checkpoint, lose_pod_response: false, }
+  {
+    objects: Map([]),
+    calls: [],
+    checkpoint,
+    lose_pod_response: false,
+    hold_running: false,
+  }
 }
 
 ///|
@@ -72,6 +79,42 @@ fn FakeApi::transport(self : FakeApi) -> @kubernetes.Transport {
         }
         (201, @json.parse(resource.stringify()))
       }
+      "PATCH" => {
+        guard self.objects.get(path) is Some(resource) &&
+          resource
+          is {
+            "metadata": { "uid": String(uid), .. },
+            "spec": Object(spec),
+            ..
+          } else {
+          return (404, {})
+        }
+        assert_true(
+          body
+          is Some(
+            [
+              {
+                "op": "test",
+                "path": "/metadata/uid",
+                "value": String(expected),
+                ..
+              },
+              {
+                "op": "add",
+                "path": "/spec/activeDeadlineSeconds",
+                "value": 1,
+                ..
+              },
+            ]
+          ) &&
+          expected == uid,
+        )
+        spec["activeDeadlineSeconds"] = 1
+        if !self.hold_running {
+          fixture_exit(resource)
+        }
+        (200, @json.parse(resource.stringify()))
+      }
       "DELETE" => {
         guard self.objects.get(path)
           is Some({ "metadata": { "uid": String(uid), .. }, .. }) else {
@@ -86,6 +129,24 @@ fn FakeApi::transport(self : FakeApi) -> @kubernetes.Transport {
       }
       _ => fail("unexpected API verb")
     }
+  }
+}
+
+///|
+fn fixture_exit(resource : Json) -> Unit raise {
+  guard resource is { "status": Object(status), .. } &&
+    status.get("containerStatuses") is Some([Object(container)]) &&
+    container.get("containerID") is Some(String(id)) else {
+    fail("missing fixture container")
+  }
+  status["phase"] = "Failed"
+  container["ready"] = false
+  container["state"] = {
+    "terminated": {
+      "containerID": id,
+      "exitCode": 137,
+      "finishedAt": "2026-09-16T00:00:00Z",
+    },
   }
 }
 
@@ -139,6 +200,10 @@ async test "supervisor persists ownership before creation and resumes without du
   assert_eq(api.calls.filter(call => call.has_prefix("POST")).length(), 3)
   assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
   assert_eq(restored.retained_artifact_digests(), [assignment.artifact.digest])
+  assert_eq(api.objects.length(), 3)
+  assert_eq(restored.pending_terminations().length(), 0)
+  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.pending_terminations().length(), 1)
   let deletions = api.calls.filter(call => call.has_prefix("DELETE"))
   assert_true(deletions[0].contains("/pods/"))
   assert_eq(api.objects.length(), 2)
@@ -296,7 +361,7 @@ async test "an admitted Pod with a changed model mount fails closed" {
   } noraise {
     _ => fail("altered model mount accepted")
   }
-  for _ in 0..<4 {
+  for _ in 0..<5 {
     supervisor.reap_expired(@async.now())
   }
   assert_eq(api.objects.length(), 0)
@@ -317,7 +382,7 @@ async test "expiry reaper works without fetching controller state" {
       @async.now(),
     ),
   )
-  for _ in 0..<4 {
+  for _ in 0..<5 {
     supervisor.reap_expired(assignment.lease_expires_unix_ms)
   }
   assert_eq(api.objects.length(), 0)
@@ -340,7 +405,7 @@ async test "fresh empty controller intent cleans a restored journal without Node
     ),
   )
   let restored = restore_supervisor(api, checkpoint)
-  for _ in 0..<4 {
+  for _ in 0..<5 {
     restored.remove_absent([])
   }
   assert_eq(api.objects.length(), 0)
