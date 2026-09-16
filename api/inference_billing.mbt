@@ -5,11 +5,11 @@ async fn ApiService::commercial_project_exists(
   project_id : String,
 ) -> Bool {
   self.commercial_mutex.acquire()
+  defer self.commercial_mutex.release()
   let exists = self.commercial_store.project_for_organization(
       organization_id, project_id,
     )
     is Some(_)
-  self.commercial_mutex.release()
   exists
 }
 
@@ -127,22 +127,14 @@ async fn ApiService::record_inference_charge(
   self.commercial_mutex.acquire()
   defer self.commercial_mutex.release()
   let before = self.commercial_store.durable_snapshot()
-  try {
-    ignore(self.commercial_store.ingest_usage(observation))
-    match rate {
-      Some(value) =>
-        ignore(
-          self.commercial_store.rate_usage(event_id, entry_id, value, ended),
-        )
-      None => ()
-    }
-    self.persist_commercial_state()
-  } catch {
-    error => {
-      ignore(self.commercial_store.replace_from_durable_snapshot(before))
-      raise error
-    }
+  errdefer ignore(self.commercial_store.replace_from_durable_snapshot(before))
+  ignore(self.commercial_store.ingest_usage(observation))
+  match rate {
+    Some(value) =>
+      ignore(self.commercial_store.rate_usage(event_id, entry_id, value, ended))
+    None => ()
   }
+  self.persist_commercial_state()
 }
 
 ///|
