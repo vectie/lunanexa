@@ -159,3 +159,20 @@ store package. Interface generation and scoped formatting pass without public
 interface changes. This is file-failure and mutex-wait evidence only; it does
 not claim an actual model transfer, PostgreSQL commit interruption, or deployment
 of the modified binary on the acceptance controller.
+
+## Workspace handoff lifecycle rollback
+
+Client handoff issue, redeem, quota-consuming authorization and subject-scoped
+revocation now use scoped lock release and error rollback. The fixture forces
+two staging-write failures at each of those four stages, verifies complete
+memory/disk equality and bounded lock reacquisition, then retries and reopens.
+Recovery retains exactly one handoff and one credential; successful consumption
+charges exactly one request. A redeemed code rejects replay after reopen and
+a revoked credential rejects authorization after reopen. Neither plaintext
+handoff code nor API secret appears in the persisted snapshot.
+
+All four strict native handoff-store tests pass. Interface generation and
+scoped formatting pass without public interface changes. The three older
+handoff fixtures now also remove their temporary directories on exit. These
+tests establish file-failure/retry behavior, not mid-write cancellation,
+database failover or live controller rollout of this source change.
