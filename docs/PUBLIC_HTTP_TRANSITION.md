@@ -153,3 +153,49 @@ replay acceptance coverage. No password, token or OTP seed was logged, and MFA
 policy was not weakened. The test helper uses the raw TOTP form secret as UTF-8
 HMAC key, matching Keycloak's `TotpUtils.encode`, rather than treating that raw
 field as an already Base32-encoded value.
+
+### Browser findings: HTTP transition is not end-to-end complete
+
+The actual workstation browser subsequently rendered the public operator
+`http://106.39.18.146:5003/console/` login page. It displayed
+“Administrative login is blocked on public plain HTTP” and
+“Organization sign-in requires HTTPS”; credential entry and Sign in were
+disabled. Source confirms `cmd/console/main.mbt:login_transport_allowed`
+accepts only HTTPS or loopback HTTP. Workbench's endpoint safety check has
+the same restriction. Backend protocol success therefore does **not** prove
+usable HTTP operator/workbench entry.
+
+Required follow-up: implement an explicit deployment-scoped HTTP UI opt-in,
+retain secure defaults and localhost-only static bootstrap credentials, add
+regression tests for enabled/disabled mode, rebuild/deploy the affected UI
+assets and repeat real-browser login. Do not globally allow arbitrary HTTP
+controller endpoints or mark this item passed from a curl test.
+
+The public enterprise page on port 5005 separately failed to open in the
+workstation browser with `net::ERR_BLOCKED_BY_CLIENT`. This observation is
+distinct from the earlier curl empty reply; its cause is not established.
+No browser security override or global network change was applied.
+
+### Explicit UI opt-in implementation
+
+Console and workbench share `ui/browser_transport`. Their shipped HTML contains
+an empty `lunanexa-public-http-origin` meta element, so public HTTP remains
+disabled by default. A deployment choosing temporary HTTP must set its content
+to the exact public origin, for example `http://106.39.18.146:5003` for the
+operator page. The configured origin, actual page origin and requested API
+origin must all match. Other hosts/ports, embedded credentials, paths, query
+strings and fragments do not gain HTTP permission. Query parameters and local
+storage cannot enable this mode. Static operator/audit token bootstrap remains
+localhost-only. Enabled HTTP pages display a plaintext-transport warning.
+
+This metadata is deployment policy, not cryptographic protection: HTTP remains
+vulnerable to network interception. Restoring HTTPS requires removing the opt-in
+as well as the coordinated gateway/identity changes above. Source implementation
+and unit tests do not establish that the new assets have been deployed.
+
+Validation for this implementation: 44/44 targeted JS tests passed across
+browser transport, console and workbench with `--deny-warn`; targeted strict
+JS checking and release browser-bundle build passed. `moon info` reports only
+the new JS-only transport package's two functions (the module's canonical
+native backend does not emit a tracked interface for JS-only packages).
+Live UI rollout and rendered enabled-mode acceptance are still pending.
