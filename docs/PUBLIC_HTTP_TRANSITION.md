@@ -91,3 +91,31 @@ Proxy-mode and gateway rollout follow-up:
 Switching back requires restoring HTTPS public URLs, secure cookie names,
 Keycloak policy and outer TLS listeners together, and removing the temporary
 HTTP flag and canonical issuer override. Users must sign in again.
+
+## Applied public HTTP configuration (2026-09-16)
+
+The public transition was applied after the gateway rollout:
+
+- Keycloak public hostname is `http://106.39.18.146:5006`; the lunanexa realm's
+  external SSL requirement is disabled. Internal listener remains HTTPS and
+  its certificate, private CA and internal edge are unchanged.
+- Operator/enterprise clients allow only their respective exact HTTP callback;
+  gateway uses the explicit HTTP flag, separate HTTP cookie names and the
+  original HTTPS canonical account namespace.
+- Both outer Nginx listeners use HTTP on their existing container ports.
+  Upstream certificate verification remains enabled. Outer HSTS was removed.
+- Corrected operator/enterprise edge readiness and liveness probes from HTTPS
+  to HTTP; both edge replicas then rolled successfully. The identity public
+  edge uses TCP probes, requiring no protocol change.
+- Verified from management: operator and enterprise root paths return 302 to
+  their UI; both OIDC start endpoints return 302 to the HTTP provider with
+  HttpOnly, non-Secure cookies in the new namespace. Public discovery advertises
+  the exact HTTP issuer and endpoints.
+- Workstation direct public port 5003 also returns the correct HTTP 302 without
+  HSTS. Direct public ports 5005 and 5006 returned an empty reply during this
+  check, despite management-side success. Public reachability and a completed
+  browser login remain unresolved; do not claim full login acceptance.
+
+The pre-change private backup is retained outside git at
+`/var/folders/_j/kcn3f7817s71gymnv_nnn1bm0000gn/T/lunanexa-public-http-backup-.45436.89ff5d9a`.
+It includes provider client configuration and must not be published.
