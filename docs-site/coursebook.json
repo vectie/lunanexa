@@ -170,7 +170,7 @@
       "id":"state-ownership",
       "group_id":"concepts",
       "title":"Follow state ownership and durability",
-      "summary":"Not all state lives in PostgreSQL. Enterprise and workspace authority use transactional PostgreSQL projections; controller, registry, scheduler, enrollment, telemetry, deployment, and exclusive-lease stores still use signed file/PVC adapters and epoch fencing.",
+      "summary":"Production management authority lives in PostgreSQL snapshots and projections. One controller holds the database leadership lock; standbys restore durable state after election. File adapters are for development and recovery fixtures, not production multi-replica authority.",
       "audience":"Operator planning storage, backup, or recovery",
       "estimated_minutes":9,
       "status":"implemented",
@@ -180,7 +180,7 @@
         {"kind":"table","columns":["State","Authority","Recovery implication"],"rows":[
           ["Enterprise membership, agreements, lease requests","PostgreSQL normalized projections plus canonical snapshots","Back up PostgreSQL with encryption and test point-in-time restore."],
           ["Workspace users, grants, leases, admission reservations","PostgreSQL in production; file adapter for development","Preserve admission ownership and rolling counters across restart."],
-          ["Registry, scheduler, assignments, enrollment, telemetry","Signed file/PVC snapshots","Back up the complete set together and restore under a higher controller epoch."],
+          ["Control, registry, scheduler, assignments, enrollment, telemetry, deployments","Authoritative PostgreSQL snapshots in production","Restore the complete database; the elected controller obtains a newer fencing token before serving."],
           ["Model source","Management-node /data/models plus detached signatures","Back up independently; node-local materializations are disposable caches."],
           ["Runtime images","External digest-pinned OCI registry","Retain signed immutable images and scan evidence."],
           ["Prompts and outputs","Not persisted by default","Non-ephemeral retention is rejected without an approved external provider."]
@@ -288,31 +288,41 @@
       "id":"access-flow",
       "group_id":"concepts",
       "title":"Trace user, workspace, and exclusive access",
-      "summary":"Human access is explicit and layered: external identity maps to an opaque subject, an operator activates the user and grant, a bounded lease authorizes model admission, and a separate exclusive-node contract governs any real DGX login.",
-      "audience":"Access administrator and security reviewer",
+      "summary":"Choose the path that matches your resources: administrator-approved private workspaces, a bounded public trial, or a commercial machine order. Registration creates an identity, not machine access; the platform manages grants, leases and receipts behind these journeys.",
+      "audience":"Workspace users and access administrators",
       "estimated_minutes":11,
       "status":"implemented",
       "tags":["user","grant","lease","identity","exclusive access"],
-      "source_ids":["workspaces","product-contract","implementation-status","security"],
+      "source_ids":["workspaces","product-contract","implementation-status","security","platform-identity"],
       "blocks":[
-        {"kind":"flow","title":"Managed workspace access","steps":[
-          {"title":"Authenticate externally","text":"Trusted ingress validates the human and derives or injects an opaque LunaNexa subject."},
-          {"title":"Register user","text":"The operator creates or invites a workspace user, then activates the lifecycle record."},
-          {"title":"Grant access","text":"A tenant-scoped Developer or Admin grant defines role and time window."},
-          {"title":"Activate lease","text":"A capability lease limits requests, concurrency, input/output, and expiry."},
-          {"title":"Invoke","text":"Workbench or client presents inference authority; the server resolves subject ownership and admits only a matching active grant and lease."}
+        {"kind":"flow","title":"Private cloud: use your organization's resources","steps":[
+          {"title":"Sign in and select your organization","text":"Use the platform identity site or an approved enterprise login. Create an individual/company record or accept an invitation if needed."},
+          {"title":"Receive administrator approval","text":"An administrator enables your access package and chooses resources, models, quotas and expiry. You do not create grants or leases manually."},
+          {"title":"Open your workspace","text":"Choose the approved ComfyUI or WebIDE from the workbench. Private-cloud workspace access does not require a machine-rental contract."}
         ]},
-        {"kind":"heading","level":2,"id":"identity-transport","text":"Production identity transport"},
-        {"kind":"paragraph","text":"With ingress-nginx client certificates, only ssl-client-verify: SUCCESS is accepted and the distinguished name is reduced to an opaque SHA-256 subject reference. X-LunaNexa-Subject is accepted only from an actual loopback TCP peer; remote callers cannot self-assert it."},
-        {"kind":"heading","level":2,"id":"exclusive-access","text":"Exclusive-node lifecycle"},
+        {"kind":"flow","title":"Public experience: try approved models","steps":[
+          {"title":"Register and verify","text":"Complete the platform's identity checks. A bounded trial is issued only when the deployment enables it."},
+          {"title":"Review your allowance","text":"Check the allowed models, expiry and remaining quota, then create the trial API key in the portal."},
+          {"title":"Start using the trial","text":"Call an allowed model within the displayed limits. A trial does not grant a paid machine or unrestricted workspace access."}
+        ]},
+        {"kind":"flow","title":"Commercial rental: order capacity before using it","steps":[
+          {"title":"Choose an offering","text":"Select your individual/company customer and complete required verification, then choose the service, capacity and duration. You do not choose physical node IDs."},
+          {"title":"Review and confirm the order","text":"Review the quote and required agreement, then complete checkout. The platform waits for confirmed payment before provisioning."},
+          {"title":"Use the ready service","text":"Follow order status until provisioning and any required model deployment are ready. Use the bare-machine access handoff or dedicated model API for the offering you purchased."}
+        ]},
+        {"kind":"table","columns":["Delivery","What you receive","What stays separate"],"rows":[["IaaS","An exclusive bare-machine lease and secure access handoff","Commercial agreement, payment and machine cleanup lifecycle"],["PaaS","An isolated WebIDE or ComfyUI workspace with persistent storage","Private-cloud administrator approval is not a machine rental"],["MaaS","A scoped model API, shared or bound to a dedicated order","Model readiness, authorization and usage accounting"]]},
+        {"kind":"callout","tone":"info","title":"Your work and your login are different","text":"Workflows, uploads and generated files live in the workspace volume, not the temporary browser session. Reopen the same authorized workspace to continue; a logout or container restart is not a file deletion. Organization/project boundaries, retention policy and explicit deletion still apply. Download important results for your own backup."},
+        {"kind":"heading","level":2,"id":"identity-transport","text":"Behind the scenes: identity and authorization"},
+        {"kind":"paragraph","text":"The platform-operated Keycloak identity service stores passwords and handles verification and MFA; the LunaNexa controller does not store those credentials. Account membership, scoped grants, leases and audit receipts remain platform checks. Administrators inspect their technical details; ordinary users should not copy identifiers, sign receipts or configure trust for each launch."},
+        {"kind":"heading","level":2,"id":"exclusive-access","text":"Behind the scenes: exclusive-machine lifecycle"},
         {"kind":"flow","steps":[
-          {"title":"Reserve","text":"One user and one eligible DGX are bound; managed placement is fenced immediately."},
+          {"title":"Reserve","text":"One subject and one eligible compute node are bound; managed placement is fenced immediately."},
           {"title":"Provision","text":"A fixed root-owned helper resolves a credential reference and applies allowlisted host operations."},
           {"title":"Expire or end","text":"The protected node watchdog enforces generation and time even while disconnected."},
           {"title":"Revoke and sanitize","text":"Access removal and cleanup must produce current receipts."},
           {"title":"Return or quarantine","text":"Only proven sanitization returns the node to managed service; failure quarantines it."}
         ]},
-        {"kind":"callout","tone":"warning","title":"Identity directory is not an IdP","text":"LunaNexa stores opaque subject references and evidence, not upstream passwords, identity documents, browser credentials, or client private keys."}
+        {"kind":"callout","tone":"warning","title":"If access is unavailable","text":"A new account alone grants no resources. Check the selected organization, approval, quota, expiry and service readiness; contact your administrator when a required service is unavailable. Private-cloud admission must be explicitly enabled by the deployment. These documented journeys do not certify that a particular installation's registration, email, payment or hardware acceptance has passed."}
       ]
     },
     {

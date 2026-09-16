@@ -102,6 +102,15 @@ test("coursebook renderer shows both concise and titled procedure steps", async 
   assert.match(source, /item\.text/);
 });
 
+test("compact guide trigger keeps a visible glyph and localized accessible name", async () => {
+  const css = await readFile(resolve(siteRoot, "styles.css"), "utf8");
+  const source = await readFile(resolve(siteRoot, "app.js"), "utf8");
+  assert.match(css, /\.pet-trigger \[data-ask-label\] \{ font-size: 0; \}/);
+  assert.match(css, /\.pet-trigger \[data-ask-label\]::after \{ content: "\?"; font-size: 15px; \}/);
+  assert.ok(source.includes('$("[data-open-pet]").setAttribute("aria-label", t("ask_guide", "Ask guide"))'));
+  assert.ok(source.includes('$("[data-open-search]").setAttribute("aria-label", t("search", "Search"))'));
+});
+
 test("newcomer operations runbook connects both roles without exposing internals", () => {
   const page = pageById.get("daily-operations");
   assert.ok(page);
@@ -238,6 +247,24 @@ test("every page source exists in the evidence ledger", () => {
     assert.ok(page.source_ids.length > 0, `${page.id}: no sources`);
     for (const id of page.source_ids) assert.ok(sourceById.has(id), `${page.id}: missing source ${id}`);
   }
+});
+
+test("access journeys keep private approval separate from trial and commercial rental", () => {
+  for (const page of [pageById.get("access-flow"), zhBook.pages["access-flow"]]) {
+    const journeys = page.blocks.filter((block) => block.kind === "flow").slice(0, 3);
+    assert.equal(journeys.length, 3);
+    assert.deepEqual(journeys.map((journey) => journey.steps.length), [3, 3, 3]);
+    const deliveries = page.blocks.find((block) => block.kind === "table");
+    assert.deepEqual(deliveries.rows.map((row) => row[0]), ["IaaS", "PaaS", "MaaS"]);
+  }
+  const english = JSON.stringify(pageById.get("access-flow"));
+  const chinese = JSON.stringify(zhBook.pages["access-flow"]);
+  assert.match(english, /Private-cloud workspace access does not require a machine-rental contract/);
+  assert.match(chinese, /私有云工作空间访问不需要机器租赁合同/);
+  assert.match(english, /Registration creates an identity, not machine access/);
+  assert.match(chinese, /注册只建立身份，不自动授予机器访问权/);
+  assert.match(english, /do not certify/);
+  assert.match(chinese, /不代表某一安装环境已通过/);
 });
 
 test("published source digests match the inspected repository bytes", async () => {

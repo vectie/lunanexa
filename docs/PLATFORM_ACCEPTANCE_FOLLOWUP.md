@@ -610,3 +610,47 @@ offering available=1, both reserved=0. Sessions were logged out afterwards.
 No new order, payment callback, refund or real payment was issued. This verifies
 list isolation and retained terminal capacity state, not checkout UI or every
 individual-order authorization route.
+
+### Terminal-order access and key-issuance denial
+
+The follow-up live probes used fresh TEST ONLY sessions for the original and
+independent second organization. The original owner received HTTP 409
+`MachineOrderNotActive` for the terminal order's access route and HTTP 409
+`DedicatedEndpointUnavailable` when requesting an access key. The second
+organization received HTTP 404 `NotFound` for that same access route and HTTP
+400 `InvalidRequest` for key issuance, matching its nonexistent-order probes.
+The original organization's nonexistent-order probes returned the same 404/400
+pair. Error bodies did not disclose target lease, payment or organization
+fields. No key was issued and both sessions were logged out.
+
+The original five orders remained terminal with no capacity reservation; the
+second organization still saw zero orders. This closes these specific negative
+authorization checks, not successful paid provisioning, real checkout UI or
+all machine-commerce routes.
+
+### Documentation/UI and regression checkpoint (2026-09-16)
+
+The bilingual access guide now separates three short journeys: private-cloud
+administrator approval, bounded public trial, and commercial rental. IaaS,
+PaaS (WebIDE/ComfyUI), and MaaS delivery remain distinct. The storage guide and
+architecture no longer describe the six migrated control-plane snapshot domains
+as production file/PVC authority. The source ledger's six stale digests were
+refreshed; this targeted review does not certify every historical guide claim.
+
+The compact guide trigger retains its visible question mark at 390px width;
+search and guide accessible names follow the selected language. Live browser
+inspection verified English/Chinese labels, menu open/close, Chinese guide
+open/close and search dismissal. The viewport width and document scroll width
+both measured 390px, and search/guide controls measured 44x44px. A rendered
+Chinese first viewport was inspected and the temporary viewport was reset.
+These checks concern the documentation site, not identity/payment browser E2E.
+
+- Documentation and administrator-diagnostics Node tests: 32/32 passed.
+- Native functional regression with `--warn-list -92-20`: 797/797 passed.
+  Conditional PostgreSQL cases in this command do not replace the separately
+  recorded live database matrix.
+- Native strict check with `--deny-warn`: failed with 80 errors, including
+  fragile cleanup handlers; the strict release gate is still open work.
+
+No serving deployment, domain, certificate, trust setting or actual model
+inference was changed by this checkpoint.

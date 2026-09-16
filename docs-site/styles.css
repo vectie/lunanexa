@@ -422,7 +422,7 @@ html[lang^="zh"] .dialog-kicker { letter-spacing: 0; text-transform: none; }
   .brand > span:last-child { display: none; }
   .topbar-actions { gap: 5px; }
   .pet-trigger { width: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-  .pet-trigger [data-ask-label] { width: 0; overflow: hidden; font-size: 0; }
+  .pet-trigger [data-ask-label] { font-size: 0; }
   .pet-trigger [data-ask-label]::after { content: "?"; font-size: 15px; }
   .mobile-nav-trigger { padding-inline: 9px; }
   .article-shell { padding-inline: 16px; }
