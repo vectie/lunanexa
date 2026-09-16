@@ -1,6 +1,7 @@
 ///|
 async test "signature and lease approval survive restart" {
   let directory = @fs.tmpdir(prefix="lunanexa-portal-store-")
+  defer @fs.rmdir(directory, recursive=true)
   let path = "\{directory}/portal.json"
   let store = @store.FilePortalStore::open(path)
   ignore(
@@ -32,6 +33,32 @@ async test "signature and lease approval survive restart" {
       updated_unix_ms: 1000L,
     }),
   )
+  let before_signature = store.snapshot()
+  let signature_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  for _ in 0..<2 {
+    try
+      store.request_signature(
+        "subject-a",
+        {
+          agreement_id: "agreement-a",
+          expected_generation: 1L,
+          idempotency_key: "sign-a",
+        },
+        1100L,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("signature request unexpectedly persisted")
+    }
+    assert_eq(
+      @async.with_timeout(1000, () => store.snapshot()),
+      before_signature,
+    )
+    assert_eq(@fs.read_file(path).text(), signature_disk)
+  }
+  @fs.rmdir(path + ".next")
   let requested = store.request_signature(
     "subject-a",
     {
@@ -69,6 +96,31 @@ async test "signature and lease approval survive restart" {
     },
     1300L,
   )
+  let before_review = store.snapshot()
+  let review_disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  for _ in 0..<2 {
+    try
+      store.review_lease_request(
+        {
+          request_id: "request-a",
+          expected_generation: submitted.generation,
+          decision: Approve,
+          node_id: Some("spark-01"),
+          evidence_receipt: "operator:approved:a",
+        },
+        Some("exclusive-request-a"),
+        1400L,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("lease approval unexpectedly persisted")
+    }
+    assert_eq(@async.with_timeout(1000, () => store.snapshot()), before_review)
+    assert_eq(@fs.read_file(path).text(), review_disk)
+  }
+  @fs.rmdir(path + ".next")
   ignore(
     store.review_lease_request(
       {
@@ -86,7 +138,6 @@ async test "signature and lease approval survive restart" {
   let view = reopened.self_view("subject-a")
   assert_eq(view.agreements[0].state, Executed)
   assert_eq(view.lease_requests[0].state, Approved)
-  @fs.rmdir(directory, recursive=true)
 }
 
 ///|
@@ -230,7 +281,7 @@ async test "lease idempotency is tenant scoped and conflicting replay is isolate
   try
     store.submit_lease_request(
       "subject-a",
-      { ..submission_a, request_id: "request-conflict" },
+      { ..submission_a, request_id: "request-conflict", },
       1302L,
     )
   catch {
