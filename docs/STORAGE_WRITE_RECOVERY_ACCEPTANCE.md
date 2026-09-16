@@ -203,3 +203,28 @@ pass. Every matrix database was dropped, an independent catalog query found
 zero `lnx_acceptance_%` databases, and the dedicated SSH tunnel was closed.
 The acceptance PostgreSQL service was not stopped. These tests do not establish
 server failover, interruption during COMMIT, or actual model transfer.
+
+## Machine-order payment and provisioning rollback
+
+The durable machine-commerce adapter now releases every acquired mutex through
+scoped cleanup and restores its prior typed snapshot on errors in fourteen
+mutation paths, including cross-store compensation replacement. Business
+validation, signing, contract/payment requirements and public APIs are unchanged.
+
+The file fixture forces two consecutive write failures during settled-payment
+activation and two during provisioning startup. Complete snapshots and disk
+bytes remain unchanged after each failure; bounded snapshot reads prove the
+mutex is available. Retrying and reopening preserves one capacity reservation,
+and repeating the original payment and provisioning requests returns Replayed.
+The fixture now removes its temporary directory on exit. The machine-commerce
+core/store strict native selection passes 9/9; interface generation and scoped
+formatting pass without public interface changes. This does not represent real
+payment settlement, real machine provisioning or live controller rollout.
+
+The selected reconciler, customer machine HTTP and inference-billing fixtures
+also pass 10/10 with warnings 92/20 disabled for remaining dependencies. They
+cover bare-machine provisioning, dedicated endpoint separation, the paid video
+test path, capacity-timeout compensation, tenant/organization authorization,
+termination confirmation, expiry recovery and billing receipt behavior. Any
+environment-conditional database branch in this local run is not fresh live
+PostgreSQL evidence.
