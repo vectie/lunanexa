@@ -33,20 +33,23 @@ test "deterministic API-key mutation fuzz rejects 10k boundary and injection var
   for attack in forbidden {
     for position in 0..<256 {
       let injected = "\{envelope[:position]}\{attack}\{envelope[position + 1:]}"
-      assert_true(rejected({ ..valid_intent(), key_id: injected }))
-      assert_true(rejected({ ..valid_intent(), tenant_ref: injected }))
-      assert_true(rejected({ ..valid_intent(), subject_ref: injected }))
+      assert_true(rejected({ ..valid_intent(), key_id: injected, }))
+      assert_true(rejected({ ..valid_intent(), tenant_ref: injected, }))
+      assert_true(rejected({ ..valid_intent(), subject_ref: injected, }))
       mutations += 3
     }
   }
   for length in 0..<=400 {
     let value = "a".repeat(length)
     let expected_rejection = length == 0 || length > 256
-    assert_eq(rejected({ ..valid_intent(), key_id: value }), expected_rejection)
+    assert_eq(
+      rejected({ ..valid_intent(), key_id: value, }),
+      expected_rejection,
+    )
     mutations += 1
   }
-  assert_true(rejected({ ..valid_intent(), maximum_requests: 0L }))
-  assert_true(rejected({ ..valid_intent(), maximum_requests: 1000000001L }))
-  assert_true(rejected({ ..valid_intent(), expires_unix_ms: 100000L }))
+  assert_true(rejected({ ..valid_intent(), maximum_requests: 0L, }))
+  assert_true(rejected({ ..valid_intent(), maximum_requests: 1000000001L, }))
+  assert_true(rejected({ ..valid_intent(), expires_unix_ms: 100000L, }))
   assert_true(mutations > 10000)
 }

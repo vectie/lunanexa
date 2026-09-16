@@ -913,7 +913,7 @@ async fn ApiService::handle_offline_commerce(
         false,
       )
     }
-    let completed = { ..result, completed_unix_ms: Some(@async.now()) }
+    let completed = { ..result, completed_unix_ms: Some(@async.now()), }
     let reply = try
       json_reply(200, store.complete_activation(completed).to_json())
     catch {
@@ -964,7 +964,7 @@ async fn ApiService::handle_offline_commerce(
         false,
       )
     }
-    let completed = { ..result, completed_unix_ms: Some(@async.now()) }
+    let completed = { ..result, completed_unix_ms: Some(@async.now()), }
     let reply = try
       json_reply(200, store.complete_reversal(completed).to_json())
     catch {

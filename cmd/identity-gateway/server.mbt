@@ -312,7 +312,7 @@ async fn handle_browser_session(
   } else {
     (current_id, current)
   }
-  let refreshed = { ..active, last_used_unix_ms: now }
+  let refreshed = { ..active, last_used_unix_ms: now, }
   store.replace(active_id, refreshed)
   let cookie_reference = encode_cookie_reference(
     active_id,
@@ -403,6 +403,17 @@ fn enterprise_path_allowed(path : String) -> Bool {
   exact_or_child(path, "/v1/contract-documents/manifest") ||
   exact_or_child(path, "/v1/offline-commerce/self") ||
   exact_or_child(path, "/v1/machine-access/self")
+}
+
+///|
+// Browser workbench bootstrap is read-only and exact. Do not expose the
+// workspace mutation tree or generic workloads through the enterprise proxy.
+fn enterprise_request_allowed(request : @http.Request, path : String) -> Bool {
+  enterprise_path_allowed(path) ||
+  (
+    request.meth == Get &&
+    (path == "/v1/workspace/self" || path == "/v1/settings/effective")
+  )
 }
 
 ///|
@@ -497,7 +508,7 @@ async fn handle_api_proxy(
   audience : BrowserAudience,
 ) -> Unit {
   guard canonical_api_path(request.path) is Some(path) &&
-    (audience == Operator || enterprise_path_allowed(path)) &&
+    (audience == Operator || enterprise_request_allowed(request, path)) &&
     header(request.headers, "Sec-Fetch-Site") == Some("same-origin") &&
     browser_state(store, config, request, audience)
     is Some((session_id, session)) &&
@@ -506,7 +517,7 @@ async fn handle_api_proxy(
     header(request.headers, "Authorization") == Some("Bearer \{session.bearer}") else {
     return send_error(connection, 401, "browser-bearer-rejected")
   }
-  let refreshed = { ..session, last_used_unix_ms: @async.now() }
+  let refreshed = { ..session, last_used_unix_ms: @async.now(), }
   store.replace(session_id, refreshed)
   let cookie_reference = encode_cookie_reference(
     session_id,

@@ -92,6 +92,61 @@ async test "notification HTTP surface isolates tenant inbox and operator alerts"
   assert_eq(inbox.status, 200)
   assert_true(inbox.body.contains("notice-subject-a"))
   assert_false(inbox.body.contains("alert-node-a"))
+  let announcement = (
+    {
+      "announcement_id": "planned-quota-change",
+      "tenant_ref": "tenant-a",
+      "title": "Quota policy update",
+      "body": "Review your resource limits before tomorrow.",
+      "expires_unix_ms": (now + 60000L).to_json(),
+    } : Json).stringify()
+  let publish_path = "/v1/notifications/operator/announcements"
+  assert_eq(
+    service.handle(Post, publish_path, subject_a, announcement).status,
+    401,
+  )
+  let operator_headers = { "Authorization": "Bearer operator-token" }
+  assert_eq(
+    service.handle(Post, publish_path, operator_headers, announcement).status,
+    201,
+  )
+  assert_eq(
+    service.handle(Post, publish_path, operator_headers, announcement).status,
+    200,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      publish_path,
+      operator_headers,
+      announcement.replace(old="Quota policy update", new="Changed content"),
+    ).status,
+    409,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      publish_path,
+      operator_headers,
+      announcement.replace(old="tenant-a", new="missing-tenant"),
+    ).status,
+    400,
+  )
+  assert_true(
+    service.handle(Get, "/v1/notifications/self", subject_a, "").body.contains(
+      "Quota policy update",
+    ),
+  )
+  assert_false(
+    service.handle(Get, "/v1/notifications/self", subject_b, "").body.contains(
+      "Quota policy update",
+    ),
+  )
+  assert_false(
+    notifications
+    .records_for_subject("tenant-a", "subject-a", now + 60001L)
+    .any(record => record.event.topic == Announcement),
+  )
   let preference = service.handle(
     Put,
     "/v1/notifications/self/preferences",

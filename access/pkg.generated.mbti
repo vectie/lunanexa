@@ -37,7 +37,7 @@ pub struct AccessStore {
   mut credentials : Map[String, ApiCredential]
   mutex : @async.Mutex
 }
-pub async fn AccessStore::authorize(Self, String, ApiKeyScope, tenant_ref? : String, model? : String, Int64, Bool) -> ApiAuthorization
+pub async fn AccessStore::authorize(Self, String, ApiKeyScope, tenant_ref? : String, model? : String, Int64, Bool, reserve_quota? : async (Int64) -> Bool) -> ApiAuthorization
 pub async fn AccessStore::issue(Self, ApiKeyIssueIntent, Int64) -> IssuedApiKey
 pub async fn AccessStore::open(String, String) -> Self
 pub async fn AccessStore::open_postgres(@database.PostgresDatabase, String) -> Self

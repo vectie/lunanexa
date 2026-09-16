@@ -33,6 +33,7 @@ pub(all) enum NotificationTopic {
   AccessCredential
   GuideDiagnostics
   DeliveryHealth
+  Announcement
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

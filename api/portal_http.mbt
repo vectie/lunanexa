@@ -602,7 +602,14 @@ async fn ApiService::handle_enterprise_portal(
           }
         _ => ()
       }
-      json_reply(201, issued.public_view().to_json())
+      json_reply(201, {
+        "credential": issued.public_view().credential.to_json(),
+        "secret": issued.secret,
+        "allowed_models": issued.credential.allowed_models.to_json(),
+        "api_base_url": self.client_launch_config
+        .map(config => config.public_api_base_url)
+        .to_json(),
+      })
     }
     (Post, _) if path.has_prefix("/v1/portal/self/api-keys/") &&
       path.has_suffix(":revoke") => {

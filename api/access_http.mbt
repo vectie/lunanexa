@@ -190,6 +190,29 @@ async fn ApiService::api_key_check(
           return KeyDenied
         }
         let value = if consume {
+          if trial_active &&
+            !contract_active &&
+            self.account_store is Some(accounts) &&
+            accounts.active_trial_for_subject(preview.subject_ref, now)
+            is Some(trial) {
+            return KeyAuthorized(
+              store.authorize(
+                secret,
+                scope,
+                tenant_ref=preview.tenant_ref,
+                model?,
+                now,
+                true,
+                reserve_quota=legacy_consumed => {
+                  accounts.consume_trial_request(
+                    trial.trial_id,
+                    legacy_consumed,
+                    @async.now(),
+                  )
+                },
+              ),
+            )
+          }
           match (tenant_ref, model) {
             (Some(tenant), Some(selected_model)) =>
               store.authorize(

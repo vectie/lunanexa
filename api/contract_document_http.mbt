@@ -353,7 +353,7 @@ fn linked_order_values(
   packet : @contractdoc.ContractPacket,
 ) -> Array[@contractdoc.ContractFieldValue] {
   if packet.active_forms.contains(AccessConfirmation) {
-    [{ field_id: "access.order_number", value: packet.order_ref }]
+    [{ field_id: "access.order_number", value: packet.order_ref, }]
   } else {
     []
   }

@@ -23,7 +23,7 @@ fn GatewaySessionStore::open(
     #|CREATE INDEX IF NOT EXISTS identity_gateway_sessions_expiry_idx
     #|ON lunanexa.identity_gateway_sessions (expires_unix_ms)
   ignore(connection.execute(create_index_sql))
-  { connection, mutex: @async.Mutex() }
+  { connection, mutex: @async.Mutex(), }
 }
 
 ///|

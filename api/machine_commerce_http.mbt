@@ -633,7 +633,7 @@ async fn ApiService::handle_machine_commerce(
         } noraise {
           value => value
         }
-        response.push({ offering, availability })
+        response.push({ offering, availability, })
       }
       return json_reply(200, response.to_json())
     }

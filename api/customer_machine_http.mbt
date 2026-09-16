@@ -72,7 +72,7 @@ async fn ApiService::customer_machine_view(
   }
   {
     ..base,
-    credential_handoff: { ..base.credential_handoff, state: handoff_state },
+    credential_handoff: { ..base.credential_handoff, state: handoff_state, },
   }
 }
 

@@ -472,6 +472,14 @@ async test "free trial is single use, bounded, durable, and key bound" {
     100000L,
   )
   assert_eq(trial.api_key_id, None)
+  let legacy_json : Json = trial.to_json()
+  guard legacy_json is Object(fields) else { fail("expected trial object") }
+  ignore(fields.remove("consumed_requests"))
+  let legacy : @account.TrialEntitlement = @json.from_json(legacy_json)
+  assert_eq(legacy.consumed_requests, None)
+  assert_true(store.consume_trial_request(trial.trial_id, 98L, 100001L))
+  assert_true(store.consume_trial_request(trial.trial_id, 0L, 100001L))
+  assert_false(store.consume_trial_request(trial.trial_id, 0L, 100001L))
   let bound = store.bind_trial_api_key(trial.trial_id, "trial-key-one", 100001L)
   assert_eq(bound.api_key_id, Some("trial-key-one"))
   assert_true(
@@ -495,6 +503,11 @@ async test "free trial is single use, bounded, durable, and key bound" {
     87400000L,
   )
   let reopened = @account.AccountStore::open(path, secret)
+  assert_eq(
+    reopened.trial_for_account(registered.account.account_id).unwrap().consumed_requests,
+    Some(100L),
+  )
+  assert_false(reopened.consume_trial_request(trial.trial_id, 0L, 100002L))
   assert_eq(
     reopened.trial_for_account(registered.account.account_id).unwrap().api_key_id,
     Some("trial-key-one"),

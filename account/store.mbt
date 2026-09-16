@@ -289,6 +289,9 @@ fn AccountStore::restore(
       trial.allowed_models.any(model => trial.allowed_models.count(model) != 1) ||
       trial.maximum_requests <= 0L ||
       trial.maximum_requests > 10000L ||
+      trial.consumed_requests.map_or(false, consumed => {
+        consumed < 0L || consumed > trial.maximum_requests
+      }) ||
       trial.starts_unix_ms <= 0L ||
       trial.expires_unix_ms <= trial.starts_unix_ms ||
       trial.expires_unix_ms - trial.starts_unix_ms > 2592000000L ||
@@ -439,6 +442,7 @@ pub async fn AccountStore::ensure_trial(
     expires_unix_ms: intent.expires_unix_ms,
     api_key_id: None,
     revoked_unix_ms: None,
+    consumed_requests: Some(0L),
   }
   self.trials[intent.trial_id] = trial
   self.persist()
@@ -485,6 +489,37 @@ pub async fn AccountStore::active_trial_for_subject(
   }
   self.mutex.release()
   value
+}
+
+///|
+pub async fn AccountStore::consume_trial_request(
+  self : AccountStore,
+  trial_id : String,
+  legacy_consumed : Int64,
+  now_unix_ms : Int64,
+) -> Bool {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  let previous = self.trials.copy()
+  errdefer {
+    self.trials = previous
+  }
+  guard self.trials.get(trial_id) is Some(trial) &&
+    trial.starts_unix_ms <= now_unix_ms &&
+    trial.expires_unix_ms > now_unix_ms &&
+    trial.revoked_unix_ms is None else {
+    raise Unauthorized
+  }
+  let consumed = trial.consumed_requests.unwrap_or(0L).max(legacy_consumed)
+  if legacy_consumed < 0L {
+    raise InvalidInput("invalid legacy trial usage")
+  }
+  if consumed >= trial.maximum_requests {
+    return false
+  }
+  self.trials[trial_id] = { ..trial, consumed_requests: Some(consumed + 1L), }
+  self.persist()
+  true
 }
 
 ///|

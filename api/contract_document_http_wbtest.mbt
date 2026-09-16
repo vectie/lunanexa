@@ -424,7 +424,7 @@ async test "four-eyes HTTP approval is 202, second-person, and replay-safe" {
       1000L,
     ),
     state: Effective,
-    values: [{ field_id: "lease.total_rent", value: "1" }],
+    values: [{ field_id: "lease.total_rent", value: "1", }],
   }
   ignore(documents.create_packet(packet, "operator-a"))
   let pending = service.handle(
@@ -929,7 +929,7 @@ async test "early termination close reconciles the settlement against the ledger
           version: "v1",
           meter: "gpu-second",
           unit: "second",
-          unit_price: { minor_units, currency: "CNY", scale: 2 },
+          unit_price: { minor_units, currency: "CNY", scale: 2, },
           effective_from_unix_ms: 1000L,
           effective_until_unix_ms: 10000L,
         },
@@ -1102,7 +1102,7 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
       1000L,
     ),
     state: Effective,
-    values: [{ field_id: "lease.end_date", value: "2026-08-25" }],
+    values: [{ field_id: "lease.end_date", value: "2026-08-25", }],
   }
   ignore(documents.create_packet(master, "operator"))
   let notifications = @notification_store.NotificationStore::open(
@@ -1243,7 +1243,7 @@ async test "contract renewal creates a linked draft for the owner and the operat
       1000L,
     ),
     state: Effective,
-    values: [{ field_id: "lessee.name", value: "星海科技" }],
+    values: [{ field_id: "lessee.name", value: "星海科技", }],
   }
   ignore(documents.create_packet(master, "operator"))
   let drafting = {
@@ -1388,16 +1388,16 @@ async test "operator tokens attribute contract actions to the authenticated oper
     revision: 5L,
   }
   ignore(documents.create_packet(generated, "subject-a"))
-  let effective = { ..draft_packet("packet-close"), state: Effective }
+  let effective = { ..draft_packet("packet-close"), state: Effective, }
   ignore(documents.create_packet(effective, "subject-a"))
-  let renewable = { ..draft_packet("packet-renew-src"), state: Effective }
+  let renewable = { ..draft_packet("packet-renew-src"), state: Effective, }
   ignore(documents.create_packet(renewable, "subject-a"))
   let superseding = {
     ..draft_packet("packet-supersede"),
     state: InformationDraft,
   }
   ignore(documents.create_packet(superseding, "subject-a"))
-  let successor = { ..draft_packet("packet-successor"), revision: 1L }
+  let successor = { ..draft_packet("packet-successor"), revision: 1L, }
   ignore(documents.create_packet(successor, "subject-a"))
   // An unknown token is rejected, and the legacy single token no longer
   // authenticates once the multi-operator map is installed.
@@ -1597,7 +1597,7 @@ async test "contract expiry reconciler auto-closes past the grace period once" {
       1000L,
     ),
     state: Effective,
-    values: [{ field_id: "lease.end_date", value: "2026-08-01" }],
+    values: [{ field_id: "lease.end_date", value: "2026-08-01", }],
   }
   ignore(documents.create_packet(expired, "operator"))
   // Two days past its end date: still inside the grace period.
@@ -1615,7 +1615,7 @@ async test "contract expiry reconciler auto-closes past the grace period once" {
       1000L,
     ),
     state: Effective,
-    values: [{ field_id: "lease.end_date", value: "2026-08-10" }],
+    values: [{ field_id: "lease.end_date", value: "2026-08-10", }],
   }
   ignore(documents.create_packet(within_grace, "operator"))
   let notifications = @notification_store.NotificationStore::open(
