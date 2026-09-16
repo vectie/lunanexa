@@ -296,5 +296,5 @@ pub fn EvidenceBundle::release_ready(self : EvidenceBundle) -> Bool {
 
 ///|
 pub fn EvidenceBundle::export_json(self : EvidenceBundle) -> String {
-  self.to_json().stringify(indent=2)
+  ToJson::to_json(self).stringify(indent=2)
 }
