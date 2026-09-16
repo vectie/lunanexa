@@ -654,3 +654,31 @@ These checks concern the documentation site, not identity/payment browser E2E.
 
 No serving deployment, domain, certificate, trust setting or actual model
 inference was changed by this checkpoint.
+
+### Live revoked-content denial and second-organization rebuild
+
+Fresh private, no-rental-contract hosted handoffs were exercised for both test
+organizations against the existing acceptance deployment. Each connected with
+204, opened the workspace with 200 and upgraded WebSocket with 101. Revocation
+closed the established socket with policy code 1008 (4437 ms for the second
+organization, 5001 ms for the original). New HTTP and WebSocket requests returned
+401. Cross-origin upgrades returned 403 and tampered cookies returned 401.
+
+The expanded negative checks also require 401 after revocation for `/userdata`,
+the exact saved-video `/view` path, `/history`, `/queue` and `/object_info`.
+Both organizations passed all five checks. These are HTTP/client protocol
+checks, not a new visual-browser acceptance claim.
+
+The second organization's workspace Pod was recreated during subsequent launch
+(`...m498t` to `...xmzdj`, then `...kk2p2`); this is not an unchanged-Pod test.
+After the new launch returned 204/200, read-only verification recovered the
+previously saved workflow byte-for-byte and the uploaded TEST ONLY input video
+with SHA256 `8b4bc945cb35c2dff26e566c525a30fa91649f473aef41a657c9e96bdacb7148`.
+Its asset list excluded the original organization's outputs and the original
+organization's exact video path returned 404. No replacement workflow/input
+was written to make these checks pass. The readback handoff was then revoked;
+all new campaign sessions were logged out and temporary downloads removed.
+
+The managed-runtime acceptance namespace was empty during this campaign.
+Existing separate test-provider Pods remain; no model was deployed, hardware
+identity changed, or old unresolved r12 execution evidence reconstructed.
