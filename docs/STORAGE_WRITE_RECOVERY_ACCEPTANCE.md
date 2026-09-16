@@ -137,3 +137,25 @@ packages. Interface generation and formatting completed. This is local
 file-failure and lock-wait coverage, not in-flight database commit cancellation,
 real identity-provider registration, or evidence that the running controller
 has been upgraded to this source revision.
+
+## Prewarm and one-time transfer cleanup
+
+The technical store uses scoped mutex release for prewarm creation, state
+advancement and transfer-grant consumption. Failed prewarm writes restore the
+previous operation map; failed nonce persistence removes only the nonce added
+by that attempt. Public contracts and transfer validation remain unchanged.
+
+The file fixture injects two consecutive staging-write failures into each of
+these three paths, verifies complete snapshot/disk equality and bounded lock
+reacquisition, then retries successfully. Reopening the store rejects the
+successfully consumed nonce as `NonceReplayed`. A separate cancellation fixture
+holds the mutex while two waiting consumers time out, proves neither releases
+the owner lock nor consumes the nonce, and then consumes/reopens/rejects replay
+after release. Temporary directories are removed on exit, including the older
+restart fixture that previously left its snapshot in `/tmp`.
+
+Strict native tests pass 11/11 for the technical policy package and 2/2 for its
+store package. Interface generation and scoped formatting pass without public
+interface changes. This is file-failure and mutex-wait evidence only; it does
+not claim an actual model transfer, PostgreSQL commit interruption, or deployment
+of the modified binary on the acceptance controller.

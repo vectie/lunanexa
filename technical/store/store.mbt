@@ -49,7 +49,7 @@ async fn write_file(path : String, snapshot : TechnicalSnapshot) -> Unit {
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -124,7 +124,7 @@ pub async fn TechnicalStore::open_postgres(
       database.save_opaque_snapshot(
         "technical_operations",
         snapshot_schema_version,
-        store.snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(store.snapshot_unlocked()).stringify(),
       )
   }
   store
@@ -139,7 +139,7 @@ async fn TechnicalStore::persist(self : TechnicalStore) -> Unit {
       database.save_opaque_snapshot(
         "technical_operations",
         snapshot_schema_version,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -151,33 +151,25 @@ pub async fn TechnicalStore::begin_prewarm(
   now_unix_ms : Int64,
 ) -> @technical.PrewarmDecision {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.prewarm.copy()
-  try {
-    let decision = @technical.begin_prewarm(intent, now_unix_ms)
-    match self.prewarm.get(intent.operation_id) {
-      Some(existing) if existing.intent == intent => {
-        self.mutex.release()
-        return Accepted(existing)
-      }
-      Some(_) => raise OperationConflict(intent.operation_id)
-      None => ()
-    }
-    match decision {
-      Accepted(candidate) => {
-        self.prewarm[intent.operation_id] = candidate
-        self.persist()
-      }
-      Rejected(_) => ()
-    }
-    self.mutex.release()
-    decision
-  } catch {
-    error => {
-      self.prewarm = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.prewarm = previous
   }
+  let decision = @technical.begin_prewarm(intent, now_unix_ms)
+  match self.prewarm.get(intent.operation_id) {
+    Some(existing) if existing.intent == intent => return Accepted(existing)
+    Some(_) => raise OperationConflict(intent.operation_id)
+    None => ()
+  }
+  match decision {
+    Accepted(candidate) => {
+      self.prewarm[intent.operation_id] = candidate
+      self.persist()
+    }
+    Rejected(_) => ()
+  }
+  decision
 }
 
 ///|
@@ -188,31 +180,26 @@ pub async fn TechnicalStore::advance_prewarm(
   now_unix_ms : Int64,
 ) -> @technical.PrewarmDecision {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.prewarm.copy()
-  try {
-    guard self.prewarm.get(expected.intent.operation_id) is Some(current) else {
-      raise OperationNotFound(expected.intent.operation_id)
-    }
-    if current != expected {
-      raise OperationConflict(expected.intent.operation_id)
-    }
-    let advanced = @technical.advance_prewarm(current, event, now_unix_ms)
-    match advanced {
-      Accepted(operation) => {
-        self.prewarm[current.intent.operation_id] = operation
-        self.persist()
-      }
-      Rejected(_) => ()
-    }
-    self.mutex.release()
-    advanced
-  } catch {
-    error => {
-      self.prewarm = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.prewarm = previous
   }
+  guard self.prewarm.get(expected.intent.operation_id) is Some(current) else {
+    raise OperationNotFound(expected.intent.operation_id)
+  }
+  if current != expected {
+    raise OperationConflict(expected.intent.operation_id)
+  }
+  let advanced = @technical.advance_prewarm(current, event, now_unix_ms)
+  match advanced {
+    Accepted(operation) => {
+      self.prewarm[current.intent.operation_id] = operation
+      self.persist()
+    }
+    Rejected(_) => ()
+  }
+  advanced
 }
 
 ///|
@@ -225,35 +212,24 @@ pub async fn TechnicalStore::validate_and_consume_transfer(
   maximum_lifetime_ms : Int64,
 ) -> @technical.TransferGrantDecision {
   self.mutex.acquire()
-  try {
-    let decision = @technical.validate_transfer_grant(
-      grant,
-      requested,
-      authenticity,
-      self.consumed_nonces.keys().to_array(),
-      now_unix_ms,
-      maximum_lifetime_ms,
-    )
-    match decision {
-      Accepted(consumed_nonce~) => {
-        self.consumed_nonces[consumed_nonce] = ()
-        self.persist() catch {
-          error => {
-            ignore(self.consumed_nonces.remove(consumed_nonce))
-            raise error
-          }
-        }
-      }
-      Rejected(_) => ()
+  defer self.mutex.release()
+  let decision = @technical.validate_transfer_grant(
+    grant,
+    requested,
+    authenticity,
+    self.consumed_nonces.keys().to_array(),
+    now_unix_ms,
+    maximum_lifetime_ms,
+  )
+  match decision {
+    Accepted(consumed_nonce~) => {
+      self.consumed_nonces[consumed_nonce] = ()
+      errdefer ignore(self.consumed_nonces.remove(consumed_nonce))
+      self.persist()
     }
-    self.mutex.release()
-    decision
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
+    Rejected(_) => ()
   }
+  decision
 }
 
 ///|
