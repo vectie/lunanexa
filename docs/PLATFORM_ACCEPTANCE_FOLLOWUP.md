@@ -1,5 +1,39 @@
 # Platform acceptance follow-up
 
+## Cancellation during provider packet loss — passed 2026-09-16
+
+The `--partition-cancel` follow-up used a new bounded TEST ONLY deployment and
+job `video-9affdf6a15da171ddb86b4db92dc55a874aba2a4b0bbde6f30fd2eeb425d295e`.
+The exact provider-IP TCP DROP had a 180-second UTC cutoff and deferred removal.
+Positive DROP counters and MoonGate unavailability established real packet loss.
+While disconnected, DELETE did not report successful deletion: PostgreSQL
+showed Cancelling/execution_terminal=false with no usage receipt, and another
+request by the same one-job owner returned VideoCapacityBusy.
+
+After rule removal and verified absence, cancelling the original job twice
+succeeded idempotently. The commercial snapshot had exactly one quantity-one
+private-workspace-video-job observation. A distinct new task could then be
+created using the released capacity and was also cancelled during cleanup.
+The original Pod UID `b95d931e-f2a1-4ba9-8312-4f6006e3cab9`, container ID
+`301d68f21ba805d739c60a321e0c883eb1411a8c36ef9c1f7a93af7ed33d1ee1`
+and zero restarts were unchanged. Harness exit was zero, scoped credentials were
+revoked, the deployment stopped, and its runtime namespace contained no Pods.
+
+Two earlier attempts are not passes: the first harness incorrectly required
+a 409/cancelling body, whereas a timed-out provider operation may return
+retryable VideoUnavailable; the second harness's 25-second curl deadline ended
+before the provider's default 30-second timeout. Both attempts removed their
+rules and stopped their deployments. The successful correction uses a 60-second
+client deadline and verifies durable cancellation/capacity independently of
+the error-envelope variant. No product authorization or cancellation guarantee
+was weakened to obtain the passing result.
+
+Operator-local harness SHA256: runner
+`d6c426141a0a7a6a74b88e1e4099a7fe60b19e8f6daf5581ee97e558841ae225`, verifier
+`0be328e593111bbec97e74ce79044da8cfe3f6cce45cdc6aa438f83279ba243b`.
+This is isolated live protocol/capacity/billing evidence, not model inference,
+production identity registration or resolution of older missing exit evidence.
+
 ## Provider packet-partition recovery — passed 2026-09-16
 
 The previously open provider-link partition check now has direct live evidence.
