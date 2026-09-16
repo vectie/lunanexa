@@ -332,3 +332,86 @@ no errors; this is not a strict warning-free release pass. `moon fmt` completed;
 its unrelated formatting-only changes in 148 previously clean backend files
 were reverted rather than included in this scanner change. `git diff --check`
 passed, with no generated public interface changes.
+
+### Real client-response loss and remaining provider-partition boundary
+
+A capability preflight attempted a short-lived, pinned cached
+network utility Pod in the acceptance namespace. Admission rejected it under
+`restricted:v1.34` because host networking, NET_ADMIN and root execution are not
+permitted. No utility Pod or firewall rule was created, and no namespace policy
+was relaxed. The proposed host OUTPUT fault is therefore **not** an accepted
+provider-link partition result. The previous owned-NetworkPolicy mutation also
+remains invalid for that purpose because it replaced the runtime.
+
+An unprivileged loopback HTTP fault shim then exercised actual **client TCP
+response loss**. It forwarded the test request through MoonGate, waited for the
+real upstream acceptance, and closed the client socket without returning any
+response bytes. Curl reported exit 52 with empty stdout. Retrying the same
+request key against the controller recovered original task
+`video-b42ea2783cc962cd0708ff552bb74111b383dd3544b43bb609e76080d1703306`.
+MoonGate polling observed progress/completion; the downloaded marked fixture
+matched SHA-256
+`100f5f75c28643c855e503d16b0a1b6941fbfceb2d0b0881f16d7a420df54f91`.
+The private usage ledger contained exactly one quantity-one job observation.
+
+Runtime Pod UID `6039e738-2ab0-4463-8f44-f640bbb418b3` and container
+`495c0f63fab74386e0ea59ac37015f8bd5db27f586d589d5b7e6bc43745397fb`
+were unchanged, with zero restarts. Job, download, handoff and session cleanup
+completed, followed by stopping the bounded deployment. Read-only PostgreSQL
+inspection confirmed Cancelled/execution-terminal with its retained usage
+receipt; final Kubernetes inspection found no runtime Pods/claims/templates
+and only the default-deny policy. This proves lost-client-response recovery,
+not a provider-link partition or actual model inference.
+
+The expanded cancellation-response-loss campaign initially stopped at an
+incorrect harness expectation: cancelled content returned 409, not the expected
+404. Inspection of `VideoRuntime::content`, `media_failure`, and MoonGate's
+bounded error mapping confirmed that this is the existing contract
+(`VideoContentUnavailable` -> `VideoConflict`). The harness now requires both
+409 and the exact bounded error code; no production behavior was changed to
+make the test pass. That failed run cleaned its test deployment. A complete
+rerun is required before claiming cancellation/next-capacity coverage.
+
+The first corrected rerun exposed a second acceptance-environment issue: its
+running MoonGate executable predated committed error-classification fix
+`8fa1b768d007fecd43c248392d94f1fa1ea0ceea`. Current source was not evidence of
+current process behavior. A separate build from that exact committed tree
+passed the media-gateway suite 4/4 with `--deny-warn`; the full release build
+completed with 28 existing warnings. Candidate SHA-256
+`210da1ce5e045473616321b49b0012c499488774645e56f72af67b9b790660bb`
+replaced only the local acceptance listener on 127.0.0.1:5883, with its original
+working directory and deployment-owned controller origin. The two unrelated
+MoonGate working-tree edits were not included or changed; the previous binary
+remains available for rollback. No production service was updated.
+
+The full rerun then passed, including both actual lost TCP responses:
+
+- Create-response-loss task
+  `video-c2d4ab9547f07b4c887e09aa390c4635fabc9fe97f31fe37f47793bd522610a5`
+  recovered under the same key, completed and downloaded the same marked fixture,
+  with exactly one private job usage observation.
+- Cancellation-response-loss task
+  `video-41f7acc7b1f0586555e5efe5f4d8c0049fd68a893053dc629c4c615ccc5ecfe2`
+  returned identical successful deletion on retry, exposed no downloadable
+  artifact (409 `VideoConflict`), and retained exactly one usage observation.
+- New queued task
+  `video-6c09a002bbdb9256f080b2509ef9cfdb5f337e2dd6db110d315b7c6b513bb017`
+  proved that the same owner's one-concurrent-job capacity was released after
+  cancellation. It was cancelled during cleanup.
+
+The runtime kept Pod UID `75494d7a-f84c-413f-8829-4c0333ba020b`, container
+`306463d78fe528766c4536b3287e02555823e02b16c0049ce96a67e45c8c212d`, and
+zero restarts throughout the successful campaign. All temporary downloads,
+jobs, handoffs and sessions were cleaned, then the bounded deployment stopped;
+the final runtime Pod inventory was empty. This closes client create/cancel
+response-loss recovery, not the separately unverified provider-link partition.
+
+Reproduction harnesses remain in the operator's local
+`/Users/kq/Workspace/aigc-spark-preflight` directory, separate from product code
+and deployment credentials. The successful runner is
+`run-client-disconnect.mbtx` (SHA-256
+`b7b74dcf78045120e621691bd5caaa83168c01ec5a9f28727f344c54998f44ec`),
+with `verify-private-video-discovery.mbtx` (SHA-256
+`982e0d7e250d173be6085d87c0d005c5e6c28cef8bba8db4cbc88976bbd1f96c`).
+Read-only PostgreSQL checks after cleanup confirmed all three successful-run
+tasks as Cancelled/execution-terminal with retained usage receipts.
