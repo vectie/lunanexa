@@ -97,3 +97,20 @@ task is not an adequate commit-interruption test, and synchronous database I/O
 may delay other work on the same execution thread. Independent connection or
 server fault injection and an explicit ambiguous-outcome recovery design remain
 necessary; the passing tests do not establish those properties.
+
+The scheduler and telemetry real-database fixtures subsequently added two
+consecutive writes after explicitly closing their original connection. Both
+reject with QueryFailed and preserve their entire in-memory snapshot; a fresh
+connection restores exactly the pre-failure data. Scheduler completion then
+recovers and remains exactly once. The selected real PostgreSQL matrix passes
+2/2 fixture files, deletes its two temporary databases, and its SSH tunnel was
+closed. This is a known disconnection before a write, not a server kill,
+database failover or an ambiguous COMMIT outcome.
+
+The commercial PostgreSQL fixture also rejects two order-creation attempts
+after closing its connection, retaining the complete snapshot. A new connection
+restores that snapshot, accepts the same order/key, and returns the same order
+on replay without a duplicate. Its selected real-database run passes 1/1 and
+the strict local commerce store suite passes 15/15. The temporary database was
+dropped by the runner and the tunnel was closed. Together these three domain
+fixtures cover known-disconnected writes, not interruption during COMMIT.

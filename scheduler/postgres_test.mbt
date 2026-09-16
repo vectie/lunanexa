@@ -18,6 +18,15 @@ async test "scheduler capacity and state restore from PostgreSQL" {
   scheduler.mark_started(work.workload_id, now + 1L)
   let before = scheduler.snapshot()
   database.close()
+  for _ in 0..<2 {
+    try scheduler.complete(work.workload_id, 125L) catch {
+      @database.DatabaseError::QueryFailed(_) => ()
+      error => fail("unexpected disconnected completion error: \{Repr(error)}")
+    } noraise {
+      _ => fail("closed database accepted completion")
+    }
+    assert_eq(scheduler.snapshot(), before)
+  }
   let recovered_database = @database.PostgresDatabase::open(url)
   defer recovered_database.close()
   let reopened = @scheduler.FileScheduler::open_postgres(recovered_database, 99)
