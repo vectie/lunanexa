@@ -44,6 +44,22 @@ Pre-deployment evidence, 2026-09-16:
 - No public listener, Keycloak realm/client, production gateway image, TLS
   certificate, or internal trust setting was changed by this attempt.
 
+Runtime packaging follow-up:
+
+- Rebuilt a standalone runtime using the build environment's resolved library
+  closure (including PostgreSQL dependencies), rather than mixing two glibc
+  versions. No model artifacts are included.
+- Fixed restrictive staging-directory permissions uncovered by the non-root
+  smoke test; did not relax Pod security or run the service as root.
+- Corrected candidate digest:
+  `sha256:79b5bce362a6a343344f27b7067aeb96a79d8be921da0ccdc0cb277147074d32`.
+- Management-node smoke passed with UID/GID 65532, read-only root filesystem,
+  no privilege escalation, all capabilities dropped and RuntimeDefault seccomp.
+  Kubernetes HTTP readiness `/health:8081` passed in relay mode. The temporary
+  Pod was then deleted.
+- This proves image startup only. Proxy-mode PostgreSQL initialization, actual
+  OIDC login and the coordinated public HTTP rollout are still pending.
+
 1. Back up non-secret ingress configuration and Keycloak client/realm settings.
 2. Build and smoke-test the gateway candidate with existing HTTPS configuration.
 3. Update Keycloak public hostname, realm SSL policy and exact client callbacks.
