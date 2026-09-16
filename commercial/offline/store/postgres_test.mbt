@@ -60,7 +60,7 @@ async test "offline commerce PostgreSQL restart preserves state and rolls back c
   store.record_worker_acceptance(EntitlementDispatcher, now)
   store.record_reconciler_attempt(now)
   store.record_reconciler_success(now)
-  ignore(store.create_order({ ..order, selected_sla_code: "mutated" })) catch {
+  ignore(store.create_order({ ..order, selected_sla_code: "mutated", })) catch {
     @offline.OfflineCommerceError::IdempotencyConflict(_) => ()
     _ => fail("mutated PostgreSQL replay was accepted")
   }
@@ -84,13 +84,13 @@ async test "offline commerce PostgreSQL restart preserves state and rolls back c
           description: "transfer",
           quantity: 1L,
           unit: "lease",
-          unit_price: { currency: "CNY", minor_units: 1L, scale: 2 },
-          line_total: { currency: "CNY", minor_units: 1L, scale: 2 },
+          unit_price: { currency: "CNY", minor_units: 1L, scale: 2, },
+          line_total: { currency: "CNY", minor_units: 1L, scale: 2, },
         },
       ],
-      subtotal: { currency: "CNY", minor_units: 1L, scale: 2 },
-      tax: { currency: "CNY", minor_units: 0L, scale: 2 },
-      total: { currency: "CNY", minor_units: 1L, scale: 2 },
+      subtotal: { currency: "CNY", minor_units: 1L, scale: 2, },
+      tax: { currency: "CNY", minor_units: 0L, scale: 2, },
+      total: { currency: "CNY", minor_units: 1L, scale: 2, },
       valid_until_unix_ms: now + 3600000L,
       terms_digest: "sha256:" + "a".repeat(64),
       created_unix_ms: now,
@@ -183,4 +183,25 @@ async test "offline commerce PostgreSQL restart preserves state and rolls back c
     "provider-transfer-postgres",
   )
   database.close()
+  let disconnected_order = {
+    ..order,
+    order_id: "disconnected-order",
+    idempotency_key: "disconnected-order-key",
+  }
+  for _ in 0..<2 {
+    try ignore(transfer_reopened.create_order(disconnected_order)) catch {
+      @database.DatabaseError::QueryFailed(_) => ()
+      error => fail("unexpected disconnected order error: \{Repr(error)}")
+    } noraise {
+      _ => fail("closed database accepted a new order")
+    }
+    assert_eq(transfer_reopened.snapshot(), transfer_snapshot)
+  }
+  let new_database = @database.PostgresDatabase::open(url)
+  defer new_database.close()
+  let new_store = @store.OfflineCommerceStore::open_postgres(new_database)
+  assert_eq(new_store.snapshot(), transfer_snapshot)
+  assert_eq(new_store.create_order(disconnected_order), disconnected_order)
+  assert_eq(new_store.create_order(disconnected_order), disconnected_order)
+  assert_eq(new_store.snapshot().orders.length(), 2)
 }
