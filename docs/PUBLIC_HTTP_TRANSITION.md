@@ -119,3 +119,37 @@ The public transition was applied after the gateway rollout:
 The pre-change private backup is retained outside git at
 `/var/folders/_j/kcn3f7817s71gymnv_nnn1bm0000gn/T/lunanexa-public-http-backup-.45436.89ff5d9a`.
 It includes provider client configuration and must not be published.
+
+Additional HTTP-browser compatibility fix:
+
+- Changed only the operator/enterprise outer edge's Referrer-Policy from
+  `no-referrer` to `same-origin`. HTTP browsers can omit Fetch Metadata, so the
+  gateway's exact-origin fallback needs same-origin Referer on GET fetches.
+  Cross-origin Referer remains suppressed. Verified public `/console/` returns
+  HTTP 200 with `Referrer-Policy: same-origin` after a successful edge rollout.
+- Updated the public console Service's `appProtocol` hints to `http` while
+  preserving port names and selectors.
+- Workstation routing uses `utun4`; direct interface-bound probes did not
+  establish connectivity. Management-side public 5006 succeeds, while public
+  5005 times out. These observations do not isolate a single root cause, and
+  no global VPN, routing or firewall changes were made.
+
+### Completed HTTP authentication protocol acceptance
+
+On 2026-09-16 the local `verify-http-login.mbtx` harness completed real
+Keycloak password login, mandatory TOTP enrollment, authorization-code callback,
+enterprise page redirect and controller session issuance. Public HTTP URLs and
+Host headers were preserved through temporary SSH forwards to the management
+LAN; internal admin access continued to verify the private TLS CA. This is
+protocol acceptance, not evidence of direct public reachability or rendered
+browser behavior.
+
+The final run additionally asserted cross-origin session retrieval returns 401,
+same-origin logout without CSRF returns 403, authenticated logout succeeds,
+and subsequent browser-session retrieval returns 401. Temporary Keycloak users
+and local cookie/CA files were removed by cleanup handlers. Controller account
+and audit records may remain; this does not claim their deletion or bearer
+replay acceptance coverage. No password, token or OTP seed was logged, and MFA
+policy was not weakened. The test helper uses the raw TOTP form secret as UTF-8
+HMAC key, matching Keycloak's `TotpUtils.encode`, rather than treating that raw
+field as an already Base32-encoded value.
