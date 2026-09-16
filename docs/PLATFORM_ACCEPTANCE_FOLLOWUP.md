@@ -1,5 +1,39 @@
 # Platform acceptance follow-up
 
+## Provider packet-partition recovery — passed 2026-09-16
+
+The previously open provider-link partition check now has direct live evidence.
+The operator-local MoonBit harness ran `run-client-disconnect.mbtx
+--provider-partition`, creating one ten-minute TEST ONLY deployment on the real
+compute node. No GPU identity or Kubernetes-owned NetworkPolicy was changed.
+A host FORWARD DROP rule matched only the disposable provider Pod's TCP traffic;
+its UTC match deadline was 90 seconds, and exact-rule deletion was deferred.
+
+Job `video-1b57a5b08fb12101f6e11f57c342c43d18d906d3d647a659cae54132673cdc1b`
+was accepted through MoonGate and returned the same ID on controller retry.
+During injection, the rule's packet counter was positive, the MoonGate poll
+returned bounded `ManagedVideoUnavailable` with same-key recovery guidance,
+and PostgreSQL retained exactly one nonterminal job with neither termination
+evidence nor a usage receipt. The original provider identity was unchanged.
+
+The exact rule was removed and its absence checked. The original job then
+progressed through in_progress to completed; its downloaded marked test MP4
+matched SHA256 `100f5f75c28643c855e503d16b0a1b6941fbfceb2d0b0881f16d7a420df54f91`.
+Pod UID `adec189e-9dd9-4bde-b2bc-e510dcd1706b`, container ID
+`0569b344d342391de451f9b73a9f46c7754b366b931ae96eccb587f90f212178`
+and zero restarts were unchanged across the complete campaign. The harness
+exited zero after removing temporary downloads, deleting the job, revoking its
+handoff/session and stopping the bounded deployment; the managed runtime
+namespace was empty. Independent host rule listing also showed no test DROP.
+
+Harnesses reside in `/Users/kq/Workspace/aigc-spark-preflight`, not product
+code. SHA256: runner `4b2b471fa12df962e3b32e2857123994c31847629a6f4019f8f678e70f4183fb`,
+verifier `13a7d37d6a69afe20bcce823e6d36c9b8294f485fb73120030f06e5be274e4fb`.
+Both passed `moon check` before execution. This closes that isolated provider
+packet-partition scenario, not real IdP/browser registration, production node
+image readiness, historical missing r12 termination evidence, or Spark hardware
+and model inference qualification.
+
 ## Live revalidation — 2026-09-16 04:25 UTC
 
 Read-only checks after the beginner UX delivery confirmed management SSH access,
