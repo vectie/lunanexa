@@ -1,5 +1,35 @@
 # Platform acceptance follow-up
 
+## Live revalidation — 2026-09-16 04:25 UTC
+
+Read-only checks after the beginner UX delivery confirmed management SSH access,
+both Kubernetes nodes Ready, and the isolated acceptance controller user service
+running. The acceptance PostgreSQL, workspace gateway, ComfyUI fixture and both
+CPU TEST ONLY providers were Running. The isolated managed-node Pod was 1/1.
+The two hosted tenant workspace deployments were scaled to zero; this inventory
+does not prove that launching a new session currently succeeds.
+
+Fresh unauthenticated requests to the acceptance gateway root, `/userdata`,
+`/history`, `/queue`, `/object_info` and WebSocket upgrade `/ws` all returned 401.
+These are live negative-access checks, not signed-in browser acceptance.
+
+The identity StatefulSets remained 2/2 (IdP) and 1/1 (PostgreSQL), and the public
+identity edge was 1/1. Direct workstation discovery with proxy bypass still
+failed during TLS negotiation (curl 28, HTTP 000). No TLS, trust, issuer or
+public exposure setting was changed while the requested TLS scope awaited
+clarification.
+
+An independent deployment defect remains: production `lunanexa-node-agent`
+has desired=1/available=0. Current Pod `lunanexa-node-agent-596c7548cd-m57qc`
+is scheduled but both containers report `ErrImageNeverPull` for pinned image
+digest `b77f0c0f7e758fbe32aa262c347952422481ac3a435492bbefd7967f3fcd51a7`.
+Older Pods were disk-pressure evictions, but current node DiskPressure=False;
+the current blocker is a missing cached image with pull policy Never. This is
+separate from the healthy isolated acceptance node agent. Do not blindly start
+the older production agent until resource ownership and compatibility with the
+isolated campaign have been checked. No image, replica, node identity, model or
+saved workspace data was changed by this revalidation.
+
 Initial source baseline: main `732f50e`; subsequent dated sections record later
 source and live acceptance checks. Repository tests and live checks are
 distinguished below; neither establishes Spark hardware qualification.
