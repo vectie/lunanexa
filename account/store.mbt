@@ -206,7 +206,7 @@ async fn AccountStore::persist(self : AccountStore) -> Unit {
       let temporary = "\{path}.next"
       @fs.write_file(
         temporary,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
         create_mode=CreateOrTruncate,
         permission=0o600,
         sync=Full,
@@ -217,7 +217,7 @@ async fn AccountStore::persist(self : AccountStore) -> Unit {
       database.save_opaque_snapshot(
         "accounts",
         snapshot_schema_version,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -400,55 +400,49 @@ pub async fn AccountStore::ensure_trial(
     raise InvalidInput("invalid trial entitlement")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.trials.copy()
-  try {
-    guard self.accounts.get(intent.account_id) is Some(account) &&
-      account.state == Active &&
-      role_allows(account.roles, EnterpriseUser) else {
-      raise Unauthorized
-    }
-    match self.trials.get(intent.trial_id) {
-      Some(existing) => {
-        if existing.account_id != intent.account_id ||
-          existing.organization_id != intent.organization_id ||
-          existing.tenant_ref != intent.tenant_ref ||
-          existing.project_id != intent.project_id ||
-          existing.allowed_models != intent.allowed_models ||
-          existing.maximum_requests != intent.maximum_requests {
-          raise AlreadyExists(intent.trial_id)
-        }
-        self.mutex.release()
-        return existing
-      }
-      None => ()
-    }
-    if self.trials.values().any(value => value.account_id == intent.account_id) {
-      raise AlreadyExists(intent.account_id)
-    }
-    let trial : TrialEntitlement = {
-      trial_id: intent.trial_id,
-      account_id: intent.account_id,
-      organization_id: intent.organization_id,
-      tenant_ref: intent.tenant_ref,
-      project_id: intent.project_id,
-      allowed_models: intent.allowed_models,
-      maximum_requests: intent.maximum_requests,
-      starts_unix_ms: now_unix_ms,
-      expires_unix_ms: intent.expires_unix_ms,
-      api_key_id: None,
-      revoked_unix_ms: None,
-    }
-    self.trials[intent.trial_id] = trial
-    self.persist()
-    self.mutex.release()
-    trial
-  } catch {
-    error => {
-      self.trials = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.trials = previous
   }
+  guard self.accounts.get(intent.account_id) is Some(account) &&
+    account.state == Active &&
+    role_allows(account.roles, EnterpriseUser) else {
+    raise Unauthorized
+  }
+  match self.trials.get(intent.trial_id) {
+    Some(existing) => {
+      if existing.account_id != intent.account_id ||
+        existing.organization_id != intent.organization_id ||
+        existing.tenant_ref != intent.tenant_ref ||
+        existing.project_id != intent.project_id ||
+        existing.allowed_models != intent.allowed_models ||
+        existing.maximum_requests != intent.maximum_requests {
+        raise AlreadyExists(intent.trial_id)
+      }
+      return existing
+    }
+    None => ()
+  }
+  if self.trials.values().any(value => value.account_id == intent.account_id) {
+    raise AlreadyExists(intent.account_id)
+  }
+  let trial : TrialEntitlement = {
+    trial_id: intent.trial_id,
+    account_id: intent.account_id,
+    organization_id: intent.organization_id,
+    tenant_ref: intent.tenant_ref,
+    project_id: intent.project_id,
+    allowed_models: intent.allowed_models,
+    maximum_requests: intent.maximum_requests,
+    starts_unix_ms: now_unix_ms,
+    expires_unix_ms: intent.expires_unix_ms,
+    api_key_id: None,
+    revoked_unix_ms: None,
+  }
+  self.trials[intent.trial_id] = trial
+  self.persist()
+  trial
 }
 
 ///|
@@ -505,33 +499,25 @@ pub async fn AccountStore::bind_trial_api_key(
     raise InvalidInput("invalid trial API key binding")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.trials.copy()
-  try {
-    guard self.trials.get(trial_id) is Some(trial) &&
-      trial.expires_unix_ms > now_unix_ms &&
-      trial.revoked_unix_ms is None else {
-      raise Unauthorized
-    }
-    match trial.api_key_id {
-      Some(existing) if existing != key_id => raise AlreadyExists(trial_id)
-      Some(_) => {
-        self.mutex.release()
-        return trial
-      }
-      None => ()
-    }
-    let updated = { ..trial, api_key_id: Some(key_id) }
-    self.trials[trial_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.trials = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.trials = previous
   }
+  guard self.trials.get(trial_id) is Some(trial) &&
+    trial.expires_unix_ms > now_unix_ms &&
+    trial.revoked_unix_ms is None else {
+    raise Unauthorized
+  }
+  match trial.api_key_id {
+    Some(existing) if existing != key_id => raise AlreadyExists(trial_id)
+    Some(_) => return trial
+    None => ()
+  }
+  let updated = { ..trial, api_key_id: Some(key_id), }
+  self.trials[trial_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -541,29 +527,22 @@ pub async fn AccountStore::revoke_trial_for_account(
   now_unix_ms : Int64,
 ) -> TrialEntitlement {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.trials.copy()
-  try {
-    guard self.trials
-      .values()
-      .find_first(trial => trial.account_id == account_id)
-      is Some(trial) else {
-      raise NotFound(account_id)
-    }
-    let updated = match trial.revoked_unix_ms {
-      Some(_) => trial
-      None => { ..trial, revoked_unix_ms: Some(now_unix_ms) }
-    }
-    self.trials[trial.trial_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.trials = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.trials = previous
   }
+  guard self.trials.values().find_first(trial => trial.account_id == account_id)
+    is Some(trial) else {
+    raise NotFound(account_id)
+  }
+  let updated = match trial.revoked_unix_ms {
+    Some(_) => trial
+    None => { ..trial, revoked_unix_ms: Some(now_unix_ms), }
+  }
+  self.trials[trial.trial_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -595,42 +574,37 @@ pub async fn AccountStore::issue_invitation(
   }
   let secret = self.invitation_secret(intent, now_unix_ms)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.invitations.copy()
-  try {
-    if self.invitations.contains(intent.invitation_id) ||
-      self.invitations
-      .values()
-      .any(invitation => {
-        invitation.email.to_lower() == intent.email.to_lower() &&
-        invitation.consumed_unix_ms is None &&
-        invitation.expires_unix_ms > now_unix_ms
-      }) {
-      raise AlreadyExists(intent.invitation_id)
-    }
-    let invitation : AccountInvitation = {
-      invitation_id: intent.invitation_id,
-      secret_sha256: digest(secret),
-      email: intent.email,
-      organization_id: intent.organization_id,
-      tenant_ref: intent.tenant_ref,
-      project_id: intent.project_id,
-      created_by: intent.created_by,
-      created_unix_ms: now_unix_ms,
-      expires_unix_ms: intent.expires_unix_ms,
-      consumed_account_id: None,
-      consumed_unix_ms: None,
-    }
-    self.invitations[intent.invitation_id] = invitation
-    self.persist()
-    self.mutex.release()
-    { invitation: invitation_view(invitation), secret }
-  } catch {
-    error => {
-      self.invitations = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.invitations = previous
   }
+  if self.invitations.contains(intent.invitation_id) ||
+    self.invitations
+    .values()
+    .any(invitation => {
+      invitation.email.to_lower() == intent.email.to_lower() &&
+      invitation.consumed_unix_ms is None &&
+      invitation.expires_unix_ms > now_unix_ms
+    }) {
+    raise AlreadyExists(intent.invitation_id)
+  }
+  let invitation : AccountInvitation = {
+    invitation_id: intent.invitation_id,
+    secret_sha256: digest(secret),
+    email: intent.email,
+    organization_id: intent.organization_id,
+    tenant_ref: intent.tenant_ref,
+    project_id: intent.project_id,
+    created_by: intent.created_by,
+    created_unix_ms: now_unix_ms,
+    expires_unix_ms: intent.expires_unix_ms,
+    consumed_account_id: None,
+    consumed_unix_ms: None,
+  }
+  self.invitations[intent.invitation_id] = invitation
+  self.persist()
+  { invitation: invitation_view(invitation), secret, }
 }
 
 ///|
@@ -661,50 +635,44 @@ pub async fn AccountStore::accept_invitation(
   }
   let secret_digest = digest(invitation_secret)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.invitations.copy()
-  try {
-    guard self.accounts.get(account_id) is Some(account) &&
-      account.state == Active &&
-      role_allows(account.roles, EnterpriseUser) else {
-      raise Unauthorized
-    }
-    let mut matched : AccountInvitation? = None
-    for invitation in self.invitations.values() {
-      if constant_time_equal(invitation.secret_sha256, secret_digest) {
-        matched = Some(invitation)
-      }
-    }
-    guard matched is Some(invitation) &&
-      invitation.email.to_lower() == account.email.to_lower() else {
-      raise Unauthorized
-    }
-    let consumed = match invitation.consumed_account_id {
-      Some(consumed_account_id) if consumed_account_id == account_id =>
-        invitation
-      Some(_) => raise Unauthorized
-      None => {
-        if invitation.expires_unix_ms <= now_unix_ms {
-          raise Unauthorized
-        }
-        let updated = {
-          ..invitation,
-          consumed_account_id: Some(account_id),
-          consumed_unix_ms: Some(now_unix_ms),
-        }
-        self.invitations[invitation.invitation_id] = updated
-        self.persist()
-        updated
-      }
-    }
-    self.mutex.release()
-    invitation_view(consumed)
-  } catch {
-    error => {
-      self.invitations = previous
-      self.mutex.release()
-      raise error
+  errdefer {
+    self.invitations = previous
+  }
+  guard self.accounts.get(account_id) is Some(account) &&
+    account.state == Active &&
+    role_allows(account.roles, EnterpriseUser) else {
+    raise Unauthorized
+  }
+  let mut matched : AccountInvitation? = None
+  for invitation in self.invitations.values() {
+    if constant_time_equal(invitation.secret_sha256, secret_digest) {
+      matched = Some(invitation)
     }
   }
+  guard matched is Some(invitation) &&
+    invitation.email.to_lower() == account.email.to_lower() else {
+    raise Unauthorized
+  }
+  let consumed = match invitation.consumed_account_id {
+    Some(consumed_account_id) if consumed_account_id == account_id => invitation
+    Some(_) => raise Unauthorized
+    None => {
+      if invitation.expires_unix_ms <= now_unix_ms {
+        raise Unauthorized
+      }
+      let updated = {
+        ..invitation,
+        consumed_account_id: Some(account_id),
+        consumed_unix_ms: Some(now_unix_ms),
+      }
+      self.invitations[invitation.invitation_id] = updated
+      self.persist()
+      updated
+    }
+  }
+  invitation_view(consumed)
 }
 
 ///|
@@ -739,10 +707,15 @@ pub async fn AccountStore::register_with_invitation(
   let fingerprint = external_digest[7:31].to_owned()
   let account_id = "account-\{fingerprint}"
   let subject_ref = "subject-\{fingerprint}"
-  self.mutex.acquire()
-  let previous_accounts = self.accounts.copy()
-  let previous_invitations = self.invitations.copy()
-  let result = try {
+  let result = {
+    self.mutex.acquire()
+    defer self.mutex.release()
+    let previous_accounts = self.accounts.copy()
+    let previous_invitations = self.invitations.copy()
+    errdefer {
+      self.accounts = previous_accounts
+      self.invitations = previous_invitations
+    }
     let mut matched : AccountInvitation? = None
     for invitation in self.invitations.values() {
       if constant_time_equal(invitation.secret_sha256, secret_digest) {
@@ -818,20 +791,12 @@ pub async fn AccountStore::register_with_invitation(
       Some(value) => invitation_view(value)
       None => raise Unauthorized
     }
-    self.mutex.release()
     (account, consumed)
-  } catch {
-    error => {
-      self.accounts = previous_accounts
-      self.invitations = previous_invitations
-      self.mutex.release()
-      raise error
-    }
   }
   let session = self.issue_session(
     identity_issuer, identity_subject, source_assertion, lifetime_ms, now_unix_ms,
   )
-  { account: result.0, invitation: result.1, session }
+  { account: result.0, invitation: result.1, session, }
 }
 
 ///|
@@ -894,7 +859,7 @@ pub async fn AccountStore::register_open(
   let session = self.issue_session(
     identity_issuer, identity_subject, source_assertion, lifetime_ms, now_unix_ms,
   )
-  { account, session }
+  { account, session, }
 }
 
 ///|
@@ -907,31 +872,26 @@ pub async fn AccountStore::create(
     raise InvalidInput("new account must be invited or active")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.accounts.copy()
-  try {
-    if self.accounts.contains(account.account_id) ||
-      self.accounts
-      .values()
-      .any(value => {
-        value.subject_ref == account.subject_ref ||
-        (
-          value.identity_issuer == account.identity_issuer &&
-          value.identity_subject_sha256 == account.identity_subject_sha256
-        )
-      }) {
-      raise AlreadyExists(account.account_id)
-    }
-    self.accounts[account.account_id] = account
-    self.persist()
-    self.mutex.release()
-    account_view(account)
-  } catch {
-    error => {
-      self.accounts = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.accounts = previous
   }
+  if self.accounts.contains(account.account_id) ||
+    self.accounts
+    .values()
+    .any(value => {
+      value.subject_ref == account.subject_ref ||
+      (
+        value.identity_issuer == account.identity_issuer &&
+        value.identity_subject_sha256 == account.identity_subject_sha256
+      )
+    }) {
+    raise AlreadyExists(account.account_id)
+  }
+  self.accounts[account.account_id] = account
+  self.persist()
+  account_view(account)
 }
 
 ///|
@@ -952,39 +912,34 @@ pub async fn AccountStore::set_state(
   now_unix_ms : Int64,
 ) -> AccountView {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_accounts = self.accounts.copy()
   let previous_sessions = self.sessions.copy()
-  try {
-    guard self.accounts.get(account_id) is Some(current) else {
-      raise NotFound(account_id)
-    }
-    if !transition_allowed(current.state, state) ||
-      now_unix_ms < current.updated_unix_ms {
-      raise InvalidTransition(account_id)
-    }
-    let updated = { ..current, state, updated_unix_ms: now_unix_ms }
-    self.accounts[account_id] = updated
-    if state == Suspended || state == Revoked {
-      for session_id, session in self.sessions {
-        if session.account_id == account_id && session.revoked_unix_ms is None {
-          self.sessions[session_id] = {
-            ..session,
-            revoked_unix_ms: Some(now_unix_ms),
-          }
+  errdefer {
+    self.accounts = previous_accounts
+    self.sessions = previous_sessions
+  }
+  guard self.accounts.get(account_id) is Some(current) else {
+    raise NotFound(account_id)
+  }
+  if !transition_allowed(current.state, state) ||
+    now_unix_ms < current.updated_unix_ms {
+    raise InvalidTransition(account_id)
+  }
+  let updated = { ..current, state, updated_unix_ms: now_unix_ms, }
+  self.accounts[account_id] = updated
+  if state == Suspended || state == Revoked {
+    for session_id, session in self.sessions {
+      if session.account_id == account_id && session.revoked_unix_ms is None {
+        self.sessions[session_id] = {
+          ..session,
+          revoked_unix_ms: Some(now_unix_ms),
         }
       }
     }
-    self.persist()
-    self.mutex.release()
-    account_view(updated)
-  } catch {
-    error => {
-      self.accounts = previous_accounts
-      self.sessions = previous_sessions
-      self.mutex.release()
-      raise error
-    }
   }
+  self.persist()
+  account_view(updated)
 }
 
 ///|
@@ -998,37 +953,32 @@ pub async fn AccountStore::set_roles(
     raise InvalidInput("invalid account roles")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_accounts = self.accounts.copy()
   let previous_sessions = self.sessions.copy()
-  try {
-    guard self.accounts.get(account_id) is Some(current) else {
-      raise NotFound(account_id)
-    }
-    if current.state == Revoked || now_unix_ms < current.updated_unix_ms {
-      raise InvalidTransition(account_id)
-    }
-    let updated = { ..current, roles, updated_unix_ms: now_unix_ms }
-    self.accounts[account_id] = updated
-    // Role removal must take effect immediately for already issued sessions.
-    for session_id, session in self.sessions {
-      if session.account_id == account_id && session.revoked_unix_ms is None {
-        self.sessions[session_id] = {
-          ..session,
-          revoked_unix_ms: Some(now_unix_ms),
-        }
+  errdefer {
+    self.accounts = previous_accounts
+    self.sessions = previous_sessions
+  }
+  guard self.accounts.get(account_id) is Some(current) else {
+    raise NotFound(account_id)
+  }
+  if current.state == Revoked || now_unix_ms < current.updated_unix_ms {
+    raise InvalidTransition(account_id)
+  }
+  let updated = { ..current, roles, updated_unix_ms: now_unix_ms, }
+  self.accounts[account_id] = updated
+  // Role removal must take effect immediately for already issued sessions.
+  for session_id, session in self.sessions {
+    if session.account_id == account_id && session.revoked_unix_ms is None {
+      self.sessions[session_id] = {
+        ..session,
+        revoked_unix_ms: Some(now_unix_ms),
       }
     }
-    self.persist()
-    self.mutex.release()
-    account_view(updated)
-  } catch {
-    error => {
-      self.accounts = previous_accounts
-      self.sessions = previous_sessions
-      self.mutex.release()
-      raise error
-    }
   }
+  self.persist()
+  account_view(updated)
 }
 
 ///|
@@ -1077,67 +1027,58 @@ pub async fn AccountStore::issue_session(
     identity_issuer, identity_subject,
   )
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.sessions.copy()
-  try {
-    self.prune_completed_sessions_unlocked(now_unix_ms)
-    guard self.accounts
-      .values()
-      .find_first(value => {
-        value.identity_issuer == identity_issuer &&
-        value.identity_subject_sha256 == external_digest
-      })
-      is Some(account) &&
-      account.state == Active else {
-      raise Unauthorized
-    }
-    if self.sessions
-      .values()
-      .any(value => value.source_assertion_sha256 == assertion_digest) {
-      raise AssertionReplayed
-    }
-    let active_session_count = self.sessions
-      .values()
-      .filter(session => {
-        session.account_id == account.account_id &&
-        session.revoked_unix_ms is None &&
-        session.expires_unix_ms > now_unix_ms
-      })
-      .count()
-    if active_session_count >= 8 {
-      raise InvalidInput("account active-session limit is reached")
-    }
-    let ordinal = self.sessions.length()
-    let material = self.session_material(
-      account.account_id,
-      now_unix_ms,
-      ordinal,
-    )
-    let session_id = "session-\{material[:32]}"
-    let secret = "lnxs_\{material}"
-    if self.sessions.contains(session_id) {
-      raise AlreadyExists(session_id)
-    }
-    let session : BrowserSession = {
-      session_id,
-      account_id: account.account_id,
-      secret_sha256: digest(secret),
-      source_assertion_sha256: assertion_digest,
-      created_unix_ms: now_unix_ms,
-      expires_unix_ms: now_unix_ms + lifetime_ms,
-      last_used_unix_ms: now_unix_ms,
-      revoked_unix_ms: None,
-    }
-    self.sessions[session_id] = session
-    self.persist()
-    self.mutex.release()
-    { session: session_view(session), secret }
-  } catch {
-    error => {
-      self.sessions = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.sessions = previous
   }
+  self.prune_completed_sessions_unlocked(now_unix_ms)
+  guard self.accounts
+    .values()
+    .find_first(value => {
+      value.identity_issuer == identity_issuer &&
+      value.identity_subject_sha256 == external_digest
+    })
+    is Some(account) &&
+    account.state == Active else {
+    raise Unauthorized
+  }
+  if self.sessions
+    .values()
+    .any(value => value.source_assertion_sha256 == assertion_digest) {
+    raise AssertionReplayed
+  }
+  let active_session_count = self.sessions
+    .values()
+    .filter(session => {
+      session.account_id == account.account_id &&
+      session.revoked_unix_ms is None &&
+      session.expires_unix_ms > now_unix_ms
+    })
+    .count()
+  if active_session_count >= 8 {
+    raise InvalidInput("account active-session limit is reached")
+  }
+  let ordinal = self.sessions.length()
+  let material = self.session_material(account.account_id, now_unix_ms, ordinal)
+  let session_id = "session-\{material[:32]}"
+  let secret = "lnxs_\{material}"
+  if self.sessions.contains(session_id) {
+    raise AlreadyExists(session_id)
+  }
+  let session : BrowserSession = {
+    session_id,
+    account_id: account.account_id,
+    secret_sha256: digest(secret),
+    source_assertion_sha256: assertion_digest,
+    created_unix_ms: now_unix_ms,
+    expires_unix_ms: now_unix_ms + lifetime_ms,
+    last_used_unix_ms: now_unix_ms,
+    revoked_unix_ms: None,
+  }
+  self.sessions[session_id] = session
+  self.persist()
+  { session: session_view(session), secret, }
 }
 
 ///|
@@ -1152,40 +1093,33 @@ pub async fn AccountStore::authorize(
   }
   let secret_digest = digest(secret)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.sessions.copy()
-  try {
-    guard self.sessions
-      .values()
-      .find_first(value => {
-        constant_time_equal(value.secret_sha256, secret_digest)
-      })
-      is Some(session) else {
-      raise Unauthorized
-    }
-    guard self.accounts.get(session.account_id) is Some(account) else {
-      raise Unauthorized
-    }
-    if account.state != Active ||
-      session.revoked_unix_ms is Some(_) ||
-      now_unix_ms < session.created_unix_ms ||
-      session.expires_unix_ms <= now_unix_ms ||
-      required_role
-      .map(role => !role_allows(account.roles, role))
-      .unwrap_or(false) {
-      raise Unauthorized
-    }
-    let touched = { ..session, last_used_unix_ms: now_unix_ms }
-    self.sessions[session.session_id] = touched
-    self.persist()
-    self.mutex.release()
-    { session_id: session.session_id, account: account_view(account) }
-  } catch {
-    error => {
-      self.sessions = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.sessions = previous
   }
+  guard self.sessions
+    .values()
+    .find_first(value => constant_time_equal(value.secret_sha256, secret_digest))
+    is Some(session) else {
+    raise Unauthorized
+  }
+  guard self.accounts.get(session.account_id) is Some(account) else {
+    raise Unauthorized
+  }
+  if account.state != Active ||
+    session.revoked_unix_ms is Some(_) ||
+    now_unix_ms < session.created_unix_ms ||
+    session.expires_unix_ms <= now_unix_ms ||
+    required_role
+    .map(role => !role_allows(account.roles, role))
+    .unwrap_or(false) {
+    raise Unauthorized
+  }
+  let touched = { ..session, last_used_unix_ms: now_unix_ms, }
+  self.sessions[session.session_id] = touched
+  self.persist()
+  { session_id: session.session_id, account: account_view(account), }
 }
 
 ///|
@@ -1206,28 +1140,23 @@ pub async fn AccountStore::revoke_session(
   now_unix_ms : Int64,
 ) -> BrowserSessionView {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.sessions.copy()
-  try {
-    guard self.sessions.get(session_id) is Some(current) &&
-      current.account_id == account_id else {
-      raise NotFound(session_id)
-    }
-    let revoked = if current.revoked_unix_ms is Some(_) {
-      current
-    } else {
-      { ..current, revoked_unix_ms: Some(now_unix_ms) }
-    }
-    self.sessions[session_id] = revoked
-    self.persist()
-    self.mutex.release()
-    session_view(revoked)
-  } catch {
-    error => {
-      self.sessions = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.sessions = previous
   }
+  guard self.sessions.get(session_id) is Some(current) &&
+    current.account_id == account_id else {
+    raise NotFound(session_id)
+  }
+  let revoked = if current.revoked_unix_ms is Some(_) {
+    current
+  } else {
+    { ..current, revoked_unix_ms: Some(now_unix_ms), }
+  }
+  self.sessions[session_id] = revoked
+  self.persist()
+  session_view(revoked)
 }
 
 ///|
@@ -1237,29 +1166,24 @@ pub async fn AccountStore::revoke_all_sessions(
   now_unix_ms : Int64,
 ) -> Int {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.sessions.copy()
-  try {
-    if !self.accounts.contains(account_id) {
-      raise NotFound(account_id)
-    }
-    let mut count = 0
-    for session_id, session in self.sessions {
-      if session.account_id == account_id && session.revoked_unix_ms is None {
-        self.sessions[session_id] = {
-          ..session,
-          revoked_unix_ms: Some(now_unix_ms),
-        }
-        count += 1
+  errdefer {
+    self.sessions = previous
+  }
+  if !self.accounts.contains(account_id) {
+    raise NotFound(account_id)
+  }
+  let mut count = 0
+  for session_id, session in self.sessions {
+    if session.account_id == account_id && session.revoked_unix_ms is None {
+      self.sessions[session_id] = {
+        ..session,
+        revoked_unix_ms: Some(now_unix_ms),
       }
-    }
-    self.persist()
-    self.mutex.release()
-    count
-  } catch {
-    error => {
-      self.sessions = previous
-      self.mutex.release()
-      raise error
+      count += 1
     }
   }
+  self.persist()
+  count
 }

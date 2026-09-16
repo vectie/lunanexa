@@ -114,3 +114,26 @@ on replay without a duplicate. Its selected real-database run passes 1/1 and
 the strict local commerce store suite passes 15/15. The temporary database was
 dropped by the runner and the tunnel was closed. Together these three domain
 fixtures cover known-disconnected writes, not interruption during COMMIT.
+
+## Account authority cleanup
+
+All thirteen account-store write/authorization cleanup handlers now use scoped
+mutex release and error rollback rather than catch-and-rethrow cleanup. Invited
+registration releases its scoped lock before issuing the browser session, so
+the later operation can reacquire the same mutex. Existing identity, invitation,
+trial and session validation rules and public interfaces are unchanged.
+
+The new account fixture cancels two consecutive mutex waiters while an owner
+holds the lock, checks unchanged memory/disk, then injects two file-write
+failures through the snapshot staging path. Timed reads prove failed writers
+release the mutex; a retry and reopen persist exactly one account. It also
+injects failure while suspending an account with a live session: account and
+session snapshots roll back together. A successful retry survives reopen and
+the old session is rejected. Test directories are removed by scoped cleanup.
+
+Account strict native tests pass 11/11; the account/API functional selection
+passes 140/140 with warning classes 92 and 20 disabled for still-unmigrated
+packages. Interface generation and formatting completed. This is local
+file-failure and lock-wait coverage, not in-flight database commit cancellation,
+real identity-provider registration, or evidence that the running controller
+has been upgraded to this source revision.
