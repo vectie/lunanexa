@@ -12,7 +12,7 @@
   },
   "navigation": [
     {"id":"overview","label":"Overview","page_ids":["welcome","feature-map","boundaries"]},
-    {"id":"quickstart","label":"Quickstart","page_ids":["local-quickstart","operator-console","developer-workbench","client-api"]},
+    {"id":"quickstart","label":"Quickstart","page_ids":["trial-quickstart","enterprise-portal-day-one","exclusive-machine-basics","comfyui-quickstart","local-quickstart","operator-console","developer-workbench","client-api"]},
     {"id":"concepts","label":"How it works","page_ids":["architecture","request-flow","deployment-flow","enrollment-flow","access-flow","state-ownership"]},
     {"id":"deployment","label":"Deployment","page_ids":["tomorrow-deployment","dgx-runtimes"]},
     {"id":"operations","label":"Operations","page_ids":["daily-operations","ui-end-to-end-sop","production-ui-validation","observability-recovery"]},
@@ -21,6 +21,47 @@
     {"id":"advanced","label":"Technical notes","visibility":"advanced","page_ids":["readiness","future-expansion","source-ledger"]}
   ],
   "pages": [
+    {
+      "id":"trial-quickstart","group_id":"quickstart","title":"Register and make your first trial call",
+      "summary":"Start with platform registration, inspect the actual trial allowance, save the one-time key securely, and make a bounded model request without confusing a shared trial with machine ownership.",
+      "audience":"Individual trying shared model APIs","estimated_minutes":5,"status":"documented","tags":["trial","registration","API key"],"source_ids":["product-contract","platform-identity","workspaces"],
+      "blocks":[
+        {"kind":"steps","items":[{"title":"Register or sign in","text":"Use the platform identity page. An existing company identity system is not required when the operator has enabled platform registration. Complete its email verification and security prompts."},{"title":"Read your actual trial scope","text":"Inspect the model aliases, expiry and remaining requests displayed in the portal. The standard profile is 24 hours, 100 requests, 20 per hour and one concurrent request; the deployment may reduce these bounds. Registration grants no machine or SSH access."},{"title":"Save the key once","text":"Choose Create trial API key. Save the secret in your password manager before closing the dialog. It is shown once and a second issuance is rejected; waiting for expiry does not create another trial. If lost, contact the operator about organization access; never paste the key into support messages."},{"title":"Make a first call","text":"Use Copy first-call example in the one-time dialog. Set API_KEY locally to your saved key and use the configured API entrance, not the browser portal URL. The example selects an allowed model alias; if the entrance is missing, ask the operator rather than guessing. Inspect the result and remaining allowance."}]},
+        {"kind":"callout","tone":"warning","title":"Trial is not a machine rental","text":"It does not include bare-machine access or automatically open hosted ComfyUI. Continuing through an organization invitation replaces trial authority; paid machines retain their separate order and agreement checks."},
+        {"kind":"paragraph","text":"For a first browser-only attempt, an active trial offers Try a prompt in the workbench. It opens the same-origin workbench using your signed-in trial session: connect, select an allowed model and send a request. It creates no API key and still enforces expiry, model scope and quota. If a request fails, search the exact public code on error-reference. HTTP 401, 403 and 429 each have multiple causes; the public code and current scope determine the next action. This source-backed route still needs deployed browser acceptance."}
+      ]
+    },
+    {
+      "id":"enterprise-portal-day-one","group_id":"quickstart","title":"Your first day in the enterprise portal",
+      "summary":"Choose the right organization and delivery path, review granted resources, and start API or workspace work without copying internal identifiers or assuming that registration grants infrastructure access.",
+      "audience":"Company owner, invited colleague or private-cloud user","estimated_minutes":6,"status":"documented","tags":["enterprise","organization","first call"],"source_ids":["product-contract","workspaces","operations-commerce-guide"],
+      "blocks":[
+        {"kind":"steps","items":[{"title":"Choose your organization","text":"After sign-in, create an Individual or Company customer record, or accept an invitation. Select the intended organization before working; a customer record is not a resource grant. The operator console and enterprise portal use separate login clients and role checks."},{"title":"Choose your delivery path","text":"Private cloud: an administrator grants workspace resources without a machine-rental contract. Public trial: use the bounded shared-model allowance. Commercial machine: select an offer, accept required terms, complete checkout and wait for confirmed provisioning."},{"title":"Use the granted resource","text":"For MaaS, create a scoped API key and use Copy first-call example in its one-time dialog. For PaaS, open the approved WebIDE or ComfyUI from the workspace surface. For IaaS, use the separate machine access page only after its lease is active."},{"title":"Keep your work and evidence","text":"Save workflows and download important results. Browser-local editor drafts are not the hosted workspace volume. Inspect usage and receipts; never send a raw key or provider credential with a support request."}]},
+        {"kind":"callout","tone":"info","title":"One next step, not a bypass","text":"Follow the displayed readiness blocker. A manual lease request waits for operator review; no fixed approval time is promised. Payment completion, a submitted request and a ready machine are different states."},
+        {"kind":"paragraph","text":"For exact failures use error-reference. For SSH and expiry consequences use exclusive-machine-basics; for managed workspace persistence use comfyui-quickstart. These guides describe implemented contracts, not proof that every external provider is live."}
+      ]
+    },
+    {
+      "id":"exclusive-machine-basics","group_id":"quickstart","title":"Use and safely leave a rented bare machine",
+      "summary":"Understand the bare-machine lifecycle, claim scoped connection details, verify SSH identity, and save data before expiry without mistaking a credential handoff window for the machine lease itself.",
+      "audience":"User with an approved exclusive-machine lease","estimated_minutes":6,"status":"documented","tags":["IaaS","SSH","expiry","machine"],"source_ids":["product-contract","operations-commerce-guide","security"],
+      "blocks":[
+        {"kind":"steps","items":[{"title":"Wait for active access","text":"Select a published offer or submit your requirements through the authorized request path. The platform selects eligible capacity from policy and health; you do not type a physical node address. Manual requests need operator review; provisioning may still be pending after payment."},{"title":"Claim and verify","text":"Choose Redeem SSH access once the lease is active. Copy the connection command and host fingerprint from the details. Follow the short-lived certificate issuer instructions and compare the host fingerprint before connecting; never disable SSH host verification."},{"title":"Use a local tunnel when needed","text":"For a user-owned web application listening on loopback port 8181, use the portal tunnel command built from the issued host, port and username. Keep the SSH session open and open the local forwarded address. The command does not install or start an application, and does not expose a public port."},{"title":"Download before ending access","text":"Save required files before lease expiry or End access early. Expiry closes access and starts staged tenant-account/container/volume cleanup. This is neither an instant whole-disk wipe nor a backup service. Contact the operator before expiry to discuss continued access; no self-service machine-renewal button or guaranteed extension exists."}]},
+        {"kind":"table","columns":["Clock","What it means"],"rows":[["Machine lease expiry","Access ends and tenant cleanup begins; export your work first."],["Connection handoff validity","The time window for claiming connection information; it does not extend machine lifetime."],["Workspace lease expiry","Model and hosted workspace access stop; retained workspace volume follows the deployment retention policy, not bare-machine cleanup."]]},
+        {"kind":"callout","tone":"warning","title":"Separate authorities","text":"A model API allowance does not grant SSH. A machine lease does not automatically authorize every model alias. Managed inference nodes never acquire arbitrary user applications through this guide."},
+        {"kind":"paragraph","text":"The connection details provide Copy SSH command, Copy host fingerprint and Copy tunnel command. Only paste these into your own trusted terminal after reviewing the destination. Clipboard permission failure does not mean the machine request failed."}
+      ]
+    },
+    {
+      "id":"comfyui-quickstart","group_id":"quickstart","title":"Open ComfyUI, save work and return",
+      "summary":"Use administrator-approved hosted ComfyUI as a WebIDE, keep workflows and results in the scoped workspace, and distinguish that delivery from a self-managed application on a rented bare machine.",
+      "audience":"Private-cloud or authorized workspace user","estimated_minutes":5,"status":"documented","tags":["PaaS","ComfyUI","workflow","download"],"source_ids":["product-contract","workspaces","security"],
+      "blocks":[
+        {"kind":"steps","items":[{"title":"Open your approved workspace","text":"Sign in, select the organization and open its approved ComfyUI workspace after administrator resource authorization. Private-cloud workspace access needs no rental contract. A shared interface does not mean other tenants can see your process or files."},{"title":"Save and download","text":"Save the workflow in ComfyUI and download important generated results. Hosted workflows, uploads and outputs belong to the scoped persistent workspace volume, not the browser-local workbench draft. Never treat an unsaved canvas as a backup."},{"title":"Reopen and verify","text":"Return through the portal and confirm the saved workflow and files remain. An expired or revoked lease denies HTTP, WebSocket and model access; retained volume data follows operator retention policy. Ask the administrator to restore authority rather than bypassing the gateway."}]},
+        {"kind":"callout","tone":"info","title":"Hosted workspace or rented machine?","text":"Hosted ComfyUI uses the authenticated workspace gateway; do not SSH or publish its private port. If you instead run your own ComfyUI under an exclusive bare-machine lease, follow exclusive-machine-basics and the portal's copyable SSH tunnel instructions. That path has machine-expiry cleanup, not hosted-volume retention."},
+        {"kind":"callout","tone":"warning","title":"Release checks still need observation","text":"A tutorial and source tests do not certify a live image, real model generation or Spark performance. Validate narrow-screen scrolling, long labels, keyboard-only navigation, modal focus entry/return and downloads on the deployed UI; keep any unobserved item pending."}
+      ]
+    },
     {
       "id":"welcome",
       "group_id":"overview",
@@ -392,7 +433,7 @@
       "blocks":[
         {"kind":"steps","items":[
           {"title":"Connect identity","text":"The browser reads /v1/workspace/self through trusted ingress and displays the mapped subject's current authorization."},
-          {"title":"Confirm active capability","text":"A valid user, tenant grant, active time window, and TextGenerate lease must agree before Send is enabled."},
+          {"title":"Confirm active capability","text":"A valid user, tenant grant, active time window, and TextGenerate lease must agree before Send request is enabled."},
           {"title":"Edit locally","text":"Project drafts remain browser-local; the workbench is not a remote DGX filesystem or shell."},
           {"title":"Invoke explicitly","text":"The client sends a canonical ephemeral request with bounded input/output and a unique workload/idempotency identity."},
           {"title":"Inspect result evidence","text":"Read normalized output, status, usage, timing, and receipt; server rejection remains authoritative if a lease expires mid-session."}
@@ -457,14 +498,14 @@
         {"kind":"callout","tone":"info","title":"No access-node assumption","text":"Connect directly or use an operator-owned VPN/OpenSSH ProxyJump. A bastion is not registered as management or compute and is not required for daily browser, API or node-agent traffic."},
         {"kind":"callout","tone":"danger","title":"Roles are explicit, never inferred","text":"Accelerator presence does not silently make a management host schedulable. Co-located temporary compute requires a separate qualification and enrollment decision; the planned four-DGX campaign is an explicit acceptance inventory, not a platform node-count invariant."},
         {"kind":"callout","tone":"danger","title":"Current Ascend 310P3 is not compute-ready","text":"The host device is healthy, but Kubernetes exposes no huawei.com/Ascend resource and LunaNexa telemetry/runtime supervision is still NVIDIA-specific. Compute Preview now fails closed. Do not upgrade CANN or enroll the host until the reviewed runtime, device plugin, LunaNexa adapters, reboot recovery and model evidence all pass."},
-        {"kind":"callout","tone":"warning","title":"Use the installer UI within its boundary","text":"The UI starts after hosts join Kubernetes. Preview is read-only and shows only a bounded non-secret resource change plan; a failed or unsummarizable diff blocks Apply. Apply requires the scope-specific phrase. The companion accepts no arbitrary shell, browser-pasted private key, kubeadm join token or secret value."},
+        {"kind":"callout","tone":"warning","title":"Use the installer UI within its boundary","text":"The UI starts after hosts join Kubernetes. Preview and verify is read-only and shows only a bounded non-secret resource change plan; a failed or unsummarizable diff blocks changes. For the management-only path, Deploy management foundation requires the scope-specific phrase. The companion accepts no arbitrary shell, browser-pasted private key, kubeadm join token or secret value."},
         {"kind":"heading","level":2,"id":"modelsource-onboarding","text":"Onboard ModelScope models from the protected console"},
         {"kind":"steps","items":[
           "Open the deployed console through localhost port-forwarding or reviewed HTTPS. Public plaintext HTTP deliberately disables credential entry.",
           "Sign in with separate operator and audit authorities. Search the ModelScope catalog by model name; do not paste registry JSON.",
           "Open the exact owner/repository row and inspect revision, license, task and declared size before selecting Download.",
           "Watch the automatically refreshed durable import. A retry resumes verified files or the remaining byte range and never publishes partial bytes.",
-          "After source checksums pass, inspect license, signature, evaluation and runtime-template gates separately. Approve for users remains disabled until all four are backed by real evidence."
+          "After source checksums pass, inspect license, signature, evaluation and runtime-template gates separately. The approval milestone is not itself a clickable approval button; downloads do not bypass the separately governed model approval process."
         ]},
         {"kind":"callout","tone":"info","title":"Current MiniCPM pilot state","text":"OpenBMB/MiniCPM5-1B is a public, Apache-2.0 candidate of roughly 2.17 GB. A manual staging directory is not a catalog approval. The first protected UI import must retain the observed revision and per-file hashes, then remain non-user-visible until artifact packaging, signature, evaluation and a qualified serving template exist."}
       ]
@@ -526,10 +567,10 @@
         {"kind":"callout","tone":"info","title":"One event, two audiences","text":"A durable source event can appear as an actionable operator alert and as a tenant-scoped customer notification. Reading or dismissing a message does not erase the source receipt, and a delivery retry does not create another business event."},
         {"kind":"heading","level":2,"id":"notification-recipe","text":"Recipe 1: triage an alert and confirm the customer message"},
         {"kind":"steps","items":[
-          "Operator: open Alert center, sort Critical and High first, open one alert, and copy its correlation or source receipt before changing anything.",
+          "Operator: open Alerts, inspect Critical and High items first, and retain the correlation or source receipt before changing anything. Do not assume a sortable table or a separate detail dialog.",
           "Operator: inspect the current evidence, then acknowledge ownership. Assign it to a named responder; use a bounded silence only when a maintenance window explains the signal.",
           "Operator: resolve only after the typed condition has recovered. Resolution closes the alert lifecycle but preserves its evidence.",
-          "Customer: open Notifications in the enterprise portal, confirm the message belongs to the expected order or lease, follow its safe action, and mark it read.",
+          "Customer: open Notifications in the enterprise portal, confirm the message belongs to the expected order or lease, follow its safe action, and choose Mark as read.",
           "If email, SMS, or webhook delivery fails, continue with the in-app record and investigate the operator DeliveryDeadLetter alert."
         ]},
         {"kind":"code","language":"sh","label":"Operator read-only triage (credentials come from the secret provider)","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_MONITORING_TOKEN:?load monitoring authority without printing it}\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/notifications/operator\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/observability/events\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/metrics\""},
@@ -555,7 +596,7 @@
         {"kind":"callout","tone":"danger","title":"A generated file is not a legal or financial outcome","text":"The PDF is the print copy and the DOCX is an editable source. An upload is not an e-signature, a receipt is not bank settlement, and generated metadata is not a tax invoice. Keep the order paused until the organization's authorized legal and finance reviewers accept the required evidence."},
         {"kind":"heading","level":2,"id":"machine-recipe","text":"Recipe 4: use and end an exclusive-machine lease safely"},
         {"kind":"steps","items":[
-          "Customer: open Machine access and verify lease state, machine display name, username, coarse reachability, handoff state, start time, and expiry before connecting. The portal intentionally does not reveal the physical node ID or a raw credential.",
+          "Customer: open My machine and verify lease state, machine display name, username, coarse reachability, handoff state, start time, and expiry before connecting. The portal intentionally does not reveal the physical node ID or a raw credential.",
           "Customer: follow the opaque handoff reference to the approved credential broker or SSH certificate redirect. That separate trusted surface supplies the authorized host alias, port, certificate, and host-key fingerprint; compare the fingerprint before the first login.",
           "Customer: before manual termination, save work and stop personal processes. Review the current lease generation, type the exact confirmation shown by the portal, and submit once.",
           "Operator: watch Draining, RevokingAccess, and Sanitizing. Do not restore managed scheduling merely because the account disappeared.",
@@ -885,7 +926,19 @@
           ["Blocked deployment","Preflight evidence or capacity is missing","Read typed findings; supply reviewed evidence before retrying."],
           ["CancelledByCaller","The authenticated owner cancelled the workload","No runtime-failure escalation unless cancellation was unexpected."]
         ]},
-        {"kind":"callout","tone":"info","title":"Public errors are intentionally bounded","text":"They do not contain node addresses, filesystem paths, container IDs, provider credentials, stack traces, or internal topology. Operators use correlated audit and protected logs for deeper diagnosis."}
+        {"kind":"callout","tone":"info","title":"Public errors are intentionally bounded","text":"They do not contain node addresses, filesystem paths, container IDs, provider credentials, stack traces, or internal topology. Operators use correlated audit and protected logs for deeper diagnosis."},
+        {"kind":"heading","level":2,"id":"first-call-failures","text":"Search the exact error: first call and portal access"},
+        {"kind":"table","columns":["Exact code or status","Plain-language meaning","Safe next action"],"rows":[
+          ["TrialApiKeyRejected","The single trial key was already issued; another issuance is rejected.","Use the saved key. If lost, contact the operator about organization access. Expiry does not automatically create another trial."],
+          ["PortalAccessDenied","Your selected organization membership does not authorize this action.","Check the selected organization and ask its administrator for the required role; signing into the operator site does not grant a portal role."],
+          ["EffectiveMasterLeaseRequired","This admission path requires an effective commercial master agreement.","Check the commercial agreement with your administrator. Private-cloud administrator-granted workspaces must use the configured private-cloud path, not fabricated contract evidence."],
+          ["HTTP 401","Authentication failed; this does not uniquely mean a wrong URL.","Use the configured API entrance and correct non-expired scoped key. Reconnect your session when appropriate; never share the secret."],
+          ["HTTP 403","The requested action, model or tenant is outside current authority.","Check the exact public code, selected organization, active lease and allowed model aliases."],
+          ["HTTP 409","The request conflicts with current state; this does not uniquely mean a lost trial key.","Read the exact code and refresh state before retrying. Do not repeat non-repeatable issuance or create duplicate orders."],
+          ["HTTP 429","Rate, concurrency or total quota may be exhausted.","Check request usage and the exact code. Wait for an applicable rate window or running request; a total allowance does not refill automatically."],
+          ["Network timeout","No reliable result was received; a mutation may still have committed.","Check connectivity and refresh the operation state. Reuse the supported idempotency identity rather than creating a duplicate payment, order or workload."]
+        ]},
+        {"kind":"paragraph","text":"Support needs the public error code, action, approximate time and non-secret receipt/correlation identifier. Do not include API keys, SSH certificates, private keys, provider tokens, raw prompts or customer content. The error explanation link should lead to this page, not an internal log."}
       ]
     },
     {
