@@ -60,6 +60,24 @@ Runtime packaging follow-up:
 - This proves image startup only. Proxy-mode PostgreSQL initialization, actual
   OIDC login and the coordinated public HTTP rollout are still pending.
 
+Proxy-mode and gateway rollout follow-up:
+
+- A standalone canary reused the existing HTTPS configuration and secret
+  references. Its custom readiness gate remained false; EndpointSlice confirmed
+  `ready=false, serving=false`, so it did not receive Service traffic.
+- The application readiness check, including PostgreSQL `SELECT 1`, passed.
+  A separate loopback SSH/Pod forward returned `/health` HTTP 200.
+- Operator and enterprise `/auth/oidc/start` both returned HTTP 302 to the exact
+  configured Keycloak authorization endpoint, with Secure and HttpOnly cookies.
+  This covers real verified-TLS discovery and flow creation, not a completed
+  user login or authorization-code exchange.
+- The corrected image was rolled into `lunanexa-identity-gateway`; rollout
+  completed with 2/2 replicas ready. All public protocols remain HTTPS.
+  Previous image for rollback:
+  `sha256:5cb6a33edd626ebe4881688157c29bdc58640713996dfe11aea8f17da81dba9e`.
+- The standalone canary was removed. Keycloak hostname/client callbacks and
+  outer proxy protocol changes remain pending.
+
 1. Back up non-secret ingress configuration and Keycloak client/realm settings.
 2. Build and smoke-test the gateway candidate with existing HTTPS configuration.
 3. Update Keycloak public hostname, realm SSL policy and exact client callbacks.
