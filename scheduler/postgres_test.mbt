@@ -6,7 +6,37 @@ async test "scheduler capacity and state restore from PostgreSQL" {
   let database = @database.PostgresDatabase::open(url)
   let scheduler = @scheduler.FileScheduler::open_postgres(database, 7)
   assert_eq(scheduler.snapshot().capacity, 7)
-  let reopened = @scheduler.FileScheduler::open_postgres(database, 99)
-  assert_eq(reopened.snapshot().capacity, 7)
+  scheduler.set_quota({
+    tenant_ref: "tenant",
+    max_inflight: 1,
+    max_accelerator_ms: 1000L,
+    window_ms: 60000L,
+  })
+  let now = @async.now()
+  let work = { ..request(), deadline_unix_ms: now + 60000L, }
+  assert_eq(scheduler.admit(work, now), Accepted(queue_position=0))
+  scheduler.mark_started(work.workload_id, now + 1L)
+  let before = scheduler.snapshot()
   database.close()
+  let recovered_database = @database.PostgresDatabase::open(url)
+  defer recovered_database.close()
+  let reopened = @scheduler.FileScheduler::open_postgres(recovered_database, 99)
+  assert_eq(reopened.snapshot().capacity, 7)
+  assert_eq(reopened.snapshot(), before)
+  assert_eq(
+    reopened.admit(work, now + 2L),
+    Rejected(reason=WorkloadAlreadyActive),
+  )
+  reopened.complete(work.workload_id, 125L)
+  reopened.complete(work.workload_id, 125L)
+  let settled_database = @database.PostgresDatabase::open(url)
+  defer settled_database.close()
+  let settled = @scheduler.FileScheduler::open_postgres(settled_database, 99)
+  assert_eq(settled.snapshot().active.length(), 0)
+  assert_eq(settled.snapshot().usage[0].accelerator_ms, 125L)
+  assert_eq(settled.snapshot().usage[0].completed_workloads, 1L)
+  assert_eq(
+    settled.admit({ ..work, workload_id: "after-recovery", }, now + 3L),
+    Accepted(queue_position=0),
+  )
 }

@@ -56,3 +56,25 @@ The follow-up `moon test commercial/offline api --target native --warn-list
 -92-20` run passed 130/130. This selected-package API/contract regression is
 separate from the 14 strict store tests above; it is not a full repository or
 live external-provider acceptance run. This batch has not been deployed.
+
+At commit `548e686`, the real PostgreSQL acceptance matrix passed 19/19 fixture
+files, each with an explicitly configured connection and a separate fresh
+database. An independent catalog query afterwards found zero
+`lnx_acceptance_*` databases; the run's loopback-only SSH tunnel was closed.
+This exercises the existing database fixtures, not database failover. In
+particular, the scheduler fixture currently restores capacity only and the
+telemetry fixture restores an empty snapshot. Nonempty state across newly
+established database connections remains a coverage gap for those two fixtures.
+
+That narrow nonempty-recovery gap was subsequently covered and the real matrix
+rerun passed 19/19. Scheduler coverage now persists quota and a started workload,
+closes its connection, restores through a new connection, rejects duplicate
+admission, completes the workload twice, then opens a third connection and
+verifies exactly one completion/125 accelerator milliseconds and available
+capacity for a new workload. Telemetry persists a bounded sample, closes its
+connection, and restores the exact snapshot/value through a new connection.
+Both packages also pass their 14 local strict tests; those local runs alone
+skip environment-conditional database execution. Interface generation passes.
+An independent database catalog query again found zero temporary acceptance
+databases, and the test tunnel was closed. Database-server failover and ambiguous
+commit recovery remain separate unproven scenarios.
