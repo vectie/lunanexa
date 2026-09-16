@@ -5,7 +5,7 @@ pub fn ApiService::with_private_cloud_workspace_access(
   self : ApiService,
   enabled : Bool,
 ) -> ApiService {
-  { ..self, private_cloud_workspace_access: enabled }
+  { ..self, private_cloud_workspace_access: enabled, }
 }
 
 ///|

@@ -429,7 +429,9 @@ async test "settled bare order provisions internally without leaking its node" {
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_exclusive_lease_store(leases)
-    .with_lease_helper_receipt_secret("machine-test-helper-receipt-key-more-than-32-bytes")
+    .with_lease_helper_receipt_secret(
+      "machine-test-helper-receipt-key-more-than-32-bytes",
+    )
     .with_portal_store(portal)
     .with_machine_commerce_store(machine_store)
     .with_provider_callback_secrets({
@@ -739,19 +741,32 @@ async test "settled bare order provisions internally without leaking its node" {
   let activation = service.handle(
     Post,
     "/v1/nodes/physical-node-a/exclusive-lease:observe",
-    { "Authorization": "Node node-token", "X-LunaNexa-Node-Id": "physical-node-a" },
-    ({
-      "lease_id": internal_lease.intent.lease_id,
-      "observed_generation": internal_lease.generation.to_string(),
-      "action": "provision",
-      "receipt": @nodelease.signed_helper_receipt(action, activated_at, service.lease_helper_receipt_secret),
-      "observed_unix_ms": activated_at.to_string(),
-    } : Json).stringify(),
+    {
+      "Authorization": "Node node-token",
+      "X-LunaNexa-Node-Id": "physical-node-a",
+    },
+    (
+      {
+        "lease_id": internal_lease.intent.lease_id,
+        "observed_generation": internal_lease.generation.to_string(),
+        "action": "provision",
+        "receipt": @nodelease.signed_helper_receipt(
+          action,
+          activated_at,
+          service.lease_helper_receipt_secret,
+        ),
+        "observed_unix_ms": activated_at.to_string(),
+      } : Json).stringify(),
   )
-  guard activation.status == 200 else { fail("Activation rejected: " + activation.body) }
+  guard activation.status == 200 else {
+    fail("Activation rejected: " + activation.body)
+  }
   let active_lease = leases.lease(internal_lease.intent.lease_id).unwrap()
   assert_eq(active_lease.intent.starts_unix_ms, activated_at)
-  assert_eq(active_lease.intent.expires_unix_ms, activated_at + reconciled.duration_seconds * 1000L)
+  assert_eq(
+    active_lease.intent.expires_unix_ms,
+    activated_at + reconciled.duration_seconds * 1000L,
+  )
   service.reconcile_machine_commerce()
   let active_order = machine_store.order(created.order_id).unwrap()
   assert_eq(active_order.state, Active)

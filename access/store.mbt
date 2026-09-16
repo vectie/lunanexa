@@ -325,6 +325,7 @@ pub async fn AccessStore::authorize(
   model? : String,
   now_unix_ms : Int64,
   consume : Bool,
+  reserve_quota? : async (Int64) -> Bool,
 ) -> ApiAuthorization {
   if secret.length() != 68 || !secret.has_prefix("lnx_") {
     raise Unauthorized
@@ -362,6 +363,14 @@ pub async fn AccessStore::authorize(
     raise QuotaExceeded
   }
   if consume {
+    // Validate the live credential while holding its mutex before reserving any
+    // shared entitlement. The callback must not re-enter this AccessStore.
+    // The two durable stores are not one transaction: a
+    // failure after reservation may conservatively consume shared quota, but
+    // exhausted/revoked credentials never consume it and no retry gets free use.
+    if reserve_quota is Some(reserve) && !reserve(current.consumed_requests) {
+      raise QuotaExceeded
+    }
     self.credentials[current.key_id] = {
       ..current,
       consumed_requests: current.consumed_requests + 1L,

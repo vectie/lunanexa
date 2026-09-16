@@ -48,7 +48,7 @@ fn artifact_assignment_fixture(secret : String) -> @contracts.DesiredAssignment 
     controller_epoch: 1L,
     signature: "",
   }
-  { ..unsigned, signature: @node.assignment_signature(unsigned, secret) }
+  { ..unsigned, signature: @node.assignment_signature(unsigned, secret), }
 }
 
 ///|

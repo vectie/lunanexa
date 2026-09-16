@@ -3068,6 +3068,14 @@ async fn ApiService::dispatch_with_transport(
   if access_onboarding_path(path) {
     return self.handle_access_onboarding(verb, path, headers, body)
   }
+  if path == "/v1/portal/self/trial/workloads" {
+    if verb != Post {
+      return api_error(
+        405, "MethodNotAllowed", "trial invocation requires POST", false,
+      )
+    }
+    return self.invoke_trial_session(headers, body)
+  }
   if account_path(path) {
     return self.handle_accounts(
       verb, path, headers, body, allow_asserted_subject,
@@ -3411,7 +3419,40 @@ async fn ApiService::dispatch_with_transport(
       } noraise {
         value => value
       }
-      json_reply(200, view.to_json())
+      let allowed_models : Array[String] = []
+      if view.authorized &&
+        self.account_store is Some(accounts) &&
+        accounts.active_trial_for_subject(subject_ref, @async.now())
+        is Some(trial) {
+        for model in trial.allowed_models {
+          allowed_models.push(model)
+        }
+      }
+      if view.authorized &&
+        self.access_store is Some(access) &&
+        view.active_lease is Some(lease) {
+        for
+          credential in access.views_for_subject(lease.tenant_ref, subject_ref) {
+          if credential.revoked_unix_ms is None &&
+            credential.expires_unix_ms > @async.now() &&
+            credential.scopes.contains(Inference) &&
+            credential.consumed_requests < credential.maximum_requests {
+            for model in credential.allowed_models {
+              if !allowed_models.contains(model) {
+                allowed_models.push(model)
+              }
+            }
+          }
+        }
+      }
+      let projection = view.to_json()
+      guard projection is Object(fields) else {
+        return api_error(
+          500, "InvalidProjection", "workspace projection is unavailable", false,
+        )
+      }
+      fields["allowed_models"] = allowed_models.to_json()
+      json_reply(200, projection)
     }
     (Post, "/v1/workspace/users") => {
       if !self.operator_authorized(headers) {
@@ -4552,6 +4593,7 @@ async fn ApiService::dispatch_with_transport(
       if workspace_error is Some(reply) {
         return reply
       }
+      defer self.release_workspace_admission(request, reserved)
       let authority : @access.ApiAuthorization = if bearer_authorized(
           headers,
           self.inference_token,
@@ -4574,7 +4616,7 @@ async fn ApiService::dispatch_with_transport(
             Inference,
             Some(request.tenant_ref),
             Some(request.model_selector),
-            true,
+            !(self.require_workspace_lease && !reserved),
           ) {
           KeyAuthorized(value) => value
           KeyQuotaExceeded =>
@@ -4588,17 +4630,7 @@ async fn ApiService::dispatch_with_transport(
             )
         }
       }
-      try self.invoke_workload(request, authority) catch {
-        error => {
-          self.release_workspace_admission(request, reserved)
-          raise error
-        }
-      } noraise {
-        reply => {
-          self.release_workspace_admission(request, reserved)
-          reply
-        }
-      }
+      self.invoke_workload(request, authority)
     }
     (Get, _) if path.has_prefix("/v1/workloads/") => {
       if !bearer_authorized(headers, self.inference_token) {

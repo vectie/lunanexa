@@ -126,13 +126,13 @@ fn offline_test_quote(id : String, now : Int64) -> @offline.ImmutableQuote {
         description: "Exclusive machine lease",
         quantity: 1L,
         unit: "lease",
-        unit_price: { currency: "CNY", minor_units: 10000L, scale: 2 },
-        line_total: { currency: "CNY", minor_units: 10000L, scale: 2 },
+        unit_price: { currency: "CNY", minor_units: 10000L, scale: 2, },
+        line_total: { currency: "CNY", minor_units: 10000L, scale: 2, },
       },
     ],
-    subtotal: { currency: "CNY", minor_units: 10000L, scale: 2 },
-    tax: { currency: "CNY", minor_units: 0L, scale: 2 },
-    total: { currency: "CNY", minor_units: 10000L, scale: 2 },
+    subtotal: { currency: "CNY", minor_units: 10000L, scale: 2, },
+    tax: { currency: "CNY", minor_units: 0L, scale: 2, },
+    total: { currency: "CNY", minor_units: 10000L, scale: 2, },
     valid_until_unix_ms: now + 3600000L,
     terms_digest: "sha256:" + "a".repeat(64),
     created_unix_ms: now,
@@ -731,7 +731,7 @@ async test "entitlement callback authority is distinct terminal and idempotent" 
     confirmed.to_json().stringify(),
   )
   assert_eq(replay.status, 200)
-  let mutated = { ..confirmed, authority_target_ref: "lease-target-attacker" }
+  let mutated = { ..confirmed, authority_target_ref: "lease-target-attacker", }
   assert_eq(
     expired_service.handle(Post, path, authority, mutated.to_json().stringify()).status,
     409,

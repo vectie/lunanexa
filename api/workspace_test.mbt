@@ -249,6 +249,11 @@ async test "workspace API persists authority and enforces it before runtime" {
     )
     assert_true(self_view.authorized)
     assert_eq(self_view.active_lease.unwrap().lease_id, "lease-workspace")
+    let projected = @json.parse(self_reply.body)
+    guard projected is Object(fields) else { fail("expected workspace object") }
+    assert_true(fields.get("allowed_models") is Some(Array([])))
+    ignore(fields.remove("allowed_models"))
+    assert_eq(projected, self_view.to_json())
     assert_eq(
       service.handle(
         Get,
@@ -425,7 +430,7 @@ async test "expired workspace lease is reconciled before workload admission" {
   ignore(directory.issue_access_grant(workspace_api_grant(now), now))
   ignore(
     directory.issue_lease(
-      { ..workspace_api_lease(now), expires_unix_ms: now + 40L },
+      { ..workspace_api_lease(now), expires_unix_ms: now + 40L, },
       now,
     ),
   )
@@ -449,6 +454,12 @@ async test "expired workspace lease is reconciled before workload admission" {
   )
   assert_false(self_view.authorized)
   assert_eq(self_view.readiness, LeaseUnavailable)
+  assert_eq(self_view.active_lease, None)
+  let projected = @json.parse(self_reply.body)
+  guard projected is Object(fields) else { fail("expected workspace object") }
+  assert_true(fields.get("allowed_models") is Some(Array([])))
+  ignore(fields.remove("allowed_models"))
+  assert_eq(projected, self_view.to_json())
   let denied = service.handle(
     Post,
     "/v1/workloads",
@@ -479,7 +490,7 @@ async test "actual canonical payload bytes cannot bypass declared or lease input
         ..base_lease,
         limits: {
           ..base_lease.limits,
-          capabilities: [{ ..base_limit, max_input_units_per_request: 64 }],
+          capabilities: [{ ..base_limit, max_input_units_per_request: 64, }],
         },
       },
       now,

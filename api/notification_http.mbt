@@ -89,6 +89,7 @@ fn notification_topic_key(topic : @notifications.NotificationTopic) -> String {
     AccessCredential => "access-credential"
     GuideDiagnostics => "guide-diagnostics"
     DeliveryHealth => "delivery-health"
+    Announcement => "announcement"
   }
 }
 
@@ -820,6 +821,7 @@ async fn ApiService::enqueue_subject_notification(
   source_receipt : String,
   parameters : Map[String, String],
   now_unix_ms : Int64,
+  expires_unix_ms? : Int64,
 ) -> Unit {
   guard self.notification_store is Some(store) else { return }
   let audience = @notifications.NotificationAudience::Subject(
@@ -844,7 +846,7 @@ async fn ApiService::enqueue_subject_notification(
       body_key: "notifications.\{code}.body",
       parameters,
       created_unix_ms: now_unix_ms,
-      expires_unix_ms: None,
+      expires_unix_ms,
     }),
   )
 }
@@ -860,6 +862,27 @@ async fn ApiService::refresh_subject_notifications(
   guard self.portal_store is Some(portal) else { return }
   let view = portal.self_view_for_organization(subject_ref, organization_id) catch {
     _ => return
+  }
+  if self.account_store is Some(accounts) &&
+    accounts.active_trial_for_subject(subject_ref, now_unix_ms) is Some(trial) &&
+    trial.tenant_ref == tenant_ref &&
+    trial.organization_id == organization_id &&
+    trial.expires_unix_ms - now_unix_ms <= 3600000L {
+    self.enqueue_subject_notification(
+      tenant_ref,
+      subject_ref,
+      "TrialExpiring",
+      CommercialAction,
+      Warning,
+      trial.trial_id,
+      "trial-expiry:\{trial.trial_id}",
+      Map([
+        ("expires_unix_ms", trial.expires_unix_ms.to_string()),
+        ("next_action", "create-or-join-organization"),
+      ]),
+      now_unix_ms,
+      expires_unix_ms=trial.expires_unix_ms,
+    )
   }
   for request in view.lease_requests {
     if request.state == Approved && request.subject_ref == subject_ref {
@@ -1050,6 +1073,14 @@ async fn ApiService::handle_notifications(
     )
   }
   let now = @async.now()
+  if path == "/v1/notifications/operator/announcements" {
+    if verb != Post {
+      return api_error(
+        405, "MethodNotAllowed", "announcement publication requires POST", false,
+      )
+    }
+    return self.publish_announcement(headers, body, now)
+  }
   if path == "/v1/notifications/operator/readiness" {
     if !self.operator_authorized(headers) {
       return api_error(

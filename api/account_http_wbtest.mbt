@@ -469,6 +469,9 @@ async test "free registration provisions one bounded shared-inference trial" {
     "\{directory}/access.json",
     "trial-registration-api-key-secret-more-than-32-bytes",
   )
+  let notices = @notification_store.NotificationStore::open(
+    "\{directory}/notifications.json",
+  )
   let durable = @store.FileStore::open("\{directory}/state.json")
   durable.fence_controller(1L)
   let runtime = @runtimes.OpenAiTextRuntime::new(
@@ -486,6 +489,7 @@ async test "free registration provisions one bounded shared-inference trial" {
     .with_portal_store(portal)
     .with_workspace_directory(workspace, true)
     .with_access_store(access)
+    .with_notification_store(notices)
     .with_open_registration_trial(86400000L, 100L, ["text.qwen"])
   let now = @async.now()
   let response = service.handle_with_transport(
@@ -512,9 +516,121 @@ async test "free registration provisions one bounded shared-inference trial" {
   assert_eq(registered.account.roles, [EnterpriseUser])
   assert_eq(trial.maximum_requests, 100L)
   assert_eq(trial.allowed_models, ["text.qwen"])
+  assert_eq(
+    service.handle(Get, "/v1/accounts/trial-summary", Map([]), "").status,
+    401,
+  )
+  let summary = service.handle(
+    Get,
+    "/v1/accounts/trial-summary",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_eq(summary.status, 200)
+  assert_true(
+    @json.parse(summary.body)
+    is {
+      "registered_trials": Number(1, ..),
+      "active_trials": Number(1, ..),
+      "converted_trials": Number(0, ..),
+      ..
+    },
+  )
+  assert_false(summary.body.contains("trial-user@example.invalid"))
+  ignore(service.reconcile_notifications(trial.expires_unix_ms - 3600001L))
+  assert_eq(
+    notices
+    .records_for_subject(trial.tenant_ref, registered.account.subject_ref, now)
+    .length(),
+    0,
+  )
+  ignore(service.reconcile_notifications(trial.expires_unix_ms - 3600000L))
+  ignore(service.reconcile_notifications(trial.expires_unix_ms - 1L))
+  assert_eq(
+    notices
+    .records_for_subject(trial.tenant_ref, registered.account.subject_ref, now)
+    .filter(record => record.event.code == "TrialExpiring")
+    .length(),
+    1,
+  )
   let session_headers = {
     "Authorization": "Bearer \{registered.session.secret}",
   }
+  let workspace_reply = service.handle(
+    Get,
+    "/v1/workspace/self",
+    session_headers,
+    "",
+  )
+  assert_true(
+    @json.parse(workspace_reply.body)
+    is { "allowed_models": [String("text.qwen")], .. },
+  )
+  assert_eq(
+    service.handle(Post, "/v1/portal/self/trial/workloads", Map([]), "{}").status,
+    403,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/portal/self/trial/workloads",
+      session_headers,
+      "{}",
+    ).status,
+    403,
+  )
+  let trial_request : @contracts.WorkloadEnvelope = {
+    version: @contracts.contract_version,
+    idempotency_key: "trial-session-request",
+    workload_id: "trial-session-workload",
+    tenant_ref: trial.tenant_ref,
+    credential_scope: "workspace-inference",
+    capability: TextGenerate,
+    model_selector: "text.qwen",
+    payload: { "prompt": "test only" },
+    data_policy: {
+      classification: Confidential,
+      retention: Ephemeral,
+      allow_cache: false,
+      allow_training_reuse: false,
+    },
+    deadline_unix_ms: now + 30000L,
+    priority: Interactive,
+    latency_class: Realtime,
+    resource_ceiling: {
+      max_input_units: 128,
+      max_output_units: 16,
+      max_runtime_ms: 2000L,
+      max_accelerator_memory_mib: 1024,
+    },
+    stream: false,
+    output_format: "text",
+    trace_token: "trial-session-trace",
+  }
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/portal/self/trial/workloads",
+      session_headers,
+      { ..trial_request, tenant_ref: "another-tenant", }.to_json().stringify(),
+    ).status,
+    403,
+  )
+  let invocation = service.handle(
+    Post,
+    "/v1/portal/self/trial/workloads",
+    session_headers,
+    trial_request.to_json().stringify(),
+  )
+  assert_true(invocation.status != 401 && invocation.status != 403)
+  assert_eq(
+    accounts.trial_for_account(registered.account.account_id).unwrap().consumed_requests,
+    Some(1L),
+  )
+  assert_eq(
+    accounts.trial_for_account(registered.account.account_id).unwrap().api_key_id,
+    None,
+  )
   assert_eq(
     service.handle(Get, "/v1/auth/trial", session_headers, "").status,
     200,
@@ -540,8 +656,73 @@ async test "free registration provisions one bounded shared-inference trial" {
     key_body,
   )
   assert_eq(key_reply.status, 201)
+  assert_true(
+    @json.parse(key_reply.body)
+    is { "api_base_url": Null, "allowed_models": [String("text.qwen")], .. },
+  )
   let issued : @access.IssuedApiKeyView = @json.from_json(
     @json.parse(key_reply.body),
+  )
+  assert_true(
+    service.api_key_check(
+      { "Authorization": "Bearer \{issued.secret}" },
+      Inference,
+      Some(trial.tenant_ref),
+      Some("text.qwen"),
+      true,
+    )
+    is KeyAuthorized(_),
+  )
+  assert_eq(
+    accounts.trial_for_account(registered.account.account_id).unwrap().consumed_requests,
+    Some(2L),
+  )
+  // Seed an explicitly synthetic completed response for the already-owned
+  // reservation, then exercise canonical replay without runtime invocation.
+  service.cache_result(idempotency_scope(trial_request), {
+    version: @contracts.contract_version,
+    workload_id: trial_request.workload_id,
+    state: Succeeded,
+    output: Some({ "output_text": "test-only replay" }),
+    error: None,
+    usage: {
+      input_units: 1,
+      output_units: 1,
+      accelerator_ms: 0L,
+      queue_ms: 0L,
+    },
+    artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    runtime_version: "test-only",
+    execution_node_id: None,
+    timing: {
+      accepted_unix_ms: now,
+      started_unix_ms: now,
+      first_output_unix_ms: now,
+      completed_unix_ms: now,
+    },
+    retryable: false,
+    audit_receipt: "test-only-trial-replay",
+  })
+  let replay_headers = {
+    "Authorization": "Bearer \{issued.secret}",
+    "X-LunaNexa-Subject": registered.account.subject_ref,
+  }
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/workloads",
+      replay_headers,
+      trial_request.to_json().stringify(),
+    ).status,
+    200,
+  )
+  assert_eq(
+    accounts.trial_for_account(registered.account.account_id).unwrap().consumed_requests,
+    Some(2L),
+  )
+  assert_eq(
+    access.views_for_subject(trial.tenant_ref, registered.account.subject_ref)[0].consumed_requests,
+    1L,
   )
   assert_eq(
     service.handle(
@@ -610,6 +791,16 @@ async test "free registration provisions one bounded shared-inference trial" {
     true,
   )
   assert_eq(upgraded.status, 201)
+  let converted_summary = service.handle(
+    Get,
+    "/v1/accounts/trial-summary",
+    { "Authorization": "Bearer operator-token" },
+    "",
+  )
+  assert_true(
+    @json.parse(converted_summary.body)
+    is { "converted_trials": Number(1, ..), "active_trials": Number(0, ..), .. },
+  )
   assert_eq(
     portal.self_view(registered.account.subject_ref).membership.organization_id,
     "enterprise-org",

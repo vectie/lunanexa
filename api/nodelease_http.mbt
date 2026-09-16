@@ -198,16 +198,25 @@ async fn ApiService::observe_node_lease_action(
   }
   let paid_duration = if observation.action == "provision" {
     match self.machine_commerce_store {
-      Some(machine_store) => machine_store.snapshot().orders.iter().find_first(order => {
-        order.offering_kind == BareMachine && order.state == Provisioning &&
-        order.target_lease_ref == Some(initial.intent.lease_id) &&
-        order.purchaser_subject_ref == initial.intent.subject_ref
-      }).map(order => order.duration_seconds * 1000L)
+      Some(machine_store) =>
+        machine_store.snapshot().orders
+        .iter()
+        .find_first(order => {
+          order.offering_kind == BareMachine &&
+          order.state == Provisioning &&
+          order.target_lease_ref == Some(initial.intent.lease_id) &&
+          order.purchaser_subject_ref == initial.intent.subject_ref
+        })
+        .map(order => order.duration_seconds * 1000L)
       None => None
     }
-  } else { None }
+  } else {
+    None
+  }
   if paid_duration is Some(_) && @async.now() >= initial.intent.expires_unix_ms {
-    return api_error(409, "ExpiredProvisioning", "paid preparation expired before activation", false)
+    return api_error(
+      409, "ExpiredProvisioning", "paid preparation expired before activation", false,
+    )
   }
   let advance = (
     current : @nodelease.ExclusiveNodeLease,
@@ -216,7 +225,11 @@ async fn ApiService::observe_node_lease_action(
     if state == Active && paid_duration is Some(duration) {
       return leases.transition(
         current.intent.lease_id,
-        { expected_generation: current.generation, state, evidence_receipt: observation.receipt },
+        {
+          expected_generation: current.generation,
+          state,
+          evidence_receipt: observation.receipt,
+        },
         observation.observed_unix_ms,
         activation_duration_ms=duration,
       )

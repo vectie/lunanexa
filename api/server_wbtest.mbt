@@ -6,7 +6,12 @@ test "public workload response removes internal execution topology" {
     state: Succeeded,
     output: Some({ "output_text": "ok" }),
     error: None,
-    usage: { input_units: 1, output_units: 1, accelerator_ms: 1L, queue_ms: 0L },
+    usage: {
+      input_units: 1,
+      output_units: 1,
+      accelerator_ms: 1L,
+      queue_ms: 0L,
+    },
     artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     runtime_version: "runtime-v1",
     execution_node_id: Some("private-node-1"),

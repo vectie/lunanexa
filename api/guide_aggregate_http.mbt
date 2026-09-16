@@ -44,7 +44,7 @@ fn bounded_counts(values : Array[String]) -> Array[GuideCount] {
     counts[safe] = counts.get(safe).unwrap_or(0) + 1
   }
   let result = [
-    for entry in counts => GuideCount::{ code: entry.0, count: entry.1 }
+    for entry in counts => GuideCount::{ code: entry.0, count: entry.1, }
   ]
   result.sort_by_key(value => value.code)
   result[:result.length().min(128)].to_owned()
