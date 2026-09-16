@@ -86,7 +86,7 @@ This does not claim cross-store transactional billing.
 - [x] API authorization, tenant isolation, deduplication and leak regression tests pass in the native functional suite (820/820, `--warn-list -92-20`).
 - [x] Targeted desktop/390px portal and workbench checks completed. Creation and demo one-time-secret dialogs cycle focus, Escape clears/closes, and restore the opener. CSV/draft download initiation feedback checked; downloaded file bytes and OS clipboard contents were not independently inspected.
 - [x] Functional and strict results recorded separately: full native strict checking still reports the 63 baseline diagnostics; it is not a passing release gate.
-- [ ] Commit coherent changes on main and push GitHub/GitLab.
+- [x] Commit coherent changes on main and push GitHub/GitLab: backend `699d00e`, UI `ab97aeb`, and documentation `6a773f6`.
 
 The previous baseline passed 803 native functional tests with warnings 92/20
 disabled; full strict checking still had 63 diagnostics. These are baseline
