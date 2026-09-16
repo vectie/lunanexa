@@ -29,6 +29,7 @@ struct RuntimeRecord {
   resources : Array[ResourceRecord]
   mut stopping : Bool
   mut observed_containers : Array[ObservedContainer]?
+  mut original_assignment : @contracts.DesiredAssignment?
 } derive(ToJson, FromJson)
 
 ///|
@@ -130,6 +131,20 @@ pub fn RuntimeSupervisor::restore(
     }
   }
   for record in journal.runtimes {
+    if record.original_assignment is Some(assignment) &&
+      (
+        assignment.assignment_id != record.assignment_id ||
+        assignment.generation != record.generation ||
+        assignment.node_id != settings.node_id ||
+        assignment.artifact.digest != record.artifact_digest ||
+        assignment.runtime.image_digest != record.image_digest ||
+        assignment.runtime.name + "@" + assignment.runtime.image_digest !=
+        record.image_ref ||
+        assignment.lease_expires_unix_ms != record.lease_expires_unix_ms ||
+        assignment.signature == ""
+      ) {
+      raise LifecycleError::InvalidResource
+    }
     if record.observed_containers is Some(containers) {
       if containers.length() > 1024 ||
         containers.any(container => {

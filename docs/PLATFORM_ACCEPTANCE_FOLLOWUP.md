@@ -161,3 +161,122 @@ then passed with the corrected controller:
 
 This proves controller restart recovery through the API path, not a real network
 partition, provider-process recovery, a new browser run, or actual GPU inference.
+
+## Network fault attempt exposed a cleanup evidence gap
+
+Campaign `video-ab17731dfa08c06016251c3ea1dee1b1bdee9fbf61a35c949c04711440b61dfd`
+changed only the r12 runtime's ingress policy with a UID precondition. A new
+management-host connection timed out, proving the initial transport disruption.
+However, the supervisor detected drift of its owned policy and replaced the
+runtime resources. The original policy and Pod no longer existed; replacement
+Pod address became 10.42.1.40. Therefore this is **not** a passing pure-network
+partition test or proof that a running original instance survives a partition.
+
+The restore precondition correctly rejected the replacement policy rather than
+overwriting it. Read-back showed the intended original ingress rules on the new
+owned policy. The test also wrongly expected the controller's VideoUnavailable
+envelope through MoonGate, whose bounded adapter returns ManagedVideoUnavailable.
+The invalid injection mode is disabled until transport can be interrupted
+outside the supervisor-owned resource specification.
+
+Job deletion could not be confirmed. Its scoped session/handoff were revoked,
+but read-only PostgreSQL inspection found Cancelling, execution_terminal=false,
+no usage receipt and no termination evidence. This is intentionally not counted
+as successful cleanup. Source inspection explains a genuine lifecycle gap:
+`RuntimeSupervisor::stop_record` deletes resources and discards the runtime record
+after absence, without preserving a new explicit original-container exit report.
+The media plane correctly refuses to treat Pod disappearance as process-exit
+proof, leaving capacity retained. Fix the node stop/evidence lifecycle before
+claiming complete expiry, drift-replacement or cancellation acceptance; do not
+forge a terminal receipt or manually mark the job settled.
+
+### Node stop correction under validation
+
+The source correction retains the original controller-signed assignment in the
+node journal. Legacy live entries can backfill it only from the same verified
+assignment. The stop path now requests an exact-UID Pod deadline of one second,
+waits for explicit termination of every previously published container, persists
+the existing authenticated report outbox, and only then permits deletion. A
+deadline or terminal Pod phase alone is not used to settle any known job.
+Disappearance of an unresolved published Pod preserves the journal/cache and
+returns Draining. This cannot reconstruct evidence already lost by older code.
+
+Pod PATCH permission is required, but the transport accepts only the bounded
+UID-test/deadline operation; policy, image and credential mutation stay excluded.
+The adapter uses Kubernetes' documented
+[Pod active deadline](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)
+and still requires its explicit container-exit observation, not API absence.
+
+Local native Kubernetes checks and all 42 tests passed with `--deny-warn`,
+including held-running instances across restart, failed report persistence,
+exactly-once outbox recovery, legacy backfill, corrupted attribution, missing
+Pods, and forbidden PATCH shapes. Whole-repository regression and a fresh Linux
+node build are in progress. The correction is not deployed yet; the old failed
+campaign is still not settled and not claimed as clean.
+
+The full native regression subsequently passed 792/792 (warning classes 92/20
+excluded); Kubernetes strict tests remained 42/42. Candidate node binary
+`23ac92c537f41b0d4902728b9b9e9de46db1a923027a38cfe016d83020a9d6ca`
+was packaged as an executable-only layer, image digest
+`sha256:beba5fcba4bc88e4cc3ef25bd53c9b6585343945a96482ee8c64e6b37740c152`.
+A non-root, tokenless inspection Pod succeeded on the actual compute node. The
+isolated runtime Role received Pod patch permission and the isolated managed
+node switched images while retaining its Pod UID and persisted host state.
+
+Live `managed-test-video-20260916-r13` used a ten-minute assignment. The original
+test user's unresolved r12 job still rejected a new request with VideoCapacityBusy
+(409), confirming it was not silently released. A separate disposable user was
+granted VideoGenerate with one concurrent request and 20/hour, preserving expiry.
+Adding an overlapping lease did not override its selected old lease; updating
+that immutable lease returned 409. The old text-only lease was explicitly ended
+through the operator API so the already-created replacement lease became current.
+No original-user quota or historical failed job was altered.
+
+Second-user job
+`video-aed3c6c1e5ed629b75ce4e77af5a8f308c0dfb4d49c29725e1c95404f3dd27e3`
+was queued through MoonGate. Stopping the deployment through the operator API
+produced a Failed/execution-terminal record, persisted original-instance report
+`runtime-termination-04f9083711ee6347df2a5b0da9a72e1ff78d348a1901b4457a54b2dc890c85f0`,
+and exactly one private-workspace usage receipt. The Pod was removed and the
+workspace identity remained unchanged. The test did **not** fully pass: deferred
+customer DELETE returned VideoAccessEnded after deployment authority ended.
+
+The API correction under validation permits the current authenticated owner to
+clear an already evidenced, settled terminal job without execution authority or
+provider traffic. Account/workspace/key/model checks remain required; ordinary
+in-flight or artifact-bearing jobs do not take this shortcut. Targeted tests and
+a new controller candidate are in progress; do not claim this last cleanup has
+passed until the original live job is checked again.
+
+### Complete stop/settlement/customer-cleanup follow-up
+
+The API integration fixture passed 4/4 after adding private-owner terminal
+cleanup and revoked-account rejection checks. Final whole-repository native
+regression again passed 792/792 with warning classes 92/20 excluded; the strict
+Kubernetes package remained 42/42. Interfaces were regenerated with no public
+interface changes. Existing repository warnings and unrelated release gates
+remain outstanding.
+
+Controller candidate `b3a81450674647e5fe829777b46487d71703df5107153f1408a8e14454fedf4e`
+was installed in the isolated user service with the same PostgreSQL/configuration
+and a retained rollback binary. Against the **original** r13 task above, the
+current second-user session successfully performed DELETE twice; the ledger
+remained singular. Read-only PostgreSQL inspection confirmed Cancelled,
+execution_terminal=true, and the same exit reference and usage receipt. The
+test session/handoff were revoked, and no substitute task was used for this check.
+
+A separate five-minute r14 deployment then verified recovered capacity for the
+same one-concurrent-job owner. Job
+`video-5151a814627470b6332d9e771e8192af3d7f5a22eb07192981a0496036dda0ea`
+passed MoonGate submission, same-job controller retry, in-progress/completed,
+and the exact marked-MP4 digest. Its provider job, temporary download and handoff
+were cleaned. The r14 deployment was then explicitly stopped. The completed
+non-root image-smoke Pod was also deleted; its manifest and pinned image remain
+reproducible. Workspace files and audit/billing history were preserved.
+Final namespace inspection found no Pods, ResourceClaims or claim templates;
+only the intentional default-deny NetworkPolicy remained.
+
+This closes the newly exercised managed-stop and private terminal-cleanup flow.
+It does not reconstruct the missing r12 exit evidence, qualify the rejected
+network-policy partition test, or complete the remaining browser/identity,
+release-gate and real-hardware evidence.

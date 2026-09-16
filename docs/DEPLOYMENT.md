@@ -762,9 +762,15 @@ mount an engine socket. Confirm that its non-root process identity can read the
 configuration files and write the pre-created `/var/lib/lunanexa` directory.
 Prepare `deploy/node-kubernetes-rbac.yaml` and the per-node
 `deploy/kubernetes-runtime.example.json`; node identity and model-cache paths
-must match the agent configuration. The Role grants create/get/delete only for
+must match the agent configuration. The Role grants create/get/delete for
 Pods, NetworkPolicies and ResourceClaimTemplates in the dedicated runtime
-namespace. Serving Pods receive neither this API token nor model-download
+namespace, plus patch for Pods. The adapter restricts PATCH to a UID-conditional
+`activeDeadlineSeconds=1` stop request; it does not expose arbitrary patching.
+Upgrade this Role before the node binary. Stop/expiry first asks kubelet to end
+the workload, retains the Pod until explicit original-container exit reports
+are durable, then deletes resources. A missing Pod is not exit proof and may
+require operator investigation; never clear its journal to release capacity.
+Serving Pods receive neither this API token nor model-download
 credentials. Model bytes are materialized and verified before a read-only
 file mount is exposed to the runtime.
 
