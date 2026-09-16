@@ -1,5 +1,38 @@
 # Platform acceptance follow-up
 
+## Natural runtime expiry during packet loss — passed; completed-job cleanup gap found
+
+The first 90-second lease attempt did not exercise in-flight expiry: background
+polling completed job
+`video-b29fdd1909749060ab24d4cb3775d36036aed69d5f351f67857e314e17899433`
+before the runtime disappeared. The expected per-job termination evidence never
+appeared, and deferred customer DELETE exhausted bounded retries. This is not
+a passing cleanup result. Read-only database inspection found Cancelling with
+execution_terminal=true, an existing usage receipt and no termination reference.
+The deployment was stopped and no runtime Pod remained; the historical job was
+not edited to conceal the failure.
+
+Source diagnosis: `VideoRuntime::refresh_internal` only attaches verified
+instance termination to nonterminal jobs; `acknowledge_instance_termination`
+also rejects already-terminal jobs. A later cancellation of a completed job can
+therefore still depend on a provider that naturally expired. This completed-job
+cleanup lifecycle requires a correction and regression/live revalidation; do
+not loosen original-instance evidence or fabricate a deletion acknowledgement.
+
+The second campaign held the new provider's TCP path unreachable while its
+90-second assignment expired naturally. Job
+`video-efe7af3fe09d33eca6aa14a960f33a7a0dbd4a30a6914fddbe8cecf68443bd7c`
+remained nonterminal during the proved packet outage, then received persisted
+original-instance termination evidence and exactly one quantity-one usage
+observation. The authenticated owner deleted it twice idempotently after
+execution authority ended. The managed-runtime namespace was empty before the
+runner's final explicit deployment cleanup, proving that manual stop did not
+cause the observed expiry. Harness exit was zero; its exact DROP rule was
+removed with absence verification and had a 180-second UTC safety cutoff.
+Scoped sessions/handoffs were revoked. No model inference or hardware identity
+change occurred. This passes **in-flight lease expiry during provider outage**,
+not the separate completed-job cleanup failure above.
+
 ## Cancellation during provider packet loss — passed 2026-09-16
 
 The `--partition-cancel` follow-up used a new bounded TEST ONLY deployment and
