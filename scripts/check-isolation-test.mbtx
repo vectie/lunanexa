@@ -6,10 +6,13 @@ import {
 
 async fn main {
   let script = @fs.read_file("scripts/check-isolation.sh")
-  let scratch = @fs.tmpdir(prefix="lunanexa-isolation-scan-")
+  let scratch = @fs.tmpdir(prefix="lunanexa-isolation scan-")
   defer @fs.rmdir(scratch, recursive=true)
   @fs.mkdir(scratch + "/scripts")
+  @fs.mkdir(scratch + "/node")
+  @fs.mkdir(scratch + "/node/kubernetes")
   @fs.write_file(scratch + "/scripts/check-isolation.sh", script)
+  @fs.write_file(scratch + "/scripts/check-isolation.mbtx", @fs.read_file("scripts/check-isolation.mbtx"))
   let cases : Array[(String, Bool)] = [
     ("let container_id = runtime.handle\nlet identity = container_id.length()", true),
     ("{ \"container_id\": runtime.handle }", false),
@@ -18,14 +21,39 @@ async fn main {
     ("{ \"stack_trace\": error }", false),
     ("{ \"node_address\": node }", false),
     ("import { \"vectie/moontown\" }", false),
+    ("struct Journal {\n  container_id : String\n} derive(ToJson, FromJson)", true),
+    ("priv struct Journal { container_id : String }", true),
+    ("pub struct Reply { container_id : String }", false),
+    ("pub(readonly) struct Reply { container_id : String }", false),
+    ("pub fn inspect(container_id : String) -> Bool { true }", true),
+    ("fn inspect(\n container_id : String,\n) { { container_id: container_id } }", false),
+    ("fn inspect(value : Json = { container_id: \"test-only\" }) { () }", false),
+    ("struct Journal { container_id : String }\n///|\npub(all) struct Reply { container_id : String }", false),
+    ("struct Journal { container_id : String }\n///|\nfn reply() { { container_id: \"test-only\" } }", false),
+    ("// pub(all) struct Fake {\nstruct Journal { container_id : String }", true),
+    ("let hint = \"struct Private {\"\n{ container_id: value }", false),
+    ("fn reply() {\n #|{\"container_id\": \"test-only\"}\n}", false),
+    ("fn reply() { { \"provider_credential\": \"test-only-sensitive-marker\" } }", false),
+    ("let body = \"{container_id: test-only}\"", false),
+    ("fn reply() {\n #|{container_id: test-only}\n}", false),
+    ("struct Journal { container_id : String }\n///|\nfn reply() { let brace = '{'; { container_id: value } }", false),
   ]
   for index, entry in cases {
     let (source, expected) = entry
-    @fs.write_file(scratch + "/fixture.mbt", source)
+    @fs.write_file(scratch + "/node/kubernetes/fixture.mbt", source)
     let result = @shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output()
     guard (result.exit_code() == 0) == expected else {
       fail("Isolation scan fixture \{index} has the wrong result: " + result.stderr())
     }
+    assert_false(result.stdout().contains("test-only-sensitive-marker"))
+    assert_false(result.stderr().contains("test-only-sensitive-marker"))
   }
-  println("Isolation/response scan fixtures: 7 passed. Static scans do not replace public-response tests.")
+  @fs.write_file(scratch + "/node/kubernetes/fixture.mbt", "")
+  @fs.write_file(scratch + "/fixture.mbt", "struct Reply { provider_credential : String } derive(ToJson)")
+  let response_record = @shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output()
+  assert_true(response_record.exit_code() != 0)
+  @fs.write_file(scratch + "/fixture.mbt", "pub fn inspect(provider_credential : String) -> Bool { true }")
+  let parameter = @shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output()
+  assert_eq(parameter.exit_code(), 0)
+  println("Isolation/response scan fixtures: \{cases.length() + 2} passed. Static scans do not replace public-response tests.")
 }
