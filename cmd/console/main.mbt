@@ -289,11 +289,7 @@ fn console_copy(
   english : String,
   chinese : String,
 ) -> String {
-  if locale.is_chinese() {
-    chinese
-  } else {
-    english
-  }
+  @i18n.copy(locale, english, chinese)
 }
 
 ///|
@@ -791,7 +787,7 @@ fn quick_deployment_intent(
     version: @contracts.contract_version,
     idempotency_key: "console:\{deployment_id}",
     deployment_id,
-    template: { template_id: template.template_id, version: template.version },
+    template: { template_id: template.template_id, version: template.version, },
     replicas: 1,
     data_class: template.data_policy.classification,
     lease_duration_ms: 86400000L,
@@ -920,6 +916,14 @@ async fn load_console(
   let accounts : Array[@ui.AccountView] = @json.from_json(
     @json.parse(request("GET", endpoint, "/v1/accounts", token)),
   )
+  let trial_summary : @ui.TrialSummary? = Some(
+    @json.from_json(
+      @json.parse(request("GET", endpoint, "/v1/accounts/trial-summary", token)),
+    ),
+  ) catch {
+    // Supplemental statistics are unavailable, never zero, on older controllers.
+    _ => None
+  }
   let access_packages : Array[@ui.AccessPackageView] = @json.from_json(
     @json.parse(
       request("GET", endpoint, "/v1/onboarding/access-packages", token),
@@ -1445,6 +1449,8 @@ async fn load_console(
     notifications,
     notification_deliveries,
     accounts,
+    trial_summary,
+    announcement_draft: @ui.empty_announcement_draft(),
     authenticated_account,
     account_sessions,
     account_invite: {
@@ -1564,6 +1570,7 @@ priv enum LoadOutcome {
   Loaded(@ui.ConsoleState)
   LoadFailed(@i18n.Locale, String)
   ActionComplete(@i18n.Locale, String)
+  LocalCopyComplete(Bool)
   ModelSourceSearchLoaded(@i18n.Locale, @ui.ModelSourceCatalogPage)
   ModelImportsLoaded(@i18n.Locale, Array[@ui.ModelImportRow], String?)
   ModelImportsPolled(Int64, Array[@ui.ModelImportRow])
@@ -1694,7 +1701,7 @@ fn switch_console_locale(
 
 ///|
 fn switch_app_locale(model : AppModel, locale : @i18n.Locale) -> AppModel {
-  { ..model, console: switch_console_locale(model.console, locale) }
+  { ..model, console: switch_console_locale(model.console, locale), }
 }
 
 ///|
@@ -1803,7 +1810,10 @@ fn operator_contract_command(
         model.endpoint,
         "/v1/contract-documents/operator/packets/\{packet_id}:information",
         model.credential,
-        body=ContractInformationUpdate::{ expected_revision: revision, changes }
+        body=ContractInformationUpdate::{
+            expected_revision: revision,
+            changes,
+          }
           .to_json()
           .stringify(),
       )
@@ -2093,7 +2103,7 @@ fn demo_contract_lifecycle_action(
         (
           packet.close_packet(
             revision,
-            { kind, reason, closed_by: "operator", closed_unix_ms: now },
+            { kind, reason, closed_by: "operator", closed_unix_ms: now, },
             true,
             now,
           ),
@@ -2289,7 +2299,7 @@ fn schedule_contract_preview(
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
     return (
-      { ..model, console: { ..model.console, contract_documents: documents } },
+      { ..model, console: { ..model.console, contract_documents: documents, }, },
       @rabbita.none,
     )
   }
@@ -2298,7 +2308,7 @@ fn schedule_contract_preview(
   let next = {
     ..model,
     contract_preview_generation: generation,
-    console: { ..model.console, contract_documents: pending },
+    console: { ..model.console, contract_documents: pending, },
   }
   let command = @rabbita.perform(message => emit(message), async fn() noraise {
     try contract_preview_delay_promise(delay_ms).wait() catch {
@@ -2539,7 +2549,7 @@ fn update_live(
           audit_credential: value,
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false },
+          console: { ..model.console, operator_authenticated: false, },
         },
         @rabbita.none,
       )
@@ -2550,18 +2560,18 @@ fn update_live(
           credential: value,
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false },
+          console: { ..model.console, operator_authenticated: false, },
         },
         @rabbita.none,
       )
     AuditCredentialChanged(value) =>
-      ({ ..model, audit_credential: value }, @rabbita.none)
+      ({ ..model, audit_credential: value, }, @rabbita.none)
     InferenceCredentialChanged(value) =>
-      ({ ..model, inference_credential: value }, @rabbita.none)
+      ({ ..model, inference_credential: value, }, @rabbita.none)
     InferenceSubjectChanged(value) =>
-      ({ ..model, inference_subject_ref: value }, @rabbita.none)
+      ({ ..model, inference_subject_ref: value, }, @rabbita.none)
     CommercialOrganizationChanged(value) =>
-      ({ ..model, commercial_organization: value }, @rabbita.none)
+      ({ ..model, commercial_organization: value, }, @rabbita.none)
     Console(AccountInviteIdChanged(value)) =>
       (
         {
@@ -2638,7 +2648,7 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            account_invite: { ..model.console.account_invite, email: value },
+            account_invite: { ..model.console.account_invite, email: value, },
           },
         },
         @rabbita.none,
@@ -2671,6 +2681,159 @@ fn update_live(
           },
         },
         @rabbita.none,
+      )
+    }
+    Console(AnnouncementIdChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            announcement_draft: {
+              ..model.console.announcement_draft,
+              announcement_id: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AnnouncementTenantChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            announcement_draft: {
+              ..model.console.announcement_draft,
+              tenant_ref: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AnnouncementTitleChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            announcement_draft: {
+              ..model.console.announcement_draft,
+              title: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AnnouncementBodyChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            announcement_draft: {
+              ..model.console.announcement_draft,
+              body: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AnnouncementExpiryChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            announcement_draft: {
+              ..model.console.announcement_draft,
+              expires_unix_ms: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AnnouncementLifetimeChosen(days)) => {
+      guard days == 1 || days == 7 || days == 30 else {
+        return (model, @rabbita.none)
+      }
+      let expiry = (current_unix_ms() + days.to_int64() * 86400000L).to_string()
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            announcement_draft: {
+              ..model.console.announcement_draft,
+              expires_unix_ms: expiry,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Console(SubmitAnnouncement) => {
+      let draft = model.console.announcement_draft
+      guard !model.demo_mode &&
+        model.console.operator_authenticated &&
+        @ui.announcement_ready(draft) else {
+        return (model, @rabbita.none)
+      }
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let expiry = @string.parse_int64(draft.expires_unix_ms)
+          guard expiry > current_unix_ms() else {
+            fail("announcement expiry must be future")
+          }
+          let body : Json = {
+            "announcement_id": draft.announcement_id.trim().to_owned(),
+            "tenant_ref": draft.tenant_ref.trim().to_owned(),
+            "title": draft.title.trim().to_owned(),
+            "body": draft.body.trim().to_owned(),
+            "expires_unix_ms": expiry.to_string(),
+          }
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/notifications/operator/announcements",
+              model.credential,
+              body=body.stringify(),
+            ),
+          )
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Announcement was not published. Check the active tenant, plain-text message, future expiry within 30 days, and whether this ID already has different content.",
+                "公告未发布。请检查有效租户、纯文本内容、30 天内的未来到期时间，以及该编号是否已用于其他内容。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Announcement published to the selected tenant.",
+                "公告已发布给指定租户。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
       )
     }
     Console(SubmitAccountInvite) => {
@@ -3105,7 +3268,7 @@ fn update_live(
       }
       let next = {
         ..model,
-        console: { ..model.console, loading: true, error_message: None },
+        console: { ..model.console, loading: true, error_message: None, },
       }
       (next, load_command(next, emit))
     }
@@ -3142,6 +3305,38 @@ fn update_live(
                 "控制器刷新失败。",
               ),
             ),
+          },
+        },
+        @rabbita.none,
+      )
+    Outcome(LocalCopyComplete(ok)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            success_message: if ok {
+              Some(
+                console_copy(
+                  model.console.locale,
+                  "Identifier copied.",
+                  "标识符已复制。",
+                ),
+              )
+            } else {
+              None
+            },
+            error_message: if ok {
+              None
+            } else {
+              Some(
+                console_copy(
+                  model.console.locale,
+                  "Clipboard unavailable. Select the visible identifier and copy it manually.",
+                  "无法使用剪贴板，请选中可见标识符手动复制。",
+                ),
+              )
+            },
           },
         },
         @rabbita.none,
@@ -3674,7 +3869,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ActivateUser(user_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -3880,7 +4075,7 @@ fn update_live(
       )
     Console(DismissConfirmation) =>
       (
-        { ..model, console: { ..model.console, confirmation: None } },
+        { ..model, console: { ..model.console, confirmation: None, }, },
         @rabbita.none,
       )
     Console(AcknowledgeAlert(notification_id, generation)) => {
@@ -3918,7 +4113,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(AssignAlertToSelf(notification_id, generation)) => {
       let body = {
@@ -3958,7 +4153,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SilenceAlert(notification_id, generation)) => {
       let body = {
@@ -3998,7 +4193,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ResolveAlert(notification_id, generation)) => {
       let body = { "expected_generation": generation.to_json() }
@@ -4035,12 +4230,12 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(Refresh) => (model, load_command(model, emit))
     Console(ModelSourceQueryChanged(value)) =>
       (
-        { ..model, console: { ..model.console, model_source_query: value } },
+        { ..model, console: { ..model.console, model_source_query: value, }, },
         @rabbita.none,
       )
     Console(SearchModelSource) => {
@@ -4096,7 +4291,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(DownloadModelSource(model_id)) => {
       let body = { "model_id": model_id, "revision": "master" }
@@ -4142,7 +4337,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(CancelModelImport(import_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4189,7 +4384,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RetryModelImport(import_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4236,7 +4431,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RefreshModelImports) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4264,7 +4459,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(BeginModelAdoption(import_id)) => {
       guard model.console.operator_authenticated &&
@@ -4463,27 +4658,27 @@ fn update_live(
     }
     Console(OperationChanged(value)) =>
       (
-        { ..model, console: { ..model.console, operation_name: value } },
+        { ..model, console: { ..model.console, operation_name: value, }, },
         @rabbita.none,
       )
     Console(OperationBodyChanged(value)) =>
       (
-        { ..model, console: { ..model.console, operation_body: value } },
+        { ..model, console: { ..model.console, operation_body: value, }, },
         @rabbita.none,
       )
     Console(QuickDeploymentIdChanged(value)) =>
       (
-        { ..model, console: { ..model.console, quick_deployment_id: value } },
+        { ..model, console: { ..model.console, quick_deployment_id: value, }, },
         @rabbita.none,
       )
     Console(QuickTemplateChanged(value)) =>
       (
-        { ..model, console: { ..model.console, quick_template: value } },
+        { ..model, console: { ..model.console, quick_template: value, }, },
         @rabbita.none,
       )
     Console(PortalNodeChanged(value)) =>
       (
-        { ..model, console: { ..model.console, portal_node_id: value } },
+        { ..model, console: { ..model.console, portal_node_id: value, }, },
         @rabbita.none,
       )
     Console(ApproveEnterpriseLease(request_id, generation)) => {
@@ -4547,7 +4742,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RejectEnterpriseLease(request_id, generation)) => {
       let body = @portal.LeaseReview::{
@@ -4590,7 +4785,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SubmitQuickDeployment) => {
       guard quick_deployment_intent(model.console, current_unix_ms())
@@ -4644,7 +4839,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SubmitOperation) => {
       let (verb, path, inference) = match model.console.operation_name {
@@ -4709,7 +4904,7 @@ fn update_live(
         return (
           {
             ..model,
-            console: { ..model.console, error_message: Some(message) },
+            console: { ..model.console, error_message: Some(message), },
           },
           @rabbita.none,
         )
@@ -4787,7 +4982,7 @@ fn update_live(
           }
         })
       }
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(DrainNode(node_id))) => {
       let generation = current_unix_ms()
@@ -4829,7 +5024,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(CordonNode(node_id))) => {
       let generation = current_unix_ms()
@@ -4871,7 +5066,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RollbackAlias(alias_name))) => {
       let body : Json = {
@@ -4909,7 +5104,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(StopDeployment(assignment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4942,7 +5137,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RollbackServiceDeployment(deployment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4975,7 +5170,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(DeleteServiceDeployment(deployment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5008,7 +5203,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(ActivateAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5043,7 +5238,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(SuspendAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5078,7 +5273,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RevokeAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5113,7 +5308,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(SetAccountRoles(account_id, roles))) => {
       let body = AccountRolesIntent::{ roles, }.to_json().stringify()
@@ -5150,7 +5345,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(SuspendUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5183,7 +5378,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RevokeUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5216,7 +5411,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RevokeAccessGrant(grant_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5249,7 +5444,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(EndComputeLease(lease_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5282,7 +5477,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(TerminateExclusiveNodeLease(lease_id, generation))) => {
       let body = @nodelease.ExclusiveLeaseTerminationRequest::{
@@ -5322,7 +5517,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(
       ConfirmAction(
@@ -5370,7 +5565,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(OfflineCommerce(Refresh)) => (model, load_command(model, emit))
     Console(OfflineCommerce(RequestGeneration(order_id, kind))) => {
@@ -5425,7 +5620,7 @@ fn update_live(
         "已请求生成并验证文档。",
         emit,
       )
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(OfflineCommerce(ConfirmAction(action))) => {
       let now = current_unix_ms()
@@ -5490,13 +5685,13 @@ fn update_live(
               },
             ],
             subtotal: money,
-            tax: { minor_units: 0L, currency: "CNY", scale: 2 },
+            tax: { minor_units: 0L, currency: "CNY", scale: 2, },
             total: money,
             valid_until_unix_ms: valid_until,
             terms_digest,
             created_unix_ms: now,
           }
-          let value : OfflineQuoteAction = { order_id, quote }
+          let value : OfflineQuoteAction = { order_id, quote, }
           ignore(confirmed_actor)
           {
             path: "/v1/offline-commerce/operator/quotes",
@@ -5737,7 +5932,7 @@ fn update_live(
       (
         {
           ..model,
-          console: { ..model.console, contract_documents: next_documents },
+          console: { ..model.console, contract_documents: next_documents, },
         },
         operator_contract_command(model, packet_id, revision, changes, emit),
       )
@@ -5749,7 +5944,7 @@ fn update_live(
       (
         {
           ..model,
-          console: { ..model.console, contract_documents: next_documents },
+          console: { ..model.console, contract_documents: next_documents, },
         },
         @rabbita.none,
       )
@@ -5773,7 +5968,7 @@ fn update_live(
       )
       let next = {
         ..model,
-        console: { ..model.console, contract_documents: next_documents },
+        console: { ..model.console, contract_documents: next_documents, },
       }
       match action {
         RegisterExecution(_)
@@ -5872,6 +6067,17 @@ fn update_live(
           )
       }
     }
+    Console(ContractDocuments(CopyPublicIdentifier(value))) =>
+      (
+        model,
+        @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+          try copy_public_identifier_promise(value).wait() catch {
+            _ => LocalCopyComplete(false)
+          } noraise {
+            _ => LocalCopyComplete(true)
+          }
+        }),
+      )
     Console(ContractDocuments(message)) =>
       (
         {
@@ -5928,6 +6134,7 @@ fn update(
       | Console(DismissConfirmation)
       | ContractPreviewDue(_, _)
       | Outcome(ContractPreviewLoaded(_, _))
+      | Outcome(LocalCopyComplete(_))
       | Outcome(ContractPreviewFailed(_, _, _)) =>
         update_live(model, message, emit)
       Console(OfflineCommerce(RequestGeneration(_, _)))
@@ -6403,7 +6610,8 @@ fn login_view(
             @html.h2(console_copy(locale, "Operator login", "运维登录")),
             @html.p(
               console_copy(
-                locale, "Authenticate against the LunaNexa controller.", "通过 LunaNexa 控制器进行身份验证。",
+                locale, "This is the operator console for platform administrators. The customer portal uses a separate browser session; signing in there does not sign you in here.",
+                "这里是平台管理员使用的运维控制台。用户门户使用独立的浏览器会话，在那里登录不会自动登录此处。",
               ),
             ),
           ]),

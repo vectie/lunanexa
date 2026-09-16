@@ -1,10 +1,10 @@
 ///|
 test "enterprise portal separates customer requests from operator assignment" {
   let state = @enterprise.demo_state()
-  let agreements = @enterprise.render({ ..state, route: Agreements })
-  let requests = @enterprise.render({ ..state, route: LeaseRequests })
-  let models = @enterprise.render({ ..state, route: Models })
-  let desktop = @enterprise.render({ ..state, route: DesktopIde })
+  let agreements = @enterprise.render({ ..state, route: Agreements, })
+  let requests = @enterprise.render({ ..state, route: LeaseRequests, })
+  let models = @enterprise.render({ ..state, route: Models, })
+  let desktop = @enterprise.render({ ..state, route: DesktopIde, })
   assert_true(agreements.contains("Enterprise capacity framework"))
   assert_true(agreements.contains("Review &amp; sign"))
   assert_true(requests.contains("Submit lease request"))
@@ -57,7 +57,7 @@ test "enterprise WebIDE journey exposes one truthful next action" {
 test "enterprise locale control renders Chinese and preserves opaque data" {
   let state = @enterprise.demo_state()
   let chinese = state.update(LocaleChanged(ChineseSimplified))
-  let html = @enterprise.render({ ..chinese, route: Models })
+  let html = @enterprise.render({ ..chinese, route: Models, })
   assert_true(html.contains("界面语言"))
   assert_true(html.contains("共享模型目录"))
   assert_true(html.contains("中央托管"))
@@ -69,7 +69,7 @@ test "enterprise locale control renders Chinese and preserves opaque data" {
 ///|
 test "customer notification inbox is bilingual and keeps opaque receipts" {
   let state = @enterprise.demo_state()
-  let english = @enterprise.render({ ..state, route: Notifications })
+  let english = @enterprise.render({ ..state, route: Notifications, })
   assert_true(english.contains("Notification inbox"))
   assert_true(english.contains("Machine access is ready"))
   assert_true(english.contains("Mark as read"))
@@ -95,7 +95,7 @@ test "customer notification inbox is bilingual and keeps opaque receipts" {
 ///|
 test "enterprise machine route shows safe live access without topology" {
   let state = @enterprise.demo_state()
-  let english = @enterprise.render({ ..state, route: MachineAccess })
+  let english = @enterprise.render({ ..state, route: MachineAccess, })
   assert_true(english.contains("My machine access"))
   assert_true(english.contains("assigned-machine:exclusive-lease-demo"))
   assert_true(english.contains("End access early"))
@@ -139,7 +139,7 @@ test "lease form requires every bounded field" {
 ///|
 test "customer offline order route explains evidence upload in both languages" {
   let state = @enterprise.demo_state()
-  let english = @enterprise.render({ ..state, route: OfflineCommerce })
+  let english = @enterprise.render({ ..state, route: OfflineCommerce, })
   assert_true(english.contains("Orders and offline documents"))
   assert_true(english.contains("Upload Executed contract scan"))
   let chinese = @enterprise.render({
@@ -218,6 +218,10 @@ test "API key dialogs expose accessible semantics and one-time erasure" {
       key_id: "key-new",
       display_name: "New integration",
       secret: "lnx_example_one_time_secret",
+      allowed_models: ["text.default"],
+      api_base_url: None,
+      tenant_ref: "tenant-demo",
+      memory_ceiling_mib: Some(4096),
     }),
   }
   let revealed = @enterprise.render(with_secret)
@@ -296,7 +300,7 @@ test "free trial shows one clear action, limits, and no machine promise" {
   let account = @enterprise.render({
     ..state,
     route: AccountAccess,
-    trial: Some({ ..trial, api_key_id: Some("trial-key") }),
+    trial: Some({ ..trial, api_key_id: Some("trial-key"), }),
   })
   assert_true(
     account.contains("one-time trial API key has already been issued"),
@@ -316,7 +320,7 @@ test "free trial shows one clear action, limits, and no machine promise" {
 test "cost checkout derives authority fields and exposes complete states" {
   let state = @enterprise.demo_state()
   assert_true(@enterprise.payment_checkout_available(state))
-  let ready = @enterprise.render({ ..state, route: Costs })
+  let ready = @enterprise.render({ ..state, route: Costs, })
   assert_true(ready.contains("Pay a finalized billing period"))
   assert_true(ready.contains("CNY 18,420.00"))
   assert_true(ready.contains("1842000 minor units"))
@@ -333,7 +337,7 @@ test "cost checkout derives authority fields and exposes complete states" {
   let loading = state.update(SubmitPaymentCheckout)
   assert_true(loading.payment_checkout_loading)
   assert_false(@enterprise.payment_checkout_available(loading))
-  let loading_html = @enterprise.render({ ..loading, route: Costs })
+  let loading_html = @enterprise.render({ ..loading, route: Costs, })
   assert_true(loading_html.contains("Creating secure checkout…"))
   let empty = @enterprise.render({
     ..state,
@@ -424,7 +428,7 @@ test "qualified signature handoff is explicit HTTPS-only and renewable" {
     ..state,
     route: Agreements,
     agreements: [agreement],
-    provider_requests: [{ ..expired_record, state: Expired }],
+    provider_requests: [{ ..expired_record, state: Expired, }],
   })
   assert_true(terminal.contains("Signing link expired"))
   assert_false(terminal.contains("Renew signing session"))
@@ -453,7 +457,7 @@ test "qualified signature handoff is explicit HTTPS-only and renewable" {
 ///|
 test "self-service entry separates shared dedicated and bare GPU outcomes" {
   let state = @enterprise.demo_state()
-  let overview = @enterprise.render({ ..state, route: Overview })
+  let overview = @enterprise.render({ ..state, route: Overview, })
   assert_true(overview.contains("What do you want to run?"))
   assert_true(overview.contains("Shared MaaS"))
   assert_true(overview.contains("Dedicated MaaS"))
@@ -515,13 +519,13 @@ test "company form validation is bounded and requires legal contact facts" {
   }
   assert_true(@enterprise.company_creation_valid(ready))
   assert_false(
-    @enterprise.company_creation_valid({ ..ready, billing_email: "invalid" }),
+    @enterprise.company_creation_valid({ ..ready, billing_email: "invalid", }),
   )
   assert_false(
-    @enterprise.company_creation_valid({ ..ready, registered_address: "" }),
+    @enterprise.company_creation_valid({ ..ready, registered_address: "", }),
   )
   assert_false(
-    @enterprise.company_creation_valid({ ..ready, action_loading: true }),
+    @enterprise.company_creation_valid({ ..ready, action_loading: true, }),
   )
   assert_false(@enterprise.company_join_valid(empty))
   assert_true(
@@ -535,7 +539,7 @@ test "company form validation is bounded and requires legal contact facts" {
 ///|
 test "dedicated machine wizard exposes SKU region duration model and signed quote" {
   let state = @enterprise.demo_state()
-  let capacity = @enterprise.render({ ..state, route: SelfService })
+  let capacity = @enterprise.render({ ..state, route: SelfService, })
   assert_true(capacity.contains("Order progress"))
   assert_true(capacity.contains("Choose capacity"))
   assert_true(capacity.contains("NVIDIA RTX 5060 Ti"))
@@ -561,7 +565,7 @@ test "dedicated machine wizard exposes SKU region duration model and signed quot
   let quote = @enterprise.render({
     ..state,
     route: SelfService,
-    self_service: { ..state.self_service, step: Quote },
+    self_service: { ..state.self_service, step: Quote, },
   })
   assert_true(quote.contains("Review price and scope"))
   assert_true(quote.contains("CNY 1,444.80"))
@@ -641,7 +645,7 @@ test "self-service catalog renders loading error and empty states honestly" {
   assert_true(failed.contains("Retry catalog"))
   let empty = @enterprise.render({
     ..base,
-    self_service: { ..base.self_service, offerings_loaded: true },
+    self_service: { ..base.self_service, offerings_loaded: true, },
   })
   assert_true(empty.contains("No capacity available"))
   assert_true(empty.contains("No order has been created"))
@@ -676,7 +680,7 @@ test "machine order gates and provisioning remain resumable and fail closed" {
   let progress = @enterprise.render({
     ..state,
     route: SelfService,
-    self_service: { ..state.self_service, step: Provisioning },
+    self_service: { ..state.self_service, step: Provisioning, },
   })
   assert_true(progress.contains("Provisioning progress"))
   assert_true(
@@ -762,7 +766,7 @@ test "pending organization exposes provider verification or an explicit blocker"
     ..state,
     route: SelfService,
     organizations: [pending],
-    self_service: { ..state.self_service, step: Organization },
+    self_service: { ..state.self_service, step: Organization, },
   })
   assert_true(html.contains("Organization verification pending"))
   assert_true(html.contains("Verify organization"))
@@ -780,7 +784,7 @@ test "pending organization exposes provider verification or an explicit blocker"
     ..state,
     route: SelfService,
     organizations: [blocked],
-    self_service: { ..state.self_service, step: Organization },
+    self_service: { ..state.self_service, step: Organization, },
   })
   assert_true(
     blocked_html.contains("Identity verification provider is unavailable"),
@@ -820,7 +824,7 @@ test "machine lifecycle renders payment recovery compensation failure and termin
     self_service: {
       ..state.self_service,
       step: ContractPayment,
-      order: Some({ ..order, status: AwaitingPayment }),
+      order: Some({ ..order, status: AwaitingPayment, }),
       checkout: Some({
         state: "Submitted",
         provider: "provider-test",
@@ -838,7 +842,7 @@ test "machine lifecycle renders payment recovery compensation failure and termin
     self_service: {
       ..state.self_service,
       step: Provisioning,
-      order: Some({ ..order, status: CompensationPending }),
+      order: Some({ ..order, status: CompensationPending, }),
     },
   })
   assert_true(compensation.contains("refund compensation are being reconciled"))
@@ -849,7 +853,7 @@ test "machine lifecycle renders payment recovery compensation failure and termin
     self_service: {
       ..state.self_service,
       step: Provisioning,
-      order: Some({ ..order, status: FailedOrder }),
+      order: Some({ ..order, status: FailedOrder, }),
     },
   })
   assert_true(failed.contains("This order failed"))
@@ -859,7 +863,7 @@ test "machine lifecycle renders payment recovery compensation failure and termin
     self_service: {
       ..state.self_service,
       step: Provisioning,
-      order: Some({ ..order, status: ActiveOrder }),
+      order: Some({ ..order, status: ActiveOrder, }),
     },
   })
   assert_true(active.contains("Terminate service"))
@@ -870,7 +874,7 @@ test "machine lifecycle renders payment recovery compensation failure and termin
     ..state,
     self_service: {
       ..state.self_service,
-      order: Some({ ..order, status: ActiveOrder }),
+      order: Some({ ..order, status: ActiveOrder, }),
     },
   }.update(Navigate(AccountAccess))
   assert_true(endpoint_access.api_key_issue_open)

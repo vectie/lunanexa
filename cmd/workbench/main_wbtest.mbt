@@ -14,6 +14,36 @@ test "workbench only sends credentials to an HTTPS or loopback origin" {
 }
 
 ///|
+test "model choices require an explicit valid server allowlist" {
+  assert_eq(authorized_models_from_json({}), [])
+  assert_eq(authorized_models_from_json({ "allowed_models": "text.default" }), [])
+  assert_eq(
+    authorized_models_from_json({
+      "allowed_models": ["text.qwen", "bad model", "text.qwen", "text.vision"],
+    }),
+    ["text.qwen", "text.vision"],
+  )
+}
+
+///|
+test "trial bootstrap rejects expired wrong-type and missing-CSRF sessions" {
+  let session : TrialBrowserSession = {
+    session_token: "lnxs_test-only",
+    csrf_token: "csrf-test-only",
+    expires_unix_ms: 100L,
+  }
+  assert_true(valid_trial_browser_session(session, 99L))
+  assert_false(valid_trial_browser_session(session, 100L))
+  assert_false(
+    valid_trial_browser_session(
+      { ..session, session_token: "lnxk_test-only", },
+      99L,
+    ),
+  )
+  assert_false(valid_trial_browser_session({ ..session, csrf_token: "", }, 99L))
+}
+
+///|
 #warnings("-alert_unstable")
 test "public plain HTTP workbench blocks credential entry before transport" {
   let model : AppModel = {

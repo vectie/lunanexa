@@ -362,17 +362,17 @@ fn SelfServiceState::update(
       }
     SelectOrganization(_) => self
     ChooseOrganizationMode(mode) =>
-      { ..self, organization_mode: mode, action_error: None }
-    SubjectKindChanged(value) => { ..self, subject_kind: value }
-    LegalNameChanged(value) => { ..self, legal_name: value }
-    CompanyDisplayNameChanged(value) => { ..self, display_name: value }
-    CountryRegionChanged(value) => { ..self, country_region: value }
-    RegisteredAddressChanged(value) => { ..self, registered_address: value }
-    RegistrationNumberChanged(value) => { ..self, registration_number: value }
-    TaxIdentifierChanged(value) => { ..self, tax_identifier: value }
-    BillingContactNameChanged(value) => { ..self, billing_contact_name: value }
-    BillingEmailChanged(value) => { ..self, billing_email: value }
-    InvitationCodeChanged(value) => { ..self, invitation_code: value }
+      { ..self, organization_mode: mode, action_error: None, }
+    SubjectKindChanged(value) => { ..self, subject_kind: value, }
+    LegalNameChanged(value) => { ..self, legal_name: value, }
+    CompanyDisplayNameChanged(value) => { ..self, display_name: value, }
+    CountryRegionChanged(value) => { ..self, country_region: value, }
+    RegisteredAddressChanged(value) => { ..self, registered_address: value, }
+    RegistrationNumberChanged(value) => { ..self, registration_number: value, }
+    TaxIdentifierChanged(value) => { ..self, tax_identifier: value, }
+    BillingContactNameChanged(value) => { ..self, billing_contact_name: value, }
+    BillingEmailChanged(value) => { ..self, billing_email: value, }
+    InvitationCodeChanged(value) => { ..self, invitation_code: value, }
     SubmitCreateCompany
     | SubmitJoinCompany
     | RefreshOrganizations
@@ -382,12 +382,12 @@ fn SelfServiceState::update(
     | RefreshMachineOrders
     | CancelMachineOrder(_, _)
     | TerminateMachineOrder(_, _) =>
-      { ..self, action_loading: true, action_error: None }
+      { ..self, action_loading: true, action_error: None, }
     ConfirmMachineTermsReviewed =>
-      { ..self, terms_reviewed: true, action_error: None }
-    ContinueWithOrganization => { ..self, step: Capacity, action_error: None }
+      { ..self, terms_reviewed: true, action_error: None, }
+    ContinueWithOrganization => { ..self, step: Capacity, action_error: None, }
     RefreshOfferings =>
-      { ..self, offerings_loading: true, offerings_error: None }
+      { ..self, offerings_loading: true, offerings_error: None, }
     SelectOffering(offering_id) => {
       let template = match
         self.offerings
@@ -405,15 +405,15 @@ fn SelfServiceState::update(
         action_error: None,
       }
     }
-    SelfServiceProjectChanged(value) => { ..self, project_id: value }
-    UnixUsernameChanged(value) => { ..self, unix_username: value }
-    RegionChanged(value) => { ..self, region: value, quote: None }
-    DurationChanged(value) => { ..self, duration_hours: value, quote: None }
+    SelfServiceProjectChanged(value) => { ..self, project_id: value, }
+    UnixUsernameChanged(value) => { ..self, unix_username: value, }
+    RegionChanged(value) => { ..self, region: value, quote: None, }
+    DurationChanged(value) => { ..self, duration_hours: value, quote: None, }
     ModelSelectorChanged(value) =>
-      { ..self, model_selector: value, quote: None }
+      { ..self, model_selector: value, quote: None, }
     ModelTemplateChanged(value) =>
-      { ..self, model_template_ref: value, quote: None }
-    ViewProvisioning => { ..self, step: Provisioning, action_error: None }
+      { ..self, model_template_ref: value, quote: None, }
+    ViewProvisioning => { ..self, step: Provisioning, action_error: None, }
     PreviousSelfServiceStep =>
       {
         ..self,
@@ -428,7 +428,7 @@ fn SelfServiceState::update(
         action_error: None,
       }
     RestartSelfService => default_self_service_state()
-    DismissSelfServiceError => { ..self, action_error: None }
+    DismissSelfServiceError => { ..self, action_error: None, }
   }
 }
 
@@ -535,9 +535,9 @@ fn self_service_text_command(
 ///|
 fn product_label(locale : @i18n.Locale, product : SelfServiceProduct) -> String {
   match product {
-    SharedMaaS => copy(locale, "Shared MaaS", "共享 MaaS")
-    DedicatedMaaS => copy(locale, "Dedicated MaaS", "专属 MaaS")
-    BareGpu => copy(locale, "Bare GPU", "裸 GPU")
+    SharedMaaS => enterprise_copy(locale, SharedMaas)
+    DedicatedMaaS => enterprise_copy(locale, DedicatedMaas)
+    BareGpu => enterprise_copy(locale, BareGpu)
   }
 }
 
@@ -559,7 +559,7 @@ fn product_card(
       type_="button",
       class="quiet-button",
       on_click=self_service_command(emit, SelectProduct(product)),
-      copy(state.locale, "Choose this service", "选择此服务"),
+      enterprise_copy(state.locale, ChooseThisService),
     ),
   ])
 }
@@ -577,22 +577,10 @@ fn product_choices(
         @html.div([
           @html.p(
             class="eyebrow",
-            copy(state.locale, "START WITH AN OUTCOME", "从目标开始"),
+            enterprise_copy(state.locale, StartWithAnOutcome),
           ),
-          @html.h2(
-            copy(
-              state.locale,
-              "What do you want to run?",
-              "您希望以哪种方式运行？",
-            ),
-          ),
-          @html.p(
-            copy(
-              state.locale,
-              "Choose an API, a managed dedicated endpoint, or a machine you control. You can go back without losing entered values.",
-              "选择共享 API、托管专属端点，或由您控制的机器。返回上一步不会丢失已填写内容。",
-            ),
-          ),
+          @html.h2(enterprise_copy(state.locale, WhatDoYouWantToRun)),
+          @html.p(enterprise_copy(state.locale, ChooseAnApiAManagedDedicated)),
         ]),
       ]),
       @html.div(class="service-choice-grid", [
@@ -600,53 +588,25 @@ fn product_choices(
           state,
           emit,
           SharedMaaS,
-          copy(state.locale, "Call a model API", "调用模型 API"),
-          copy(
-            state.locale,
-            "No machine selection. Start with a quota-bound key and pay for measured inference.",
-            "无需选择机器。先创建受额度约束的密钥，按实际推理用量付费。",
-          ),
-          copy(
-            state.locale,
-            "You receive an API key",
-            "您将获得 API 密钥",
-          ),
+          enterprise_copy(state.locale, CallAModelApi),
+          enterprise_copy(state.locale, NoMachineSelectionStartWithA),
+          enterprise_copy(state.locale, YouReceiveAnApiKey),
         ),
         product_card(
           state,
           emit,
           DedicatedMaaS,
-          copy(
-            state.locale,
-            "Deploy a private model endpoint",
-            "部署专属模型端点",
-          ),
-          copy(
-            state.locale,
-            "Choose a GPU and approved model. LunaNexa transfers, deploys, and operates the endpoint.",
-            "选择 GPU 与已批准模型，由 LunaNexa 完成传输、部署与端点运维。",
-          ),
-          copy(
-            state.locale,
-            "You receive a private endpoint",
-            "您将获得专属端点",
-          ),
+          enterprise_copy(state.locale, DeployAPrivateModelEndpoint),
+          enterprise_copy(state.locale, ChooseAGpuAndApprovedModel),
+          enterprise_copy(state.locale, YouReceiveAPrivateEndpoint),
         ),
         product_card(
           state,
           emit,
           BareGpu,
-          copy(state.locale, "Rent a GPU workspace", "租用 GPU 工作区"),
-          copy(
-            state.locale,
-            "Choose capacity and manage your own software through short-lived SSH or WebIDE access.",
-            "选择算力，并通过短期 SSH 或 WebIDE 自主管理软件。",
-          ),
-          copy(
-            state.locale,
-            "You receive SSH and WebIDE access",
-            "您将获得 SSH 与 WebIDE 访问",
-          ),
+          enterprise_copy(state.locale, RentAGpuWorkspace),
+          enterprise_copy(state.locale, ChooseCapacityAndManageYourOwn),
+          enterprise_copy(state.locale, YouReceiveSshAndWebideAccess),
         ),
       ]),
     ],
@@ -669,17 +629,17 @@ fn self_service_step_number(step : SelfServiceStep) -> Int {
 fn self_service_progress(state : EnterpriseState) -> @rabbita.Html {
   let current = self_service_step_number(state.self_service.step)
   let labels = [
-    copy(state.locale, "Service", "服务"),
-    copy(state.locale, "Organization", "组织"),
-    copy(state.locale, "Capacity", "配置"),
-    copy(state.locale, "Quote", "报价"),
-    copy(state.locale, "Contract & payment", "合同与支付"),
-    copy(state.locale, "Provisioning", "开通"),
+    enterprise_copy(state.locale, Service),
+    enterprise_copy(state.locale, Organization),
+    enterprise_copy(state.locale, Capacity),
+    enterprise_copy(state.locale, Quote),
+    enterprise_copy(state.locale, ContractPayment),
+    enterprise_copy(state.locale, Provisioning),
   ]
   @html.nav(
     class="purchase-progress",
     attrs=@html.Attrs::build().aria_label(
-      copy(state.locale, "Order progress", "订单进度"),
+      enterprise_copy(state.locale, OrderProgress),
     ),
     @html.ol(
       [
@@ -730,41 +690,29 @@ fn organization_step(
         None => None
       }
       @html.section(class="guided-panel", [
-        @html.p(class="eyebrow", copy(state.locale, "ORGANIZATION", "组织")),
+        @html.p(class="eyebrow", enterprise_copy(state.locale, Organization338)),
         @html.h2(
           if organization_active {
-            copy(state.locale, "Organization ready", "组织已就绪")
+            enterprise_copy(state.locale, OrganizationReady)
           } else {
-            copy(
-              state.locale,
-              "Organization verification pending",
-              "组织验证待完成",
-            )
+            enterprise_copy(state.locale, OrganizationVerificationPending)
           },
         ),
         @html.p(
           if organization_active {
-            copy(
-              state.locale,
-              "This order will be owned by your active organization. Tenant and subject identifiers are derived from your signed-in session.",
-              "该订单将归属于您的活跃组织。租户和用户标识均从登录会话中派生。",
-            )
+            enterprise_copy(state.locale, ThisOrderWillBeOwnedBy)
           } else {
-            copy(
-              state.locale,
-              "Your company record exists, but machine ordering remains fail-closed until verification succeeds. Shared trial access is unaffected.",
-              "公司记录已创建，但完成验证前机器下单保持失败关闭；共享试用不受影响。",
-            )
+            enterprise_copy(state.locale, YourCompanyRecordExistsButMachine)
           },
         ),
         @html.dl(class="selection-summary", [
           @html.div([
-            @html.dt(copy(state.locale, "Organization", "组织")),
-            @html.dd(class="mono", membership.organization_id),
+            @html.dt(enterprise_copy(state.locale, Organization)),
+            @html.dd([copy_detail(state, emit, membership.organization_id)]),
           ]),
           @html.div([
-            @html.dt(copy(state.locale, "Tenant", "租户")),
-            @html.dd(class="mono", membership.tenant_ref),
+            @html.dt(enterprise_copy(state.locale, Tenant)),
+            @html.dd([copy_detail(state, emit, membership.tenant_ref)]),
           ]),
         ]),
         if !organization_active {
@@ -785,7 +733,7 @@ fn organization_step(
                   target=Blank,
                   rel="noopener noreferrer",
                   escape=true,
-                  copy(state.locale, "Verify organization", "验证组织"),
+                  enterprise_copy(state.locale, VerifyOrganization),
                 ),
               ])
             Some(value) if value.blocker_code ==
@@ -793,10 +741,9 @@ fn organization_step(
               @html.div(
                 class="notice is-error",
                 attrs=@html.Attrs::build().role("alert"),
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "Identity verification provider is unavailable. Machine ordering remains blocked; contact platform support.",
-                  "身份验证服务商不可用。机器下单保持关闭，请联系平台支持。",
+                  IdentityVerificationProviderIsUnavailableMachine,
                 ),
               )
             Some(value) if value.blocker_code ==
@@ -804,20 +751,18 @@ fn organization_step(
               @html.div(
                 class="notice is-warning",
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "Verification dispatch needs retry. Refreshing this organization safely retries the durable request.",
-                  "验证派发需要重试；刷新组织会安全重试持久化请求。",
+                  VerificationDispatchNeedsRetryRefreshingThis,
                 ),
               )
             _ =>
               @html.div(
                 class="inline-state",
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "The verification request is pending while the provider prepares the secure action.",
-                  "验证请求已进入等待，服务商正在准备安全操作入口。",
+                  TheVerificationRequestIsPendingWhile,
                 ),
               )
           }
@@ -829,7 +774,7 @@ fn organization_step(
             type_="button",
             class="quiet-button",
             on_click=self_service_command(emit, PreviousSelfServiceStep),
-            copy(state.locale, "Back", "返回"),
+            enterprise_copy(state.locale, Back),
           ),
           if !organization_active {
             @html.button(
@@ -837,7 +782,7 @@ fn organization_step(
               class="quiet-button",
               disabled=state.self_service.action_loading,
               on_click=self_service_command(emit, RefreshOrganizations),
-              copy(state.locale, "Refresh verification", "刷新验证状态"),
+              enterprise_copy(state.locale, RefreshVerification),
             )
           } else {
             @html.nothing
@@ -848,9 +793,9 @@ fn organization_step(
             disabled=!organization_active,
             on_click=self_service_command(emit, ContinueWithOrganization),
             if organization_active {
-              copy(state.locale, "Continue", "继续")
+              enterprise_copy(state.locale, Continue)
             } else {
-              copy(state.locale, "Waiting for verification", "等待验证")
+              enterprise_copy(state.locale, WaitingForVerification)
             },
           ),
         ]),
@@ -858,20 +803,10 @@ fn organization_step(
     }
     _ =>
       @html.section(class="guided-panel", [
-        @html.p(class="eyebrow", copy(state.locale, "ORGANIZATION", "组织")),
-        @html.h2(
-          copy(
-            state.locale,
-            "Create a company or join one",
-            "创建公司或加入已有公司",
-          ),
-        ),
+        @html.p(class="eyebrow", enterprise_copy(state.locale, Organization338)),
+        @html.h2(enterprise_copy(state.locale, CreateACompanyOrJoinOne)),
         @html.p(
-          copy(
-            state.locale,
-            "A company identity provider is optional. Sign in with the platform identity service, then create the legal customer record here.",
-            "无需企业身份系统。先使用平台身份服务登录，再在这里建立正式客户主体。",
-          ),
+          enterprise_copy(state.locale, ACompanyIdentityProviderIsOptional),
         ),
         @html.div(class="segmented-control", [
           @html.button(
@@ -892,7 +827,7 @@ fn organization_step(
               emit,
               ChooseOrganizationMode(CreateCompany),
             ),
-            copy(state.locale, "Create company", "创建公司"),
+            enterprise_copy(state.locale, CreateCompany),
           ),
           @html.button(
             type_="button",
@@ -912,7 +847,7 @@ fn organization_step(
               emit,
               ChooseOrganizationMode(JoinCompany),
             ),
-            copy(state.locale, "Join company", "加入公司"),
+            enterprise_copy(state.locale, JoinCompany),
           ),
         ]),
         if state.self_service.organization_mode == CreateCompany {
@@ -921,7 +856,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-subject-kind",
-                  copy(state.locale, "Legal subject type", "主体类型"),
+                  enterprise_copy(state.locale, LegalSubjectType),
                 ),
                 @html.select(
                   id="company-subject-kind",
@@ -932,12 +867,12 @@ fn organization_step(
                     @html.option(
                       value="Company",
                       selected=state.self_service.subject_kind == "Company",
-                      copy(state.locale, "Company", "企业"),
+                      enterprise_copy(state.locale, Company),
                     ),
                     @html.option(
                       value="Individual",
                       selected=state.self_service.subject_kind == "Individual",
-                      copy(state.locale, "Individual", "个人"),
+                      enterprise_copy(state.locale, Individual),
                     ),
                   ],
                 ),
@@ -945,7 +880,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-legal-name",
-                  copy(state.locale, "Legal name", "法定名称"),
+                  enterprise_copy(state.locale, LegalName),
                 ),
                 @html.input(
                   id="company-legal-name",
@@ -959,7 +894,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-display-name",
-                  copy(state.locale, "Display name", "显示名称"),
+                  enterprise_copy(state.locale, DisplayName),
                 ),
                 @html.input(
                   id="company-display-name",
@@ -973,7 +908,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-country",
-                  copy(state.locale, "Country code", "国家代码"),
+                  enterprise_copy(state.locale, CountryCode),
                 ),
                 @html.input(
                   id="company-country",
@@ -987,11 +922,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-registration-number",
-                  copy(
-                    state.locale,
-                    "Registration number (optional)",
-                    "注册号（可选）",
-                  ),
+                  enterprise_copy(state.locale, RegistrationNumberOptional),
                 ),
                 @html.input(
                   id="company-registration-number",
@@ -1005,11 +936,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-tax-id",
-                  copy(
-                    state.locale,
-                    "Tax or registration ID (optional)",
-                    "税号或注册号（可选）",
-                  ),
+                  enterprise_copy(state.locale, TaxOrRegistrationIdOptional),
                 ),
                 @html.input(
                   id="company-tax-id",
@@ -1023,7 +950,7 @@ fn organization_step(
               @html.div(class="field field-wide", [
                 @html.label(
                   for_="company-address",
-                  copy(state.locale, "Registered address", "注册地址"),
+                  enterprise_copy(state.locale, RegisteredAddress),
                 ),
                 @html.input(
                   id="company-address",
@@ -1037,7 +964,7 @@ fn organization_step(
               @html.div(class="field", [
                 @html.label(
                   for_="company-billing-contact",
-                  copy(state.locale, "Billing contact", "账单联系人"),
+                  enterprise_copy(state.locale, BillingContact),
                 ),
                 @html.input(
                   id="company-billing-contact",
@@ -1051,7 +978,7 @@ fn organization_step(
               @html.div(class="field field-wide", [
                 @html.label(
                   for_="company-billing-email",
-                  copy(state.locale, "Billing email", "账单邮箱"),
+                  enterprise_copy(state.locale, BillingEmail),
                 ),
                 @html.input(
                   id="company-billing-email",
@@ -1063,10 +990,9 @@ fn organization_step(
                   }),
                 ),
                 @html.small(
-                  copy(
+                  enterprise_copy(
                     state.locale,
-                    "The creator becomes organization owner. Machine ordering remains blocked until required verification succeeds.",
-                    "创建者将成为组织所有者；完成必要验证前，机器下单保持关闭。",
+                    TheCreatorBecomesOrganizationOwnerMachine,
                   ),
                 ),
               ]),
@@ -1077,13 +1003,9 @@ fn organization_step(
               disabled=!company_creation_valid(state.self_service),
               on_click=self_service_command(emit, SubmitCreateCompany),
               if state.self_service.action_loading {
-                copy(
-                  state.locale,
-                  "Creating company…",
-                  "正在创建公司…",
-                )
+                enterprise_copy(state.locale, CreatingCompany)
               } else {
-                copy(state.locale, "Create company", "创建公司")
+                enterprise_copy(state.locale, CreateCompany)
               },
             ),
           ])
@@ -1092,7 +1014,7 @@ fn organization_step(
             @html.div(class="field", [
               @html.label(
                 for_="company-invitation",
-                copy(state.locale, "Invitation code", "邀请码"),
+                enterprise_copy(state.locale, InvitationCode),
               ),
               @html.input(
                 id="company-invitation",
@@ -1104,11 +1026,7 @@ fn organization_step(
                 }),
               ),
               @html.small(
-                copy(
-                  state.locale,
-                  "The signed, one-time invitation selects the organization and granted roles. Do not paste an organization ID.",
-                  "一次性签名邀请会确定组织与授权角色，无需粘贴组织 ID。",
-                ),
+                enterprise_copy(state.locale, TheSignedOneTimeInvitationSelects),
               ),
             ]),
             @html.button(
@@ -1117,13 +1035,9 @@ fn organization_step(
               disabled=!company_join_valid(state.self_service),
               on_click=self_service_command(emit, SubmitJoinCompany),
               if state.self_service.action_loading {
-                copy(
-                  state.locale,
-                  "Joining company…",
-                  "正在加入公司…",
-                )
+                enterprise_copy(state.locale, JoiningCompany)
               } else {
-                copy(state.locale, "Join company", "加入公司")
+                enterprise_copy(state.locale, JoinCompany)
               },
             ),
           ])
@@ -1133,20 +1047,12 @@ fn organization_step(
             type_="button",
             class="quiet-button",
             on_click=self_service_command(emit, PreviousSelfServiceStep),
-            copy(state.locale, "Back", "返回"),
+            enterprise_copy(state.locale, Back),
           ),
         ]),
         @html.details(class="integration-contract", [
-          @html.summary(
-            copy(state.locale, "Integration contract", "集成契约"),
-          ),
-          @html.p(
-            copy(
-              state.locale,
-              "List or create: GET/POST /v1/portal/self/organizations. Creation sends a legal profile; organization, tenant, owner membership, cost center and project identifiers are server-derived. Join uses POST /v1/portal/self/invitations:accept with a one-time invitation secret. Ambiguous multi-organization requests fail closed until X-LunaNexa-Organization is selected.",
-              "查询或创建：GET/POST /v1/portal/self/organizations。创建时提交法定主体资料；组织、租户、所有者成员资格、成本中心与项目标识均由服务端派生。加入使用一次性邀请密钥调用 POST /v1/portal/self/invitations:accept。多组织选择不明确时请求失败关闭，直至选择 X-LunaNexa-Organization。",
-            ),
-          ),
+          @html.summary(enterprise_copy(state.locale, IntegrationContract)),
+          @html.p(enterprise_copy(state.locale, ListOrCreateGetPostV)),
         ]),
       ])
   }
@@ -1165,7 +1071,7 @@ fn offering_card(
       @html.div(class="offering-heading", [
         @html.div([
           @html.h3(offering.display_name),
-          @html.p(class="mono", offering.gpu_sku),
+          @html.p([copy_detail(state, emit, offering.gpu_sku)]),
         ]),
         @html.span(
           class=if offering.available {
@@ -1174,23 +1080,23 @@ fn offering_card(
             "availability"
           },
           if offering.available {
-            copy(state.locale, "Available", "可用")
+            enterprise_copy(state.locale, Available)
           } else {
-            copy(state.locale, "Unavailable", "暂无资源")
+            enterprise_copy(state.locale, Unavailable)
           },
         ),
       ]),
       @html.dl(class="selection-summary", [
         @html.div([
-          @html.dt(copy(state.locale, "GPU", "GPU")),
+          @html.dt(enterprise_copy(state.locale, Gpu)),
           @html.dd("\{offering.accelerator_count}"),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Memory", "显存")),
+          @html.dt(enterprise_copy(state.locale, Memory)),
           @html.dd("\{offering.accelerator_memory_mib / 1024} GiB"),
         ]),
         @html.div([
-          @html.dt(copy(state.locale, "Regions", "区域")),
+          @html.dt(enterprise_copy(state.locale, Regions)),
           @html.dd(offering.regions.join(", ")),
         ]),
       ]),
@@ -1211,9 +1117,9 @@ fn offering_card(
           SelectOffering(offering.offering_id),
         ),
         if selected {
-          copy(state.locale, "Selected", "已选择")
+          enterprise_copy(state.locale, Selected)
         } else {
-          copy(state.locale, "Select capacity", "选择此配置")
+          enterprise_copy(state.locale, SelectCapacity)
         },
       ),
     ],
@@ -1231,32 +1137,20 @@ fn capacity_step(
   if product == SharedMaaS {
     return @html.section(class="guided-panel", [
       @html.p(class="eyebrow", product_label(state.locale, product)),
-      @html.h2(
-        copy(
-          state.locale,
-          "Start with the shared API",
-          "开始使用共享 API",
-        ),
-      ),
-      @html.p(
-        copy(
-          state.locale,
-          "Shared MaaS does not require a machine order. Choose an approved model and create a quota-bound API key from your account.",
-          "共享 MaaS 无需机器订单。请从账户中选择已批准模型并创建受额度约束的 API 密钥。",
-        ),
-      ),
+      @html.h2(enterprise_copy(state.locale, StartWithTheSharedApi)),
+      @html.p(enterprise_copy(state.locale, SharedMaasDoesNotRequireA)),
       @html.div(class="wizard-actions", [
         @html.button(
           type_="button",
           class="quiet-button",
           on_click=self_service_command(emit, PreviousSelfServiceStep),
-          copy(state.locale, "Back", "返回"),
+          enterprise_copy(state.locale, Back),
         ),
         @html.button(
           type_="button",
           class="primary-button",
           on_click=command(emit, Navigate(AccountAccess)),
-          copy(state.locale, "Create API key", "创建 API 密钥"),
+          enterprise_copy(state.locale, CreateApiKey),
         ),
       ]),
     ])
@@ -1269,14 +1163,14 @@ fn capacity_step(
     @html.option(
       value="",
       selected=state.self_service.region == "",
-      copy(state.locale, "Select a region", "选择区域"),
+      enterprise_copy(state.locale, SelectARegion),
     ),
   ]
   let model_options : Array[@rabbita.Html] = [
     @html.option(
       value="",
       selected=state.self_service.model_selector == "",
-      copy(state.locale, "Select a model", "选择模型"),
+      enterprise_copy(state.locale, SelectAModel),
     ),
   ]
   let template_options : Array[@rabbita.Html] = []
@@ -1318,31 +1212,19 @@ fn capacity_step(
   }
   @html.section(class="guided-panel", [
     @html.p(class="eyebrow", product_label(state.locale, product)),
-    @html.h2(copy(state.locale, "Choose capacity", "选择算力配置")),
+    @html.h2(enterprise_copy(state.locale, ChooseCapacity)),
     @html.p(
       if product == DedicatedMaaS {
-        copy(
-          state.locale,
-          "The selected approved model will be transferred from object storage and deployed after payment settles.",
-          "支付完成后，系统会从对象存储传输已批准模型并自动部署。",
-        )
+        enterprise_copy(state.locale, TheSelectedApprovedModelWillBe)
       } else {
-        copy(
-          state.locale,
-          "You receive an isolated workspace. No managed model is installed unless you choose Dedicated MaaS.",
-          "您将获得隔离工作区。除非选择专属 MaaS，否则不会安装托管模型。",
-        )
+        enterprise_copy(state.locale, YouReceiveAnIsolatedWorkspaceNo)
       },
     ),
     if state.self_service.offerings_loading {
       @html.p(
         class="inline-state",
         attrs=@html.Attrs::build().role("status").aria_live("polite"),
-        copy(
-          state.locale,
-          "Loading live capacity…",
-          "正在加载实时算力…",
-        ),
+        enterprise_copy(state.locale, LoadingLiveCapacity),
       )
     } else if state.self_service.offerings_error is Some(error) {
       @html.div(class="inline-state is-error", [
@@ -1351,42 +1233,32 @@ fn capacity_step(
           type_="button",
           class="quiet-button",
           on_click=self_service_command(emit, RefreshOfferings),
-          copy(state.locale, "Retry catalog", "重试加载目录"),
+          enterprise_copy(state.locale, RetryCatalog),
         ),
       ])
     } else if state.self_service.offerings_loaded && matching.length() == 0 {
       @html.div(class="inline-state", [
-        @html.h3(
-          copy(state.locale, "No capacity available", "当前无可用算力"),
-        ),
+        @html.h3(enterprise_copy(state.locale, NoCapacityAvailable)),
         @html.p(
-          copy(
-            state.locale,
-            "Try another service or refresh availability. No order has been created.",
-            "请选择其他服务或刷新库存。当前尚未创建订单。",
-          ),
+          enterprise_copy(state.locale, TryAnotherServiceOrRefreshAvailability),
         ),
         @html.button(
           type_="button",
           class="quiet-button",
           on_click=self_service_command(emit, RefreshOfferings),
-          copy(state.locale, "Refresh availability", "刷新库存"),
+          enterprise_copy(state.locale, RefreshAvailability),
         ),
       ])
     } else if !state.self_service.offerings_loaded {
       @html.div(class="inline-state", [
         @html.p(
-          copy(
-            state.locale,
-            "Load current SKU, region and availability data before configuring an order.",
-            "请先加载当前 SKU、区域和库存数据，再配置订单。",
-          ),
+          enterprise_copy(state.locale, LoadCurrentSkuRegionAndAvailability),
         ),
         @html.button(
           type_="button",
           class="primary-button",
           on_click=self_service_command(emit, RefreshOfferings),
-          copy(state.locale, "Load capacity", "加载算力"),
+          enterprise_copy(state.locale, LoadCapacity),
         ),
       ])
     } else {
@@ -1400,12 +1272,12 @@ fn capacity_step(
     match chosen {
       Some(offering) if offering.kind == product =>
         @html.div(class="guided-form capacity-configuration", [
-          @html.h3(copy(state.locale, "Configure order", "配置订单")),
+          @html.h3(enterprise_copy(state.locale, ConfigureOrder)),
           @html.div(class="form-grid", [
             @html.div(class="field", [
               @html.label(
                 for_="self-service-project",
-                copy(state.locale, "Project", "项目"),
+                enterprise_copy(state.locale, Project),
               ),
               @html.input(
                 id="self-service-project",
@@ -1420,7 +1292,7 @@ fn capacity_step(
               @html.div(class="field", [
                 @html.label(
                   for_="self-service-unix-username",
-                  copy(state.locale, "Linux username", "Linux 用户名"),
+                  enterprise_copy(state.locale, LinuxUsername),
                 ),
                 @html.input(
                   id="self-service-unix-username",
@@ -1450,11 +1322,7 @@ fn capacity_step(
                   } else {
                     ""
                   },
-                  copy(
-                    state.locale,
-                    "Required for bare GPU access: start with a lowercase letter; use a–z, 0–9, _ or -. Reserved system names are rejected.",
-                    "裸 GPU 访问必填：以小写字母开头，只可使用 a–z、0–9、_ 或 -；系统保留名称会被拒绝。",
-                  ),
+                  enterprise_copy(state.locale, RequiredForBareGpuAccessStart),
                 ),
               ])
             } else {
@@ -1463,7 +1331,7 @@ fn capacity_step(
             @html.div(class="field", [
               @html.label(
                 for_="self-service-region",
-                copy(state.locale, "Region", "区域"),
+                enterprise_copy(state.locale, Region),
               ),
               @html.select(
                 id="self-service-region",
@@ -1476,7 +1344,7 @@ fn capacity_step(
             @html.div(class="field", [
               @html.label(
                 for_="self-service-duration",
-                copy(state.locale, "Rental period", "租用周期"),
+                enterprise_copy(state.locale, RentalPeriod),
               ),
               @html.select(
                 id="self-service-duration",
@@ -1493,22 +1361,22 @@ fn capacity_step(
                   @html.option(
                     value="24",
                     selected=state.self_service.duration_hours == 24,
-                    copy(state.locale, "24 hours", "24 小时"),
+                    enterprise_copy(state.locale, Hours),
                   ),
                   @html.option(
                     value="168",
                     selected=state.self_service.duration_hours == 168,
-                    copy(state.locale, "7 days", "7 天"),
+                    enterprise_copy(state.locale, Days),
                   ),
                   @html.option(
                     value="720",
                     selected=state.self_service.duration_hours == 720,
-                    copy(state.locale, "30 days", "30 天"),
+                    enterprise_copy(state.locale, Days101),
                   ),
                 ],
               ),
               @html.small(
-                "\{offering.minimum_duration_hours}–\{offering.maximum_duration_hours} \{copy(state.locale, "hours allowed", "小时可选")}",
+                "\{offering.minimum_duration_hours}–\{offering.maximum_duration_hours} \{enterprise_copy(state.locale, HoursAllowed)}",
               ),
             ]),
             if product == DedicatedMaaS {
@@ -1516,7 +1384,7 @@ fn capacity_step(
                 @html.div(class="field", [
                   @html.label(
                     for_="self-service-model",
-                    copy(state.locale, "Approved model", "已批准模型"),
+                    enterprise_copy(state.locale, ApprovedModel),
                   ),
                   @html.select(
                     id="self-service-model",
@@ -1528,18 +1396,16 @@ fn capacity_step(
                   if state.model_catalog.length() == 0 {
                     @html.small(
                       class="field-error",
-                      copy(
+                      enterprise_copy(
                         state.locale,
-                        "No approved model is available for this organization.",
-                        "该组织当前没有可部署的已批准模型。",
+                        NoApprovedModelIsAvailableFor,
                       ),
                     )
                   } else {
                     @html.small(
-                      copy(
+                      enterprise_copy(
                         state.locale,
-                        "Only catalog-approved models can be materialized.",
-                        "仅可传输并部署目录中已批准的模型。",
+                        OnlyCatalogApprovedModelsCanBe,
                       ),
                     )
                   },
@@ -1547,7 +1413,7 @@ fn capacity_step(
                 @html.div(class="field", [
                   @html.label(
                     for_="self-service-model-template",
-                    copy(state.locale, "Deployment template", "部署模板"),
+                    enterprise_copy(state.locale, DeploymentTemplate),
                   ),
                   @html.select(
                     id="self-service-model-template",
@@ -1557,24 +1423,19 @@ fn capacity_step(
                     template_options,
                   ),
                   @html.small(
-                    copy(
+                    enterprise_copy(
                       state.locale,
-                      "Only templates reviewed for this SKU can be quoted.",
-                      "仅可报价已针对该 SKU 审核的模板。",
+                      OnlyTemplatesReviewedForThisSku,
                     ),
                   ),
                 ]),
               ])
             } else {
               @html.div(class="field", [
-                @html.label(copy(state.locale, "Managed model", "托管模型")),
+                @html.label(enterprise_copy(state.locale, ManagedModel)),
                 @html.p(
                   class="read-only-value",
-                  copy(
-                    state.locale,
-                    "None — you manage this workspace",
-                    "无——由您自行管理工作区",
-                  ),
+                  enterprise_copy(state.locale, NoneYouManageThisWorkspace),
                 ),
               ])
             },
@@ -1585,13 +1446,9 @@ fn capacity_step(
             disabled=!self_service_configuration_valid(state.self_service),
             on_click=self_service_command(emit, RequestQuote),
             if state.self_service.action_loading {
-              copy(
-                state.locale,
-                "Calculating signed quote…",
-                "正在计算签名报价…",
-              )
+              enterprise_copy(state.locale, CalculatingSignedQuote)
             } else {
-              copy(state.locale, "Review price", "查看报价")
+              enterprise_copy(state.locale, ReviewPrice)
             },
           ),
         ])
@@ -1602,11 +1459,11 @@ fn capacity_step(
         type_="button",
         class="quiet-button",
         on_click=self_service_command(emit, PreviousSelfServiceStep),
-        copy(state.locale, "Back", "返回"),
+        enterprise_copy(state.locale, Back),
       ),
     ]),
     @html.details(class="integration-contract", [
-      @html.summary(copy(state.locale, "Integration contract", "集成契约")),
+      @html.summary(enterprise_copy(state.locale, IntegrationContract)),
       @html.p(
         "GET /v1/portal/self/machine-offerings · POST /v1/portal/self/machine-quotes · BareMachine quotes require unix_username; DedicatedEndpoint quotes omit it · X-LunaNexa-Organization: <selected organization>",
       ),
@@ -1622,19 +1479,13 @@ fn quote_step(
   let agreements_ready = state.agreements.any(value => value.state == Executed)
   let terms_ready = agreements_ready || state.self_service.terms_accepted
   @html.section(class="guided-panel", [
-    @html.p(class="eyebrow", copy(state.locale, "SIGNED QUOTE", "签名报价")),
-    @html.h2(
-      copy(state.locale, "Review price and scope", "核对价格与范围"),
-    ),
+    @html.p(class="eyebrow", enterprise_copy(state.locale, SignedQuote)),
+    @html.h2(enterprise_copy(state.locale, ReviewPriceAndScope)),
     if state.self_service.action_loading {
       @html.p(
         class="inline-state",
         attrs=@html.Attrs::build().role("status").aria_live("polite"),
-        copy(
-          state.locale,
-          "Calculating an authoritative quote…",
-          "正在计算权威报价…",
-        ),
+        enterprise_copy(state.locale, CalculatingAnAuthoritativeQuote),
       )
     } else if state.self_service.action_error is Some(error) {
       @html.div(class="inline-state is-error", [
@@ -1643,7 +1494,7 @@ fn quote_step(
           type_="button",
           class="quiet-button",
           on_click=self_service_command(emit, DismissSelfServiceError),
-          copy(state.locale, "Dismiss", "关闭"),
+          enterprise_copy(state.locale, Dismiss),
         ),
       ])
     } else {
@@ -1652,69 +1503,57 @@ fn quote_step(
           @html.div(class="quote-review", [
             @html.dl(class="selection-summary quote-facts", [
               @html.div([
-                @html.dt(copy(state.locale, "Total", "总额")),
+                @html.dt(enterprise_copy(state.locale, Total)),
                 @html.dd(class="quote-total", quote.display_amount),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Quote", "报价")),
-                @html.dd(class="mono", quote.quote_id),
+                @html.dt(enterprise_copy(state.locale, Quote)),
+                @html.dd([copy_detail(state, emit, quote.quote_id)]),
               ]),
               @html.div([
-                @html.dt(copy(state.locale, "Valid until", "有效期至")),
+                @html.dt(enterprise_copy(state.locale, ValidUntil)),
                 @html.dd(
                   @contractdoc.format_unix_ms_utc(quote.valid_until_unix_ms),
                 ),
               ]),
               @html.div([
-                @html.dt(
-                  copy(state.locale, "Currency / scale", "币种 / 精度"),
-                ),
+                @html.dt(enterprise_copy(state.locale, CurrencyScale)),
                 @html.dd("\{quote.currency} / \{quote.money_scale}"),
               ]),
             ]),
             @html.p(
               class="trust-callout",
-              copy(
+              enterprise_copy(
                 state.locale,
-                "Amount, availability window and terms digest are server-derived and signed. Creating the order is idempotent; it does not mark payment as settled.",
-                "金额、库存窗口与条款摘要均由服务端派生并签名。创建订单可安全重试，且不会伪造支付成功状态。",
+                AmountAvailabilityWindowAndTermsDigest,
               ),
             ),
-            @html.code(class="mono", quote.terms_digest),
+            copy_detail(state, emit, quote.terms_digest),
             if !agreements_ready {
               match state.self_service.terms {
                 Some(terms) =>
                   @html.div(class="terms-acceptance", [
                     @html.strong(
-                      copy(
-                        state.locale,
-                        "Machine self-service terms",
-                        "机器自助服务条款",
-                      ),
+                      enterprise_copy(state.locale, MachineSelfServiceTerms),
                     ),
                     @html.p(
                       "\{terms.template_id} · \{terms.version} · \{terms.locale}",
                     ),
-                    @html.code(class="mono", terms.rendered_document_hash),
+                    copy_detail(state, emit, terms.rendered_document_hash),
                     @html.a(
                       class="quiet-button action-link",
                       href=terms.document_uri,
                       target=Blank,
                       rel="noopener noreferrer",
                       escape=true,
-                      copy(
-                        state.locale,
-                        "Open immutable terms document",
-                        "打开不可变条款文档",
-                      ),
+                      enterprise_copy(state.locale, OpenImmutableTermsDocument),
                     ),
                     if state.self_service.terms_accepted {
                       @html.p(
                         class="success-copy",
-                        copy(
+                        enterprise_copy(
                           state.locale,
-                          "Acceptance evidence recorded for this session.",
-                          "本次会话的接受证据已记录。",
+                          AcceptanceEvidenceRecordedForThisSession,
                         ),
                       )
                     } else {
@@ -1728,17 +1567,9 @@ fn quote_step(
                             ConfirmMachineTermsReviewed,
                           ),
                           if state.self_service.terms_reviewed {
-                            copy(
-                              state.locale,
-                              "Document reviewed",
-                              "已阅读文档",
-                            )
+                            enterprise_copy(state.locale, DocumentReviewed)
                           } else {
-                            copy(
-                              state.locale,
-                              "I reviewed this document",
-                              "我已阅读此文档",
-                            )
+                            enterprise_copy(state.locale, IReviewedThisDocument)
                           },
                         ),
                         @html.button(
@@ -1750,11 +1581,7 @@ fn quote_step(
                             emit,
                             AcceptMachineTerms,
                           ),
-                          copy(
-                            state.locale,
-                            "Accept terms to continue",
-                            "接受条款并继续",
-                          ),
+                          enterprise_copy(state.locale, AcceptTermsToContinue),
                         ),
                       ])
                     },
@@ -1763,20 +1590,18 @@ fn quote_step(
                   @html.p(
                     class="notice is-error",
                     attrs=@html.Attrs::build().role("alert"),
-                    copy(
+                    enterprise_copy(
                       state.locale,
-                      "Machine terms are unavailable. Ordering remains blocked.",
-                      "机器条款不可用，下单保持关闭。",
+                      MachineTermsAreUnavailableOrderingRemains,
                     ),
                   )
               }
             } else {
               @html.p(
                 class="success-copy",
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "An executed organization agreement satisfies the machine terms gate.",
-                  "组织已执行的协议满足机器条款门槛。",
+                  AnExecutedOrganizationAgreementSatisfiesThe,
                 ),
               )
             },
@@ -1785,19 +1610,16 @@ fn quote_step(
               class="primary-button",
               disabled=!terms_ready || state.self_service.action_loading,
               on_click=self_service_command(emit, CreateMachineOrder),
-              copy(state.locale, "Create order", "创建订单"),
+              enterprise_copy(state.locale, CreateOrder),
             ),
           ])
         None =>
           @html.div(class="inline-state", [
-            @html.h3(
-              copy(state.locale, "Quote not available", "报价尚未生成"),
-            ),
+            @html.h3(enterprise_copy(state.locale, QuoteNotAvailable)),
             @html.p(
-              copy(
+              enterprise_copy(
                 state.locale,
-                "Return to capacity, verify the configuration, and request a fresh quote.",
-                "请返回配置步骤，确认参数后重新请求报价。",
+                ReturnToCapacityVerifyTheConfiguration,
               ),
             ),
           ])
@@ -1808,7 +1630,7 @@ fn quote_step(
         type_="button",
         class="quiet-button",
         on_click=self_service_command(emit, PreviousSelfServiceStep),
-        copy(state.locale, "Back to capacity", "返回配置"),
+        enterprise_copy(state.locale, BackToCapacity),
       ),
     ]),
   ])
@@ -1820,16 +1642,16 @@ fn order_status_label(
   status : MachineOrderStatus,
 ) -> String {
   match status {
-    AwaitingPayment => copy(locale, "Awaiting payment", "等待支付")
-    PaymentSettled => copy(locale, "Payment settled", "支付已结算")
-    ProvisioningOrder => copy(locale, "Provisioning", "正在开通")
-    ActiveOrder => copy(locale, "Active", "已开通")
-    CancellationPending => copy(locale, "Cancellation pending", "正在取消")
-    TerminationPending => copy(locale, "Termination pending", "正在终止")
-    CompensationPending => copy(locale, "Compensation pending", "正在补偿")
-    CancelledOrder => copy(locale, "Cancelled", "已取消")
-    TerminatedOrder => copy(locale, "Terminated", "已终止")
-    FailedOrder => copy(locale, "Failed", "失败")
+    AwaitingPayment => enterprise_copy(locale, AwaitingPayment)
+    PaymentSettled => enterprise_copy(locale, PaymentSettled)
+    ProvisioningOrder => enterprise_copy(locale, Provisioning431)
+    ActiveOrder => enterprise_copy(locale, Active432)
+    CancellationPending => enterprise_copy(locale, CancellationPending)
+    TerminationPending => enterprise_copy(locale, TerminationPending)
+    CompensationPending => enterprise_copy(locale, CompensationPending)
+    CancelledOrder => enterprise_copy(locale, Cancelled)
+    TerminatedOrder => enterprise_copy(locale, Terminated)
+    FailedOrder => enterprise_copy(locale, Failed)
   }
 }
 
@@ -1841,13 +1663,8 @@ fn contract_payment_step(
   let agreements_ready = state.agreements.any(value => value.state == Executed) ||
     state.self_service.terms_accepted
   @html.section(class="guided-panel", [
-    @html.p(
-      class="eyebrow",
-      copy(state.locale, "CONTRACT & PAYMENT", "合同与支付"),
-    ),
-    @html.h2(
-      copy(state.locale, "Complete commercial gates", "完成商业准入"),
-    ),
+    @html.p(class="eyebrow", enterprise_copy(state.locale, ContractPayment437)),
+    @html.h2(enterprise_copy(state.locale, CompleteCommercialGates)),
     match state.self_service.order {
       Some(order) =>
         @html.div(class="order-gates", [
@@ -1865,22 +1682,12 @@ fn contract_payment_step(
               },
             ),
             @html.div([
-              @html.h3(
-                copy(state.locale, "Required agreements", "必需协议"),
-              ),
+              @html.h3(enterprise_copy(state.locale, RequiredAgreements)),
               @html.p(
                 if agreements_ready {
-                  copy(
-                    state.locale,
-                    "Executed evidence is verified.",
-                    "签署证据已验证。",
-                  )
+                  enterprise_copy(state.locale, ExecutedEvidenceIsVerified)
                 } else {
-                  copy(
-                    state.locale,
-                    "A legal signer must complete every required agreement.",
-                    "法定签署人必须完成全部必需协议。",
-                  )
+                  enterprise_copy(state.locale, ALegalSignerMustCompleteEvery)
                 },
               ),
             ]),
@@ -1888,7 +1695,7 @@ fn contract_payment_step(
               type_="button",
               class="quiet-button",
               on_click=command(emit, Navigate(Agreements)),
-              copy(state.locale, "Open agreements", "打开协议"),
+              enterprise_copy(state.locale, OpenAgreements),
             ),
           ]),
           @html.div(class="gate-row", [
@@ -1905,20 +1712,15 @@ fn contract_payment_step(
               },
             ),
             @html.div([
-              @html.h3(copy(state.locale, "Secure payment", "安全支付")),
+              @html.h3(enterprise_copy(state.locale, SecurePayment)),
               @html.p(
                 if order.status == AwaitingPayment {
-                  copy(
+                  enterprise_copy(
                     state.locale,
-                    "Payment settlement is verified independently before capacity is reserved.",
-                    "系统独立验证支付结算后才会预留算力。",
+                    PaymentSettlementIsVerifiedIndependentlyBefore,
                   )
                 } else {
-                  copy(
-                    state.locale,
-                    "Payment evidence received.",
-                    "已收到支付证据。",
-                  )
+                  enterprise_copy(state.locale, PaymentEvidenceReceived)
                 },
               ),
             ]),
@@ -1933,11 +1735,7 @@ fn contract_payment_step(
                   escape=true,
                   [
                     @html.span(
-                      copy(
-                        state.locale,
-                        "Open secure checkout",
-                        "打开安全支付",
-                      ),
+                      enterprise_copy(state.locale, OpenSecureCheckout),
                     ),
                     @html.span(" · \{checkout.provider}"),
                   ],
@@ -1948,13 +1746,9 @@ fn contract_payment_step(
                   class="primary-button",
                   on_click=self_service_command(emit, RefreshMachineOrders),
                   if order.status == AwaitingPayment {
-                    copy(
-                      state.locale,
-                      "Refresh payment status",
-                      "刷新支付状态",
-                    )
+                    enterprise_copy(state.locale, RefreshPaymentStatus)
                   } else {
-                    copy(state.locale, "Refresh order", "刷新订单")
+                    enterprise_copy(state.locale, RefreshOrder)
                   },
                 )
             },
@@ -1974,16 +1768,16 @@ fn contract_payment_step(
           ]),
           @html.div(class="order-reference", [
             @html.strong(
-              "\{copy(state.locale, "Order", "订单")} · \{order_status_label(state.locale, order.status)}",
+              "\{enterprise_copy(state.locale, Order)} · \{order_status_label(state.locale, order.status)}",
             ),
-            @html.code(class="mono", order.order_id),
+            copy_detail(state, emit, order.order_id),
           ]),
           @html.button(
             type_="button",
             class="primary-button",
             disabled=order.status == AwaitingPayment,
             on_click=self_service_command(emit, ViewProvisioning),
-            copy(state.locale, "Track provisioning", "跟踪开通进度"),
+            enterprise_copy(state.locale, TrackProvisioning),
           ),
           if order.status == AwaitingPayment {
             @html.button(
@@ -1994,7 +1788,7 @@ fn contract_payment_step(
                 emit,
                 CancelMachineOrder(order.order_id, order.generation),
               ),
-              copy(state.locale, "Cancel unpaid order", "取消未支付订单"),
+              enterprise_copy(state.locale, CancelUnpaidOrder),
             )
           } else {
             @html.nothing
@@ -2002,16 +1796,8 @@ fn contract_payment_step(
         ])
       None =>
         @html.div(class="inline-state", [
-          @html.h3(
-            copy(state.locale, "Order not created", "订单尚未创建"),
-          ),
-          @html.p(
-            copy(
-              state.locale,
-              "No payment request will be created until an idempotent machine order exists.",
-              "创建可安全重试的机器订单之前，系统不会发起支付请求。",
-            ),
-          ),
+          @html.h3(enterprise_copy(state.locale, OrderNotCreated)),
+          @html.p(enterprise_copy(state.locale, NoPaymentRequestWillBeCreated)),
         ])
     },
     @html.div(class="wizard-actions", [
@@ -2019,11 +1805,11 @@ fn contract_payment_step(
         type_="button",
         class="quiet-button",
         on_click=self_service_command(emit, PreviousSelfServiceStep),
-        copy(state.locale, "Back to quote", "返回报价"),
+        enterprise_copy(state.locale, BackToQuote),
       ),
     ]),
     @html.details(class="integration-contract", [
-      @html.summary(copy(state.locale, "Integration contract", "集成契约")),
+      @html.summary(enterprise_copy(state.locale, IntegrationContract)),
       @html.p(
         "POST /v1/portal/self/machine-orders · X-LunaNexa-Organization: <selected organization> · entitlement_transaction_ref = machine-order:<order_id>",
       ),
@@ -2037,19 +1823,19 @@ fn provisioning_step(
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   @html.section(class="guided-panel", [
-    @html.p(class="eyebrow", copy(state.locale, "LIVE ORDER", "实时订单")),
-    @html.h2(copy(state.locale, "Provisioning progress", "开通进度")),
+    @html.p(class="eyebrow", enterprise_copy(state.locale, LiveOrder)),
+    @html.h2(enterprise_copy(state.locale, ProvisioningProgress)),
     match state.self_service.order {
       Some(order) =>
         @html.div([
           @html.div(class="order-status-heading", [
             @html.div([
               @html.strong(order_status_label(state.locale, order.status)),
-              @html.p(class="mono", order.order_id),
+              @html.p([copy_detail(state, emit, order.order_id)]),
             ]),
             @html.span(
               class="state-pill",
-              "\{copy(state.locale, "Generation", "版本")} \{order.generation}",
+              "\{enterprise_copy(state.locale, Generation456)} \{order.generation}",
             ),
           ]),
           match order.status {
@@ -2057,46 +1843,29 @@ fn provisioning_step(
               @html.div(
                 class="notice is-warning",
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
-                copy(
+                enterprise_copy(
                   state.locale,
-                  "Payment was verified, but capacity could not be completed. Cleanup and refund compensation are being reconciled; do not place a duplicate order.",
-                  "支付已验证，但算力未能完成开通。系统正在核对清理与退款补偿，请勿重复下单。",
+                  PaymentWasVerifiedButCapacityCould,
                 ),
               )
             FailedOrder =>
               @html.div(
                 class="notice is-error",
                 attrs=@html.Attrs::build().role("alert"),
-                copy(
-                  state.locale,
-                  "This order failed. Refresh for the durable final state before starting another order.",
-                  "该订单失败。创建新订单前，请刷新并确认其持久化最终状态。",
-                ),
+                enterprise_copy(state.locale, ThisOrderFailedRefreshForThe),
               )
             CancellationPending | TerminationPending =>
               @html.div(
                 class="notice is-warning",
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
-                copy(
-                  state.locale,
-                  "The requested shutdown is in progress. Access remains untrusted until cleanup is verified.",
-                  "关停请求正在处理中；完成清理验证前，不应继续信任访问状态。",
-                ),
+                enterprise_copy(state.locale, TheRequestedShutdownIsInProgress),
               )
             _ => @html.nothing
           },
           @html.ol(class="provisioning-timeline", [
             @html.li(class="is-complete", [
-              @html.strong(
-                copy(state.locale, "Order accepted", "订单已受理"),
-              ),
-              @html.p(
-                copy(
-                  state.locale,
-                  "Commercial scope is immutable.",
-                  "商业范围已固定。",
-                ),
-              ),
+              @html.strong(enterprise_copy(state.locale, OrderAccepted)),
+              @html.p(enterprise_copy(state.locale, CommercialScopeIsImmutable)),
             ]),
             @html.li(
               class=if order.status == AwaitingPayment {
@@ -2105,15 +1874,9 @@ fn provisioning_step(
                 "is-complete"
               },
               [
-                @html.strong(
-                  copy(state.locale, "Payment settled", "支付结算"),
-                ),
+                @html.strong(enterprise_copy(state.locale, PaymentSettled462)),
                 @html.p(
-                  copy(
-                    state.locale,
-                    "Provider evidence is verified.",
-                    "支付服务商证据已验证。",
-                  ),
+                  enterprise_copy(state.locale, ProviderEvidenceIsVerified),
                 ),
               ],
             ),
@@ -2126,15 +1889,9 @@ fn provisioning_step(
                 ""
               },
               [
-                @html.strong(
-                  copy(state.locale, "Capacity provisioned", "算力开通"),
-                ),
+                @html.strong(enterprise_copy(state.locale, CapacityProvisioned)),
                 @html.p(
-                  copy(
-                    state.locale,
-                    "A lease is reserved and prepared.",
-                    "正在预留并准备租约。",
-                  ),
+                  enterprise_copy(state.locale, ALeaseIsReservedAndPrepared),
                 ),
               ],
             ),
@@ -2148,14 +1905,11 @@ fn provisioning_step(
                   ""
                 },
                 [
-                  @html.strong(
-                    copy(state.locale, "Model deployed", "模型部署"),
-                  ),
+                  @html.strong(enterprise_copy(state.locale, ModelDeployed)),
                   @html.p(
-                    copy(
+                    enterprise_copy(
                       state.locale,
-                      "Artifact transfer, verification and LunaFlux deployment are tracked together.",
-                      "模型传输、校验与 LunaFlux 部署统一跟踪。",
+                      ArtifactTransferVerificationAndLunafluxDeployment,
                     ),
                   ),
                 ],
@@ -2168,15 +1922,9 @@ fn provisioning_step(
                   ""
                 },
                 [
-                  @html.strong(
-                    copy(state.locale, "Access issued", "访问已签发"),
-                  ),
+                  @html.strong(enterprise_copy(state.locale, AccessIssued)),
                   @html.p(
-                    copy(
-                      state.locale,
-                      "Short-lived SSH and WebIDE access only.",
-                      "仅签发短期 SSH 与 WebIDE 访问。",
-                    ),
+                    enterprise_copy(state.locale, ShortLivedSshAndWebideAccess),
                   ),
                 ],
               )
@@ -2184,19 +1932,17 @@ fn provisioning_step(
             @html.li(
               class=if order.status == ActiveOrder { "is-complete" } else { "" },
               [
-                @html.strong(copy(state.locale, "Ready", "已就绪")),
+                @html.strong(enterprise_copy(state.locale, Ready)),
                 @html.p(
                   if order.kind == DedicatedMaaS {
-                    copy(
+                    enterprise_copy(
                       state.locale,
-                      "Use the canonical /v1/workloads endpoint with an order-bound key from Endpoint access.",
-                      "使用标准 /v1/workloads 端点，并在“端点访问”中创建订单绑定密钥。",
+                      UseTheCanonicalVWorkloadsEndpoint,
                     )
                   } else {
-                    copy(
+                    enterprise_copy(
                       state.locale,
-                      "Machine access becomes visible in My machine.",
-                      "机器访问将在“我的机器”中显示。",
+                      MachineAccessBecomesVisibleInMy,
                     )
                   },
                 ),
@@ -2205,25 +1951,29 @@ fn provisioning_step(
           ]),
           @html.dl(class="selection-summary", [
             @html.div([
-              @html.dt(copy(state.locale, "GPU", "GPU")),
+              @html.dt(enterprise_copy(state.locale, Gpu)),
               @html.dd(order.gpu_sku),
             ]),
             @html.div([
-              @html.dt(copy(state.locale, "Region", "区域")),
+              @html.dt(enterprise_copy(state.locale, Region)),
               @html.dd(order.region),
             ]),
             @html.div([
-              @html.dt(copy(state.locale, "Lease", "租约")),
-              @html.dd(class="mono", order.lease_ref.unwrap_or("—")),
+              @html.dt(enterprise_copy(state.locale, Lease)),
+              @html.dd([
+                copy_detail(state, emit, order.lease_ref.unwrap_or("—")),
+              ]),
             ]),
             @html.div([
-              @html.dt(copy(state.locale, "Deployment", "部署")),
-              @html.dd(class="mono", order.deployment_ref.unwrap_or("—")),
+              @html.dt(enterprise_copy(state.locale, Deployment)),
+              @html.dd([
+                copy_detail(state, emit, order.deployment_ref.unwrap_or("—")),
+              ]),
             ]),
             if order.kind == DedicatedMaaS && order.status == ActiveOrder {
               @html.div([
-                @html.dt(copy(state.locale, "Endpoint", "端点")),
-                @html.dd(class="mono", "/v1/workloads"),
+                @html.dt(enterprise_copy(state.locale, Endpoint)),
+                @html.dd([copy_detail(state, emit, "/v1/workloads")]),
               ])
             } else {
               @html.nothing
@@ -2245,17 +1995,9 @@ fn provisioning_step(
                   ),
                 ),
                 if order.kind == BareGpu {
-                  copy(
-                    state.locale,
-                    "Open machine access",
-                    "打开机器访问",
-                  )
+                  enterprise_copy(state.locale, OpenMachineAccess)
                 } else {
-                  copy(
-                    state.locale,
-                    "View endpoint access",
-                    "查看端点访问",
-                  )
+                  enterprise_copy(state.locale, ViewEndpointAccess)
                 },
               ),
               @html.button(
@@ -2266,18 +2008,14 @@ fn provisioning_step(
                   emit,
                   TerminateMachineOrder(order.order_id, order.generation),
                 ),
-                copy(state.locale, "Terminate service", "终止服务"),
+                enterprise_copy(state.locale, TerminateService),
               ),
             ])
           } else {
             @html.p(
               class="inline-state",
               attrs=@html.Attrs::build().role("status").aria_live("polite"),
-              copy(
-                state.locale,
-                "You can safely leave this page. Progress is stored with the order and resumes here.",
-                "您可以安全离开此页面。进度保存在订单中，返回后可继续跟踪。",
-              ),
+              enterprise_copy(state.locale, YouCanSafelyLeaveThisPage),
             )
           },
           if order.status == PaymentSettled || order.status == ProvisioningOrder {
@@ -2289,7 +2027,7 @@ fn provisioning_step(
                 emit,
                 CancelMachineOrder(order.order_id, order.generation),
               ),
-              copy(state.locale, "Request cancellation", "申请取消"),
+              enterprise_copy(state.locale, RequestCancellation),
             )
           } else {
             @html.nothing
@@ -2299,31 +2037,23 @@ fn provisioning_step(
             class="quiet-button",
             disabled=state.self_service.action_loading,
             on_click=self_service_command(emit, RefreshMachineOrders),
-            copy(state.locale, "Refresh order status", "刷新订单状态"),
+            enterprise_copy(state.locale, RefreshOrderStatus),
           ),
         ])
       None =>
         @html.div(class="inline-state", [
-          @html.h3(copy(state.locale, "No active order", "没有活跃订单")),
-          @html.p(
-            copy(
-              state.locale,
-              "Start a new service order or refresh the order list.",
-              "请创建新服务订单或刷新订单列表。",
-            ),
-          ),
+          @html.h3(enterprise_copy(state.locale, NoActiveOrder)),
+          @html.p(enterprise_copy(state.locale, StartANewServiceOrderOr)),
         ])
     },
     if state.self_service.orders.length() > 0 {
       @html.section(class="recent-machine-orders", [
-        @html.h3(
-          copy(state.locale, "Recent machine orders", "最近机器订单"),
-        ),
+        @html.h3(enterprise_copy(state.locale, RecentMachineOrders)),
         @html.ul(
           [
             for order in state.self_service.orders => {
               @html.li([
-                @html.code(class="mono", order.order_id),
+                copy_detail(state, emit, order.order_id),
                 @html.span(order_status_label(state.locale, order.status)),
                 @html.span(order.gpu_sku + " · " + order.display_amount),
               ])
@@ -2339,11 +2069,11 @@ fn provisioning_step(
         type_="button",
         class="quiet-button",
         on_click=self_service_command(emit, RestartSelfService),
-        copy(state.locale, "Start another order", "创建另一个订单"),
+        enterprise_copy(state.locale, StartAnotherOrder),
       ),
     ]),
     @html.details(class="integration-contract", [
-      @html.summary(copy(state.locale, "Integration contract", "集成契约")),
+      @html.summary(enterprise_copy(state.locale, IntegrationContract)),
       @html.p(
         "GET /v1/portal/self/machine-orders · POST /v1/portal/self/machine-orders/{id}/cancel · POST /v1/portal/self/machine-orders/{id}/terminate · X-LunaNexa-Organization: <selected organization>",
       ),

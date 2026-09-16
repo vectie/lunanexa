@@ -30,6 +30,7 @@ pub(all) struct WorkbenchState {
   files : Array[DraftFile]
   active_path : String
   model_selector : String
+  allowed_models : Array[String]
   instruction : String
   output_text : String
   receipt : String
@@ -53,16 +54,9 @@ pub(all) enum WorkbenchMessage {
   SelectEditor(@workspace.EditorConnectionKind)
   SelectIntegration(@workspace.IntegrationProvider)
   ClearNotice
+  ExportDrafts
+  CopyDiagnostic(String)
 } derive(Eq)
-
-///|
-fn copy(locale : @i18n.Locale, english : String, chinese : String) -> String {
-  if locale.is_chinese() {
-    chinese
-  } else {
-    english
-  }
-}
 
 ///|
 fn integration_description(
@@ -70,26 +64,11 @@ fn integration_description(
   provider : @workspace.IntegrationProvider,
 ) -> String {
   match provider {
-    CodeBuddy =>
-      copy(
-        locale, "Open CodeBuddy with scoped LunaNexa client metadata.", "使用限定范围的 LunaNexa 客户端元数据打开 CodeBuddy。",
-      )
-    WorkBuddy =>
-      copy(
-        locale, "Continue in WorkBuddy through the northbound contract.", "通过北向契约在 WorkBuddy 中继续。",
-      )
-    Trae =>
-      copy(
-        locale, "Hand the active browser draft to a local Trae client.", "将当前浏览器本地草稿交接给本地 Trae 客户端。",
-      )
-    Qoder =>
-      copy(
-        locale, "Open Qoder with an expiring provider-neutral handoff.", "通过有时效且不绑定特定提供商的交接打开 Qoder。",
-      )
-    Generic =>
-      copy(
-        locale, "Open a generic client through the scoped contract.", "通过限定范围的契约打开通用客户端。",
-      )
+    CodeBuddy => static_message(locale, OpenCodebuddyWithScopedLunanexaClient)
+    WorkBuddy => static_message(locale, ContinueInWorkbuddyThroughTheNorthbound)
+    Trae => static_message(locale, HandTheActiveBrowserDraftTo)
+    Qoder => static_message(locale, OpenQoderWithAnExpiringProvider)
+    Generic => static_message(locale, OpenAGenericClientThroughThe)
   }
 }
 
@@ -140,6 +119,7 @@ pub fn default_state(now_unix_ms : Int64) -> WorkbenchState {
     ],
     active_path: "src/main.mbt",
     model_selector: "text.default",
+    allowed_models: [],
     instruction: "Explain the selected code and suggest one focused test.",
     output_text: "",
     receipt: "",
@@ -189,6 +169,7 @@ pub fn demo_state() -> WorkbenchState {
       policy_receipt: "policy-demo-01",
     }),
     model_selector: "text.default",
+    allowed_models: ["text.default"],
     usage: {
       requests_used: 42,
       requests_limit: 200,
@@ -238,6 +219,7 @@ pub fn WorkbenchState::update(
   message : WorkbenchMessage,
 ) -> WorkbenchState {
   match message {
+    ExportDrafts | CopyDiagnostic(_) => self
     LocaleChanged(locale) =>
       {
         ..self,
@@ -255,16 +237,12 @@ pub fn WorkbenchState::update(
       }
     SelectFile(path) =>
       if self.files.any(file => file.path == path) {
-        { ..self, active_path: path, error_message: None }
+        { ..self, active_path: path, error_message: None, }
       } else {
         {
           ..self,
           error_message: Some(
-            copy(
-              self.locale,
-              "That browser draft is unavailable.",
-              "该浏览器草稿不可用。",
-            ),
+            static_message(self.locale, ThatBrowserDraftIsUnavailable),
           ),
         }
       }
@@ -280,8 +258,8 @@ pub fn WorkbenchState::update(
       ]
       { ..self, files, }
     }
-    ModelChanged(value) => { ..self, model_selector: value }
-    InstructionChanged(value) => { ..self, instruction: value }
+    ModelChanged(value) => { ..self, model_selector: value, }
+    InstructionChanged(value) => { ..self, instruction: value, }
     SendRequest =>
       if can_send(self) {
         {
@@ -296,11 +274,7 @@ pub fn WorkbenchState::update(
         {
           ..self,
           error_message: Some(
-            copy(
-              self.locale,
-              "An active text-generation lease, model, file, and instruction are required.",
-              "需要有效的文本生成租约、模型、文件和指令。",
-            ),
+            static_message(self.locale, AnActiveTextGenerationLeaseModel),
           ),
         }
       }
@@ -361,7 +335,7 @@ fn provider_label(
     WorkBuddy => "WorkBuddy"
     Trae => "Trae"
     Qoder => "Qoder"
-    Generic => copy(locale, "Generic client", "通用客户端")
+    Generic => static_message(locale, GenericClient)
   }
 }
 
@@ -390,12 +364,12 @@ fn connection_label(
   state : @workspace.ConnectionState,
 ) -> String {
   match state {
-    Pending => copy(locale, "Pending", "待处理")
-    Connecting => copy(locale, "Connecting", "正在连接")
-    Connected => copy(locale, "Connected", "已连接")
-    Disconnected => copy(locale, "Client-side handoff", "客户端交接")
-    Failed => copy(locale, "Needs attention", "需要处理")
-    Revoked => copy(locale, "Revoked", "已撤销")
+    Pending => static_message(locale, Pending)
+    Connecting => static_message(locale, Connecting)
+    Connected => static_message(locale, Connected)
+    Disconnected => static_message(locale, ClientSideHandoff)
+    Failed => static_message(locale, NeedsAttention)
+    Revoked => static_message(locale, Revoked)
   }
 }
 
@@ -410,18 +384,18 @@ fn lease_is_denied(state : WorkbenchState) -> Bool {
 ///|
 fn access_status_label(state : WorkbenchState) -> String {
   if lease_ready(state) {
-    copy(state.locale, "Workspace ready", "工作区就绪")
+    static_message(state.locale, WorkspaceReady)
   } else {
     match state.lease {
       Some(lease) =>
         match lease.state {
-          Expired => copy(state.locale, "Lease expired", "租约已过期")
-          Revoked => copy(state.locale, "Lease revoked", "租约已撤销")
-          Suspended => copy(state.locale, "Lease suspended", "租约已暂停")
-          Requested => copy(state.locale, "Approval pending", "待审批")
-          Active => copy(state.locale, "Access required", "需要访问权限")
+          Expired => static_message(state.locale, LeaseExpired)
+          Revoked => static_message(state.locale, LeaseRevoked)
+          Suspended => static_message(state.locale, LeaseSuspended)
+          Requested => static_message(state.locale, ApprovalPending)
+          Active => static_message(state.locale, AccessRequired)
         }
-      None => copy(state.locale, "Access required", "需要访问权限")
+      None => static_message(state.locale, AccessRequired)
     }
   }
 }
@@ -431,112 +405,56 @@ fn lease_gate(state : WorkbenchState) -> @rabbita.Html {
   let gate_message = match state.lease {
     Some(lease) =>
       match lease.state {
-        Expired =>
-          copy(
-            state.locale,
-            "This capacity lease has expired. Ask an administrator for a new bounded lease.",
-            "此工作区租约已过期。请联系管理员申请新的有期限租约。",
-          )
-        Revoked =>
-          copy(
-            state.locale,
-            "This capacity lease was revoked and cannot start new work.",
-            "此工作区租约已撤销，无法启动新工作。",
-          )
+        Expired => static_message(state.locale, ThisCapacityLeaseHasExpiredAsk)
+        Revoked => static_message(state.locale, ThisCapacityLeaseWasRevokedAnd)
         Suspended =>
-          copy(
-            state.locale,
-            "This capacity lease is suspended. New work is disabled.",
-            "此工作区租约已暂停，新工作已禁用。",
-          )
+          static_message(state.locale, ThisCapacityLeaseIsSuspendedNew)
         Requested =>
-          copy(
-            state.locale,
-            "This capacity lease is awaiting approval.",
-            "此工作区租约待审批。",
-          )
-        Active =>
-          copy(
-            state.locale,
-            "The active lease is outside its valid time window.",
-            "当前租约不在有效时间范围内。",
-          )
+          static_message(state.locale, ThisCapacityLeaseIsAwaitingApproval)
+        Active => static_message(state.locale, TheActiveLeaseIsOutsideIts)
       }
-    None =>
-      copy(
-        state.locale,
-        "Connect with a scoped inference token and verified identity to load your authorization. Loopback acceptance may also use an opaque subject reference.",
-        "使用限定范围的推理令牌和已验证身份进行连接，以加载限定范围的访问权限。本地回环验收也可使用不透明主体引用。",
-      )
+    None => static_message(state.locale, ConnectWithAScopedInferenceToken)
   }
   @html.main_(id="main", class="entry-gate", [
     @html.div(class="gate-copy", [
       @html.p(
         class="eyebrow",
-        copy(
-          state.locale,
-          "LUNANEXA DEVELOPER WORKSPACE",
-          "LUNANEXA 开发者工作台",
-        ),
+        static_message(state.locale, LunanexaDeveloperWorkspace),
       ),
-      @html.h1(
-        copy(
-          state.locale,
-          "Your workspace is not ready",
-          "工作区尚未就绪",
-        ),
-      ),
+      @html.h1(static_message(state.locale, YourWorkspaceIsNotReady)),
       @html.p(class="gate-lede", gate_message),
       @html.div(class="gate-steps", [
         @html.div(class="gate-step", [
           @html.span(class="step-number", "01"),
           @html.div([
-            @html.strong(copy(state.locale, "Verify identity", "验证身份")),
+            @html.strong(static_message(state.locale, VerifyIdentity)),
             @html.span(
-              copy(
-                state.locale,
-                "Load an opaque subject through trusted ingress.",
-                "通过受信任入口加载不透明主体。",
-              ),
+              static_message(state.locale, LoadAnOpaqueSubjectThroughTrusted),
             ),
           ]),
         ]),
         @html.div(class="gate-step", [
           @html.span(class="step-number", "02"),
           @html.div([
-            @html.strong(copy(state.locale, "Check capacity", "检查容量")),
+            @html.strong(static_message(state.locale, CheckCapacity)),
             @html.span(
-              copy(
-                state.locale,
-                "Confirm a scoped, time-bounded lease.",
-                "确认限定范围且有时效的租约。",
-              ),
+              static_message(state.locale, ConfirmAScopedTimeBoundedLease),
             ),
           ]),
         ]),
         @html.div(class="gate-step", [
           @html.span(class="step-number", "03"),
           @html.div([
-            @html.strong(copy(state.locale, "Start building", "开始开发")),
+            @html.strong(static_message(state.locale, StartBuilding)),
             @html.span(
-              copy(
-                state.locale,
-                "Open the local editor and generic model tools.",
-                "打开本地编辑器和通用模型工具。",
-              ),
+              static_message(state.locale, OpenTheLocalEditorAndGeneric),
             ),
           ]),
         ]),
       ]),
       @html.p(class="boundary-note gate-boundary", [
-        @html.strong(copy(state.locale, "Trust boundary", "信任边界")),
-        @html.span(
-          copy(
-            state.locale,
-            "A lease never grants a DGX login, managed-node filesystem, arbitrary shell, repository checkout, or editor-agent installation.",
-            "租约绝不会授予 DGX 登录、受管节点文件系统、任意 Shell、代码仓库检出或编辑器代理安装权限。",
-          ),
-        ),
+        @html.strong(static_message(state.locale, TrustBoundary)),
+        @html.span(static_message(state.locale, ALeaseNeverGrantsADgx)),
       ]),
     ]),
   ])
@@ -550,17 +468,14 @@ fn locale_control(
   let english = @i18n.default_locale()
   let chinese = english.alternate()
   @html.div(class="locale-control", [
-    @html.label(
-      for_="workbench-locale",
-      copy(state.locale, "Language", "语言"),
-    ),
+    @html.label(for_="workbench-locale", static_message(state.locale, Language)),
     @html.select(
       id="workbench-locale",
       on_change=text_command(emit, value => {
         LocaleChanged(@i18n.parse_locale(value))
       }),
       attrs=@html.Attrs::build().aria_label(
-        copy(state.locale, "Interface language", "界面语言"),
+        static_message(state.locale, InterfaceLanguage),
       ),
       [
         @html.option(
@@ -588,14 +503,9 @@ fn topbar(
       let minutes = ((lease.expires_unix_ms - state.now_unix_ms) / 60000L).max(
         0L,
       )
-      copy(
-        state.locale,
-        "Lease \{lease.lease_id} · \{minutes}m remaining",
-        "租约 \{lease.lease_id} · 剩余 \{minutes} 分钟",
-      )
+      lease_remaining_message(state.locale, lease.lease_id, minutes)
     }
-    None =>
-      copy(state.locale, "Authorization not loaded", "访问权限未加载")
+    None => static_message(state.locale, AuthorizationNotLoaded)
   }
   @html.header(class="topbar", [
     @html.div(class="brand", [
@@ -612,20 +522,10 @@ fn topbar(
         ],
       ),
       @html.div(class="brand-copy", [
-        @html.strong(
-          copy(
-            state.locale,
-            "能源谷“创未来”街区算力平台 Workbench",
-            "能源谷“创未来”街区算力平台 开发者工作台",
-          ),
-        ),
+        @html.strong(static_message(state.locale, Workbench)),
         @html.span(
           class="secondary",
-          copy(
-            state.locale,
-            "Local drafts · provider-neutral models",
-            "浏览器本地草稿 · 不绑定特定提供商的模型",
-          ),
+          static_message(state.locale, LocalDraftsProviderNeutralModels),
         ),
       ]),
     ]),
@@ -644,9 +544,19 @@ fn topbar(
       @html.div(class="lease-meta", [
         @html.span(
           class="secondary",
-          copy(state.locale, "Capacity lease", "容量租约"),
+          static_message(state.locale, CapacityLease),
         ),
         @html.strong(class="mono", lease_copy),
+        if state.lease is Some(lease) {
+          @html.button(
+            type_="button",
+            class="secondary-action",
+            on_click=command(emit, CopyDiagnostic(lease.lease_id)),
+            static_message(state.locale, CopyLeaseId),
+          )
+        } else {
+          @html.nothing
+        },
       ]),
     ]),
   ])
@@ -660,34 +570,23 @@ fn file_tree(
   @html.aside(
     class="file-panel",
     attrs=@html.Attrs::build().aria_label(
-      copy(state.locale, "Project drafts", "项目草稿"),
+      static_message(state.locale, ProjectDrafts),
     ),
     [
       @html.div(class="panel-title", [
         @html.div([
-          @html.p(
-            class="panel-kicker",
-            copy(state.locale, "EXPLORER", "资源管理器"),
-          ),
-          @html.h2(copy(state.locale, "Project drafts", "项目草稿")),
+          @html.p(class="panel-kicker", static_message(state.locale, Explorer)),
+          @html.h2(static_message(state.locale, ProjectDrafts)),
         ]),
         @html.span(
           class="count-badge mono",
-          copy(
-            state.locale,
-            "\{state.files.length()} LOCAL",
-            "\{state.files.length()} 个本地草稿",
-          ),
+          local_drafts_message(state.locale, state.files.length()),
         ),
       ]),
       if state.files.length() == 0 {
         @html.p(
           class="empty-state",
-          copy(
-            state.locale,
-            "No browser-local draft files. Add a local draft before sending a request.",
-            "没有浏览器本地草稿。请先添加本地草稿，再发送请求。",
-          ),
+          static_message(state.locale, NoBrowserLocalDraftFilesAdd),
         )
       } else {
         @html.ul(
@@ -721,17 +620,22 @@ fn file_tree(
         )
       },
       @html.p(class="boundary-note compact", [
-        @html.strong(
-          copy(state.locale, "Browser-local only", "仅限浏览器本地"),
-        ),
+        @html.strong(static_message(state.locale, BrowserLocalOnly)),
         @html.span(
-          copy(
-            state.locale,
-            "No repository, credential, IDE agent, shell, or filesystem is mounted on a managed GPU node.",
-            "受管节点文件系统不会挂载代码仓库、凭据、IDE 代理或任意 Shell。",
-          ),
+          static_message(state.locale, NoRepositoryCredentialIdeAgentShell),
         ),
       ]),
+      @html.p(
+        class="privacy-copy",
+        message_text(state.locale, LocalDraftWarning),
+      ),
+      @html.button(
+        type_="button",
+        class="secondary-action",
+        disabled=state.files.is_empty(),
+        on_click=command(emit, ExportDrafts),
+        message_text(state.locale, ExportDraftsLabel),
+      ),
     ],
   )
 }
@@ -744,14 +648,8 @@ fn editor(
   match active_file(state) {
     None =>
       @html.section(class="editor-panel empty-state", [
-        @html.h2(copy(state.locale, "Select a draft", "选择草稿")),
-        @html.p(
-          copy(
-            state.locale,
-            "Choose a browser-local file to begin editing.",
-            "选择浏览器本地文件以开始编辑。",
-          ),
-        ),
+        @html.h2(static_message(state.locale, SelectADraft)),
+        @html.p(static_message(state.locale, ChooseABrowserLocalFileTo)),
       ])
     Some(file) =>
       @html.section(
@@ -766,14 +664,14 @@ fn editor(
             @html.div(class="editor-meta", [
               @html.span(
                 class="draft-state",
-                copy(state.locale, "Browser draft", "浏览器本地草稿"),
+                static_message(state.locale, BrowserDraft),
               ),
               @html.span(class="mono secondary", file.language),
             ]),
           ]),
           @html.label(
             for_="code-editor",
-            copy(state.locale, "Code editor", "代码编辑器"),
+            static_message(state.locale, CodeEditor),
           ),
           @html.textarea(
             id="code-editor",
@@ -785,14 +683,10 @@ fn editor(
             "",
           ),
           @html.div(class="editor-statusbar", [
-            @html.span(copy(state.locale, "Local editing", "本地编辑")),
+            @html.span(static_message(state.locale, LocalEditing)),
             @html.span(
               class="mono",
-              copy(
-                state.locale,
-                "Managed-node mounts: none",
-                "受管节点挂载：无",
-              ),
+              static_message(state.locale, ManagedNodeMountsNone),
             ),
           ]),
         ],
@@ -801,26 +695,37 @@ fn editor(
 }
 
 ///|
-fn output_view(state : WorkbenchState) -> @rabbita.Html {
+fn output_view(
+  state : WorkbenchState,
+  emit : @rabbita.Emit[WorkbenchMessage]?,
+) -> @rabbita.Html {
   @html.section(
     class="output-view",
     attrs=@html.Attrs::build().aria_labelledby("output-title"),
     [
       @html.div(class="panel-title", [
         @html.div([
-          @html.p(class="panel-kicker", copy(state.locale, "RESULT", "结果")),
+          @html.p(class="panel-kicker", static_message(state.locale, Result)),
           @html.h3(
             id="output-title",
-            copy(state.locale, "Normalized output", "规范化输出"),
+            static_message(state.locale, NormalizedOutput),
           ),
         ]),
         if state.receipt == "" {
           @html.span(
             class="secondary",
-            copy(state.locale, "Awaiting request", "等待请求"),
+            static_message(state.locale, AwaitingRequest),
           )
         } else {
-          @html.span(class="receipt-chip mono", state.receipt)
+          @html.div([
+            @html.span(class="receipt-chip mono", state.receipt),
+            @html.button(
+              type_="button",
+              class="secondary-action",
+              on_click=command(emit, CopyDiagnostic(state.receipt)),
+              message_text(state.locale, CopyReceipt),
+            ),
+          ])
         },
       ]),
       if state.loading {
@@ -830,20 +735,12 @@ fn output_view(state : WorkbenchState) -> @rabbita.Html {
             .role("status")
             .aria_live("polite")
             .aria_busy("true"),
-          copy(
-            state.locale,
-            "Sending canonical workload…",
-            "正在发送规范工作负载…",
-          ),
+          static_message(state.locale, SendingCanonicalWorkload),
         )
       } else if state.output_text == "" {
         @html.p(
           class="empty-state compact",
-          copy(
-            state.locale,
-            "Run the selected draft to inspect normalized output and its auditable receipt.",
-            "运行所选草稿，以检查标准化输出及其可审计回执。",
-          ),
+          static_message(state.locale, RunTheSelectedDraftToInspect),
         )
       } else {
         @html.pre(state.output_text)
@@ -860,18 +757,13 @@ fn run_panel(
   @html.aside(
     class="run-panel",
     attrs=@html.Attrs::build().aria_label(
-      copy(state.locale, "Model request", "模型请求"),
+      static_message(state.locale, ModelRequest),
     ),
     [
       @html.div(class="panel-title", [
         @html.div([
-          @html.p(
-            class="panel-kicker",
-            copy(state.locale, "MODEL TOOL", "模型工具"),
-          ),
-          @html.h2(
-            copy(state.locale, "Run with LunaNexa", "使用 LunaNexa 运行"),
-          ),
+          @html.p(class="panel-kicker", static_message(state.locale, ModelTool)),
+          @html.h2(static_message(state.locale, RunWithLunanexa)),
         ]),
         @html.span(
           class=if lease_ready(state) {
@@ -882,7 +774,7 @@ fn run_panel(
             "mini-status is-blocked"
           },
           if lease_ready(state) {
-            copy(state.locale, "Lease active", "租约有效")
+            static_message(state.locale, LeaseActive)
           } else {
             access_status_label(state)
           },
@@ -890,30 +782,53 @@ fn run_panel(
       ]),
       @html.label(
         for_="model-selector",
-        copy(state.locale, "Model alias", "模型别名"),
+        static_message(state.locale, ModelAlias),
       ),
-      @html.input(
+      @html.select(
         id="model-selector",
-        value=state.model_selector,
-        placeholder="text.default",
-        attrs=@html.Attrs::build()
-          .disabled(state.loading)
-          .aria_describedby("model-selector-help"),
-        on_input=text_command(emit, value => ModelChanged(value)),
+        disabled=state.loading || state.allowed_models.is_empty(),
+        on_change=text_command(emit, value => ModelChanged(value)),
+        [
+          if !state.allowed_models.contains(state.model_selector) {
+            @html.option(
+              value="",
+              selected=true,
+              disabled=true,
+              message_text(state.locale, SelectAuthorizedModel),
+            )
+          } else {
+            @html.text("")
+          },
+          ..[
+            for model_name in state.allowed_models => {
+              @html.option(
+                value=model_name,
+                selected=model_name == state.model_selector,
+                model_name,
+              )
+            }
+          ],
+        ],
       ),
+      @html.details([
+        @html.summary(message_text(state.locale, AdvancedModel)),
+        @html.label(
+          for_="manual-model-selector",
+          static_message(state.locale, ModelAlias),
+        ),
+        @html.input(
+          id="manual-model-selector",
+          value=state.model_selector,
+          attrs=@html.Attrs::build().disabled(state.loading),
+          on_input=text_command(emit, value => ModelChanged(value)),
+        ),
+      ]),
       @html.p(
         id="model-selector-help",
         class="privacy-copy",
-        copy(
-          state.locale,
-          "Use a provider-neutral model alias such as text.default.",
-          "使用不绑定特定提供商的模型别名，例如 text.default。",
-        ),
+        static_message(state.locale, ChooseAnAuthorizedAliasManualInput),
       ),
-      @html.label(
-        for_="instruction",
-        copy(state.locale, "Instruction", "指令"),
-      ),
+      @html.label(for_="instruction", static_message(state.locale, Instruction)),
       @html.textarea(
         id="instruction",
         rows=6,
@@ -929,22 +844,18 @@ fn run_panel(
         disabled=!can_send(state),
         on_click=command(emit, SendRequest),
         if state.loading {
-          copy(state.locale, "Sending…", "正在发送…")
+          static_message(state.locale, Sending)
         } else {
-          copy(state.locale, "Send request", "发送请求")
+          static_message(state.locale, SendRequest)
         },
       ),
       @html.p(
         class="privacy-copy request-policy",
-        copy(
-          state.locale,
-          "Ephemeral · no cache · no training reuse · bounded deadline",
-          "临时处理 · 不缓存 · 不用于训练 · 有期限",
-        ),
+        static_message(state.locale, EphemeralNoCacheNoTrainingReuse),
       ),
       @html.div(class="usage", [
         @html.div(class="usage-heading", [
-          @html.h3(copy(state.locale, "Session usage", "会话用量")),
+          @html.h3(static_message(state.locale, SessionUsage)),
           @html.strong(
             class="mono",
             "\{state.usage.requests_used}/\{state.usage.requests_limit}",
@@ -953,31 +864,25 @@ fn run_panel(
         @html.progress(
           value=state.usage.requests_used,
           max=state.usage.requests_limit.max(1),
-          copy(state.locale, "Request quota", "请求配额"),
+          static_message(state.locale, RequestQuota),
         ),
         @html.div(class="usage-stats", [
           @html.div([
             @html.strong(class="mono", "\{state.usage.input_units}"),
-            @html.span(copy(state.locale, "Input units", "输入单元")),
+            @html.span(static_message(state.locale, InputUnits)),
           ]),
           @html.div([
             @html.strong(class="mono", "\{state.usage.output_units}"),
-            @html.span(copy(state.locale, "Output units", "输出单元")),
+            @html.span(static_message(state.locale, OutputUnits)),
           ]),
           @html.div([
             @html.strong(class="mono", "\{state.usage.accelerator_ms}"),
-            @html.span(
-              copy(state.locale, "Accelerator ms", "加速器耗时（ms）"),
-            ),
+            @html.span(static_message(state.locale, AcceleratorMs)),
           ]),
         ]),
         @html.p(
           class="privacy-copy",
-          copy(
-            state.locale,
-            "Observed in this browser page; authoritative metering remains in the controller receipt and operator telemetry.",
-            "此处仅显示本浏览器页面观测到的用量；权威计量仍以控制器回执和运维遥测为准。",
-          ),
+          static_message(state.locale, ObservedInThisBrowserPageAuthoritative),
         ),
       ]),
     ],
@@ -997,22 +902,16 @@ fn integrations(
           @html.strong("VS Code"),
           @html.span(
             class="secondary",
-            copy(state.locale, "Client-side extension", "客户端扩展"),
+            static_message(state.locale, ClientSideExtension),
           ),
         ]),
       ]),
-      @html.p(
-        copy(
-          state.locale,
-          "Open the same scoped provider contract in a local VS Code extension.",
-          "在本地 VS Code 扩展中打开同一限定范围且不绑定特定提供商的契约。",
-        ),
-      ),
+      @html.p(static_message(state.locale, OpenTheSameScopedProviderContract)),
       @html.button(
         type_="button",
         disabled=!lease_ready(state),
         on_click=command(emit, SelectEditor(VSCode)),
-        copy(state.locale, "Prepare VS Code handoff", "准备 VS Code 交接"),
+        static_message(state.locale, PrepareVsCodeHandoff),
       ),
     ]),
   ]
@@ -1037,7 +936,7 @@ fn integrations(
           type_="button",
           disabled=!lease_ready(state),
           on_click=command(emit, SelectIntegration(integration.provider)),
-          copy(state.locale, "Prepare client handoff", "准备客户端交接"),
+          static_message(state.locale, PrepareClientHandoff),
         ),
       ]),
     )
@@ -1050,24 +949,16 @@ fn integrations(
         @html.div([
           @html.p(
             class="eyebrow",
-            copy(state.locale, "CLIENT INTEGRATIONS", "客户端集成"),
+            static_message(state.locale, ClientIntegrations),
           ),
           @html.h2(
             id="integrations-title",
-            copy(
-              state.locale,
-              "Continue in your preferred client",
-              "在常用客户端中继续",
-            ),
+            static_message(state.locale, ContinueInYourPreferredClient),
           ),
         ]),
         @html.p(
           class="secondary",
-          copy(
-            state.locale,
-            "VS Code, CodeBuddy, WorkBuddy, Trae, and Qoder remain client-side. Handoffs never install credentials, repositories, shells, or agents on GPU nodes.",
-            "VS Code、CodeBuddy、WorkBuddy、Trae 和 Qoder 始终位于客户端。交接绝不会在 GPU 节点上安装凭据、代码仓库、Shell 或代理。",
-          ),
+          static_message(state.locale, VsCodeCodebuddyWorkbuddyTraeAnd),
         ),
       ]),
       @html.div(class="integration-grid", cards),
@@ -1076,20 +967,15 @@ fn integrations(
           @html.p(
             class="notice",
             attrs=@html.Attrs::build().role("status").aria_live("polite"),
-            copy(
-              state.locale,
-              "\{editor_label(editor)} handoff requested. Only opaque, expiring client metadata may leave this browser; no node access was created.",
-              "已请求 \{editor_label(editor)} 交接。只有不透明且有时效的客户端元数据可离开此浏览器；未创建任何节点访问权限。",
-            ),
+            handoff_requested_message(state.locale, editor_label(editor)),
           )
         (_, Some(provider)) =>
           @html.p(
             class="notice",
             attrs=@html.Attrs::build().role("status").aria_live("polite"),
-            copy(
+            handoff_requested_message(
               state.locale,
-              "\{provider_label(state.locale, provider)} handoff requested. Only opaque, expiring client metadata may leave this browser; no node access was created.",
-              "已请求 \{provider_label(state.locale, provider)} 交接。只有不透明且有时效的客户端元数据可离开此浏览器；未创建任何节点访问权限。",
+              provider_label(state.locale, provider),
             ),
           )
         _ => @html.nothing
@@ -1243,7 +1129,7 @@ fn workbench_view(
       @html.a(
         href="#main",
         class="skip-link",
-        copy(state.locale, "Skip to workspace", "跳到工作区"),
+        static_message(state.locale, SkipToWorkspace),
       ),
       topbar(state, emit),
       match state.error_message {
@@ -1268,13 +1154,13 @@ fn workbench_view(
         @html.main_(id="main", class="workspace-main", [
           @html.h1(
             class="sr-only",
-            copy(state.locale, "Developer workspace", "开发者工作台"),
+            static_message(state.locale, DeveloperWorkspace),
           ),
           @html.div(class="workspace-grid", [
             file_tree(state, emit),
             @html.div(class="editor-stack", [
               editor(state, emit),
-              output_view(state),
+              output_view(state, emit),
             ]),
             run_panel(state, emit),
           ]),

@@ -8,6 +8,45 @@ test "enterprise lease model input is trimmed and empty entries are ignored" {
 }
 
 ///|
+test "demo one-time key walkthrough creates no authority and dismissal clears fixture" {
+  let portal = @enterprise_ui.demo_state()
+  let model : AppModel = {
+    endpoint: "https://unused.invalid",
+    token: "",
+    csrf_token: "",
+    subject_ref: "",
+    connecting: false,
+    bootstrap_started: true,
+    demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: { ..portal, route: AccountAccess, api_key_issue_open: true, },
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (preview, _) = update(model, Portal(SubmitApiKeyIssue), emit)
+  assert_eq(preview.portal.api_keys, portal.api_keys)
+  assert_false(preview.portal.api_key_issue_open)
+  guard preview.portal.one_time_api_key_secret is Some(value) else {
+    fail("missing demo walkthrough")
+  }
+  assert_eq(value.secret, "DEMO-NOT-A-CREDENTIAL")
+  assert_true(
+    preview.portal.success_message
+    .unwrap_or("")
+    .contains("no API key was issued"),
+  )
+  let rendered = @enterprise_ui.render(preview.portal)
+  assert_true(rendered.contains("DEMO preview"))
+  assert_true(rendered.contains("cannot authorize any request"))
+  assert_true(rendered.contains("api-key-secret-dismiss"))
+  let (dismissed, _) = update(preview, Portal(DismissOneTimeApiKeySecret), emit)
+  assert_eq(dismissed.portal.one_time_api_key_secret, None)
+  assert_eq(dismissed.portal.api_keys, portal.api_keys)
+}
+
+///|
 test "enterprise demo lease submission never claims an operator mutation" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
@@ -21,7 +60,7 @@ test "enterprise demo lease submission never claims an operator mutation" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests },
+    portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let before = model.portal.lease_requests.length()
@@ -46,7 +85,7 @@ test "enterprise contract preview is reactive and generation fenced" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments },
+    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -94,7 +133,7 @@ test "demo machine termination mirrors the controller cleanup transition" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
+    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (begun, _) = update(
@@ -142,7 +181,7 @@ test "demo credential redemption is explicit and never contains a secret" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess },
+    portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (redeemed, _) = update(
@@ -190,7 +229,7 @@ test "enterprise demo renews the selected effective contract packet" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments },
+    portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -273,6 +312,10 @@ test "logout erases account key and one-time secret state and fences stale issue
         key_id: "key-new",
         display_name: "New integration",
         secret: "lnx_one_time",
+        allowed_models: ["text.default"],
+        api_base_url: None,
+        tenant_ref: "tenant-demo",
+        memory_ceiling_mib: Some(4096),
       }),
     },
   }
@@ -289,6 +332,7 @@ test "logout erases account key and one-time secret state and fences stale issue
   let issued : @enterprise_ui.IssuedApiKeyView = {
     credential: portal.api_keys[0],
     secret: "lnx_stale_secret",
+    api_base_url: None,
   }
   let (after_stale, _) = update(
     signed_out,
@@ -356,7 +400,7 @@ test "matching browser-session expiry clears the local session" {
     contract_preview_generation: 0L,
     portal: {
       ..portal,
-      machine_access: { ..portal.machine_access, now_unix_ms: 500L },
+      machine_access: { ..portal.machine_access, now_unix_ms: 500L, },
     },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -386,7 +430,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
     meter: "tokens",
     quantity: 10L,
     unit: "token",
-    amount: { minor_units: 12345L, currency: "CNY", scale: 2 },
+    amount: { minor_units: 12345L, currency: "CNY", scale: 2, },
     rate_card_id: "rate-one",
     rate_card_version: "v1",
     service_started_unix_ms: 1000L,
@@ -405,7 +449,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
       {
         ..entry,
         entry_id: "entry-two",
-        amount: { ..entry.amount, minor_units: 55L },
+        amount: { ..entry.amount, minor_units: 55L, },
         recorded_unix_ms: 4000L,
       },
     ],
@@ -417,7 +461,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
         ended_unix_ms: 2000L,
         billing_timezone: "UTC",
         entry_ids: ["entry-one", "entry-two"],
-        total: { minor_units: 12400L, currency: "CNY", scale: 2 },
+        total: { minor_units: 12400L, currency: "CNY", scale: 2, },
         finalized_unix_ms: 4000L,
         finalized_by: "billing-operator",
       },
@@ -451,7 +495,7 @@ test "enterprise checkout quote is stable and selects the latest finalized perio
       {
         ..snapshot.finalized_periods[0],
         period_id: "period-two",
-        total: { minor_units: 2500L, currency: "USD", scale: 2 },
+        total: { minor_units: 2500L, currency: "USD", scale: 2, },
         finalized_unix_ms: 5000L,
       },
     ],
@@ -478,7 +522,7 @@ test "enterprise demo checkout requires an explicit provider-link click" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
-    portal: { ..portal, route: Costs },
+    portal: { ..portal, route: Costs, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (submitted, _) = update(model, Portal(SubmitPaymentCheckout), emit)
@@ -527,7 +571,10 @@ test "organization bootstrap honors an active saved choice and fails closed on a
     }),
     Some("org-northstar"),
   )
-  let inactive = { ..first, membership: { ..first.membership, active: false } }
+  let inactive = {
+    ..first,
+    membership: { ..first.membership, active: false, },
+  }
   assert_eq(preferred_organization([inactive], "org-northstar"), None)
 }
 
@@ -582,7 +629,7 @@ fn mock_machine_offering(
       memory_mib: 16384L,
       cpu_count: 16L,
       meter: "machine-second",
-      unit_price: { minor_units: 2L, currency: "CNY", scale: 2 },
+      unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 3600L,
       minimum_duration_seconds: 86400L,
       maximum_duration_seconds: 2592000L,
@@ -622,7 +669,7 @@ fn mock_machine_order(
     unix_username: None,
     requested_model_selector: Some("qwen3"),
     model_template_ref: None,
-    quoted_total: { minor_units: 4800L, currency: "CNY", scale: 2 },
+    quoted_total: { minor_units: 4800L, currency: "CNY", scale: 2, },
     state,
     generation: 3L,
     payment_ref: Some("payment-test"),
@@ -673,7 +720,7 @@ test "machine quote request derives bare username and dedicated model without te
   assert_false(json.contains("organization_id"))
   assert_false(json.contains("purchaser_subject_ref"))
   let dedicated = machine_quote_intent(
-    { ..state, model_selector: " qwen3 " },
+    { ..state, model_selector: " qwen3 ", },
     "quote-dedicated",
     "request-dedicated",
   )

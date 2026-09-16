@@ -105,6 +105,8 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         last_error_code: "ProviderUnavailable",
       },
     ],
+    trial_summary: None,
+    announcement_draft: @ui.empty_announcement_draft(),
     accounts: [
       {
         account_id: "account-operator",

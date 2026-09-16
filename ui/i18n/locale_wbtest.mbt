@@ -22,3 +22,9 @@ test "locale alternation is exhaustive" {
   assert_true(ChineseSimplified.is_chinese())
   assert_false(English.is_chinese())
 }
+
+///|
+test "shared copy preserves both translations" {
+  assert_eq(copy(English, "Copy", "复制"), "Copy")
+  assert_eq(copy(ChineseSimplified, "Copy", "复制"), "复制")
+}

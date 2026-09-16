@@ -15,3 +15,7 @@ import {
 }
 
 supported_targets = "js"
+
+import {
+  "vectie/lunanexa/contracts",
+} for "test"
