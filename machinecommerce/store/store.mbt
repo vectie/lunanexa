@@ -137,8 +137,8 @@ pub async fn MachineCommerceStore::snapshot(
   self : MachineCommerceStore,
 ) -> @machinecommerce.MachineCommerceSnapshot {
   self.mutex.acquire()
+  defer self.mutex.release()
   let snapshot = self.core.snapshot()
-  self.mutex.release()
   snapshot
 }
 
@@ -153,25 +153,15 @@ pub async fn MachineCommerceStore::replace_from_snapshot(
   snapshot : @machinecommerce.MachineCommerceSnapshot,
 ) -> Unit {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let restored = @machinecommerce.MachineCommerceStore::from_snapshot(
     self.signing_secret,
     snapshot,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
+  )
   self.core = restored
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  self.persist()
 }
 
 ///|
@@ -179,8 +169,8 @@ pub async fn MachineCommerceStore::active_offerings(
   self : MachineCommerceStore,
 ) -> Array[@machinecommerce.MachineOffering] {
   self.mutex.acquire()
+  defer self.mutex.release()
   let offerings = self.core.active_offerings()
-  self.mutex.release()
   offerings
 }
 
@@ -191,13 +181,8 @@ pub async fn MachineCommerceStore::availability(
   now_unix_ms : Int64,
 ) -> @machinecommerce.MachineAvailability {
   self.mutex.acquire()
-  let result = self.core.availability(offering_id, now_unix_ms) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  defer self.mutex.release()
+  let result = self.core.availability(offering_id, now_unix_ms)
   result
 }
 
@@ -207,8 +192,8 @@ pub async fn MachineCommerceStore::order(
   order_id : String,
 ) -> @machinecommerce.MachineOrder? {
   self.mutex.acquire()
+  defer self.mutex.release()
   let result = self.core.order(order_id)
-  self.mutex.release()
   result
 }
 
@@ -218,8 +203,8 @@ pub async fn MachineCommerceStore::quote(
   quote_id : String,
 ) -> @machinecommerce.MachineQuote? {
   self.mutex.acquire()
+  defer self.mutex.release()
   let result = self.core.quote(quote_id)
-  self.mutex.release()
   result
 }
 
@@ -229,8 +214,8 @@ pub async fn MachineCommerceStore::orders_for_subject(
   subject_ref : String,
 ) -> Array[@machinecommerce.MachineOrder] {
   self.mutex.acquire()
+  defer self.mutex.release()
   let result = self.core.orders_for_subject(subject_ref)
-  self.mutex.release()
   result
 }
 
@@ -240,8 +225,8 @@ pub async fn MachineCommerceStore::order_for_access_key(
   key_id : String,
 ) -> @machinecommerce.MachineOrder? {
   self.mutex.acquire()
+  defer self.mutex.release()
   let result = self.core.order_for_access_key(key_id)
-  self.mutex.release()
   result
 }
 
@@ -254,23 +239,13 @@ pub async fn MachineCommerceStore::bind_access_key(
   now_unix_ms : Int64,
 ) -> @machinecommerce.MachineActionReceipt {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.bind_access_key(
     order_id, subject_ref, key_id, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -280,21 +255,11 @@ pub async fn MachineCommerceStore::put_offering(
   offering : @machinecommerce.MachineOffering,
 ) -> (@machinecommerce.MachineOffering, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
-  let result = self.core.put_offering(offering) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  errdefer self.rollback(before)
+  let result = self.core.put_offering(offering)
+  self.persist()
   result
 }
 
@@ -305,21 +270,11 @@ pub async fn MachineCommerceStore::create_quote(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineQuote, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
-  let result = self.core.create_quote(intent, now_unix_ms) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  errdefer self.rollback(before)
+  let result = self.core.create_quote(intent, now_unix_ms)
+  self.persist()
   result
 }
 
@@ -330,21 +285,11 @@ pub async fn MachineCommerceStore::create_order(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
-  let result = self.core.create_order(intent, now_unix_ms) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  errdefer self.rollback(before)
+  let result = self.core.create_order(intent, now_unix_ms)
+  self.persist()
   result
 }
 
@@ -356,23 +301,13 @@ pub async fn MachineCommerceStore::activate_settled_payment(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.activate_settled_payment(
     order_id, settlement, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -384,21 +319,11 @@ pub async fn MachineCommerceStore::start_provisioning(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
-  let result = self.core.start_provisioning(order_id, intent, now_unix_ms) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  errdefer self.rollback(before)
+  let result = self.core.start_provisioning(order_id, intent, now_unix_ms)
+  self.persist()
   result
 }
 
@@ -411,23 +336,13 @@ pub async fn MachineCommerceStore::complete_provisioning(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.complete_provisioning(
     order_id, idempotency_key, expected_generation, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -440,23 +355,13 @@ pub async fn MachineCommerceStore::request_cancel(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.request_cancel(
     subject_ref, order_id, action, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -469,23 +374,13 @@ pub async fn MachineCommerceStore::request_termination(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.request_termination(
     subject_ref, order_id, action, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -499,23 +394,13 @@ pub async fn MachineCommerceStore::record_failure(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.record_failure(
     order_id, idempotency_key, expected_generation, failure_code, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -529,23 +414,13 @@ pub async fn MachineCommerceStore::complete_compensation(
   now_unix_ms : Int64,
 ) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.complete_compensation(
     order_id, idempotency_key, expected_generation, compensation_ref, now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -564,24 +439,14 @@ pub async fn MachineCommerceStore::complete_termination_with_usage(
   @machinecommerce.IdempotencyResult,
 ) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
+  errdefer self.rollback(before)
   let result = self.core.complete_termination_with_usage(
     order_id, idempotency_key, expected_generation, compensation_ref, ended_unix_ms,
     now_unix_ms,
-  ) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  )
+  self.persist()
   result
 }
 
@@ -597,20 +462,10 @@ pub async fn MachineCommerceStore::record_usage(
   @machinecommerce.IdempotencyResult,
 ) {
   self.mutex.acquire()
+  defer self.mutex.release()
   let before = self.core.snapshot()
-  let result = self.core.record_usage(order_id, intent, now_unix_ms) catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.persist() catch {
-    error => {
-      self.rollback(before)
-      self.mutex.release()
-      raise error
-    }
-  }
-  self.mutex.release()
+  errdefer self.rollback(before)
+  let result = self.core.record_usage(order_id, intent, now_unix_ms)
+  self.persist()
   result
 }
