@@ -31,7 +31,7 @@ pub async fn FileRegistry::open(path : String) -> FileRegistry {
   } else {
     ModelRegistry::new()
   }
-  let durable = { persistence: RegistryFile(path), registry, mutex: Mutex() }
+  let durable = { persistence: RegistryFile(path), registry, mutex: Mutex(), }
   if !@fs.exists(path) {
     write_registry(path, registry.snapshot())
   }
@@ -63,16 +63,27 @@ pub async fn FileRegistry::open_postgres(
 }
 
 ///|
-async fn FileRegistry::persist(self : FileRegistry) -> Unit {
+async fn[T] FileRegistry::update(
+  self : FileRegistry,
+  mutate : (ModelRegistry) -> T raise,
+) -> T {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  // Work on an independent snapshot. Neither failed validation nor cancelled
+  // persistence may publish an uncommitted model, approval or alias in memory.
+  let candidate = ModelRegistry::restore(self.registry.snapshot())
+  let result = mutate(candidate)
   match self.persistence {
-    RegistryFile(path) => write_registry(path, self.registry.snapshot())
+    RegistryFile(path) => write_registry(path, candidate.snapshot())
     RegistryPostgres(database) =>
       database.save_opaque_snapshot(
         "model_registry",
         "lunanexa.registry.v1",
-        self.registry.snapshot(),
+        candidate.snapshot(),
       )
   }
+  self.registry = candidate
+  result
 }
 
 ///|
@@ -80,18 +91,7 @@ pub async fn FileRegistry::register_model(
   self : FileRegistry,
   model : @contracts.ModelRecord,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.registry.register_model(model)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(registry => registry.register_model(model))
 }
 
 ///|
@@ -99,18 +99,7 @@ pub async fn FileRegistry::register_runtime(
   self : FileRegistry,
   runtime : @contracts.RuntimeSpec,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.registry.register_runtime(runtime)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(registry => registry.register_runtime(runtime))
 }
 
 ///|
@@ -120,8 +109,8 @@ pub async fn FileRegistry::deployment_allowed(
   runtime : @contracts.RuntimeSpec,
 ) -> Bool {
   self.mutex.acquire()
+  defer self.mutex.release()
   let allowed = self.registry.deployment_allowed(artifact_digest, runtime)
-  self.mutex.release()
   allowed
 }
 
@@ -132,8 +121,8 @@ pub async fn FileRegistry::scheduling_target(
   capability : @contracts.Capability,
 ) -> SchedulingTarget? {
   self.mutex.acquire()
+  defer self.mutex.release()
   let target = self.registry.scheduling_target(selector, capability)
-  self.mutex.release()
   target
 }
 
@@ -142,18 +131,7 @@ pub async fn FileRegistry::record_license(
   self : FileRegistry,
   license : LicenseRecord,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.registry.record_license(license)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(registry => registry.record_license(license))
 }
 
 ///|
@@ -165,10 +143,10 @@ pub async fn FileRegistry::adopt_import(
   model : @contracts.ModelRecord,
   license : LicenseRecord,
 ) -> Unit {
-  self.mutex.acquire()
-  let before_json = self.registry.snapshot()
-  let before : RegistrySnapshot = @json.from_json(@json.parse(before_json))
-  try {
+  self.update(registry => {
+    let before : RegistrySnapshot = @json.from_json(
+      @json.parse(registry.snapshot()),
+    )
     let existing_model = before.models
       .iter()
       .find_first(value => {
@@ -187,21 +165,12 @@ pub async fn FileRegistry::adopt_import(
       _ => ()
     }
     if existing_model is None {
-      self.registry.register_model(model)
+      registry.register_model(model)
     }
     if existing_license is None {
-      self.registry.record_license(license)
+      registry.record_license(license)
     }
-    self.persist()
-  } catch {
-    error => {
-      self.registry = ModelRegistry::restore(before_json)
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  })
 }
 
 ///|
@@ -209,18 +178,7 @@ pub async fn FileRegistry::record_verification(
   self : FileRegistry,
   verification : ArtifactVerification,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.registry.record_verification(verification)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(registry => registry.record_verification(verification))
 }
 
 ///|
@@ -228,18 +186,7 @@ pub async fn FileRegistry::record_evaluation(
   self : FileRegistry,
   evaluation : EvaluationRecord,
 ) -> Unit {
-  self.mutex.acquire()
-  try {
-    self.registry.record_evaluation(evaluation)
-    self.persist()
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  self.update(registry => registry.record_evaluation(evaluation))
 }
 
 ///|
@@ -249,18 +196,7 @@ pub async fn FileRegistry::approve(
   version : String,
   now_unix_ms : Int64,
 ) -> @contracts.ModelRecord {
-  self.mutex.acquire()
-  try {
-    let model = self.registry.approve(model_id, version, now_unix_ms)
-    self.persist()
-    self.mutex.release()
-    model
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
+  self.update(registry => registry.approve(model_id, version, now_unix_ms))
 }
 
 ///|
@@ -273,20 +209,9 @@ pub async fn FileRegistry::promote(
   actor : String,
   now_unix_ms : Int64,
 ) -> PromotionReceipt {
-  self.mutex.acquire()
-  try {
-    let receipt = self.registry.promote(
-      alias_name, model_id, version, stage, actor, now_unix_ms,
-    )
-    self.persist()
-    self.mutex.release()
-    receipt
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
+  self.update(registry => {
+    registry.promote(alias_name, model_id, version, stage, actor, now_unix_ms)
+  })
 }
 
 ///|
@@ -296,26 +221,15 @@ pub async fn FileRegistry::rollback(
   actor : String,
   now_unix_ms : Int64,
 ) -> PromotionReceipt {
-  self.mutex.acquire()
-  try {
-    let receipt = self.registry.rollback(alias_name, actor, now_unix_ms)
-    self.persist()
-    self.mutex.release()
-    receipt
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  }
+  self.update(registry => registry.rollback(alias_name, actor, now_unix_ms))
 }
 
 ///|
 pub async fn FileRegistry::snapshot(self : FileRegistry) -> RegistrySnapshot {
   self.mutex.acquire()
+  defer self.mutex.release()
   let snapshot : RegistrySnapshot = @json.from_json(
     @json.parse(self.registry.snapshot()),
   )
-  self.mutex.release()
   snapshot
 }
