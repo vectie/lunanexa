@@ -277,13 +277,17 @@ does not gain general Internet egress or write access to the model store. The
 first source profile is ModelScope and is specified in
 [`MODELSCOPE_MODEL_ONBOARDING.md`](MODELSCOPE_MODEL_ONBOARDING.md).
 
-PostgreSQL schema v1 is implemented for enterprise memberships, agreements,
+PostgreSQL schema v3 is implemented for enterprise memberships, agreements,
 tenant lease requests, workspace users, grants, leases and admission
 reservations. Each mutation commits a canonical typed snapshot and normalized
 indexed projections together. File persistence for these domains is now an
-explicit development fallback. Remaining controller, registry, commercial and
-technical-policy stores retain their existing adapters and must be migrated
-before claiming a fully database-backed control plane.
+explicit development fallback. Production controller, registry, enrollment,
+scheduler, telemetry, deployment, commercial and technical-policy authority
+also uses PostgreSQL snapshots. Exactly one controller holds the session
+leadership lock; standby processes restore these stores after election under a
+new fencing token. See `docs/DATABASE.md` for the complete domain inventory and
+migration procedure. This implementation does not prove external database HA,
+backup recovery or interruption-free failover.
 
 The artifact store is authoritative; node-local materializations are disposable
 assignment-scoped cache entries. This keeps model transfer out of the management API
@@ -308,8 +312,9 @@ Controller placement is a deployment-profile decision. Separation is preferred
 when the profile needs compute-failure isolation; constrained labs may
 explicitly co-locate management and compute. In either case, loss of any node
 covered by the profile's failure claim must not destroy desired state or the
-registry. A later highly available controller can be added without changing
-the node protocol.
+registry. The single-active, standby-controller design retains the node
+protocol; the database and deployed failure domains still require separate
+availability acceptance.
 
 ## Model lifecycle
 

@@ -2,17 +2,17 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "5e9dd5edc2a2066e2cb3b144fcaa1f639ddefe93",
+    "revision": "6e3647098b048593220e63caf94cba1e9d3d1b96",
     "working_tree": "dirty-deployment-candidate",
-    "inspected_at": "2026-08-27T12:52:43Z"
+    "inspected_at": "2026-09-16T03:09:45Z"
   },
   "sources": [
-    {"id":"readme","path":"README.mbt.md","digest":"sha256:14145add34c8bedd8809368d0b2540a09a937baff83ee66163b577cb56525ac1","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:524586496af7eb55d0c655cd4a415c786ae0d9742d737a2df90f5f7a129c844a","kind":"product-contract","public":true},
-    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:4e6d2feaa543452512e5391b33e597a41d19709d18b9e5a5fb05ca3fe8645772","kind":"architecture","public":true},
+    {"id":"readme","path":"README.mbt.md","digest":"sha256:772e4f08bac70cdae9f47cbeebdfc10fe52b0d033297992f39262ffc10d7a066","kind":"overview","public":true},
+    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:e98fea6f01df61acb32c7b224ab507e746d26c26e68fefb44cd31802d127d4c1","kind":"product-contract","public":true},
+    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:78bba360ca07bf9eba89efe674ba8209400129701ba843a647a3c3df8d38a4f5","kind":"architecture","public":true},
     {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b","kind":"readiness","public":true},
-    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:c8c4aac2c380565f5c917239b4019e2df1219e3bb5c4e410e12c66233e69e63b","kind":"deployment","public":true},
-    {"id":"platform-identity","path":"docs/PLATFORM_IDENTITY.md","digest":"sha256:e1c07ce1358143925349752d23a8650fbbc69cb1e537d3c52baecfa39370dd0d","kind":"identity-deployment","public":true},
+    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:ed4d9d157506c2273b22f40eb4cc83b21de74f43bc675259bd81c65bc069d465","kind":"deployment","public":true},
+    {"id":"platform-identity","path":"docs/PLATFORM_IDENTITY.md","digest":"sha256:8d46fb1218fe1e2a7847fe5a0ef00b5f3e58969ef644a7f2e6dee6816293a3a9","kind":"identity-deployment","public":true},
     {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:11fa522d84849679b3670d6649cfcf62df77b10c892fb97e5555dff2f017f92b","kind":"operations","public":true},
     {"id":"operations-commerce-guide","path":"docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md","digest":"sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6","kind":"operations-and-guide-contract","public":true},
     {"id":"recovery","path":"docs/RECOVERY_RUNBOOK.md","digest":"sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361","kind":"recovery","public":true},
@@ -26,7 +26,7 @@
     {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:8cb8c5c56271b12ca834a4db3cdcd29648873bada77c641211c2ce6c49874bef","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:9a31b79d052317e5d116ae522ce3f8e562cf63a9c75e71d9b0c61123bee679f6","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:7046664c49d7a18da93cdc988ce1eb4b7a7354d6d9aec2f95d4a4243831fcaf5","kind":"implementation","public":true},
     {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220","kind":"acceptance-script","public":true},
     {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4","kind":"hardware-qualification","public":true},
     {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7","kind":"runtime-qualification","public":true},
@@ -38,7 +38,7 @@
     {"id":"claim-control-baseline","statement":"The repository implements controller, scheduling, enrollment, registry, workspace authority, deployment operations, Rabbita sites, client transport, and recovery evidence baselines.","status":"implemented","source_ids":["implementation-status"],"limitations":["Implementation is not equivalent to real four-node production acceptance."]},
     {"id":"claim-four-node-production","statement":"The four physical DGX Spark fleet has passed complete production acceptance.","status":"planned","source_ids":["implementation-status","production-readiness"],"limitations":["Physical enrollment, real serving, measured performance, live security scans, and named human acceptance are still required."]},
     {"id":"claim-simulation","statement":"The local four-node simulator exercises placement, routing, drain, queueing, restart, and leak-check behavior.","status":"simulated","source_ids":["simulation","implementation-status"],"limitations":["It does not validate NVIDIA hardware, thermal behavior, network topology, container runtime, or service objectives."]},
-    {"id":"claim-postgres","statement":"PostgreSQL is the production system of record for enterprise and workspace authority, with other control-plane stores still using signed file/PVC adapters.","status":"implemented","source_ids":["database","architecture"],"limitations":["The reference PostgreSQL StatefulSet is single-instance and not highly available."]},
+    {"id":"claim-postgres","statement":"PostgreSQL is the production system of record for management authority, including control, registry, enrollment, scheduler, telemetry and deployment snapshots; one elected controller serves while standby processes wait.","status":"implemented","source_ids":["database","architecture"],"limitations":["The reference PostgreSQL StatefulSet is development-only and single-instance. Production requires an external HA database; configuration and leadership fencing do not prove deployed replication, failover, backup recovery or zero interruption."]},
     {"id":"claim-workbench","statement":"The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.","status":"implemented","source_ids":["workspaces","client-integration"],"limitations":["Third-party editor handoffs are typed integration points, not bundled vendor runtimes."]},
     {"id":"claim-one-click","statement":"A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.","status":"implemented","source_ids":["management-plane","implementation-status"],"limitations":["Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."]},
     {"id":"claim-vllm-sglang","statement":"The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.","status":"documented","source_ids":["dgx-qualification","deployment"],"limitations":["They require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."]},
@@ -50,7 +50,7 @@
     {"id":"claim-two-offering-roadmap","statement":"The next major-version roadmap separates managed inference from dedicated GPU workspace access and assigns each an independent evidence-based launch gate.","status":"planned","source_ids":["future-expansion","product-contract","production-readiness"],"limitations":["Neither offering is production-ready until its physical and external acceptance gates pass."]}
   ],
   "open_gaps": [
-    "The repository source ledger is current, but production evidence must be refreshed after the physical deployment and external-adapter acceptance run.",
+    "Source digests identify the current working-tree bytes. This refresh reviews private/public/commercial access and PostgreSQL state ownership; it is not a fresh comprehensive audit of every historical coursebook claim. Production evidence separately requires physical deployment and external-adapter acceptance.",
     "No physical DGX Spark node has been exercised by this documentation generation run.",
     "The vLLM/SGLang qualification path uses a separate multi-file model directory; production assignment-bound extraction/packaging still needs review.",
     "Production CA/mTLS, identity-gateway image, platform-identity DNS/TLS/SMTP/PostgreSQL, OCI registry, metrics, secret provider, model license, and named human acceptors remain external deployment inputs.",

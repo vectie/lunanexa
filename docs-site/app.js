@@ -217,7 +217,9 @@
     $("[data-language-label]").textContent = t("language", "Language");
     $("[data-locale-select]").setAttribute("aria-label", t("language", "Language"));
     $("[data-search-label]").textContent = t("search", "Search");
+    $("[data-open-search]").setAttribute("aria-label", t("search", "Search"));
     $("[data-ask-label]").textContent = t("ask_guide", "Ask guide");
+    $("[data-open-pet]").setAttribute("aria-label", t("ask_guide", "Ask guide"));
     $("[data-menu-label]").textContent = t("menu", "Menu");
     $("[data-toc-label]").textContent = t("on_this_page", "On this page");
     $("[data-search-kicker]").textContent = t("coursebook_search", "Coursebook search");
