@@ -6528,9 +6528,7 @@ fn app_view(
 
 ///|
 fn login_transport_allowed(endpoint : String) -> Bool {
-  endpoint.has_prefix("https://") ||
-  endpoint.has_prefix("http://127.0.0.1:") ||
-  endpoint.has_prefix("http://localhost:")
+  @browser_transport.endpoint_allowed(endpoint)
 }
 
 ///|
@@ -6647,6 +6645,15 @@ fn login_view(
             console_copy(
               locale, "Administrative login is blocked on public plain HTTP. Use the protected localhost URL or install TLS first.",
               "公共明文 HTTP 已禁止运维登录。请使用受保护的本机地址，或先部署 TLS。",
+            ),
+          )
+        } else if model.endpoint.has_prefix("http://") &&
+          !localhost_dev_fallback_allowed(model.endpoint) {
+          @html.p(
+            class="login-transport-warning",
+            console_copy(
+              locale, "Temporary HTTP mode is enabled by this deployment. Browser traffic is not encrypted; use only on a trusted network.",
+              "此部署已开启临时 HTTP 模式。浏览器流量未加密，请仅在可信网络中使用。",
             ),
           )
         } else {
