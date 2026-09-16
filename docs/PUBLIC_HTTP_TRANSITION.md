@@ -199,3 +199,25 @@ JS checking and release browser-bundle build passed. `moon info` reports only
 the new JS-only transport package's two functions (the module's canonical
 native backend does not emit a tracked interface for JS-only packages).
 Live UI rollout and rendered enabled-mode acceptance are still pending.
+
+### Live UI rollout follow-up
+
+The UI assets were subsequently layered over the existing web image, preserving
+its enterprise/installer assets and Nginx configuration. Candidate and deployed
+digest: `sha256:1d87ab49f114ff8ef0158ff8a5f88e59abc6173a19d8a458bcd1126d1ac7b0b5`
+in the private registry's `acceptance/web` repository. An isolated Pod with a
+distinct app selector reached Ready with zero restarts; both HTML pages served
+their exact deployment-origin metadata. The console Deployment then rolled
+successfully without changing its security context or backend.
+
+The actual browser on public port 5003 now displays the temporary HTTP warning,
+an enabled organization-sign-in link and an editable session field; the old
+HTTP-blocked message is gone. Static bootstrap token fields remain absent.
+Following the real OIDC link still fails in this workstation browser with
+`net::ERR_BLOCKED_BY_CLIENT`. Thus the UI transport-policy defect is deployed
+and its landing state verified, but end-to-end browser authentication remains
+unproven. This result does not supersede the outstanding public 5005/5006
+reachability investigation or count as ComfyUI/workbench acceptance.
+
+Rollback image remains
+`moon/lunanexa-web@sha256:a6136238fb0d39165fb26296b809786204fc6e74c2fee774e5103f7a4fe17550`.
