@@ -2,9 +2,9 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "6e3647098b048593220e63caf94cba1e9d3d1b96",
+    "revision": "7dde11e78f3ea75375a8a998cea177a807ba715a",
     "working_tree": "dirty-deployment-candidate",
-    "inspected_at": "2026-09-16T03:09:45Z"
+    "inspected_at": "2026-09-16T04:09:18Z"
   },
   "sources": [
     {"id":"readme","path":"README.mbt.md","digest":"sha256:772e4f08bac70cdae9f47cbeebdfc10fe52b0d033297992f39262ffc10d7a066","kind":"overview","public":true},
@@ -26,7 +26,7 @@
     {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:8cb8c5c56271b12ca834a4db3cdcd29648873bada77c641211c2ce6c49874bef","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:7046664c49d7a18da93cdc988ce1eb4b7a7354d6d9aec2f95d4a4243831fcaf5","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:23d9745575abbb753e1b4957449577ee01ccb29721c3ac60867c001868a77db7","kind":"implementation","public":true},
     {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220","kind":"acceptance-script","public":true},
     {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4","kind":"hardware-qualification","public":true},
     {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7","kind":"runtime-qualification","public":true},
