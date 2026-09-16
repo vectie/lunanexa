@@ -6,7 +6,7 @@
     "tagline": "Operate a private GPU fleet as a governed model provider.",
     "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting LunaNexa.",
     "language": "en",
-    "revision": "cb490f9e3c01759f51f7fa2578c62c3e26c9342c",
+    "revision": "cb3b61b458f6b35a39e13f12501735f5bd34b67b",
     "freshness": "reviewed",
     "updated_at": "2026-09-16T08:00:00Z"
   },
@@ -1071,12 +1071,12 @@
             ],
             [
               "Platform as a Service",
-              "Work in managed development environments: the browser workbench, the desktop WebIDE (MoonCode), and editor extensions such as VS Code",
+              "Work in managed development environments: the browser workbench, the portal's client catalog (desktop WebIDE, hosted ComfyUI workspace), and editor extensions such as VS Code",
               "Server setup and credential plumbing — the one-time handoff installs a lease-scoped provider for you"
             ],
             [
               "Infrastructure as a Service",
-              "Rent a whole GPU machine for yourself (an exclusive lease) and run your own software, such as ComfyUI",
+              "Rent a whole GPU machine for yourself — self-service through the six-step purchase, or an operator-approved exclusive lease — and run your own software",
               "Hardware procurement, fencing from other users, and the verified deep clean after you leave"
             ]
           ]
@@ -1097,7 +1097,7 @@
             },
             {
               "title": "I hold a lease at my company",
-              "text": "Enterprise user: sign in, clear the contract gate, then use managed models, the desktop IDE, self-service API keys, or a whole machine.",
+              "text": "Enterprise user: sign in, clear the contract gate, then use managed models, the client catalog, self-service API keys, or buy/request a whole machine.",
               "href": "enterprise-portal-day-one"
             },
             {
@@ -1124,7 +1124,7 @@
           "rows": [
             [
               "Trial visitor",
-              "Bounded 24-hour trial — start at the trial quickstart",
+              "Bounded trial — browser workbench or one trial API key",
               "Browser workbench only",
               "Not included, ever"
             ],
@@ -1132,7 +1132,7 @@
               "Enterprise user",
               "Self-service API keys and the workbench",
               "Workbench, desktop WebIDE, editor extensions",
-              "Exclusive lease with SSH — start at the ComfyUI quickstart"
+              "Six-step self-service purchase or operator-approved lease, SSH + WebIDE"
             ],
             [
               "Administrator",
@@ -1178,7 +1178,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "This page picks up where the quickstart ended: ComfyUI is open in your browser and you are staring at a dark canvas full of boxes. Nothing is broken — that unfamiliar canvas is the normal starting point. Walk through this page once and you will have your first generated image and a mental map of everything on screen."
+          "text": "This page picks up where the quickstart ended: ComfyUI is open in your browser and you are staring at a dark canvas full of boxes. It does not matter whether ComfyUI was launched from the portal's workspace catalog or on an exclusive machine — the canvas is the same. Walk through this page once and you will have your first generated image and a mental map of everything on screen."
         },
         {
           "kind": "heading",
@@ -1333,6 +1333,12 @@
           "text": "You can start ComfyUI and you have made a first image. This page covers everything that keeps the experience good after day one: more models, more node types, keeping your work safe, and — most important — what happens to the machine when your time is up."
         },
         {
+          "kind": "callout",
+          "tone": "info",
+          "title": "Two ways ComfyUI can run here",
+          "text": "If you launched ComfyUI from the portal's workspace catalog, your workflows and outputs live in the workspace and the platform keeps them for you — no terminal needed. The terminal commands on this page apply when you run ComfyUI yourself on an exclusive machine over SSH."
+        },
+        {
           "kind": "heading",
           "level": 2,
           "id": "install-model",
@@ -1481,7 +1487,7 @@
           "kind": "callout",
           "tone": "warning",
           "title": "Not available today",
-          "text": "Nothing on this page exists yet. Managed nodes accept no interactive logins and there is no JupyterLab or remote-development profile. The only interactive access LunaNexa offers today is the exclusive machine lease — a whole machine fenced off just for you."
+          "text": "Managed nodes still accept no interactive logins, and there is no JupyterLab or remote-development profile on them. What does exist today: hosted web workspaces — browser IDE and ComfyUI — running as isolated workspace backends you reach through the portal, plus the exclusive machine lease for a whole fenced machine."
         },
         {
           "kind": "heading",
@@ -1546,7 +1552,7 @@
             },
             {
               "title": "Workbench and editors",
-              "text": "No machine at all: call managed models from the browser, desktop WebIDE, or VS Code.",
+              "text": "Real today: browser IDE and hosted ComfyUI as isolated workspace backends, launched from the portal.",
               "href": "developer-workbench"
             }
           ]
@@ -1587,8 +1593,8 @@
         {
           "kind": "callout",
           "tone": "warning",
-          "title": "Not available today",
-          "text": "There is no application image catalog and no community image publishing. The only one-click deployment that exists today produces managed model services from signed catalog templates — models, not applications."
+          "title": "Partly real today",
+          "text": "The portal's client page is already a launch catalog of approved clients — including a hosted ComfyUI workspace — provisioned as isolated backends. What is still planned: third-party prebuilt application images from a signed catalog, and community publishing of your own hardened images."
         },
         {
           "kind": "heading",
@@ -1673,6 +1679,11 @@
           "kind": "cards",
           "items": [
             {
+              "title": "Launch catalog (real today)",
+              "text": "Open the portal's client page and launch an approved client such as the hosted ComfyUI workspace.",
+              "href": "comfyui-quickstart"
+            },
+            {
               "title": "One-click model service",
               "text": "Signed catalog templates already produce deterministic, preflight-checked model-service plans — for models, not apps.",
               "href": "deployment-flow"
@@ -1721,7 +1732,7 @@
           "kind": "callout",
           "tone": "warning",
           "title": "Not available today",
-          "text": "There is no autostart setting, no public port exposure, and no YAML import. Runtime configuration today is immutable and reviewed, and all traffic enters through the LunaNexa gateway."
+          "text": "There is no autostart setting, no public port exposure, and no YAML import. Runtime configuration today is immutable and reviewed, and all traffic enters through the LunaNexa gateway. Note that hosted workspace apps — browser IDE, ComfyUI — are already reachable through that authenticated gateway; what is planned is user-declared exposure for your own workloads."
         },
         {
           "kind": "heading",
@@ -1947,8 +1958,8 @@
         {
           "kind": "callout",
           "tone": "warning",
-          "title": "Not available today",
-          "text": "There are no tenant shared volumes, no self-service image registry, and no user-facing object-store acceleration. Today, models reach a node only through signed, assignment-scoped transfer, and an exclusive machine's disk is wiped at the end of the lease."
+          "title": "Partly real today",
+          "text": "Workspace outputs already persist: hosted workspaces keep your workflows and generated files across sessions. What is still planned: tenant shared volumes, a self-service image registry, and user-facing object-store acceleration. Models still reach a node only through signed, assignment-scoped transfer, and an exclusive machine's disk is still wiped at the end of the lease."
         },
         {
           "kind": "heading",
@@ -2049,8 +2060,8 @@
         {
           "kind": "callout",
           "tone": "warning",
-          "title": "Not available today",
-          "text": "There is no top-up balance, no self-service invoicing, no real-name verification flow, and no reserved-capacity packs. What exists today is the hybrid offline-commerce workflow — orders, contract documents, evidence review, and fulfillment — with the actual money, tax, and identity steps handled outside LunaNexa."
+          "title": "Partly real today",
+          "text": "Real today: a six-step self-service machine purchase with signed quote, contract and payment, automatic usage metering, CSV cost export, and operator announcements. Still planned: top-up balances, self-service invoices, real-name verification, reserved capacity packs, and SLA credits."
         },
         {
           "kind": "heading",
@@ -2159,7 +2170,7 @@
           "kind": "callout",
           "tone": "warning",
           "title": "Not available today",
-          "text": "The portal has no chat panel today. The workbench already sends real model calls from the browser with quota visibility and receipts — it is the current way to try a model without writing code."
+          "text": "The portal has no chat panel today. The workbench already sends real model calls from the browser with quota visibility and receipts — and trial visitors can try a prompt there without even creating a key, using the trial session."
         },
         {
           "kind": "heading",
