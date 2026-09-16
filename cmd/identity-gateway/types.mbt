@@ -29,6 +29,7 @@ priv struct GatewayConfig {
   mode : GatewayMode
   listen_address : String
   issuer : String
+  canonical_identity_issuer : String?
   oidc_transport_origin : String?
   oidc_ca_file : String?
   operator_host : String

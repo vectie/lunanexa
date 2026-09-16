@@ -54,10 +54,14 @@ fn validate_http_upstream(value : String, name : String) -> Unit raise {
 
 ///|
 fn configured_host(redirect_uri : String) -> String raise {
-  guard redirect_uri.has_prefix("https://") else {
-    raise Failure("redirect URI is not HTTPS")
+  let prefix = if redirect_uri.has_prefix("https://") {
+    8
+  } else if redirect_uri.has_prefix("http://") {
+    7
+  } else {
+    raise Failure("redirect URI protocol is invalid")
   }
-  let rest = redirect_uri[8:]
+  let rest = redirect_uri[prefix:]
   guard rest.find("/") is Some(index) && index > 0 else {
     raise Failure("redirect URI has no callback path")
   }
@@ -79,6 +83,7 @@ fn load_config() -> GatewayConfig raise {
       mode,
       listen_address,
       issuer: "",
+      canonical_identity_issuer: None,
       oidc_transport_origin: None,
       oidc_ca_file: None,
       operator_host: "",
@@ -111,7 +116,25 @@ fn load_config() -> GatewayConfig raise {
   let enterprise_redirect_uri = required_environment(
     "LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI",
   )
-  validate_https_origin(issuer, "LUNANEXA_OIDC_ISSUER_URL")
+  let public_http = match optional_environment("LUNANEXA_PUBLIC_HTTP_ENABLED") {
+    None | Some("false") => false
+    Some("true") => true
+    _ => raise Failure("invalid LUNANEXA_PUBLIC_HTTP_ENABLED")
+  }
+  validate_browser_endpoint(issuer, public_http)
+  let canonical_identity_issuer = optional_environment(
+    "LUNANEXA_IDENTITY_CANONICAL_ISSUER",
+  )
+  match canonical_identity_issuer {
+    Some(canonical) => {
+      guard public_http && canonical == "https://\{issuer[7:]}" else {
+        raise Failure(
+          "canonical identity issuer may only preserve the same HTTPS issuer during public HTTP migration",
+        )
+      }
+    }
+    None => ()
+  }
   let oidc_transport_origin = optional_environment(
     "LUNANEXA_OIDC_TRANSPORT_ORIGIN",
   )
@@ -124,8 +147,11 @@ fn load_config() -> GatewayConfig raise {
     }
     None => ()
   }
-  validate_https_origin(operator_redirect_uri, "operator redirect")
-  validate_https_origin(enterprise_redirect_uri, "enterprise redirect")
+  if public_http && oidc_transport_origin is None {
+    raise Failure("public HTTP requires a separate HTTPS OIDC transport")
+  }
+  validate_browser_endpoint(operator_redirect_uri, public_http)
+  validate_browser_endpoint(enterprise_redirect_uri, public_http)
   let operator_host = configured_host(operator_redirect_uri)
   let enterprise_host = configured_host(enterprise_redirect_uri)
   guard operator_host != enterprise_host else {
@@ -170,8 +196,8 @@ fn load_config() -> GatewayConfig raise {
   }
   guard operator_client_id != enterprise_client_id &&
     operator_client_secret != enterprise_client_secret &&
-    operator_cookie_name.has_prefix("__Host-") &&
-    enterprise_cookie_name.has_prefix("__Host-") &&
+    valid_browser_cookie_name(operator_cookie_name, public_http) &&
+    valid_browser_cookie_name(enterprise_cookie_name, public_http) &&
     operator_cookie_name != enterprise_cookie_name &&
     !operator_cookie_name.contains(";") &&
     !enterprise_cookie_name.contains(";") else {
@@ -198,6 +224,7 @@ fn load_config() -> GatewayConfig raise {
     mode,
     listen_address,
     issuer,
+    canonical_identity_issuer,
     oidc_transport_origin,
     oidc_ca_file: optional_environment("LUNANEXA_OIDC_CA_FILE"),
     operator_host,
@@ -227,6 +254,47 @@ fn load_config() -> GatewayConfig raise {
     ) *
     1000L,
     assertion_lifetime_ms,
+  }
+}
+
+///|
+fn validate_browser_endpoint(value : String, public_http : Bool) -> Unit raise {
+  validate_http_upstream(value, "browser endpoint")
+  let prefix = if public_http { "http://" } else { "https://" }
+  guard value.has_prefix(prefix) && configured_host(value) != "" else {
+    raise Failure(
+      "browser endpoint does not match the explicit public transport mode",
+    )
+  }
+}
+
+///|
+fn valid_browser_cookie_name(name : String, public_http : Bool) -> Bool {
+  let prefix = if public_http { "lunanexa_http_" } else { "__Host-" }
+  name.has_prefix(prefix) &&
+  name.length() > prefix.length() &&
+  name
+  .iter()
+  .all(c => {
+    (c >= 'a' && c <= 'z') ||
+    (c >= 'A' && c <= 'Z') ||
+    (c >= '0' && c <= '9') ||
+    c == '_' ||
+    c == '-'
+  })
+}
+
+///|
+fn GatewayConfig::browser_secure(self : GatewayConfig) -> Bool {
+  self.issuer.has_prefix("https://")
+}
+
+///|
+fn GatewayConfig::browser_scheme(self : GatewayConfig) -> String {
+  if self.browser_secure() {
+    "https"
+  } else {
+    "http"
   }
 }
 
