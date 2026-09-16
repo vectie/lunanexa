@@ -221,3 +221,16 @@ reachability investigation or count as ComfyUI/workbench acceptance.
 
 Rollback image remains
 `moon/lunanexa-web@sha256:a6136238fb0d39165fb26296b809786204fc6e74c2fee774e5103f7a4fe17550`.
+
+### Controller-direct logout revocation verification
+
+The expanded live password/MFA harness completed on 2026-09-16. Before logout,
+the issued bearer returned HTTP 200 from `/v1/auth/self` directly on the
+production controller Service through an SSH-only loopback forward, without
+gateway cookies or browser metadata. After successful gateway logout, the exact
+same bearer returned HTTP 401 from that same controller path. Browser-session
+retrieval also returned 401. The cross-origin 401 and missing-CSRF logout 403
+negative controls still passed. This closes the bearer-replay evidence gap;
+it does not establish public-network reachability or browser self-registration.
+The disposable Keycloak user and local credential files were removed. Controller
+account/audit records are not claimed deleted. No token or MFA seed was logged.
