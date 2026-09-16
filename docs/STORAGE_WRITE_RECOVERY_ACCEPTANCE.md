@@ -252,3 +252,30 @@ warnings 92/20 disabled for remaining dependencies. It includes the resumable
 access-package path, cross-store crash/restart recovery and current-account
 revalidation before API-key quota consumption. These are repository integration
 tests, not a new public IdP/browser acceptance result.
+
+## Exclusive-lease and machine-credential cleanup
+
+The lease store's issue, transition and expiry-reconciliation paths and the
+credential store's five write handlers now use scoped mutex release and error
+rollback. Public APIs, signatures, lease lifecycle and issuer-readiness checks
+remain unchanged.
+
+A new lease fixture fails reservation, provisioning transition and expiry
+persistence twice each, verifying all lease records, disk bytes and placement
+blocking remain unchanged. Each successful retry survives reopen. Expiry reaches
+generation 3/Expiring, repeated reconciliation makes no further transition,
+and the node remains blocked from managed placement: expiry is not proof of
+access revocation or sanitization.
+
+The credential outbox fixture fails both queue creation and dispatch acceptance
+twice, preserving the complete request/record snapshot and disk bytes. Recovery
+creates exactly the same replayable dispatch and handoff across reopen. All
+new temporary directories are removed by scoped cleanup. Combined strict native
+store tests pass 14/14; interface generation and scoped formatting pass without
+public interface changes. No actual host account, SSH credential or leased
+machine was changed by these fixture tests.
+
+The selected lease HTTP, lease-billing and credential-handoff HTTP fixtures pass
+8/8 with warnings 92/20 disabled for still-unmigrated dependencies. This local
+integration run does not replace external SSH issuer, actual host cleanup or
+physical sanitization acceptance.
