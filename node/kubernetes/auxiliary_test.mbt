@@ -35,7 +35,7 @@ async test "auxiliary resource creation and deletion are namespace and UID scope
     })
     let identity = manager.create_auxiliary(resource)
     assert_eq(identity.uid, "aux-uid")
-    assert_eq(manager.remove_auxiliary(identity), @contracts.Draining)
+    assert_eq(manager.remove_auxiliary(identity), Draining)
   }
 }
 

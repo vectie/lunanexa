@@ -393,7 +393,7 @@ pub fn template(
   }
   let layout_copy = @worker.customize_exact_docx_template(
     source,
-    marker_defaults.map(item => { placeholder: item.marker, value: item.value }),
+    marker_defaults.map(item => { placeholder: item.marker, value: item.value, }),
   ) catch {
     error => raise MoonLeafPreviewFailed("\{Repr(error)}")
   }

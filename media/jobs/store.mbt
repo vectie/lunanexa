@@ -222,7 +222,7 @@ pub async fn JobStore::restore(
   if recovered {
     persist(snapshot(jobs, terminations))
   }
-  { jobs, terminations, persist, maximum_jobs, mutex: @async.Mutex(), }
+  { jobs, terminations, persist, maximum_jobs, mutex: Mutex(), }
 }
 
 ///|

@@ -1224,17 +1224,8 @@ async fn[X] ApiService::with_audit_lock(
   operation : async () -> X,
 ) -> X {
   self.audit_mutex.acquire()
-  try operation() catch {
-    error => {
-      self.audit_mutex.release()
-      raise error
-    }
-  } noraise {
-    value => {
-      self.audit_mutex.release()
-      value
-    }
-  }
+  defer self.audit_mutex.release()
+  operation()
 }
 
 ///|
@@ -2347,21 +2338,12 @@ async fn ApiService::invoke_workload(
       })
       self.active[request.workload_id] = task
       self.active_mutex.release()
-      try task.wait() catch {
-        error => {
-          self.active_mutex.acquire()
-          ignore(self.active.remove(request.workload_id))
-          self.active_mutex.release()
-          raise error
-        }
-      } noraise {
-        value => {
-          self.active_mutex.acquire()
-          ignore(self.active.remove(request.workload_id))
-          self.active_mutex.release()
-          value
-        }
+      defer {
+        self.active_mutex.acquire()
+        defer self.active_mutex.release()
+        ignore(self.active.remove(request.workload_id))
       }
+      task.wait()
     })
   catch {
     error => {
@@ -2815,21 +2797,12 @@ async fn ApiService::stream_workload(
       })
       self.active[request.workload_id] = task
       self.active_mutex.release()
-      try task.wait() catch {
-        error => {
-          self.active_mutex.acquire()
-          ignore(self.active.remove(request.workload_id))
-          self.active_mutex.release()
-          raise error
-        }
-      } noraise {
-        value => {
-          self.active_mutex.acquire()
-          ignore(self.active.remove(request.workload_id))
-          self.active_mutex.release()
-          value
-        }
+      defer {
+        self.active_mutex.acquire()
+        defer self.active_mutex.release()
+        ignore(self.active.remove(request.workload_id))
       }
+      task.wait()
     })
   catch {
     error => {
@@ -3181,7 +3154,14 @@ async fn ApiService::dispatch_with_transport(
         )
       }
       let readiness = self.management_readiness(@async.now())
-      json_reply(if readiness.ready { 200 } else { 503 }, readiness.to_json())
+      json_reply(
+        if readiness.ready {
+          200
+        } else {
+          503
+        },
+        ToJson::to_json(readiness),
+      )
     }
     (Get, "/v1/settings/effective") => {
       if !self.operator_authorized(headers) &&
@@ -4747,7 +4727,7 @@ async fn ApiService::dispatch_with_transport(
         accepted: true,
         receipt: "cancel:\{workload_id}:\{digest_hex(workload_id)}",
       }
-      json_reply(202, receipt.to_json())
+      json_reply(202, ToJson::to_json(receipt))
     }
     (Get, "/v1/audit") => {
       if !self.audit_authorized(headers) {
@@ -5318,26 +5298,18 @@ pub async fn ApiService::serve_on(
         send_listener_reply(connection, reply)
         return
       }
-      try
-        self.stream_workload(
-          workload,
-          connection,
-          authority,
-          openai=Some({
-            id: "chatcmpl-\{request_digest[:32]}",
-            model: value.model,
-            created_unix_seconds: now / 1000L,
-            tool_call_seen: [false],
-          }),
-        )
-      catch {
-        error => {
-          self.release_workspace_admission(workload, reserved)
-          raise error
-        }
-      } noraise {
-        _ => self.release_workspace_admission(workload, reserved)
-      }
+      defer self.release_workspace_admission(workload, reserved)
+      self.stream_workload(
+        workload,
+        connection,
+        authority,
+        openai=Some({
+          id: "chatcmpl-\{request_digest[:32]}",
+          model: value.model,
+          created_unix_seconds: now / 1000L,
+          tool_call_seen: [false],
+        }),
+      )
       return
     }
     if request.meth == Post && request.path == "/v1/workloads:stream" {
@@ -5475,14 +5447,8 @@ pub async fn ApiService::serve_on(
           "default-project",
         ),
       }
-      try self.stream_workload(workload, connection, authority) catch {
-        error => {
-          self.release_workspace_admission(workload, reserved)
-          raise error
-        }
-      } noraise {
-        _ => self.release_workspace_admission(workload, reserved)
-      }
+      defer self.release_workspace_admission(workload, reserved)
+      self.stream_workload(workload, connection, authority)
       return
     }
     guard api_method(request.meth) is Some(verb) else {

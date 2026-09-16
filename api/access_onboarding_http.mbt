@@ -305,10 +305,12 @@ async fn ApiService::access_package_view_for_membership(
   let contract_ready = self.private_cloud_workspace_access ||
     (match self.contract_document_store {
       Some(contracts) =>
-        contracts.has_effective_master_lease(
+        self.has_effective_rental_authority(
+          contracts,
           membership.tenant_ref,
           account.subject_ref,
           now,
+          organization_id=membership.organization_id,
         )
       None => false
     })
@@ -940,10 +942,12 @@ async fn ApiService::enable_webide_access_package(
   guard self.private_cloud_workspace_access ||
     (
       self.contract_document_store is Some(contracts) &&
-      contracts.has_effective_master_lease(
+      self.has_effective_rental_authority(
+        contracts,
         membership.tenant_ref,
         account.subject_ref,
         now,
+        organization_id=membership.organization_id,
       )
     ) else {
     return api_error(

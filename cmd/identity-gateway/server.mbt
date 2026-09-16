@@ -60,7 +60,7 @@ fn browser_cookie(
   max_age : Int64,
   secure? : Bool = true,
 ) -> @http.Cookie {
-  @http.Cookie(name, value, path="/", max_age~, secure~, http_only=true, extensions=[
+  Cookie(name, value, path="/", max_age~, secure~, http_only=true, extensions=[
     "SameSite=Lax",
   ])
 }

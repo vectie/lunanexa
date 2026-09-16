@@ -295,7 +295,10 @@ test "persisted lease guard rejects state without a lease" {
   let empty = @nodelease.LeaseAgentGuard::new("dgx-a").snapshot()
   try
     ignore(
-      @nodelease.LeaseAgentGuard::from_snapshot({ ..empty, state: AccessActive }),
+      @nodelease.LeaseAgentGuard::from_snapshot({
+        ..empty,
+        state: AccessActive,
+      }),
     )
   catch {
     InvalidIntent(_) => ()

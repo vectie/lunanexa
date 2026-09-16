@@ -21,7 +21,7 @@ pub fn money(
       "money requires an uppercase ISO currency and scale 0..9",
     )
   }
-  { minor_units, currency, scale }
+  { minor_units, currency, scale, }
 }
 
 ///|
@@ -79,7 +79,7 @@ pub fn FixedMoney::negate(
   if self.minor_units == int64_min {
     raise ArithmeticOverflow
   }
-  { ..self, minor_units: -self.minor_units }
+  { ..self, minor_units: -self.minor_units, }
 }
 
 ///|
@@ -106,5 +106,5 @@ pub fn estimate_cost(
 
 ///|
 fn zero_like(value : FixedMoney) -> FixedMoney {
-  { ..value, minor_units: 0L }
+  { ..value, minor_units: 0L, }
 }

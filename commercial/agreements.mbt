@@ -56,7 +56,7 @@ pub fn CommercialStore::set_template_state(
   if next == ReadyTemplate && template.document_uri is None {
     raise InvalidInput("ready agreement template requires readable terms")
   }
-  let updated = { ..template, state: next }
+  let updated = { ..template, state: next, }
   self.templates[key] = updated
   updated
 }
@@ -226,7 +226,7 @@ pub fn CommercialStore::transition_agreement(
     !agreement_transition_allowed(agreement.state, next) {
     raise InvalidTransition("agreement state")
   }
-  let updated = { ..agreement, state: next, updated_unix_ms }
+  let updated = { ..agreement, state: next, updated_unix_ms, }
   self.agreements[agreement_id] = updated
   updated
 }

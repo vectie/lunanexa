@@ -99,7 +99,7 @@ pub fn lunaflux_candidate_manifest_digest(
 ) -> String {
   lunaflux_promotion_sha256(
     "lunanexa.lunaflux.candidate-manifest.v1",
-    candidate.to_json().stringify(),
+    ToJson::to_json(candidate).stringify(),
   )
 }
 
@@ -271,7 +271,7 @@ fn prepare_lunaflux_promotion_catalog(
     }
     receipts.push(approval.approval_receipt_digest)
   }
-  { authority: input, digest: promotion_authority_catalog_digest(input) }
+  { authority: input, digest: promotion_authority_catalog_digest(input), }
 }
 
 ///|

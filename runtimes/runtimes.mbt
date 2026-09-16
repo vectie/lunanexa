@@ -34,7 +34,7 @@ pub struct FakeRuntime {
 
 ///|
 pub fn FakeRuntime::new(name : String) -> FakeRuntime {
-  { runtime_name: name, ready: false, draining: false, invocations: [] }
+  { runtime_name: name, ready: false, draining: false, invocations: [], }
 }
 
 ///|

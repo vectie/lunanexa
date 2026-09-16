@@ -24,6 +24,10 @@ pub fn required_evidence(FulfillmentPolicy) -> Array[OfflineEvidenceKind]
 
 pub let snapshot_schema_version : String
 
+pub fn undertaking_quote_term(CommercialOrder) -> Int64?
+
+pub fn undertaking_tariff(String) -> Int64?
+
 pub fn valid_object_ref(String) -> Bool
 
 pub fn valid_sha256(String) -> Bool

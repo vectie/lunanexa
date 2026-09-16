@@ -249,8 +249,9 @@ test "enterprise demo renews the selected effective contract packet" {
     ),
     emit,
   )
-  assert_eq(renewed.portal.contract_documents.packets.length(), 3)
-  let packet = renewed.portal.contract_documents.packets[2]
+  let prior_count = model.portal.contract_documents.packets.length()
+  assert_eq(renewed.portal.contract_documents.packets.length(), prior_count + 1)
+  let packet = renewed.portal.contract_documents.packets[prior_count]
   assert_eq(
     renewed.portal.contract_documents.selected_packet_id,
     Some(packet.packet_id),

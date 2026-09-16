@@ -52,13 +52,13 @@ test "credential issuer readiness expires and rejects simulated health" {
   assert_false(@credential.credential_issuer_evidence_ready(evidence, 61000L))
   assert_false(
     @credential.credential_issuer_evidence_ready(
-      { ..evidence, healthy: false },
+      { ..evidence, healthy: false, },
       1000L,
     ),
   )
   assert_false(
     @credential.credential_issuer_evidence_ready(
-      { ..evidence, health_endpoint: "http://attacker.example/health" },
+      { ..evidence, health_endpoint: "http://attacker.example/health", },
       1000L,
     ),
   )

@@ -13,4 +13,10 @@ import {
   "moonbitlang/core/env",
 } for "test"
 
-options(link: { "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl" } })
+options(
+  link: {
+    "native": {
+      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",
+    },
+  },
+)

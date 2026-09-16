@@ -78,7 +78,7 @@ pub fn LunaFluxPromotionVerifier::new(
     raise InvalidPromotionVerifierSecret
   }
   {
-    policy: { ..policy, authorities: policy.authorities.copy() },
+    policy: { ..policy, authorities: policy.authorities.copy(), },
     key_bytes: key_bytes.to_fixedarray(),
     closed: false,
   }
@@ -230,7 +230,7 @@ fn unique_signed_receipt_for(
 fn invalid_verifier_report(
   blockers : Array[LunaFluxPromotionBlocker],
 ) -> LunaFluxPromotionReport {
-  { evidence_well_formed: false, routable: false, authority: None, blockers }
+  { evidence_well_formed: false, routable: false, authority: None, blockers, }
 }
 
 ///|

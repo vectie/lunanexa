@@ -66,7 +66,7 @@ fn intent() -> @deployment.ModelServiceIntent {
     version: @contracts.contract_version,
     idempotency_key: "deploy-text-small",
     deployment_id: "text-small-service",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -164,7 +164,7 @@ test "dedicated preflight is pinned to the controller-reserved node" {
     intent(),
     {
       registry: [evidence],
-      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"] }],
+      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"], }],
       available_secret_refs: ["runtime-token"],
     },
     "node-b",
@@ -221,7 +221,7 @@ test "dedicated preflight cannot waive node eligibility" {
 test "one-click catalog rejects container-managed artifact downloads" {
   let unsupported = {
     ..template(),
-    artifact: { ..template().artifact, uri: "oci://models/model.text:v1" },
+    artifact: { ..template().artifact, uri: "oci://models/model.text:v1", },
   }
   try
     @deployment.validate_template(unsupported, require_signature=false)

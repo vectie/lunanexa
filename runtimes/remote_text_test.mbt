@@ -38,8 +38,8 @@ test "runtime routing configuration rejects ambiguous or credential-bearing endp
   )
   let cases : Array[Array[@runtimes.NodeRuntimeEndpoint]] = [
     [
-      { node_id: "node-a", endpoint: "https://one.invalid/v1/responses" },
-      { node_id: "node-a", endpoint: "https://two.invalid/v1/responses" },
+      { node_id: "node-a", endpoint: "https://one.invalid/v1/responses", },
+      { node_id: "node-a", endpoint: "https://two.invalid/v1/responses", },
     ],
     [
       {
@@ -47,7 +47,7 @@ test "runtime routing configuration rejects ambiguous or credential-bearing endp
         endpoint: "https://authority@runtime.invalid/v1/responses",
       },
     ],
-    [{ node_id: "../node-a", endpoint: "https://runtime.invalid" }],
+    [{ node_id: "../node-a", endpoint: "https://runtime.invalid", }],
   ]
   for entries in cases {
     try runtime.with_node_endpoints(entries) catch {
@@ -115,7 +115,7 @@ async test "text adapter rejects payloads that cannot map to Responses input" {
     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     allow_http_loopback=true,
   )
-  let unsupported = { ..remote_request(), payload: { "unexpected": "value" } }
+  let unsupported = { ..remote_request(), payload: { "unexpected": "value" }, }
   try runtime.invoke(unsupported) catch {
     @runtimes.RemoteRuntimeError::InvalidUpstreamResponse(message) =>
       assert_true(message.contains("input, prompt, or messages"))
@@ -219,7 +219,7 @@ async test "approved text adapter normalizes an upstream SSE stream" {
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       allow_http_loopback=true,
     ).with_node_endpoints([
-      { node_id: "node-b", endpoint: "http://\{server.addr}/v1/responses" },
+      { node_id: "node-b", endpoint: "http://\{server.addr}/v1/responses", },
     ])
     let chunks : Array[Json] = []
     let result = runtime.invoke_stream_at(remote_request(), "node-b", chunk => {
@@ -420,7 +420,7 @@ async test "LunaFlux Responses mode rejects failed and incomplete streams" {
         allow_http_loopback=true,
       ).with_lunaflux_streaming_responses()
       try
-        runtime.invoke({ ..remote_request(), payload: { "prompt": "test" } })
+        runtime.invoke({ ..remote_request(), payload: { "prompt": "test" }, })
       catch {
         @runtimes.RemoteRuntimeError::UpstreamFailed(code~, retryable~) => {
           assert_eq(failure_case, "failed")

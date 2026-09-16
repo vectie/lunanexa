@@ -69,7 +69,7 @@ pub fn GuideProbeWorker::with_observability_store(
   self : GuideProbeWorker,
   observability : @observability.ObservabilityStore,
 ) -> GuideProbeWorker {
-  { ..self, observability: Some(observability) }
+  { ..self, observability: Some(observability), }
 }
 
 ///|
@@ -175,20 +175,18 @@ pub async fn GuideProbeWorker::run_once(
 pub async fn GuideProbeWorker::run_forever(self : GuideProbeWorker) -> Unit {
   for ;; {
     let now = @async.now()
-    ignore(self.run_once(now)) catch {
-      error => {
-        ignore(
-          self.record_probe_event(
-            now,
-            false,
-            "guide-probe-worker-failed-\{now}",
-            0L,
-          ),
-        ) catch {
-          _ => ()
-        }
-        raise error
-      }
+    {
+      errdefer (ignore(
+        self.record_probe_event(
+          now,
+          false,
+          "guide-probe-worker-failed-\{now}",
+          0L,
+        ),
+      ) catch {
+        _ => ()
+      })
+      ignore(self.run_once(now))
     }
     @async.sleep(self.policy.probe_interval_ms.to_int().max(1000))
   }

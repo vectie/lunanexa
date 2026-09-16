@@ -191,7 +191,7 @@ pub fn RuntimeSupervisor::restore(
     journal,
     transport,
     commit,
-    mutex: @async.Mutex(),
+    mutex: Mutex(),
     file_lock: None,
     closed: false,
     clock,

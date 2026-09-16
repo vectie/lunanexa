@@ -154,7 +154,7 @@ pub fn CommercialStore::approve_commitment(
   } else {
     Approved
   }
-  let updated = { ..commitment, approved_by: Some(approver), state }
+  let updated = { ..commitment, approved_by: Some(approver), state, }
   self.commitments[commitment_id] = updated
   updated
 }
@@ -343,7 +343,7 @@ pub fn CommercialStore::admit(
     reasons.push("capacity entitlement unavailable")
   }
   if !reasons.is_empty() {
-    { kind: Blocked, reasons, matching_commitment_id: commitment_id }
+    { kind: Blocked, reasons, matching_commitment_id: commitment_id, }
   } else if approval_required {
     {
       kind: ApprovalRequired,
@@ -351,6 +351,6 @@ pub fn CommercialStore::admit(
       matching_commitment_id: commitment_id,
     }
   } else {
-    { kind: Allowed, reasons: [], matching_commitment_id: commitment_id }
+    { kind: Allowed, reasons: [], matching_commitment_id: commitment_id, }
   }
 }

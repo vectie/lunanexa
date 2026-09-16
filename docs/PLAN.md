@@ -15,6 +15,12 @@ physical or commercial launch readiness.
 
 ## Working policy
 
+The parallel undertaking-letter rental slice is specified in
+[`UNDERTAKING_RENTAL.md`](UNDERTAKING_RENTAL.md). Implement the tenant submission,
+manager approval, source-template rendering and existing delivery integration as
+one coherent feature, then run its regression and browser gates. Do not replace
+the traditional contract path or weaken private-cloud and commercial separation.
+
 Private-cloud workspace admission update: preserve IaaS bare-machine rentals,
 PaaS WebIDE/ComfyUI workspaces, and MaaS model APIs as separate delivery paths.
 Unify the role-aware workspace experience without sharing unisolated processes

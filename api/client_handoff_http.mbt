@@ -161,10 +161,12 @@ async fn ApiService::handle_client_handoff(
       ) ||
       (match self.contract_document_store {
         Some(contracts) =>
-          contracts.has_effective_master_lease(
+          self.has_effective_rental_authority(
+            contracts,
             redeemed.tenant_ref,
             redeemed.subject_ref,
             now,
+            organization_id=redeemed.organization_id,
           )
         None => false
       })
@@ -243,10 +245,12 @@ async fn ApiService::handle_client_handoff(
       let contract_ready = self.private_cloud_workspace_access ||
         (match self.contract_document_store {
           Some(contracts) =>
-            contracts.has_effective_master_lease(
+            self.has_effective_rental_authority(
+              contracts,
               portal_view.membership.tenant_ref,
               subject_ref,
               now,
+              organization_id=portal_view.membership.organization_id,
             )
           None => false
         })
@@ -370,10 +374,12 @@ async fn ApiService::handle_client_handoff(
       guard (self.private_cloud_workspace_access && paid_order is None) ||
         (
           self.contract_document_store is Some(contract_store) &&
-          contract_store.has_effective_master_lease(
+          self.has_effective_rental_authority(
+            contract_store,
             portal_view.membership.tenant_ref,
             subject_ref,
             now,
+            organization_id=portal_view.membership.organization_id,
           )
         ) else {
         return api_error(

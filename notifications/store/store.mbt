@@ -393,95 +393,85 @@ pub async fn NotificationStore::enqueue(
 ) -> @notifications.NotificationRecord {
   @notifications.validate_event(event)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_records = self.records.copy()
   let previous_deliveries = self.deliveries.copy()
-  try {
-    match self.records.get(event.notification_id) {
-      Some(existing) if existing.event == event => {
-        self.mutex.release()
+  errdefer {
+    self.records = previous_records
+    self.deliveries = previous_deliveries
+  }
+  match self.records.get(event.notification_id) {
+    Some(existing) if existing.event == event => return existing
+    Some(_) =>
+      raise @notifications.NotificationError::AlreadyExists(
+        event.notification_id,
+      )
+    None => ()
+  }
+  for _, existing in self.records {
+    if same_source(existing.event, event) {
+      if existing.event == event {
         return existing
       }
-      Some(_) =>
-        raise @notifications.NotificationError::AlreadyExists(
-          event.notification_id,
-        )
-      None => ()
+      raise @notifications.NotificationError::IdempotencyConflict(
+        event.source_receipt,
+      )
     }
-    for _, existing in self.records {
-      if same_source(existing.event, event) {
-        if existing.event == event {
-          self.mutex.release()
-          return existing
-        }
-        raise @notifications.NotificationError::IdempotencyConflict(
-          event.source_receipt,
-        )
+    if existing.lifecycle != Resolved &&
+      existing.event.deduplication_key == event.deduplication_key &&
+      existing.event.audience == event.audience {
+      if existing.event.topic == event.topic &&
+        existing.event.code == event.code {
+        return existing
       }
-      if existing.lifecycle != Resolved &&
-        existing.event.deduplication_key == event.deduplication_key &&
-        existing.event.audience == event.audience {
-        if existing.event.topic == event.topic &&
-          existing.event.code == event.code {
-          self.mutex.release()
-          return existing
-        }
-        raise @notifications.NotificationError::IdempotencyConflict(
-          event.deduplication_key,
-        )
-      }
-    }
-    self.make_capacity_unlocked()
-    let record : @notifications.NotificationRecord = {
-      event,
-      lifecycle: Unread,
-      generation: 1L,
-      assigned_to: None,
-      acknowledged_by: None,
-      acknowledged_unix_ms: None,
-      silenced_until_unix_ms: None,
-      resolved_by: None,
-      resolved_unix_ms: None,
-      updated_unix_ms: event.created_unix_ms,
-    }
-    self.records[event.notification_id] = record
-    for channel in self.channels_for_event_unlocked(event) {
-      let delivery_id = "delivery-\{event.notification_id}-\{channel_name(channel)}"
-      self.deliveries[delivery_id] = {
-        delivery_id,
-        notification_id: event.notification_id,
-        channel,
-        state: if channel == InApp {
-          Delivered
-        } else {
-          PendingDelivery
-        },
-        attempt_count: 0,
-        next_attempt_unix_ms: if channel == InApp {
-          None
-        } else {
-          Some(event.created_unix_ms)
-        },
-        provider_receipt: if channel == InApp {
-          Some("in-app:\{event.notification_id}")
-        } else {
-          None
-        },
-        last_error_code: None,
-        updated_unix_ms: event.created_unix_ms,
-      }
-    }
-    self.prune_unlocked()
-    self.persist()
-    self.mutex.release()
-    record
-  } catch {
-    error => {
-      self.records = previous_records
-      self.deliveries = previous_deliveries
-      self.mutex.release()
-      raise error
+      raise @notifications.NotificationError::IdempotencyConflict(
+        event.deduplication_key,
+      )
     }
   }
+  self.make_capacity_unlocked()
+  let record : @notifications.NotificationRecord = {
+    event,
+    lifecycle: Unread,
+    generation: 1L,
+    assigned_to: None,
+    acknowledged_by: None,
+    acknowledged_unix_ms: None,
+    silenced_until_unix_ms: None,
+    resolved_by: None,
+    resolved_unix_ms: None,
+    updated_unix_ms: event.created_unix_ms,
+  }
+  self.records[event.notification_id] = record
+  for channel in self.channels_for_event_unlocked(event) {
+    let delivery_id = "delivery-\{event.notification_id}-\{channel_name(channel)}"
+    self.deliveries[delivery_id] = {
+      delivery_id,
+      notification_id: event.notification_id,
+      channel,
+      state: if channel == InApp {
+        Delivered
+      } else {
+        PendingDelivery
+      },
+      attempt_count: 0,
+      next_attempt_unix_ms: if channel == InApp {
+        None
+      } else {
+        Some(event.created_unix_ms)
+      },
+      provider_receipt: if channel == InApp {
+        Some("in-app:\{event.notification_id}")
+      } else {
+        None
+      },
+      last_error_code: None,
+      updated_unix_ms: event.created_unix_ms,
+    }
+  }
+  self.prune_unlocked()
+  self.persist()
+  record
 }
 
 ///|
@@ -491,28 +481,23 @@ pub async fn NotificationStore::set_preference(
 ) -> @notifications.NotificationPreference {
   @notifications.validate_preference(preference)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.preferences.copy()
-  try {
-    match self.preferences.get(preference.preference_id) {
-      Some(existing) if existing.tenant_ref != preference.tenant_ref ||
-        existing.subject_ref != preference.subject_ref ||
-        existing.topic != preference.topic =>
-        raise @notifications.NotificationError::IdempotencyConflict(
-          preference.preference_id,
-        )
-      _ => ()
-    }
-    self.preferences[preference.preference_id] = preference
-    self.persist()
-    self.mutex.release()
-    preference
-  } catch {
-    error => {
-      self.preferences = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.preferences = previous
   }
+  match self.preferences.get(preference.preference_id) {
+    Some(existing) if existing.tenant_ref != preference.tenant_ref ||
+      existing.subject_ref != preference.subject_ref ||
+      existing.topic != preference.topic =>
+      raise @notifications.NotificationError::IdempotencyConflict(
+        preference.preference_id,
+      )
+    _ => ()
+  }
+  self.preferences[preference.preference_id] = preference
+  self.persist()
+  preference
 }
 
 ///|
@@ -623,35 +608,30 @@ pub async fn NotificationStore::expire_silences(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.records.copy()
-  try {
-    let mut expired = 0
-    for notification_id, record in self.records {
-      if record.lifecycle != Resolved &&
-        record.silenced_until_unix_ms.map_or(false, expiry => {
-          expiry <= now_unix_ms
-        }) {
-        self.records[notification_id] = {
-          ..record,
-          generation: record.generation + 1L,
-          silenced_until_unix_ms: None,
-          updated_unix_ms: now_unix_ms,
-        }
-        expired += 1
+  errdefer {
+    self.records = previous
+  }
+  let mut expired = 0
+  for notification_id, record in self.records {
+    if record.lifecycle != Resolved &&
+      record.silenced_until_unix_ms.map_or(false, expiry => {
+        expiry <= now_unix_ms
+      }) {
+      self.records[notification_id] = {
+        ..record,
+        generation: record.generation + 1L,
+        silenced_until_unix_ms: None,
+        updated_unix_ms: now_unix_ms,
       }
-    }
-    if expired > 0 {
-      self.persist()
-    }
-    self.mutex.release()
-    expired
-  } catch {
-    error => {
-      self.records = previous
-      self.mutex.release()
-      raise error
+      expired += 1
     }
   }
+  if expired > 0 {
+    self.persist()
+  }
+  expired
 }
 
 ///|
@@ -743,54 +723,49 @@ pub async fn NotificationStore::record_worker_pass(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.worker_health
-  try {
-    let failed = retry_scheduled > 0 || dead_lettered > 0
-    self.worker_health = {
-      generation: previous.generation + 1L,
-      last_heartbeat_unix_ms: Some(now_unix_ms),
-      last_attempt_unix_ms: if attempted > 0 {
-        Some(now_unix_ms)
-      } else {
-        previous.last_attempt_unix_ms
-      },
-      last_success_unix_ms: if attempted > 0 && delivered == attempted {
-        Some(now_unix_ms)
-      } else {
-        previous.last_success_unix_ms
-      },
-      last_failure_unix_ms: if failed {
-        Some(now_unix_ms)
-      } else {
-        previous.last_failure_unix_ms
-      },
-      consecutive_failures: if failed {
-        previous.consecutive_failures + 1
-      } else if attempted > 0 && delivered == attempted {
-        0
-      } else {
-        previous.consecutive_failures
-      },
-      last_error_code: if dead_lettered > 0 {
-        Some("DeliveryDeadLettered")
-      } else if retry_scheduled > 0 {
-        Some("DeliveryRetryScheduled")
-      } else if attempted > 0 && delivered == attempted {
-        None
-      } else {
-        previous.last_error_code
-      },
-    }
-    self.persist()
-    self.mutex.release()
-    self.worker_health
-  } catch {
-    error => {
-      self.worker_health = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.worker_health = previous
   }
+  let failed = retry_scheduled > 0 || dead_lettered > 0
+  self.worker_health = {
+    generation: previous.generation + 1L,
+    last_heartbeat_unix_ms: Some(now_unix_ms),
+    last_attempt_unix_ms: if attempted > 0 {
+      Some(now_unix_ms)
+    } else {
+      previous.last_attempt_unix_ms
+    },
+    last_success_unix_ms: if attempted > 0 && delivered == attempted {
+      Some(now_unix_ms)
+    } else {
+      previous.last_success_unix_ms
+    },
+    last_failure_unix_ms: if failed {
+      Some(now_unix_ms)
+    } else {
+      previous.last_failure_unix_ms
+    },
+    consecutive_failures: if failed {
+      previous.consecutive_failures + 1
+    } else if attempted > 0 && delivered == attempted {
+      0
+    } else {
+      previous.consecutive_failures
+    },
+    last_error_code: if dead_lettered > 0 {
+      Some("DeliveryDeadLettered")
+    } else if retry_scheduled > 0 {
+      Some("DeliveryRetryScheduled")
+    } else if attempted > 0 && delivered == attempted {
+      None
+    } else {
+      previous.last_error_code
+    },
+  }
+  self.persist()
+  self.worker_health
 }
 
 ///| Records an unexpected worker-loop failure before the controller task fails
@@ -808,26 +783,21 @@ pub async fn NotificationStore::record_worker_failure(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.worker_health
-  try {
-    self.worker_health = {
-      ..previous,
-      generation: previous.generation + 1L,
-      last_heartbeat_unix_ms: Some(now_unix_ms),
-      last_failure_unix_ms: Some(now_unix_ms),
-      consecutive_failures: previous.consecutive_failures + 1,
-      last_error_code: Some(error_code),
-    }
-    self.persist()
-    self.mutex.release()
-    self.worker_health
-  } catch {
-    error => {
-      self.worker_health = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.worker_health = previous
   }
+  self.worker_health = {
+    ..previous,
+    generation: previous.generation + 1L,
+    last_heartbeat_unix_ms: Some(now_unix_ms),
+    last_failure_unix_ms: Some(now_unix_ms),
+    consecutive_failures: previous.consecutive_failures + 1,
+    last_error_code: Some(error_code),
+  }
+  self.persist()
+  self.worker_health
 }
 
 ///|
@@ -865,23 +835,18 @@ async fn NotificationStore::replace_record(
   update : (@notifications.NotificationRecord) -> @notifications.NotificationRecord raise,
 ) -> @notifications.NotificationRecord {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.records.copy()
-  try {
-    guard self.records.get(notification_id) is Some(record) else {
-      raise @notifications.NotificationError::NotFound(notification_id)
-    }
-    let updated = update(record)
-    self.records[notification_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.records = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.records = previous
   }
+  guard self.records.get(notification_id) is Some(record) else {
+    raise @notifications.NotificationError::NotFound(notification_id)
+  }
+  let updated = update(record)
+  self.records[notification_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -989,38 +954,31 @@ pub async fn NotificationStore::skip_delivery_if_ineligible(
   now_unix_ms : Int64,
 ) -> @notifications.NotificationDelivery? {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.deliveries.copy()
-  try {
-    guard self.deliveries.get(delivery_id) is Some(delivery) &&
-      delivery.state == Delivering &&
-      delivery.attempt_count == expected_attempt_count &&
-      self.records.get(delivery.notification_id) is Some(record) else {
-      self.mutex.release()
-      return None
-    }
-    guard delivery_ineligible_reason(record, now_unix_ms) is Some(reason) else {
-      self.mutex.release()
-      return None
-    }
-    let skipped = {
-      ..delivery,
-      state: DeliverySkipped,
-      next_attempt_unix_ms: None,
-      provider_receipt: None,
-      last_error_code: Some(reason),
-      updated_unix_ms: now_unix_ms,
-    }
-    self.deliveries[delivery_id] = skipped
-    self.persist()
-    self.mutex.release()
-    Some(skipped)
-  } catch {
-    error => {
-      self.deliveries = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.deliveries = previous
   }
+  guard self.deliveries.get(delivery_id) is Some(delivery) &&
+    delivery.state == Delivering &&
+    delivery.attempt_count == expected_attempt_count &&
+    self.records.get(delivery.notification_id) is Some(record) else {
+    return None
+  }
+  guard delivery_ineligible_reason(record, now_unix_ms) is Some(reason) else {
+    return None
+  }
+  let skipped = {
+    ..delivery,
+    state: DeliverySkipped,
+    next_attempt_unix_ms: None,
+    provider_receipt: None,
+    last_error_code: Some(reason),
+    updated_unix_ms: now_unix_ms,
+  }
+  self.deliveries[delivery_id] = skipped
+  self.persist()
+  Some(skipped)
 }
 
 ///| Requeues exactly the dead-letter generation the operator inspected and
@@ -1043,55 +1001,50 @@ pub async fn NotificationStore::redrive_dead_letter(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_deliveries = self.deliveries.copy()
   let previous_audit = self.redrive_audit.copy()
-  try {
-    guard self.deliveries.get(action.delivery_id) is Some(delivery) else {
-      raise @notifications.NotificationError::NotFound(action.delivery_id)
-    }
-    if delivery.state != DeadLetter {
-      raise @notifications.NotificationError::InvalidTransition(
-        "only dead-letter deliveries may be redriven",
-      )
-    }
-    if delivery.attempt_count != action.expected_attempt_count ||
-      delivery.updated_unix_ms != action.expected_updated_unix_ms {
-      raise @notifications.NotificationError::StaleGeneration
-    }
-    let receipt : @notifications.NotificationDeliveryRedriveReceipt = {
-      receipt_id: "redrive-\{action.now_unix_ms}-\{self.redrive_audit.length() + 1}",
-      delivery_id: action.delivery_id,
-      actor_ref: action.actor_ref,
-      previous_attempt_count: delivery.attempt_count,
-      accepted_unix_ms: action.now_unix_ms,
-    }
-    self.deliveries[action.delivery_id] = {
-      ..delivery,
-      state: PendingDelivery,
-      attempt_count: 0,
-      next_attempt_unix_ms: Some(action.now_unix_ms),
-      provider_receipt: None,
-      last_error_code: None,
-      updated_unix_ms: action.now_unix_ms,
-    }
-    self.redrive_audit.push(receipt)
-    while self.redrive_audit.length() > 1000 {
-      ignore(self.redrive_audit.remove(0))
-    }
-    self.persist()
-    self.mutex.release()
-    receipt
-  } catch {
-    error => {
-      self.deliveries = previous_deliveries
-      self.redrive_audit.clear()
-      for receipt in previous_audit {
-        self.redrive_audit.push(receipt)
-      }
-      self.mutex.release()
-      raise error
+  errdefer {
+    self.deliveries = previous_deliveries
+    self.redrive_audit.clear()
+    for receipt in previous_audit {
+      self.redrive_audit.push(receipt)
     }
   }
+  guard self.deliveries.get(action.delivery_id) is Some(delivery) else {
+    raise @notifications.NotificationError::NotFound(action.delivery_id)
+  }
+  if delivery.state != DeadLetter {
+    raise @notifications.NotificationError::InvalidTransition(
+      "only dead-letter deliveries may be redriven",
+    )
+  }
+  if delivery.attempt_count != action.expected_attempt_count ||
+    delivery.updated_unix_ms != action.expected_updated_unix_ms {
+    raise @notifications.NotificationError::StaleGeneration
+  }
+  let receipt : @notifications.NotificationDeliveryRedriveReceipt = {
+    receipt_id: "redrive-\{action.now_unix_ms}-\{self.redrive_audit.length() + 1}",
+    delivery_id: action.delivery_id,
+    actor_ref: action.actor_ref,
+    previous_attempt_count: delivery.attempt_count,
+    accepted_unix_ms: action.now_unix_ms,
+  }
+  self.deliveries[action.delivery_id] = {
+    ..delivery,
+    state: PendingDelivery,
+    attempt_count: 0,
+    next_attempt_unix_ms: Some(action.now_unix_ms),
+    provider_receipt: None,
+    last_error_code: None,
+    updated_unix_ms: action.now_unix_ms,
+  }
+  self.redrive_audit.push(receipt)
+  while self.redrive_audit.length() > 1000 {
+    ignore(self.redrive_audit.remove(0))
+  }
+  self.persist()
+  receipt
 }
 
 ///|
@@ -1111,66 +1064,59 @@ pub async fn NotificationStore::claim_due_deliveries(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.deliveries.copy()
-  try {
-    let due = sorted_deliveries(self.deliveries).filter(delivery => {
-      (
-        delivery.state == PendingDelivery ||
-        delivery.state == RetryScheduled ||
-        delivery.state == Delivering
-      ) &&
-      delivery.next_attempt_unix_ms.map_or(false, due_at => {
-        due_at <= now_unix_ms
-      })
-    })
-    let claimed : Array[@notifications.NotificationDelivery] = []
-    for delivery in due {
-      if claimed.length() >= limit {
-        break
-      }
-      let ineligible = match self.records.get(delivery.notification_id) {
-        Some(record) => delivery_ineligible_reason(record, now_unix_ms)
-        None => Some("NotificationRecordMissing")
-      }
-      if ineligible is Some(reason) {
-        self.deliveries[delivery.delivery_id] = {
-          ..delivery,
-          state: DeliverySkipped,
-          next_attempt_unix_ms: None,
-          provider_receipt: None,
-          last_error_code: Some(reason),
-          updated_unix_ms: now_unix_ms,
-        }
-      } else if delivery.attempt_count >= self.maximum_delivery_attempts {
-        self.deliveries[delivery.delivery_id] = {
-          ..delivery,
-          state: DeadLetter,
-          next_attempt_unix_ms: None,
-          last_error_code: Some("DeliveryAttemptLimit"),
-          updated_unix_ms: now_unix_ms,
-        }
-      } else {
-        let next = {
-          ..delivery,
-          state: Delivering,
-          attempt_count: delivery.attempt_count + 1,
-          next_attempt_unix_ms: Some(now_unix_ms + lease_duration_ms),
-          updated_unix_ms: now_unix_ms,
-        }
-        self.deliveries[delivery.delivery_id] = next
-        claimed.push(next)
-      }
+  errdefer {
+    self.deliveries = previous
+  }
+  let due = sorted_deliveries(self.deliveries).filter(delivery => {
+    (
+      delivery.state == PendingDelivery ||
+      delivery.state == RetryScheduled ||
+      delivery.state == Delivering
+    ) &&
+    delivery.next_attempt_unix_ms.map_or(false, due_at => due_at <= now_unix_ms)
+  })
+  let claimed : Array[@notifications.NotificationDelivery] = []
+  for delivery in due {
+    if claimed.length() >= limit {
+      break
     }
-    self.persist()
-    self.mutex.release()
-    claimed
-  } catch {
-    error => {
-      self.deliveries = previous
-      self.mutex.release()
-      raise error
+    let ineligible = match self.records.get(delivery.notification_id) {
+      Some(record) => delivery_ineligible_reason(record, now_unix_ms)
+      None => Some("NotificationRecordMissing")
+    }
+    if ineligible is Some(reason) {
+      self.deliveries[delivery.delivery_id] = {
+        ..delivery,
+        state: DeliverySkipped,
+        next_attempt_unix_ms: None,
+        provider_receipt: None,
+        last_error_code: Some(reason),
+        updated_unix_ms: now_unix_ms,
+      }
+    } else if delivery.attempt_count >= self.maximum_delivery_attempts {
+      self.deliveries[delivery.delivery_id] = {
+        ..delivery,
+        state: DeadLetter,
+        next_attempt_unix_ms: None,
+        last_error_code: Some("DeliveryAttemptLimit"),
+        updated_unix_ms: now_unix_ms,
+      }
+    } else {
+      let next = {
+        ..delivery,
+        state: Delivering,
+        attempt_count: delivery.attempt_count + 1,
+        next_attempt_unix_ms: Some(now_unix_ms + lease_duration_ms),
+        updated_unix_ms: now_unix_ms,
+      }
+      self.deliveries[delivery.delivery_id] = next
+      claimed.push(next)
     }
   }
+  self.persist()
+  claimed
 }
 
 ///|
@@ -1179,23 +1125,18 @@ pub async fn NotificationStore::record_delivery_result(
   result : @notifications.DeliveryResult,
 ) -> @notifications.NotificationDelivery {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.deliveries.copy()
-  try {
-    guard self.deliveries.get(result.delivery_id) is Some(delivery) else {
-      raise @notifications.NotificationError::NotFound(result.delivery_id)
-    }
-    let updated = delivery.record_result(result, self.maximum_delivery_attempts)
-    self.deliveries[result.delivery_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.deliveries = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.deliveries = previous
   }
+  guard self.deliveries.get(result.delivery_id) is Some(delivery) else {
+    raise @notifications.NotificationError::NotFound(result.delivery_id)
+  }
+  let updated = delivery.record_result(result, self.maximum_delivery_attempts)
+  self.deliveries[result.delivery_id] = updated
+  self.persist()
+  updated
 }
 
 ///|

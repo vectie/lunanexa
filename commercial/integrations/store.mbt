@@ -370,7 +370,7 @@ pub fn IntegrationStore::renew_expired_dispatch(
   }
   self.dispatch_receipt_history.push(receipt)
   ignore(self.dispatch_receipts.remove(record_id))
-  let renewed = { ..record, state: Pending, updated_unix_ms: now_unix_ms }
+  let renewed = { ..record, state: Pending, updated_unix_ms: now_unix_ms, }
   self.records[record_id] = renewed
   (renewed, Applied)
 }

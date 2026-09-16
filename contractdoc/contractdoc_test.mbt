@@ -59,7 +59,7 @@ test "secret-bearing offline fields cannot enter persisted packet data" {
     packet.update_information(
       manifest,
       1L,
-      [{ field_id: "access.initial_password", value: "do-not-store" }],
+      [{ field_id: "access.initial_password", value: "do-not-store", }],
       CustomerMessenger,
       "subject-1",
       "enterprise-portal",
@@ -90,7 +90,7 @@ test "physical choice markers use source glyphs and missing optional slots stay 
   ).update_information(
     manifest,
     1L,
-    [{ field_id: "lease.tier", value: "月租" }],
+    [{ field_id: "lease.tier", value: "月租", }],
     ManagerOperator,
     "operator-1",
     "operator-console",
@@ -117,7 +117,7 @@ test "generation rejects a MoonLeaf receipt with the wrong physical page count" 
     [MasterLease],
     1000L,
   )
-  let requested = { ..requested, state: GenerationRequested }
+  let requested = { ..requested, state: GenerationRequested, }
   let evidence = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   let docx : @contractdoc.ContractGeneratedArtifact = {
     artifact_id: "contract-docx-wrong-pages",
@@ -176,7 +176,7 @@ test "field ownership prevents cross-party edits and records provenance" {
   let customer = packet.update_information(
     manifest,
     1L,
-    [{ field_id: "lessee.name", value: "星海科技" }],
+    [{ field_id: "lessee.name", value: "星海科技", }],
     CustomerMessenger,
     "subject-1",
     "enterprise-portal",
@@ -189,7 +189,7 @@ test "field ownership prevents cross-party edits and records provenance" {
     customer.update_information(
       manifest,
       2L,
-      [{ field_id: "lessor.name", value: "不应允许" }],
+      [{ field_id: "lessor.name", value: "不应允许", }],
       CustomerMessenger,
       "subject-1",
       "enterprise-portal",
@@ -223,7 +223,7 @@ fn lifecycle_test_packet(
     [MasterLease],
     1000L,
   )
-  { ..packet, state, revision, values_sha256 }
+  { ..packet, state, revision, values_sha256, }
 }
 
 ///|
@@ -235,7 +235,7 @@ test "failed generation records the reason and retries with the confirmed digest
     3L,
     Some(digest),
   )
-  let draft = { ..requested, state: InformationDraft }
+  let draft = { ..requested, state: InformationDraft, }
   try draft.fail_generation(3L, "renderer crashed", 4000L) catch {
     InvalidTransition(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -289,7 +289,7 @@ test "execution registration requires generated state and valid evidence" {
     registered_by: "operator-1",
     registered_unix_ms: 6000L,
   }
-  let drafting = { ..generated, state: InformationDraft }
+  let drafting = { ..generated, state: InformationDraft, }
   try drafting.register_execution(5L, evidence, 6000L) catch {
     InvalidTransition(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -299,7 +299,7 @@ test "execution registration requires generated state and valid evidence" {
   try
     generated.register_execution(
       5L,
-      { ..evidence, evidence_sha256: "not-a-digest" },
+      { ..evidence, evidence_sha256: "not-a-digest", },
       6000L,
     )
   catch {
@@ -309,7 +309,7 @@ test "execution registration requires generated state and valid evidence" {
     _ => fail("a malformed evidence digest must be rejected")
   }
   try
-    generated.register_execution(5L, { ..evidence, signed_on: " " }, 6000L)
+    generated.register_execution(5L, { ..evidence, signed_on: " ", }, 6000L)
   catch {
     InvalidEvidence(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -323,7 +323,7 @@ test "execution registration requires generated state and valid evidence" {
     try
       generated.register_execution(
         5L,
-        { ..evidence, signed_on: bad_date },
+        { ..evidence, signed_on: bad_date, },
         6000L,
       )
     catch {
@@ -334,7 +334,7 @@ test "execution registration requires generated state and valid evidence" {
     }
   }
   try
-    generated.register_execution(5L, { ..evidence, registered_by: "" }, 6000L)
+    generated.register_execution(5L, { ..evidence, registered_by: "", }, 6000L)
   catch {
     InvalidEvidence(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -348,7 +348,7 @@ test "execution registration requires generated state and valid evidence" {
     effective.update_information(
       manifest,
       effective.revision,
-      [{ field_id: "lessee.name", value: "事后修改" }],
+      [{ field_id: "lessee.name", value: "事后修改", }],
       CustomerMessenger,
       "subject-1",
       "enterprise-portal",
@@ -371,7 +371,7 @@ test "closure requires an effective packet and settlements for early termination
     closed_by: "operator-1",
     closed_unix_ms: 8000L,
   }
-  let generated = { ..effective, state: Generated }
+  let generated = { ..effective, state: Generated, }
   try generated.close_packet(6L, expiry, false, 8000L) catch {
     InvalidTransition(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -408,7 +408,9 @@ test "closure requires an effective packet and settlements for early termination
   let closed = effective.close_packet(6L, expiry, false, 8000L)
   assert_eq(closed.state, Closed)
   assert_eq(closed.closure, Some(expiry))
-  try effective.close_packet(6L, { ..expiry, reason: "" }, false, 8000L) catch {
+  try
+    effective.close_packet(6L, { ..expiry, reason: "", }, false, 8000L)
+  catch {
     InvalidInput(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
@@ -448,7 +450,7 @@ test "supersession is rejected for effective or terminal packets" {
     }
   }
   try
-    packet.supersede_packet(1L, { ..supersession, successor_ref: "" }, 3000L)
+    packet.supersede_packet(1L, { ..supersession, successor_ref: "", }, 3000L)
   catch {
     InvalidInput(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -456,7 +458,7 @@ test "supersession is rejected for effective or terminal packets" {
     _ => fail("an invalid successor reference must be rejected")
   }
   try
-    packet.supersede_packet(1L, { ..supersession, reason: " " }, 3000L)
+    packet.supersede_packet(1L, { ..supersession, reason: " ", }, 3000L)
   catch {
     InvalidInput(_) => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -504,7 +506,7 @@ test "renewal draft carries initial forms and drops offline and derived values" 
     owner: PlatformDerived,
     locator: "synthetic",
   }
-  let manifest = { ..base, fields: base.fields + [derived] }
+  let manifest = { ..base, fields: base.fields + [derived], }
   let source = {
     ..@contractdoc.new_packet(
       manifest,
@@ -520,11 +522,11 @@ test "renewal draft carries initial forms and drops offline and derived values" 
     ),
     state: Effective,
     values: [
-      { field_id: "lessee.name", value: "星海科技" },
-      { field_id: "lease.start_date", value: "2026-09-01" },
-      { field_id: "lease.derived_marker", value: "derived-value" },
-      { field_id: "lessee.signatory", value: "offline-signature" },
-      { field_id: "access.order_number", value: "order-1" },
+      { field_id: "lessee.name", value: "星海科技", },
+      { field_id: "lease.start_date", value: "2026-09-01", },
+      { field_id: "lease.derived_marker", value: "derived-value", },
+      { field_id: "lessee.signatory", value: "offline-signature", },
+      { field_id: "access.order_number", value: "order-1", },
     ],
   }
   let renewal = source.renewal_draft(

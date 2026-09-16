@@ -42,6 +42,9 @@ pub(all) enum ContractDocumentConfirmation {
   RequestRenewal(String)
   ApprovePending(String)
   RejectApproval(String, String)
+  SubmitUndertaking(String, Int64, String, String)
+  ReviseUndertaking(String, Int64)
+  WithdrawUndertaking(String, String)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ContractDocumentsMessage {
@@ -70,12 +73,26 @@ pub(all) enum ContractDocumentsMessage {
   ConfirmAction(ContractDocumentConfirmation)
   Refresh
   ClearNotice
+  SelectCreationTemplate(String)
+  SelectCreationOrder(String)
+  CreatePacket(String, String)
+  BeginSubmitUndertaking(String, Int64)
+  BeginReviseUndertaking(String, Int64)
+  BeginWithdrawUndertaking(String)
+  UploadUndertakingEvidence(String)
+  DownloadDocument(String)
 } derive(Eq)
 
 pub(all) struct ContractDocumentsState {
   locale : @i18n.Locale
   actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
+  available_manifests : Array[@contractdoc.ContractTemplateManifest]
+  creation_template_id : String
+  creation_order_ref : String
+  available_orders : Array[(String, String)]
+  undertaking_order_refs : Array[String]
+  signed_artifacts : Array[(String, String, String, Int64)]
   packets : Array[@contractdoc.ContractPacket]
   events : Array[@contractdoc.ContractPacketEvent]
   approvals : Array[@contractdoc.ContractApproval]
@@ -97,6 +114,7 @@ pub(all) struct ContractDocumentsState {
   success_message : String?
   error_message : String?
 } derive(Eq)
+pub fn ContractDocumentsState::current_manifest(Self) -> @contractdoc.ContractTemplateManifest?
 pub fn ContractDocumentsState::preview_request(Self) -> ContractDocumentsMessage?
 pub fn ContractDocumentsState::update(Self, ContractDocumentsMessage) -> Self
 
@@ -109,6 +127,8 @@ pub(all) enum ContractPacketCapability {
   ClosePacket
   SupersedePacket
   RequestRenewal
+  SubmitUndertaking
+  ReviseUndertaking
 } derive(Eq, @debug.Debug)
 
 // Type aliases

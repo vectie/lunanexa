@@ -28,6 +28,8 @@ pub fn heartbeat_signature(@contracts.NodeHeartbeat, String) -> String
 
 pub fn inventory_host_resources(@contracts.NodeInventory) -> HostResources?
 
+pub fn inventory_without_host_resources(@contracts.NodeInventory) -> @contracts.NodeInventory
+
 pub fn parse_linux_host_resources(String, String) -> HostResources raise
 
 pub fn parse_nvidia_smi_csv(String) -> AcceleratorSensorSnapshot raise

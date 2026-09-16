@@ -413,7 +413,7 @@ async fn exercise_media_api(
         no_deployment.handle(Delete, stopped_path, headers, "").status,
         200,
       )
-      assert_eq(jobs.get(stopped.job_id, owner).state, @media_jobs.Cancelled)
+      assert_eq(jobs.get(stopped.job_id, owner).state, Cancelled)
       assert_eq(state["deletes"], 1)
       assert_eq(
         commercial.durable_snapshot().commercial.usage_observations.length(),

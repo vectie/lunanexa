@@ -164,7 +164,7 @@ pub fn update(
   message : InstallerMessage,
 ) -> InstallerState {
   match message {
-    LocaleChanged(locale) => { ..state, locale, error_message: None }
+    LocaleChanged(locale) => { ..state, locale, error_message: None, }
     DeploymentTargetChanged(value) => {
       let target : @install_contract.DeploymentTarget = match value {
         "compute-expansion" => ComputeExpansion
@@ -215,95 +215,95 @@ pub fn update(
     CompanionEndpointChanged(value) =>
       {
         ..state,
-        form: { ..state.form, companion_endpoint: value },
+        form: { ..state.form, companion_endpoint: value, },
         preview_verified: false,
       }
     SessionTokenChanged(value) =>
       {
         ..state,
-        form: { ..state.form, session_token: value },
+        form: { ..state.form, session_token: value, },
         preview_verified: false,
       }
     SshUserChanged(value) =>
       {
         ..state,
-        form: { ..state.form, ssh_user: value },
+        form: { ..state.form, ssh_user: value, },
         preview_verified: false,
       }
     SshPortChanged(value) =>
       {
         ..state,
-        form: { ..state.form, ssh_port: value },
+        form: { ..state.form, ssh_port: value, },
         preview_verified: false,
       }
     SshKeyPathChanged(value) =>
       {
         ..state,
-        form: { ..state.form, ssh_key_path: value },
+        form: { ..state.form, ssh_key_path: value, },
         preview_verified: false,
       }
     KnownHostsPathChanged(value) =>
       {
         ..state,
-        form: { ..state.form, known_hosts_path: value },
+        form: { ..state.form, known_hosts_path: value, },
         preview_verified: false,
       }
     ManagementNodeChanged(value) =>
       {
         ..state,
-        form: { ..state.form, management_node: value },
+        form: { ..state.form, management_node: value, },
         preview_verified: false,
       }
     ManagementHostChanged(value) =>
       {
         ..state,
-        form: { ..state.form, management_host: value },
+        form: { ..state.form, management_host: value, },
         preview_verified: false,
       }
     ComputeTargetsChanged(value) =>
       {
         ..state,
-        form: { ..state.form, compute_targets: value },
+        form: { ..state.form, compute_targets: value, },
         preview_verified: false,
       }
     ClusterNamespaceChanged(value) =>
       {
         ..state,
-        form: { ..state.form, cluster_namespace: value },
+        form: { ..state.form, cluster_namespace: value, },
         preview_verified: false,
       }
     KubeconfigPathChanged(value) =>
       {
         ..state,
-        form: { ..state.form, kubeconfig_path: value },
+        form: { ..state.form, kubeconfig_path: value, },
         preview_verified: false,
       }
     RenderedDirectoryChanged(value) =>
       {
         ..state,
-        form: { ..state.form, rendered_directory: value },
+        form: { ..state.form, rendered_directory: value, },
         preview_verified: false,
       }
     ManagementSecretManifestChanged(value) =>
       {
         ..state,
-        form: { ..state.form, management_secret_manifest: value },
+        form: { ..state.form, management_secret_manifest: value, },
         preview_verified: false,
       }
     SecretDirectoryChanged(value) =>
       {
         ..state,
-        form: { ..state.form, secret_directory: value },
+        form: { ..state.form, secret_directory: value, },
         preview_verified: false,
       }
     CliPathChanged(value) =>
       {
         ..state,
-        form: { ..state.form, cli_path: value },
+        form: { ..state.form, cli_path: value, },
         preview_verified: false,
       }
     ConfirmationChanged(value) =>
-      { ..state, form: { ..state.form, confirmation: value } }
+      { ..state, form: { ..state.form, confirmation: value, }, }
     PreviewRequested =>
       {
         ..state,
@@ -382,7 +382,7 @@ pub fn update(
         ],
         error_message: Some(message),
       }
-    ClearTerminal => { ..state, terminal_lines: [], error_message: None }
+    ClearTerminal => { ..state, terminal_lines: [], error_message: None, }
   }
 }
 

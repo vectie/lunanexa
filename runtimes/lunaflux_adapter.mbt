@@ -26,7 +26,7 @@ fn lunaflux_adapter_contract_digest(
 pub fn LunaFluxAdapterAuthority::opaque_adapter(
   self : LunaFluxAdapterAuthority,
 ) -> LunaFluxOpaqueAdapter {
-  { authority: self, contract_digest: lunaflux_adapter_contract_digest(self) }
+  { authority: self, contract_digest: lunaflux_adapter_contract_digest(self), }
 }
 
 ///|

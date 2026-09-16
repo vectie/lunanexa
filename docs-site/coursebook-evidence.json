@@ -2,13 +2,13 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "7dde11e78f3ea75375a8a998cea177a807ba715a",
+    "revision": "9012d154031e62c553fb7a78d3834dfaaf87d22e",
     "working_tree": "dirty-deployment-candidate",
-    "inspected_at": "2026-09-16T04:09:18Z"
+    "inspected_at": "2026-09-16T07:08:05Z"
   },
   "sources": [
     {"id":"readme","path":"README.mbt.md","digest":"sha256:772e4f08bac70cdae9f47cbeebdfc10fe52b0d033297992f39262ffc10d7a066","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:e98fea6f01df61acb32c7b224ab507e746d26c26e68fefb44cd31802d127d4c1","kind":"product-contract","public":true},
+    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:a265296c6e5479b0c6198f04ec37a99a938d5432ae00478b805ffa67d613a854","kind":"product-contract","public":true},
     {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:78bba360ca07bf9eba89efe674ba8209400129701ba843a647a3c3df8d38a4f5","kind":"architecture","public":true},
     {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b","kind":"readiness","public":true},
     {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:ed4d9d157506c2273b22f40eb4cc83b21de74f43bc675259bd81c65bc069d465","kind":"deployment","public":true},
@@ -26,7 +26,7 @@
     {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:8cb8c5c56271b12ca834a4db3cdcd29648873bada77c641211c2ce6c49874bef","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:23d9745575abbb753e1b4957449577ee01ccb29721c3ac60867c001868a77db7","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:cfc561908ec0f73ed75f3a900fadeb264a5cb973a6d3d54c019591f70d19d9e6","kind":"implementation","public":true},
     {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220","kind":"acceptance-script","public":true},
     {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4","kind":"hardware-qualification","public":true},
     {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7","kind":"runtime-qualification","public":true},
@@ -50,7 +50,7 @@
     {"id":"claim-two-offering-roadmap","statement":"The next major-version roadmap separates managed inference from dedicated GPU workspace access and assigns each an independent evidence-based launch gate.","status":"planned","source_ids":["future-expansion","product-contract","production-readiness"],"limitations":["Neither offering is production-ready until its physical and external acceptance gates pass."]}
   ],
   "open_gaps": [
-    "Source digests identify the current working-tree bytes. This refresh reviews private/public/commercial access and PostgreSQL state ownership; it is not a fresh comprehensive audit of every historical coursebook claim. Production evidence separately requires physical deployment and external-adapter acceptance.",
+    "Source digests identify the current working-tree bytes. This refresh includes the parallel undertaking rental admission and cancellation-safe persistence changes; it is not a fresh comprehensive audit of every historical coursebook claim. Undertaking PDF rendering and live object delivery remain unverified. Production evidence separately requires physical deployment and external-adapter acceptance.",
     "No physical DGX Spark node has been exercised by this documentation generation run.",
     "The vLLM/SGLang qualification path uses a separate multi-file model directory; production assignment-bound extraction/packaging still needs review.",
     "Production CA/mTLS, identity-gateway image, platform-identity DNS/TLS/SMTP/PostgreSQL, OCI registry, metrics, secret provider, model license, and named human acceptors remain external deployment inputs.",

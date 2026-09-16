@@ -62,7 +62,7 @@ pub(all) struct CatalogPage {
 
 pub struct FileImportStore {
   path : String
-  operations : Map[String, ImportOperation]
+  mut operations : Map[String, ImportOperation]
   mutex : @async.Mutex
 }
 pub async fn FileImportStore::cancel(Self, String, Int64) -> ImportOperation

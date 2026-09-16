@@ -174,6 +174,9 @@ pub fn ContractPacket::marker_value(
     }
   }
   match name {
+    "undertaking.signed_date.year" => self.undertaking_date_part("year")
+    "undertaking.signed_date.month" => self.undertaking_date_part("month")
+    "undertaking.signed_date.day" => self.undertaking_date_part("day")
     "lease.day.start" => lease_date(self, "日租", "start")
     "lease.week.start" => lease_date(self, "周租", "start")
     "lease.month.start" => lease_date(self, "月租", "start")
@@ -196,5 +199,5 @@ pub fn ContractPacket::marker_replacements(
   if self.state != GenerationRequested {
     raise InvalidTransition("contract packet generation was not requested")
   }
-  markers.map(marker => { field_id: marker, value: self.marker_value(marker) })
+  markers.map(marker => { field_id: marker, value: self.marker_value(marker), })
 }

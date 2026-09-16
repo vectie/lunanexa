@@ -276,7 +276,11 @@ pub fn advance_prewarm(
       if operation.progress.transferred_bytes != operation.intent.size_bytes {
         Rejected(TransferIncomplete)
       } else {
-        Accepted({ ..operation, state: Verifying, updated_unix_ms: now_unix_ms })
+        Accepted({
+          ..operation,
+          state: Verifying,
+          updated_unix_ms: now_unix_ms,
+        })
       }
     PublishReady if operation.state == Verifying =>
       Accepted({
@@ -285,7 +289,7 @@ pub fn advance_prewarm(
         reservation: None,
         updated_unix_ms: now_unix_ms,
       })
-    ObserveTime => Accepted({ ..operation, updated_unix_ms: now_unix_ms })
+    ObserveTime => Accepted({ ..operation, updated_unix_ms: now_unix_ms, })
     _ => Rejected(InvalidTransition)
   }
 }

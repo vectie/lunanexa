@@ -16,7 +16,7 @@ test "tenant role and agreement gates are fail closed" {
   }
   @portal.validate_submission(submission)
   try
-    @portal.validate_submission({ ..submission, unix_username: "root" })
+    @portal.validate_submission({ ..submission, unix_username: "root", })
   catch {
     InvalidInput(_) => ()
     _ => fail("unexpected error")
@@ -78,7 +78,9 @@ test "adversarial lease fields fail closed" {
     "root", "Alice", "-alice", "alice/../../root", "alice\u0000root", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   ]
   for username in hostile_usernames {
-    try @portal.validate_submission({ ..base, unix_username: username }) catch {
+    try
+      @portal.validate_submission({ ..base, unix_username: username, })
+    catch {
       InvalidInput(_) => ()
       _ => fail("unexpected username error")
     } noraise {
@@ -88,7 +90,7 @@ test "adversarial lease fields fail closed" {
   let hostile_models = ["../model", "model<script>", "model\u0000hidden", ""]
   for model in hostile_models {
     try
-      @portal.validate_submission({ ..base, requested_model_ids: [model] })
+      @portal.validate_submission({ ..base, requested_model_ids: [model], })
     catch {
       InvalidInput(_) => ()
       _ => fail("unexpected model error")

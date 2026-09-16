@@ -225,7 +225,7 @@ async test "signed machine helper evidence is scoped expiring and fail closed" {
   }
   @fs.write_file(
     path,
-    { ..evidence, node_scope: "mutated-fleet" }.to_json().stringify(),
+    { ..evidence, node_scope: "mutated-fleet", }.to_json().stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )

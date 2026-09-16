@@ -97,6 +97,9 @@ pub fn ContractPacket::renewal_draft(
   if self.state != Effective {
     raise ContractNotRenewable("contract packet is not effective")
   }
+  if is_undertaking_template(self.template_id) {
+    raise ContractNotRenewable("a new undertaking requires a new prepaid order")
+  }
   if self.template_id != manifest.template_id ||
     self.template_version != manifest.template_version ||
     self.template_sha256 != manifest.sha256 {
@@ -242,7 +245,7 @@ pub fn ContractPacket::update_information(
   }
   let updated_values = values
     .to_array()
-    .map(pair => { field_id: pair.0, value: pair.1 })
+    .map(pair => { field_id: pair.0, value: pair.1, })
   updated_values.sort_by((left, right) => left.field_id.compare(right.field_id))
   let updated_assignments = assignments.to_array().map(pair => pair.1)
   updated_assignments.sort_by((left, right) => {
@@ -260,7 +263,7 @@ pub fn ContractPacket::update_information(
     updated_unix_ms: now_unix_ms,
   }
   if missing_required_fields(manifest, draft).length() == 0 {
-    { ..draft, state: ReadyForConfirmation }
+    { ..draft, state: ReadyForConfirmation, }
   } else {
     draft
   }
@@ -357,7 +360,7 @@ pub fn ContractPacket::complete_generation(
   pdf : ContractGeneratedArtifact,
   now_unix_ms : Int64,
 ) -> ContractPacket raise ContractDocumentError {
-  let youthpolicy = youthpolicy_remote_lease_manifest()
+  let youthpolicy = manifest_for_template_id(self.template_id)
   let expected_page_count = if self.template_id == youthpolicy.template_id &&
     self.template_version == youthpolicy.template_version {
     Some(youthpolicy.page_count)

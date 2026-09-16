@@ -403,9 +403,10 @@ extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
 
 ///|
 /// Loads only the checked, field-free MoonLeaf scene shipped with demo assets.
-extern "js" fn demo_contract_preview_promise() -> @js.Promise =
-  #| async () => {
-  #|   const response = await fetch("/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json", {
+extern "js" fn demo_contract_preview_promise(undertaking : Bool) -> @js.Promise =
+  #| async undertaking => {
+  #|   const path = undertaking ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
+  #|   const response = await fetch(path, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
   #|     credentials: "same-origin",
@@ -987,7 +988,11 @@ async fn load_console(
   // The manifest is a public, versioned product artifact compiled into the
   // console. Using the same source of truth here also keeps the web client
   // compatible with controllers that expose it only to the customer portal.
-  let contract_manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let contract_manifests : Array[@contractdoc.ContractTemplateManifest] = @json.from_json(
+    @json.parse(
+      request("GET", endpoint, "/v1/contract-documents/manifest/catalog", token),
+    ),
+  )
   let contract_snapshot : @contractdoc.ContractDocumentSnapshot = @json.from_json(
     @json.parse(
       request(
@@ -1515,7 +1520,8 @@ async fn load_console(
     },
     contract_documents: {
       ..@contract_documents.default_state(locale, actor_owner=ManagerOperator),
-      manifest: Some(contract_manifest),
+      manifest: contract_manifests.get(0),
+      available_manifests: contract_manifests,
       packets: contract_packets,
       events: contract_snapshot.events,
       approvals: contract_approvals,
@@ -2130,7 +2136,8 @@ fn demo_contract_lifecycle_action(
       }
       RequestRenewal(packet_id) => {
         let packet = demo_contract_packet(model, packet_id)
-        let manifest = match model.console.contract_documents.manifest {
+        let manifest = match
+          model.console.contract_documents.current_manifest() {
           Some(value) => value
           None => fail("contract manifest unavailable")
         }
@@ -2251,13 +2258,18 @@ fn demo_operator_contract_preview_command(
 ) -> @rabbita.Cmd {
   @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
     try {
-      let text : String = demo_contract_preview_promise().wait().cast()
+      guard model.console.contract_documents.current_manifest()
+        is Some(manifest) else {
+        fail("contract manifest unavailable")
+      }
+      let text : String = demo_contract_preview_promise(
+          @contractdoc.is_undertaking_template(manifest.template_id),
+        )
+        .wait()
+        .cast()
       let template : @contractdoc.ContractPreviewTemplate = @json.from_json(
         @json.parse(text),
       )
-      guard model.console.contract_documents.manifest is Some(manifest) else {
-        fail("contract manifest unavailable")
-      }
       guard model.console.contract_documents.packets.search_by(packet => {
           packet.packet_id == packet_id
         })
@@ -5568,6 +5580,8 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(OfflineCommerce(Refresh)) => (model, load_command(model, emit))
+    Console(OfflineCommerce(RequestArtifactDownload(artifact_id))) =>
+      (model, operator_evidence_download_command(model, artifact_id, emit))
     Console(OfflineCommerce(RequestGeneration(order_id, kind))) => {
       guard selected_offline_order(model.console.offline_commerce, order_id)
         is Some(order) else {
@@ -5628,6 +5642,52 @@ fn update_live(
         .trim()
         .to_owned()
       let request_spec : OfflineActionRequest = match action {
+        QuoteUndertakingOrder(order_id, term, quantity) => {
+          guard selected_offline_order(model.console.offline_commerce, order_id)
+            is Some(order) else {
+            return (model, @rabbita.none)
+          }
+          let quote = try
+            undertaking_quote(
+              order,
+              term,
+              quantity,
+              random_identifier("undertaking-quote"),
+              now,
+            )
+          catch {
+            _ =>
+              return (
+                {
+                  ..model,
+                  console: {
+                    ..model.console,
+                    offline_commerce: {
+                      ..model.console.offline_commerce,
+                      loading: false,
+                      error_message: Some(
+                        console_copy(
+                          model.console.locale,
+                          "Choose a valid tariff and 1–10000 devices.",
+                          "请选择有效档位，设备台数须为 1–10000。",
+                        ),
+                      ),
+                    },
+                  },
+                },
+                @rabbita.none,
+              )
+          } noraise {
+            value => value
+          }
+          let value : OfflineQuoteAction = { order_id, quote, }
+          {
+            path: "/v1/offline-commerce/operator/quotes",
+            body: value.to_json().stringify(),
+            english_success: "Fixed-tariff undertaking quote created.",
+            chinese_success: "已创建承诺函固定档位报价。",
+          }
+        }
         QuoteOrder(order_id, terms_digest, price_text, confirmed_actor) => {
           guard selected_offline_order(model.console.offline_commerce, order_id)
             is Some(order) else {
@@ -5724,7 +5784,8 @@ fn update_live(
             chinese_success: "已发布验证通过的打印材料。",
           }
         }
-        AcceptEvidence(artifact_id, digest) => {
+        AcceptEvidence(artifact_id, digest)
+        | VerifyFullPrepayment(artifact_id, digest) => {
           guard selected_offline_artifact(
               model.console.offline_commerce,
               artifact_id,
@@ -5739,7 +5800,11 @@ fn update_live(
             expected_artifact_sha256: digest,
             reviewer_ref: actor,
             accepted: true,
-            reason_code: "evidence-accepted",
+            reason_code: if action is VerifyFullPrepayment(_, _) {
+              "FullPrepaymentVerified"
+            } else {
+              "evidence-accepted"
+            },
             audit_receipt: random_identifier("offline-review-receipt"),
             reviewed_unix_ms: now,
           }
@@ -6137,7 +6202,8 @@ fn update(
       | Outcome(LocalCopyComplete(_))
       | Outcome(ContractPreviewFailed(_, _, _)) =>
         update_live(model, message, emit)
-      Console(OfflineCommerce(RequestGeneration(_, _)))
+      Console(OfflineCommerce(RequestArtifactDownload(_)))
+      | Console(OfflineCommerce(RequestGeneration(_, _)))
       | Console(OfflineCommerce(ConfirmAction(_)))
       | Console(OfflineCommerce(Refresh)) =>
         (

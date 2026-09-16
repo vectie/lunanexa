@@ -29,7 +29,7 @@ test "offline commerce readiness is complete only with evidence for every gate" 
   assert_eq(ready.status, OfflineCommerceReady)
   assert_eq(ready.blocker_codes, [])
   let missing_evidence = @offline.offline_commerce_readiness(
-    [{ ..capabilities[0], evidence_ref: None }, ..capabilities[1:]],
+    [{ ..capabilities[0], evidence_ref: None, }, ..capabilities[1:]],
     3000L,
   )
   assert_eq(missing_evidence.status, OfflineCommerceAdaptersPending)
@@ -45,7 +45,7 @@ test "offline commerce readiness is complete only with evidence for every gate" 
   let duplicate_receipt = @offline.offline_commerce_readiness(
     [
       capabilities[0],
-      { ..capabilities[1], evidence_ref: capabilities[0].evidence_ref },
+      { ..capabilities[1], evidence_ref: capabilities[0].evidence_ref, },
       ..capabilities[2:],
     ],
     5000L,

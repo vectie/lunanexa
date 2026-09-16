@@ -51,7 +51,7 @@ test "transfer grant is short lived one use and fully bound" {
   assert_eq(
     @technical.validate_transfer_grant(
       grant,
-      { ..requested, node_id: "dgx-3" },
+      { ..requested, node_id: "dgx-3", },
       Verified,
       [],
       1500L,
@@ -87,8 +87,8 @@ test "transfer grant is short lived one use and fully bound" {
 test "only reviewed named sidecars with opaque config references are accepted" {
   let decision = @technical.select_sidecar_profiles(
     [
-      { profile: InferenceGateway, configuration_ref: "config://gateway/v1" },
-      { profile: TelemetryExporter, configuration_ref: "config://metrics/v1" },
+      { profile: InferenceGateway, configuration_ref: "config://gateway/v1", },
+      { profile: TelemetryExporter, configuration_ref: "config://metrics/v1", },
     ],
     [InferenceGateway, TelemetryExporter],
   )
@@ -104,8 +104,8 @@ test "only reviewed named sidecars with opaque config references are accepted" {
   assert_eq(
     @technical.select_sidecar_profiles(
       [
-        { profile: InferenceGateway, configuration_ref: "config://one" },
-        { profile: InferenceGateway, configuration_ref: "config://two" },
+        { profile: InferenceGateway, configuration_ref: "config://one", },
+        { profile: InferenceGateway, configuration_ref: "config://two", },
       ],
       [InferenceGateway],
     ),
@@ -113,7 +113,7 @@ test "only reviewed named sidecars with opaque config references are accepted" {
   )
   assert_eq(
     @technical.select_sidecar_profiles(
-      [{ profile: CertificateReloader, configuration_ref: "raw:yaml" }],
+      [{ profile: CertificateReloader, configuration_ref: "raw:yaml", }],
       [CertificateReloader],
     ),
     Rejected(InvalidConfigurationReference),
@@ -155,7 +155,7 @@ test "cache telemetry exposes safe lifecycle fields and never evicts references"
   )
   assert_eq(
     @technical.cache_reconcile_action(
-      { ..cache_entry(), assignment_references: 0 },
+      { ..cache_entry(), assignment_references: 0, },
       2000L,
       1000L,
     ),

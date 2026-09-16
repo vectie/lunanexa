@@ -10,7 +10,7 @@ permitted in this campaign.
 
 | User requirement | Strongest inspected evidence | Remaining closure work |
 | --- | --- | --- |
-| Registration, organization, permissions | Signed TEST ONLY registration rejects unsigned assertions/nonces; organization creation/replay and suspension checks. Real Keycloak password + MFA + controller-session protocol passes via SSH transport. | Public self-registration, actual email/recovery and rendered authenticated journey are not proved by admin-created users or signed test assertions. |
+| Registration, organization, permissions | Signed TEST ONLY registration rejects unsigned assertions/nonces; organization creation/replay and suspension checks. Real public Keycloak registration form, password + MFA + controller-session/logout protocol passes via SSH transport, without admin-create. | Public-network/rendered self-registration, actual email/recovery and authenticated browser journey remain unproved. Protocol evidence does not substitute for browser acceptance. |
 | Orders and payment callbacks | Isolated quote replay, signed wrong-amount rejection, exact settlement replay, refund/compensation and capacity release. Fake-host helper brought a replacement bare-machine order Active. | Usable browser terms/checkout flow; dedicated-endpoint payment-to-entitlement path with TEST ONLY provider; real machine-access delivery remains unverified. No real money required. |
 | Administrator-granted private workspace | Two organizations enabled access without rental contract; foreign handoff denied; distinct Pods/PVCs. | Verify current portal clicks through this authorization and launches the existing gateway, rather than constructing handoffs only in a harness. |
 | ComfyUI HTTP/WebSocket and tenant isolation | Authenticated HTTP/WS; foreign outputs and workflow/input reads denied; traversal tests; revocation closes WS and denies saved content. | Complete rendered private-cloud journey after current identity/UI rollout; retain explicit scope of tested network paths. |
@@ -37,6 +37,13 @@ or physical-hardware evidence.
 - [ ] Verify real self-registration and user-facing identity lifecycle, then
   authenticated organization/resource-grant → launch → reopen/download clicks.
   Preserve MFA, roles, quotas and private/commercial admission distinctions.
+  The real self-registration form protocol, MFA and logout replay checks passed
+  through SSH transport on 2026-09-16; rendered/public-network steps remain open.
+  Live realm inspection found registration enabled but verifyEmail=false,
+  resetPasswordAllowed=false and no SMTP host/from/credentials configured.
+  This differs from the repository's verified-email profile. SMTP provisioning
+  and a designated test mailbox are required for real email/recovery acceptance;
+  do not blindly enable mail-dependent gates or claim those paths tested.
 - [x] Test logout bearer revocation against the controller directly, not merely
   the deleted gateway cookie. Real password/MFA login issued one session;
   controller-direct `/v1/auth/self` returned 200 before gateway logout and
@@ -49,8 +56,13 @@ or physical-hardware evidence.
 - [ ] Review unresolved r12 cleanup evidence and production node-agent ownership
   before activating any older agent. Never let two agents manage the same node.
 - [ ] Finish strict source gate through reviewed cleanup/compatibility fixes and
-  regression coverage. Latest whole-repo strict check before the billing change
-  failed with 54 diagnostics; no blanket warning suppression counts as closure.
+  regression coverage. Cancellation-safe cleanup and deprecated API fixes have
+  removed the earlier strict-check failures. Native 858/858 and JS 153/153 tests
+  now pass with warning 73 enabled and no exclusions. Local process kill/restart
+  recovery also passed after fixing procfs failure blocking the node heartbeat.
+  The remaining complete release-gate sequence is still being verified; see
+  `NON_MODEL_SOURCE_GATE_20260916.md`. No blanket warning suppression counts as
+  closure.
 - [ ] Complete scoped browser responsive/accessibility/error-state checks and
   final temporary-resource inventory, preserving saved user work and evidence.
 - [ ] Run one final integrated non-model campaign against the recorded versions,

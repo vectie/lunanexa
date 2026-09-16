@@ -446,50 +446,44 @@ async fn ApiService::ensure_open_trial(
     self.commercial_mutex.acquire()
     defer self.commercial_mutex.release()
     let before = self.commercial_store.durable_snapshot()
-    try {
-      if self.commercial_store.organization(trial.organization_id) is None {
-        self.commercial_store.add_organization({
-          organization_id: trial.organization_id,
-          display_name: "Trial — \{account.display_name}",
-          state: Active,
-          verification_ref: Some("trial:\{trial.trial_id}"),
-          legal_profile: None,
-          created_unix_ms: trial.starts_unix_ms,
-        })
-      }
-      let cost_center_id = "trial-cost-\{fingerprint}"
-      let commercial = self.commercial_store.durable_snapshot().commercial
-      if !commercial.cost_centers.any(value => {
-          value.cost_center_id == cost_center_id
-        }) {
-        self.commercial_store.add_cost_center({
-          cost_center_id,
-          organization_id: trial.organization_id,
-          parent_cost_center_id: None,
-          display_name: "Free trial",
-          created_unix_ms: trial.starts_unix_ms,
-        })
-      }
-      if self.commercial_store.project_for_organization(
-          trial.organization_id,
-          trial.project_id,
-        )
-        is None {
-        self.commercial_store.add_project({
-          project_id: trial.project_id,
-          organization_id: trial.organization_id,
-          cost_center_id,
-          display_name: "Free trial",
-          created_unix_ms: trial.starts_unix_ms,
-        })
-      }
-      self.persist_commercial_state()
-    } catch {
-      error => {
-        ignore(self.commercial_store.replace_from_durable_snapshot(before))
-        raise error
-      }
+    errdefer ignore(self.commercial_store.replace_from_durable_snapshot(before))
+    if self.commercial_store.organization(trial.organization_id) is None {
+      self.commercial_store.add_organization({
+        organization_id: trial.organization_id,
+        display_name: "Trial — \{account.display_name}",
+        state: Active,
+        verification_ref: Some("trial:\{trial.trial_id}"),
+        legal_profile: None,
+        created_unix_ms: trial.starts_unix_ms,
+      })
     }
+    let cost_center_id = "trial-cost-\{fingerprint}"
+    let commercial = self.commercial_store.durable_snapshot().commercial
+    if !commercial.cost_centers.any(value => {
+        value.cost_center_id == cost_center_id
+      }) {
+      self.commercial_store.add_cost_center({
+        cost_center_id,
+        organization_id: trial.organization_id,
+        parent_cost_center_id: None,
+        display_name: "Free trial",
+        created_unix_ms: trial.starts_unix_ms,
+      })
+    }
+    if self.commercial_store.project_for_organization(
+        trial.organization_id,
+        trial.project_id,
+      )
+      is None {
+      self.commercial_store.add_project({
+        project_id: trial.project_id,
+        organization_id: trial.organization_id,
+        cost_center_id,
+        display_name: "Free trial",
+        created_unix_ms: trial.starts_unix_ms,
+      })
+    }
+    self.persist_commercial_state()
   }
   Some(trial)
 }

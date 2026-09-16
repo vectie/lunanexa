@@ -48,7 +48,7 @@ async test "v1 contract snapshots migrate ownership and provenance" {
         subject_ref: "subject-1",
         order_ref: "order-1",
         active_forms: [MasterLease],
-        values: [{ field_id: "lessee.name", value: "测试单位" }],
+        values: [{ field_id: "lessee.name", value: "测试单位", }],
         values_sha256: None,
         confirmed_by: None,
         confirmed_unix_ms: None,
@@ -99,8 +99,8 @@ async test "contract packets persist drafts and audit no raw values" {
     packet.packet_id,
     1L,
     [
-      { field_id: "reservation.organization_name", value: "测试单位" },
-      { field_id: "reservation.contact_phone", value: "13800000000" },
+      { field_id: "reservation.organization_name", value: "测试单位", },
+      { field_id: "reservation.contact_phone", value: "13800000000", },
     ],
     CustomerMessenger,
     "subject-1",
@@ -138,7 +138,7 @@ async test "governance projections gate access and survive restart" {
       1000L,
     ),
     state: Effective,
-    values: [{ field_id: "lease.end_date", value: "2026-12-31" }],
+    values: [{ field_id: "lease.end_date", value: "2026-12-31", }],
   }
   let store = ContractDocumentStore::open(path)
   ignore(store.create_packet(packet, packet.subject_ref))
@@ -157,7 +157,7 @@ async test "governance projections gate access and survive restart" {
           [MasterLease],
           1001L,
         ),
-        values: [{ field_id: "lease.end_date", value: "2025-01-01" }],
+        values: [{ field_id: "lease.end_date", value: "2025-01-01", }],
       },
       packet.subject_ref,
     ),
@@ -175,7 +175,7 @@ async test "governance projections gate access and survive restart" {
     packet_id: packet.packet_id,
     preceding_packet_ref: packet.packet_id,
     base_revision: packet.revision,
-    changes: [{ field_id: "lease.total_rent", value: "100" }],
+    changes: [{ field_id: "lease.total_rent", value: "100", }],
     reason: "renewed price",
     state: PendingApproval,
     effective_unix_ms: None,
@@ -305,7 +305,7 @@ async test "confirmed generation request and exact paired artifacts survive rest
           _ => "已核实资料"
         }
       }
-      { field_id: field.field_id, value }
+      { field_id: field.field_id, value, }
     }
   ]
   let store = ContractDocumentStore::open(path)
@@ -440,7 +440,7 @@ async test "v2 contract snapshots load with empty lifecycle extensions" {
         subject_ref: "subject-1",
         order_ref: "order-1",
         active_forms: [MasterLease],
-        values: [{ field_id: "lessee.name", value: "测试单位" }],
+        values: [{ field_id: "lessee.name", value: "测试单位", }],
         assignments: [
           {
             field_id: "lessee.name",
@@ -523,7 +523,7 @@ async test "effective-stage forms require an effective preceding packet" {
   }
   try
     store.create_packet(
-      { ..follow_up, preceding_packet_ref: None },
+      { ..follow_up, preceding_packet_ref: None, },
       "subject-1",
     )
   catch {
@@ -1169,7 +1169,7 @@ async test "contract approvals persist, decide once, and survive a reload" {
     ),
     revision: 5L,
     state: Effective,
-    values: [{ field_id: "lease.total_rent", value: "1" }],
+    values: [{ field_id: "lease.total_rent", value: "1", }],
   }
   ignore(store.create_packet(approval_packet, "alice"))
   let pending : @contractdoc.ContractApproval = {
@@ -1199,8 +1199,8 @@ async test "contract approvals persist, decide once, and survive a reload" {
         approval_id: "approval-invalid-revision",
         expected_revision: 4L,
       },
-      { ..pending, approval_id: "approval-invalid-state", status: Approved },
-      { ..pending, approval_id: "approval-invalid-payload", action: "execute" },
+      { ..pending, approval_id: "approval-invalid-state", status: Approved, },
+      { ..pending, approval_id: "approval-invalid-payload", action: "execute", },
     ] {
     try store.create_approval(invalid) catch {
       @contractdoc.ContractDocumentError::InvalidInput(_) => ()
