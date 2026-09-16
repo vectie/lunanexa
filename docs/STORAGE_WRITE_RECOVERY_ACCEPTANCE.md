@@ -78,3 +78,22 @@ skip environment-conditional database execution. Interface generation passes.
 An independent database catalog query again found zero temporary acceptance
 databases, and the test tunnel was closed. Database-server failover and ambiguous
 commit recovery remain separate unproven scenarios.
+
+## Cancellation boundary
+
+New white-box tests hold the commerce/telemetry mutex in an owner task and
+cancel two consecutive waiting writers using an explicitly identified timeout
+error. Both waiters must enter and time out; neither can release the owner's
+lock, mutate the snapshot or alter disk bytes. After the owner releases its
+lock, a bounded new write and reopen succeed. Combined strict package tests
+pass 22/22. This is lock-wait cancellation coverage, not cancellation during
+persistence.
+
+Source inspection confirms `PostgresDatabase::save_opaque_snapshot` acquires
+its async mutex and then performs BEGIN, snapshot write and COMMIT through the
+synchronous native `PQexec`/`PQexecParams` adapter. There is no asynchronous
+yield between these transaction calls. Consequently an async timeout in that
+task is not an adequate commit-interruption test, and synchronous database I/O
+may delay other work on the same execution thread. Independent connection or
+server fault injection and an explicit ambiguous-outcome recovery design remain
+necessary; the passing tests do not establish those properties.
