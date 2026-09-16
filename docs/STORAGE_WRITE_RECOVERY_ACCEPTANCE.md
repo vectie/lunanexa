@@ -279,3 +279,33 @@ The selected lease HTTP, lease-billing and credential-handoff HTTP fixtures pass
 8/8 with warnings 92/20 disabled for still-unmigrated dependencies. This local
 integration run does not replace external SSH issuer, actual host cleanup or
 physical sanitization acceptance.
+
+## Enterprise portal persistence recovery
+
+The portal store now uses scoped mutex release in its two authorized self-view
+paths and scoped release/error rollback in seven mutation paths. Organization
+membership, trial replacement, agreement signing and lease-review authorization
+rules and public interfaces are unchanged.
+
+The signature/approval fixture injects two consecutive staging-write failures
+for signature requests and for lease approval. Each failure preserves the full
+in-memory snapshot and disk bytes; a bounded snapshot read verifies lock release.
+Removing the injected fault permits normal retry, and reopen retains the executed
+agreement and approved request. Temporary files are removed on fixture exit.
+The strict native portal and portal-store selection passes 12/12; scoped
+interface generation and formatting pass without generated interface changes.
+This is local persistence evidence, not an external signing-provider result or
+a deployment of the new controller binary.
+
+The portal HTTP selection also passes 2/2 with warnings 92/20 disabled for
+remaining dependencies. No live signing, lease provisioning or user membership
+is changed by this local regression run.
+
+A fresh full native strict check still reports 63 errors, including deprecated
+trait-method calls and remaining fragile async cleanup handlers. Passing the
+targeted suite does not imply that the repository-wide strict gate has passed.
+
+The subsequent full native functional run passes 803/803 with warnings 92/20
+disabled. Environment-conditional PostgreSQL branches in this local run are
+not fresh live database evidence. This functional result does not override
+the remaining strict-check errors or qualify real hardware/model inference.

@@ -270,25 +270,18 @@ pub async fn FilePortalStore::self_view(
   subject_ref : String,
 ) -> @portal.EnterpriseSelfView {
   self.mutex.acquire()
-  try {
-    let memberships = sorted_memberships(self.memberships).filter(value => {
-      value.subject_ref == subject_ref && value.active
-    })
-    if memberships.length() > 1 {
-      raise @portal.PortalError::OrganizationSelectionRequired
-    }
-    guard memberships.get(0) is Some(membership) else {
-      raise @portal.PortalError::Unauthorized("enterprise membership required")
-    }
-    let view = self.self_view_for_membership_unlocked(subject_ref, membership)
-    self.mutex.release()
-    view
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  let memberships = sorted_memberships(self.memberships).filter(value => {
+    value.subject_ref == subject_ref && value.active
+  })
+  if memberships.length() > 1 {
+    raise @portal.PortalError::OrganizationSelectionRequired
   }
+  guard memberships.get(0) is Some(membership) else {
+    raise @portal.PortalError::Unauthorized("enterprise membership required")
+  }
+  let view = self.self_view_for_membership_unlocked(subject_ref, membership)
+  view
 }
 
 ///|
@@ -333,24 +326,15 @@ pub async fn FilePortalStore::self_view_for_organization(
     raise @portal.PortalError::InvalidInput("invalid organization identity")
   }
   self.mutex.acquire()
-  try {
-    guard self.membership_for_organization_unlocked(
-        subject_ref, organization_id,
-      )
-      is Some(membership) else {
-      raise @portal.PortalError::Unauthorized(
-        "active organization membership required",
-      )
-    }
-    let view = self.self_view_for_membership_unlocked(subject_ref, membership)
-    self.mutex.release()
-    view
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
+  defer self.mutex.release()
+  guard self.membership_for_organization_unlocked(subject_ref, organization_id)
+    is Some(membership) else {
+    raise @portal.PortalError::Unauthorized(
+      "active organization membership required",
+    )
   }
+  let view = self.self_view_for_membership_unlocked(subject_ref, membership)
+  view
 }
 
 ///|
@@ -360,41 +344,36 @@ pub async fn FilePortalStore::put_membership(
 ) -> @portal.EnterpriseMembership {
   @portal.validate_membership(membership)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.memberships.copy()
-  try {
-    if self.memberships.contains(membership.membership_id) {
-      raise @portal.PortalError::AlreadyExists(membership.membership_id)
-    }
-    if self.memberships
-      .values()
-      .any(value => {
-        value.subject_ref == membership.subject_ref &&
-        value.organization_id == membership.organization_id &&
-        value.active
-      }) {
-      raise @portal.PortalError::AlreadyExists(
-        "\{membership.subject_ref}:\{membership.organization_id}",
-      )
-    }
-    if self.memberships
-      .values()
-      .any(value => {
-        value.organization_id == membership.organization_id &&
-        value.tenant_ref != membership.tenant_ref
-      }) {
-      raise @portal.PortalError::TenantMismatch
-    }
-    self.memberships[membership.membership_id] = membership
-    self.persist()
-    self.mutex.release()
-    membership
-  } catch {
-    error => {
-      self.memberships = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.memberships = previous
   }
+  if self.memberships.contains(membership.membership_id) {
+    raise @portal.PortalError::AlreadyExists(membership.membership_id)
+  }
+  if self.memberships
+    .values()
+    .any(value => {
+      value.subject_ref == membership.subject_ref &&
+      value.organization_id == membership.organization_id &&
+      value.active
+    }) {
+    raise @portal.PortalError::AlreadyExists(
+      "\{membership.subject_ref}:\{membership.organization_id}",
+    )
+  }
+  if self.memberships
+    .values()
+    .any(value => {
+      value.organization_id == membership.organization_id &&
+      value.tenant_ref != membership.tenant_ref
+    }) {
+    raise @portal.PortalError::TenantMismatch
+  }
+  self.memberships[membership.membership_id] = membership
+  self.persist()
+  membership
 }
 
 ///|
@@ -410,35 +389,27 @@ pub async fn FilePortalStore::replace_trial_membership(
     raise @portal.PortalError::InvalidInput("invalid membership replacement")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.memberships.copy()
-  try {
-    guard self.memberships.get(trial_membership_id) is Some(trial) &&
-      trial.active &&
-      trial.subject_ref == membership.subject_ref &&
-      trial_membership_id.has_prefix("trial-membership-") else {
-      raise @portal.PortalError::Unauthorized("trial membership is unavailable")
-    }
-    match self.memberships.get(membership.membership_id) {
-      Some(existing) if existing == membership => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) =>
-        raise @portal.PortalError::AlreadyExists(membership.membership_id)
-      None => ()
-    }
-    self.memberships[trial_membership_id] = { ..trial, active: false }
-    self.memberships[membership.membership_id] = membership
-    self.persist()
-    self.mutex.release()
-    membership
-  } catch {
-    error => {
-      self.memberships = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.memberships = previous
   }
+  guard self.memberships.get(trial_membership_id) is Some(trial) &&
+    trial.active &&
+    trial.subject_ref == membership.subject_ref &&
+    trial_membership_id.has_prefix("trial-membership-") else {
+    raise @portal.PortalError::Unauthorized("trial membership is unavailable")
+  }
+  match self.memberships.get(membership.membership_id) {
+    Some(existing) if existing == membership => return existing
+    Some(_) =>
+      raise @portal.PortalError::AlreadyExists(membership.membership_id)
+    None => ()
+  }
+  self.memberships[trial_membership_id] = { ..trial, active: false, }
+  self.memberships[membership.membership_id] = membership
+  self.persist()
+  membership
 }
 
 ///|
@@ -453,31 +424,26 @@ pub async fn FilePortalStore::publish_agreement(
     )
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.agreements.copy()
-  try {
-    if self.agreements.contains(agreement.agreement_id) {
-      raise @portal.PortalError::AlreadyExists(agreement.agreement_id)
-    }
-    if !self.memberships
-      .values()
-      .any(value => {
-        value.tenant_ref == agreement.tenant_ref &&
-        value.organization_id == agreement.organization_id &&
-        value.active
-      }) {
-      raise @portal.PortalError::NotFound("enterprise organization membership")
-    }
-    self.agreements[agreement.agreement_id] = agreement
-    self.persist()
-    self.mutex.release()
-    agreement
-  } catch {
-    error => {
-      self.agreements = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.agreements = previous
   }
+  if self.agreements.contains(agreement.agreement_id) {
+    raise @portal.PortalError::AlreadyExists(agreement.agreement_id)
+  }
+  if !self.memberships
+    .values()
+    .any(value => {
+      value.tenant_ref == agreement.tenant_ref &&
+      value.organization_id == agreement.organization_id &&
+      value.active
+    }) {
+    raise @portal.PortalError::NotFound("enterprise organization membership")
+  }
+  self.agreements[agreement.agreement_id] = agreement
+  self.persist()
+  agreement
 }
 
 ///|
@@ -488,52 +454,46 @@ pub async fn FilePortalStore::request_signature(
   now_unix_ms : Int64,
 ) -> @portal.PortalAgreement {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.agreements.copy()
-  try {
-    guard self.agreements.get(request.agreement_id) is Some(agreement) else {
-      raise @portal.PortalError::NotFound(request.agreement_id)
-    }
-    guard self.membership_for_organization_unlocked(
-        subject_ref,
-        agreement.organization_id,
-      )
-      is Some(membership) else {
-      raise @portal.PortalError::Unauthorized("enterprise membership required")
-    }
-    if !@portal.role_allows(membership.roles, LegalSigner) {
-      raise @portal.PortalError::Unauthorized("legal signer role required")
-    }
-    if agreement.tenant_ref != membership.tenant_ref ||
-      agreement.organization_id != membership.organization_id {
-      raise @portal.PortalError::TenantMismatch
-    }
-    if !@contracts.valid_identifier(request.idempotency_key) {
-      raise @portal.PortalError::InvalidInput("invalid idempotency key")
-    }
-    let receipt = "portal-signature:\{request.idempotency_key}"
-    if agreement.state == SignatureRequested &&
-      agreement.signer_subject_ref == Some(subject_ref) &&
-      agreement.signature_request_receipt == Some(receipt) {
-      self.mutex.release()
-      return agreement
-    }
-    let updated = agreement.request_signature(
-      subject_ref,
-      receipt,
-      request.expected_generation,
-      now_unix_ms,
-    )
-    self.agreements[request.agreement_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.agreements = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.agreements = previous
   }
+  guard self.agreements.get(request.agreement_id) is Some(agreement) else {
+    raise @portal.PortalError::NotFound(request.agreement_id)
+  }
+  guard self.membership_for_organization_unlocked(
+      subject_ref,
+      agreement.organization_id,
+    )
+    is Some(membership) else {
+    raise @portal.PortalError::Unauthorized("enterprise membership required")
+  }
+  if !@portal.role_allows(membership.roles, LegalSigner) {
+    raise @portal.PortalError::Unauthorized("legal signer role required")
+  }
+  if agreement.tenant_ref != membership.tenant_ref ||
+    agreement.organization_id != membership.organization_id {
+    raise @portal.PortalError::TenantMismatch
+  }
+  if !@contracts.valid_identifier(request.idempotency_key) {
+    raise @portal.PortalError::InvalidInput("invalid idempotency key")
+  }
+  let receipt = "portal-signature:\{request.idempotency_key}"
+  if agreement.state == SignatureRequested &&
+    agreement.signer_subject_ref == Some(subject_ref) &&
+    agreement.signature_request_receipt == Some(receipt) {
+    return agreement
+  }
+  let updated = agreement.request_signature(
+    subject_ref,
+    receipt,
+    request.expected_generation,
+    now_unix_ms,
+  )
+  self.agreements[request.agreement_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -543,23 +503,18 @@ pub async fn FilePortalStore::record_execution(
   now_unix_ms : Int64,
 ) -> @portal.PortalAgreement {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.agreements.copy()
-  try {
-    guard self.agreements.get(execution.agreement_id) is Some(agreement) else {
-      raise @portal.PortalError::NotFound(execution.agreement_id)
-    }
-    let updated = agreement.record_execution(execution, now_unix_ms)
-    self.agreements[execution.agreement_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.agreements = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.agreements = previous
   }
+  guard self.agreements.get(execution.agreement_id) is Some(agreement) else {
+    raise @portal.PortalError::NotFound(execution.agreement_id)
+  }
+  let updated = agreement.record_execution(execution, now_unix_ms)
+  self.agreements[execution.agreement_id] = updated
+  self.persist()
+  updated
 }
 
 ///|
@@ -590,70 +545,60 @@ pub async fn FilePortalStore::submit_lease_request(
     raise @portal.PortalError::InvalidInput("lease request already expired")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.lease_requests.copy()
-  try {
-    guard self.membership_for_organization_unlocked(
-        subject_ref,
-        submission.organization_id,
-      )
-      is Some(membership) else {
-      raise @portal.PortalError::Unauthorized("enterprise membership required")
-    }
-    if !@portal.role_allows(membership.roles, LeaseRequester) {
-      raise @portal.PortalError::Unauthorized("lease requester role required")
-    }
-    if submission.tenant_ref != membership.tenant_ref ||
-      submission.organization_id != membership.organization_id {
-      raise @portal.PortalError::TenantMismatch
-    }
-    match
-      self.request_by_idempotency_unlocked(
-        submission.tenant_ref,
-        subject_ref,
-        submission.idempotency_key,
-      ) {
-      Some(existing) if existing.subject_ref == subject_ref &&
-        existing.submission == submission => {
-        self.mutex.release()
-        return existing
-      }
-      Some(_) =>
-        raise @portal.PortalError::IdempotencyConflict(
-          submission.idempotency_key,
-        )
-      None => ()
-    }
-    if self.lease_requests.contains(submission.request_id) {
-      raise @portal.PortalError::AlreadyExists(submission.request_id)
-    }
-    if !self.executed_agreement_unlocked(
-        submission.tenant_ref,
-        submission.organization_id,
-      ) {
-      raise @portal.PortalError::AgreementRequired
-    }
-    let request : @portal.EnterpriseLeaseRequest = {
-      submission,
-      subject_ref,
-      state: Submitted,
-      generation: 1L,
-      assigned_node_id: None,
-      exclusive_lease_id: None,
-      decision_receipt: None,
-      created_unix_ms: now_unix_ms,
-      updated_unix_ms: now_unix_ms,
-    }
-    self.lease_requests[submission.request_id] = request
-    self.persist()
-    self.mutex.release()
-    request
-  } catch {
-    error => {
-      self.lease_requests = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.lease_requests = previous
   }
+  guard self.membership_for_organization_unlocked(
+      subject_ref,
+      submission.organization_id,
+    )
+    is Some(membership) else {
+    raise @portal.PortalError::Unauthorized("enterprise membership required")
+  }
+  if !@portal.role_allows(membership.roles, LeaseRequester) {
+    raise @portal.PortalError::Unauthorized("lease requester role required")
+  }
+  if submission.tenant_ref != membership.tenant_ref ||
+    submission.organization_id != membership.organization_id {
+    raise @portal.PortalError::TenantMismatch
+  }
+  match
+    self.request_by_idempotency_unlocked(
+      submission.tenant_ref,
+      subject_ref,
+      submission.idempotency_key,
+    ) {
+    Some(existing) if existing.subject_ref == subject_ref &&
+      existing.submission == submission => return existing
+    Some(_) =>
+      raise @portal.PortalError::IdempotencyConflict(submission.idempotency_key)
+    None => ()
+  }
+  if self.lease_requests.contains(submission.request_id) {
+    raise @portal.PortalError::AlreadyExists(submission.request_id)
+  }
+  if !self.executed_agreement_unlocked(
+      submission.tenant_ref,
+      submission.organization_id,
+    ) {
+    raise @portal.PortalError::AgreementRequired
+  }
+  let request : @portal.EnterpriseLeaseRequest = {
+    submission,
+    subject_ref,
+    state: Submitted,
+    generation: 1L,
+    assigned_node_id: None,
+    exclusive_lease_id: None,
+    decision_receipt: None,
+    created_unix_ms: now_unix_ms,
+    updated_unix_ms: now_unix_ms,
+  }
+  self.lease_requests[submission.request_id] = request
+  self.persist()
+  request
 }
 
 ///|
@@ -675,21 +620,16 @@ pub async fn FilePortalStore::review_lease_request(
   now_unix_ms : Int64,
 ) -> @portal.EnterpriseLeaseRequest {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.lease_requests.copy()
-  try {
-    guard self.lease_requests.get(review.request_id) is Some(request) else {
-      raise @portal.PortalError::NotFound(review.request_id)
-    }
-    let updated = request.review(review, exclusive_lease_id, now_unix_ms)
-    self.lease_requests[review.request_id] = updated
-    self.persist()
-    self.mutex.release()
-    updated
-  } catch {
-    error => {
-      self.lease_requests = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.lease_requests = previous
   }
+  guard self.lease_requests.get(review.request_id) is Some(request) else {
+    raise @portal.PortalError::NotFound(review.request_id)
+  }
+  let updated = request.review(review, exclusive_lease_id, now_unix_ms)
+  self.lease_requests[review.request_id] = updated
+  self.persist()
+  updated
 }
