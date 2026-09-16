@@ -81,7 +81,7 @@ async fn write_snapshot(
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -229,7 +229,7 @@ pub async fn ClientHandoffStore::open_postgres(
       database.save_opaque_snapshot(
         "client_handoffs",
         @handoff.snapshot_schema_version,
-        store.snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(store.snapshot_unlocked()).stringify(),
       )
   }
   store
@@ -244,7 +244,7 @@ async fn ClientHandoffStore::persist(self : ClientHandoffStore) -> Unit {
       database.save_opaque_snapshot(
         "client_handoffs",
         @handoff.snapshot_schema_version,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -325,84 +325,78 @@ pub async fn ClientHandoffStore::issue(
 ) -> @handoff.IssuedClientHandoff {
   @handoff.validate_issue_intent(intent, now_unix_ms)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_handoffs = self.handoffs.copy()
   let previous_credentials = self.credentials.copy()
-  try {
-    match self.by_request(intent.request_id) {
-      Some(existing) if existing.client_id == intent.client_id &&
-        existing.tenant_ref == intent.tenant_ref &&
-        existing.subject_ref == intent.subject_ref &&
-        existing.organization_id == Some(intent.organization_id) &&
-        existing.project_id == Some(intent.project_id) &&
-        existing.display_name == intent.display_name &&
-        existing.allowed_models == intent.allowed_models &&
-        existing.handoff_expires_unix_ms == intent.handoff_expires_unix_ms &&
-        existing.credential_expires_unix_ms == intent.credential_expires_unix_ms &&
-        existing.maximum_requests == intent.maximum_requests => {
-        let issued = self.issued_view(existing)
-        self.mutex.release()
-        return issued
-      }
-      Some(_) => raise @handoff.ClientHandoffError::IdempotencyConflict
-      None => ()
-    }
-    let digest = self.hmac_hex(
-      "lunanexa.client-handoff.id.v1|\{intent.request_id}|\{intent.client_id}|\{intent.subject_ref}|\{now_unix_ms}",
-    )
-    let handoff_id = "client-handoff-\{digest[:32]}"
-    let api_key_id = "client-key-\{digest[32:]}"
-    let code = self.handoff_code(intent, now_unix_ms)
-    let record : @handoff.ClientHandoffRecord = {
-      version: @handoff.contract_version,
-      handoff_id,
-      request_id: intent.request_id,
-      client_id: intent.client_id,
-      tenant_ref: intent.tenant_ref,
-      subject_ref: intent.subject_ref,
-      organization_id: Some(intent.organization_id),
-      project_id: Some(intent.project_id),
-      api_key_id,
-      code_sha256: digest_secret(code),
-      display_name: intent.display_name,
-      allowed_models: intent.allowed_models.copy(),
-      created_unix_ms: now_unix_ms,
-      handoff_expires_unix_ms: intent.handoff_expires_unix_ms,
-      credential_expires_unix_ms: intent.credential_expires_unix_ms,
-      maximum_requests: intent.maximum_requests,
-      redeemed_unix_ms: None,
-      revoked_unix_ms: None,
-    }
-    let secret = self.api_secret(record)
-    let credential : @handoff.ClientCredential = {
-      key_id: api_key_id,
-      handoff_id,
-      client_id: intent.client_id,
-      tenant_ref: intent.tenant_ref,
-      subject_ref: intent.subject_ref,
-      organization_id: Some(intent.organization_id),
-      project_id: Some(intent.project_id),
-      secret_sha256: digest_secret(secret),
-      allowed_models: intent.allowed_models.copy(),
-      issued_unix_ms: now_unix_ms,
-      expires_unix_ms: intent.credential_expires_unix_ms,
-      maximum_requests: intent.maximum_requests,
-      consumed_requests: 0L,
-      revoked_unix_ms: None,
-    }
-    self.handoffs[handoff_id] = record
-    self.credentials[api_key_id] = credential
-    self.persist()
-    let issued = self.issued_view(record)
-    self.mutex.release()
-    issued
-  } catch {
-    error => {
-      self.handoffs = previous_handoffs
-      self.credentials = previous_credentials
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.handoffs = previous_handoffs
+    self.credentials = previous_credentials
   }
+  match self.by_request(intent.request_id) {
+    Some(existing) if existing.client_id == intent.client_id &&
+      existing.tenant_ref == intent.tenant_ref &&
+      existing.subject_ref == intent.subject_ref &&
+      existing.organization_id == Some(intent.organization_id) &&
+      existing.project_id == Some(intent.project_id) &&
+      existing.display_name == intent.display_name &&
+      existing.allowed_models == intent.allowed_models &&
+      existing.handoff_expires_unix_ms == intent.handoff_expires_unix_ms &&
+      existing.credential_expires_unix_ms == intent.credential_expires_unix_ms &&
+      existing.maximum_requests == intent.maximum_requests => {
+      let issued = self.issued_view(existing)
+      return issued
+    }
+    Some(_) => raise @handoff.ClientHandoffError::IdempotencyConflict
+    None => ()
+  }
+  let digest = self.hmac_hex(
+    "lunanexa.client-handoff.id.v1|\{intent.request_id}|\{intent.client_id}|\{intent.subject_ref}|\{now_unix_ms}",
+  )
+  let handoff_id = "client-handoff-\{digest[:32]}"
+  let api_key_id = "client-key-\{digest[32:]}"
+  let code = self.handoff_code(intent, now_unix_ms)
+  let record : @handoff.ClientHandoffRecord = {
+    version: @handoff.contract_version,
+    handoff_id,
+    request_id: intent.request_id,
+    client_id: intent.client_id,
+    tenant_ref: intent.tenant_ref,
+    subject_ref: intent.subject_ref,
+    organization_id: Some(intent.organization_id),
+    project_id: Some(intent.project_id),
+    api_key_id,
+    code_sha256: digest_secret(code),
+    display_name: intent.display_name,
+    allowed_models: intent.allowed_models.copy(),
+    created_unix_ms: now_unix_ms,
+    handoff_expires_unix_ms: intent.handoff_expires_unix_ms,
+    credential_expires_unix_ms: intent.credential_expires_unix_ms,
+    maximum_requests: intent.maximum_requests,
+    redeemed_unix_ms: None,
+    revoked_unix_ms: None,
+  }
+  let secret = self.api_secret(record)
+  let credential : @handoff.ClientCredential = {
+    key_id: api_key_id,
+    handoff_id,
+    client_id: intent.client_id,
+    tenant_ref: intent.tenant_ref,
+    subject_ref: intent.subject_ref,
+    organization_id: Some(intent.organization_id),
+    project_id: Some(intent.project_id),
+    secret_sha256: digest_secret(secret),
+    allowed_models: intent.allowed_models.copy(),
+    issued_unix_ms: now_unix_ms,
+    expires_unix_ms: intent.credential_expires_unix_ms,
+    maximum_requests: intent.maximum_requests,
+    consumed_requests: 0L,
+    revoked_unix_ms: None,
+  }
+  self.handoffs[handoff_id] = record
+  self.credentials[api_key_id] = credential
+  self.persist()
+  let issued = self.issued_view(record)
+  issued
 }
 
 ///|
@@ -419,69 +413,64 @@ pub async fn ClientHandoffStore::redeem(
   }
   let code_digest = digest_secret(handoff_code)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.handoffs.copy()
-  try {
-    let mut matched : @handoff.ClientHandoffRecord? = None
-    for record in self.handoffs.values() {
-      if constant_time_equal(record.code_sha256, code_digest) {
-        matched = Some(record)
-      }
+  errdefer {
+    self.handoffs = previous
+  }
+  let mut matched : @handoff.ClientHandoffRecord? = None
+  for record in self.handoffs.values() {
+    if constant_time_equal(record.code_sha256, code_digest) {
+      matched = Some(record)
     }
-    guard matched is Some(record) else {
-      raise @handoff.ClientHandoffError::Unauthorized
-    }
-    if record.client_id != client_id {
-      raise @handoff.ClientHandoffError::ClientMismatch
-    }
-    if record.revoked_unix_ms is Some(_) {
-      raise @handoff.ClientHandoffError::Revoked
-    }
-    if record.redeemed_unix_ms is Some(_) {
-      raise @handoff.ClientHandoffError::AlreadyRedeemed
-    }
-    if now_unix_ms >= record.handoff_expires_unix_ms {
-      raise @handoff.ClientHandoffError::Expired
-    }
-    guard self.credentials.get(record.api_key_id) is Some(credential) else {
-      raise @handoff.ClientHandoffError::NotFound
-    }
-    guard record.organization_id is Some(organization_id) &&
-      record.project_id is Some(project_id) &&
-      credential.organization_id == Some(organization_id) &&
-      credential.project_id == Some(project_id) else {
-      raise @handoff.ClientHandoffError::Unauthorized
-    }
-    // Verify the deterministic secret before consuming the one-time record.
-    // A corrupted credential snapshot must fail closed without persisting an
-    // irreversible redeemed state.
-    let secret = self.api_secret(record)
-    if !constant_time_equal(digest_secret(secret), credential.secret_sha256) {
-      raise @handoff.ClientHandoffError::Unauthorized
-    }
-    let redeemed = { ..record, redeemed_unix_ms: Some(now_unix_ms) }
-    self.handoffs[record.handoff_id] = redeemed
-    self.persist()
-    self.mutex.release()
-    {
-      handoff_id: record.handoff_id,
-      client_id: record.client_id,
-      api_key_id: credential.key_id,
-      api_secret: secret,
-      tenant_ref: record.tenant_ref,
-      subject_ref: record.subject_ref,
-      organization_id,
-      project_id,
-      allowed_models: record.allowed_models.copy(),
-      expires_unix_ms: credential.expires_unix_ms,
-      maximum_requests: credential.maximum_requests,
-      one_time: true,
-    }
-  } catch {
-    error => {
-      self.handoffs = previous
-      self.mutex.release()
-      raise error
-    }
+  }
+  guard matched is Some(record) else {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  if record.client_id != client_id {
+    raise @handoff.ClientHandoffError::ClientMismatch
+  }
+  if record.revoked_unix_ms is Some(_) {
+    raise @handoff.ClientHandoffError::Revoked
+  }
+  if record.redeemed_unix_ms is Some(_) {
+    raise @handoff.ClientHandoffError::AlreadyRedeemed
+  }
+  if now_unix_ms >= record.handoff_expires_unix_ms {
+    raise @handoff.ClientHandoffError::Expired
+  }
+  guard self.credentials.get(record.api_key_id) is Some(credential) else {
+    raise @handoff.ClientHandoffError::NotFound
+  }
+  guard record.organization_id is Some(organization_id) &&
+    record.project_id is Some(project_id) &&
+    credential.organization_id == Some(organization_id) &&
+    credential.project_id == Some(project_id) else {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  // Verify the deterministic secret before consuming the one-time record.
+  // A corrupted credential snapshot must fail closed without persisting an
+  // irreversible redeemed state.
+  let secret = self.api_secret(record)
+  if !constant_time_equal(digest_secret(secret), credential.secret_sha256) {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  let redeemed = { ..record, redeemed_unix_ms: Some(now_unix_ms), }
+  self.handoffs[record.handoff_id] = redeemed
+  self.persist()
+  {
+    handoff_id: record.handoff_id,
+    client_id: record.client_id,
+    api_key_id: credential.key_id,
+    api_secret: secret,
+    tenant_ref: record.tenant_ref,
+    subject_ref: record.subject_ref,
+    organization_id,
+    project_id,
+    allowed_models: record.allowed_models.copy(),
+    expires_unix_ms: credential.expires_unix_ms,
+    maximum_requests: credential.maximum_requests,
+    one_time: true,
   }
 }
 
@@ -502,57 +491,50 @@ pub async fn ClientHandoffStore::authorize(
   ignore(scope)
   let secret_digest = digest_secret(secret)
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.credentials.copy()
-  try {
-    let mut matched : @handoff.ClientCredential? = None
-    for credential in self.credentials.values() {
-      if constant_time_equal(credential.secret_sha256, secret_digest) {
-        matched = Some(credential)
-      }
+  errdefer {
+    self.credentials = previous
+  }
+  let mut matched : @handoff.ClientCredential? = None
+  for credential in self.credentials.values() {
+    if constant_time_equal(credential.secret_sha256, secret_digest) {
+      matched = Some(credential)
     }
-    guard matched is Some(current) else {
-      raise @handoff.ClientHandoffError::Unauthorized
+  }
+  guard matched is Some(current) else {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  guard current.organization_id is Some(organization_id) &&
+    current.project_id is Some(project_id) else {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  guard self.handoffs.get(current.handoff_id) is Some(record) &&
+    record.redeemed_unix_ms is Some(_) &&
+    record.revoked_unix_ms is None else {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  if current.revoked_unix_ms is Some(_) ||
+    current.expires_unix_ms <= now_unix_ms ||
+    model.map(value => !current.allowed_models.contains(value)).unwrap_or(false) {
+    raise @handoff.ClientHandoffError::Unauthorized
+  }
+  if consume && current.consumed_requests >= current.maximum_requests {
+    raise @handoff.ClientHandoffError::QuotaExceeded
+  }
+  if consume {
+    self.credentials[current.key_id] = {
+      ..current,
+      consumed_requests: current.consumed_requests + 1L,
     }
-    guard current.organization_id is Some(organization_id) &&
-      current.project_id is Some(project_id) else {
-      raise @handoff.ClientHandoffError::Unauthorized
-    }
-    guard self.handoffs.get(current.handoff_id) is Some(record) &&
-      record.redeemed_unix_ms is Some(_) &&
-      record.revoked_unix_ms is None else {
-      raise @handoff.ClientHandoffError::Unauthorized
-    }
-    if current.revoked_unix_ms is Some(_) ||
-      current.expires_unix_ms <= now_unix_ms ||
-      model
-      .map(value => !current.allowed_models.contains(value))
-      .unwrap_or(false) {
-      raise @handoff.ClientHandoffError::Unauthorized
-    }
-    if consume && current.consumed_requests >= current.maximum_requests {
-      raise @handoff.ClientHandoffError::QuotaExceeded
-    }
-    if consume {
-      self.credentials[current.key_id] = {
-        ..current,
-        consumed_requests: current.consumed_requests + 1L,
-      }
-      self.persist()
-    }
-    self.mutex.release()
-    {
-      key_id: current.key_id,
-      tenant_ref: current.tenant_ref,
-      subject_ref: current.subject_ref,
-      organization_id,
-      project_id,
-    }
-  } catch {
-    error => {
-      self.credentials = previous
-      self.mutex.release()
-      raise error
-    }
+    self.persist()
+  }
+  {
+    key_id: current.key_id,
+    tenant_ref: current.tenant_ref,
+    subject_ref: current.subject_ref,
+    organization_id,
+    project_id,
   }
 }
 
@@ -565,35 +547,30 @@ pub async fn ClientHandoffStore::revoke_for_subject(
   now_unix_ms : Int64,
 ) -> @handoff.ClientHandoffView {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_handoffs = self.handoffs.copy()
   let previous_credentials = self.credentials.copy()
-  try {
-    guard self.handoffs.get(handoff_id) is Some(record) &&
-      record.tenant_ref == tenant_ref &&
-      record.subject_ref == subject_ref &&
-      self.credentials.get(record.api_key_id) is Some(credential) else {
-      raise @handoff.ClientHandoffError::NotFound
-    }
-    let revoked_at = record.revoked_unix_ms.unwrap_or(now_unix_ms)
-    let revoked = { ..record, revoked_unix_ms: Some(revoked_at) }
-    let revoked_credential = {
-      ..credential,
-      revoked_unix_ms: Some(credential.revoked_unix_ms.unwrap_or(revoked_at)),
-    }
-    self.handoffs[handoff_id] = revoked
-    self.credentials[credential.key_id] = revoked_credential
-    self.persist()
-    let view = handoff_view(revoked, revoked_credential)
-    self.mutex.release()
-    view
-  } catch {
-    error => {
-      self.handoffs = previous_handoffs
-      self.credentials = previous_credentials
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.handoffs = previous_handoffs
+    self.credentials = previous_credentials
   }
+  guard self.handoffs.get(handoff_id) is Some(record) &&
+    record.tenant_ref == tenant_ref &&
+    record.subject_ref == subject_ref &&
+    self.credentials.get(record.api_key_id) is Some(credential) else {
+    raise @handoff.ClientHandoffError::NotFound
+  }
+  let revoked_at = record.revoked_unix_ms.unwrap_or(now_unix_ms)
+  let revoked = { ..record, revoked_unix_ms: Some(revoked_at), }
+  let revoked_credential = {
+    ..credential,
+    revoked_unix_ms: Some(credential.revoked_unix_ms.unwrap_or(revoked_at)),
+  }
+  self.handoffs[handoff_id] = revoked
+  self.credentials[credential.key_id] = revoked_credential
+  self.persist()
+  let view = handoff_view(revoked, revoked_credential)
+  view
 }
 
 ///|
