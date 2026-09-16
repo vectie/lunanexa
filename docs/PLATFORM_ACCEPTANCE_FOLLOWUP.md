@@ -415,3 +415,35 @@ with `verify-private-video-discovery.mbtx` (SHA-256
 `982e0d7e250d173be6085d87c0d005c5e6c28cef8bba8db4cbc88976bbd1f96c`).
 Read-only PostgreSQL checks after cleanup confirmed all three successful-run
 tasks as Cancelled/execution-terminal with retained usage receipts.
+
+### PostgreSQL recovery matrix and durable billing replay (2026-09-16)
+
+Re-ran all 19 fixture files in `run-postgres-acceptance-matrix.mbtx` against
+the real acceptance PostgreSQL service. Each fixture used a newly created
+database through a loopback-only SSH tunnel; the active controller database
+was not used as a test fixture. All 19 passed. A separate `pg_database` query
+after completion found zero databases matching the harness's
+`lnx_acceptance_` prefix.
+
+Coverage includes native SQL binding checks, snapshot allowlists and atomic
+rollback, exclusive leadership transfer, account registration restoration,
+portal/workspace authority, onboarding journal recovery, machine lease and
+credential stores, offline commerce, registry, scheduler, deployments,
+enrollment, telemetry, notifications, observability, media submission ambiguity,
+control snapshots and inference billing. This is real database integration
+evidence, not hardware inference, browser identity or external payment evidence.
+
+The billing fixture previously checked replay only against its original
+in-memory commercial store. It now closes the original database connection,
+loads the commercial and integration snapshots through a new connection,
+constructs a fresh API service, and replays the same durable receipt. It also
+rejects a replay with a changed accelerator quantity and then accepts an
+unchanged replay, proving the conflict does not leave the billing lock held.
+There remains exactly one quantity-two usage observation and one 50-minor-unit
+charge. The persisted commercial snapshot is byte-identical to the snapshot
+before recovery, not merely equal in an in-memory row count.
+
+`moon info --target native` completed with 174 existing warnings and zero
+errors; no generated public interfaces changed. The fixture matrix suppresses
+existing warnings 92 and 20, so these passing integration tests are not a
+strict whole-repository warning-free release gate.
