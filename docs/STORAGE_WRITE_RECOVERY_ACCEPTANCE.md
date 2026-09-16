@@ -228,3 +228,27 @@ test path, capacity-timeout compensation, tenant/organization authorization,
 termination confirmation, expiry recovery and billing receipt behavior. Any
 environment-conditional database branch in this local run is not fresh live
 PostgreSQL evidence.
+
+## Access-onboarding journal recovery
+
+The onboarding journal's begin, advance, failure-record and retry operations
+now use scoped mutex release and error rollback without changing step ordering,
+terminal conflict handling, authority prerequisites or public interfaces.
+The file fixture injects two consecutive staging-write failures at each of
+those four stages and verifies complete memory/disk equality and bounded lock
+reacquisition. Successful retries survive reopen, preserve the AccountReady
+resume point and exactly two recorded attempts, then progress through each
+remaining step to Completed with no pending operation. Both local journal
+fixtures remove their temporary directories on exit.
+
+The strict native onboarding suite passes 3/3; its conditional PostgreSQL test
+is not fresh live database evidence in this local run. Interface generation and
+scoped formatting pass without public interface changes. Cross-store atomicity
+and actual user-facing identity-provider activation are not implied by journal
+rollback alone.
+
+The access-onboarding and API-key HTTP regression selection passes 5/5 with
+warnings 92/20 disabled for remaining dependencies. It includes the resumable
+access-package path, cross-store crash/restart recovery and current-account
+revalidation before API-key quota consumption. These are repository integration
+tests, not a new public IdP/browser acceptance result.
