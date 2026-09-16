@@ -140,7 +140,7 @@ test "native-framed candidate remains explicitly non-routable" {
 test "pending, mismatched, duplicated, and reused claims fail closed" {
   let evidence = forged_promotion_submission()
   let approval_claims = evidence.approval_claims.copy()
-  approval_claims[0] = { ..approval_claims[0], decision: Pending }
+  approval_claims[0] = { ..approval_claims[0], decision: Pending, }
   approval_claims[1] = {
     ..approval_claims[1],
     subject_digest: promotion_digest('f'),

@@ -153,7 +153,7 @@ async fn exercise_response(
       observation_test_secret,
     )
     let result = worker.run_once(100000L)
-    let projection = result.to_json().stringify() +
+    let projection = ToJson::to_json(result).stringify() +
       notifications.snapshot().to_json().stringify()
     @fs.rmdir(directory, recursive=true)
     (result, identity_verified[0], projection)

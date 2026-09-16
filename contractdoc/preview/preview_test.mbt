@@ -15,7 +15,7 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
   ).update_information(
     manifest,
     1L,
-    [{ field_id: "lessor.name", value: "月桂算力服务有限公司" }],
+    [{ field_id: "lessor.name", value: "月桂算力服务有限公司", }],
     ManagerOperator,
     "operator-preview",
     "operator-console",
@@ -32,7 +32,7 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
     packet,
     CustomerMessenger,
     MasterLease,
-    [{ field_id: "lessee.name", value: "星海人工智能实验室" }],
+    [{ field_id: "lessee.name", value: "星海人工智能实验室", }],
   )
   assert_eq(preview.engine, "moonleaf")
   assert_eq(preview.packet_revision, 3L)
@@ -116,7 +116,7 @@ async test "MoonLeaf audits the 18-page marker copy against the authoritative DO
   let markers = @worker.exact_docx_markers(candidate_bytes)
   let generated_bytes = @worker.customize_exact_docx_template(
     candidate_bytes,
-    markers.map(marker => { placeholder: marker, value: "" }),
+    markers.map(marker => { placeholder: marker, value: "", }),
   )
   let generated = @opc.open(generated_bytes.bytes)
   let generated_pages = @docx.paginate_document(generated)
@@ -157,7 +157,7 @@ async test "generated demo scene materializes only the authorized role draft" {
   ).update_information(
     manifest,
     1L,
-    [{ field_id: "lessor.name", value: "青年政策运营中心" }],
+    [{ field_id: "lessor.name", value: "青年政策运营中心", }],
     ManagerOperator,
     "operator-demo",
     "operator-console",
@@ -169,7 +169,7 @@ async test "generated demo scene materializes only the authorized role draft" {
     packet,
     CustomerMessenger,
     MasterLease,
-    [{ field_id: "lessee.name", value: "星海客户实验室" }],
+    [{ field_id: "lessee.name", value: "星海客户实验室", }],
   )
   let json = preview.to_json().stringify()
   assert_true(json.contains("青年政策运营中心"))
@@ -183,7 +183,7 @@ async test "generated demo scene materializes only the authorized role draft" {
       packet,
       CustomerMessenger,
       MasterLease,
-      [{ field_id: "lessor.name", value: "越权修改" }],
+      [{ field_id: "lessor.name", value: "越权修改", }],
     )
   catch {
     InvalidInput("contract field is owned by another participant") => ()
@@ -266,20 +266,20 @@ async test "read-only packets preview their recorded values and ignore draft cha
   ).update_information(
     manifest,
     1L,
-    [{ field_id: "lessee.name", value: "Recorded customer" }],
+    [{ field_id: "lessee.name", value: "Recorded customer", }],
     CustomerMessenger,
     "subject-demo",
     "customer-portal",
     2000L,
   )
-  let effective = { ..draft, state: Effective }
+  let effective = { ..draft, state: Effective, }
   let preview = @contractdoc.materialize_preview_template(
     scene,
     manifest,
     effective,
     CustomerMessenger,
     MasterLease,
-    [{ field_id: "lessee.name", value: "Uncommitted browser value" }],
+    [{ field_id: "lessee.name", value: "Uncommitted browser value", }],
   )
   let text = preview_visible_text(preview)
   assert_true(text.contains("Recorded customer"))

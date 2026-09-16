@@ -37,7 +37,7 @@ pub fn recovery_plan(
       actions.push(StopOrphan(runtime_id))
     }
   }
-  { controller_epoch, actions }
+  { controller_epoch, actions, }
 }
 
 ///|

@@ -55,7 +55,7 @@ pub fn Bridge::new(
     sessions: {},
     challenges: {},
     authorizations: {},
-    mutex: @async.Mutex(),
+    mutex: Mutex(),
   }
 }
 

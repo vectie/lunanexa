@@ -5,7 +5,7 @@ async fn load_runtime_supervisor(
 ) -> @node_agent.ManagedRuntimeSupervisor {
   match @env.get_env_var("LUNANEXA_RUNTIME_BACKEND").unwrap_or("oci") {
     "oci" =>
-      @node_agent.Oci(
+      Oci(
         @node_agent.OciRuntimeSupervisor::new(
           environment("LUNANEXA_CONTAINER_ENGINE"),
           environment("LUNANEXA_RUNTIME_NETWORK"),
@@ -50,7 +50,7 @@ async fn load_runtime_supervisor(
           "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
         ),
       )
-      @node_agent.Kubernetes(
+      Kubernetes(
         @kubernetes.RuntimeSupervisor::open_file(
           settings,
           transport,

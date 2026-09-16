@@ -35,9 +35,9 @@ async test "controller routes change only after complete runtime cleanup" {
     }
     let state = supervisor.stop(assignment.assignment_id)
     if phase < 4 {
-      assert_eq(state, @contracts.Draining)
+      assert_eq(state, Draining)
     } else {
-      assert_eq(state, @contracts.Stopped)
+      assert_eq(state, Stopped)
     }
   }
   let restored = @kubernetes.RuntimeSupervisor::restore(

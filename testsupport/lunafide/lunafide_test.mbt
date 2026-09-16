@@ -240,8 +240,8 @@ test "invalid commercial amounts currencies and references fail closed" {
       invoice_request("negative", amount_minor=-1L),
       invoice_request("lowercase", currency="cny"),
       invoice_request("long-currency", currency="CNYX"),
-      { ..invoice_request("bad-digest"), bill_content_sha256: "sha256:xyz" },
-      { ..invoice_request("overlong"), billing_profile_ref: "x".repeat(257) },
+      { ..invoice_request("bad-digest"), bill_content_sha256: "sha256:xyz", },
+      { ..invoice_request("overlong"), billing_profile_ref: "x".repeat(257), },
     ] {
     try service.issue_invoice(request) catch {
       InvalidRequest(_) => ()
@@ -305,7 +305,7 @@ test "forged callback is rejected without poisoning valid event ID" {
   let service = @lunafide.LunaFide::new("test-secret")
   let record = service.request_verification(verification_request("callback-a"))
   let event = service.events()[0]
-  let forged = { ..event, payload: Json::string("forged") }
+  let forged = { ..event, payload: Json::string("forged"), }
   let receiver = @lunafide.WebhookReceiver::new()
   try
     receiver.accept(
@@ -348,7 +348,7 @@ test "valid MAC for another tenant or aggregate cannot cross binding" {
   let service = @lunafide.LunaFide::new("test-secret")
   let record = service.request_verification(verification_request("binding-a"))
   let original = service.events()[0]
-  let unsigned = { ..original, tenant_ref: "tenant-b", signature: "" }
+  let unsigned = { ..original, tenant_ref: "tenant-b", signature: "", }
   let rebound = {
     ..unsigned,
     signature: @lunafide.sign_webhook(unsigned, "test-secret"),

@@ -28,19 +28,19 @@ test "machine helper adapter evidence binds scope actions and expiry" {
   )
   assert_false(
     @nodelease.valid_machine_helper_adapter_evidence_signature(
-      { ..evidence, node_scope: "other-fleet" },
+      { ..evidence, node_scope: "other-fleet", },
       secret,
     ),
   )
   assert_false(
     @nodelease.machine_helper_adapter_evidence_ready(
-      { ..evidence, sanitize_verified: false },
+      { ..evidence, sanitize_verified: false, },
       1000L,
     ),
   )
   assert_false(
     @nodelease.machine_helper_adapter_evidence_ready(
-      { ..evidence, covered_node_ids: ["dgx-spark-01", "dgx-spark-01"] },
+      { ..evidence, covered_node_ids: ["dgx-spark-01", "dgx-spark-01"], },
       1000L,
     ),
   )

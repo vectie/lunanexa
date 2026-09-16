@@ -38,7 +38,7 @@ test "termination requires an explicit exit of the original container" {
         expected, "containerd://original", value,
       )
     catch {
-      @kubernetes.IdentityMismatch => ()
+      IdentityMismatch => ()
       error => raise error
     } noraise {
       _ => fail("foreign termination accepted")
@@ -107,7 +107,7 @@ test "termination requires an explicit exit of the original container" {
       value,
     )
   catch {
-    @kubernetes.IdentityMismatch => ()
+    IdentityMismatch => ()
     error => raise error
   } noraise {
     _ => fail("deletion bypassed node identity")

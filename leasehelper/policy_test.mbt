@@ -10,8 +10,8 @@ test "cleanup evidence releases only a completely clean node" {
     access_material_absent: true,
   }
   assert_true(clean.verified())
-  assert_false({ ..clean, containers_absent: false }.verified())
-  assert_false({ ..clean, lease_state_absent: false }.verified())
+  assert_false({ ..clean, containers_absent: false, }.verified())
+  assert_false({ ..clean, lease_state_absent: false, }.verified())
 }
 
 ///|

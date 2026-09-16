@@ -498,7 +498,7 @@ async test "capability reservations enforce concurrency and rolling hourly limit
           ..base.limits,
           max_active_sessions: 1,
           capabilities: [
-            { ..limit, max_concurrent_requests: 2, max_requests_per_hour: 3 },
+            { ..limit, max_concurrent_requests: 2, max_requests_per_hour: 3, },
           ],
         },
       },
@@ -634,7 +634,7 @@ async test "expired held reservation recovers concurrency after restart" {
         limits: {
           ..base.limits,
           capabilities: [
-            { ..limit, max_concurrent_requests: 1, max_requests_per_hour: 100 },
+            { ..limit, max_concurrent_requests: 1, max_requests_per_hour: 100, },
           ],
         },
       },

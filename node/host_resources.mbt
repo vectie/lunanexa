@@ -86,6 +86,19 @@ pub fn HostResources::inventory(
 }
 
 ///|
+/// Missing measurement does not suppress the control heartbeat. It does
+/// remove all reserved capacity claims, including stale static labels, so
+/// paid-machine admission continues to fail closed.
+pub fn inventory_without_host_resources(
+  base : @contracts.NodeInventory,
+) -> @contracts.NodeInventory {
+  let labels = base.labels.copy()
+  labels.remove("lunanexa.io/host-cpu-count")
+  labels.remove("lunanexa.io/host-memory-mib")
+  { ..base, labels, }
+}
+
+///|
 /// Older agents without host measurements remain enrolled but cannot satisfy
 /// paid machine capacity. Invalid signed measurements fail closed as well.
 pub fn inventory_host_resources(

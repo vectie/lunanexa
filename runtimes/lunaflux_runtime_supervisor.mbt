@@ -159,7 +159,7 @@ fn parse_lunaflux_ready_publication(
   if runtime_protocol != "openai-responses-v1" {
     raise RuntimeProtocolMismatch
   }
-  { runtime_origin, runtime_protocol, control_origin }
+  { runtime_origin, runtime_protocol, control_origin, }
 }
 
 ///|

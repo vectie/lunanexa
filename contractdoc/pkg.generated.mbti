@@ -23,6 +23,8 @@ pub fn format_cny_minor_units(Int64) -> String
 
 pub fn format_unix_ms_utc(Int64) -> String
 
+pub fn is_undertaking_template(String) -> Bool
+
 pub fn manifest_for_template_id(String) -> ContractTemplateManifest
 
 pub fn materialize_preview_template(ContractPreviewTemplate, ContractTemplateManifest, ContractPacket, ContractFieldOwner, ContractFormKind, Array[ContractFieldValue]) -> ContractPreviewDocument raise ContractDocumentError
@@ -34,6 +36,8 @@ pub fn new_packet(ContractTemplateManifest, String, String, String, String, Stri
 pub fn parse_cny_minor_units(String) -> Int64?
 
 pub let snapshot_schema_version : String
+
+pub fn undertaking_manifest() -> ContractTemplateManifest
 
 pub fn validate_field_value(ContractFieldDefinition, String) -> Unit raise ContractDocumentError
 

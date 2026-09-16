@@ -2,6 +2,8 @@ import {
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/crypto",
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",

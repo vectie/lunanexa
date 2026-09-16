@@ -442,12 +442,22 @@ async fn send_heartbeat(
   agent : @node_agent.NodeAgent,
 ) -> Unit {
   let runtime_endpoints = agent.runtime_endpoints(@async.now())
+  let measured_inventory = @node_agent.collect_linux_host_resources().inventory(
+    inventory,
+  ) catch {
+    _ => {
+      println(
+        "LunaNexa host resource measurement unavailable; heartbeat omits paid-capacity claims",
+      )
+      @node_agent.inventory_without_host_resources(inventory)
+    }
+  }
   let unsigned : @contracts.NodeHeartbeat = {
     node_id,
     state: agent.state(),
     observed_generation: agent.observed_generation(),
     controller_epoch: agent.controller_epoch(),
-    inventory: @node_agent.collect_linux_host_resources().inventory(inventory),
+    inventory: measured_inventory,
     running_deployments: agent.running_deployments(),
     runtime_endpoints: if runtime_endpoints.is_empty() {
       None
@@ -847,7 +857,7 @@ async fn main {
       )
   }
   @async.with_task_group(group => {
-    if supervisor is @node_agent.Kubernetes(kubernetes) {
+    if supervisor is Kubernetes(kubernetes) {
       // Independent delivery: a failed report must not block probes, heartbeats
       // or local lease enforcement. The durable outbox retains failed batches.
       group.spawn_bg(() => {
@@ -891,7 +901,7 @@ async fn main {
     }
     group.spawn_bg(() => {
       while true {
-        if supervisor is @node_agent.Kubernetes(_) {
+        if supervisor is Kubernetes(_) {
           for assignment_id in agent.reap_expired(@async.now()) {
             supervisor.stop(assignment_id) catch {
               _ =>

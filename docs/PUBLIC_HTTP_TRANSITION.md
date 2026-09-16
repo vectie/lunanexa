@@ -234,3 +234,36 @@ negative controls still passed. This closes the bearer-replay evidence gap;
 it does not establish public-network reachability or browser self-registration.
 The disposable Keycloak user and local credential files were removed. Controller
 account/audit records are not claimed deleted. No token or MFA seed was logged.
+
+### Actual realm lifecycle configuration
+
+A read-only authenticated inspection on 2026-09-16 found
+registrationAllowed=true, registrationEmailAsUsername=true,
+bruteForceProtected=true, **verifyEmail=false** and
+**resetPasswordAllowed=false**. SMTP host, port, from, user and password were
+all unconfigured. The script emitted only booleans/policy settings, not secret
+values; it sent no email and created no user. This contradicts any assumption
+that the deployed realm currently implements the repository's verified-email
+and recovery profile. Successful admin-created-user password/MFA tests do not
+cover self-registration email verification or password recovery. Enabling those
+gates without a working deployment-owned SMTP service would not fix the flow.
+
+### Public registration protocol through verified SSH transport
+
+On 2026-09-16 the `verify-http-login.mbtx --self-register` operator harness
+followed the real enterprise OIDC start link, submitted Keycloak's public
+registration form and created a disposable user without calling admin-create.
+It then completed password authentication, required TOTP setup and the actual
+authorization-code callback. The resulting controller session returned 200
+before logout and 401 for the same bearer after logout; cross-origin session
+retrieval returned 401 and logout without CSRF returned 403. The harness exited
+successfully and deleted its exact temporary Keycloak user and private local
+credential files. Controller account/audit records remain evidence, not claimed
+deleted.
+
+All three test forwards (enterprise, IdP and controller) were established
+together before this run, fixing the preceding harness failure caused by a
+missing controller forward. This is real self-registration **protocol** evidence
+over SSH transport, not a rendered-browser or public-network pass. Email
+verification and recovery remain untested and unavailable under the realm
+configuration recorded above; no setting was weakened to complete this run.

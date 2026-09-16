@@ -6,6 +6,8 @@ import {
   "moonbitlang/core/env",
 } for "test"
 
+supported_targets = "native"
+
 options(
   "native-stub": [ "libpq.c" ],
   targets: { "postgres.mbt": [ "native" ], "postgres_test.mbt": [ "native" ] },

@@ -1,0 +1,79 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+}
+
+// Extract only Attachment 2 from the reviewed original. The original stays
+// outside the repository: its request narrative and Attachment 1 are private.
+fn replace_once(source : String, before : String, after : String) -> String raise {
+  let pieces = source.split(before).to_array()
+  guard pieces.length() == 2 else { fail("Source anchor changed: \{before}") }
+  pieces[0].to_owned() + after + pieces[1].to_owned()
+}
+
+async fn main {
+  guard @env.args() is [_, source, output] else {
+    fail("Usage: build-undertaking-template.mbtx SOURCE.docx OUTPUT_DIRECTORY")
+  }
+  let hash = @shell.Cmd("shasum", ["-a", "256", source]).output()
+  hash.check()
+  guard hash.stdout().has_prefix("3bb56d66ae9d36519df9a25de1dd80eda7880865960780227da03f08172f9de5 ") else {
+    fail("Unreviewed undertaking source")
+  }
+  let temp = @shell.Cmd("mktemp", ["-d", "/tmp/lunanexa-undertaking-extract.XXXXXX"]).output()
+  temp.check()
+  let root = temp.stdout().trim().to_owned()
+  guard root.has_prefix("/tmp/lunanexa-undertaking-extract.") && !root.contains("\n") else {
+    fail("Unexpected staging directory")
+  }
+  let unpack = @shell.Cmd("unzip", ["-q", source, "-d", root]).output()
+  unpack.check()
+  let xml = @fs.read_file("\{root}/word/document.xml").text()
+  let start = xml.find("<w:p w14:paraId=\"15521FFD\">").unwrap()
+  let body = xml.find("<w:body>").unwrap() + 8
+  let extracted = xml[:body].to_owned() + xml[start:].to_owned()
+  guard !extracted.contains("附件1") && !extracted.contains("请示事项") else {
+    fail("Private source material leaked into extracted attachment")
+  }
+  // Original comments and author/custom properties are not contract clauses.
+  // Use only the already extracted content and explicit neutral metadata.
+  @fs.write_file("\{root}/word/document.xml", extracted, create_mode=CreateOrTruncate)
+  @fs.write_file("\{root}/word/comments.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><w:comments xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"/>", create_mode=CreateOrTruncate)
+  @fs.write_file("\{root}/word/commentsExtended.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><w15:commentsEx xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\"/>", create_mode=CreateOrTruncate)
+  @fs.write_file("\{root}/word/people.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><w15:people xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\"/>", create_mode=CreateOrTruncate)
+  @fs.write_file("\{root}/docProps/core.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>设备使用承诺函</dc:title></cp:coreProperties>", create_mode=CreateOrTruncate)
+  @fs.write_file("\{root}/docProps/custom.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/custom-properties\"/>", create_mode=CreateOrTruncate)
+  @fs.write_file("\{root}/docProps/app.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\"><Application>LunaNexa</Application></Properties>", create_mode=CreateOrTruncate)
+  let mkdir = @shell.Cmd("mkdir", ["-p", output]).output()
+  mkdir.check()
+  let names = ["[Content_Types].xml", "_rels", "docProps", "word"]
+  let changed = ["word/document.xml", "word/comments.xml", "word/commentsExtended.xml", "word/people.xml", "docProps/core.xml", "docProps/custom.xml", "docProps/app.xml"]
+  let stamp = @shell.Cmd("touch", ["-t", "201207020952.00"] + changed, cwd=root).output()
+  stamp.check()
+  let archive = @shell.Cmd("zip", ["-q", "-X", "-D", "-r", "\{root}/source.docx"] + names, cwd=root).output()
+  archive.check()
+  @fs.write_file("\{output}/device-use-undertaking.docx", @fs.read_file("\{root}/source.docx").binary(), create_mode=CreateOrTruncate)
+  let name_start = extracted.find("<w:p w14:paraId=\"0E84CC24\">").unwrap()
+  let name_end = name_start + extracted[name_start:].find("</w:p>").unwrap() + 6
+  let name_p = replace_once(extracted[name_start:name_end].to_owned(), "<w:t xml:space=\"preserve\">          </w:t>", "<w:t>{{lessee.name}}</w:t>")
+  let named = extracted[:name_start].to_owned() + name_p + extracted[name_end:].to_owned()
+  let date_start = named.find("<w:p w14:paraId=\"694B4DD1\">").unwrap()
+  let date_end = date_start + named[date_start:].find("</w:p>").unwrap() + 6
+  let mut date_p = named[date_start:date_end].to_owned()
+  date_p = replace_once(date_p, "<w:t xml:space=\"preserve\">    </w:t>", "<w:t>{{undertaking.signed_date.year}}</w:t>")
+  let parts = date_p.split("<w:t xml:space=\"preserve\">   </w:t>").to_array()
+  guard parts.length() == 3 else { fail("Source date fields changed") }
+  date_p = parts[0].to_owned() + "<w:t>{{undertaking.signed_date.month}}</w:t>" + parts[1].to_owned() + "<w:t>{{undertaking.signed_date.day}}</w:t>" + parts[2].to_owned()
+  let fillable = named[:date_start].to_owned() + date_p + named[date_end:].to_owned()
+  @fs.write_file("\{root}/word/document.xml", fillable, create_mode=CreateOrTruncate)
+  let restamp = @shell.Cmd("touch", ["-t", "201207020952.00", "word/document.xml"], cwd=root).output()
+  restamp.check()
+  let zip = @shell.Cmd("zip", ["-q", "-X", "-D", "-r", "\{root}/fillable.docx"] + names, cwd=root).output()
+  zip.check()
+  @fs.write_file("\{output}/device-use-undertaking.fillable.docx", @fs.read_file("\{root}/fillable.docx").binary(), create_mode=CreateOrTruncate)
+  let cleanup = @shell.Cmd("rm", ["-r", "--", root]).output()
+  cleanup.check()
+  println("Extracted source and fillable undertaking; temporary source staging removed")
+}

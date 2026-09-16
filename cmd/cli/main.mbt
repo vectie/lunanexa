@@ -449,7 +449,7 @@ async fn main {
         base,
         "/v1/assignments",
         environment("LUNANEXA_OPERATOR_TOKEN"),
-        { ..assignment, signature: "" }.to_json().stringify(),
+        { ..assignment, signature: "", }.to_json().stringify(),
       )
     }
     "stop-assignment" => {

@@ -4,7 +4,7 @@ async test "model import recovery and retry transitions are durable" {
   let path = "\{directory}/imports.json"
   let store = FileImportStore::open(path)
   let created = store.create(
-    { model_id: "OpenBMB/MiniCPM5-1B", revision: "master" },
+    { model_id: "OpenBMB/MiniCPM5-1B", revision: "master", },
     "apache-2.0",
     1000L,
   )
@@ -65,7 +65,7 @@ async test "cancelled imports can retry without creating a duplicate identity" {
   let path = "\{directory}/imports.json"
   let store = FileImportStore::open(path)
   let first = store.create(
-    { model_id: "OpenBMB/MiniCPM5-1B", revision: "master" },
+    { model_id: "OpenBMB/MiniCPM5-1B", revision: "master", },
     "apache-2.0",
     2000L,
   )

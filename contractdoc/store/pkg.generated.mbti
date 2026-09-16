@@ -67,6 +67,7 @@ pub async fn ContractDocumentStore::register_execution(Self, String, Int64, @con
 pub async fn ContractDocumentStore::renew_packet(Self, String, String, String, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::reopen_approval(Self, String, String) -> @contractdoc.ContractApproval
 pub async fn ContractDocumentStore::request_generation(Self, String, Int64, String, String, Int64) -> @contractdoc.ContractPacket
+pub async fn ContractDocumentStore::revise_undertaking(Self, String, Int64, String, Int64) -> @contractdoc.ContractPacket
 pub async fn ContractDocumentStore::settlement_draft(Self, String) -> @contractdoc.ContractSettlementDraft?
 pub async fn ContractDocumentStore::snapshot(Self) -> @contractdoc.ContractDocumentSnapshot
 pub async fn ContractDocumentStore::successor_packet(Self, String) -> @contractdoc.ContractPacket?

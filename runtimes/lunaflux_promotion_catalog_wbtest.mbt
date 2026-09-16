@@ -160,28 +160,29 @@ fn mismatch_promotion_authority(
         },
       }
     OciImageAuthority =>
-      { ..input, oci_image: { ..input.oci_image, evidence_digest: wrong } }
-    SbomAuthority => { ..input, sbom: { ..input.sbom, evidence_digest: wrong } }
+      { ..input, oci_image: { ..input.oci_image, evidence_digest: wrong, }, }
+    SbomAuthority =>
+      { ..input, sbom: { ..input.sbom, evidence_digest: wrong, }, }
     BuildProvenanceAuthority =>
       {
         ..input,
-        build_provenance: { ..input.build_provenance, evidence_digest: wrong },
+        build_provenance: { ..input.build_provenance, evidence_digest: wrong, },
       }
     LicenseAuthority =>
-      { ..input, license: { ..input.license, evidence_digest: wrong } }
+      { ..input, license: { ..input.license, evidence_digest: wrong, }, }
     KernelAuthority =>
-      { ..input, kernel: { ..input.kernel, evidence_digest: wrong } }
+      { ..input, kernel: { ..input.kernel, evidence_digest: wrong, }, }
     PhysicalServingAuthority =>
       {
         ..input,
-        physical_serving: { ..input.physical_serving, evidence_digest: wrong },
+        physical_serving: { ..input.physical_serving, evidence_digest: wrong, },
       }
     BenchmarkAuthority =>
-      { ..input, benchmark: { ..input.benchmark, evidence_digest: wrong } }
+      { ..input, benchmark: { ..input.benchmark, evidence_digest: wrong, }, }
     ControlContractAuthority =>
       {
         ..input,
-        control_contract: { ..input.control_contract, evidence_digest: wrong },
+        control_contract: { ..input.control_contract, evidence_digest: wrong, },
       }
     InvocationContractAuthority =>
       {
@@ -248,7 +249,7 @@ test "promotion catalog rejects malformed authority and receipt replay" {
   try
     prepare_lunaflux_promotion_catalog({
       ..input,
-      sbom: { ..input.sbom, approval_receipt_digest: "sha256:short" },
+      sbom: { ..input.sbom, approval_receipt_digest: "sha256:short", },
     })
   catch {
     InvalidPromotionAuthority(SbomAuthority) => ()
@@ -259,7 +260,7 @@ test "promotion catalog rejects malformed authority and receipt replay" {
   try
     prepare_lunaflux_promotion_catalog({
       ..input,
-      license: { ..input.license, authority_id: "not an authority id" },
+      license: { ..input.license, authority_id: "not an authority id", },
     })
   catch {
     InvalidPromotionAuthority(LicenseAuthority) => ()
@@ -293,7 +294,7 @@ test "catalog rejects candidate control and invocation substitution" {
     ..request,
     candidate: {
       ..request.candidate,
-      runtime: { ..request.candidate.runtime, version: "substituted-v2" },
+      runtime: { ..request.candidate.runtime, version: "substituted-v2", },
     },
   })
   assert_false(candidate_substitution.routable)

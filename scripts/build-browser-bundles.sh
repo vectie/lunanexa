@@ -54,6 +54,8 @@ render_asset_version "$output_root/workbench/index.html" \
 render_asset_version "$output_root/installer/index.html" \
   __LUNANEXA_INSTALLER_ASSET_DIGEST__ "$output_root/installer/installer-ui.js"
 cp assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json "$output_root/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json"
+mkdir -p "$output_root/assets/contracts/youthpolicy/undertaking-v1"
+cp assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json "$output_root/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json"
 cp assets/fonts/contract-fonts.css "$output_root/assets/fonts/contract-fonts.css"
 for font in FangSong_GB2312.ttf FZXiaoBiaoSong-B05S.ttf SimHei.ttf; do
   if [ -f "assets/fonts/private/$font" ]; then
@@ -70,6 +72,7 @@ test -s "$output_root/workbench/workbench.js"
 test -s "$output_root/installer/index.html"
 test -s "$output_root/installer/installer-ui.js"
 test -s "$output_root/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json"
+test -s "$output_root/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json"
 test -s "$output_root/assets/fonts/contract-fonts.css"
 
 printf '%s\n' "browser bundles ready at $output_root"

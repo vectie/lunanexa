@@ -181,7 +181,7 @@ pub fn NotificationDeliveryWorker::with_observability_store(
   self : NotificationDeliveryWorker,
   store : @observability.ObservabilityStore,
 ) -> NotificationDeliveryWorker {
-  { ..self, observability_store: Some(store) }
+  { ..self, observability_store: Some(store), }
 }
 
 ///|
@@ -244,13 +244,13 @@ pub async fn NotificationDeliveryWorker::run_forever(
 ) -> Unit {
   for ;; {
     let now = @async.now()
-    ignore(self.run_once(now)) catch {
-      error => {
-        ignore(self.store.record_worker_failure(now, "WorkerPassFailed")) catch {
-          _ => ()
-        }
-        raise error
-      }
+    {
+      errdefer (ignore(
+        self.store.record_worker_failure(now, "WorkerPassFailed"),
+      ) catch {
+        _ => ()
+      })
+      ignore(self.run_once(now))
     }
     @async.sleep(self.interval_ms)
   }

@@ -14,11 +14,7 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
     approved_model_aliases: [],
     blocker_codes: ["ApprovedModelRequired"],
   }
-  let state = {
-    ..demo,
-    route: @enterprise.DesktopIde,
-    desktop_clients: [desktop, comfy],
-  }
+  let state = { ..demo, route: DesktopIde, desktop_clients: [desktop, comfy], }
   let selected = state.update(SelectWebIde("comfyui"))
   assert_eq(selected.desktop_client, Some(comfy))
   let rendered = @enterprise.render(selected)
@@ -51,7 +47,7 @@ test "WebIDE labels remain escaped and selecting a client clears old notices" {
   }
   let state = {
     ..demo,
-    route: @enterprise.DesktopIde,
+    route: DesktopIde,
     desktop_clients: [desktop, other],
     success_message: Some("old connection"),
   }

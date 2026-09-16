@@ -13,11 +13,11 @@ async test "stopping keeps running Pods and capacity across restart until explic
     @async.now(),
   )
   assert_true(first.endpoint is Some(_))
-  assert_eq(supervisor.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(supervisor.stop(assignment.assignment_id), Draining)
   assert_eq(api.objects.length(), 3)
   assert_eq(supervisor.pending_terminations(), [])
   let restored = restore_supervisor(api, checkpoint)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
   assert_eq(api.calls.filter(call => call.has_prefix("PATCH")).length(), 1)
   assert_eq(api.calls.filter(call => call.has_prefix("DELETE")).length(), 0)
   assert_eq(restored.retained_artifact_digests(), [assignment.artifact.digest])
@@ -26,7 +26,7 @@ async test "stopping keeps running Pods and capacity across restart until explic
       fixture_exit(resource)
     }
   }
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
   let reports = restored.pending_terminations()
   assert_eq(reports.length(), 1)
   assert_eq(reports[0].original_assignment, Some(assignment))
@@ -82,7 +82,7 @@ async test "failed exit-report persistence never permits Pod deletion and retrie
   assert_eq(api.calls.filter(call => call.has_prefix("DELETE")).length(), 0)
   assert_eq(api.objects.length(), 3)
   fail_commit.val = false
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
   assert_eq(restored.pending_terminations().length(), 1)
   assert_eq(api.calls.filter(call => call.has_prefix("DELETE")).length(), 1)
   let recovered = restore_supervisor(api, checkpoint)
@@ -148,11 +148,11 @@ async test "missing published Pod retains unresolved evidence and cache after re
     }
   }
   for _ in 0..<3 {
-    assert_eq(supervisor.stop(assignment.assignment_id), @contracts.Draining)
+    assert_eq(supervisor.stop(assignment.assignment_id), Draining)
   }
   assert_eq(supervisor.pending_terminations(), [])
   let restored = restore_supervisor(api, checkpoint)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
   assert_eq(restored.retained_artifact_digests(), [assignment.artifact.digest])
   assert_eq(api.objects.length(), 2)
   assert_eq(api.calls.filter(call => call.has_prefix("DELETE")).length(), 0)

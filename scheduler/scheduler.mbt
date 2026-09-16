@@ -175,7 +175,7 @@ pub fn place(
     if reasons.length() == 0 {
       candidates.push(score_node(node, requirements, policy))
     } else {
-      rejected.push({ node_id: node.node_id, reasons })
+      rejected.push({ node_id: node.node_id, reasons, })
     }
   }
   candidates.sort_by((left, right) => {

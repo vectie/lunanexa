@@ -117,7 +117,7 @@ async fn VideoRuntime::refresh_internal(
   }
   if job.execution_context is Some(context) &&
     self.store.termination_for_context(context) is Some(accepted) {
-    if job.state == @jobs.Intent {
+    if job.state == Intent {
       return self.record_terminal(
         self.store.cancel(
           job.job_id,

@@ -42,7 +42,7 @@ test "adversarial prewarm progress cannot regress exceed size or travel backward
   )
   assert_eq(
     @technical.advance_prewarm(
-      { ..half, progress: { ..half.progress, total_bytes: 1L } },
+      { ..half, progress: { ..half.progress, total_bytes: 1L, }, },
       ObserveTime,
       1400L,
     ),
@@ -59,7 +59,7 @@ test "digest mutation fuzz rejects every non lowercase hexadecimal position" {
       base[position + 1:].to_owned()
     assert_eq(
       @technical.begin_prewarm(
-        { ..prewarm_intent(), model_digest: candidate },
+        { ..prewarm_intent(), model_digest: candidate, },
         1000L,
       ),
       Rejected(InvalidDigest),
@@ -68,7 +68,7 @@ test "digest mutation fuzz rejects every non lowercase hexadecimal position" {
   for length in [0, 1, 63, 65, 128] {
     assert_eq(
       @technical.begin_prewarm(
-        { ..prewarm_intent(), model_digest: "a".repeat(length) },
+        { ..prewarm_intent(), model_digest: "a".repeat(length), },
         1000L,
       ),
       Rejected(InvalidDigest),
@@ -82,7 +82,7 @@ test "probe evaluator rejects stale and impossible policies" {
   assert_eq(
     @technical.evaluate_probe(
       state,
-      { kind: Startup, success: true, observed_unix_ms: 100L },
+      { kind: Startup, success: true, observed_unix_ms: 100L, },
       probe_policy(),
     ),
     Rejected(StaleObservation),
@@ -90,30 +90,30 @@ test "probe evaluator rejects stale and impossible policies" {
   assert_eq(
     @technical.evaluate_probe(
       state,
-      { kind: Startup, success: true, observed_unix_ms: 101L },
+      { kind: Startup, success: true, observed_unix_ms: 101L, },
       {
         ..probe_policy(),
-        startup: { ..probe_policy().startup, timeout_ms: 1001L },
+        startup: { ..probe_policy().startup, timeout_ms: 1001L, },
       },
     ),
     Rejected(InvalidPolicy),
   )
   let delayed = {
     ..probe_policy(),
-    startup: { ..probe_policy().startup, initial_delay_ms: 10L },
+    startup: { ..probe_policy().startup, initial_delay_ms: 10L, },
   }
   assert_eq(
     @technical.evaluate_probe(
       state,
-      { kind: Startup, success: true, observed_unix_ms: 109L },
+      { kind: Startup, success: true, observed_unix_ms: 109L, },
       delayed,
     ),
     Rejected(InitialDelayActive),
   )
   assert_eq(
     @technical.evaluate_probe(
-      { ..state, startup_complete: true },
-      { kind: Readiness, success: true, observed_unix_ms: 110L },
+      { ..state, startup_complete: true, },
+      { kind: Readiness, success: true, observed_unix_ms: 110L, },
       probe_policy(),
     ),
     Rejected(InvalidState),
@@ -127,10 +127,10 @@ test "grant binding mutations all fail closed" {
   let mismatches : Array[
     (@technical.TransferGrantUse, @technical.TransferGrantRejection),
   ] = [
-    ({ ..requested, node_id: "other" }, NodeMismatch),
-    ({ ..requested, deployment_id: "other" }, DeploymentMismatch),
-    ({ ..requested, model_digest: "b".repeat(64) }, ModelMismatch),
-    ({ ..requested, scope: RuntimeImageRead }, ScopeMismatch),
+    ({ ..requested, node_id: "other", }, NodeMismatch),
+    ({ ..requested, deployment_id: "other", }, DeploymentMismatch),
+    ({ ..requested, model_digest: "b".repeat(64), }, ModelMismatch),
+    ({ ..requested, scope: RuntimeImageRead, }, ScopeMismatch),
   ]
   for pair in mismatches {
     let (request, expected) = pair

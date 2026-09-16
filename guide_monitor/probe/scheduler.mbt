@@ -18,7 +18,7 @@ async fn persist_scheduler_state(
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    state.to_json().stringify(),
+    ToJson::to_json(state).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -53,7 +53,7 @@ pub async fn GuideProbeScheduler::open(path : String) -> GuideProbeScheduler {
   } else {
     @fs.chmod(path, 0o600)
   }
-  { path, state, mutex: Mutex() }
+  { path, state, mutex: Mutex(), }
 }
 
 ///|

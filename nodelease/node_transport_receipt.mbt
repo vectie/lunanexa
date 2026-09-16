@@ -3,8 +3,8 @@ fn node_transport_payload(
   lease : ExclusiveNodeLease,
   node_id : String,
 ) -> String {
-  let unsigned : ExclusiveNodeLease = { ..lease, authority_receipt: "" }
-  "lunanexa.node-lease-envelope.v1|\{node_id}|\{unsigned.to_json().stringify()}"
+  let unsigned : ExclusiveNodeLease = { ..lease, authority_receipt: "", }
+  "lunanexa.node-lease-envelope.v1|\{node_id}|\{ToJson::to_json(unsigned).stringify()}"
 }
 
 ///|
@@ -17,7 +17,7 @@ pub fn node_transport_lease(
   node_credential : String,
 ) -> ExclusiveNodeLease {
   if lease.intent.node_id != node_id || node_credential == "" {
-    return { ..lease, authority_receipt: "" }
+    return { ..lease, authority_receipt: "", }
   }
   let mac = @crypto.bytes_to_hex_string(
     @crypto.hmac(
@@ -26,7 +26,7 @@ pub fn node_transport_lease(
       @utf8.encode(node_transport_payload(lease, node_id)).view(),
     ),
   )
-  { ..lease, authority_receipt: "node-envelope-v1:\{mac}" }
+  { ..lease, authority_receipt: "node-envelope-v1:\{mac}", }
 }
 
 ///|
@@ -181,7 +181,7 @@ pub fn valid_node_transport_lease(
     return false
   }
   let expected = node_transport_lease(
-      { ..lease, authority_receipt: "" },
+      { ..lease, authority_receipt: "", },
       node_id,
       node_credential,
     ).authority_receipt

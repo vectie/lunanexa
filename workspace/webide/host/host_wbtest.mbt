@@ -97,7 +97,7 @@ test "platform CA is deployment-owned and mounted only by the model proxy" {
   try
     WorkspaceHost::new({ ..config, trusted_ca_config_map: Some("../secret"), })
   catch {
-    HostError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     _ => fail("unexpected host error")
   } noraise {
     _ => fail("invalid ConfigMap reference accepted")

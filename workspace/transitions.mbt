@@ -26,7 +26,7 @@ pub fn WorkspaceUser::transition(
   if !workspace_user_transition_allowed(self.state, to) {
     raise TransitionDenied("workspace_user")
   }
-  { ..self, state: to }
+  { ..self, state: to, }
 }
 
 ///|
@@ -66,7 +66,7 @@ pub fn WorkspaceAccessGrant::transition(
   if to == GrantExpired && now_unix_ms < self.expires_unix_ms {
     raise InvalidTimeRange("access_grant_expiry")
   }
-  { ..self, state: to }
+  { ..self, state: to, }
 }
 
 ///|
@@ -86,7 +86,7 @@ pub fn WorkspaceLease::transition(
   if to == Expired && now_unix_ms < self.expires_unix_ms {
     raise InvalidTimeRange("lease_expiry")
   }
-  { ..self, state: to }
+  { ..self, state: to, }
 }
 
 ///|
@@ -117,5 +117,5 @@ pub fn WorkspaceSession::transition(
   if !connection_transition_allowed(self.connection, to) {
     raise TransitionDenied("workspace_session")
   }
-  { ..self, connection: to }
+  { ..self, connection: to, }
 }

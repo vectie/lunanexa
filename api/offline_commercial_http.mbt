@@ -398,6 +398,7 @@ async fn ApiService::issue_offline_transfer(
   expected_sha256 : String?,
   issued_unix_ms : Int64,
   expires_unix_ms : Int64,
+  operator_scope? : (String, String),
 ) -> @offline.OfflineTransferGrant {
   guard self.offline_transfer_adapter_endpoint is Some(endpoint) &&
     self.offline_transfer_adapter_token is Some(adapter_token) &&
@@ -455,7 +456,17 @@ async fn ApiService::issue_offline_transfer(
   // Persist authority before asking an external adapter to accept it. An
   // adapter timeout can be retried idempotently without creating an untracked
   // browser credential.
-  ignore(store.issue_transfer_session(session))
+  match operator_scope {
+    Some((tenant_ref, operator_ref)) =>
+      ignore(
+        store.issue_operator_download_session(
+          session,
+          tenant_ref~,
+          operator_ref~,
+        ),
+      )
+    None => ignore(store.issue_transfer_session(session))
+  }
   let receipt = @async.with_timeout(5000, () => {
     request_offline_transfer_adapter(endpoint, adapter_token, {
       session_id,
@@ -716,17 +727,11 @@ pub async fn ApiService::reconcile_offline_commerce(
 ) -> Unit {
   guard self.offline_commerce_store is Some(store) else { return }
   store.record_reconciler_attempt(now_unix_ms)
-  try {
-    self.reconcile_offline_commerce_pass(now_unix_ms)
-    store.record_reconciler_success(@async.now())
-  } catch {
-    error => {
-      ignore(store.record_reconciler_failure("OfflineReconcileFailed")) catch {
-        _ => ()
-      }
-      raise error
-    }
-  }
+  errdefer (ignore(store.record_reconciler_failure("OfflineReconcileFailed")) catch {
+    _ => ()
+  })
+  self.reconcile_offline_commerce_pass(now_unix_ms)
+  store.record_reconciler_success(@async.now())
 }
 
 ///|
@@ -914,6 +919,13 @@ async fn ApiService::handle_offline_commerce(
       )
     }
     let completed = { ..result, completed_unix_ms: Some(@async.now()), }
+    if result.state == EntitlementActivationConfirmed &&
+      !self.undertaking_fulfillment_allowed(result.order_id, @async.now()) {
+      return api_error(
+        409, "UndertakingApprovalRequired", "undertaking authority changed before activation completed",
+        false,
+      )
+    }
     let reply = try
       json_reply(200, store.complete_activation(completed).to_json())
     catch {
@@ -1060,7 +1072,27 @@ async fn ApiService::handle_offline_commerce(
         false,
       )
     }
-    return json_reply(200, store.claim_authority_work(@async.now()).to_json())
+    let now = @async.now()
+    let blocked : Array[String] = []
+    for activation in store.snapshot().entitlement_activations {
+      if activation.state == EntitlementActivationRequested &&
+        !self.undertaking_fulfillment_allowed(activation.order_id, now) {
+        blocked.push(activation.order_id)
+      }
+    }
+    return json_reply(
+      200,
+      store
+      .claim_authority_work(now, blocked_activation_orders=blocked)
+      .to_json(),
+    )
+  }
+  if verb == Post &&
+    path.has_prefix("/v1/offline-commerce/operator/artifacts/") &&
+    path.has_suffix(":download") {
+    let artifact_id = path["/v1/offline-commerce/operator/artifacts/".length():path.length() -
+    ":download".length()].to_owned()
+    return self.operator_artifact_download(store, artifact_id, headers, body)
   }
   if path.has_prefix("/v1/offline-commerce/operator/") {
     if !self.operator_authorized(headers) {
@@ -1248,6 +1280,12 @@ async fn ApiService::handle_offline_commerce(
             )
           }
           let current = store.order_for_operator(action.order_id)
+          if !self.undertaking_fulfillment_allowed(current.order_id, server_now) {
+            return api_error(
+              409, "UndertakingApprovalRequired", "the undertaking requires current manager approval, full prepayment and an active term",
+              false,
+            )
+          }
           let activation : @offline.EntitlementActivation = {
             activation_id: action.activation_id,
             idempotency_key: action.idempotency_key,
@@ -1535,7 +1573,7 @@ async fn ApiService::handle_offline_commerce(
         evidence: grant.public_view(),
         transfer,
       }
-      json_reply(201, response.to_json())
+      json_reply(201, ToJson::to_json(response))
     }
     (Post, _) if path.has_prefix("/v1/offline-commerce/self/orders/") &&
       path.has_suffix(":cancel") => {
@@ -1682,7 +1720,7 @@ async fn ApiService::handle_offline_commerce(
           false,
         )
       }
-      json_reply(200, artifact.public_view().to_json())
+      json_reply(200, ToJson::to_json(artifact.public_view()))
     }
     _ =>
       api_error(

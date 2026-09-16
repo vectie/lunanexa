@@ -62,7 +62,7 @@ test "signed observations reject mutation, wrong target, and stale replay" {
     "guide-monitor-test-secret-at-least-32-bytes",
     100100L,
   )
-  let forged = { ..signed, knowledge_stale: true }
+  let forged = { ..signed, knowledge_stale: true, }
   try {
     @guide_monitor.verify_observation(
       policy(),

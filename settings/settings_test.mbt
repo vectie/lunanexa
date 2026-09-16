@@ -38,7 +38,7 @@ test "hard safety ceilings reject hostile administrator configuration" {
   let defaults = @settings.default_global_admin_settings()
   let hostile = {
     ..defaults,
-    scheduler: { ..defaults.scheduler, runtime_concurrency: 1000000 },
+    scheduler: { ..defaults.scheduler, runtime_concurrency: 1000000, },
   }
   try @settings.validate_global_admin_settings(hostile) catch {
     InvalidGlobalSetting(section) => assert_eq(section, "scheduler")

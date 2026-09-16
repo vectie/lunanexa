@@ -49,7 +49,7 @@ pub struct Client[T] {
 
 ///|
 pub fn[T] Client::new(config : ClientConfig, transport : T) -> Client[T] {
-  { config, transport }
+  { config, transport, }
 }
 
 ///|
@@ -210,7 +210,7 @@ pub fn FixtureTransport::new(
   capabilities : Array[CapabilityDescriptor],
   healthy? : Bool = true,
 ) -> FixtureTransport {
-  { response, capabilities, cancelled_workload: None, healthy_value: healthy }
+  { response, capabilities, cancelled_workload: None, healthy_value: healthy, }
 }
 
 ///|
@@ -283,7 +283,7 @@ pub impl ProviderTransport for FixtureTransport with fn stream(
     sequence: 2,
     kind: Completed,
     output: None,
-    response: Some({ ..self.response, output: None }),
+    response: Some({ ..self.response, output: None, }),
   })
 }
 
@@ -304,7 +304,7 @@ pub struct HttpTransport {
 
 ///|
 pub fn HttpTransport::new(credential_value : String) -> HttpTransport {
-  { credential_value, subject_ref: None }
+  { credential_value, subject_ref: None, }
 }
 
 ///|
@@ -324,7 +324,7 @@ pub fn HttpTransport::with_subject_ref(
       retryable=false,
     )
   }
-  { ..self, subject_ref: Some(subject_ref) }
+  { ..self, subject_ref: Some(subject_ref), }
 }
 
 ///|

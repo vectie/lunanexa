@@ -50,13 +50,13 @@ test "record registration is idempotent and provider-reference unique" {
   assert_eq(store.register(record), Applied)
   assert_eq(store.register(record), Replayed)
   let mut changed = false
-  ignore(store.register({ ..record, expected_amount_minor: Some(1251L) })) catch {
+  ignore(store.register({ ..record, expected_amount_minor: Some(1251L), })) catch {
     IdempotencyConflict(_) => changed = true
     _ => ()
   }
   assert_true(changed)
   let mut duplicate_ref = false
-  ignore(store.register({ ..record, record_id: "payment-2" })) catch {
+  ignore(store.register({ ..record, record_id: "payment-2", })) catch {
     AlreadyExists(_) => duplicate_ref = true
     _ => ()
   }
@@ -76,7 +76,7 @@ test "verified callbacks reconcile once and reject replay mutation" {
   assert_eq(replay, Replayed)
   assert_eq(same, authorized)
   let mut mutated = false
-  ignore(store.reconcile_callback({ ..callback, next_state: Settled })) catch {
+  ignore(store.reconcile_callback({ ..callback, next_state: Settled, })) catch {
     IdempotencyConflict(_) => mutated = true
     _ => ()
   }
@@ -321,14 +321,14 @@ test "provider dispatch rejects unsafe redirect and cross-provider binding" {
       "https://payments.example/checkout#secret", "https://payments.example/checkout\\escape",
     ] {
     let mut rejected = false
-    ignore(store.record_dispatch({ ..base, action_url: candidate })) catch {
+    ignore(store.record_dispatch({ ..base, action_url: candidate, })) catch {
       EvidenceMismatch(_) => rejected = true
       _ => ()
     }
     assert_true(rejected)
   }
   let mut crossed = false
-  ignore(store.record_dispatch({ ..base, provider: "other-pay" })) catch {
+  ignore(store.record_dispatch({ ..base, provider: "other-pay", })) catch {
     EvidenceMismatch(_) => crossed = true
     _ => ()
   }

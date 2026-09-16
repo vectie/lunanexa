@@ -136,7 +136,7 @@ fn base_job(request : @offline.ArtifactGenerationRequest) -> OfflineArtifactJob 
     result_filename: "result.json",
     render_manifest_filename: "render-manifest.json",
     docx_replacements: [
-      { placeholder: "{{ORDER_ID}}", value: "order-worker-1" },
+      { placeholder: "{{ORDER_ID}}", value: "order-worker-1", },
     ],
     xlsx_replacements: [],
   }
@@ -154,7 +154,7 @@ async test "PDF finalization binds rendered bytes to exact MoonLeaf source" {
     expected_object_ref: "object://offline/order-worker-1/contract.pdf",
   }
   let customized = @worker.customize_docx_template(template, [
-    { placeholder: "{{ORDER_ID}}", value: "order-worker-1" },
+    { placeholder: "{{ORDER_ID}}", value: "order-worker-1", },
   ])
   let pdf = @utf8.encode(
     "%PDF-1.4\n1 0 obj\n<<>>\nendobj\nxref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 >>\nstartxref\n29\n%%EOF\n",
@@ -202,7 +202,7 @@ async fn write_manifest_and_job(
   request : @offline.ArtifactGenerationRequest,
   manifest : RenderEvidenceManifest,
 ) -> Unit {
-  let manifest_text = manifest.to_json().stringify()
+  let manifest_text = ToJson::to_json(manifest).stringify()
   @fs.write_file(
     "\{root}/render-manifest.json",
     manifest_text,
@@ -211,7 +211,7 @@ async fn write_manifest_and_job(
   )
   @fs.write_file(
     "\{root}/job.json",
-    base_job(request).to_json().stringify(),
+    ToJson::to_json(base_job(request)).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
@@ -234,7 +234,7 @@ async test "worker binds signed render evidence to the customized DOCX" {
   let evidence = png_evidence()
   let request = generation_request(now)
   let customized = @worker.customize_docx_template(template, [
-    { placeholder: "{{ORDER_ID}}", value: "order-worker-1" },
+    { placeholder: "{{ORDER_ID}}", value: "order-worker-1", },
   ])
   @fs.write_file(
     "\{root}/contract.docx",
@@ -282,7 +282,7 @@ async test "worker rejects unbound, tampered, stale, or malformed render evidenc
   let template = docx_template()
   let request = generation_request(now)
   let customized = @worker.customize_docx_template(template, [
-    { placeholder: "{{ORDER_ID}}", value: "order-worker-1" },
+    { placeholder: "{{ORDER_ID}}", value: "order-worker-1", },
   ])
   let artifact_sha256 = sha256(customized.bytes)
   let evidence = png_evidence()
@@ -326,14 +326,14 @@ async test "worker rejects unbound, tampered, stale, or malformed render evidenc
 
   // A signed manifest becomes invalid if any field is tampered afterward.
   let signed = signed_manifest(request, artifact_sha256, sha256(evidence), now)
-  write_manifest_and_job(root, request, { ..signed, passed: false })
+  write_manifest_and_job(root, request, { ..signed, passed: false, })
   expect_job_failure(root, now)
 
   // Another rendering engine cannot satisfy the MoonLeaf artifact boundary,
   // even when the outer manifest is signed by the deployment adapter.
   let foreign = {
     ..signed,
-    moonleaf: { ..signed.moonleaf, engine: "libreoffice" },
+    moonleaf: { ..signed.moonleaf, engine: "libreoffice", },
     signature: "",
   }
   write_manifest_and_job(root, request, {
