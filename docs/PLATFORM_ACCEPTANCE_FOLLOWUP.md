@@ -280,3 +280,55 @@ This closes the newly exercised managed-stop and private terminal-cleanup flow.
 It does not reconstruct the missing r12 exit evidence, qualify the rejected
 network-policy partition test, or complete the remaining browser/identity,
 release-gate and real-hardware evidence.
+
+### Identity entry and security-gate recheck (2026-09-16, 3531195)
+
+The management-host discovery check again verified TLS against the deployed
+public certificate and matched the issuer and endpoint origins. The workstation
+direct TLS probe timed out (curl exit 28); a fresh in-app browser tab for
+`https://106.39.18.146:5006/realms/lunanexa/account/` failed with
+`ERR_TUNNEL_CONNECTION_FAILED` before displaying a login form. No registration,
+password login, email verification or MFA acceptance is established by this
+check. Domains, certificates and system trust were not changed. The observed
+certificate expires at 2026-09-18 10:04:34 UTC.
+
+The existing platform-identity, direct-IP browser-edge and OIDC browser-ingress
+manifest suites all passed. These are local rendering and configuration checks,
+not proof that the public browser path works. The deployment literal-secret
+heuristic passed; its eight process fixtures passed, including checks that
+rejected credential literals are not printed.
+
+The repository isolation gate still fails. Its seven existing fixtures pass,
+but the actual repository scan matches `ObservedContainer.container_id` in the
+node's durable journal and the `container_id` argument of
+`observe_container_termination`. Neither match alone proves a customer-response
+leak: the scanner does not distinguish internal persistence/parameters from
+response schemas. No fields were renamed, excluded or allowlisted to force a
+green result. The scanner needs a scope-aware correction and regression coverage;
+public-response tests remain necessary independently of that correction.
+
+### Scope-aware isolation gate correction
+
+The gate now delegates to a MoonBit script that distinguishes declarations from
+serialized field spellings. Function parameter names are not response fields;
+private record declarations are permitted only in the Kubernetes node adapter.
+There is no whole-directory exclusion: public records, object construction and
+serialized JSON in that adapter still fail. Private records outside that adapter
+also remain checked. Product-specific dependency checks retain their original
+boundary, including untracked and hidden source files, while build outputs are
+excluded. Findings print file/line locations rather than source values.
+
+All 25 process fixtures passed, including same-file private/public transitions,
+object-valued parameter defaults, quoted/embedded/multiline serialized fields,
+misleading comments/string contents, paths containing spaces and output
+redaction. The actual repository scan passed without renaming any runtime field
+or altering the on-disk journal format. Native API regression passed 129/129
+with warning classes 92/20 excluded. This remains a source heuristic, not proof
+of absence of arbitrary data-flow leaks, and does not replace runtime API tests.
+
+The final whole-repository native run passed 792/792 with the same warning
+exclusions. `moon info --target native` completed with 174 existing warnings and
+no errors; this is not a strict warning-free release pass. `moon fmt` completed;
+its unrelated formatting-only changes in 148 previously clean backend files
+were reverted rather than included in this scanner change. `git diff --check`
+passed, with no generated public interface changes.
