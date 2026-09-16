@@ -49,29 +49,29 @@ pub fn OperatorWorkflow::apply(
   let mut next = self
   match command {
     EnrollNode if self.node_state == Enrolling =>
-      next = { ..self, node_state: Active }
+      next = { ..self, node_state: Active, }
     RegisterModel if self.model_state == Candidate => ()
     VerifyModel if self.model_state == Candidate =>
-      next = { ..self, model_state: Verified }
+      next = { ..self, model_state: Verified, }
     EvaluateModel if self.model_state == Verified =>
-      next = { ..self, model_state: Evaluated }
+      next = { ..self, model_state: Evaluated, }
     ApproveModel if self.model_state == Evaluated =>
-      next = { ..self, model_state: Approved }
+      next = { ..self, model_state: Approved, }
     DeployModel if self.model_state == Approved && self.node_state == Active =>
-      next = { ..self, deployment_state: Preparing }
+      next = { ..self, deployment_state: Preparing, }
     MarkReady if self.deployment_state == Preparing =>
-      next = { ..self, deployment_state: Ready }
+      next = { ..self, deployment_state: Ready, }
     InvokeRequest if self.deployment_state == Ready =>
-      next = { ..self, workload_state: Running }
+      next = { ..self, workload_state: Running, }
     CompleteRequest if self.workload_state == Running =>
-      next = { ..self, workload_state: Succeeded }
+      next = { ..self, workload_state: Succeeded, }
     DrainNode if self.node_state == Active =>
-      next = { ..self, node_state: Draining, deployment_state: Draining }
+      next = { ..self, node_state: Draining, deployment_state: Draining, }
     ObserveReroute if self.node_state == Draining =>
-      next = { ..self, rerouted: true }
+      next = { ..self, rerouted: true, }
     RollbackModel if self.model_state == Approved => ()
     _ => raise InvalidSequence(command)
   }
   let receipt = "ui:\{next.receipts.length() + 1}:\{Repr(command)}"
-  { ..next, receipts: next.receipts + [receipt] }
+  { ..next, receipts: next.receipts + [receipt], }
 }

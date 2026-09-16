@@ -35,11 +35,13 @@ priv enum PublicFailureKind {
 priv enum ClientOutcome {
   WorkspaceLoaded(
     @workspace.WorkspaceSelfContract,
-    @settings.PublicSettingsView
+    @settings.PublicSettingsView,
+    Array[String]
   )
   RequestCompleted(RequestResult)
   PublicFailure(PublicFailureKind, String, Bool)
   ClockAdvanced(Int64, Int64)
+  LocalActionFinished(Bool, Bool)
 }
 
 ///|
@@ -71,11 +73,7 @@ fn app_copy(
   english : String,
   chinese : String,
 ) -> String {
-  if locale.is_chinese() {
-    chinese
-  } else {
-    english
-  }
+  @i18n.copy(locale, english, chinese)
 }
 
 ///|
@@ -129,7 +127,7 @@ fn load_local_preferences() -> @settings.UserLocalPreferences {
     return if legacy_locale == "" {
       fallback
     } else {
-      { ..fallback, locale: legacy_locale }
+      { ..fallback, locale: legacy_locale, }
     }
   }
   try {
@@ -161,7 +159,17 @@ fn sync_document_locale(locale : @i18n.Locale) -> Unit {
 
 ///|
 extern "js" fn configured_endpoint() -> String =
-  #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
+  #| () => {
+  #|   try { if (new URL(globalThis.location.href).searchParams.get("trial") === "1") return globalThis.location.origin; } catch (_) {}
+  #|   return globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || "";
+  #| }
+
+///|
+extern "js" fn trial_session_mode(endpoint : String) -> Bool =
+  #| endpoint => {
+  #|   try { return new URL(globalThis.location.href).searchParams.get("trial") === "1" && endpoint === globalThis.location.origin; }
+  #|   catch (_) { return false; }
+  #| }
 
 ///|
 extern "js" fn demo_mode() -> Bool =
@@ -208,7 +216,7 @@ fn demo_workbench_state(
       })
     None => None
   }
-  { ..seeded, now_unix_ms, lease, model_selector }
+  { ..seeded, now_unix_ms, lease, model_selector, }
 }
 
 ///|
@@ -233,13 +241,15 @@ extern "js" fn request_promise(
   token : String,
   subject_ref : String,
   body : String,
+  csrf : String,
 ) -> @js.Promise =
-  #| async (verb, url, token, subject, body) => {
+  #| async (verb, url, token, subject, body, csrf) => {
   #|   const headers = {
   #|     "Accept": "application/json",
-  #|     "Content-Type": "application/json",
-  #|     "Authorization": `Bearer ${token}`
+  #|     "Content-Type": "application/json"
   #|   };
+  #|   if (token) headers["Authorization"] = `Bearer ${token}`;
+  #|   if (csrf) headers["X-LunaNexa-CSRF"] = csrf;
   #|   if (subject) headers["X-LunaNexa-Subject"] = subject;
   #|   const response = await fetch(url, {
   #|     method: verb,
@@ -261,13 +271,15 @@ extern "js" fn workload_promise(
   token : String,
   subject_ref : String,
   body : String,
+  csrf : String,
 ) -> @js.Promise =
-  #| async (url, token, subject, body) => {
+  #| async (url, token, subject, body, csrf) => {
   #|   const headers = {
   #|     "Accept": "application/json",
-  #|     "Content-Type": "application/json",
-  #|     "Authorization": "Bearer " + token
+  #|     "Content-Type": "application/json"
   #|   };
+  #|   if (token) headers["Authorization"] = "Bearer " + token;
+  #|   if (csrf) headers["X-LunaNexa-CSRF"] = csrf;
   #|   if (subject) headers["X-LunaNexa-Subject"] = subject;
   #|   const response = await fetch(url, {
   #|     method: "POST",
@@ -312,7 +324,19 @@ async fn request(
   } else {
     endpoint
   }
-  let value = request_promise(verb, "\{base}\{path}", token, subject_ref, body).wait()
+  let session = if trial_session_mode(endpoint) {
+    Some(load_trial_browser_session())
+  } else {
+    None
+  }
+  let value = request_promise(
+    verb,
+    "\{base}\{path}",
+    session.map(s => s.session_token).unwrap_or(token),
+    subject_ref,
+    body,
+    session.map(s => s.csrf_token).unwrap_or(""),
+  ).wait()
   value.cast()
 }
 
@@ -328,7 +352,23 @@ async fn workload_request(
   } else {
     endpoint
   }
-  let value = workload_promise("\{base}/v1/workloads", token, subject_ref, body).wait()
+  let session = if trial_session_mode(endpoint) {
+    Some(load_trial_browser_session())
+  } else {
+    None
+  }
+  let path = if session is Some(_) {
+    "/v1/portal/self/trial/workloads"
+  } else {
+    "/v1/workloads"
+  }
+  let value = workload_promise(
+    "\{base}\{path}",
+    session.map(s => s.session_token).unwrap_or(token),
+    subject_ref,
+    body,
+    session.map(s => s.csrf_token).unwrap_or(""),
+  ).wait()
   value.cast()
 }
 
@@ -337,14 +377,29 @@ async fn load_workspace(
   endpoint : String,
   token : String,
   subject_ref : String,
-) -> @workspace.WorkspaceSelfContract {
+) -> (@workspace.WorkspaceSelfContract, Array[String]) {
   let self_text = request(
     "GET", endpoint, "/v1/workspace/self", token, subject_ref,
   )
   let self_contract : @workspace.WorkspaceSelfContract = @json.from_json(
     @json.parse(self_text),
   )
-  self_contract
+  (self_contract, authorized_models_from_json(@json.parse(self_text)))
+}
+
+///|
+fn authorized_models_from_json(value : Json) -> Array[String] {
+  let aliases : Array[String] = match value {
+    { "allowed_models": value, .. } => @json.from_json(value) catch { _ => [] }
+    _ => []
+  }
+  let result : Array[String] = []
+  for model_name in aliases {
+    if @workspace.valid_identifier(model_name) && !result.contains(model_name) {
+      result.push(model_name)
+    }
+  }
+  result
 }
 
 ///|
@@ -388,7 +443,7 @@ fn state_from_workspace(
     lease,
     now_unix_ms: current_unix_ms(),
     model_selector: selector,
-    usage: { ..current.usage, requests_limit: request_limit },
+    usage: { ..current.usage, requests_limit: request_limit, },
     loading: false,
     success_message: if ready && text_ready {
       Some(
@@ -522,7 +577,12 @@ fn public_failure_message(
         "工作负载未被接受，或未返回有效的公开响应。",
       )
     PublicDetail(code, message, retryable) => {
-      let detail = if message == "" {
+      let detail = if code == "Unauthenticated" && message == "" {
+        app_copy(
+          locale, "Sign in again through the enterprise portal, then reconnect this workbench.",
+          "请先在企业门户重新登录，然后重新连接工作台。",
+        )
+      } else if message == "" {
         app_copy(
           locale, "The workload was rejected.", "工作负载已被拒绝。",
         )
@@ -636,7 +696,7 @@ async fn send_workload(
       )
     None => {
       let output_text = response.output.map(output => output.stringify())
-      { output_text, receipt: response.audit_receipt, usage: response.usage }
+      { output_text, receipt: response.audit_receipt, usage: response.usage, }
     }
   }
 }
@@ -691,7 +751,8 @@ fn connect_command(
       ) => PublicFailure(PublicDetail(code, message, retryable), receipt, stale)
       _ => PublicFailure(WorkspaceLoadUnavailable, "", true)
     } noraise {
-      (contract, policy) => WorkspaceLoaded(contract, policy)
+      ((contract, aliases), policy) =>
+        WorkspaceLoaded(contract, policy, aliases)
     }
   })
 }
@@ -774,6 +835,70 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
+    Workbench(ExportDrafts) =>
+      (
+        model,
+        @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+          try
+            export_drafts_promise(@workbench_ui.export_drafts(model.workbench)).wait()
+          catch {
+            _ => LocalActionFinished(false, true)
+          } noraise {
+            _ => LocalActionFinished(true, true)
+          }
+        }),
+      )
+    Workbench(CopyDiagnostic(value)) =>
+      (
+        model,
+        @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+          try copy_diagnostic_promise(value).wait() catch {
+            _ => LocalActionFinished(false, false)
+          } noraise {
+            _ => LocalActionFinished(true, false)
+          }
+        }),
+      )
+    Outcome(LocalActionFinished(ok, exported)) =>
+      (
+        {
+          ..model,
+          workbench: {
+            ..model.workbench,
+            success_message: if ok {
+              Some(
+                if exported {
+                  app_copy(
+                    model.workbench.locale,
+                    "Draft download requested. Keep the exported file private.",
+                    "已请求下载草稿，请妥善保管导出文件。",
+                  )
+                } else {
+                  app_copy(
+                    model.workbench.locale,
+                    "Diagnostic identifier copied.",
+                    "已复制诊断标识。",
+                  )
+                },
+              )
+            } else {
+              None
+            },
+            error_message: if ok {
+              None
+            } else {
+              Some(
+                app_copy(
+                  model.workbench.locale,
+                  "Your browser blocked this action. Check download or clipboard permission and retry.",
+                  "浏览器阻止了该操作，请检查下载或剪贴板权限后重试。",
+                ),
+              )
+            },
+          },
+        },
+        @rabbita.none,
+      )
     EndpointChanged(value) =>
       (
         {
@@ -908,7 +1033,7 @@ fn update(
           @rabbita.none,
         )
       }
-      let next = { ..model, workbench: current.update(SendRequest) }
+      let next = { ..model, workbench: current.update(SendRequest), }
       if next.workbench.loading {
         if next.demo_mode {
           (
@@ -999,14 +1124,22 @@ fn update(
         },
         @rabbita.none,
       )
-    Outcome(WorkspaceLoaded(contract, policy)) => {
+    Outcome(WorkspaceLoaded(contract, policy, aliases)) => {
       let next = {
         ..model,
         connecting: false,
         subject_ref: contract.subject_ref,
         global_policy_generation: policy.global_generation,
         global_max_output_units: policy.request_budgets.openai_max_output_units,
-        workbench: state_from_workspace(model.workbench, contract),
+        workbench: {
+          ..state_from_workspace(model.workbench, contract),
+          allowed_models: aliases,
+          model_selector: if aliases.contains(model.workbench.model_selector) {
+            model.workbench.model_selector
+          } else {
+            aliases.get(0).unwrap_or("")
+          },
+        },
       }
       (next, lease_clock_command(next.workbench, next.clock_generation, emit))
     }
@@ -1149,34 +1282,46 @@ fn app_view(
             ),
           ]),
           @html.div(class="connection-primary", [
-            @html.div(class="connection-field", [
-              @html.label(
-                for_="workspace-token",
+            if trial_session_mode(model.endpoint) {
+              @html.p(
                 app_copy(
-                  locale, "Scoped inference token", "限定范围的推理令牌",
+                  locale, "Use your signed-in trial session. No API key is created; expiry, model scope and quota still apply.",
+                  "使用已登录的试用会话，不创建 API 密钥；仍受有效期、模型范围和额度约束。",
                 ),
-              ),
-              @html.input(
-                id="workspace-token",
-                input_type=Password,
-                value=model.scoped_token,
-                placeholder=app_copy(
-                  locale, "Paste your expiring token", "粘贴有时效的令牌",
+              )
+            } else {
+              @html.div(class="connection-field", [
+                @html.label(
+                  for_="workspace-token",
+                  app_copy(
+                    locale, "Scoped inference token", "限定范围的推理令牌",
+                  ),
                 ),
-                auto_complete=Off,
-                attrs=@html.Attrs::build().disabled(
-                  !transport_allowed ||
-                  model.connecting ||
-                  model.workbench.loading,
+                @html.input(
+                  id="workspace-token",
+                  input_type=Password,
+                  value=model.scoped_token,
+                  placeholder=app_copy(
+                    locale, "Paste your expiring token", "粘贴有时效的令牌",
+                  ),
+                  auto_complete=Off,
+                  attrs=@html.Attrs::build().disabled(
+                    !transport_allowed ||
+                    model.connecting ||
+                    model.workbench.loading,
+                  ),
+                  on_input=emit.map(value => TokenChanged(value)),
                 ),
-                on_input=emit.map(value => TokenChanged(value)),
-              ),
-            ]),
+              ])
+            },
             @html.button(
               type_="button",
               disabled=model.endpoint.trim() == "" ||
                 !transport_allowed ||
-                model.scoped_token == "" ||
+                (
+                  model.scoped_token == "" &&
+                  !trial_session_mode(model.endpoint)
+                ) ||
                 model.connecting ||
                 model.workbench.loading,
               on_click=emit(Connect),

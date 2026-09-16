@@ -366,6 +366,28 @@ extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
 ///|
+extern "js" fn configured_docs_url() -> String =
+  #| () => { try { const u = new URL(globalThis.LUNANEXA_DOCS_URL); if (u.username || u.password) return ''; u.search=''; u.hash=''; return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(u.hostname)) ? u.href : ''; } catch (_) { return ''; } }
+
+///|
+extern "js" fn install_dialog_focus() -> Unit =
+  #| () => {
+  #|   if (globalThis.__lunanexaEnterpriseDialogFocus) return;
+  #|   globalThis.__lunanexaEnterpriseDialogFocus = true;
+  #|   let active = null, previous = null;
+  #|   const tabbables = d => [...d.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]')].filter(e => e.getClientRects().length && e.tabIndex >= 0);
+  #|   const sync = () => { const dialogs = document.querySelectorAll('[aria-modal="true"]'); const next = dialogs[dialogs.length - 1] || null; if (next === active) return; if (!active && next) previous = document.activeElement; active = next; if (active) { active.tabIndex = -1; (tabbables(active)[0] || active).focus(); } else if (previous?.isConnected) { previous.focus(); previous = null; } };
+  #|   new MutationObserver(sync).observe(document.documentElement, {childList:true, subtree:true});
+  #|   document.addEventListener('keydown', e => { if (!active) return; if (e.key === 'Tab') { const els = tabbables(active); const first = els[0] || active, last = els[els.length - 1] || active; if (e.shiftKey && (document.activeElement === first || !active.contains(document.activeElement))) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && (document.activeElement === last || !active.contains(document.activeElement))) { e.preventDefault(); first.focus(); } } else if (e.key === 'Escape') { const cancel = active.querySelector('#api-key-issue-cancel,#api-key-revoke-cancel,#api-key-secret-dismiss'); if (cancel && !cancel.disabled) { e.preventDefault(); cancel.click(); } } });
+  #|   document.addEventListener('focusin', e => { if (active && !active.contains(e.target)) (tabbables(active)[0] || active).focus(); });
+  #|   sync();
+  #| }
+
+///|
+extern "js" fn download_costs_csv(value : String) -> Bool =
+  #| (value) => { try { const url = URL.createObjectURL(new Blob(['\ufeff', value], {type:'text/csv;charset=utf-8'})); const a = document.createElement('a'); a.href=url; a.download='lunanexa-costs.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); return true; } catch (_) { return false; } }
+
+///|
 extern "js" fn demo_mode() -> Bool =
   #| () => {
   #|   try {
@@ -3694,6 +3716,16 @@ fn update(
             portal: {
               ..next,
               loading: false,
+              api_key_issue_open: false,
+              one_time_api_key_secret: Some({
+                key_id: "demo-preview-only",
+                display_name: "DEMO — no credential issued",
+                secret: "DEMO-NOT-A-CREDENTIAL",
+                allowed_models: ["text.default"],
+                api_base_url: Some("https://api.example.invalid"),
+                tenant_ref: "demo-tenant",
+                memory_ceiling_mib: Some(8192),
+              }),
               success_message: Some(
                 portal_copy(
                   next.locale,
@@ -3741,10 +3773,61 @@ fn update(
     }
     Portal(CopyOneTimeApiKeySecret) =>
       match model.portal.one_time_api_key_secret {
-        Some(value) if !model.demo_mode =>
+        Some(value) =>
           (model, copy_api_key_secret_command(model, value.secret, emit))
         _ => (model, @rabbita.none)
       }
+    Portal(CopyFirstCallExample) =>
+      match model.portal.one_time_api_key_secret {
+        Some(value) =>
+          (
+            model,
+            copy_api_key_secret_command(
+              model,
+              @enterprise_ui.first_call_example(value),
+              emit,
+            ),
+          )
+        None => (model, @rabbita.none)
+      }
+    Portal(CopyDetail(value))
+    | Portal(MachineAccess(CopyAccessDetail(value)))
+    | Portal(ContractDocuments(CopyPublicIdentifier(value))) =>
+      (model, copy_api_key_secret_command(model, value, emit))
+    Portal(ExportCosts) => {
+      let started = download_costs_csv(@enterprise_ui.costs_csv(model.portal))
+      (
+        {
+          ..model,
+          portal: {
+            ..model.portal,
+            success_message: if started {
+              Some(
+                portal_copy(
+                  model.portal.locale,
+                  "CSV download started. Check your browser downloads.",
+                  "CSV 下载已发起，请查看浏览器下载列表。",
+                ),
+              )
+            } else {
+              None
+            },
+            error_message: if started {
+              None
+            } else {
+              Some(
+                portal_copy(
+                  model.portal.locale,
+                  "The download could not start. Check browser download permissions and retry.",
+                  "无法发起下载，请检查浏览器下载权限后重试。",
+                ),
+              )
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    }
     ContractPreviewDue(generation, request) =>
       if generation != model.contract_preview_generation {
         (model, @rabbita.none)
@@ -4454,6 +4537,21 @@ fn update(
                 key_id: issued.credential.key_id,
                 display_name: issued.credential.display_name,
                 secret: issued.secret,
+                allowed_models: issued.credential.allowed_models,
+                api_base_url: issued.api_base_url,
+                tenant_ref: issued.credential.tenant_ref,
+                memory_ceiling_mib: match
+                  issued.credential.allowed_models.get(0) {
+                  Some(model_alias) =>
+                    model.portal.model_catalog
+                    .iter()
+                    .find_first(item => {
+                      item.alias_name == Some(model_alias) &&
+                      item.minimum_memory_mib > 0
+                    })
+                    .map(item => item.minimum_memory_mib)
+                  None => None
+                },
               }),
               loading: false,
               success_message: None,
@@ -4508,8 +4606,8 @@ fn update(
               success_message: Some(
                 portal_copy(
                   model.portal.locale,
-                  "Secret copied. Save it securely, then clear this dialog.",
-                  "密钥已复制。请安全保存，然后清除此对话框。",
+                  "Copied. Keep any credentials private.",
+                  "已复制。请妥善保管所有凭据。",
                 ),
               ),
               error_message: None,
@@ -5342,7 +5440,12 @@ fn update(
           (next, machine_clock_command(next, emit))
         }
       }
-    Outcome(Failed(dispatched_locale, message)) =>
+    Outcome(Failed(dispatched_locale, message)) => {
+      let message = @enterprise_ui.friendly_failure(
+        model.portal.locale,
+        portal_copy(model.portal.locale, "Operation", "操作"),
+        message,
+      )
       (
         {
           ..model,
@@ -5400,6 +5503,7 @@ fn update(
         },
         @rabbita.none,
       )
+    }
   }
 }
 
@@ -5432,7 +5536,14 @@ fn app_view(
         ),
       ),
       @enterprise_ui.interactive_view(
-        model.portal,
+        {
+          ..model.portal,
+          docs_base_url: if configured_docs_url() == "" {
+            None
+          } else {
+            Some(configured_docs_url())
+          },
+        },
         emit.map(message => Portal(message)),
       ),
     ])
@@ -5455,6 +5566,12 @@ fn app_view(
             portal_copy(
               locale, "Sign in with an existing identity or register a new account through the trusted identity ingress.",
               "使用现有身份登录，或通过受信任的身份入口注册新账户。",
+            ),
+          ),
+          @html.p(
+            portal_copy(
+              locale, "This is the customer portal for workspaces, model APIs and machine orders. The operator console has a separate application session, even when you use the same identity.",
+              "这里是用于工作空间、模型 API 和机器订单的用户门户。运维控制台使用独立的应用会话，即使登录的是同一身份。",
             ),
           ),
           @html.p(
@@ -5609,7 +5726,14 @@ fn app_view(
       ),
     ]),
     @enterprise_ui.interactive_view(
-      model.portal,
+      {
+        ..model.portal,
+        docs_base_url: if configured_docs_url() == "" {
+          None
+        } else {
+          Some(configured_docs_url())
+        },
+      },
       emit.map(message => Portal(message)),
     ),
   ])
@@ -5629,6 +5753,7 @@ fn subscriptions(
 
 ///|
 fn main {
+  install_dialog_focus()
   let is_demo = demo_mode()
   let initial_locale = @i18n.parse_locale(stored_locale_preference())
   commit_enterprise_organization(stored_organization_preference())
@@ -5649,6 +5774,11 @@ fn main {
       portal: if is_demo {
         {
           ..@enterprise_ui.demo_state(),
+          docs_base_url: if configured_docs_url() == "" {
+            None
+          } else {
+            Some(configured_docs_url())
+          },
           locale: initial_locale,
           machine_access: {
             ..@enterprise_ui.demo_state().machine_access,
@@ -5666,6 +5796,11 @@ fn main {
       } else {
         {
           ..@enterprise_ui.default_state(current_unix_ms()),
+          docs_base_url: if configured_docs_url() == "" {
+            None
+          } else {
+            Some(configured_docs_url())
+          },
           locale: initial_locale,
           machine_access: {
             ..@enterprise_ui.default_state(current_unix_ms()).machine_access,

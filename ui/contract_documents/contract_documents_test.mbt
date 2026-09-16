@@ -122,6 +122,28 @@ test "contract timeline renders recorded events as an accessible fact graph" {
   assert_true(html.contains("Draft created"))
   assert_true(html.contains("Information updated"))
   assert_true(html.contains("recorded facts only"))
+  assert_true(html.contains("Copy actor ID"))
+  assert_true(html.contains("Copy packet ID"))
+  assert_false(html.contains("values_sha256"))
+  assert_false(html.contains("artifact_sha256"))
+}
+
+///|
+test "copy public contract identifier preserves state and localizes label" {
+  let state = {
+    ..@contract_documents.default_state(ChineseSimplified),
+    manifest: Some(@contractdoc.youthpolicy_remote_lease_manifest()),
+    packets: [packet(InformationDraft)],
+  }
+  assert_true(state.update(CopyPublicIdentifier("packet-001")) == state)
+  assert_true(
+    @contract_documents.render(state).contains("复制资料包标识"),
+  )
+  assert_false(
+    @contract_documents.render(@contract_documents.default_state(English)).contains(
+      "Copy packet ID",
+    ),
+  )
 }
 
 ///|
@@ -162,8 +184,11 @@ test "reactive preview follows the selected form and current role draft" {
     selected_packet_id: Some(packet.packet_id),
     selected_form: Some(ReservationApplication),
     draft_values: [
-      { field_id: "reservation.operator_comment", value: "档期已核验" },
-      { field_id: "reservation.organization_name", value: "客户不可代填" },
+      { field_id: "reservation.operator_comment", value: "档期已核验", },
+      {
+        field_id: "reservation.organization_name",
+        value: "客户不可代填",
+      },
     ],
   }
   guard state.preview_request()
@@ -174,7 +199,7 @@ test "reactive preview follows the selected form and current role draft" {
   assert_eq(revision, packet.revision)
   assert_eq(form, ReservationApplication)
   assert_eq(changes, [
-    { field_id: "reservation.operator_comment", value: "档期已核验" },
+    { field_id: "reservation.operator_comment", value: "档期已核验", },
   ])
 }
 
@@ -196,7 +221,7 @@ test "customer and operator share one packet with role-owned fields and live pre
     .update_information(
       manifest,
       1L,
-      [{ field_id: "lessee.name", value: "星海科技" }],
+      [{ field_id: "lessee.name", value: "星海科技", }],
       CustomerMessenger,
       "subject-1",
       "enterprise-portal",
@@ -205,7 +230,7 @@ test "customer and operator share one packet with role-owned fields and live pre
     .update_information(
       manifest,
       2L,
-      [{ field_id: "lessor.name", value: "青年政策运营方" }],
+      [{ field_id: "lessor.name", value: "青年政策运营方", }],
       ManagerOperator,
       "operator-1",
       "operator-console",
@@ -214,7 +239,7 @@ test "customer and operator share one packet with role-owned fields and live pre
     .update_information(
       manifest,
       3L,
-      [{ field_id: "access.order_number", value: "order-1" }],
+      [{ field_id: "access.order_number", value: "order-1", }],
       PlatformDerived,
       "contract-system",
       "linked-order:order-1",
@@ -282,7 +307,7 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
       {
         text: "乙方单位名称",
         paragraphs: [
-          { ..paragraph, runs: [{ ..title_run, text: "乙方单位名称" }] },
+          { ..paragraph, runs: [{ ..title_run, text: "乙方单位名称", }], },
         ],
         grid_span: 1,
         vertical_merge: Some("restart"),
@@ -296,7 +321,7 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
       {
         text: "星海科技",
         paragraphs: [
-          { ..paragraph, runs: [{ ..title_run, text: "星海科技" }] },
+          { ..paragraph, runs: [{ ..title_run, text: "星海科技", }], },
         ],
         grid_span: 2,
         vertical_merge: None,
@@ -343,7 +368,7 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
     rows: [
       table_row,
       {
-        cells: [{ ..table_row.cells[0], vertical_merge: Some("continue") }],
+        cells: [{ ..table_row.cells[0], vertical_merge: Some("continue"), }],
         height_twips: Some(559),
         height_rule: Some("atLeast"),
       },
@@ -367,7 +392,7 @@ test "MoonLeaf scene renders Chinese text, merged cells, and tables without rast
     packet_id: "packet-001",
     packet_revision: 1L,
     form: MasterLease,
-    blocks: [title, table, { ..empty, kind: "page-break" }, second],
+    blocks: [title, table, { ..empty, kind: "page-break", }, second],
     pages: [[title, table], [second]],
     diagnostic_codes: [],
     page_width_twips: Some(11906),
@@ -438,14 +463,14 @@ test "capabilities follow packet state and actor role" {
   )
   assert_eq(
     @contract_documents.contract_packet_capabilities(
-      { ..packet(InformationConfirmed), values_sha256: digest },
+      { ..packet(InformationConfirmed), values_sha256: digest, },
       CustomerMessenger,
     ),
     [SaveInformation, RequestGeneration],
   )
   assert_eq(
     @contract_documents.contract_packet_capabilities(
-      { ..packet(GenerationFailed), values_sha256: digest },
+      { ..packet(GenerationFailed), values_sha256: digest, },
       CustomerMessenger,
     ),
     [RetryGeneration],
@@ -513,14 +538,14 @@ test "capabilities follow packet state and actor role" {
   )
   assert_eq(
     @contract_documents.contract_packet_capabilities(
-      { ..packet(InformationConfirmed), values_sha256: digest },
+      { ..packet(InformationConfirmed), values_sha256: digest, },
       ManagerOperator,
     ),
     [SaveInformation, SupersedePacket],
   )
   assert_eq(
     @contract_documents.contract_packet_capabilities(
-      { ..packet(GenerationFailed), values_sha256: digest },
+      { ..packet(GenerationFailed), values_sha256: digest, },
       ManagerOperator,
     ),
     [SupersedePacket],
@@ -620,8 +645,8 @@ test "effective guidance renders the recorded lease window when present" {
     {
       ..packet(Effective),
       values: [
-        { field_id: "lease.start_date", value: "2026-09-01" },
-        { field_id: "lease.end_date", value: "2026-10-01" },
+        { field_id: "lease.start_date", value: "2026-09-01", },
+        { field_id: "lease.end_date", value: "2026-10-01", },
       ],
       execution,
     },
@@ -634,8 +659,8 @@ test "effective guidance renders the recorded lease window when present" {
     {
       ..packet(Effective),
       values: [
-        { field_id: "reservation.start_date", value: "2026-11-01" },
-        { field_id: "reservation.end_date", value: "2026-12-01" },
+        { field_id: "reservation.start_date", value: "2026-11-01", },
+        { field_id: "reservation.end_date", value: "2026-12-01", },
       ],
       execution,
     },
@@ -750,7 +775,7 @@ test "operator approvals use a confirmation gate and task inbox" {
 test "customer sees approval progress obligations and expiry without operator actions" {
   let effective = {
     ..packet(Effective),
-    values: [{ field_id: "lease.end_date", value: "2026-09-01" }],
+    values: [{ field_id: "lease.end_date", value: "2026-09-01", }],
     execution: Some({
       evidence_sha256: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
       signed_on: "2026-08-01",
@@ -813,6 +838,7 @@ test "customer sees approval progress obligations and expiry without operator ac
   assert_true(html.contains("等待第二人复核"))
   assert_true(html.contains("催办"))
   assert_true(html.contains("剩余 12 天"))
+  assert_true(html.contains("2026-09-01 · UTC 日历日期"))
   assert_true(html.contains("首期付款"))
   assert_true(html.contains("CNY 123.45"))
   assert_true(html.contains("已逾期"))
