@@ -447,3 +447,23 @@ before recovery, not merely equal in an in-memory row count.
 errors; no generated public interfaces changed. The fixture matrix suppresses
 existing warnings 92 and 20, so these passing integration tests are not a
 strict whole-repository warning-free release gate.
+
+### PostgreSQL media capacity recovery follow-up (2026-09-16)
+
+Extended the real PostgreSQL media-store fixture beyond ambiguous-submission
+restoration. A fresh database connection restores the job and rejects a second
+reservation under its one-active-job budget. An exit record for a replacement
+instance is rejected without marking execution terminal. An original-instance
+termination record is then persisted; another new database connection restores
+that exact terminal record, accepts its identical replay, and allows a new
+reservation under the same one-job limit. The media-store fixture passed 2/2
+with the real database configured. Media job/runtime strict tests passed 28/28;
+targeted interface generation completed without public interface changes.
+The complete PostgreSQL matrix was repeated after this addition: 19/19 fixture
+files passed. An independent catalog query again found zero temporary harness
+databases, and the loopback SSH tunnel was closed.
+
+These are test-constructed records exercising the internal persistence
+primitive. They do not constitute authenticated live node termination evidence
+and do not close the provider-network-partition acceptance gap. No real job,
+node inventory or historical missing evidence was altered.

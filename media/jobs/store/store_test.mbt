@@ -30,6 +30,98 @@ async test "file-backed media intents survive restart without resubmission" {
 }
 
 ///|
+async fn verify_postgres_termination_recovery(
+  again : @jobs.JobStore,
+  job : @jobs.StoredJob,
+  owner : @jobs.Owner,
+  url : String,
+) -> Unit {
+  let context : @jobs.ExecutionContext = {
+    deployment_id: "deployment",
+    generation: 1L,
+    node_id: "test-node",
+    instance_id: Some("c".repeat(64)),
+  }
+  again.remember_execution(job.deployment_id, context)
+  let recovered_database = @database.PostgresDatabase::open(url)
+  defer recovered_database.close()
+  let recovered = @store.open_postgres(recovered_database)
+  try
+    recovered.reserve(
+      owner,
+      "must-stay-busy",
+      "sha256:" + "d".repeat(64),
+      "video.h3",
+      "deployment",
+      1002L,
+      2000L,
+      5000L,
+      maximum_active=1,
+    )
+  catch {
+    @jobs.JobError::Busy => ()
+    error => raise error
+  } noraise {
+    _ => fail("ambiguous submission released capacity after database recovery")
+  }
+  try
+    recovered.acknowledge_instance_termination(
+      job.job_id,
+      owner,
+      job.deployment_id,
+      { ..context, instance_id: Some("d".repeat(64)), },
+      "test-only-wrong-instance",
+      1003L,
+      1004L,
+    )
+  catch {
+    @jobs.JobError::Conflict => ()
+    error => raise error
+  } noraise {
+    _ => fail("replacement instance cannot terminate original execution")
+  }
+  assert_false(recovered.get(job.job_id, owner).execution_terminal)
+  let terminal = recovered.acknowledge_instance_termination(
+    job.job_id,
+    owner,
+    job.deployment_id,
+    context,
+    "test-only-original-instance-exit",
+    1003L,
+    1004L,
+  )
+  assert_true(terminal.execution_terminal)
+  let final_database = @database.PostgresDatabase::open(url)
+  defer final_database.close()
+  let final_store = @store.open_postgres(final_database)
+  assert_true(final_store.get(job.job_id, owner) == terminal)
+  assert_true(
+    final_store.acknowledge_instance_termination(
+      job.job_id,
+      owner,
+      job.deployment_id,
+      context,
+      "test-only-original-instance-exit",
+      1003L,
+      1005L,
+    ) ==
+    terminal,
+  )
+  let (_, created_after_exit) = final_store.reserve(
+    owner,
+    "capacity-after-evidenced-exit",
+    "sha256:" + "e".repeat(64),
+    "video.h3",
+    "deployment",
+    1006L,
+    2000L,
+    5000L,
+    maximum_active=1,
+  )
+  assert_true(created_after_exit)
+}
+
+///|
 async test "PostgreSQL private media intents retain ownership and ambiguous submission across restart" {
   guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
     return
@@ -70,4 +162,5 @@ async test "PostgreSQL private media intents retain ownership and ambiguous subm
   let again = @store.open_postgres(database)
   assert_true(again.get(job.job_id, owner).owner == owner)
   assert_eq(again.get(job.job_id, owner).state, SubmissionUnknown)
+  verify_postgres_termination_recovery(again, job, owner, url)
 }
