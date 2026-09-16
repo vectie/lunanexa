@@ -33,3 +33,26 @@ rerun also passed 8/8 after adding an assertion that quota rejection in a new
 usage window leaves both memory and disk unchanged. The full run's warning
 exclusions are required by other packages and do not satisfy the strict
 repository gate. No cluster service was upgraded in this batch.
+
+## Offline commercial store follow-up
+
+The offline commerce store's 23 rollback handlers now use scoped mutex release
+and error cleanup instead of catch-and-rethrow cleanup. Existing per-operation
+rollback fields, validations and replay decisions are retained. The strict
+native store suite passes 14/14 with no warning exclusions; interface generation
+reports zero warnings and no public interface change.
+
+File-fault regressions reject temporary writes during template registration,
+order creation, quote replacement, upload callback, entitlement activation
+callback and entitlement reversal callback. Each compares the full in-memory
+snapshot and original disk bytes, removes the injected fault, and completes
+the original operation. Existing activation/reversal replay checks and final
+reopen-to-Revoked checks also pass. These tests do not inject cancellation at
+the commit boundary or prove recovery from an ambiguous PostgreSQL commit.
+The remaining callback and worker transitions retain their existing functional
+tests, not exhaustive new persistence-fault coverage.
+
+The follow-up `moon test commercial/offline api --target native --warn-list
+-92-20` run passed 130/130. This selected-package API/contract regression is
+separate from the 14 strict store tests above; it is not a full repository or
+live external-provider acceptance run. This batch has not been deployed.
