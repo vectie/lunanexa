@@ -1,6 +1,6 @@
 # Platform acceptance follow-up
 
-## Completed-job exit evidence correction — local regression passed
+## Completed-job exit evidence correction — local and original live task passed
 
 The completed-job cleanup defect identified below is corrected in source.
 Verified original-instance termination can now attach after execution completed,
@@ -23,7 +23,27 @@ isolated acceptance rollout, a PostgreSQL custom-format backup was written to
 `/tmp/completed-exit-before-20260916.dump` inside the acceptance database Pod,
 restricted to mode 0600, and its table of contents was readable with pg_restore.
 This is not a restore drill. The previous controller binary will also be retained.
-The Linux candidate and original failed live task still require verification.
+The Linux candidate completed and was installed only in the isolated acceptance
+controller, retaining its PostgreSQL and configuration. Binary SHA256:
+`7535110acdcc56f54405ad416d459e37e25da929f27f6da15c2f048c4e7b23dc`.
+Its user service was active with zero restarts and health passed. Production
+controller, node image, identity/TLS configuration and model runtimes were not
+updated by this rollout.
+
+The original failed job
+`video-b29fdd1909749060ab24d4cb3775d36036aed69d5f351f67857e314e17899433`
+then passed two authenticated owner DELETE calls and retained exactly one usage
+observation. No replacement task was submitted. Independent read-only SQL
+verified Cancelling → Cancelled and termination-reference absent → present,
+while terminal_unix_ms remained `1789533646461` and the existing usage receipt
+digest remained `c93e41299726dcdfbe0ace2ab16c473a`. The normal reconciler bound
+the already authenticated original-instance evidence; no manual database
+transition or fabricated receipt was used. New test handoff/session cleanup
+completed and the verifier exited zero.
+
+The full native strict gate was repeated and still reports 63 pre-existing
+diagnostics. The older r12 missing-evidence case is not resolved by this change;
+an absent original report cannot be reconstructed from Pod disappearance.
 
 ## Natural runtime expiry during packet loss — passed; completed-job cleanup gap found
 
