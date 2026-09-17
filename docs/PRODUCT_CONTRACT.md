@@ -220,6 +220,17 @@ The workspace is one role-aware experience, not a shared unisolated process or
 filesystem: organization/project boundaries remain enforced. Platform
 administration does not disclose passwords or raw user secrets.
 
+Commercial rental supports a parallel undertaking-letter admission path: the
+customer signs the selected immutable undertaking and the managing party
+approves that exact revision, instead of requiring bilateral execution. This
+does not waive full prepayment, resource availability, tenant isolation or
+lease expiry, and it must not turn a template selection into signature evidence.
+Traditional contracts remain available. Both paths reuse document editing,
+generation, evidence and lifecycle authority; see
+[`UNDERTAKING_RENTAL.md`](UNDERTAKING_RENTAL.md) for the implementation and
+acceptance checklist. Equal admission authority is a product rule, not an
+independent legal-equivalence certification.
+
 - Mutual authentication is required between controller and nodes.
 - Node agents initiate or maintain a narrow management channel. Interactive
   access exists only in explicit exclusive-node mode and is provisioned through

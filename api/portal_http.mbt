@@ -449,10 +449,12 @@ async fn ApiService::handle_enterprise_portal(
         ) ||
         (match self.contract_document_store {
           Some(contract_store) =>
-            contract_store.has_effective_master_lease(
+            self.has_effective_rental_authority(
+              contract_store,
               view.membership.tenant_ref,
               subject_ref,
               now,
+              organization_id=view.membership.organization_id,
             )
           None => false
         })

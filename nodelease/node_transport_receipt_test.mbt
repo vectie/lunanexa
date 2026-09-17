@@ -40,7 +40,7 @@ test "node lease envelope is node and credential scoped" {
   )
   assert_false(
     @nodelease.valid_node_transport_lease(
-      { ..envelope, generation: 4L },
+      { ..envelope, generation: 4L, },
       "node-a",
       "node-a-credential",
     ),

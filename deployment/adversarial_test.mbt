@@ -66,7 +66,7 @@ fn adversarial_intent() -> @deployment.ModelServiceIntent {
     version: @contracts.contract_version,
     idempotency_key: "console:service-1",
     deployment_id: "service-1",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -118,14 +118,14 @@ test "deterministic fuzz exhausts deployment intent boundaries" {
       "../service", "service/name", "service name", "service\nname", "service<script>",
       "service%2fadmin", "服务",
     ] {
-    assert_false(intent_is_valid({ ..base, deployment_id: hostile }))
-    assert_false(intent_is_valid({ ..base, idempotency_key: hostile }))
+    assert_false(intent_is_valid({ ..base, deployment_id: hostile, }))
+    assert_false(intent_is_valid({ ..base, idempotency_key: hostile, }))
   }
   for duration in [-1L, 0L, 2592000001L, 9223372036854775807L] {
-    assert_false(intent_is_valid({ ..base, lease_duration_ms: duration }))
+    assert_false(intent_is_valid({ ..base, lease_duration_ms: duration, }))
   }
-  assert_true(intent_is_valid({ ..base, lease_duration_ms: 1L }))
-  assert_true(intent_is_valid({ ..base, lease_duration_ms: 2592000000L }))
+  assert_true(intent_is_valid({ ..base, lease_duration_ms: 1L, }))
+  assert_true(intent_is_valid({ ..base, lease_duration_ms: 2592000000L, }))
 }
 
 ///|
@@ -139,7 +139,7 @@ test "mutation fuzz rejects forbidden identifier bytes at every position" {
       let candidate = "a".repeat(position) +
         mutation +
         "b".repeat(128 - position)
-      assert_false(intent_is_valid({ ..base, deployment_id: candidate }))
+      assert_false(intent_is_valid({ ..base, deployment_id: candidate, }))
     }
   }
   for position in 0..<=256 {
@@ -147,7 +147,7 @@ test "mutation fuzz rejects forbidden identifier bytes at every position" {
       let candidate = "a".repeat(position) +
         mutation +
         "b".repeat(256 - position)
-      assert_false(intent_is_valid({ ..base, idempotency_key: candidate }))
+      assert_false(intent_is_valid({ ..base, idempotency_key: candidate, }))
     }
   }
 }
@@ -156,40 +156,46 @@ test "mutation fuzz rejects forbidden identifier bytes at every position" {
 test "adversarial catalog corpus fails before assignment planning" {
   let base = adversarial_template()
   let invalid : Array[@deployment.ModelServiceTemplate] = [
-    { ..base, artifact: { ..base.artifact, size_bytes: 0L } },
-    { ..base, artifact: { ..base.artifact, size_bytes: 1099511627777L } },
-    { ..base, artifact: { ..base.artifact, uri: "s3://models/../secret" } },
-    { ..base, artifact: { ..base.artifact, uri: "s3://models//model" } },
+    { ..base, artifact: { ..base.artifact, size_bytes: 0L, }, },
+    { ..base, artifact: { ..base.artifact, size_bytes: 1099511627777L, }, },
+    { ..base, artifact: { ..base.artifact, uri: "s3://models/../secret", }, },
+    { ..base, artifact: { ..base.artifact, uri: "s3://models//model", }, },
     {
       ..base,
-      artifact: { ..base.artifact, uri: "s3://models/model?version=1" },
+      artifact: { ..base.artifact, uri: "s3://models/model?version=1", },
     },
-    { ..base, artifact: { ..base.artifact, uri: "s3://models/%2e%2e/secret" } },
-    { ..base, artifact: { ..base.artifact, signature_ref: "../../sig" } },
-    { ..base, runtime: { ..base.runtime, name: "image@latest" } },
-    { ..base, runtime: { ..base.runtime, name: "image\n--privileged" } },
-    { ..base, runtime: { ..base.runtime, architectures: [] } },
     {
       ..base,
-      runtime: { ..base.runtime, architectures: ["nvidia-gb10", "nvidia-gb10"] },
+      artifact: { ..base.artifact, uri: "s3://models/%2e%2e/secret", },
     },
-    { ..base, runtime: { ..base.runtime, capabilities: [] } },
-    { ..base, runtime: { ..base.runtime, supports_batching: true } },
-    { ..base, runtime: { ..base.runtime, supports_multi_node: true } },
-    { ..base, capability: ImageGenerate },
-    { ..base, resources: { ..base.resources, accelerator_count: 65 } },
-    { ..base, resources: { ..base.resources, memory_mib: 1048577 } },
-    { ..base, network: { ..base.network, allow_controller: false } },
-    { ..base, network: { ..base.network, allowed_egress: ["0.0.0.0/0"] } },
+    { ..base, artifact: { ..base.artifact, signature_ref: "../../sig", }, },
+    { ..base, runtime: { ..base.runtime, name: "image@latest", }, },
+    { ..base, runtime: { ..base.runtime, name: "image\n--privileged", }, },
+    { ..base, runtime: { ..base.runtime, architectures: [], }, },
     {
       ..base,
-      health: { ..base.health, readiness_path: "http://attacker/ready" },
+      runtime: {
+        ..base.runtime,
+        architectures: ["nvidia-gb10", "nvidia-gb10"],
+      },
     },
-    { ..base, health: { ..base.health, readiness_path: "/../../ready" } },
-    { ..base, health: { ..base.health, interval_ms: 3600001 } },
-    { ..base, health: { ..base.health, failure_threshold: 101 } },
-    { ..base, rollout: { ..base.rollout, readiness_timeout_ms: 86400001L } },
-    { ..base, secret_refs: ["runtime-token", "runtime-token"] },
+    { ..base, runtime: { ..base.runtime, capabilities: [], }, },
+    { ..base, runtime: { ..base.runtime, supports_batching: true, }, },
+    { ..base, runtime: { ..base.runtime, supports_multi_node: true, }, },
+    { ..base, capability: ImageGenerate, },
+    { ..base, resources: { ..base.resources, accelerator_count: 65, }, },
+    { ..base, resources: { ..base.resources, memory_mib: 1048577, }, },
+    { ..base, network: { ..base.network, allow_controller: false, }, },
+    { ..base, network: { ..base.network, allowed_egress: ["0.0.0.0/0"], }, },
+    {
+      ..base,
+      health: { ..base.health, readiness_path: "http://attacker/ready", },
+    },
+    { ..base, health: { ..base.health, readiness_path: "/../../ready", }, },
+    { ..base, health: { ..base.health, interval_ms: 3600001, }, },
+    { ..base, health: { ..base.health, failure_threshold: 101, }, },
+    { ..base, rollout: { ..base.rollout, readiness_timeout_ms: 86400001L, }, },
+    { ..base, secret_refs: ["runtime-token", "runtime-token"], },
   ]
   for candidate in invalid {
     expect_invalid_template(candidate)
@@ -268,7 +274,7 @@ test "placement fuzz is deterministic and duplicate-node fail closed" {
   }
   let multi_machine_plan = @deployment.preflight(
     [catalog],
-    { ..intent, replicas: 2 },
+    { ..intent, replicas: 2, },
     {
       registry: [approved_evidence()],
       nodes: [eligible_node("node-a"), eligible_node("node-a")],

@@ -69,7 +69,7 @@ async test "explicit container exit is checkpointed once and cannot resurrect af
   for _ in 0..<4 {
     ignore(restored.stop(assignment.assignment_id))
   }
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Stopped)
+  assert_eq(restored.stop(assignment.assignment_id), Stopped)
   assert_eq(restored.pending_terminations(), evidence)
   let cleaned = restore_supervisor(api, checkpoint)
   assert_eq(cleaned.pending_terminations(), evidence)
@@ -135,7 +135,7 @@ async test "unpersisted container incarnation cannot become a route" {
   }
   let observation = frozen.probe_assignments([assignment])[0]
   assert_true(observation.endpoint is None)
-  assert_eq(observation.state, @contracts.Failed)
+  assert_eq(observation.state, Failed)
   assert_eq(frozen.snapshot(), saved)
 }
 
@@ -156,7 +156,7 @@ async test "runtime probes are read only and bind routes to container incarnatio
   let mutations = api.calls.filter(call => !call.has_prefix("GET")).length()
   let probed = supervisor.probe_assignments([assignment])
   assert_eq(probed.length(), 1)
-  assert_eq(probed[0].state, @contracts.Ready)
+  assert_eq(probed[0].state, Ready)
   assert_eq(probed[0].endpoint.unwrap().instance_id, original.instance_id)
   assert_true(
     probed[0].endpoint.unwrap().observed_unix_ms >= original.observed_unix_ms,
@@ -228,11 +228,11 @@ async test "runtime probes reject foreign ownership and absent resources without
     }
   }
   let rejected = supervisor.probe_assignments([assignment])[0]
-  assert_eq(rejected.state, @contracts.Failed)
+  assert_eq(rejected.state, Failed)
   assert_true(rejected.endpoint is None)
   api.objects.clear()
   let absent = supervisor.probe_assignments([assignment])[0]
-  assert_eq(absent.state, @contracts.Failed)
+  assert_eq(absent.state, Failed)
   assert_true(absent.endpoint is None)
   assert_eq(
     api.calls.filter(call => !call.has_prefix("GET")).length(),

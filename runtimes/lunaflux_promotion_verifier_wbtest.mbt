@@ -142,9 +142,9 @@ test "receipt policy binds rollout authority and verifier key" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
   let candidate_digest = lunaflux_candidate_manifest_digest(request.candidate)
   let substitutions : Array[LunaFluxSignedEvidenceApproval] = [
-    { ..receipts[0], rollout_digest: catalog_test_digest('8'), signature: "" },
-    { ..receipts[0], authority_id: "replacement-review", signature: "" },
-    { ..receipts[0], verifier_key_id: "replacement-key", signature: "" },
+    { ..receipts[0], rollout_digest: catalog_test_digest('8'), signature: "", },
+    { ..receipts[0], authority_id: "replacement-review", signature: "", },
+    { ..receipts[0], verifier_key_id: "replacement-key", signature: "", },
   ]
   for substitution in substitutions {
     let changed = receipts.copy()
@@ -204,7 +204,7 @@ test "missing duplicate and reused signed receipts fail closed" {
 test "signature candidate and key substitution fail authentication" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
   let bad_signature = receipts.copy()
-  bad_signature[0] = { ..bad_signature[0], signature: "f".repeat(64) }
+  bad_signature[0] = { ..bad_signature[0], signature: "f".repeat(64), }
   let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   let signature_report = verifier.verify(request, bad_signature)
   assert_false(signature_report.routable)
@@ -230,7 +230,7 @@ test "signature candidate and key substitution fail authentication" {
       ..request,
       candidate: {
         ..request.candidate,
-        runtime: { ..request.candidate.runtime, version: "substituted" },
+        runtime: { ..request.candidate.runtime, version: "substituted", },
       },
     },
     receipts,
@@ -249,7 +249,7 @@ test "malformed and unbounded signed receipt sets fail closed" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
   let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   let malformed = receipts.copy()
-  malformed[0] = { ..malformed[0], signature: "ABCDEF".repeat(10) + "ABCD" }
+  malformed[0] = { ..malformed[0], signature: "ABCDEF".repeat(10) + "ABCD", }
   let malformed_report = verifier.verify(request, malformed)
   assert_false(malformed_report.routable)
   assert_true(
@@ -270,7 +270,7 @@ test "verifier policy and secret admission are exact" {
   let (_, policy, secret, _) = verifier_test_fixture()
   try
     LunaFluxPromotionVerifier::new(
-      { ..policy, schema_version: "future" },
+      { ..policy, schema_version: "future", },
       secret.view(),
     )
   catch {
@@ -295,7 +295,7 @@ test "verifier policy and secret admission are exact" {
   ignore(missing.pop())
   try
     LunaFluxPromotionVerifier::new(
-      { ..policy, authorities: missing },
+      { ..policy, authorities: missing, },
       secret.view(),
     )
   catch {

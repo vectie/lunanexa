@@ -52,3 +52,28 @@ test "measured host resources replace static labels without mutating inventory" 
   updated.labels["lunanexa.io/host-memory-mib"] = "-1"
   assert_eq(@node.inventory_host_resources(updated), None)
 }
+
+///|
+test "missing host measurement keeps identity but removes stale paid capacity claims" {
+  let base : @contracts.NodeInventory = {
+    node_id: "unmeasured-test",
+    agent_version: "test",
+    os_release: "test",
+    runtime_names: [],
+    accelerators: [],
+    labels: {
+      "lunanexa.io/host-cpu-count": "999",
+      "lunanexa.io/host-memory-mib": "999999",
+      "lunanexa.io/region": "test",
+    },
+    taints: [],
+  }
+  assert_true(@node.inventory_host_resources(base) is Some(_))
+  let safe = @node.inventory_without_host_resources(base)
+  assert_eq(safe.node_id, base.node_id)
+  assert_eq(safe.labels.get("lunanexa.io/region"), Some("test"))
+  assert_eq(@node.inventory_host_resources(safe), None)
+  assert_eq(safe.labels.get("lunanexa.io/host-cpu-count"), None)
+  assert_eq(safe.labels.get("lunanexa.io/host-memory-mib"), None)
+  assert_eq(base.labels.get("lunanexa.io/host-cpu-count"), Some("999"))
+}

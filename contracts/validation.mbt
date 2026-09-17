@@ -173,7 +173,7 @@ pub fn model_transition_allowed(from : ModelState, to : ModelState) -> Bool {
 
 ///|
 pub fn health(component : String, version : String) -> HealthResponse {
-  { product: "LunaNexa", component, version, status: "ok" }
+  { product: "LunaNexa", component, version, status: "ok", }
 }
 
 ///|

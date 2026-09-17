@@ -156,10 +156,12 @@ async fn ApiService::api_key_check(
           ) ||
           (match self.contract_document_store {
             Some(contracts) =>
-              contracts.has_effective_master_lease(
+              self.has_effective_rental_authority(
+                contracts,
                 preview.tenant_ref,
                 preview.subject_ref,
                 now,
+                organization_id=preview.organization_id,
               )
             None => self.allow_legacy_unbound_access
           })
@@ -279,10 +281,12 @@ async fn ApiService::api_key_check(
           ) ||
           (match self.contract_document_store {
             Some(contracts) =>
-              contracts.has_effective_master_lease(
+              self.has_effective_rental_authority(
+                contracts,
                 value.tenant_ref,
                 value.subject_ref,
                 now,
+                organization_id=value.organization_id,
               )
             None => false
           })
@@ -382,10 +386,12 @@ async fn ApiService::handle_access_management(
       // bootstrap compatibility; production control always wires the store.
       match self.contract_document_store {
         Some(contract_store) => {
-          guard contract_store.has_effective_master_lease(
+          guard self.has_effective_rental_authority(
+            contract_store,
             intent.tenant_ref,
             intent.subject_ref,
             @async.now(),
+            organization_id=intent.organization_id,
           ) else {
             return api_error(
               409, "EffectiveMasterLeaseRequired", "an effective, unexpired MasterLease is required before issuing access",

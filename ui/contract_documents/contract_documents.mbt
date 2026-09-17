@@ -8,6 +8,9 @@ pub(all) enum ContractDocumentConfirmation {
   RequestRenewal(String)
   ApprovePending(String)
   RejectApproval(String, String)
+  SubmitUndertaking(String, Int64, String, String)
+  ReviseUndertaking(String, Int64)
+  WithdrawUndertaking(String, String)
 } derive(Debug, Eq)
 
 ///|
@@ -23,6 +26,8 @@ pub(all) enum ContractPacketCapability {
   ClosePacket
   SupersedePacket
   RequestRenewal
+  SubmitUndertaking
+  ReviseUndertaking
 } derive(Debug, Eq)
 
 ///|
@@ -39,12 +44,18 @@ pub fn contract_packet_capabilities(
   }
   // Renewal is offered to both roles from an effective packet: the customer
   // initiates it in the portal, the operator prepares it in the console.
-  if packet.state == Effective {
+  if packet.state == Effective &&
+    !@contractdoc.is_undertaking_template(packet.template_id) {
     capabilities.push(RequestRenewal)
   }
   // Confirmation and generation requests are the customer's attestation; the
   // backend exposes the matching routes only on the customer side.
   if actor_owner == CustomerMessenger {
+    if @contractdoc.is_undertaking_template(packet.template_id) &&
+      packet.state == Generated {
+      capabilities.push(SubmitUndertaking)
+      capabilities.push(ReviseUndertaking)
+    }
     if packet.state == ReadyForConfirmation {
       capabilities.push(ConfirmInformation)
     }
@@ -56,7 +67,8 @@ pub fn contract_packet_capabilities(
     }
   }
   if actor_owner == ManagerOperator {
-    if packet.state == Generated {
+    if packet.state == Generated &&
+      !@contractdoc.is_undertaking_template(packet.template_id) {
       capabilities.push(RegisterExecution)
     }
     if packet.state == Effective {
@@ -76,6 +88,12 @@ pub(all) struct ContractDocumentsState {
   locale : @i18n.Locale
   actor_owner : @contractdoc.ContractFieldOwner
   manifest : @contractdoc.ContractTemplateManifest?
+  available_manifests : Array[@contractdoc.ContractTemplateManifest]
+  creation_template_id : String
+  creation_order_ref : String
+  available_orders : Array[(String, String)]
+  undertaking_order_refs : Array[String]
+  signed_artifacts : Array[(String, String, String, Int64)]
   packets : Array[@contractdoc.ContractPacket]
   events : Array[@contractdoc.ContractPacketEvent]
   approvals : Array[@contractdoc.ContractApproval]
@@ -130,6 +148,14 @@ pub(all) enum ContractDocumentsMessage {
   ConfirmAction(ContractDocumentConfirmation)
   Refresh
   ClearNotice
+  SelectCreationTemplate(String)
+  SelectCreationOrder(String)
+  CreatePacket(String, String)
+  BeginSubmitUndertaking(String, Int64)
+  BeginReviseUndertaking(String, Int64)
+  BeginWithdrawUndertaking(String)
+  UploadUndertakingEvidence(String)
+  DownloadDocument(String)
 } derive(Eq)
 
 ///|
@@ -160,6 +186,12 @@ pub fn default_state(
     locale,
     actor_owner,
     manifest: None,
+    available_manifests: [],
+    creation_template_id: "",
+    creation_order_ref: "",
+    available_orders: [],
+    undertaking_order_refs: [],
+    signed_artifacts: [],
     packets: [],
     events: [],
     approvals: [],
@@ -237,6 +269,29 @@ pub fn ContractDocumentsState::update(
   message : ContractDocumentsMessage,
 ) -> ContractDocumentsState {
   match message {
+    SelectCreationTemplate(value) =>
+      { ..self, creation_template_id: value, creation_order_ref: "", }
+    SelectCreationOrder(value) => { ..self, creation_order_ref: value, }
+    CreatePacket(_, _) | UploadUndertakingEvidence(_) | DownloadDocument(_) =>
+      { ..self, loading: true, error_message: None, }
+    BeginSubmitUndertaking(id, revision) =>
+      {
+        ..self,
+        confirmation: Some(
+          SubmitUndertaking(
+            id,
+            revision,
+            "",
+            find_packet(self.packets, id).map_or("", packet => {
+              packet.value("undertaking.signed_date").unwrap_or("")
+            }),
+          ),
+        ),
+      }
+    BeginReviseUndertaking(id, revision) =>
+      { ..self, confirmation: Some(ReviseUndertaking(id, revision)), }
+    BeginWithdrawUndertaking(id) =>
+      { ..self, confirmation: Some(WithdrawUndertaking(id, "")), }
     CopyPublicIdentifier(_) => self
     SelectPacket(packet_id) => {
       let packet = find_packet(self.packets, packet_id)
@@ -377,6 +432,12 @@ pub fn ContractDocumentsState::update(
         ..self,
         confirmation: self.confirmation.map(action => {
           match (action, field) {
+            (SubmitUndertaking(id, revision, _, date), EvidenceDigest) =>
+              SubmitUndertaking(id, revision, value, date)
+            (SubmitUndertaking(id, revision, artifact, _), SignedOn) =>
+              SubmitUndertaking(id, revision, artifact, value)
+            (WithdrawUndertaking(id, _), RejectionReason) =>
+              WithdrawUndertaking(id, value)
             (RegisterExecution(id, revision, _, signed_on), EvidenceDigest) =>
               RegisterExecution(id, revision, value, signed_on)
             (RegisterExecution(id, revision, digest, _), SignedOn) =>
@@ -415,7 +476,8 @@ pub fn ContractDocumentsState::update(
 pub fn ContractDocumentsState::preview_request(
   self : ContractDocumentsState,
 ) -> ContractDocumentsMessage? {
-  guard self.manifest is Some(manifest) && self.selected_form is Some(form) else {
+  guard self.current_manifest() is Some(manifest) &&
+    self.selected_form is Some(form) else {
     return None
   }
   let packet = match self.selected_packet_id {
@@ -564,7 +626,14 @@ fn step_bar(
         }
         @html.li(class=tone, [
           @html.span(class="contract-step-marker", "\{index + 1}"),
-          @html.span(step_label(locale, step)),
+          @html.span(
+            if step == SignedEffective &&
+              @contractdoc.is_undertaking_template(packet.template_id) {
+              copy(locale, "Party A approved", "甲方批准")
+            } else {
+              step_label(locale, step)
+            },
+          ),
         ])
       }
     ],
@@ -579,6 +648,33 @@ fn state_guidance(
   packet : @contractdoc.ContractPacket,
   actor_owner : @contractdoc.ContractFieldOwner,
 ) -> String {
+  if @contractdoc.is_undertaking_template(packet.template_id) {
+    match packet.state {
+      InformationDraft | ReadyForConfirmation =>
+        return copy(
+          locale, "Review your organization and the original undertaking. Party A confirms the paid order's rental dates and terms; missing operator information does not need to be copied by you.",
+          "核对承诺单位与原始承诺条款。甲方负责确认关联订单的租期与金额；运营信息未齐全时请等待甲方确认，无需代为填写。",
+        )
+      Generated =>
+        return if actor_owner == CustomerMessenger {
+          copy(
+            locale, "Download, sign and stamp the undertaking, then upload its scan and submit it for Party A approval. If rejected, revise, regenerate and sign the new version.",
+            "下载承诺函、签字盖章，上传扫描件并提交甲方审批。如被退回，可修订、重新生成并签章。",
+          )
+        } else {
+          copy(
+            locale, "Review the tenant's signed scan and payment evidence in the approval inbox. Party A approves rather than countersigns; capacity and payment checks cannot be skipped.",
+            "请在审批待办中审核使用方签章扫描件与付款凭证。甲方只审批、不双签；资源与付款检查不可跳过。",
+          )
+        }
+      Effective =>
+        return copy(
+          locale, "Party A approved this undertaking. Access remains subject to the paid order, rental dates, resource readiness and permissions. The approved version is read-only.",
+          "本承诺函已获甲方批准。访问仍受关联付款订单、租期、资源就绪及权限约束；获批版本只读。",
+        )
+      _ => ()
+    }
+  }
   match packet.state {
     InformationDraft =>
       copy(
@@ -1476,6 +1572,20 @@ fn capability_button(
         BeginRegisterExecution(packet.packet_id, packet.revision),
         copy(state.locale, "Register signed evidence", "登记签署证据"),
       )
+    SubmitUndertaking =>
+      (
+        BeginSubmitUndertaking(packet.packet_id, packet.revision),
+        copy(
+          state.locale,
+          "Submit undertaking for approval",
+          "提交承诺函审批",
+        ),
+      )
+    ReviseUndertaking =>
+      (
+        BeginReviseUndertaking(packet.packet_id, packet.revision),
+        copy(state.locale, "Revise and regenerate", "修订并重新生成"),
+      )
     ClosePacket =>
       (
         BeginClosePacket(packet.packet_id, packet.revision),
@@ -1495,7 +1605,14 @@ fn capability_button(
   @html.button(
     type_="button",
     class=if quiet { "quiet-button" } else { "primary-button" },
-    disabled=state.loading,
+    disabled=state.loading ||
+      (
+        capability == SubmitUndertaking &&
+        state.approvals.any(approval => {
+          approval.packet_id == packet.packet_id &&
+          (approval.status == Pending || approval.status == Approved)
+        })
+      ),
     on_click=command(emit, message),
     label,
   )
@@ -1591,15 +1708,35 @@ fn packet_editor(
         )
     }
   }
-  @html.section(class="contract-workspace", [
+  let packet_class = if @contractdoc.is_undertaking_template(packet.template_id) {
+    "contract-workspace is-undertaking"
+  } else {
+    "contract-workspace"
+  }
+  @html.section(class=packet_class, [
     @html.div(class="contract-progress", [
-      @html.strong(state_label(state.locale, packet.state)),
+      @html.strong(
+        if @contractdoc.is_undertaking_template(packet.template_id) &&
+          packet.state == Effective {
+          copy(state.locale, "Approved and effective", "已批准生效")
+        } else {
+          state_label(state.locale, packet.state)
+        },
+      ),
       @html.span(
-        copy(
-          state.locale,
-          "Source packet: 7 forms · 18 pages",
-          "源合同包：7 份表单 · 18 页",
-        ),
+        if @contractdoc.is_undertaking_template(packet.template_id) {
+          copy(
+            state.locale,
+            "Attachment 2 · equipment undertaking",
+            "附件 2 · 设备使用承诺函",
+          )
+        } else {
+          copy(
+            state.locale,
+            "Source packet: 7 forms · 18 pages",
+            "源合同包：7 份表单 · 18 页",
+          )
+        },
       ),
       @html.span("Revision \{packet.revision}"),
     ]),
@@ -1608,6 +1745,31 @@ fn packet_editor(
       class="contract-guidance",
       state_guidance(state.locale, packet, state.actor_owner),
     ),
+    if @contractdoc.is_undertaking_template(packet.template_id) &&
+      state.actor_owner == CustomerMessenger &&
+      !packet.artifacts.is_empty() {
+      @html.div(
+        class="contract-actions",
+        [
+          for artifact in packet.artifacts => {
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              disabled=state.loading,
+              on_click=command(emit, DownloadDocument(artifact.artifact_id)),
+              copy(state.locale, "Download verified ", "下载已验证 ") +
+              (if artifact.media_type == "application/pdf" {
+                "PDF"
+              } else {
+                "DOCX"
+              }),
+            )
+          }
+        ],
+      )
+    } else {
+      @html.nothing
+    },
     @html.section(class="contract-timeline", [
       @html.div(class="contract-timeline-heading", [
         @html.h2(copy(state.locale, "Contract timeline", "合同时间轴")),
@@ -1796,6 +1958,13 @@ fn operator_confirmation(
   emit : @rabbita.Emit[ContractDocumentsMessage]?,
   action : ContractDocumentConfirmation,
 ) -> @rabbita.Html {
+  let undertaking_approval = match action {
+    ApprovePending(id) =>
+      state.approvals.any(approval => {
+        approval.approval_id == id && approval.action == "undertaking:execute"
+      })
+    _ => false
+  }
   let (title, body) : (String, String) = match action {
     RegisterExecution(_) =>
       (
@@ -1823,7 +1992,7 @@ fn operator_confirmation(
           "关闭不可撤销。提前退租只有在结算确认单生成后才会被接受。",
         ),
       )
-    RejectApproval(_) =>
+    RejectApproval(_) | WithdrawUndertaking(_) =>
       (
         copy(
           state.locale,
@@ -1838,16 +2007,32 @@ fn operator_confirmation(
       )
     ApprovePending(_) =>
       (
-        copy(
-          state.locale,
-          "Approve this contract action?",
-          "批准这项合同操作？",
-        ),
-        copy(
-          state.locale,
-          "Review the immutable approval summary, expected revision, and evidence before applying the transition.",
-          "请核对不可变审批摘要、预期版本和证据后再应用该过渡。",
-        ),
+        if undertaking_approval {
+          copy(
+            state.locale,
+            "Approve the tenant undertaking?",
+            "批准使用方承诺函？",
+          )
+        } else {
+          copy(
+            state.locale,
+            "Approve this contract action?",
+            "批准这项合同操作？",
+          )
+        },
+        if undertaking_approval {
+          copy(
+            state.locale,
+            "Party A approves the exact tenant-signed version; this is not Party A's signature. Confirm the signed scan and independently verified full prepayment. Resource and permission gates remain enforced.",
+            "甲方批准的是使用方已签章的确切版本，不代表甲方签署。请核对签章扫描件及独立核实的全额到账；资源与权限闸门仍生效。",
+          )
+        } else {
+          copy(
+            state.locale,
+            "Review the immutable approval summary, expected revision, and evidence before applying the transition.",
+            "请核对不可变审批摘要、预期版本和证据后再应用该过渡。",
+          )
+        },
       )
     _ =>
       (
@@ -1932,7 +2117,7 @@ fn operator_confirmation(
           SupersessionReason,
         ),
       ]
-    RejectApproval(_, reason) =>
+    RejectApproval(_, reason) | WithdrawUndertaking(_, reason) =>
       [
         dialog_text_input(
           emit,
@@ -2033,7 +2218,8 @@ fn operator_confirmation(
     ClosePacket(_, _, _, reason) => reason.trim() != ""
     SupersedePacket(_, _, successor, reason) =>
       successor.trim() != "" && reason.trim() != ""
-    RejectApproval(_, reason) => reason.trim() != ""
+    RejectApproval(_, reason) | WithdrawUndertaking(_, reason) =>
+      reason.trim() != ""
     ApprovePending(approval_id) =>
       state.approvals.any(value => value.approval_id == approval_id)
     _ => true
@@ -2075,11 +2261,14 @@ fn confirmation(
     None => @html.span("")
     Some(action) =>
       match action {
+        SubmitUndertaking(_) | ReviseUndertaking(_) =>
+          undertaking_confirmation(state, emit, action)
         RegisterExecution(_)
         | ClosePacket(_)
         | SupersedePacket(_)
         | ApprovePending(_)
-        | RejectApproval(_) => operator_confirmation(state, emit, action)
+        | RejectApproval(_)
+        | WithdrawUndertaking(_) => operator_confirmation(state, emit, action)
         ConfirmInformation(_) | RequestGeneration(_) | RequestRenewal(_) => {
           let generating = action is RequestGeneration(_, _, _)
           let renewing = action is RequestRenewal(_)
@@ -2501,11 +2690,19 @@ fn customer_governance_status(
   ) -> String {
     match status {
       Pending =>
-        copy(
-          state.locale,
-          "Waiting for second-person review",
-          "等待第二人复核",
-        )
+        if @contractdoc.is_undertaking_template(packet.template_id) {
+          copy(
+            state.locale,
+            "Waiting for Party A approval",
+            "等待甲方审批",
+          )
+        } else {
+          copy(
+            state.locale,
+            "Waiting for second-person review",
+            "等待第二人复核",
+          )
+        }
       Approved =>
         copy(
           state.locale,
@@ -2527,125 +2724,155 @@ fn customer_governance_status(
       Waived => copy(state.locale, "Waived", "已豁免")
     }
   }
-  @html.section(class="contract-customer-governance", [
-    @html.div(class="contract-customer-governance-heading", [
-      @html.div([
+  @html.section(
+    class="contract-customer-governance",
+    [
+      ..approvals
+      .filter(approval => approval.status == Rejected)
+      .map(approval => {
         @html.p(
-          class="eyebrow",
-          copy(state.locale, "CONTRACT STATUS", "合同状态"),
-        ),
-        @html.h2(
-          copy(state.locale, "What happens next", "接下来需要做什么"),
-        ),
-      ]),
-      @html.div(class="contract-expiry-card", [
-        @html.span(copy(state.locale, "Contract expiry", "合同到期")),
-        @html.strong(countdown),
-        @html.small(
-          match expiry {
-            Some(date) =>
-              copy(
-                state.locale,
-                "\{date} · UTC calendar date",
-                "\{date} · UTC 日历日期",
-              )
-            None => "—"
-          },
-        ),
-      ]),
-    ]),
-    if pending.is_empty() {
-      @html.p(
-        class="contract-customer-status-note",
-        copy(
-          state.locale,
-          "No approval is currently waiting.",
-          "当前没有待审批事项。",
-        ),
-      )
-    } else {
-      @html.ul(
-        class="contract-customer-status-list",
-        [
-          for approval in pending => {
-            @html.li([
-              @html.div([
-                @html.strong(approval_label(approval.status)),
-                @html.span(
-                  copy(
-                    state.locale,
-                    "Requested \{@contractdoc.format_unix_ms_utc(approval.created_unix_ms)} · \{approval.action}",
-                    "发起于 \{@contractdoc.format_unix_ms_utc(approval.created_unix_ms)} · \{approval.action}",
-                  ),
-                ),
-              ]),
-              @html.button(
-                type_="button",
-                class="quiet-button",
-                disabled=state.loading,
-                on_click=command(emit, NudgeApproval(approval.approval_id)),
-                copy(state.locale, "Send reminder", "催办"),
-              ),
-            ])
-          }
-        ],
-      )
-    },
-    @html.div(class="contract-obligation-list", [
-      @html.h3(
-        copy(
-          state.locale,
-          "Payment and acceptance milestones",
-          "付款与验收节点",
-        ),
-      ),
-      if obligations.is_empty() {
-        @html.p(
+          class="notice error",
           copy(
             state.locale,
-            "No obligation has been recorded.",
-            "尚未登记履约义务。",
+            "Returned: \{approval.decision_reason.unwrap_or("Review required")}. Revise the document and submit new signed evidence.",
+            "已退回：\{approval.decision_reason.unwrap_or("请核对资料")}。请修订文档并提交新签章凭证。",
+          ),
+        )
+      }),
+      @html.div(class="contract-customer-governance-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            copy(state.locale, "CONTRACT STATUS", "合同状态"),
+          ),
+          @html.h2(
+            copy(state.locale, "What happens next", "接下来需要做什么"),
+          ),
+        ]),
+        @html.div(class="contract-expiry-card", [
+          @html.span(copy(state.locale, "Contract expiry", "合同到期")),
+          @html.strong(countdown),
+          @html.small(
+            match expiry {
+              Some(date) =>
+                copy(
+                  state.locale,
+                  "\{date} · UTC calendar date",
+                  "\{date} · UTC 日历日期",
+                )
+              None => "—"
+            },
+          ),
+        ]),
+      ]),
+      if pending.is_empty() {
+        @html.p(
+          class="contract-customer-status-note",
+          copy(
+            state.locale,
+            "No approval is currently waiting.",
+            "当前没有待审批事项。",
           ),
         )
       } else {
         @html.ul(
+          class="contract-customer-status-list",
           [
-            for obligation in obligations => {
-              @html.li(
-                class=if obligation.state == Overdue {
-                  "is-overdue"
+            for approval in pending => {
+              @html.li([
+                @html.div([
+                  @html.strong(approval_label(approval.status)),
+                  @html.span(
+                    copy(
+                      state.locale,
+                      "Requested \{@contractdoc.format_unix_ms_utc(approval.created_unix_ms)} · \{approval.action}",
+                      "发起于 \{@contractdoc.format_unix_ms_utc(approval.created_unix_ms)} · \{approval.action}",
+                    ),
+                  ),
+                ]),
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  disabled=state.loading,
+                  on_click=command(emit, NudgeApproval(approval.approval_id)),
+                  copy(state.locale, "Send reminder", "催办"),
+                ),
+                if approval.action == "undertaking:execute" &&
+                  approval.status == Pending {
+                  @html.button(
+                    type_="button",
+                    class="quiet-button",
+                    disabled=state.loading,
+                    on_click=command(
+                      emit,
+                      BeginWithdrawUndertaking(approval.approval_id),
+                    ),
+                    copy(state.locale, "Withdraw submission", "撤回申请"),
+                  )
                 } else {
-                  ""
+                  @html.nothing
                 },
-                [
-                  @html.div([
-                    @html.strong(obligation.title),
-                    @html.span(
-                      copy(
-                        state.locale,
-                        "Due \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
-                        "到期 \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
-                      ),
-                    ),
-                  ]),
-                  @html.div([
-                    @html.strong(obligation_label(obligation.state)),
-                    @html.span(
-                      match obligation.amount_minor_units {
-                        Some(amount) =>
-                          "CNY \{@contractdoc.format_cny_minor_units(amount)}"
-                        None => copy(state.locale, "No amount", "无金额")
-                      },
-                    ),
-                  ]),
-                ],
-              )
+              ])
             }
           ],
         )
       },
-    ]),
-  ])
+      @html.div(class="contract-obligation-list", [
+        @html.h3(
+          copy(
+            state.locale,
+            "Payment and acceptance milestones",
+            "付款与验收节点",
+          ),
+        ),
+        if obligations.is_empty() {
+          @html.p(
+            copy(
+              state.locale,
+              "No obligation has been recorded.",
+              "尚未登记履约义务。",
+            ),
+          )
+        } else {
+          @html.ul(
+            [
+              for obligation in obligations => {
+                @html.li(
+                  class=if obligation.state == Overdue {
+                    "is-overdue"
+                  } else {
+                    ""
+                  },
+                  [
+                    @html.div([
+                      @html.strong(obligation.title),
+                      @html.span(
+                        copy(
+                          state.locale,
+                          "Due \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
+                          "到期 \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
+                        ),
+                      ),
+                    ]),
+                    @html.div([
+                      @html.strong(obligation_label(obligation.state)),
+                      @html.span(
+                        match obligation.amount_minor_units {
+                          Some(amount) =>
+                            "CNY \{@contractdoc.format_cny_minor_units(amount)}"
+                          None => copy(state.locale, "No amount", "无金额")
+                        },
+                      ),
+                    ]),
+                  ],
+                )
+              }
+            ],
+          )
+        },
+      ]),
+    ],
+  )
 }
 
 ///|
@@ -2802,8 +3029,9 @@ fn contract_documents_view(
     ]),
     governance_task_inbox(state, emit),
     governance_summary_block(state, emit),
+    undertaking_creation(state, emit),
     packet_switcher(state, emit),
-    match (state.manifest, selected) {
+    match (state.current_manifest(), selected) {
       (Some(manifest), Some(packet)) =>
         @html.div([
           customer_governance_status(state, packet, emit),
@@ -2876,7 +3104,7 @@ fn contract_styles() -> String {
     #|.contract-task-inbox{margin:0 0 1rem;padding:1rem;border:1px solid rgba(241,195,109,.35);border-radius:.6rem;background:linear-gradient(135deg,rgba(241,195,109,.08),rgba(17,31,41,.5))}.contract-task-inbox-heading{display:flex;justify-content:space-between;gap:1rem;align-items:end;flex-wrap:wrap}.contract-task-inbox-heading h2{margin:.15rem 0}.contract-task-inbox-heading>span{color:var(--muted,#91a7ad);font-size:.8rem}.contract-task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;margin:.8rem 0}.contract-task-count{display:grid;gap:.2rem;padding:.7rem;border:1px solid var(--line,#223743);border-radius:.5rem;background:rgba(0,0,0,.12)}.contract-task-count strong{font-size:1.35rem}.contract-task-count span{color:var(--muted,#91a7ad);font-size:.78rem}.contract-task-count.is-action{border-color:rgba(241,195,109,.5)}.contract-task-empty{margin:.5rem 0 0;color:var(--muted,#91a7ad)}.contract-task-list{list-style:none;margin:.6rem 0 0;padding:0;display:grid;gap:.5rem}.contract-task-item{display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap;padding:.65rem .75rem;border:1px solid rgba(241,195,109,.25);border-radius:.5rem}.contract-task-item>div{display:grid;gap:.2rem}.contract-task-item span{color:var(--muted,#91a7ad);font-size:.82rem;overflow-wrap:anywhere}.contract-task-actions{display:flex!important;grid-auto-flow:column;gap:.45rem;flex-wrap:wrap}@media(max-width:52rem){.contract-task-grid{grid-template-columns:1fr}.contract-task-actions{grid-auto-flow:row;width:100%}.contract-task-actions button{width:100%}}
     #|.contract-customer-governance{margin:0 0 1rem;padding:1rem;border:1px solid rgba(126,224,189,.3);border-radius:.6rem;background:linear-gradient(135deg,rgba(126,224,189,.07),rgba(17,31,41,.5))}.contract-customer-governance-heading{display:flex;justify-content:space-between;align-items:start;gap:1rem;flex-wrap:wrap}.contract-customer-governance-heading h2{margin:.15rem 0}.contract-expiry-card{display:grid;gap:.15rem;min-width:12rem;padding:.65rem .8rem;border:1px solid rgba(126,224,189,.3);border-radius:.5rem;background:rgba(0,0,0,.12)}.contract-expiry-card span,.contract-expiry-card small,.contract-customer-status-note{color:var(--muted,#91a7ad)}.contract-customer-status-list,.contract-obligation-list ul{list-style:none;margin:.75rem 0 0;padding:0;display:grid;gap:.5rem}.contract-customer-status-list li,.contract-obligation-list li{display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap;padding:.65rem .75rem;border:1px solid var(--line,#223743);border-radius:.5rem}.contract-customer-status-list li>div{display:grid;gap:.15rem}.contract-customer-status-list span,.contract-obligation-list span{color:var(--muted,#91a7ad);font-size:.78rem}.contract-obligation-list{margin-top:1rem}.contract-obligation-list h3{margin:0}.contract-obligation-list li>div{display:grid;gap:.15rem}.contract-obligation-list li>div:last-child{text-align:right}.contract-obligation-list li.is-overdue{border-color:rgba(242,163,163,.6);background:rgba(242,163,163,.07)}@media(max-width:42rem){.contract-expiry-card{width:100%}.contract-customer-status-list li button{width:100%}.contract-obligation-list li>div:last-child{text-align:left}}
     #|.contract-timeline{margin:0 .8rem 1rem;padding:.8rem 1rem;border:1px solid var(--line,#223743);border-radius:.6rem;background:rgba(0,0,0,.1)}.contract-timeline-heading{display:flex;justify-content:space-between;gap:.8rem;align-items:baseline;flex-wrap:wrap}.contract-timeline-heading h2{margin:.15rem 0}.contract-timeline-heading span{color:var(--muted,#91a7ad);font-size:.78rem}.contract-timeline ol{list-style:none;margin:.8rem 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.65rem}.contract-timeline-item{position:relative;display:grid;grid-template-columns:auto 1fr;gap:.45rem;min-width:0;color:var(--muted,#91a7ad)}.contract-timeline-item:not(:last-child)::after{position:absolute;z-index:0;top:.66rem;left:1.35rem;width:calc(100% - .7rem);height:2px;background:linear-gradient(90deg,rgba(126,224,189,.55),var(--line,#35505f));content:""}.contract-timeline-item>div{position:relative;z-index:1;display:grid;gap:.2rem;padding-right:.2rem;background:linear-gradient(90deg,rgba(9,21,28,.94),rgba(9,21,28,.7) 82%,transparent)}.contract-timeline-item strong{font-size:.8rem;color:var(--muted,#91a7ad)}.contract-timeline-item span:not(.contract-timeline-marker){font-size:.72rem;overflow-wrap:anywhere}.contract-timeline-marker{position:relative;z-index:2;display:grid;place-items:center;width:1.35rem;height:1.35rem;border:1px solid var(--line,#35505f);border-radius:50%;background:var(--panel2,#111f29);font-size:.75rem}.contract-timeline-item.is-done strong{color:var(--ink,#ecf5f2)}.contract-timeline-item.is-done .contract-timeline-marker{color:#7ee0bd;border-color:rgba(126,224,189,.7);background:rgba(126,224,189,.1)}.contract-timeline-note{margin:.8rem 0 0;padding-top:.6rem;border-top:1px solid var(--line,#223743);color:var(--muted,#91a7ad);font-size:.7rem}@media(max-width:64rem){.contract-timeline ol{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:42rem){.contract-timeline ol{grid-template-columns:1fr}.contract-timeline-item{min-height:3.6rem}.contract-timeline-item:not(:last-child)::after{top:1.35rem;bottom:-.65rem;left:.66rem;width:2px;height:auto;background:linear-gradient(180deg,rgba(126,224,189,.55),var(--line,#35505f))}}
-    #|.contract-timeline-item>div{padding:.45rem;border:1px solid var(--line,#d5dee4);border-radius:.4rem;background:var(--panel,#fff)}
+    #|.is-undertaking .contract-field-grid{grid-template-columns:minmax(0,1fr)}.is-undertaking .contract-field label{flex-wrap:wrap}.contract-timeline-item>div{padding:.45rem;border:1px solid var(--line,#d5dee4);border-radius:.4rem;background:var(--panel,#fff)}
     #|.contract-packet-switcher{display:flex;align-items:end;justify-content:space-between;gap:1rem;margin:0 0 1rem;padding:.8rem 1rem;border:1px solid var(--line,#223743);border-radius:.6rem;background:var(--panel2,#111f29)}.contract-packet-switcher label{display:grid;gap:.2rem;min-width:10rem;font-weight:750}.contract-packet-switcher label:last-of-type{flex:1}.contract-packet-switcher select,.contract-packet-switcher input{width:100%;min-height:44px;padding:.6rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:#ecf5f2;font:inherit}.contract-search-empty{margin:0;color:#f1c36d;font-size:.8rem}.contract-portfolio-controls{flex-wrap:wrap}@media(max-width:52rem){.contract-packet-switcher{align-items:stretch;flex-direction:column}.contract-packet-switcher select{width:100%}}
   )
 }

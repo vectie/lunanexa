@@ -79,6 +79,7 @@ test "OIDC transport override preserves the public issuer path" {
     mode: Proxy,
     listen_address: "127.0.0.1:8080",
     issuer: "https://106.39.18.146:5006/realms/lunanexa",
+    canonical_identity_issuer: None,
     oidc_transport_origin: Some("https://id.lunanexa.example:8443"),
     oidc_ca_file: None,
     operator_host: "106.39.18.146:5003",
@@ -106,6 +107,64 @@ test "OIDC transport override preserves the public issuer path" {
   assert_eq(
     oidc_transport_url(
       config, "https://106.39.18.146:5006/realms/lunanexa/protocol/openid-connect/token",
+    ),
+    "https://id.lunanexa.example:8443/realms/lunanexa/protocol/openid-connect/token",
+  )
+  let http_config = {
+    ..config,
+    issuer: "http://106.39.18.146:5006/realms/lunanexa",
+  }
+  assert_false(http_config.browser_secure())
+  let migration = {
+    ..http_config,
+    canonical_identity_issuer: Some(config.issuer),
+  }
+  let identity : GatewayCookie = {
+    kind: "identity",
+    audience: "enterprise",
+    host: config.enterprise_host,
+    state: "",
+    nonce: "",
+    verifier: "",
+    issuer: http_config.issuer,
+    subject: "existing-subject",
+    email: "user@example.test",
+    display_name: "Test",
+    bearer: "",
+    csrf: "",
+    created_unix_ms: 1000L,
+    last_used_unix_ms: 1000L,
+    expires_unix_ms: 2000L,
+  }
+  for registration in [false, true] {
+    let before = assertion_headers(
+      config,
+      { ..identity, issuer: config.issuer, },
+      registration,
+      1L,
+      31L,
+      "fixed-test-nonce",
+    )
+    let after = assertion_headers(
+      migration, identity, registration, 1L, 31L, "fixed-test-nonce",
+    )
+    assert_eq(after, before)
+    let unrelated = assertion_headers(
+      migration,
+      { ..identity, issuer: "http://unrelated/realm", },
+      registration,
+      1L,
+      31L,
+      "fixed-test-nonce",
+    )
+    assert_eq(
+      unrelated.get("X-LunaNexa-Identity-Issuer"),
+      Some("http://unrelated/realm"),
+    )
+  }
+  assert_eq(
+    oidc_transport_url(
+      http_config, "http://106.39.18.146:5006/realms/lunanexa/protocol/openid-connect/token",
     ),
     "https://id.lunanexa.example:8443/realms/lunanexa/protocol/openid-connect/token",
   )

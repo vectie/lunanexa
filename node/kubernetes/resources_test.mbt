@@ -262,7 +262,7 @@ test "expired mismatched and duplicate GPU assignments fail before resource crea
         1000L,
       )
     catch {
-      @kubernetes.InvalidResource => ()
+      InvalidResource => ()
       _ => fail("wrong validation failure")
     } noraise {
       _ => fail("invalid assignment accepted")
@@ -288,7 +288,7 @@ test "model mounts cannot escape the verified cache and ingress cannot become pu
         1000L,
       )
     catch {
-      @kubernetes.InvalidResource => ()
+      InvalidResource => ()
       _ => fail("wrong validation failure")
     } noraise {
       _ => fail("unsafe mount accepted")
@@ -308,7 +308,7 @@ test "model mounts cannot escape the verified cache and ingress cannot become pu
         1000L,
       )
     catch {
-      @kubernetes.InvalidResource => ()
+      InvalidResource => ()
       _ => fail("wrong validation failure")
     } noraise {
       _ => fail("unsafe ingress accepted")

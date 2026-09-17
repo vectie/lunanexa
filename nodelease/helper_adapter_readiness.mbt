@@ -59,7 +59,7 @@ pub fn machine_helper_adapter_evidence_ready(
 fn machine_helper_adapter_material(
   evidence : MachineHelperAdapterReadinessEvidence,
 ) -> String {
-  { ..evidence, signature: "" }.to_json().stringify()
+  ToJson::to_json({ ..evidence, signature: "", }).stringify()
 }
 
 ///|

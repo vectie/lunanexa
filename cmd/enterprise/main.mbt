@@ -309,7 +309,7 @@ priv enum Outcome {
     Array[@nodelease.CustomerExclusiveMachineView],
     Array[@offline.CommercialOrder],
     Array[@offline_commerce.OfflineArtifactSummary],
-    @contractdoc.ContractTemplateManifest,
+    Array[@contractdoc.ContractTemplateManifest],
     Array[@contractdoc.ContractPacket],
     Array[@contractdoc.ContractPacketEvent],
     ContractSelfGovernance,
@@ -335,6 +335,7 @@ priv enum Outcome {
   EvidenceUploaded(String)
   ArtifactDownloaded(String)
   ContractPacketUpdated(@contractdoc.ContractPacket)
+  ContractActionNeedsRefresh
   ContractApprovalNudged
   DesktopClientLaunched(String)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
@@ -491,9 +492,10 @@ extern "js" fn contract_preview_delay_promise(
 
 ///|
 /// Loads only the checked, field-free MoonLeaf scene shipped with demo assets.
-extern "js" fn demo_contract_preview_promise() -> @js.Promise =
-  #| async () => {
-  #|   const response = await fetch("/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json", {
+extern "js" fn demo_contract_preview_promise(undertaking : Bool) -> @js.Promise =
+  #| async undertaking => {
+  #|   const path = undertaking ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
+  #|   const response = await fetch(path, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
   #|     credentials: "same-origin",
@@ -1534,7 +1536,7 @@ async fn load_self(
   Array[@nodelease.CustomerExclusiveMachineView],
   Array[@offline.CommercialOrder],
   Array[@offline_commerce.OfflineArtifactSummary],
-  @contractdoc.ContractTemplateManifest,
+  Array[@contractdoc.ContractTemplateManifest],
   Array[@contractdoc.ContractPacket],
   Array[@contractdoc.ContractPacketEvent],
   ContractSelfGovernance,
@@ -1738,12 +1740,12 @@ async fn load_self(
       })
     }
   }
-  let contract_manifest : @contractdoc.ContractTemplateManifest = @json.from_json(
+  let contract_manifest : Array[@contractdoc.ContractTemplateManifest] = @json.from_json(
     @json.parse(
       request(
         "GET",
         model.endpoint,
-        "/v1/contract-documents/manifest",
+        "/v1/contract-documents/manifest/catalog",
         model.token,
         model.subject_ref,
       ),
@@ -2948,13 +2950,17 @@ async fn demo_contract_preview(
   form : @contractdoc.ContractFormKind,
   changes : Array[@contractdoc.ContractFieldValue],
 ) -> @contractdoc.ContractPreviewDocument {
-  let text : String = demo_contract_preview_promise().wait().cast()
+  guard model.portal.contract_documents.current_manifest() is Some(manifest) else {
+    fail("contract manifest unavailable")
+  }
+  let text : String = demo_contract_preview_promise(
+      @contractdoc.is_undertaking_template(manifest.template_id),
+    )
+    .wait()
+    .cast()
   let template : @contractdoc.ContractPreviewTemplate = @json.from_json(
     @json.parse(text),
   )
-  guard model.portal.contract_documents.manifest is Some(manifest) else {
-    fail("contract manifest unavailable")
-  }
   guard model.portal.contract_documents.packets.search_by(packet => {
       packet.packet_id == packet_id
     })
@@ -3058,7 +3064,7 @@ fn demo_contract_action(
     ConfirmAction(RequestRenewal(packet_id)) => packet_id
     _ => return { ..documents, loading: false, }
   }
-  guard documents.manifest is Some(manifest) &&
+  guard documents.current_manifest() is Some(manifest) &&
     documents.packets.search_by(packet => packet.packet_id == packet_id)
     is Some(index) else {
     return {
@@ -3140,6 +3146,69 @@ fn contract_packet_command(
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
     try {
       match message {
+        CreatePacket(template_id, order_ref) => {
+          let intent : Json = {
+            "packet_id": random_identifier("contract"),
+            "idempotency_key": random_identifier("contract-create"),
+            "template_id": template_id,
+            "order_ref": order_ref,
+            "preceding_packet_ref": Json::null(),
+            "active_forms": ["MasterLease"],
+          }
+          @json.from_json(
+            @json.parse(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/contract-documents/self",
+                model.token,
+                model.subject_ref,
+                body=intent.stringify(),
+              ),
+            ),
+          )
+          |> ContractPacketUpdated
+        }
+        ConfirmAction(
+          SubmitUndertaking(packet_id, revision, artifact_id, signed_on)
+        ) => {
+          let intent : Json = {
+            "expected_revision": revision.to_json(),
+            "evidence_artifact_id": artifact_id,
+            "signed_on": signed_on,
+          }
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/contract-documents/self/\{packet_id}:undertaking-submit",
+              model.token,
+              model.subject_ref,
+              body=intent.stringify(),
+            ),
+          )
+          ContractActionNeedsRefresh
+        }
+        ConfirmAction(ReviseUndertaking(packet_id, revision)) => {
+          ignore(
+            contract_revision_action(model, packet_id, revision, None, "revise"),
+          )
+          ContractActionNeedsRefresh
+        }
+        ConfirmAction(WithdrawUndertaking(approval_id, reason)) => {
+          let intent : Json = { "reason": reason }
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/contract-documents/self/approvals/\{approval_id}:withdraw",
+              model.token,
+              model.subject_ref,
+              body=intent.stringify(),
+            ),
+          )
+          ContractActionNeedsRefresh
+        }
         RequestPreview(packet_id, revision, form, changes) =>
           ContractPreviewLoaded(
             generation,
@@ -4435,7 +4504,38 @@ fn update(
       let documents = model.portal.contract_documents.update(request)
       schedule_contract_preview(model, documents, 0, emit)
     }
+    Portal(ContractDocuments(DownloadDocument(artifact_id))) =>
+      if model.demo_mode {
+        (model, @rabbita.none)
+      } else {
+        (model, offline_artifact_download_command(model, artifact_id, emit))
+      }
+    Portal(ContractDocuments(UploadUndertakingEvidence(order_id))) =>
+      if model.demo_mode {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              contract_documents: {
+                ..model.portal.contract_documents,
+                confirmation: None,
+                loading: true,
+              },
+            },
+          },
+          offline_upload_grant_command(
+            model,
+            order_id,
+            ExecutedContractScan,
+            emit,
+          ),
+        )
+      }
     Portal(ContractDocuments(message)) if message is SaveInformation(_, _, _) ||
+      message is CreatePacket(_, _) ||
       message is ConfirmAction(_) => {
       let next = model.portal.update(ContractDocuments(message))
       if model.demo_mode {
@@ -4942,6 +5042,16 @@ fn update(
           value.expires_unix_ms > current_unix_ms() => Some(value)
         _ => None
       }
+      let selected_contract = match
+        model.portal.contract_documents.selected_packet_id {
+        Some(id) =>
+          match
+            contract_packets.filter(packet => packet.packet_id == id).get(0) {
+            Some(packet) => Some(packet)
+            None => contract_packets.get(0)
+          }
+        None => contract_packets.get(0)
+      }
       let next = {
         ..model,
         connecting: false,
@@ -5015,7 +5125,31 @@ fn update(
           },
           contract_documents: {
             ..model.portal.contract_documents,
-            manifest: Some(contract_manifest),
+            manifest: contract_manifest.get(0),
+            available_manifests: contract_manifest,
+            available_orders: orders.map(order => {
+              (
+                order.order_id,
+                "\{order.selected_service_code} · \{order.order_id}",
+              )
+            }),
+            undertaking_order_refs: orders
+            .filter(order => @offline.undertaking_quote_term(order) is Some(_))
+            .map(order => order.order_id),
+            signed_artifacts: artifacts
+            .filter(artifact => {
+              artifact.kind == ExecutedContractScan &&
+              artifact.scan_state == ScanPassed &&
+              artifact.review_state != ReviewRejected
+            })
+            .map(artifact => {
+              (
+                artifact.order_id,
+                artifact.artifact_id,
+                "v\{artifact.revision} · \{@contractdoc.format_unix_ms_utc(artifact.created_unix_ms)}",
+                artifact.created_unix_ms,
+              )
+            }),
             packets: contract_packets,
             events: contract_events,
             approvals: contract_governance.approvals,
@@ -5024,14 +5158,14 @@ fn update(
             closure_proposals: contract_governance.closure_proposals,
             contract_numbers: contract_governance.numbers,
             now_unix_ms: current_unix_ms(),
-            selected_packet_id: match
-              model.portal.contract_documents.selected_packet_id {
-              Some(value) => Some(value)
-              None => contract_packets.get(0).map(packet => packet.packet_id)
+            selected_packet_id: selected_contract.map(packet => packet.packet_id),
+            selected_form: match selected_contract {
+              Some(packet) => packet.active_forms.get(0)
+              None => None
             },
-            draft_values: contract_packets
-            .get(0)
-            .map_or([], packet => packet.values.copy()),
+            draft_values: selected_contract.map_or([], packet => {
+              packet.values.copy()
+            }),
             loading: false,
             error_message: None,
           },
@@ -5133,6 +5267,17 @@ fn update(
           ..model,
           portal: {
             ..model.portal,
+            contract_documents: {
+              ..model.portal.contract_documents,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Signed scan uploaded. Refresh after the safety scan to select it for approval.",
+                  "扫描件已上传。安全检查通过后刷新，即可选择并提交审批。",
+                ),
+              ),
+            },
             offline_commerce: {
               ..model.portal.offline_commerce,
               loading: false,
@@ -5155,6 +5300,17 @@ fn update(
           ..model,
           portal: {
             ..model.portal,
+            contract_documents: {
+              ..model.portal.contract_documents,
+              loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Verified document downloaded: \{filename}.",
+                  "已下载并校验文档：\{filename}。",
+                ),
+              ),
+            },
             offline_commerce: {
               ..model.portal.offline_commerce,
               loading: false,
@@ -5171,6 +5327,7 @@ fn update(
         },
         @rabbita.none,
       )
+    Outcome(ContractActionNeedsRefresh) => (model, load_command(model, emit))
     Outcome(ContractPacketUpdated(packet)) => {
       let packets = replace_contract_packet(
         model.portal.contract_documents.packets,
@@ -5185,10 +5342,16 @@ fn update(
               ..model.portal.contract_documents,
               packets,
               selected_packet_id: Some(packet.packet_id),
-              draft_values: merge_contract_draft(
-                model.portal.contract_documents.draft_values,
-                packet,
-              ),
+              selected_form: packet.active_forms.get(0),
+              draft_values: if model.portal.contract_documents.selected_packet_id ==
+                Some(packet.packet_id) {
+                merge_contract_draft(
+                  model.portal.contract_documents.draft_values,
+                  packet,
+                )
+              } else {
+                packet.values.copy()
+              },
               loading: false,
               success_message: Some(
                 portal_copy(
@@ -5452,6 +5615,12 @@ fn update(
           connecting: false,
           portal: {
             ..model.portal,
+            contract_documents: {
+              ..model.portal.contract_documents,
+              loading: false,
+              success_message: None,
+              error_message: Some(message),
+            },
             offline_commerce: {
               ..model.portal.offline_commerce,
               loading: false,

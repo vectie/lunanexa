@@ -99,7 +99,7 @@ fn LunaFide::remember(
   fingerprint : String,
   result_ref : String,
 ) -> Unit {
-  self.idempotency[scope] = { fingerprint, result_ref }
+  self.idempotency[scope] = { fingerprint, result_ref, }
 }
 
 ///|
@@ -163,7 +163,7 @@ pub fn LunaFide::request_verification(
   if !valid_ref(request.subject_ref) {
     raise InvalidRequest("invalid opaque subject reference")
   }
-  let fingerprint = sha256_hex(request.to_json().stringify())
+  let fingerprint = sha256_hex(ToJson::to_json(request).stringify())
   let scope = "verification.request|\{request.tenant_ref}|\{request.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
     Some(result_ref) =>
@@ -190,7 +190,7 @@ pub fn LunaFide::request_verification(
         verification_ref,
         request.idempotency_key,
         request.requested_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }
@@ -212,7 +212,7 @@ pub fn LunaFide::resolve_verification(
     resolution.state != Expired {
     raise InvalidRequest("resolution must be terminal")
   }
-  let fingerprint = sha256_hex(resolution.to_json().stringify())
+  let fingerprint = sha256_hex(ToJson::to_json(resolution).stringify())
   let scope = "verification.resolve|\{resolution.tenant_ref}|\{resolution.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
     Some(result_ref) =>
@@ -243,7 +243,7 @@ pub fn LunaFide::resolve_verification(
         record.verification_ref,
         resolution.idempotency_key,
         resolution.resolved_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }
@@ -271,7 +271,7 @@ pub fn LunaFide::create_envelope(
       raise InvalidRequest("invalid countersigner reference")
     _ => ()
   }
-  let fingerprint = sha256_hex(request.to_json().stringify())
+  let fingerprint = sha256_hex(ToJson::to_json(request).stringify())
   let scope = "envelope.create|\{request.tenant_ref}|\{request.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
     Some(result_ref) =>
@@ -299,7 +299,7 @@ pub fn LunaFide::create_envelope(
         envelope_ref,
         request.idempotency_key,
         request.requested_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }
@@ -316,7 +316,7 @@ pub fn LunaFide::record_signature(
     action.idempotency_key,
     action.tenant_ref,
   )
-  let fingerprint = sha256_hex(action.to_json().stringify())
+  let fingerprint = sha256_hex(ToJson::to_json(action).stringify())
   let scope = "envelope.action|\{action.tenant_ref}|\{action.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
     Some(result_ref) =>
@@ -369,7 +369,7 @@ pub fn LunaFide::record_signature(
         record.envelope_ref,
         action.idempotency_key,
         action.acted_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }
@@ -392,7 +392,7 @@ pub fn LunaFide::request_payment(
     request.currency != request.currency.to_upper() {
     raise InvalidRequest("invalid payment request")
   }
-  let fingerprint = sha256_hex(request.to_json().stringify())
+  let fingerprint = sha256_hex(ToJson::to_json(request).stringify())
   let scope = "payment.request|\{request.tenant_ref}|\{request.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
     Some(result_ref) =>
@@ -422,7 +422,7 @@ pub fn LunaFide::request_payment(
         record.payment_ref,
         request.idempotency_key,
         request.requested_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }
@@ -465,7 +465,7 @@ fn LunaFide::issue_invoice_record(
   kind : WebhookKind,
 ) -> InvoiceRecord raise LunaFideError {
   let fingerprint = sha256_hex(
-    "\{request.to_json().stringify()}|\{Repr(replaces)}",
+    "\{ToJson::to_json(request).stringify()}|\{Repr(replaces)}",
   )
   let scope = "invoice.issue|\{request.tenant_ref}|\{request.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
@@ -494,7 +494,7 @@ fn LunaFide::issue_invoice_record(
         record.invoice_ref,
         request.idempotency_key,
         request.requested_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }
@@ -514,7 +514,7 @@ pub fn LunaFide::void_invoice(
   if !valid_ref(action.reason_code) {
     raise InvalidRequest("void reason is required")
   }
-  let fingerprint = sha256_hex(action.to_json().stringify())
+  let fingerprint = sha256_hex(ToJson::to_json(action).stringify())
   let scope = "invoice.void|\{action.tenant_ref}|\{action.idempotency_key}"
   match self.idempotent_ref(scope, fingerprint) {
     Some(result_ref) =>
@@ -542,7 +542,7 @@ pub fn LunaFide::void_invoice(
         record.invoice_ref,
         action.idempotency_key,
         action.acted_unix_ms,
-        record.to_json(),
+        ToJson::to_json(record),
       )
       record
     }

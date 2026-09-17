@@ -375,7 +375,7 @@ pub fn inspect_lunaflux_promotion(
   }
   let evidence_well_formed = blockers.length() == 0
   blockers.push(PromotionVerifierUnavailable)
-  { evidence_well_formed, routable: false, authority: None, blockers }
+  { evidence_well_formed, routable: false, authority: None, blockers, }
 }
 
 ///|

@@ -85,7 +85,7 @@ async fn run_sample(
   if kind == LongStream {
     let completed_responses : Array[@contracts.WorkloadResponse] = []
     let failed = try {
-      provider.stream({ ..request, stream: true }, event => {
+      provider.stream({ ..request, stream: true, }, event => {
         if event.response is Some(response) {
           completed_responses.push(response)
         }
@@ -248,7 +248,7 @@ async fn main {
   }
   let measured_samples = [
     for sample in samples => {
-      { ..sample, utilization_per_mille: peak_utilization }
+      { ..sample, utilization_per_mille: peak_utilization, }
     }
   ]
   let run : @telemetry.BenchmarkRun = {

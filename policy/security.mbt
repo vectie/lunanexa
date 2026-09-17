@@ -71,7 +71,7 @@ pub fn trusted(subject : SignedSubject, policy : TrustPolicy) -> Bool {
 
 ///|
 pub fn strict_runtime_network_policy() -> @contracts.NetworkPolicy {
-  { allow_controller: true, allow_artifact_store: true, allowed_egress: [] }
+  { allow_controller: true, allow_artifact_store: true, allowed_egress: [], }
 }
 
 ///|
@@ -128,7 +128,7 @@ pub struct RetentionLedger {
 
 ///|
 pub fn RetentionLedger::new() -> RetentionLedger {
-  { records: Map([]), receipts: [] }
+  { records: Map([]), receipts: [], }
 }
 
 ///|

@@ -10,7 +10,7 @@ extend ImportSnapshot with ToJson::{to_json}
 ///|
 pub struct FileImportStore {
   path : String
-  operations : Map[String, ImportOperation]
+  mut operations : Map[String, ImportOperation]
   mutex : @async.Mutex
 }
 
@@ -28,8 +28,9 @@ async fn write_snapshot(
       created
     }
   })
-  let snapshot : ImportSnapshot = { schema_version: 1, operations: records }
+  let snapshot : ImportSnapshot = { schema_version: 1, operations: records, }
   let next = "\{path}.next"
+  errdefer (@fs.remove(next) catch { _ => () })
   @fs.write_file(
     next,
     snapshot.to_json().stringify(),
@@ -53,7 +54,7 @@ pub async fn FileImportStore::open(path : String) -> FileImportStore {
       }
       for operation in snapshot.operations {
         let restored = if operation.state == Downloading {
-          { ..operation, state: Queued, error_code: "recovered-after-restart" }
+          { ..operation, state: Queued, error_code: "recovered-after-restart", }
         } else {
           operation
         }
@@ -65,7 +66,7 @@ pub async fn FileImportStore::open(path : String) -> FileImportStore {
       _ => ()
     }
   }
-  let store : FileImportStore = { path, operations, mutex: Mutex() }
+  let store : FileImportStore = { path, operations, mutex: Mutex(), }
   write_snapshot(path, operations)
   store
 }
@@ -84,42 +85,35 @@ pub async fn FileImportStore::create(
 ) -> ImportOperation {
   let id = import_id(request.model_id, request.revision)
   self.mutex.acquire()
-  try {
-    if self.operations.contains(id) {
-      raise ImportAlreadyExists
-    }
-    let record : ImportOperation = {
-      import_id: id,
-      source: "modelscope",
-      model_id: request.model_id,
-      revision: request.revision,
-      state: Queued,
-      files_total: 0,
-      files_completed: 0,
-      bytes_total: 0L,
-      bytes_completed: 0L,
-      manifest_digest: "",
-      artifact_uri: "",
-      license,
-      error_code: "",
-      cancel_requested: false,
-      created_unix_ms: now_unix_ms,
-      updated_unix_ms: now_unix_ms,
-    }
-    self.operations[id] = record
-    self.persist()
-    record
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    value => {
-      self.mutex.release()
-      value
-    }
+  defer self.mutex.release()
+  let before = self.operations.copy()
+  errdefer {
+    self.operations = before
   }
+  if self.operations.contains(id) {
+    raise ImportAlreadyExists
+  }
+  let record : ImportOperation = {
+    import_id: id,
+    source: "modelscope",
+    model_id: request.model_id,
+    revision: request.revision,
+    state: Queued,
+    files_total: 0,
+    files_completed: 0,
+    bytes_total: 0L,
+    bytes_completed: 0L,
+    manifest_digest: "",
+    artifact_uri: "",
+    license,
+    error_code: "",
+    cancel_requested: false,
+    created_unix_ms: now_unix_ms,
+    updated_unix_ms: now_unix_ms,
+  }
+  self.operations[id] = record
+  self.persist()
+  record
 }
 
 ///|
@@ -156,37 +150,30 @@ pub async fn FileImportStore::next_queued(
   self : FileImportStore,
 ) -> ImportOperation? {
   self.mutex.acquire()
-  try {
-    let mut queued : ImportOperation? = None
-    for record in self.operations.values() {
-      if queued is None && record.state == Queued {
-        queued = Some(record)
+  defer self.mutex.release()
+  let before = self.operations.copy()
+  errdefer {
+    self.operations = before
+  }
+  let mut queued : ImportOperation? = None
+  for record in self.operations.values() {
+    if queued is None && record.state == Queued {
+      queued = Some(record)
+    }
+  }
+  match queued {
+    Some(record) => {
+      let next = {
+        ..record,
+        state: Downloading,
+        error_code: "",
+        updated_unix_ms: @async.now(),
       }
+      self.operations[record.import_id] = next
+      self.persist()
+      Some(next)
     }
-    match queued {
-      Some(record) => {
-        let next = {
-          ..record,
-          state: Downloading,
-          error_code: "",
-          updated_unix_ms: @async.now(),
-        }
-        self.operations[record.import_id] = next
-        self.persist()
-        Some(next)
-      }
-      None => None
-    }
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    value => {
-      self.mutex.release()
-      value
-    }
+    None => None
   }
 }
 
@@ -196,24 +183,17 @@ pub async fn FileImportStore::replace(
   record : ImportOperation,
 ) -> ImportOperation {
   self.mutex.acquire()
-  try {
-    if !self.operations.contains(record.import_id) {
-      raise ImportNotFound
-    }
-    self.operations[record.import_id] = record
-    self.persist()
-    record
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    value => {
-      self.mutex.release()
-      value
-    }
+  defer self.mutex.release()
+  let before = self.operations.copy()
+  errdefer {
+    self.operations = before
   }
+  if !self.operations.contains(record.import_id) {
+    raise ImportNotFound
+  }
+  self.operations[record.import_id] = record
+  self.persist()
+  record
 }
 
 ///|
@@ -223,28 +203,21 @@ pub async fn FileImportStore::cancel(
   now_unix_ms : Int64,
 ) -> ImportOperation {
   self.mutex.acquire()
-  try {
-    guard self.operations.get(id) is Some(record) else { raise ImportNotFound }
-    let next = match record.state {
-      Queued => { ..record, state: Cancelled, updated_unix_ms: now_unix_ms }
-      Downloading =>
-        { ..record, cancel_requested: true, updated_unix_ms: now_unix_ms }
-      _ => raise ImportNotCancelable
-    }
-    self.operations[id] = next
-    self.persist()
-    next
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    value => {
-      self.mutex.release()
-      value
-    }
+  defer self.mutex.release()
+  let before = self.operations.copy()
+  errdefer {
+    self.operations = before
   }
+  guard self.operations.get(id) is Some(record) else { raise ImportNotFound }
+  let next = match record.state {
+    Queued => { ..record, state: Cancelled, updated_unix_ms: now_unix_ms, }
+    Downloading =>
+      { ..record, cancel_requested: true, updated_unix_ms: now_unix_ms, }
+    _ => raise ImportNotCancelable
+  }
+  self.operations[id] = next
+  self.persist()
+  next
 }
 
 ///|
@@ -254,31 +227,24 @@ pub async fn FileImportStore::retry(
   now_unix_ms : Int64,
 ) -> ImportOperation {
   self.mutex.acquire()
-  try {
-    guard self.operations.get(id) is Some(record) else { raise ImportNotFound }
-    let next = match record.state {
-      Failed | Cancelled =>
-        {
-          ..record,
-          state: Queued,
-          error_code: "",
-          cancel_requested: false,
-          updated_unix_ms: now_unix_ms,
-        }
-      _ => raise ImportNotRetryable
-    }
-    self.operations[id] = next
-    self.persist()
-    next
-  } catch {
-    error => {
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    value => {
-      self.mutex.release()
-      value
-    }
+  defer self.mutex.release()
+  let before = self.operations.copy()
+  errdefer {
+    self.operations = before
   }
+  guard self.operations.get(id) is Some(record) else { raise ImportNotFound }
+  let next = match record.state {
+    Failed | Cancelled =>
+      {
+        ..record,
+        state: Queued,
+        error_code: "",
+        cancel_requested: false,
+        updated_unix_ms: now_unix_ms,
+      }
+    _ => raise ImportNotRetryable
+  }
+  self.operations[id] = next
+  self.persist()
+  next
 }

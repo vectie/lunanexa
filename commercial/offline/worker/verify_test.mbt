@@ -64,7 +64,7 @@ fn docx_fixture(active? : Bool = false) -> FixedArray[Byte] raise {
     },
   ]
   if active {
-    parts.push({ name: "word/vbaProject.bin", content: [0x01, 0x02] })
+    parts.push({ name: "word/vbaProject.bin", content: [0x01, 0x02], })
   }
   @opc.save(({ parts, } : @opc.Package))
 }
@@ -155,7 +155,7 @@ test "MoonLeaf verifies bounded DOCX and XLSX semantic reopen" {
 ///|
 test "MoonLeaf performs bounded DOCX placeholder and XLSX cell edits" {
   let docx = @worker.customize_docx_template(docx_fixture(), [
-    { placeholder: "{{ORDER_ID}}", value: "order-2026-001" },
+    { placeholder: "{{ORDER_ID}}", value: "order-2026-001", },
   ])
   assert_eq(docx.replacement_count, 1)
   assert_true(docx.verification.moonleaf_verified)
@@ -167,7 +167,7 @@ test "MoonLeaf performs bounded DOCX placeholder and XLSX cell edits" {
   assert_true(reopened.text("word/footer1.xml").contains("order-2026-001"))
   assert_false(reopened.text("word/footer1.xml").contains("{{ORDER_ID}}"))
   let xlsx = @worker.customize_xlsx_template(xlsx_fixture(), [
-    { sheet_name: "Quote", row: 2, column: 1, value: "order-2026-001" },
+    { sheet_name: "Quote", row: 2, column: 1, value: "order-2026-001", },
   ])
   assert_eq(xlsx.replacement_count, 1)
   assert_true(xlsx.verification.moonleaf_verified)
@@ -181,7 +181,7 @@ test "MoonLeaf preserves unrelated DOCX parts byte-for-byte" {
     "word/footer1.xml", "<w:ftr xmlns:w=\"urn:w\"><w:p><w:r><w:t>固定页脚</w:t></w:r></w:p></w:ftr>",
   )
   let customized = @worker.customize_docx_template(@opc.save(unrelated), [
-    { placeholder: "{{ORDER_ID}}", value: "order-2026-001" },
+    { placeholder: "{{ORDER_ID}}", value: "order-2026-001", },
   ])
   let reopened = @opc.open(customized.bytes)
   assert_eq(
@@ -201,8 +201,8 @@ test "exact DOCX customization rejects incomplete and unknown marker sets" {
   }
   try
     @worker.customize_exact_docx_template(bytes, [
-      { placeholder: "{{ORDER_ID}}", value: "order-1" },
-      { placeholder: "{{UNKNOWN}}", value: "value" },
+      { placeholder: "{{ORDER_ID}}", value: "order-1", },
+      { placeholder: "{{UNKNOWN}}", value: "value", },
     ])
   catch {
     InvalidInput(_) => ()

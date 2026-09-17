@@ -25,7 +25,7 @@ fn template_key(template_id : String, version : String) -> String {
 
 ///|
 fn canonical_template(template : @deployment.ModelServiceTemplate) -> String {
-  { ..template, signature: "" }.to_json().stringify()
+  { ..template, signature: "", }.to_json().stringify()
 }
 
 ///|
@@ -47,7 +47,7 @@ fn sign_template(
 
 ///|
 fn canonical_snapshot(snapshot : @deployment.DeploymentSnapshot) -> String {
-  { ..snapshot, signature: "" }.to_json().stringify()
+  { ..snapshot, signature: "", }.to_json().stringify()
 }
 
 ///|
@@ -104,7 +104,7 @@ fn FileDeploymentStore::snapshot_unlocked(
     operations,
     signature: "",
   }
-  { ..unsigned, signature: sign_snapshot(unsigned, self.signing_secret) }
+  { ..unsigned, signature: sign_snapshot(unsigned, self.signing_secret), }
 }
 
 ///|
@@ -113,6 +113,7 @@ async fn write_snapshot(
   snapshot : @deployment.DeploymentSnapshot,
 ) -> Unit {
   let temporary = "\{path}.next"
+  errdefer (@fs.remove(temporary) catch { _ => () })
   @fs.write_file(
     temporary,
     snapshot.to_json().stringify(),
@@ -245,9 +246,9 @@ pub async fn FileDeploymentStore::register_template(
   }
   @deployment.validate_template(candidate, require_signature=false)
   self.mutex.acquire()
+  defer self.mutex.release()
   let key = template_key(candidate.template_id, candidate.version)
   if self.templates.contains(key) {
-    self.mutex.release()
     raise @deployment.DeploymentError::InvalidTemplate(
       "catalog template already exists",
     )
@@ -261,15 +262,8 @@ pub async fn FileDeploymentStore::register_template(
     signature: sign_template(approved, self.signing_secret),
   }
   self.templates[key] = signed
-  try self.persist() catch {
-    error => {
-      self.templates.remove(key)
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  errdefer self.templates.remove(key)
+  self.persist()
   signed
 }
 
@@ -328,9 +322,9 @@ pub async fn FileDeploymentStore::create_operation(
 ) -> @deployment.DeploymentOperation {
   @deployment.validate_intent(plan.intent)
   self.mutex.acquire()
+  defer self.mutex.release()
   if operation_for_idempotency(self.operations, plan.intent.idempotency_key)
     is Some(existing) {
-    self.mutex.release()
     if existing.plan.intent == plan.intent {
       return existing
     }
@@ -364,15 +358,8 @@ pub async fn FileDeploymentStore::create_operation(
     updated_unix_ms: now_unix_ms,
   }
   self.operations[operation_id] = operation
-  try self.persist() catch {
-    error => {
-      self.operations.remove(operation_id)
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
-  }
+  errdefer self.operations.remove(operation_id)
+  self.persist()
   operation
 }
 
@@ -385,26 +372,20 @@ pub async fn FileDeploymentStore::transition(
   now_unix_ms : Int64,
 ) -> @deployment.DeploymentOperation {
   self.mutex.acquire()
+  defer self.mutex.release()
   guard self.operations.get(operation_id) is Some(current) else {
-    self.mutex.release()
     raise @deployment.DeploymentError::NotFound(operation_id)
   }
   if current.state != state &&
     !@deployment.operation_transition_allowed(current.state, state) {
-    self.mutex.release()
     raise @deployment.DeploymentError::InvalidState(operation_id)
   }
-  let next = { ..current, state, message, updated_unix_ms: now_unix_ms }
+  let next = { ..current, state, message, updated_unix_ms: now_unix_ms, }
   self.operations[operation_id] = next
-  try self.persist() catch {
-    error => {
-      self.operations[operation_id] = current
-      self.mutex.release()
-      raise error
-    }
-  } noraise {
-    _ => self.mutex.release()
+  errdefer {
+    self.operations[operation_id] = current
   }
+  self.persist()
   next
 }
 

@@ -18,6 +18,8 @@ pub(all) struct OfflineCommerceState {
   sla_code : String
   operator_actor_ref : String
   quote_minor_units : String
+  undertaking_term : String
+  undertaking_quantity : String
   terms_digest : String
   entitlement_ref : String
   confirmation : OfflineCommerceConfirmation?
@@ -29,9 +31,11 @@ pub(all) struct OfflineCommerceState {
 ///|
 pub(all) enum OfflineCommerceConsequentialAction {
   QuoteOrder(String, String, String, String)
+  QuoteUndertakingOrder(String, String, String)
   BeginOrder(String, Int64)
   ReleaseVerifiedPacket(String, Int64)
   AcceptEvidence(String, String)
+  VerifyFullPrepayment(String, String)
   RejectEvidence(String, String)
   FulfillVerifiedOrder(String, Int64)
   CancelOrder(String, Int64)
@@ -81,6 +85,8 @@ pub(all) enum OfflineCommerceMessage {
   SlaChanged(String)
   OperatorActorChanged(String)
   QuoteMinorUnitsChanged(String)
+  UndertakingTermChanged(String)
+  UndertakingQuantityChanged(String)
   TermsDigestChanged(String)
   EntitlementChanged(String)
   Refresh
@@ -105,6 +111,8 @@ pub fn default_state(
     sla_code: "standard",
     operator_actor_ref: "platform-operator",
     quote_minor_units: "0",
+    undertaking_term: "month",
+    undertaking_quantity: "1",
     terms_digest: "",
     entitlement_ref: "",
     confirmation: None,
@@ -149,13 +157,13 @@ pub fn demo_state(
           description: "Exclusive DGX capacity",
           quantity: 1L,
           unit: "lease",
-          unit_price: { minor_units: 1280000L, currency: "CNY", scale: 2 },
-          line_total: { minor_units: 1280000L, currency: "CNY", scale: 2 },
+          unit_price: { minor_units: 1280000L, currency: "CNY", scale: 2, },
+          line_total: { minor_units: 1280000L, currency: "CNY", scale: 2, },
         },
       ],
-      subtotal: { minor_units: 1280000L, currency: "CNY", scale: 2 },
-      tax: { minor_units: 0L, currency: "CNY", scale: 2 },
-      total: { minor_units: 1280000L, currency: "CNY", scale: 2 },
+      subtotal: { minor_units: 1280000L, currency: "CNY", scale: 2, },
+      tax: { minor_units: 0L, currency: "CNY", scale: 2, },
+      total: { minor_units: 1280000L, currency: "CNY", scale: 2, },
       valid_until_unix_ms: 1787000000000L,
       terms_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       created_unix_ms: 1786300000000L,
@@ -241,17 +249,20 @@ pub fn OfflineCommerceState::update(
   message : OfflineCommerceMessage,
 ) -> OfflineCommerceState {
   match message {
-    SelectOrder(order_id) => { ..self, selected_order_id: Some(order_id) }
-    ProjectChanged(value) => { ..self, project_id: value }
-    ServiceChanged(value) => { ..self, service_code: value }
-    SlaChanged(value) => { ..self, sla_code: value }
-    OperatorActorChanged(value) => { ..self, operator_actor_ref: value }
-    QuoteMinorUnitsChanged(value) => { ..self, quote_minor_units: value }
-    TermsDigestChanged(value) => { ..self, terms_digest: value }
-    EntitlementChanged(value) => { ..self, entitlement_ref: value }
+    SelectOrder(order_id) => { ..self, selected_order_id: Some(order_id), }
+    ProjectChanged(value) => { ..self, project_id: value, }
+    ServiceChanged(value) => { ..self, service_code: value, }
+    SlaChanged(value) => { ..self, sla_code: value, }
+    OperatorActorChanged(value) => { ..self, operator_actor_ref: value, }
+    QuoteMinorUnitsChanged(value) => { ..self, quote_minor_units: value, }
+    UndertakingTermChanged(value) => { ..self, undertaking_term: value, }
+    UndertakingQuantityChanged(value) =>
+      { ..self, undertaking_quantity: value, }
+    TermsDigestChanged(value) => { ..self, terms_digest: value, }
+    EntitlementChanged(value) => { ..self, entitlement_ref: value, }
     BeginConfirmation(action) =>
-      { ..self, confirmation: Some(confirmation_for_action(action)) }
-    DismissConfirmation => { ..self, confirmation: None }
+      { ..self, confirmation: Some(confirmation_for_action(action)), }
+    DismissConfirmation => { ..self, confirmation: None, }
     ConfirmAction(_) =>
       {
         ..self,
@@ -260,8 +271,8 @@ pub fn OfflineCommerceState::update(
         success_message: None,
         error_message: None,
       }
-    ClearNotice => { ..self, success_message: None, error_message: None }
-    _ => { ..self, loading: true, success_message: None, error_message: None }
+    ClearNotice => { ..self, success_message: None, error_message: None, }
+    _ => { ..self, loading: true, success_message: None, error_message: None, }
   }
 }
 
@@ -270,6 +281,12 @@ fn confirmation_for_action(
   action : OfflineCommerceConsequentialAction,
 ) -> OfflineCommerceConfirmation {
   match action {
+    QuoteUndertakingOrder(order_id, term, quantity) =>
+      {
+        action,
+        title: "Fixed undertaking tariff",
+        evidence: "\{order_id} · \{term} × \{quantity}",
+      }
     QuoteOrder(order_id, digest, price, actor) =>
       {
         action,
@@ -288,7 +305,8 @@ fn confirmation_for_action(
         title: "Release print packet",
         evidence: "\{order_id} · generation \{generation}",
       }
-    AcceptEvidence(artifact_id, digest) =>
+    AcceptEvidence(artifact_id, digest)
+    | VerifyFullPrepayment(artifact_id, digest) =>
       {
         action,
         title: "Accept exact evidence digest",
@@ -611,6 +629,87 @@ fn operator_actions(
     actions.push(
       @html.div(class="offline-field", [
         @html.label(
+          for_="undertaking-tariff",
+          copy(
+            state.locale,
+            "Undertaking tariff (CNY per device)",
+            "承诺函固定价目（元/台）",
+          ),
+        ),
+        @html.select(
+          id="undertaking-tariff",
+          on_change=text_command(emit, value => UndertakingTermChanged(value)),
+          [
+            @html.option(
+              value="day",
+              selected=state.undertaking_term == "day",
+              copy(state.locale, "1 day · 49", "1 天 · 49 元"),
+            ),
+            @html.option(
+              value="week",
+              selected=state.undertaking_term == "week",
+              copy(state.locale, "7 days · 322", "7 天 · 322 元"),
+            ),
+            @html.option(
+              value="month",
+              selected=state.undertaking_term == "month",
+              copy(state.locale, "30 days · 1290", "30 天 · 1290 元"),
+            ),
+            @html.option(
+              value="quarter",
+              selected=state.undertaking_term == "quarter",
+              copy(state.locale, "90 days · 3600", "90 天 · 3600 元"),
+            ),
+            @html.option(
+              value="year",
+              selected=state.undertaking_term == "year",
+              copy(state.locale, "365 days · 13870", "365 天 · 13870 元"),
+            ),
+          ],
+        ),
+        @html.label(
+          for_="undertaking-quantity",
+          copy(state.locale, "Number of devices", "设备台数"),
+        ),
+        @html.input(
+          id="undertaking-quantity",
+          value=state.undertaking_quantity,
+          inputmode="numeric",
+          maxlength=5,
+          on_input=text_command(emit, value => UndertakingQuantityChanged(value)),
+        ),
+        @html.button(
+          type_="button",
+          class="primary-action",
+          disabled=state.loading,
+          on_click=command(
+            emit,
+            BeginConfirmation(
+              QuoteUndertakingOrder(
+                order.order_id,
+                state.undertaking_term,
+                state.undertaking_quantity,
+              ),
+            ),
+          ),
+          copy(
+            state.locale,
+            "Quote undertaking tariff",
+            "按承诺函价目报价",
+          ),
+        ),
+        @html.p(
+          copy(
+            state.locale,
+            "The approved Attachment 2 source digest is linked automatically. Confirm rental dates in the document before tenant submission.",
+            "自动关联附件 2 原件摘要。使用方提交前，请在文档中确认实际租期。",
+          ),
+        ),
+      ]),
+    )
+    actions.push(
+      @html.div(class="offline-field", [
+        @html.label(
           for_="offline-quote-minor-units",
           copy(
             state.locale,
@@ -877,7 +976,7 @@ fn artifact_card(
       ]),
       @html.div([@html.dt("SHA-256"), @html.dd(class="mono", artifact.sha256)]),
     ]),
-    if state.audience == CustomerCommerce && artifact.scan_state == ScanPassed {
+    if artifact.scan_state == ScanPassed {
       @html.button(
         type_="button",
         class="secondary-action",
@@ -885,7 +984,10 @@ fn artifact_card(
         on_click=command(emit, RequestArtifactDownload(artifact.artifact_id)),
         copy(state.locale, "Download verified file", "下载已验证文件"),
       )
-    } else if state.audience == OperatorCommerce &&
+    } else {
+      @html.span("")
+    },
+    if state.audience == OperatorCommerce &&
       artifact.review_state == AwaitingReview {
       @html.div(class="review-actions", [
         @html.button(
@@ -907,10 +1009,18 @@ fn artifact_card(
           on_click=command(
             emit,
             BeginConfirmation(
-              AcceptEvidence(artifact.artifact_id, artifact.sha256),
+              if artifact.kind == PaymentReceipt {
+                VerifyFullPrepayment(artifact.artifact_id, artifact.sha256)
+              } else {
+                AcceptEvidence(artifact.artifact_id, artifact.sha256)
+              },
             ),
           ),
-          copy(state.locale, "Accept exact digest", "接受此文件摘要"),
+          if artifact.kind == PaymentReceipt {
+            copy(state.locale, "Verify full prepayment", "确认全额到账")
+          } else {
+            copy(state.locale, "Accept exact digest", "接受此文件摘要")
+          },
         ),
       ])
     } else {
@@ -1089,7 +1199,7 @@ fn confirmation_title(
   action : OfflineCommerceConsequentialAction,
 ) -> String {
   match action {
-    QuoteOrder(_, _, _, _) =>
+    QuoteOrder(_, _, _, _) | QuoteUndertakingOrder(_, _, _) =>
       copy(
         locale, "Freeze this immutable quote?", "确认冻结此不可变报价？",
       )
@@ -1104,6 +1214,10 @@ fn confirmation_title(
     AcceptEvidence(_, _) =>
       copy(
         locale, "Accept this exact evidence digest?", "确认接受此文件摘要？",
+      )
+    VerifyFullPrepayment(_, _) =>
+      copy(
+        locale, "Confirm the full order amount has arrived?", "确认本订单已全额到账？",
       )
     RejectEvidence(_, _) =>
       copy(
@@ -1138,7 +1252,7 @@ fn confirmation_description(
   action : OfflineCommerceConsequentialAction,
 ) -> String {
   match action {
-    QuoteOrder(_, _, _, _) =>
+    QuoteOrder(_, _, _, _) | QuoteUndertakingOrder(_, _, _) =>
       copy(
         locale, "The price, validity window, terms digest, service, and SLA become immutable for this quote revision.",
         "本报价版本的价格、有效期、条款摘要、服务与 SLA 将不可变更。",
@@ -1157,6 +1271,11 @@ fn confirmation_description(
       copy(
         locale, "Acceptance binds the exact SHA-256 digest. The submitter cannot review their own evidence.",
         "接受操作绑定确切 SHA-256 摘要；材料提交人不得审核自己的材料。",
+      )
+    VerifyFullPrepayment(_, _) =>
+      copy(
+        locale, "I have checked the quoted amount, currency, receiving account and actual bank receipt for this order and confirm full prepayment. A file upload alone is not payment verification; this independent review is audited.",
+        "我已核对本订单报价金额、币种、收款账户与真实银行到账记录，确认全额预付已到账。仅上传文件不代表付款；本次独立审核将被审计。",
       )
     RejectEvidence(_, _) =>
       copy(

@@ -32,9 +32,7 @@ pub impl @json.FromJson for Owner with fn from_json(value, path) {
     (Some(id), None) => DedicatedOrder(id)
     (None, Some(id)) => PrivateWorkspace(id)
     _ =>
-      raise @json.JsonDecodeError(
-        (path, "exactly one media authority is required"),
-      )
+      raise JsonDecodeError((path, "exactly one media authority is required"))
   }
   {
     tenant_ref: wire.tenant_ref,

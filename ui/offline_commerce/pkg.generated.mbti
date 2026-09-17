@@ -50,9 +50,11 @@ pub(all) struct OfflineCommerceConfirmation {
 
 pub(all) enum OfflineCommerceConsequentialAction {
   QuoteOrder(String, String, String, String)
+  QuoteUndertakingOrder(String, String, String)
   BeginOrder(String, Int64)
   ReleaseVerifiedPacket(String, Int64)
   AcceptEvidence(String, String)
+  VerifyFullPrepayment(String, String)
   RejectEvidence(String, String)
   FulfillVerifiedOrder(String, Int64)
   CancelOrder(String, Int64)
@@ -74,6 +76,8 @@ pub(all) enum OfflineCommerceMessage {
   SlaChanged(String)
   OperatorActorChanged(String)
   QuoteMinorUnitsChanged(String)
+  UndertakingTermChanged(String)
+  UndertakingQuantityChanged(String)
   TermsDigestChanged(String)
   EntitlementChanged(String)
   Refresh
@@ -93,6 +97,8 @@ pub(all) struct OfflineCommerceState {
   sla_code : String
   operator_actor_ref : String
   quote_minor_units : String
+  undertaking_term : String
+  undertaking_quantity : String
   terms_digest : String
   entitlement_ref : String
   confirmation : OfflineCommerceConfirmation?

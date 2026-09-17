@@ -30,7 +30,7 @@ fn helper_receipt_mac_payload(
   // The human-readable receipt prefix stays short, but the MAC binds the
   // complete typed action. In particular, a provision receipt cannot be
   // replayed for a different Unix account, credential reference or expiry.
-  "lunanexa-helper-v2|\{name}|\{lease_id}|\{generation}|\{verified_unix_ms}|\{action.to_json().stringify()}"
+  "lunanexa-helper-v2|\{name}|\{lease_id}|\{generation}|\{verified_unix_ms}|\{ToJson::to_json(action).stringify()}"
 }
 
 ///|
@@ -39,7 +39,7 @@ fn helper_authorization_mac_payload(
   issued_unix_ms : Int64,
   expires_unix_ms : Int64,
 ) -> String {
-  "lunanexa-helper-action-v1|\{issued_unix_ms}|\{expires_unix_ms}|\{action.to_json().stringify()}"
+  "lunanexa-helper-action-v1|\{issued_unix_ms}|\{expires_unix_ms}|\{ToJson::to_json(action).stringify()}"
 }
 
 ///|

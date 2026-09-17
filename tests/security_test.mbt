@@ -57,7 +57,7 @@ test "signer allowlist and digest pinning reject forged subjects" {
   )
   assert_false(
     @policy.trusted(
-      { digest: "latest", signer: "release-signer", signature_ref: "sig:1" },
+      { digest: "latest", signer: "release-signer", signature_ref: "sig:1", },
       trust,
     ),
   )
@@ -96,7 +96,7 @@ test "restart recovery starts missing desired state and stops orphans" {
   assert_true(@controller.node_unreachable(1L, 100L, 50L))
   let expired = @controller.recovery_plan(
     2L,
-    [{ ..desired, lease_expires_unix_ms: 999L }],
+    [{ ..desired, lease_expires_unix_ms: 999L, }],
     ["assignment-1"],
     1000L,
   )
@@ -187,15 +187,15 @@ test "signed backup restores durable snapshots and audit chain" {
     event_hash: "",
   }
   let events : Array[@contracts.AuditEvent] = [
-    { ..unsigned, event_hash: @store.audit_event_hash(unsigned) },
+    { ..unsigned, event_hash: @store.audit_event_hash(unsigned), },
   ]
   assert_true(@store.validate_audit_chain(events))
   assert_false(
     @store.validate_audit_chain([
-      { ..events[0], policy_version: "tampered-policy" },
+      { ..events[0], policy_version: "tampered-policy", },
     ]),
   )
   assert_false(
-    @store.validate_audit_chain([{ ..events[0], previous_hash: "forged" }]),
+    @store.validate_audit_chain([{ ..events[0], previous_hash: "forged", }]),
   )
 }

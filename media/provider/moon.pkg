@@ -12,8 +12,10 @@ import {
 
 supported_targets = "native"
 
-options(link: { "native": { "cc-link-flags": "-pthread -ldl" } })
-
 import {
   "moonbitlang/async/socket",
 } for "wbtest"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

@@ -50,7 +50,7 @@ test "training reuse requires explicit evaluation consent" {
   let request = fixture_request()
   let invalid : @contracts.WorkloadEnvelope = {
     ..request,
-    data_policy: { ..request.data_policy, allow_training_reuse: true },
+    data_policy: { ..request.data_policy, allow_training_reuse: true, },
   }
   try @contracts.validate_workload(invalid) catch {
     InvalidPolicy(_) => ()
@@ -65,7 +65,7 @@ test "resource ceilings and ephemeral cache policy are enforced at decode" {
   let request = fixture_request()
   let invalid : @contracts.WorkloadEnvelope = {
     ..request,
-    resource_ceiling: { ..request.resource_ceiling, max_runtime_ms: 0L },
+    resource_ceiling: { ..request.resource_ceiling, max_runtime_ms: 0L, },
   }
   try @contracts.decode_workload(invalid.to_json().stringify()) catch {
     @contracts.ContractError::InvalidResourceCeiling("max_runtime_ms") => ()
@@ -76,7 +76,7 @@ test "resource ceilings and ephemeral cache policy are enforced at decode" {
   try
     @contracts.validate_workload({
       ..request,
-      data_policy: { ..request.data_policy, allow_cache: true },
+      data_policy: { ..request.data_policy, allow_cache: true, },
     })
   catch {
     InvalidPolicy(_) => ()
@@ -91,9 +91,9 @@ test "public identifiers reject path and log injection characters" {
   let request = fixture_request()
   for
     invalid in [
-      { ..request, workload_id: "../audit" },
-      { ..request, tenant_ref: "tenant\nforged-event" },
-      { ..request, model_selector: "text/default" },
+      { ..request, workload_id: "../audit", },
+      { ..request, tenant_ref: "tenant\nforged-event", },
+      { ..request, model_selector: "text/default", },
     ] {
     try @contracts.validate_workload(invalid) catch {
       InvalidPolicy(message) => assert_true(message.contains("identifier"))

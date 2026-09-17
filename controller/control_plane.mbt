@@ -27,7 +27,7 @@ pub fn authenticate_local_operator(
   if presented_token == "" || presented_token != expected_token_ref {
     raise InvalidOperatorCredential
   }
-  { subject, roles: ["operator"], authenticated: true }
+  { subject, roles: ["operator"], authenticated: true, }
 }
 
 ///|
@@ -116,7 +116,12 @@ pub fn ControlPlane::invoke(
     state: Succeeded,
     output: Some(output),
     error: None,
-    usage: { input_units: 1, output_units: 2, accelerator_ms: 4L, queue_ms: 0L },
+    usage: {
+      input_units: 1,
+      output_units: 2,
+      accelerator_ms: 4L,
+      queue_ms: 0L,
+    },
     artifact_digest: "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     runtime_version: self.version,
     execution_node_id: None,

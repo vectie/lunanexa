@@ -175,7 +175,7 @@ async fn write_snapshot(
   let temporary = "\{path}.next"
   @fs.write_file(
     temporary,
-    snapshot.to_json().stringify(),
+    ToJson::to_json(snapshot).stringify(),
     create_mode=CreateOrTruncate,
     permission=0o600,
     sync=Full,
@@ -331,7 +331,7 @@ pub async fn ObservabilityStore::open_postgres(
       database.save_opaque_snapshot(
         "observability",
         snapshot_schema_version,
-        store.snapshot_unlocked().to_json().stringify(),
+        ToJson::to_json(store.snapshot_unlocked()).stringify(),
       )
   }
   store
@@ -346,7 +346,7 @@ async fn ObservabilityStore::persist(self : ObservabilityStore) -> Unit {
       database.save_opaque_snapshot(
         "observability",
         snapshot_schema_version,
-        snapshot.to_json().stringify(),
+        ToJson::to_json(snapshot).stringify(),
       )
   }
 }
@@ -361,48 +361,42 @@ pub async fn ObservabilityStore::record(
     raise InvalidEvent("generated operational event identifier is reserved")
   }
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_events = self.events.copy()
   let previous_counters = self.counters.copy()
-  try {
-    for existing in self.events {
-      if existing.event_id == event.event_id {
-        if existing == event {
-          self.mutex.release()
-          return
-        }
-        raise EventConflict(event.event_id)
+  errdefer {
+    self.events = previous_events
+    self.counters = previous_counters
+  }
+  for existing in self.events {
+    if existing.event_id == event.event_id {
+      if existing == event {
+        return
       }
+      raise EventConflict(event.event_id)
     }
-    self.events.push(event)
-    while self.events.length() > self.event_history_limit {
-      ignore(self.events.remove(0))
-    }
-    let key = counter_key(event)
-    let class = status_class(event.status_code)
-    ensure_counter_capacity(self.counters, key)
-    let current = self.counters.get(key).map_or(0L, counter => counter.value)
-    guard checked_nonnegative_add(current, 1L) is Some(next) else {
-      raise InvalidEvent("operational counter exhausted")
-    }
-    self.counters[key] = {
-      event_code: event.event_code,
-      target_type: event.target_type,
-      outcome: event.outcome,
-      status_class: class,
-      value: next,
-    }
-    self.persist()
-    self.mutex.release()
-    if self.emit_json_lines {
-      println(event.to_json().stringify())
-    }
-  } catch {
-    error => {
-      self.events = previous_events
-      self.counters = previous_counters
-      self.mutex.release()
-      raise error
-    }
+  }
+  self.events.push(event)
+  while self.events.length() > self.event_history_limit {
+    ignore(self.events.remove(0))
+  }
+  let key = counter_key(event)
+  let class = status_class(event.status_code)
+  ensure_counter_capacity(self.counters, key)
+  let current = self.counters.get(key).map_or(0L, counter => counter.value)
+  guard checked_nonnegative_add(current, 1L) is Some(next) else {
+    raise InvalidEvent("operational counter exhausted")
+  }
+  self.counters[key] = {
+    event_code: event.event_code,
+    target_type: event.target_type,
+    outcome: event.outcome,
+    status_class: class,
+    value: next,
+  }
+  self.persist()
+  if self.emit_json_lines {
+    println(ToJson::to_json(event).stringify())
   }
 }
 
@@ -417,53 +411,48 @@ pub async fn ObservabilityStore::record_generated(
   event : OperationalEvent,
 ) -> OperationalEvent {
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous_events = self.events.copy()
   let previous_counters = self.counters.copy()
-  try {
-    guard checked_counter_total(self.counters) is Some(total) &&
-      checked_nonnegative_add(total, 1L) is Some(sequence) else {
-      raise InvalidEvent("operational event sequence exhausted")
-    }
-    let generated = {
-      ..event,
-      event_id: "event-operational-\{event.timestamp_unix_ms}-\{sequence}",
-    }
-    validate_event(generated)
-    if self.events.any(event => event.event_id == generated.event_id) {
-      raise EventConflict(generated.event_id)
-    }
-    let key = counter_key(generated)
-    ensure_counter_capacity(self.counters, key)
-    let current = self.counters.get(key).map_or(0L, counter => counter.value)
-    guard checked_nonnegative_add(current, 1L) is Some(next) else {
-      raise InvalidEvent("operational counter exhausted")
-    }
-    self.events.push(generated)
-    while self.events.length() > self.event_history_limit {
-      ignore(self.events.remove(0))
-    }
-    let class = status_class(generated.status_code)
-    self.counters[key] = {
-      event_code: generated.event_code,
-      target_type: generated.target_type,
-      outcome: generated.outcome,
-      status_class: class,
-      value: next,
-    }
-    self.persist()
-    self.mutex.release()
-    if self.emit_json_lines {
-      println(generated.to_json().stringify())
-    }
-    generated
-  } catch {
-    error => {
-      self.events = previous_events
-      self.counters = previous_counters
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.events = previous_events
+    self.counters = previous_counters
   }
+  guard checked_counter_total(self.counters) is Some(total) &&
+    checked_nonnegative_add(total, 1L) is Some(sequence) else {
+    raise InvalidEvent("operational event sequence exhausted")
+  }
+  let generated = {
+    ..event,
+    event_id: "event-operational-\{event.timestamp_unix_ms}-\{sequence}",
+  }
+  validate_event(generated)
+  if self.events.any(event => event.event_id == generated.event_id) {
+    raise EventConflict(generated.event_id)
+  }
+  let key = counter_key(generated)
+  ensure_counter_capacity(self.counters, key)
+  let current = self.counters.get(key).map_or(0L, counter => counter.value)
+  guard checked_nonnegative_add(current, 1L) is Some(next) else {
+    raise InvalidEvent("operational counter exhausted")
+  }
+  self.events.push(generated)
+  while self.events.length() > self.event_history_limit {
+    ignore(self.events.remove(0))
+  }
+  let class = status_class(generated.status_code)
+  self.counters[key] = {
+    event_code: generated.event_code,
+    target_type: generated.target_type,
+    outcome: generated.outcome,
+    status_class: class,
+    value: next,
+  }
+  self.persist()
+  if self.emit_json_lines {
+    println(ToJson::to_json(generated).stringify())
+  }
+  generated
 }
 
 ///| Records a bounded component lifecycle event using the same durable event
@@ -760,21 +749,16 @@ pub async fn ObservabilityStore::record_external_export_proof(
     duration_ms: 0L,
   })
   self.mutex.acquire()
+  defer self.mutex.release()
   let previous = self.last_external_export_unix_ms
-  try {
-    self.last_external_export_unix_ms = Some(
-      previous.map_or(proof.exported_unix_ms, value => {
-        value.max(proof.exported_unix_ms)
-      }),
-    )
-    self.persist()
-    self.mutex.release()
-    event
-  } catch {
-    error => {
-      self.last_external_export_unix_ms = previous
-      self.mutex.release()
-      raise error
-    }
+  errdefer {
+    self.last_external_export_unix_ms = previous
   }
+  self.last_external_export_unix_ms = Some(
+    previous.map_or(proof.exported_unix_ms, value => {
+      value.max(proof.exported_unix_ms)
+    }),
+  )
+  self.persist()
+  event
 }

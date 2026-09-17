@@ -95,6 +95,7 @@ priv struct ContractGovernanceTenantRequest {
 priv struct ContractAdmissionRequest {
   tenant_ref : String
   subject_ref : String
+  organization_id : String?
 } derive(FromJson)
 
 ///|
@@ -127,10 +128,12 @@ async fn ApiService::handle_contract_governance(
             400, "InvalidRequest", "tenant_ref and subject_ref are required", false,
           )
       }
-      let effective = store.has_effective_master_lease(
+      let effective = self.has_effective_rental_authority(
+        store,
         request.tenant_ref,
         request.subject_ref,
         now,
+        organization_id?=request.organization_id,
       )
       let exclusive = match self.exclusive_lease_store {
         Some(leases) =>

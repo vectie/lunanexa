@@ -43,7 +43,7 @@ test "friendly failures preserve recovery and never technical secrets" {
       "TrialApiKeyRejected", "EffectiveMasterLeaseRequired", "PortalAccessDenied",
       "401", "403", "409", "429", "Timeout", "Network", "Unexpected",
     ] {
-    for locale in [@i18n.English, @i18n.ChineseSimplified] {
+    for locale in [@i18n.English, ChineseSimplified] {
       let result = @enterprise.friendly_failure(
         locale,
         "Operation",

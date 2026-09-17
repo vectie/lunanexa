@@ -150,7 +150,7 @@ async test "event identifiers are idempotent but conflicting replay is rejected"
   )
   store.record(event("event-replay", 1L))
   store.record(event("event-replay", 1L))
-  try store.record({ ..event("event-replay", 1L), duration_ms: 13L }) catch {
+  try store.record({ ..event("event-replay", 1L), duration_ms: 13L, }) catch {
     @observability.ObservabilityError::EventConflict("event-replay") => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {

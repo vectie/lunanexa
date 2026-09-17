@@ -1955,6 +1955,7 @@ pub async fn OfflineCommerceStore::claim_authority_work(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
   limit? : Int = 100,
+  blocked_activation_orders? : Array[String] = [],
 ) -> @offline.OfflineAuthorityWorkBatch {
   if limit < 1 || limit > 1000 || now_unix_ms <= 0L {
     raise @offline.OfflineCommerceError::InvalidInput(
@@ -1977,6 +1978,9 @@ pub async fn OfflineCommerceStore::claim_authority_work(
       break
     }
     if activation.state != EntitlementActivationRequested {
+      continue
+    }
+    if blocked_activation_orders.contains(activation.order_id) {
       continue
     }
     let key = activation_work_id(activation.activation_id)

@@ -11,8 +11,8 @@ async test "delete uses a UID precondition and awaits observed absence" {
       (404, {})
     }
   })
-  assert_eq(manager.stop(identity()), @contracts.Draining)
-  assert_eq(manager.observe(identity()), @contracts.Stopped)
+  assert_eq(manager.stop(identity()), Draining)
+  assert_eq(manager.observe(identity()), Stopped)
   assert_eq(calls, ["DELETE", "GET"])
 }
 

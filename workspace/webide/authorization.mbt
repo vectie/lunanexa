@@ -14,7 +14,7 @@ async fn Bridge::authorize_session(
       None => raise BridgeError::AuthorityUnavailable
     }
   }
-  let flight : AuthorizationFlight = { gate: @async.Mutex(), result: None, }
+  let flight : AuthorizationFlight = { gate: Mutex(), result: None, }
   // No suspension between acquiring this new mutex and publishing the flight.
   assert_true(flight.gate.try_acquire())
   self.authorizations[token] = flight

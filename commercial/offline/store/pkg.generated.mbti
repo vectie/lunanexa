@@ -3,15 +3,32 @@ package "vectie/lunanexa/commercial/offline/store"
 
 import {
   "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/database",
 }
 
 // Values
+pub fn contract_archive_artifact_id(String, Int64, @offline.DocumentArtifactKind) -> String raise @offline.OfflineCommerceError
+
+pub fn contract_archive_object_ref(String, String, String, Int64, @offline.DocumentArtifactKind) -> String raise @offline.OfflineCommerceError
 
 // Errors
 
 // Types and methods
+pub(all) struct ContractArchiveObject {
+  artifact_id : String
+  object_ref : String
+  media_type : String
+  sha256 : String
+  byte_count : Int64
+  storage_receipt : String
+  stored_unix_ms : Int64
+  verified : Bool
+  active_content_detected : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
 pub struct OfflineCommerceStore {
   persistence : OfflinePersistence
   mut templates : Map[String, @offline.DocumentTemplate]
@@ -32,10 +49,11 @@ pub struct OfflineCommerceStore {
   mut worker_health : @offline.OfflineWorkerHealth
   mutex : @async.Mutex
 }
+pub async fn OfflineCommerceStore::archive_contract_generation(Self, tenant_ref~ : String, organization_id~ : String, subject_ref~ : String, order_id~ : String, packet_id~ : String, packet_revision~ : Int64, template_id~ : String, template_version~ : String, locale~ : String, now_unix_ms~ : Int64, docx~ : ContractArchiveObject, pdf~ : ContractArchiveObject) -> Array[@offline.DocumentArtifact]
 pub async fn OfflineCommerceStore::artifact(Self, String, String) -> @offline.DocumentArtifact
 pub async fn OfflineCommerceStore::begin_offline_execution(Self, String, Int64, Int64) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::cancel_order(Self, String, Int64, Int64) -> @offline.CommercialOrder
-pub async fn OfflineCommerceStore::claim_authority_work(Self, Int64, limit? : Int) -> @offline.OfflineAuthorityWorkBatch
+pub async fn OfflineCommerceStore::claim_authority_work(Self, Int64, limit? : Int, blocked_activation_orders? : Array[String]) -> @offline.OfflineAuthorityWorkBatch
 pub async fn OfflineCommerceStore::claim_generation_requests(Self, Int64, limit? : Int) -> Array[@offline.ArtifactGenerationRequest]
 pub async fn OfflineCommerceStore::complete_activation(Self, @offline.EntitlementActivation) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::complete_generation(Self, @offline.ArtifactGenerationResult) -> @offline.DocumentArtifact
@@ -47,6 +65,7 @@ pub async fn OfflineCommerceStore::expire_orders(Self, Int64) -> Array[@offline.
 pub async fn OfflineCommerceStore::expire_transfer_sessions(Self, Int64) -> Int
 pub async fn OfflineCommerceStore::fulfill(Self, String, Int64, @offline.EntitlementActivation, Int64) -> @offline.CommercialOrder
 pub async fn OfflineCommerceStore::grant_upload(Self, @offline.EvidenceUploadGrant) -> @offline.EvidenceUploadGrant
+pub async fn OfflineCommerceStore::issue_operator_download_session(Self, @offline.OfflineTransferSession, tenant_ref~ : String, operator_ref~ : String) -> @offline.OfflineTransferSession
 pub async fn OfflineCommerceStore::issue_transfer_session(Self, @offline.OfflineTransferSession) -> @offline.OfflineTransferSession
 pub async fn OfflineCommerceStore::open(String) -> Self
 pub async fn OfflineCommerceStore::open_postgres(@database.PostgresDatabase) -> Self

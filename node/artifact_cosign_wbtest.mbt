@@ -38,7 +38,7 @@ test "artifact verifier uses explicit trust without bypass flags" {
       trusted_root_path="../untrusted.json",
     )
   catch {
-    ArtifactMaterializationError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     _ => fail("wrong error for invalid trust reference")
   } noraise {
     _ => fail("relative trust reference accepted")

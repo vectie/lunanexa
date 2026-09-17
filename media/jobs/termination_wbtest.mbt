@@ -1,4 +1,106 @@
 ///|
+async test "late original-instance exit preserves completed usage and finishes pending cleanup" {
+  for mode in 0..<3 {
+    let jobs = JobStore::restore(empty_snapshot(), _ => ())
+    let job = reserve(jobs, "completed-exit")
+    let context : ExecutionContext = {
+      deployment_id: "deployment-a",
+      generation: 1L,
+      node_id: "node-a",
+      instance_id: Some("a".repeat(64)),
+    }
+    jobs.remember_execution(job.deployment_id, context)
+    ignore(jobs.begin_submission(job.job_id, owner(), 1001L))
+    ignore(jobs.attach_provider(job.job_id, owner(), "upstream-job", 1002L))
+    ignore(jobs.observe(job.job_id, owner(), Completed, Some(100), 1003L))
+    ignore(jobs.record_usage(job.job_id, owner(), "original-receipt"))
+    if mode > 0 {
+      ignore(jobs.cancel(job.job_id, owner(), mode == 2, 1004L))
+    }
+    let before = jobs.get(job.job_id, owner())
+    try
+      jobs.acknowledge_instance_termination(
+        job.job_id,
+        owner(),
+        job.deployment_id,
+        { ..context, instance_id: Some("b".repeat(64)), },
+        "exit-proof",
+        1005L,
+        1006L,
+      )
+    catch {
+      Conflict => ()
+      error => raise error
+    } noraise {
+      _ => fail("replacement exit accepted for completed job")
+    }
+    assert_true(jobs.get(job.job_id, owner()) == before)
+    let frozen = JobStore::restore(jobs.snapshot(), _ => {
+      raise Failure("write unavailable")
+    })
+    try
+      frozen.acknowledge_instance_termination(
+        job.job_id,
+        owner(),
+        job.deployment_id,
+        context,
+        "exit-proof",
+        1005L,
+        1006L,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("unpersisted completed-job proof accepted")
+    }
+    assert_true(frozen.get(job.job_id, owner()) == before)
+    let ended = jobs.acknowledge_instance_termination(
+      job.job_id,
+      owner(),
+      job.deployment_id,
+      context,
+      "exit-proof",
+      1005L,
+      1006L,
+    )
+    assert_eq(
+      ended.state,
+      if mode == 0 {
+        Completed
+      } else if mode == 1 {
+        Cancelled
+      } else {
+        Expired
+      },
+    )
+    assert_eq(ended.terminal_unix_ms, Some(1003L))
+    assert_eq(ended.usage_receipt, Some("original-receipt"))
+    assert_true(ended.public_view(1006L) is { "content_available": false, .. })
+    let restored = JobStore::restore(jobs.snapshot(), _ => ())
+    assert_true(
+      restored.acknowledge_instance_termination(
+        job.job_id,
+        owner(),
+        job.deployment_id,
+        context,
+        "exit-proof",
+        1005L,
+        1007L,
+      ) ==
+      ended,
+    )
+    assert_eq(
+      restored.cancel(job.job_id, owner(), mode == 2, 1008L).state,
+      if mode == 2 {
+        Expired
+      } else {
+        Cancelled
+      },
+    )
+  }
+}
+
+///|
 async test "termination rejects stale future unknown and conflicting evidence without mutation" {
   let jobs = JobStore::restore(empty_snapshot(), _ => ())
   let job = reserve(jobs, "termination-adversarial")
@@ -92,14 +194,17 @@ async test "termination rejects stale future unknown and conflicting evidence wi
   }
   assert_true(jobs.get(job.job_id, owner()) == terminal)
   let saved = jobs.snapshot()
-  let legacy = { ..saved, jobs: [{ ..terminal, state: Cancelling }] }
+  let legacy = { ..saved, jobs: [{ ..terminal, state: Cancelling, }], }
   let recovered = JobStore::restore(legacy, _ => ())
   assert_eq(recovered.get(job.job_id, owner()).state, Cancelled)
   for expired in [false, true] {
     let restored = JobStore::restore(saved, _ => ())
     let cancelled = restored.cancel(job.job_id, owner(), expired, 1006L)
     assert_eq(cancelled.state, if expired { Expired } else { Cancelled })
-    assert_eq(cancelled.termination_evidence_ref, terminal.termination_evidence_ref)
+    assert_eq(
+      cancelled.termination_evidence_ref,
+      terminal.termination_evidence_ref,
+    )
     ignore(JobStore::restore(restored.snapshot(), _ => ()))
   }
   for
