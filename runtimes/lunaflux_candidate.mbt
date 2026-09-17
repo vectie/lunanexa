@@ -135,5 +135,5 @@ pub fn inspect_lunaflux_candidate(
   blockers.push(InvocationContractUnapproved)
   blockers.push(PhysicalServingEvidenceUnapproved)
   blockers.push(BenchmarkComparisonMissing)
-  { manifest_valid, routable: false, blockers }
+  { manifest_valid, routable: false, blockers, }
 }

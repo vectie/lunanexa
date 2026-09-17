@@ -2,7 +2,7 @@
 fn random_token() -> String raise BridgeError {
   let bytes = Bytes::make(32, 0)
   if fill_secure_random(bytes) != 0 {
-    raise BridgeError::UpstreamUnavailable
+    raise UpstreamUnavailable
   }
   @crypto.bytes_to_hex_string(bytes)
 }
@@ -59,7 +59,7 @@ fn Bridge::browser_cookie(
   challenge : Bool,
   age : Int64,
 ) -> @http.Cookie {
-  @http.Cookie(
+  Cookie(
     self.cookie_name(challenge),
     value,
     path="/",

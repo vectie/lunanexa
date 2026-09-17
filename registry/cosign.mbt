@@ -31,7 +31,7 @@ pub fn CosignVerifier::new(
     public_key_path.contains_char('\n') {
     raise InvalidVerifierConfiguration
   }
-  { binary, public_key_path }
+  { binary, public_key_path, }
 }
 
 ///|

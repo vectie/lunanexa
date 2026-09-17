@@ -102,7 +102,7 @@ test "release evidence requires named human acceptance" {
     }.release_ready(),
   )
   assert_true(
-    { ..evidence, accepted_by: Some("named-operator") }.release_ready(),
+    { ..evidence, accepted_by: Some("named-operator"), }.release_ready(),
   )
   let built = @telemetry.build_evidence_bundle([summary], {
     release_version: "0.1.0",
@@ -151,21 +151,23 @@ test "metric-specific bounds reject skewing node telemetry" {
     timestamp_unix_ms: 1L,
   }
   assert_true(@telemetry.bounded_metric(sample))
-  assert_false(@telemetry.bounded_metric({ ..sample, value: 1001.0 }))
-  assert_false(@telemetry.bounded_metric({ ..sample, node_id: "node\nforged" }))
+  assert_false(@telemetry.bounded_metric({ ..sample, value: 1001.0, }))
+  assert_false(
+    @telemetry.bounded_metric({ ..sample, node_id: "node\nforged", }),
+  )
   let limits = {
     ..@settings.default_global_admin_settings().telemetry_safety,
     maximum_power_watts: 500.0,
   }
   assert_true(
     @telemetry.bounded_metric_with_settings(
-      { ..sample, metric: "accelerator_power_watts", value: 499.0 },
+      { ..sample, metric: "accelerator_power_watts", value: 499.0, },
       limits,
     ),
   )
   assert_false(
     @telemetry.bounded_metric_with_settings(
-      { ..sample, metric: "accelerator_power_watts", value: 501.0 },
+      { ..sample, metric: "accelerator_power_watts", value: 501.0, },
       limits,
     ),
   )

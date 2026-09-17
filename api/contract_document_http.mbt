@@ -5,6 +5,7 @@ fn contract_document_path(path : String) -> Bool {
 
 ///|
 priv struct ContractPacketIntent {
+  template_id : String?
   packet_id : String
   idempotency_key : String
   order_ref : String
@@ -44,6 +45,8 @@ priv struct ContractGenerationResult {
   docx : @contractdoc.ContractGeneratedArtifact
   pdf : @contractdoc.ContractGeneratedArtifact
   worker_receipt : String
+  docx_storage : @offline_store.ContractArchiveObject?
+  pdf_storage : @offline_store.ContractArchiveObject?
 } derive(FromJson)
 
 ///|
@@ -313,9 +316,15 @@ async fn moonleaf_contract_preview(
       true,
     )
   }
-  let template_path = @env.get_env_var("LUNANEXA_CONTRACT_TEMPLATE_PATH").unwrap_or(
-    "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
-  )
+  let template_path = if @contractdoc.is_undertaking_template(
+      manifest.template_id,
+    ) {
+    "assets/contracts/youthpolicy/undertaking-v1/\{manifest.fillable_filename}"
+  } else {
+    @env.get_env_var("LUNANEXA_CONTRACT_TEMPLATE_PATH").unwrap_or(
+      "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
+    )
+  }
   let template = try
     @fs.read_file(template_path).binary().to_fixedarray()
   catch {
@@ -402,7 +411,28 @@ async fn ApiService::handle_contract_documents(
       true,
     )
   }
-  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let mut manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  for
+    suffix in [
+      ":information", ":preview", ":confirm", ":generate", ":execute", ":undertaking-submit",
+      ":revise",
+    ] {
+    let packet_id = match operator_contract_packet_id(path, suffix) {
+      Some(id) => Some(id)
+      None => contract_packet_id(path, suffix)
+    }
+    if packet_id is Some(id) && store.packet(id) is Some(packet) {
+      manifest = @contractdoc.manifest_for_template_id(packet.template_id)
+    }
+  }
+  if verb == Get &&
+    path == "/v1/contract-documents/manifest/catalog" &&
+    self.operator_authorized(headers) {
+    return json_reply(
+      200,
+      [manifest, @contractdoc.undertaking_manifest()].to_json(),
+    )
+  }
   if verb == Get &&
     path == "/v1/contract-documents/manifest" &&
     self.operator_authorized(headers) {
@@ -477,6 +507,12 @@ async fn ApiService::handle_contract_documents(
           store.packet(packet_id) is Some(packet) else {
           return api_error(
             404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        if @contractdoc.is_undertaking_template(packet.template_id) {
+          return api_error(
+            409, "UndertakingApprovalRequired", "the user must submit signed evidence for manager approval",
+            false,
           )
         }
         if self.contract_approval_required(packet) {
@@ -713,6 +749,22 @@ async fn ApiService::handle_contract_documents(
             404, "ContractPacketNotFound", "contract packet was not found", false,
           )
         }
+        if approval.action == "undertaking:execute" {
+          guard self.offline_commerce_store is Some(commerce) &&
+            approval.payload.evidence_sha256 is Some(digest) &&
+            undertaking_evidence_valid(
+              commerce.snapshot(),
+              packet,
+              digest,
+              true,
+              now,
+            ) else {
+            return api_error(
+              409, "UndertakingEvidenceRequired", "current signed undertaking and full prepayment must be independently reviewed for the matching live order",
+              false,
+            )
+          }
+        }
         let settlement_check : SettlementLedgerCheck? = match
           approval.payload.kind {
           Some(EarlyTermination) =>
@@ -813,6 +865,73 @@ async fn ApiService::handle_contract_documents(
             400, "InvalidRequest", "invalid contract generation result", false,
           )
         }
+        guard store.packet(result.packet_id) is Some(packet) else {
+          return api_error(
+            404, "ContractPacketNotFound", "contract packet was not found", false,
+          )
+        }
+        if @contractdoc.is_undertaking_template(packet.template_id) {
+          guard self.offline_commerce_store is Some(commerce) &&
+            result.docx_storage is Some(docx_storage) &&
+            result.pdf_storage is Some(pdf_storage) else {
+            return api_error(
+              409, "ContractArchiveRequired", "verified stored DOCX and PDF evidence is required",
+              false,
+            )
+          }
+          for pair in [(result.docx, docx_storage), (result.pdf, pdf_storage)] {
+            if pair.0.artifact_id != pair.1.artifact_id ||
+              pair.0.sha256 != pair.1.sha256 ||
+              pair.0.byte_count != pair.1.byte_count ||
+              pair.0.media_type != pair.1.media_type ||
+              pair.0.generated_unix_ms > pair.1.stored_unix_ms ||
+              pair.1.stored_unix_ms > @async.now() {
+              return api_error(
+                409, "ContractArchiveMismatch", "stored artifact differs from rendered result",
+                false,
+              )
+            }
+          }
+          // Validate the packet transition BEFORE publishing download authority.
+          // An already completed exact callback can safely recover a lost reply.
+          let replay = packet.state == Generated &&
+            packet.revision == result.expected_revision + 1L &&
+            packet.artifacts.contains(result.docx) &&
+            packet.artifacts.contains(result.pdf)
+          if !replay {
+            ignore(
+              packet.complete_generation(
+                result.expected_revision,
+                result.docx,
+                result.pdf,
+                @async.now(),
+              ),
+            ) catch {
+              error => return contract_document_error(error)
+            }
+          }
+          ignore(
+            commerce.archive_contract_generation(
+              tenant_ref=packet.tenant_ref,
+              organization_id=packet.organization_id,
+              subject_ref=packet.subject_ref,
+              order_id=packet.order_ref,
+              packet_id=packet.packet_id,
+              packet_revision=result.expected_revision,
+              template_id=packet.template_id,
+              template_version=packet.template_version,
+              locale=@contractdoc.undertaking_manifest().locale,
+              now_unix_ms=@async.now(),
+              docx=docx_storage,
+              pdf=pdf_storage,
+            ),
+          ) catch {
+            error => return offline_error_reply(error)
+          }
+          if replay {
+            return json_reply(200, packet.to_json())
+          }
+        }
         let completed = try
           store.complete_generation(
             result.packet_id,
@@ -877,6 +996,8 @@ async fn ApiService::handle_contract_documents(
       packet.organization_id == view.membership.organization_id
     })
   match (verb, path) {
+    (Get, "/v1/contract-documents/manifest/catalog") =>
+      json_reply(200, [manifest, @contractdoc.undertaking_manifest()].to_json())
     (Get, "/v1/contract-documents/manifest") =>
       json_reply(200, manifest.to_json())
     (Get, "/v1/contract-documents/self") =>
@@ -960,6 +1081,173 @@ async fn ApiService::handle_contract_documents(
         "status": "ReminderQueued",
       })
     }
+    (Post, _) if contract_packet_id(path, ":undertaking-submit")
+      is Some(packet_id) => {
+      let request : UndertakingSubmission = @json.from_json(@json.parse(body)) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "signed undertaking artifact and date are required",
+            false,
+          )
+      }
+      guard scoped_packets
+        .filter(packet => packet.packet_id == packet_id)
+        .get(0)
+        is Some(packet) &&
+        @contractdoc.is_undertaking_template(packet.template_id) else {
+        return api_error(
+          404, "ContractPacketNotFound", "undertaking was not found", false,
+        )
+      }
+      if !@portal.role_allows(view.membership.roles, LegalSigner) {
+        return api_error(
+          403, "Forbidden", "legal signer authority is required to submit an undertaking",
+          false,
+        )
+      }
+      let now = @async.now()
+      guard packet.state == Generated &&
+        packet.revision == request.expected_revision &&
+        packet.value("undertaking.signed_date") == Some(request.signed_on) &&
+        @contractdoc.days_until(request.signed_on, now).map_or(false, days => {
+          days <= 0L
+        }) &&
+        self.offline_commerce_store is Some(commerce) else {
+        return api_error(
+          409, "UndertakingSubmissionRejected", "a current generated and signed undertaking is required",
+          false,
+        )
+      }
+      let snapshot = commerce.snapshot()
+      guard snapshot.artifacts
+        .filter(artifact => artifact.artifact_id == request.evidence_artifact_id)
+        .get(0)
+        is Some(artifact) &&
+        undertaking_evidence_valid(
+          snapshot,
+          packet,
+          artifact.sha256,
+          false,
+          now,
+        ) else {
+        return api_error(
+          409, "UndertakingEvidenceRequired", "upload a scanned signed undertaking for this current document and order",
+          false,
+        )
+      }
+      let approval_id = "undertaking-\{packet.packet_id}-\{packet.revision}"
+      if store.get_approval(approval_id) is Some(existing) {
+        if existing.payload.evidence_sha256 == Some(artifact.sha256) &&
+          existing.payload.signed_on == Some(request.signed_on) &&
+          existing.status == Pending {
+          return json_reply(202, existing.to_json())
+        }
+        return api_error(
+          409, "UndertakingSubmissionConflict", "revise before submitting another decision",
+          false,
+        )
+      }
+      if store.snapshot().approvals.any(approval => {
+          approval.packet_id == packet_id &&
+          approval.action == "undertaking:execute" &&
+          approval.payload.evidence_sha256 == Some(artifact.sha256)
+        }) {
+        return api_error(
+          409, "UndertakingSignatureReused", "a revised document requires newly signed evidence",
+          false,
+        )
+      }
+      let approval : @contractdoc.ContractApproval = {
+        approval_id,
+        packet_id,
+        action: "undertaking:execute",
+        expected_revision: packet.revision,
+        payload: {
+          evidence_sha256: Some(artifact.sha256),
+          signed_on: Some(request.signed_on),
+          kind: None,
+          reason: None,
+          amount_minor_units: match packet.value("lease.total_rent") {
+            Some(value) => @contractdoc.parse_cny_minor_units(value)
+            None => None
+          },
+          packet_values_sha256: packet.values_sha256,
+        },
+        initiator: subject_ref,
+        created_unix_ms: now,
+        status: Pending,
+        decided_by: None,
+        decided_unix_ms: None,
+        decision_reason: None,
+      }
+      let created = try store.create_approval(approval) catch {
+        error => return contract_document_error(error)
+      } noraise {
+        value => value
+      }
+      self.notify_contract_approval_requested(created, now)
+      json_reply(202, created.to_json())
+    }
+    (Post, _) if self_approval_id(path, ":withdraw") is Some(approval_id) => {
+      let request : ContractApprovalDecision = @json.from_json(
+        @json.parse(body),
+      ) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "withdrawal reason is required", false,
+          )
+      }
+      guard request.reason.trim() != "" &&
+        request.reason.length() <= 512 &&
+        store.get_approval(approval_id) is Some(approval) &&
+        approval.action == "undertaking:execute" &&
+        approval.initiator == subject_ref &&
+        scoped_packets.any(packet => packet.packet_id == approval.packet_id) else {
+        return api_error(
+          404, "NotFound", "undertaking submission was not found", false,
+        )
+      }
+      let withdrawn = try
+        store.decide_approval(
+          approval_id,
+          false,
+          subject_ref,
+          Some(request.reason),
+          @async.now(),
+        )
+      catch {
+        error => return contract_document_error(error)
+      } noraise {
+        value => value
+      }
+      json_reply(200, withdrawn.to_json())
+    }
+    (Post, _) if contract_packet_id(path, ":revise") is Some(packet_id) => {
+      let request : ContractRevisionAction = @json.from_json(@json.parse(body)) catch {
+        _ =>
+          return api_error(
+            400, "InvalidRequest", "expected revision is required", false,
+          )
+      }
+      guard scoped_packets.any(packet => packet.packet_id == packet_id) else {
+        return api_error(
+          404, "ContractPacketNotFound", "undertaking was not found", false,
+        )
+      }
+      let revised = try
+        store.revise_undertaking(
+          packet_id,
+          request.expected_revision,
+          subject_ref,
+          @async.now(),
+        )
+      catch {
+        error => return contract_document_error(error)
+      } noraise {
+        value => value
+      }
+      json_reply(200, revised.to_json())
+    }
     (Post, "/v1/contract-documents/self") => {
       let decoded : ContractPacketIntent? = Some(
         @json.from_json(@json.parse(body)),
@@ -971,7 +1259,43 @@ async fn ApiService::handle_contract_documents(
           400, "InvalidRequest", "invalid contract packet intent", false,
         )
       }
+      if intent.template_id is Some(template_id) {
+        manifest = @contractdoc.manifest_for_template_id(template_id)
+        if manifest.template_id != template_id {
+          return api_error(
+            400, "InvalidContractTemplate", "unknown contract template", false,
+          )
+        }
+      }
       let now = @async.now()
+      if @contractdoc.is_undertaking_template(manifest.template_id) {
+        guard intent.active_forms == [MasterLease] &&
+          intent.preceding_packet_ref is None &&
+          self.offline_commerce_store is Some(commerce) &&
+          commerce.snapshot().orders.any(order => {
+            order.order_id == intent.order_ref &&
+            order.tenant_ref == view.membership.tenant_ref &&
+            order.organization_id == view.membership.organization_id &&
+            order.purchaser_subject_ref == subject_ref &&
+            undertaking_order_live(order, now) &&
+            @offline.undertaking_quote_term(order) is Some(_)
+          }) else {
+          return api_error(
+            409, "UndertakingOrderRequired", "a live own order with an eligible fixed-tariff quote is required",
+            false,
+          )
+        }
+        if scoped_packets
+          .filter(packet => packet.packet_id == intent.packet_id)
+          .get(0)
+          is Some(existing) &&
+          existing.idempotency_key == intent.idempotency_key &&
+          existing.template_id == manifest.template_id &&
+          existing.order_ref == intent.order_ref &&
+          existing.active_forms == intent.active_forms {
+          return json_reply(200, existing.to_json())
+        }
+      }
       let packet = try
         @contractdoc.new_packet(
           manifest,

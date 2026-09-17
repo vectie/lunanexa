@@ -54,10 +54,7 @@ pub fn authenticated_transport(
       if token.length() < 32 || !token.all(c => c >= '!' && c <= '~') {
         raise LifecycleError::InvalidResource
       }
-      let client = @http.Client(
-        origin,
-        trust=@tls.TrustedRoot::CustomPemFile(ca_file),
-      )
+      let client = @http.Client(origin, trust=CustomPemFile(ca_file))
       defer client.close()
       client.request(request_method, path, extra_headers={
         "authorization": "Bearer " + token,

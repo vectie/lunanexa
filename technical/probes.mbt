@@ -124,14 +124,14 @@ fn observe_counter(
     } else {
       counters.consecutive_successes + 1
     }
-    { consecutive_successes: next, consecutive_failures: 0 }
+    { consecutive_successes: next, consecutive_failures: 0, }
   } else {
     let next = if counters.consecutive_failures >= failure_threshold {
       failure_threshold
     } else {
       counters.consecutive_failures + 1
     }
-    { consecutive_successes: 0, consecutive_failures: next }
+    { consecutive_successes: 0, consecutive_failures: next, }
   }
 }
 

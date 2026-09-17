@@ -269,7 +269,7 @@ pub fn ModelRegistry::record_verification(
     for key, model in self.models {
       if model.artifact.digest == verification.digest &&
         model.state == Candidate {
-        self.models[key] = { ..model, state: Verified }
+        self.models[key] = { ..model, state: Verified, }
       }
     }
   }
@@ -301,7 +301,7 @@ pub fn ModelRegistry::record_evaluation(
   }
   self.evaluations[model_key(evaluation.model_id, evaluation.model_version)] = evaluation
   if evaluation.passed && model.state == Verified {
-    self.models[key] = { ..model, state: Evaluated }
+    self.models[key] = { ..model, state: Evaluated, }
   }
 }
 
@@ -343,7 +343,7 @@ pub fn ModelRegistry::approve(
   if model.state != Evaluated {
     raise EvaluationNotPassed(key)
   }
-  let approved : @contracts.ModelRecord = { ..model, state: Approved }
+  let approved : @contracts.ModelRecord = { ..model, state: Approved, }
   self.models[key] = approved
   approved
 }
@@ -381,7 +381,12 @@ pub fn ModelRegistry::promote(
     history.push(value)
     self.alias_history[alias_name] = history
   }
-  let alias_record : Alias = { name: alias_name, model_id, version, generation }
+  let alias_record : Alias = {
+    name: alias_name,
+    model_id,
+    version,
+    generation,
+  }
   self.aliases[alias_name] = alias_record
   let receipt : PromotionReceipt = {
     receipt_id: "promotion:\{alias_name}:\{generation}",
@@ -509,13 +514,13 @@ pub fn ModelRegistry::snapshot(self : ModelRegistry) -> String {
     ],
     receipts: self.receipts(),
     alias_history: [
-      for name, values in self.alias_history => { name, values: values.copy() }
+      for name, values in self.alias_history => { name, values: values.copy(), }
     ],
     runtimes: [
       for _, runtime in self.runtimes => runtime
     ],
   }
-  value.to_json().stringify()
+  ToJson::to_json(value).stringify()
 }
 
 ///|
@@ -526,7 +531,7 @@ pub fn ModelRegistry::restore(json : String) -> ModelRegistry raise {
   }
   let registry = ModelRegistry::new()
   for model in snapshot.models {
-    registry.register_model({ ..model, state: Candidate })
+    registry.register_model({ ..model, state: Candidate, })
   }
   for license in snapshot.licenses {
     registry.record_license(license)

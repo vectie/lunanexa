@@ -10,8 +10,8 @@ fn stable_ref(prefix : String, value : String) -> String {
 
 ///|
 fn webhook_material(event : WebhookEvent) -> String {
-  let unsigned = { ..event, signature: "" }
-  "lunafide.webhook-test-mac.v1|\{unsigned.to_json().stringify()}"
+  let unsigned = { ..event, signature: "", }
+  "lunafide.webhook-test-mac.v1|\{ToJson::to_json(unsigned).stringify()}"
 }
 
 ///|
@@ -47,7 +47,7 @@ pub struct WebhookReceiver {
 
 ///|
 pub fn WebhookReceiver::new() -> WebhookReceiver {
-  { seen_event_ids: Map([]), last_sequences: Map([]) }
+  { seen_event_ids: Map([]), last_sequences: Map([]), }
 }
 
 ///|

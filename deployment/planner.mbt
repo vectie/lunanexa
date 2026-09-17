@@ -164,7 +164,7 @@ fn finding(
   severity : FindingSeverity,
   message : String,
 ) -> PreflightFinding {
-  { code, severity, message }
+  { code, severity, message, }
 }
 
 ///|
@@ -429,7 +429,7 @@ pub fn preflight_on_node(
   node_id : String,
 ) -> DeploymentPlan {
   if !@contracts.valid_identifier(node_id, maximum_length=96) {
-    return preflight(templates, intent, { ..context, nodes: [] })
+    return preflight(templates, intent, { ..context, nodes: [], })
   }
   preflight(templates, intent, {
     ..context,

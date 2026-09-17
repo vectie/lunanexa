@@ -218,7 +218,7 @@ fn legacy_file(value : Json) -> ModelScopeFile raise ModelSourceError {
     !sha256.all(character => character.is_ascii_hexdigit()) {
     raise InvalidUpstreamResponse
   }
-  { path, revision, sha256: sha256.to_lower(), size, lfs }
+  { path, revision, sha256: sha256.to_lower(), size, lfs, }
 }
 
 ///|
@@ -263,7 +263,7 @@ pub async fn ModelScopeClient::tree(
     files.push(decoded)
   }
   let resolved_revision = if short_id == "" { revision } else { short_id }
-  { revision: resolved_revision, files }
+  { revision: resolved_revision, files, }
 }
 
 ///|
@@ -390,21 +390,13 @@ pub async fn ModelScopeClient::download_file(
   let mut offset = 0L
   if @fs.exists(destination) {
     let existing = @fs.open(destination, mode=ReadOnly)
+    defer existing.close()
     if existing.size() > file.size {
-      existing.close()
+      ()
     } else {
-      try {
-        while existing.read_some(max_len=1048576) is Some(chunk) {
-          offset += chunk.length().to_int64()
-          digest.update(chunk)
-        }
-      } catch {
-        error => {
-          existing.close()
-          raise error
-        }
-      } noraise {
-        _ => existing.close()
+      while existing.read_some(max_len=1048576) is Some(chunk) {
+        offset += chunk.length().to_int64()
+        digest.update(chunk)
       }
       if offset == file.size {
         let actual = @crypto.bytes_to_hex_string(digest.finalize())
@@ -429,12 +421,12 @@ pub async fn ModelScopeClient::download_file(
       file_url(self, model_id, revision, file.path),
       headers,
     )
+    defer stream.close()
     let mut expected_end = request_end
     let append = if response.code == 206 {
       let expected_range = "bytes \{request_start}-\{request_end}/\{file.size}"
       if response_header(response.headers, "content-range") !=
         Some(expected_range) {
-        stream.close()
         raise InvalidUpstreamResponse
       }
       request_start > 0L
@@ -442,7 +434,6 @@ pub async fn ModelScopeClient::download_file(
       // Small non-LFS objects may ignore Range. A resumed small file can be
       // safely restarted, but a large unbounded 200 response is rejected.
       if file.size > ModelScopeDownloadChunkBytes {
-        stream.close()
         raise FileSizeMismatch
       }
       if request_start > 0L {
@@ -453,7 +444,6 @@ pub async fn ModelScopeClient::download_file(
       expected_end = file.size - 1L
       false
     } else {
-      stream.close()
       raise UpstreamRejected
     }
     let output = @fs.open(
@@ -463,32 +453,20 @@ pub async fn ModelScopeClient::download_file(
       permission=0o600,
       append~,
     )
-    try {
-      while stream.read_some(max_len=1048576) is Some(chunk) {
-        if cancelled() {
-          raise ImportCancelled
-        }
-        size += chunk.length().to_int64()
-        if size > expected_end + 1L {
-          raise FileSizeMismatch
-        }
-        digest.update(chunk)
-        output.write(chunk)
-        progress(chunk.length().to_int64())
+    defer output.close()
+    while stream.read_some(max_len=1048576) is Some(chunk) {
+      if cancelled() {
+        raise ImportCancelled
       }
-      output.sync(only_data=false)
-    } catch {
-      error => {
-        output.close()
-        stream.close()
-        raise error
+      size += chunk.length().to_int64()
+      if size > expected_end + 1L {
+        raise FileSizeMismatch
       }
-    } noraise {
-      _ => {
-        output.close()
-        stream.close()
-      }
+      digest.update(chunk)
+      output.write(chunk)
+      progress(chunk.length().to_int64())
     }
+    output.sync(only_data=false)
     if size != expected_end + 1L {
       raise FileSizeMismatch
     }

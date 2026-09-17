@@ -182,7 +182,7 @@ async test "supervisor persists ownership before creation and resumes without du
     5L,
     @async.now(),
   )
-  assert_eq(first.state, @contracts.Ready)
+  assert_eq(first.state, Ready)
   assert_eq(first.address, "10.42.1.99")
   assert_eq(api.objects.length(), 3)
   assert_eq(api.calls.filter(call => call.has_prefix("POST")).length(), 3)
@@ -195,21 +195,21 @@ async test "supervisor persists ownership before creation and resumes without du
       5L,
       @async.now(),
     ).state,
-    @contracts.Ready,
+    Ready,
   )
   assert_eq(api.calls.filter(call => call.has_prefix("POST")).length(), 3)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
   assert_eq(restored.retained_artifact_digests(), [assignment.artifact.digest])
   assert_eq(api.objects.length(), 3)
   assert_eq(restored.pending_terminations().length(), 0)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
   assert_eq(restored.pending_terminations().length(), 1)
   let deletions = api.calls.filter(call => call.has_prefix("DELETE"))
   assert_true(deletions[0].contains("/pods/"))
   assert_eq(api.objects.length(), 2)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Draining)
-  assert_eq(restored.stop(assignment.assignment_id), @contracts.Stopped)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Draining)
+  assert_eq(restored.stop(assignment.assignment_id), Stopped)
   assert_eq(api.objects.length(), 0)
   assert_eq(restored.retained_artifact_digests(), [])
   assert_true(@json.parse(checkpoint.val.unwrap()) is { "runtimes": [], .. })
@@ -246,7 +246,7 @@ async test "a lost Pod creation response recovers from the durable intent withou
       5L,
       @async.now(),
     ).state,
-    @contracts.Ready,
+    Ready,
   )
   assert_eq(api.calls.filter(call => call.has_prefix("POST")).length(), 3)
   for path, resource in api.objects {
@@ -316,7 +316,7 @@ async test "journal failure prevents API mutation and can retry from the same in
       5L,
       @async.now(),
     ).state,
-    @contracts.Ready,
+    Ready,
   )
 }
 

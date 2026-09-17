@@ -181,18 +181,9 @@ extern "js" fn demo_mode() -> Bool =
   #| }
 
 ///|
-extern "js" fn endpoint_is_safe(value : String) -> Bool =
-  #| value => {
-  #|   try {
-  #|     const url = new URL(value);
-  #|     const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1" || url.hostname === "[::1]";
-  #|     return !url.username && !url.password && !url.search && !url.hash &&
-  #|       (url.pathname === "" || url.pathname === "/") &&
-  #|       (url.protocol === "https:" || (url.protocol === "http:" && loopback));
-  #|   } catch (_) {
-  #|     return false;
-  #|   }
-  #| }
+fn endpoint_is_safe(value : String) -> Bool {
+  @browser_transport.endpoint_allowed(value)
+}
 
 ///|
 fn optional_subject_is_valid(value : String) -> Bool {
@@ -1335,6 +1326,14 @@ fn app_view(
               app_copy(
                 locale, "Credential entry is blocked on public plain HTTP. Use HTTPS, or a localhost-only acceptance tunnel.",
                 "公共明文 HTTP 已禁止输入凭据。请使用 HTTPS，或仅限本机回环的验收隧道。",
+              ),
+            )
+          } else if model.endpoint.has_prefix("http://") {
+            @html.p(
+              class="connection-transport-warning",
+              app_copy(
+                locale, "HTTP traffic is not encrypted. Use this temporary connection only on a trusted network.",
+                "HTTP 流量未加密。此临时连接仅适用于可信网络。",
               ),
             )
           } else {

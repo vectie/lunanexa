@@ -313,6 +313,30 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
 pub fn demo_state() -> EnterpriseState {
   let now = 1786320000000L
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let undertaking_manifest = @contractdoc.undertaking_manifest()
+  let undertaking_draft = try! @contractdoc.new_packet(
+    undertaking_manifest,
+    "packet-demo-undertaking",
+    "packet-demo-undertaking-key",
+    "tenant-northstar",
+    "org-northstar",
+    "subject-alice",
+    "order-demo-undertaking",
+    None,
+    [MasterLease],
+    now,
+  )
+  let undertaking_packet = {
+    ..undertaking_draft,
+    values: [
+      { field_id: "lessee.name", value: "Northstar Research", },
+      { field_id: "undertaking.signed_date", value: "2026-09-16", },
+      { field_id: "lease.start_date", value: "2026-09-17", },
+      { field_id: "lease.end_date", value: "2026-10-17", },
+      { field_id: "lease.total_rent", value: "1290.00", },
+    ],
+    state: ReadyForConfirmation,
+  }
   let demo_packet : @contractdoc.ContractPacket = {
     packet_id: "packet-demo-youthpolicy",
     idempotency_key: "packet-demo-youthpolicy-key",
@@ -657,7 +681,8 @@ pub fn demo_state() -> EnterpriseState {
     contract_documents: {
       ..@contract_documents.default_state(@i18n.default_locale()),
       manifest: Some(manifest),
-      packets: [demo_packet, effective_packet],
+      available_manifests: [manifest, undertaking_manifest],
+      packets: [demo_packet, effective_packet, undertaking_packet],
       events: [
         {
           event_id: "contract-event-customer-demo-created",
@@ -1374,7 +1399,7 @@ fn navigation(
     for
       route in [
         EnterpriseRoute::Overview,
-        EnterpriseRoute::SelfService,
+        SelfService,
         AccountAccess,
         Agreements,
         LeaseRequests,

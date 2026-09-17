@@ -62,7 +62,7 @@ pub fn scheduled_probe_plan(
 
 ///|
 fn canonical_observation(observation : GuideHealthObservation) -> String {
-  { ..observation, signature: "" }.to_json().stringify()
+  ToJson::to_json({ ..observation, signature: "", }).stringify()
 }
 
 ///|

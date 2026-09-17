@@ -24,6 +24,16 @@ fn assertion_headers(
   expires : Int64,
   nonce : String,
 ) -> Map[String, String] {
+  // Only the configured, verified provider may retain its pre-migration account
+  // namespace. JWT validation continues to use the actual discovery issuer.
+  let identity = if identity.issuer == config.issuer {
+    {
+      ..identity,
+      issuer: config.canonical_identity_issuer.unwrap_or(identity.issuer),
+    }
+  } else {
+    identity
+  }
   let canonical = if registration {
     "lunanexa.identity.registration.v1\n\{identity.issuer}\n\{identity.subject}\n\{identity.email}\n\{identity.display_name}\n\{issued}\n\{expires}\n\{nonce}"
   } else {

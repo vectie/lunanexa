@@ -23,11 +23,11 @@ test "opaque LunaFlux adapter identity binds every authority envelope" {
   let authority = verifier_only_authority_fixture()
   let exact = authority.opaque_adapter().contract_digest()
   let variants = [
-    { ..authority, candidate_manifest_digest: "sha256:" + "1".repeat(64) },
-    { ..authority, launch_manifest_digest: "sha256:" + "5".repeat(64) },
-    { ..authority, control_contract_digest: "sha256:" + "2".repeat(64) },
-    { ..authority, invocation_contract_digest: "sha256:" + "3".repeat(64) },
-    { ..authority, approval_catalog_digest: "sha256:" + "4".repeat(64) },
+    { ..authority, candidate_manifest_digest: "sha256:" + "1".repeat(64), },
+    { ..authority, launch_manifest_digest: "sha256:" + "5".repeat(64), },
+    { ..authority, control_contract_digest: "sha256:" + "2".repeat(64), },
+    { ..authority, invocation_contract_digest: "sha256:" + "3".repeat(64), },
+    { ..authority, approval_catalog_digest: "sha256:" + "4".repeat(64), },
   ]
   for variant in variants {
     assert_not_eq(variant.opaque_adapter().contract_digest(), exact)

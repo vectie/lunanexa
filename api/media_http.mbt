@@ -348,10 +348,12 @@ async fn ApiService::media_owner_authorized(
   guard self.portal_store is Some(portal) else { return false }
   if owner.authority is DedicatedOrder(_) {
     guard self.contract_document_store is Some(contracts) &&
-      contracts.has_effective_master_lease(
+      self.has_effective_rental_authority(
+        contracts,
         owner.tenant_ref,
         owner.subject_ref,
         now,
+        organization_id=owner.organization_id,
       ) else {
       return false
     }

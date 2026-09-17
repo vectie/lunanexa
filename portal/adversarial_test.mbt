@@ -29,20 +29,26 @@ test "deterministic fuzz exhausts portal identifier and collection bounds" {
   for length in 0..<=300 {
     let value = "a".repeat(length)
     let expected = length > 0 && length <= 256
-    assert_eq(submission_is_valid({ ..base, request_id: value }), expected)
-    assert_eq(submission_is_valid({ ..base, idempotency_key: value }), expected)
-    assert_eq(submission_is_valid({ ..base, tenant_ref: value }), expected)
-    assert_eq(submission_is_valid({ ..base, organization_id: value }), expected)
-    assert_eq(submission_is_valid({ ..base, project_id: value }), expected)
+    assert_eq(submission_is_valid({ ..base, request_id: value, }), expected)
     assert_eq(
-      submission_is_valid({ ..base, requested_model_ids: [value] }),
+      submission_is_valid({ ..base, idempotency_key: value, }),
+      expected,
+    )
+    assert_eq(submission_is_valid({ ..base, tenant_ref: value, }), expected)
+    assert_eq(
+      submission_is_valid({ ..base, organization_id: value, }),
+      expected,
+    )
+    assert_eq(submission_is_valid({ ..base, project_id: value, }), expected)
+    assert_eq(
+      submission_is_valid({ ..base, requested_model_ids: [value], }),
       expected,
     )
   }
   for count in 0..<=34 {
     let models = [ for _ in 0..<count => "model-a" ]
     assert_eq(
-      submission_is_valid({ ..base, requested_model_ids: models }),
+      submission_is_valid({ ..base, requested_model_ids: models, }),
       count >= 1 && count <= 32,
     )
   }
@@ -59,9 +65,9 @@ test "mutation fuzz rejects injection bytes at every portal identifier position"
       let candidate = "a".repeat(position) +
         mutation +
         "b".repeat(256 - position)
-      assert_false(submission_is_valid({ ..base, idempotency_key: candidate }))
+      assert_false(submission_is_valid({ ..base, idempotency_key: candidate, }))
       assert_false(
-        submission_is_valid({ ..base, requested_model_ids: [candidate] }),
+        submission_is_valid({ ..base, requested_model_ids: [candidate], }),
       )
     }
   }
@@ -84,7 +90,7 @@ test "free text fuzz is bounded before trimming and rejects controls" {
       "safe\u0000hidden",
       " ".repeat(1000) + "x",
     ] {
-    assert_false(submission_is_valid({ ..base, justification: hostile }))
+    assert_false(submission_is_valid({ ..base, justification: hostile, }))
   }
 }
 
@@ -102,12 +108,12 @@ test "portal time and unix account boundary mutations fail closed" {
       "alice\u0000root",
       "a".repeat(33),
     ] {
-    assert_false(submission_is_valid({ ..base, unix_username: username }))
+    assert_false(submission_is_valid({ ..base, unix_username: username, }))
   }
   for starts in [-9223372036854775807L, -1L, 0L] {
-    assert_false(submission_is_valid({ ..base, starts_unix_ms: starts }))
+    assert_false(submission_is_valid({ ..base, starts_unix_ms: starts, }))
   }
   for expires in [-1L, 0L, 999L, 1000L] {
-    assert_false(submission_is_valid({ ..base, expires_unix_ms: expires }))
+    assert_false(submission_is_valid({ ..base, expires_unix_ms: expires, }))
   }
 }

@@ -102,7 +102,7 @@ pub fn OpenAiTextRuntime::new(
 pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(
   self : OpenAiTextRuntime,
 ) -> OpenAiTextRuntime {
-  { ..self, lunaflux_streaming_responses: true }
+  { ..self, lunaflux_streaming_responses: true, }
 }
 
 ///|
@@ -117,7 +117,7 @@ pub fn OpenAiTextRuntime::with_response_budgets(
     maximum_response_bytes > 16777216 {
     raise InvalidUpstreamResponse("runtime response budgets are invalid")
   }
-  { ..self, maximum_event_bytes, maximum_response_bytes }
+  { ..self, maximum_event_bytes, maximum_response_bytes, }
 }
 
 ///|
@@ -360,7 +360,7 @@ fn responses_event_completed(event : Json) -> UpstreamUsage?? {
     return None
   }
   let completed : UpstreamCompletedEvent = @json.from_json(event) catch {
-    _ => { response: None }
+    _ => { response: None, }
   }
   let usage = match completed.response {
     Some(response) => response.usage
@@ -408,7 +408,7 @@ pub fn OpenAiTextRuntime::with_node_endpoints(
     }
     node_endpoints[entry.node_id] = entry.endpoint
   }
-  { ..self, node_endpoints, direct_node_routing: true }
+  { ..self, node_endpoints, direct_node_routing: true, }
 }
 
 ///|
@@ -511,7 +511,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
     error => raise InvalidUpstreamResponse("\{Repr(error)}")
   }
   let envelope : UpstreamEnvelope = @json.from_json(output) catch {
-    _ => { usage: None }
+    _ => { usage: None, }
   }
   {
     output,
@@ -606,7 +606,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       raise UpstreamFailed(code~, retryable~)
     }
     let event : UpstreamStreamEnvelope = @json.from_json(event_json) catch {
-      _ => { usage: None }
+      _ => { usage: None, }
     }
     if event.usage is Some(usage) {
       input_units = usage.input_tokens

@@ -102,7 +102,7 @@ test "exclusive lease username and credential mutation fuzz fails closed" {
   let base = intent()
   for length in 0..<=40 {
     assert_eq(
-      nodelease_intent_is_valid({ ..base, unix_username: "a".repeat(length) }),
+      nodelease_intent_is_valid({ ..base, unix_username: "a".repeat(length), }),
       length > 0 && length <= 32,
     )
   }
@@ -110,14 +110,14 @@ test "exclusive lease username and credential mutation fuzz fails closed" {
     for mutation in ["/", "\\", " ", "\n", "\r", ":", ".", "%", "服务"] {
       let username = "a".repeat(position) + mutation + "b".repeat(31 - position)
       assert_false(
-        nodelease_intent_is_valid({ ..base, unix_username: username }),
+        nodelease_intent_is_valid({ ..base, unix_username: username, }),
       )
     }
   }
   for length in 0..<=500 {
     let reference = "ssh-cert:" + "a".repeat(length)
     assert_eq(
-      nodelease_intent_is_valid({ ..base, access_credential_ref: reference }),
+      nodelease_intent_is_valid({ ..base, access_credential_ref: reference, }),
       length > 0 && length <= 480,
     )
   }
@@ -127,7 +127,7 @@ test "exclusive lease username and credential mutation fuzz fails closed" {
       "ssh-cert:lease\nforged", "ssh-cert:服务",
     ] {
     assert_false(
-      nodelease_intent_is_valid({ ..base, access_credential_ref: reference }),
+      nodelease_intent_is_valid({ ..base, access_credential_ref: reference, }),
     )
   }
 }

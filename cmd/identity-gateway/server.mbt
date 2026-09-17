@@ -58,15 +58,16 @@ fn browser_cookie(
   name : String,
   value : String,
   max_age : Int64,
+  secure? : Bool = true,
 ) -> @http.Cookie {
-  @http.Cookie(name, value, path="/", max_age~, secure=true, http_only=true, extensions=[
+  Cookie(name, value, path="/", max_age~, secure~, http_only=true, extensions=[
     "SameSite=Lax",
   ])
 }
 
 ///|
-fn expired_cookie(name : String) -> @http.Cookie {
-  browser_cookie(name, "", 0L)
+fn expired_cookie(name : String, secure? : Bool = true) -> @http.Cookie {
+  browser_cookie(name, "", 0L, secure~)
 }
 
 ///|
@@ -76,7 +77,8 @@ fn host_and_audience(
 ) -> (String, BrowserAudience)? {
   guard header(request.headers, "Host") is Some(host) &&
     config.host_audience(host) is Some(audience) &&
-    header(request.headers, "X-Forwarded-Proto") == Some("https") else {
+    header(request.headers, "X-Forwarded-Proto") ==
+    Some(config.browser_scheme()) else {
     return None
   }
   match header(request.headers, "X-Forwarded-Host") {
@@ -86,9 +88,37 @@ fn host_and_audience(
 }
 
 ///|
-fn exact_origin(request : @http.Request, host : String) -> Bool {
-  header(request.headers, "Origin") == Some("https://\{host}") &&
-  header(request.headers, "Sec-Fetch-Site") == Some("same-origin")
+fn exact_origin(
+  request : @http.Request,
+  host : String,
+  secure? : Bool = true,
+) -> Bool {
+  let scheme = if secure { "https" } else { "http" }
+  header(request.headers, "Origin") == Some("\{scheme}://\{host}") &&
+  (
+    header(request.headers, "Sec-Fetch-Site") == Some("same-origin") ||
+    (!secure && missing_fetch_metadata(request))
+  )
+}
+
+///|
+fn missing_fetch_metadata(request : @http.Request) -> Bool {
+  header(request.headers, "Sec-Fetch-Site") is None &&
+  header(request.headers, "Sec-Fetch-Mode") is None &&
+  header(request.headers, "Sec-Fetch-Dest") is None
+}
+
+///|
+fn http_same_origin(request : @http.Request, host : String) -> Bool {
+  guard missing_fetch_metadata(request) else { return false }
+  match header(request.headers, "Origin") {
+    Some(origin) => origin == "http://\{host}"
+    None =>
+      match header(request.headers, "Referer") {
+        Some(referer) => referer.has_prefix("http://\{host}/")
+        None => false
+      }
+  }
 }
 
 ///|
@@ -151,7 +181,11 @@ async fn handle_oidc_start(
   host : String,
   audience : BrowserAudience,
 ) -> Unit {
-  guard request.meth == Get && safe_start_fetch(request) else {
+  guard request.meth == Get &&
+    (
+      safe_start_fetch(request) ||
+      (!config.browser_secure() && missing_fetch_metadata(request))
+    ) else {
     return send_error(connection, 400, "invalid-oidc-start")
   }
   let query = parse_query(request.path) catch {
@@ -210,7 +244,12 @@ async fn handle_oidc_start(
       "Content-Length": "0",
     },
     cookies=[
-      browser_cookie(config.cookie_name(audience), cookie_reference, 600L),
+      browser_cookie(
+        config.cookie_name(audience),
+        cookie_reference,
+        600L,
+        secure=config.browser_secure(),
+      ),
     ],
   )
   connection.end_response()
@@ -225,7 +264,11 @@ async fn handle_oidc_callback(
   host : String,
   audience : BrowserAudience,
 ) -> Unit {
-  guard request.meth == Get && safe_callback_fetch(request) else {
+  guard request.meth == Get &&
+    (
+      safe_callback_fetch(request) ||
+      (!config.browser_secure() && missing_fetch_metadata(request))
+    ) else {
     return send_error(connection, 400, "invalid-oidc-callback")
   }
   let query = parse_query(request.path) catch {
@@ -272,6 +315,7 @@ async fn handle_oidc_callback(
         config.cookie_name(audience),
         cookie_reference,
         config.session_absolute_ms / 1000L,
+        secure=config.browser_secure(),
       ),
     ],
   )
@@ -289,7 +333,10 @@ async fn handle_browser_session(
 ) -> Unit {
   guard request.meth == Get &&
     request.path == "/auth/session" &&
-    safe_session_fetch(request) &&
+    (
+      safe_session_fetch(request) ||
+      (!config.browser_secure() && http_same_origin(request, host))
+    ) &&
     browser_state(store, config, request, audience)
     is Some((current_id, current)) else {
     return send_error(connection, 401, "browser-session-required")
@@ -334,6 +381,7 @@ async fn handle_browser_session(
         config.cookie_name(audience),
         cookie_reference,
         (refreshed.expires_unix_ms - now) / 1000L,
+        secure=config.browser_secure(),
       ),
     ],
   )
@@ -351,7 +399,7 @@ async fn handle_logout(
 ) -> Unit {
   guard request.meth == Post &&
     request.path == "/auth/logout" &&
-    exact_origin(request, host) &&
+    exact_origin(request, host, secure=config.browser_secure()) &&
     browser_state(store, config, request, audience)
     is Some((session_id, session)) &&
     session.kind == "session" &&
@@ -370,7 +418,10 @@ async fn handle_logout(
   let status = revoke_controller_session(config, session.bearer) catch {
     _ => 502
   }
-  let cookie = expired_cookie(config.cookie_name(audience))
+  let cookie = expired_cookie(
+    config.cookie_name(audience),
+    secure=config.browser_secure(),
+  )
   if status == 200 || status == 401 {
     connection.send_response(
       204,
@@ -509,7 +560,10 @@ async fn handle_api_proxy(
 ) -> Unit {
   guard canonical_api_path(request.path) is Some(path) &&
     (audience == Operator || enterprise_request_allowed(request, path)) &&
-    header(request.headers, "Sec-Fetch-Site") == Some("same-origin") &&
+    (
+      header(request.headers, "Sec-Fetch-Site") == Some("same-origin") ||
+      (!config.browser_secure() && http_same_origin(request, host))
+    ) &&
     browser_state(store, config, request, audience)
     is Some((session_id, session)) &&
     session.kind == "session" &&
@@ -534,6 +588,7 @@ async fn handle_api_proxy(
       config.cookie_name(audience),
       cookie_reference,
       (session.expires_unix_ms - @async.now()) / 1000L,
+      secure=config.browser_secure(),
     ),
   )
 }

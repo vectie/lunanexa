@@ -18,7 +18,7 @@ async fn WorkspaceHost::kubernetes(
     }
     let client = @http.Client(
       self.config.kubernetes_origin,
-      trust=@tls.TrustedRoot::CustomPemFile(self.config.kubernetes_ca_file),
+      trust=CustomPemFile(self.config.kubernetes_ca_file),
     )
     defer client.close()
     client.request(verb, path, extra_headers={

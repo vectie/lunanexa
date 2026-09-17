@@ -121,6 +121,33 @@ test "canary promotion and rollback are deterministic and durable" {
 }
 
 ///|
+async test "failed registry persistence never publishes a model and permits retry" {
+  let directory = @fs.tmpdir(prefix="lunanexa-registry-write-failure-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = directory + "/registry.json"
+  let durable = @registry.FileRegistry::open(path)
+  let before = durable.snapshot()
+  let disk = @fs.read_file(path).text()
+  @fs.mkdir(path + ".next")
+  try durable.register_model(candidate("v1")) catch {
+    _ => ()
+  } noraise {
+    _ => fail("expected persistence failure")
+  }
+  @async.with_timeout(1000, () => {
+    assert_eq(durable.snapshot(), before)
+    assert_eq(@fs.read_file(path).text(), disk)
+    assert_eq(@registry.FileRegistry::open(path).snapshot(), before)
+  })
+  @fs.rmdir(path + ".next")
+  @async.with_timeout(1000, () => {
+    durable.register_model(candidate("v1"))
+    assert_eq(durable.snapshot().models, [candidate("v1")])
+    assert_eq(@registry.FileRegistry::open(path).snapshot(), durable.snapshot())
+  })
+}
+
+///|
 async test "file registry survives restart with rollback history" {
   let directory = @fs.tmpdir(prefix="lunanexa-registry-test-")
   let path = "\{directory}/registry.json"
@@ -153,7 +180,40 @@ async test "file registry survives restart with rollback history" {
       benchmark: benchmark(version),
       evidence_ref: "evidence:eval:\{version}",
     })
+    let before_approval = durable.snapshot()
+    @fs.mkdir(path + ".next")
+    try durable.approve("model.text", version, 2L) catch {
+      _ => ()
+    } noraise {
+      _ => fail("approval succeeded despite failed persistence")
+    }
+    @async.with_timeout(1000, () => {
+      assert_eq(durable.snapshot(), before_approval)
+      assert_eq(@registry.FileRegistry::open(path).snapshot(), before_approval)
+    })
+    @fs.rmdir(path + ".next")
     ignore(durable.approve("model.text", version, 2L))
+    let before_promotion = durable.snapshot()
+    @fs.mkdir(path + ".next")
+    try
+      durable.promote(
+        "text.default",
+        "model.text",
+        version,
+        Stable,
+        "operator",
+        3L,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("promotion succeeded despite failed persistence")
+    }
+    @async.with_timeout(1000, () => {
+      assert_eq(durable.snapshot(), before_promotion)
+      assert_eq(@registry.FileRegistry::open(path).snapshot(), before_promotion)
+    })
+    @fs.rmdir(path + ".next")
     ignore(
       durable.promote(
         "text.default",

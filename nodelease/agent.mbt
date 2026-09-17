@@ -156,13 +156,13 @@ pub fn LeaseAgentGuard::tick(
   now_unix_ms : Int64,
 ) -> LeaseAgentAction {
   guard self.snapshot.lease is Some(lease) else {
-    self.snapshot = { ..self.snapshot, state: Idle }
+    self.snapshot = { ..self.snapshot, state: Idle, }
     return NoAction
   }
   if self.snapshot.state == QuarantinedAgent {
     match lease.state {
       RevokingAccess => {
-        self.snapshot = { ..self.snapshot, state: RevocationPending }
+        self.snapshot = { ..self.snapshot, state: RevocationPending, }
         return RevokeAccess(
           lease_id=lease.intent.lease_id,
           username=lease.intent.unix_username,
@@ -170,7 +170,7 @@ pub fn LeaseAgentGuard::tick(
         )
       }
       Sanitizing => {
-        self.snapshot = { ..self.snapshot, state: SanitizationPending }
+        self.snapshot = { ..self.snapshot, state: SanitizationPending, }
         return SanitizeLease(
           lease_id=lease.intent.lease_id,
           username=lease.intent.unix_username,
@@ -187,7 +187,7 @@ pub fn LeaseAgentGuard::tick(
     }
   }
   if lease.state == Quarantined {
-    self.snapshot = { ..self.snapshot, state: QuarantinedAgent }
+    self.snapshot = { ..self.snapshot, state: QuarantinedAgent, }
     return QuarantineNode(
       lease_id=lease.intent.lease_id,
       username=lease.intent.unix_username,
@@ -198,7 +198,7 @@ pub fn LeaseAgentGuard::tick(
   match self.snapshot.state {
     Idle | ProvisionPending if !expired &&
       (lease.state == Provisioning || lease.state == Active) => {
-      self.snapshot = { ..self.snapshot, state: ProvisionPending }
+      self.snapshot = { ..self.snapshot, state: ProvisionPending, }
       ProvisionAccess(
         lease_id=lease.intent.lease_id,
         username=lease.intent.unix_username,
@@ -212,7 +212,7 @@ pub fn LeaseAgentGuard::tick(
       lease.state == Draining ||
       lease.state == RevokingAccess ||
       lease.state == Sanitizing => {
-      self.snapshot = { ..self.snapshot, state: RevocationPending }
+      self.snapshot = { ..self.snapshot, state: RevocationPending, }
       RevokeAccess(
         lease_id=lease.intent.lease_id,
         username=lease.intent.unix_username,
@@ -226,7 +226,7 @@ pub fn LeaseAgentGuard::tick(
       lease.state == Sanitizing ||
       lease.state == Completed ||
       lease.state == Cancelled => {
-      self.snapshot = { ..self.snapshot, state: RevocationPending }
+      self.snapshot = { ..self.snapshot, state: RevocationPending, }
       RevokeAccess(
         lease_id=lease.intent.lease_id,
         username=lease.intent.unix_username,
@@ -247,7 +247,7 @@ pub fn LeaseAgentGuard::tick(
         generation=lease.generation,
       )
     SanitizationPending if lease.state == Expiring || lease.state == Draining => {
-      self.snapshot = { ..self.snapshot, state: RevocationPending }
+      self.snapshot = { ..self.snapshot, state: RevocationPending, }
       RevokeAccess(
         lease_id=lease.intent.lease_id,
         username=lease.intent.unix_username,
@@ -359,7 +359,7 @@ pub fn LeaseAgentGuard::record_success(
     QuarantineNode(..) => QuarantinedAgent
     NoAction => self.snapshot.state
   }
-  self.snapshot = { ..self.snapshot, state: next, last_receipt: receipt }
+  self.snapshot = { ..self.snapshot, state: next, last_receipt: receipt, }
 }
 
 ///|

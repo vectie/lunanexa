@@ -1,5 +1,83 @@
 # Platform acceptance follow-up
 
+## Completed-job exit evidence correction — local and original live task passed
+
+The completed-job cleanup defect identified below is corrected in source.
+Verified original-instance termination can now attach after execution completed,
+preserving its original terminal timestamp, outcome and usage receipt. An
+already requested cancellation/expiry finishes without calling the dead or
+replacement provider. Completed artifacts whose runtime has verifiably exited
+are no longer advertised as downloadable. Tenant authorization, original
+instance/context matching and durable evidence checks are unchanged.
+
+Native media jobs/runtime strict tests passed 30/30, including completed,
+pending-cancel and expiry cases, persistence failure, replacement rejection,
+snapshot restoration, duplicate cleanup and no provider calls or duplicate
+settlement. Full native functional tests passed 822/822 with warnings 92/20
+disabled. This is not a strict whole-repository release claim.
+
+Compatibility caveat: older readers reject a Completed job carrying termination
+evidence. Do not downgrade only the controller binary after such records have
+been persisted; use a compatible reader or reviewed state recovery. Before the
+isolated acceptance rollout, a PostgreSQL custom-format backup was written to
+`/tmp/completed-exit-before-20260916.dump` inside the acceptance database Pod,
+restricted to mode 0600, and its table of contents was readable with pg_restore.
+This is not a restore drill. The previous controller binary will also be retained.
+The Linux candidate completed and was installed only in the isolated acceptance
+controller, retaining its PostgreSQL and configuration. Binary SHA256:
+`7535110acdcc56f54405ad416d459e37e25da929f27f6da15c2f048c4e7b23dc`.
+Its user service was active with zero restarts and health passed. Production
+controller, node image, identity/TLS configuration and model runtimes were not
+updated by this rollout.
+
+The original failed job
+`video-b29fdd1909749060ab24d4cb3775d36036aed69d5f351f67857e314e17899433`
+then passed two authenticated owner DELETE calls and retained exactly one usage
+observation. No replacement task was submitted. Independent read-only SQL
+verified Cancelling → Cancelled and termination-reference absent → present,
+while terminal_unix_ms remained `1789533646461` and the existing usage receipt
+digest remained `c93e41299726dcdfbe0ace2ab16c473a`. The normal reconciler bound
+the already authenticated original-instance evidence; no manual database
+transition or fabricated receipt was used. New test handoff/session cleanup
+completed and the verifier exited zero.
+
+The full native strict gate was repeated and still reports 63 pre-existing
+diagnostics. The older r12 missing-evidence case is not resolved by this change;
+an absent original report cannot be reconstructed from Pod disappearance.
+
+## Natural runtime expiry during packet loss — passed; completed-job cleanup gap found
+
+The first 90-second lease attempt did not exercise in-flight expiry: background
+polling completed job
+`video-b29fdd1909749060ab24d4cb3775d36036aed69d5f351f67857e314e17899433`
+before the runtime disappeared. The expected per-job termination evidence never
+appeared, and deferred customer DELETE exhausted bounded retries. This is not
+a passing cleanup result. Read-only database inspection found Cancelling with
+execution_terminal=true, an existing usage receipt and no termination reference.
+The deployment was stopped and no runtime Pod remained; the historical job was
+not edited to conceal the failure.
+
+Source diagnosis: `VideoRuntime::refresh_internal` only attaches verified
+instance termination to nonterminal jobs; `acknowledge_instance_termination`
+also rejects already-terminal jobs. A later cancellation of a completed job can
+therefore still depend on a provider that naturally expired. This completed-job
+cleanup lifecycle requires a correction and regression/live revalidation; do
+not loosen original-instance evidence or fabricate a deletion acknowledgement.
+
+The second campaign held the new provider's TCP path unreachable while its
+90-second assignment expired naturally. Job
+`video-efe7af3fe09d33eca6aa14a960f33a7a0dbd4a30a6914fddbe8cecf68443bd7c`
+remained nonterminal during the proved packet outage, then received persisted
+original-instance termination evidence and exactly one quantity-one usage
+observation. The authenticated owner deleted it twice idempotently after
+execution authority ended. The managed-runtime namespace was empty before the
+runner's final explicit deployment cleanup, proving that manual stop did not
+cause the observed expiry. Harness exit was zero; its exact DROP rule was
+removed with absence verification and had a 180-second UTC safety cutoff.
+Scoped sessions/handoffs were revoked. No model inference or hardware identity
+change occurred. This passes **in-flight lease expiry during provider outage**,
+not the separate completed-job cleanup failure above.
+
 ## Cancellation during provider packet loss — passed 2026-09-16
 
 The `--partition-cancel` follow-up used a new bounded TEST ONLY deployment and

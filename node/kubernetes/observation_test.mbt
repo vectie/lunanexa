@@ -51,27 +51,12 @@ fn pod(phase? : String = "Running", ready? : Bool = true) -> Json {
 
 ///|
 test "ready requires a running ready container, not just the Pod phase" {
-  assert_eq(@kubernetes.observe_pod(identity(), pod()), @contracts.Ready)
-  assert_eq(
-    @kubernetes.observe_pod(identity(), pod(ready=false)),
-    @contracts.Starting,
-  )
-  assert_eq(
-    @kubernetes.observe_pod(identity(), pod(phase="Pending")),
-    @contracts.Starting,
-  )
-  assert_eq(
-    @kubernetes.observe_pod(identity(), pod(phase="Failed")),
-    @contracts.Failed,
-  )
-  assert_eq(
-    @kubernetes.observe_pod(identity(), pod(phase="Succeeded")),
-    @contracts.Failed,
-  )
-  assert_eq(
-    @kubernetes.observe_pod(identity(), pod(phase="Unknown")),
-    @contracts.Degraded,
-  )
+  assert_eq(observe_pod(identity(), pod()), Ready)
+  assert_eq(@kubernetes.observe_pod(identity(), pod(ready=false)), Starting)
+  assert_eq(@kubernetes.observe_pod(identity(), pod(phase="Pending")), Starting)
+  assert_eq(@kubernetes.observe_pod(identity(), pod(phase="Failed")), Failed)
+  assert_eq(@kubernetes.observe_pod(identity(), pod(phase="Succeeded")), Failed)
+  assert_eq(@kubernetes.observe_pod(identity(), pod(phase="Unknown")), Degraded)
 }
 
 ///|
@@ -89,7 +74,7 @@ test "replacement pods and changed assignment bindings are rejected" {
       { ..original, artifact_digest: original.image_digest, },
     ] {
     try @kubernetes.observe_pod(expected, pod()) catch {
-      @kubernetes.IdentityMismatch => ()
+      IdentityMismatch => ()
       _ => fail("wrong identity error")
     } noraise {
       _ => fail("mismatched Pod accepted")
@@ -101,13 +86,13 @@ test "replacement pods and changed assignment bindings are rejected" {
 test "invalid expected identity and malformed observations fail closed" {
   let original = identity()
   try @kubernetes.observe_pod({ ..original, uid: "", }, pod()) catch {
-    @kubernetes.InvalidIdentity => ()
+    InvalidIdentity => ()
     _ => fail("wrong validation error")
   } noraise {
     _ => fail("empty UID accepted")
   }
   try @kubernetes.observe_pod(original, {}) catch {
-    @kubernetes.InvalidObservation => ()
+    InvalidObservation => ()
     _ => fail("wrong observation error")
   } noraise {
     _ => fail("malformed Pod accepted")

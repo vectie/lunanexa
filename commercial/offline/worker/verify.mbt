@@ -147,7 +147,7 @@ fn replace_docx_text_element(
         )
     }
   }
-  { name: element.name, attributes: element.attributes, children }
+  { name: element.name, attributes: element.attributes, children, }
 }
 
 ///|

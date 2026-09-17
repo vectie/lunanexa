@@ -119,7 +119,7 @@ test "startup gates readiness and liveness forces restart" {
   assert_eq(
     @technical.evaluate_probe(
       state,
-      { kind: Readiness, success: true, observed_unix_ms: 101L },
+      { kind: Readiness, success: true, observed_unix_ms: 101L, },
       probe_policy(),
     ),
     Rejected(StartupIncomplete),
@@ -127,14 +127,14 @@ test "startup gates readiness and liveness forces restart" {
   let one = applied_probe(
     @technical.evaluate_probe(
       state,
-      { kind: Startup, success: true, observed_unix_ms: 101L },
+      { kind: Startup, success: true, observed_unix_ms: 101L, },
       probe_policy(),
     ),
   )
   let started = applied_probe(
     @technical.evaluate_probe(
       one,
-      { kind: Startup, success: true, observed_unix_ms: 102L },
+      { kind: Startup, success: true, observed_unix_ms: 102L, },
       probe_policy(),
     ),
   )
@@ -143,14 +143,14 @@ test "startup gates readiness and liveness forces restart" {
   let ready_one = applied_probe(
     @technical.evaluate_probe(
       started,
-      { kind: Readiness, success: true, observed_unix_ms: 103L },
+      { kind: Readiness, success: true, observed_unix_ms: 103L, },
       probe_policy(),
     ),
   )
   let ready = applied_probe(
     @technical.evaluate_probe(
       ready_one,
-      { kind: Readiness, success: true, observed_unix_ms: 104L },
+      { kind: Readiness, success: true, observed_unix_ms: 104L, },
       probe_policy(),
     ),
   )
@@ -158,14 +158,14 @@ test "startup gates readiness and liveness forces restart" {
   let live_one = applied_probe(
     @technical.evaluate_probe(
       ready,
-      { kind: Liveness, success: false, observed_unix_ms: 105L },
+      { kind: Liveness, success: false, observed_unix_ms: 105L, },
       probe_policy(),
     ),
   )
   let dead = applied_probe(
     @technical.evaluate_probe(
       live_one,
-      { kind: Liveness, success: false, observed_unix_ms: 106L },
+      { kind: Liveness, success: false, observed_unix_ms: 106L, },
       probe_policy(),
     ),
   )

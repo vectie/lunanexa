@@ -94,7 +94,7 @@ test "runtime secret configuration cannot override node authority, device select
         1000L,
       )
     catch {
-      @kubernetes.InvalidResource => ()
+      InvalidResource => ()
       _ => fail("wrong reserved environment rejection")
     } noraise {
       _ => fail("reserved environment override accepted")
@@ -122,7 +122,7 @@ test "runtime secret references reject unpinned images cross-purpose names and d
         1000L,
       )
     catch {
-      @kubernetes.InvalidResource => ()
+      InvalidResource => ()
       _ => fail("wrong reference rejection")
     } noraise {
       _ => fail("unsafe secret reference accepted")
@@ -189,7 +189,7 @@ async test "changed secret references preserve journal cleanup and require a new
       5L,
       @async.now(),
     )
-    if result.state == @contracts.Ready {
+    if result.state == Ready {
       ready = true
     }
   }

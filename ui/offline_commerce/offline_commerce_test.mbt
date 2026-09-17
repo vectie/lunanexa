@@ -184,7 +184,7 @@ test "empty and corrective states tell users what happens next" {
   let corrective = @offline_commerce.render({
     ..@offline_commerce.default_state(English, CustomerCommerce),
     orders: [offline_order(NeedsCorrection)],
-    artifacts: [{ ..evidence(), review_state: ReviewRejected }],
+    artifacts: [{ ..evidence(), review_state: ReviewRejected, }],
   })
   assert_true(corrective.contains("Correction required"))
   assert_true(corrective.contains("Replacement required"))

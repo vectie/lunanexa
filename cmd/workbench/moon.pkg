@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/ui/browser_transport",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/settings",
   "vectie/lunanexa/workspace",

@@ -152,7 +152,7 @@ test "connection transitions are deterministic and terminal revocation is final"
 test "unsafe identifiers, duplicate capabilities, and lease mismatch fail closed" {
   let lease = active_lease()
   try
-    @workspace.validate_workspace_lease({ ..lease, subject_ref: "../../user" })
+    @workspace.validate_workspace_lease({ ..lease, subject_ref: "../../user", })
   catch {
     InvalidIdentifier("subject_ref") => ()
     error => fail("unexpected error: \{Repr(error)}")
@@ -162,7 +162,7 @@ test "unsafe identifiers, duplicate capabilities, and lease mismatch fail closed
   try
     @workspace.validate_workspace_lease({
       ..lease,
-      limits: { ..lease.limits, capabilities: [text_limit(), text_limit()] },
+      limits: { ..lease.limits, capabilities: [text_limit(), text_limit()], },
     })
   catch {
     DuplicateCapability(TextGenerate) => ()
@@ -172,7 +172,7 @@ test "unsafe identifiers, duplicate capabilities, and lease mismatch fail closed
   }
   try
     @workspace.validate_session_against_lease(
-      { ..web_session(), lease_id: "lease-other" },
+      { ..web_session(), lease_id: "lease-other", },
       lease,
     )
   catch {

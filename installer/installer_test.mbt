@@ -16,10 +16,10 @@ fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
     management_node: "management-01",
     management_host: "10.0.0.10",
     compute_nodes: [
-      { node_name: "dgx-spark-01", ssh_host: "10.0.0.21" },
-      { node_name: "dgx-spark-02", ssh_host: "10.0.0.22" },
-      { node_name: "dgx-spark-03", ssh_host: "10.0.0.23" },
-      { node_name: "dgx-spark-04", ssh_host: "10.0.0.24" },
+      { node_name: "dgx-spark-01", ssh_host: "10.0.0.21", },
+      { node_name: "dgx-spark-02", ssh_host: "10.0.0.22", },
+      { node_name: "dgx-spark-03", ssh_host: "10.0.0.23", },
+      { node_name: "dgx-spark-04", ssh_host: "10.0.0.24", },
     ],
     cluster_namespace: "lunanexa",
     kubeconfig_path: "/Users/operator/.kube/config",
@@ -75,7 +75,7 @@ test "compute expansion accepts a selected subset" {
     ..valid_request(apply=true),
     deployment_target: ComputeExpansion,
     confirmation: @installer.compute_confirmation,
-    compute_nodes: [{ node_name: "compute-01", ssh_host: "10.0.0.21" }],
+    compute_nodes: [{ node_name: "compute-01", ssh_host: "10.0.0.21", }],
   })
 }
 
@@ -87,7 +87,7 @@ test "compute expansion does not require management host identity" {
     confirmation: @installer.compute_confirmation,
     management_node: "",
     management_host: "",
-    compute_nodes: [{ node_name: "compute-01", ssh_host: "10.0.0.21" }],
+    compute_nodes: [{ node_name: "compute-01", ssh_host: "10.0.0.21", }],
     management_secret_manifest: "",
   })
 }
@@ -120,10 +120,10 @@ test "selected inventory rejects duplicate and unsafe compute targets" {
     @installer.validate_request({
       ..valid_request(),
       compute_nodes: [
-        { node_name: "dgx-spark-01", ssh_host: "10.0.0.21" },
-        { node_name: "dgx-spark-01", ssh_host: "10.0.0.22" },
-        { node_name: "dgx-spark-03", ssh_host: "$(touch /tmp/bad)" },
-        { node_name: "dgx-spark-04", ssh_host: "10.0.0.24" },
+        { node_name: "dgx-spark-01", ssh_host: "10.0.0.21", },
+        { node_name: "dgx-spark-01", ssh_host: "10.0.0.22", },
+        { node_name: "dgx-spark-03", ssh_host: "$(touch /tmp/bad)", },
+        { node_name: "dgx-spark-04", ssh_host: "10.0.0.24", },
       ],
     })
   catch {
@@ -139,14 +139,14 @@ test "combined deployment accepts non-four inventory and explicit co-location" {
     ..valid_request(),
     management_node: "lab-01",
     management_host: "lab-01.internal",
-    compute_nodes: [{ node_name: "lab-01", ssh_host: "lab-01.internal" }],
+    compute_nodes: [{ node_name: "lab-01", ssh_host: "lab-01.internal", }],
   })
   @installer.validate_request({
     ..valid_request(),
     compute_nodes: [
-      { node_name: "compute-a", ssh_host: "10.0.0.21" },
-      { node_name: "compute-b", ssh_host: "10.0.0.22" },
-      { node_name: "compute-c", ssh_host: "10.0.0.23" },
+      { node_name: "compute-a", ssh_host: "10.0.0.21", },
+      { node_name: "compute-b", ssh_host: "10.0.0.22", },
+      { node_name: "compute-c", ssh_host: "10.0.0.23", },
     ],
   })
 }

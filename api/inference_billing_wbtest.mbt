@@ -121,6 +121,31 @@ async test "durable inference receipt is rated exactly once" {
   assert_eq(snapshot.ledger_entries[0].amount.minor_units, 50L)
   database.close()
 
+  // A disconnected persistence handle must not publish a new observation or
+  // charge in memory, and repeated failures must not strand the mutex.
+  let before_failure = commercial.durable_snapshot().to_json().stringify()
+  let failed_request = {
+    ..request,
+    workload_id: "billing-write-failure",
+    idempotency_key: "billing-write-failure",
+  }
+  let failed_response = { ..response, workload_id: failed_request.workload_id, }
+  for _ in 0..<2 {
+    try
+      service.record_inference_charge(
+        failed_request, failed_response, authority,
+      )
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("closed database must reject charge persistence")
+    }
+    assert_eq(
+      commercial.durable_snapshot().to_json().stringify(),
+      before_failure,
+    )
+  }
+
   // Reconstruct the service from a new database connection, as startup does.
   // Reusing the original in-memory commercial store would not test recovery.
   let recovered_database = @database.PostgresDatabase::open(url)
