@@ -211,8 +211,11 @@ fn legacy_file(value : Json) -> ModelScopeFile raise ModelSourceError {
   } noraise {
     decoded => decoded
   }
+  // `Revision` is informational here: the tree pins the revision every file is
+  // fetched at, and some repositories (MiniMax/MiniMax-H3) leave it empty on
+  // every entry. A non-empty value still has to be well-formed.
   if !valid_repository_path(path) ||
-    !valid_revision(revision) ||
+    (revision != "" && !valid_revision(revision)) ||
     size < 0L ||
     sha256.length() != 64 ||
     !sha256.all(character => character.is_ascii_hexdigit()) {
