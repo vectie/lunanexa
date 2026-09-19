@@ -80,7 +80,7 @@ test "console quick-deployment fuzz matches the public intent boundary" {
   let base = @ui.demo_state()
   for length in 0..<=140 {
     let candidate = quick_deployment_intent(
-      { ..base, quick_deployment_id: "a".repeat(length), },
+      { ..base, quick_deployment_id: "a".repeat(length) },
       length.to_int64(),
     )
     assert_eq(candidate is Some(_), length > 0 && length <= 128)
@@ -91,12 +91,12 @@ test "console quick-deployment fuzz matches the public intent boundary" {
       "服务",
     ] {
     assert_true(
-      quick_deployment_intent({ ..base, quick_deployment_id: hostile, }, 1L)
+      quick_deployment_intent({ ..base, quick_deployment_id: hostile }, 1L)
       is None,
     )
   }
   guard quick_deployment_intent(
-      { ..base, quick_deployment_id: "service-1", },
+      { ..base, quick_deployment_id: "service-1" },
       1L,
     )
     is Some(intent) else {
@@ -164,6 +164,7 @@ test "exclusive machine termination confirmation binds node user and generation"
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (prepared, _) = update_live(
@@ -217,6 +218,7 @@ test "locale switch is local and preserves operational session state" {
     next_directive_generation: 42L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let switched = switch_app_locale(model, ChineseSimplified)
   assert_eq(switched.console.locale, ChineseSimplified)
@@ -265,7 +267,7 @@ test "loaded controller state keeps the selected route and locale" {
     ..@ui.default_state(),
     locale: English,
     route: Overview,
-    overview: { ..@ui.default_state().overview, total_nodes: 2, },
+    overview: { ..@ui.default_state().overview, total_nodes: 2 },
   }
   let merged = merge_loaded_console(current, loaded)
   assert_eq(merged.locale, ChineseSimplified)
@@ -300,6 +302,7 @@ test "model source search is edited independently from generic operations" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (edited, _) = update_live(
@@ -378,6 +381,7 @@ test "verified S3 model adoption is validated, stateful, and route-bound" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (opened, _) = update_live(
@@ -438,10 +442,11 @@ test "changing an operator credential clears authenticated UI authority" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
-    console: { ..@ui.default_state(), operator_authenticated: true, },
+    console: { ..@ui.default_state(), operator_authenticated: true },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (changed, _) = update_live(
@@ -519,6 +524,7 @@ test "Simplified Chinese connection drawer localizes security copy" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -547,10 +553,11 @@ test "unauthenticated operator sees login gate instead of console shell" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
-    console: { ..@ui.default_state(), locale: English, },
+    console: { ..@ui.default_state(), locale: English },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -582,6 +589,7 @@ test "public plain HTTP renders login landing but blocks credential entry" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -615,6 +623,7 @@ test "remote HTTPS login offers OIDC and never renders static token fallback" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -643,6 +652,7 @@ test "one account session supplies operator and audit authority in memory" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (pasted, _) = update_live(
@@ -686,6 +696,7 @@ test "logout clears authorities and loaded operator state" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (logged_out, _) = update_live(model, Logout, emit)
@@ -714,6 +725,7 @@ test "demo mode presents a read-only cluster snapshot" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -734,10 +746,11 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: Leases, },
+    console: { ..@ui.demo_state(), route: Leases },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let lease = model.console.exclusive_node_leases[0]
@@ -774,10 +787,11 @@ test "demo mode previews every destructive node operation without mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: Nodes, },
+    console: { ..@ui.demo_state(), route: Nodes },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let node_id = model.console.nodes[0].node_id
@@ -807,10 +821,11 @@ test "demo mode exercises one-click preflight without controller mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: Catalog, },
+    console: { ..@ui.demo_state(), route: Catalog },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (named, _) = update(
@@ -855,6 +870,7 @@ test "navigation clears stale operation notices and confirmation" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (next, _) = update(model, Console(Navigate(Catalog)), emit)
@@ -875,10 +891,11 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
-    console: { ..@ui.demo_state(), route: ContractDocuments, },
+    console: { ..@ui.demo_state(), route: ContractDocuments },
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -964,6 +981,7 @@ test "contract approval and governance controls route through the operator shell
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (reviewing, _) = update_live(
@@ -1058,6 +1076,7 @@ test "model import polling is generation fenced and logout invalidates it" {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 7L,
+    cluster_poll_generation: 7L,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (stale, _) = update_live(
@@ -1074,6 +1093,123 @@ test "model import polling is generation fenced and logout invalidates it" {
   assert_eq(current.console.model_imports[0].state, Verified)
   let (logged_out, _) = update_live(model, Logout, emit)
   assert_eq(logged_out.model_import_poll_generation, 8L)
+  assert_eq(logged_out.cluster_poll_generation, 8L)
   assert_eq(logged_out.credential, "")
   assert_false(logged_out.console.operator_authenticated)
+}
+
+///|
+fn cluster_poll_test_row(
+  node_id : String,
+  state : @contracts.NodeState,
+  lease_holder : String,
+) -> @ui.NodeRow {
+  {
+    node_id,
+    state,
+    architecture: "dgx-spark",
+    total_memory_mib: 131072,
+    free_memory_mib: 65536,
+    used_memory_mib: 65536,
+    utilization_per_mille: 500,
+    temperature_celsius: 41,
+    power_watts: 320,
+    workloads: 1,
+    lease_holder,
+    active_assignment: "deployment-1",
+    last_seen: "Just now",
+  }
+}
+
+///|
+test "cluster poll refreshes nodes only for the live generation" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "operator-token",
+    audit_credential: "audit-token",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Overview,
+      nodes: [cluster_poll_test_row("node-1", Active, "org-1 · tenant1")],
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 3L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let polled = [
+    cluster_poll_test_row("node-1", Unreachable, "Unassigned"),
+    cluster_poll_test_row("node-2", Active, "Unassigned"),
+  ]
+  let (stale, _) = update_live(model, Outcome(ClusterPolled(2L, polled)), emit)
+  assert_true(stale == model)
+  let (current, _) = update_live(
+    model,
+    Outcome(ClusterPolled(3L, polled)),
+    emit,
+  )
+  assert_eq(current.console.nodes.length(), 2)
+  assert_eq(current.console.nodes[0].state, Unreachable)
+  assert_eq(current.console.nodes[1].node_id, "node-2")
+  assert_eq(current.console.overview.active_nodes, 1)
+  assert_eq(current.console.overview.total_nodes, 2)
+}
+
+///|
+test "cluster poll failure retries quietly and stops on authorization loss" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "operator-token",
+    audit_credential: "audit-token",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Overview,
+    },
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 5L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (retried, _) = update_live(
+    model,
+    Outcome(ClusterPollFailed(5L, false)),
+    emit,
+  )
+  assert_true(retried == model)
+  assert_eq(retried.console.error_message, None)
+  let (unauthorized, _) = update_live(
+    model,
+    Outcome(ClusterPollFailed(5L, true)),
+    emit,
+  )
+  assert_true(unauthorized == model)
+  assert_eq(unauthorized.console.error_message, None)
+  let (stale, _) = update_live(
+    model,
+    Outcome(ClusterPollFailed(4L, false)),
+    emit,
+  )
+  assert_true(stale == model)
+  let (due_stale, _) = update_live(model, ClusterPollDue(4L), emit)
+  assert_true(due_stale == model)
+  let (signed_out, _) = update_live(
+    { ..model, console: { ..model.console, operator_authenticated: false } },
+    ClusterPollDue(5L),
+    emit,
+  )
+  assert_false(signed_out.console.operator_authenticated)
 }
