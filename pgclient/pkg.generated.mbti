@@ -1,0 +1,59 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/pgclient"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/raw_fd",
+  "moonbitlang/core/debug",
+  "vectie/lunanexa/internal/postgres",
+}
+
+// Values
+
+// Errors
+pub(all) suberror PgError {
+  ConnectionUnavailable(String)
+  QueryRejected(String)
+  InvalidArgument(String)
+  Timeout
+  Closed
+} derive(Eq, @debug.Debug)
+
+// Types and methods
+pub struct PgConnection {
+  pool : PgPool
+  index : Int
+  mut released : Bool
+}
+pub async fn PgConnection::execute(Self, String, parameters? : Array[String?]) -> PgResult
+pub fn PgConnection::release(Self) -> Unit
+pub async fn PgConnection::transaction(Self, async (Self) -> Unit) -> Unit
+
+pub struct PgPool {
+  driver : @postgres.Pool
+  wakes : Array[@raw_fd.RawFd]
+  leases : Array[@async.Mutex]
+  mut next_worker : Int
+  mut closed : Bool
+}
+pub async fn PgPool::acquire(Self) -> PgConnection
+pub fn PgPool::close(Self) -> Unit
+pub async fn PgPool::connect(String, workers? : Int) -> Self
+pub async fn PgPool::execute(Self, String, parameters? : Array[String?]) -> PgResult
+pub fn PgPool::is_connected(Self, Int) -> Bool
+pub async fn PgPool::with_connection(Self, async (PgConnection) -> Unit) -> Unit
+pub fn PgPool::worker_count(Self) -> Int
+
+pub struct PgResult {
+  handle : @postgres.QueryResult
+}
+pub fn PgResult::affected_rows(Self) -> Int64
+pub fn PgResult::column(Self, index? : Int) -> Array[String]
+pub fn PgResult::column_count(Self) -> Int
+pub fn PgResult::is_true(Self) -> Bool
+pub fn PgResult::row_count(Self) -> Int
+pub fn PgResult::value(Self, Int, Int) -> String?
+
+// Type aliases
+
+// Traits

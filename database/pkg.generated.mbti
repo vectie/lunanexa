@@ -5,6 +5,7 @@ import {
   "moonbitlang/async",
   "moonbitlang/core/debug",
   "vectie/lunanexa/internal/postgres",
+  "vectie/lunanexa/pgclient",
   "vectie/lunanexa/portal",
   "vectie/lunanexa/workspace",
 }
@@ -25,16 +26,28 @@ pub(all) suberror DatabaseError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub struct PgOperation {
+  connection : @pgclient.PgConnection
+  mut failed : Bool
+}
+
 pub struct PostgresDatabase {
   connection : @postgres.Connection
   mutex : @async.Mutex
+  url : String
+  mut work : @pgclient.PgPool?
+  mut leader : @pgclient.PgPool?
 }
+pub async fn PostgresDatabase::append_operational_event(Self, String, Int64, String) -> Unit
 pub fn PostgresDatabase::close(Self) -> Unit
 pub async fn PostgresDatabase::controller_leadership_is_current(Self, String, Int64) -> Bool
+pub async fn PostgresDatabase::load_recent_operational_events(Self, Int) -> Array[String]
 pub async fn PostgresDatabase::load_snapshot(Self, String, String) -> String?
 pub fn PostgresDatabase::open(String) -> Self raise DatabaseError
+pub async fn PostgresDatabase::operational_event_count(Self) -> Int64
 pub fn PostgresDatabase::ping(Self) -> Bool
 pub fn PostgresDatabase::projection_count(Self, String) -> Int64 raise DatabaseError
+pub async fn PostgresDatabase::prune_operational_events(Self, Int) -> Unit
 pub async fn PostgresDatabase::save_opaque_snapshot(Self, String, String, String) -> Unit
 pub async fn PostgresDatabase::save_opaque_snapshots(Self, Array[(String, String, String)]) -> Unit
 pub async fn PostgresDatabase::save_portal_snapshot(Self, @portal.PortalSnapshot) -> Unit
