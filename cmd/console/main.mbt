@@ -4160,9 +4160,7 @@ fn update_live(
         next.console.route,
         emit,
       )
-      (
-        scheduled,
-        @rabbita.batch([
+      let commands = @rabbita.batch([
           if model_imports_active(scheduled.console.model_imports) {
             model_import_poll_delay_command(generation, emit)
           } else {
@@ -4174,8 +4172,8 @@ fn update_live(
             cluster_poll_delay_command(cluster_generation, emit)
           },
           deferred,
-        ]),
-      )
+        ])
+      (scheduled, commands)
     }
     Outcome(LoadFailed(dispatched_locale, message)) =>
       (
@@ -7952,10 +7950,12 @@ fn main {
   apply_console_locale(locale)
   let base_model : AppModel = {
     endpoint: configured_endpoint(),
-    credential: if open_mode {
-      "deployment-open"
-    } else {
-      ""
+    // The login form starts already filled: the credential the deployment
+    // publishes for this origin, or the marker its gateway translates for an
+    // open deployment. The operator only has to confirm.
+    credential: match deployment_operator_credential() {
+      value if value != "" => value
+      _ => if open_mode { "deployment-open" } else { "" }
     },
     audit_credential: "",
     csrf_token: "",
