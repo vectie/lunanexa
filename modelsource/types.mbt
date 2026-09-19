@@ -2,6 +2,7 @@
 pub(all) enum ImportState {
   Queued
   Downloading
+  Verifying
   Verified
   Failed
   Cancelled
@@ -56,6 +57,7 @@ pub(all) struct ImportOperation {
   manifest_digest : String
   artifact_uri : String
   license : String
+  local_directory : String
   error_code : String
   cancel_requested : Bool
   created_unix_ms : Int64
@@ -140,6 +142,69 @@ pub fn valid_repository_path(value : String) -> Bool {
     segment != ".." &&
     segment.length() <= 180
   })
+}
+
+///|
+/// A directory the operator already populated inside the managed model store.
+/// The value is store-root relative, so it can never escape the store.
+pub fn valid_local_directory(value : String) -> Bool {
+  value.length() >= 1 &&
+  value.length() <= 180 &&
+  !value.has_prefix("/") &&
+  !value.has_suffix("/") &&
+  !value.contains("\\") &&
+  !value.contains("..") &&
+  !value.contains("//") &&
+  !value.contains_char('\n') &&
+  !value.contains_char('\r') &&
+  !value.contains_char(' ') &&
+  value
+  .split("/")
+  .all(segment => {
+    segment != "" &&
+    segment != "." &&
+    segment != ".." &&
+    segment.length() <= 90 &&
+    segment.all(character => {
+      character.is_ascii_alphabetic() ||
+      character.is_ascii_digit() ||
+      character == '-' ||
+      character == '_' ||
+      character == '.'
+    })
+  })
+}
+
+///|
+/// One entry of the managed model store listing the console scans. `bytes` is
+/// an `Int64`, and `Int64` crosses this API as a JSON string everywhere else,
+/// so it is emitted as a string rather than a bare number: a console decoding
+/// it then never has to guess, and a bare number would silently break every
+/// operator action on the Models page.
+pub fn local_directory_entry(
+  directory : String,
+  files : Int,
+  bytes : Int64,
+  registered : Bool,
+) -> Json raise ModelSourceError {
+  if !valid_local_directory(directory) || files < 0 || bytes < 0L {
+    raise InvalidRepositoryPath
+  }
+  Json::object({
+    "directory": Json::string(directory),
+    "files": Json::number(files.to_double()),
+    "bytes": Json::string(bytes.to_string()),
+    "registered": Json::boolean(registered),
+  })
+}
+
+///| The one artifact-URI form LunaNexa serves from its own managed store: the
+/// path segment is the key inside `LUNANEXA_MODEL_STORE_ROOT`.
+pub fn local_artifact_uri(directory : String) -> String raise ModelSourceError {
+  if !valid_local_directory(directory) {
+    raise InvalidRepositoryPath
+  }
+  "modelstore://\{directory}"
 }
 
 ///|

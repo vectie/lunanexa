@@ -15,9 +15,15 @@ pub fn deployment_transition_allowed(DeploymentState, DeploymentState) -> Bool
 
 pub fn health(String, String) -> HealthResponse
 
+pub let model_store_manifest_name : String
+
+pub let model_store_scheme : String
+
 pub fn model_transition_allowed(ModelState, ModelState) -> Bool
 
 pub fn node_transition_allowed(NodeState, NodeState) -> Bool
+
+pub let source_manifest_schema_version : String
 
 pub fn valid_identifier(String, maximum_length? : Int) -> Bool
 
