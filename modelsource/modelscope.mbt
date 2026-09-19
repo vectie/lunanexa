@@ -221,6 +221,31 @@ fn legacy_file(value : Json) -> ModelScopeFile raise ModelSourceError {
   { path, revision, sha256: sha256.to_lower(), size, lfs, }
 }
 
+///| ModelScope lists directories alongside files in a recursive listing. A
+/// directory carries no content digest, so it is not a file and must be
+/// dropped before anything tries to hash or download it.
+fn decode_tree_files(
+  raw_files : Array[Json],
+) -> Array[ModelScopeFile] raise ModelSourceError {
+  let files : Array[ModelScopeFile] = []
+  let paths : Map[String, Bool] = Map([])
+  for file in raw_files {
+    if file is Object(entry) && entry.get("Type") is Some(String("tree")) {
+      continue
+    }
+    let decoded = legacy_file(file)
+    if paths.contains(decoded.path) {
+      raise InvalidUpstreamResponse
+    }
+    paths[decoded.path] = true
+    files.push(decoded)
+  }
+  if files.length() == 0 {
+    raise InvalidUpstreamResponse
+  }
+  files
+}
+
 ///|
 pub async fn ModelScopeClient::tree(
   self : ModelScopeClient,
@@ -252,16 +277,7 @@ pub async fn ModelScopeClient::tree(
     raw_files.length() <= 10000 else {
     raise InvalidUpstreamResponse
   }
-  let files : Array[ModelScopeFile] = []
-  let paths : Map[String, Bool] = Map([])
-  for file in raw_files {
-    let decoded = legacy_file(file)
-    if paths.contains(decoded.path) {
-      raise InvalidUpstreamResponse
-    }
-    paths[decoded.path] = true
-    files.push(decoded)
-  }
+  let files = decode_tree_files(raw_files)
   let resolved_revision = if short_id == "" { revision } else { short_id }
   { revision: resolved_revision, files, }
 }
