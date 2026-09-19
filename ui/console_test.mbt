@@ -297,6 +297,8 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       minimum_memory_mib: "",
     },
     model_adopted_imports: [],
+    model_local_directories: [],
+    model_local_draft: { directory: "", repository: "", revision: "master", },
     operation_name: "register-model",
     operation_body: "{}",
     quick_deployment_id: "",
@@ -1363,6 +1365,7 @@ test "model import recovery and adoption preserve every safety gate" {
     bytes_total: 2171355326L,
     bytes_completed: 67108864L,
     manifest_digest: "",
+    local_directory: "",
     artifact_uri: "",
     license: "apache-2.0",
     error_code: "upstream-rejected",
@@ -1394,20 +1397,21 @@ test "model import recovery and adoption preserve every safety gate" {
   })
   assert_true(html.contains("upstream-rejected"))
   assert_true(html.contains(">Retry</button>"))
-  let verified_local = {
+  let verified_managed = {
     ..failed,
     state: Verified,
     files_completed: failed.files_total,
     bytes_completed: failed.bytes_total,
     manifest_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    artifact_uri: "modelstore://modelscope/ms-failed-1",
+    local_directory: "qwen3635ba3bfp8",
+    artifact_uri: "modelstore://qwen3635ba3bfp8",
     error_code: "",
   }
   let verified_html = @ui.render({
     ..console_state(Models),
     operator_authenticated: true,
     model_source_results: [candidate],
-    model_imports: [verified_local],
+    model_imports: [verified_managed],
   })
   assert_true(
     verified_html.contains("Checksum passed; four safety gates remain"),
@@ -1420,10 +1424,25 @@ test "model import recovery and adoption preserve every safety gate" {
     verified_html.contains("Pending · Evaluation for this exact digest"),
   )
   assert_true(verified_html.contains("Pending · Explicit operator approval"))
-  assert_true(verified_html.contains("Not ready for registry adoption"))
-  assert_false(verified_html.contains("Adopt as Candidate"))
+  // A revision the control plane serves itself is adoptable, exactly like an
+  // upstream object; it does not bypass any later gate.
+  assert_true(verified_html.contains("Adopt as Candidate"))
+  let unsupported = {
+    ..verified_managed,
+    local_directory: "",
+    artifact_uri: "file:///data/models/qwen3635ba3bfp8",
+  }
+  let unsupported_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [unsupported],
+  })
+  assert_true(unsupported_html.contains("Not ready for registry adoption"))
+  assert_false(unsupported_html.contains("Adopt as Candidate"))
   let verified_s3 = {
-    ..verified_local,
+    ..verified_managed,
+    local_directory: "",
     artifact_uri: "s3://models/modelscope/ms-failed-1",
   }
   let adoptable_html = @ui.render({
@@ -1522,4 +1541,61 @@ test "UI-to-UI operator flow uses contract lifecycle states" {
   assert_eq(workflow.workload_state, Succeeded)
   assert_true(workflow.rerouted)
   assert_eq(workflow.receipts.length(), 12)
+}
+
+///|
+test "a local registration is submittable only with a store directory and an upstream identity" {
+  let directory : @ui.ModelLocalDirectoryRow = {
+    directory: "qwen3635ba3bfp8",
+    files: 57,
+    bytes: 37493018221L,
+    registered: false,
+  }
+  let state = {
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_local_directories: [directory],
+  }
+  let draft : @ui.ModelLocalRegistrationDraft = {
+    directory: "qwen3635ba3bfp8",
+    repository: "Qwen/Qwen3.6-35B-A3B-FP8",
+    revision: "master",
+  }
+  assert_true(@ui.model_local_registration_valid(state, draft))
+  assert_false(
+    @ui.model_local_registration_valid(state, { ..draft, directory: "" }),
+  )
+  assert_false(
+    @ui.model_local_registration_valid(state, {
+      ..draft,
+      directory: "not-offered",
+    }),
+  )
+  assert_false(
+    @ui.model_local_registration_valid(state, {
+      ..draft,
+      repository: "Qwen",
+    }),
+  )
+  assert_false(
+    @ui.model_local_registration_valid(state, {
+      ..draft,
+      repository: "Qwen/Qwen3.6/extra",
+    }),
+  )
+  assert_false(
+    @ui.model_local_registration_valid(state, {
+      ..draft,
+      revision: "master branch",
+    }),
+  )
+  assert_false(
+    @ui.model_local_registration_valid(
+      {
+        ..state,
+        model_local_directories: [{ ..directory, registered: true }],
+      },
+      draft,
+    ),
+  )
 }
