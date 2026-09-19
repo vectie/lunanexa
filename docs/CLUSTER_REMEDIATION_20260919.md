@@ -681,3 +681,76 @@ payload)` 表（schema version 4 → 5），`database/postgres.mbt` 增加
 - **第 3 步（把 libpq 移出事件循环）**：在当前写入量（0.57 MB/s）下不再必要。
   真正的教训是**别在请求路径上写多兆字节快照**，而不是“给阻塞调用加线程”：
   4 MB 的序列化是 CPU 开销，换线程也省不掉。
+
+## 12. pgclient：把 libpq 移出事件循环（2026-09-19 深夜）
+
+11.4 节说第 3 步"不再必要"。这一轮按"没有收益但理论更优也要做"的要求把它做了，
+并记录过程与一次事故。
+
+### 12.1 做了什么
+
+新增公开包 `pgclient`（非阻塞 PostgreSQL 客户端）+ `internal/postgres/pool.c`（C 侧）：
+
+- 每个 worker 持有**一条自己的 libpq 连接**，在**自己的线程**上一次只跑一条语句；
+  提交时把 SQL 与参数**拷贝**进 worker 自己的内存（worker 绝不分配 MoonBit 对象、
+  绝不读 MoonBit 内存），完成后往管道写 1 字节；
+- 事件循环侧用 `RawFd::read` **await 那个管道**，即整个进程里只等文件描述符，
+  不再等一次数据库往返；结果对象在事件循环线程上构造；
+- `PgPool::execute` 把语句摊到多个 worker 上（N 个 worker 真的并行），
+  `PgPool::acquire` 租一条连接给需要会话亲和性的调用（事务、advisory lock），
+  `PgConnection::transaction` 返回时提交、抛错时回滚；
+- 错误文本由 worker 自己拷贝一份随结果带回，避免事件循环线程去读一个
+  可能正被 worker reset 的连接。
+
+验证：`moon check pgclient --target native` **0 warning**；
+`moon test pgclient --target native` **6/6 通过**，其中包含"两条 400 ms 的语句在
+2 个 worker 上重叠（<700 ms）而不是串行 800 ms"。
+
+### 12.2 事故：适配后启动即挂，以及一次真的数据损坏
+
+**（一）控制面启动挂住。** 把 `database/postgres.mbt` 的 11 个 async 方法改成借用
+池连接后，编译通过、`database` 之外的对照测试也过，但**部署后 Pod 停在 1/2**：
+日志停在 schema 迁移之后。回到节点复现：`moon test database` **同样挂住**
+（timeout 杀死时 4 个测试仍 active）。
+
+根因：`PgOperation::release` 被我写成了 `async fn`（因为它要在失败时回滚），
+而 11 个调用点都是 `defer connection.release()` —— **`defer` 不能 await**，
+于是租约永不释放：第一条语句正常，第二条语句永远等一个不会回来的租约。
+修法是让 release 保持同步，把"失败则回滚"挪进一个显式 await 的
+`with_transaction(connection, body)`（提交/回滚/释放都在这一个函数里）。
+**这个修法只在本地改过、没有重新构建验证**，所以按"没有验证就不算完成"的原则，
+本轮把适配整段回滚（`336d73a`），只保留已验证的 `pgclient` 包与上面这份记录。
+线上跑的是上一版已验证的控制面。
+
+**（二）测试把生产库写坏了（更严重）。** 排查挂起时我在**生产数据库**上跑了
+`moon test database`。这些用例会**覆写 snapshot 行**：
+`database/database_test.mbt` 用 `commercial` / `commercial_integrations` /
+`accounts` / `client_handoffs` / `media_jobs` 这些**真实域名**写测试夹具。用例被
+timeout 杀死后，恢复步骤没执行，于是生产库里这 4 个域的真实数据被测试夹具替换
+（`accounts` 15,469 B → 32 B，`commercial` 6,162 B → 15 B，
+`commercial_integrations` 184 B → 24 B，`client_handoffs` 92 B → 35 B），
+`media_jobs` 则是测试新建的。控制面随即因为"存的 schema_version 与期望不符"
+（`DatabaseError.UnsupportedSnapshot`）**崩溃重启**，回滚到旧版本也一样崩。
+
+处置：
+- 先把 5 行导出到 `/tmp/polluted.tsv`，再 `DELETE` 掉这 5 行，
+  让各 store 走"首次启动为空"的路径 —— 控制面恢复 2/2 Running，端点全部 200（3–6 ms）；
+- 这 4 个域的真实 payload **无法从数据库恢复**：没有备份，`archive_mode` 关闭，
+  `snapshots` 是 upsert 无历史。受影响的是 accounts（运维账号/会话）、
+  commercial（台账）、commercial_integrations、client_handoffs；
+  规范化表（`workspace_users`、`portal_agreements`、`enterprise_memberships`）完好。
+- 由此产生的可见影响：控制台当前落在**登录页**而不是直接进入运维界面
+  （此前免登录依赖的会话数据在被清掉的 `accounts` 域里）。
+
+**防止复发**：所有连库用例改为通过一个守卫取 URL（`df4ca7a`），
+数据库名不以 `_test` 结尾就**直接 fail**，而不是继续跑并写坏部署。
+规则：**集成测试只能指向一次性的 `*_test` 库**。
+
+### 12.3 下一步（写清楚，避免重复踩）
+
+1. 按 12.2(一) 的修法改 `database/postgres.mbt`：`release` 同步 + `with_transaction`
+   显式提交/回滚/释放；`elect_controller` 的失败分支先 ROLLBACK 再释放 advisory lock。
+2. **先在本地/测试库跑通端到端**（`moon test database` 要能跑完，不再挂起），
+   再构建部署；部署后立刻核对 Pod 2/2、`/v1/nodes` 200、控制台是否能进。
+3. 建一个真正独立的测试库（`lunanexa_test`），把 `LUNANEXA_TEST_DATABASE_URL` 指过去，
+   生产库不再作为测试目标。
