@@ -615,27 +615,45 @@ POST http://127.0.0.1:4174/h3/v1/videos/sync
 这也解释了之前的怪现象：请求快慢与响应体大小无关（`/v1/registry` 9 KB 比
 `/v1/telemetry` 56 KB 还慢），因为真正的成本是**别的请求正在写 4 MB 快照**。
 
-### 11.2 修复：把事件改成追加写 —— 但代码早就在仓库里了
+### 11.2 修复：把事件改成追加写
 
-`database/schema.mbt` 里**已经有** `lunanexa.operational_events(event_id, timestamp_unix_ms,
-payload)` 表，`database/postgres.mbt` 里也已经有
+修复内容：新增 append-only 的 `lunanexa.operational_events(event_id, timestamp_unix_ms,
+payload)` 表（schema version 4 → 5），`database/postgres.mbt` 增加
 `append_operational_event` / `load_recent_operational_events` / `operational_event_count` /
-`prune_operational_events`，`observability/store.mbt` 的 `open_postgres` 还会把旧快照里的
-事件**一次性迁移**进新表、之后只追加单条事件。
+`prune_operational_events`；`observability/store.mbt` 改成：
 
-也就是说：**这个修复早就提交在仓库里（`531e76e`、`09b6437`），只是真实集群跑的是一份
-更旧的控制面**（与 2 节记录的“控制面版本落后于前端”是同一件事）。
+- Postgres 后端的事件**一条一行追加**，`lunanexa.snapshots` 里只留计数器与外导新鲜度
+  （`counter_snapshot_unlocked`）；
+- 文件后端（单 JSON 文档）仍然整份重写，行为不变；
+- 写入顺序是**先落计数器、再追加事件行**，所以崩溃只可能让计数器领先事件窗口，不会落后；
+- 追加满一个 `event_history_limit` 才 prune 一次，避免每个请求都带一条 DELETE；
+- `open_postgres` 会把旧快照 `events` 数组里的历史**一次性幂等迁移**进新表
+  （`ON CONFLICT (event_id) DO NOTHING`），然后把快照重写成不含事件的形态，
+  所以升级不会丢历史、重试也不会重复。
 
-所以本轮的动作是**对齐版本**：
+**一处需要澄清的过程教训**：这些代码在本轮之前只存在于**未提交的工作区**里。
+我第一次读 `database/schema.mbt`、用 `git log -- observability/store.mbt` 看提交历史时，
+把工作区状态当成了 HEAD 状态，于是误判成“仓库里早就有、集群只是版本旧”。
+实际是 `git show HEAD:database/schema.mbt` 里 `schema_version = 4`、**没有**这张表：
+这份实现是本轮在工作区里写出来、随后同步到节点构建并部署的（因此本节数字是真实的，
+但“早就在仓库里”这个说法是错的）。核对方式：`git show HEAD:<path> | grep <symbol>`，
+不要用工作区文件或 `git log -- <path>` 反推当前内容。
 
-1. 把仓库当前 revision 同步到管理节点的构建树。注意两个坑：
-   - 节点上 `~/control-build/src` 是**旧 revision**，只覆盖改动的文件会得到混合版本。
-     这次做了全量对比（`*.mbt` 逐个 md5），只有 7 个文件不同，随后整树同步；
+构建与部署过程：
+
+1. 把工作区同步到管理节点的构建树。注意两个坑：
+   - 节点上 `~/control-build/src` 是**更旧的 revision**，只覆盖改动的文件会得到混合版本。
+     这次做了全量对比（`*.mbt` 逐个 md5，只有 7 个文件不同），随后整树同步；
    - macOS `tar` 会带出 AppleDouble 文件（`._*.mbt`），MoonBit 编译器会报
-     `invalid UTF-8`。同步后必须 `find … -name '._*' -delete`（本次删了 1135 个）。
+     `invalid UTF-8`。同步后必须 `find … -name '._*' -delete`（本次删了 1135 个），
+     或打包时设 `COPYFILE_DISABLE=1`。
 2. `moon check cmd/control --target native` 通过 → `moon build … --release` 通过；
-3. 换层重建镜像并滚动发布。启动时一次性迁移写入 **10,011 条事件**（用 96 秒起好，
+3. 换层重建镜像并滚动发布。启动时一次性迁移写入 **10,011 条事件**（96 秒起好，
    0 重启；探针 liveness 30 s×5 足够容忍）。
+4. 顺带修了一个让测试根本跑不起来的问题：**25 个包的 `moon.pkg` 缺 `-pthread -ldl`**。
+   可执行目标（`cmd/control`）自己有这两个 flag，所以二进制能构建；但这些包的原生
+   **测试**链接时会报 `undefined reference to pthread_key_create` 而直接失败。
+   已统一补齐，`moon test observability --target native` 现在 **12/12 通过**。
 
 ### 11.3 实测效果
 
