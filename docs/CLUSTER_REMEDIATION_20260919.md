@@ -589,3 +589,77 @@ POST http://127.0.0.1:4174/h3/v1/videos/sync
 
 这三步都属于控制面结构改动，需要回归 `moon test`、契约夹具与重启对账，
 本轮只完成了第 1 步在 telemetry 上的落地与实测。
+
+## 11. 真正的串行根源：每个请求重写 4 MB 快照（2026-09-19 晚）
+
+10.5 节列的三步里，第 2 步才是要害。用 `strace -T` 直接看控制面进程在做什么，
+10 秒窗口内的证据（`/tmp/st.log`）：
+
+- **66 条 `INSERT INTO lunanexa.snapshots`，每条 3,825,664 字节**，外加 66 组
+  BEGIN/COMMIT；
+- 窗口内**写入 PostgreSQL 共 149.4 MB**（≈15 MB/s）；
+- 阻塞时间 4.07 s 花在 `poll([{fd=7(PG)}, POLLIN])`，单次约 106–112 ms。
+
+即：**客户端每发一个请求，控制面就把 4 MB 的 observability 快照整份重写一遍。**
+
+### 11.1 因果链
+
+1. `ApiService::record_request_event`（`api/server.mbt:4819`）为**每一个 API 请求**
+   记录一条 operational event；
+2. `ObservabilityStore::record_generated` → `record` → `persist`，在持锁状态下
+   `save_opaque_snapshot("observability", …)`，把整个快照（4,067,449 字节、
+   `event_history_limit = 10000` 条事件）序列化后整块写给 Postgres；
+3. 连接是**单条共享 libpq 连接 + mutex**（`database/postgres.mbt:10`），libpq 是同步
+   FFI，运行在单线程协作式 async 运行时上 —— 所以这一次写会把**所有在途请求**卡住。
+
+这也解释了之前的怪现象：请求快慢与响应体大小无关（`/v1/registry` 9 KB 比
+`/v1/telemetry` 56 KB 还慢），因为真正的成本是**别的请求正在写 4 MB 快照**。
+
+### 11.2 修复：把事件改成追加写 —— 但代码早就在仓库里了
+
+`database/schema.mbt` 里**已经有** `lunanexa.operational_events(event_id, timestamp_unix_ms,
+payload)` 表，`database/postgres.mbt` 里也已经有
+`append_operational_event` / `load_recent_operational_events` / `operational_event_count` /
+`prune_operational_events`，`observability/store.mbt` 的 `open_postgres` 还会把旧快照里的
+事件**一次性迁移**进新表、之后只追加单条事件。
+
+也就是说：**这个修复早就提交在仓库里（`531e76e`、`09b6437`），只是真实集群跑的是一份
+更旧的控制面**（与 2 节记录的“控制面版本落后于前端”是同一件事）。
+
+所以本轮的动作是**对齐版本**：
+
+1. 把仓库当前 revision 同步到管理节点的构建树。注意两个坑：
+   - 节点上 `~/control-build/src` 是**旧 revision**，只覆盖改动的文件会得到混合版本。
+     这次做了全量对比（`*.mbt` 逐个 md5），只有 7 个文件不同，随后整树同步；
+   - macOS `tar` 会带出 AppleDouble 文件（`._*.mbt`），MoonBit 编译器会报
+     `invalid UTF-8`。同步后必须 `find … -name '._*' -delete`（本次删了 1135 个）。
+2. `moon check cmd/control --target native` 通过 → `moon build … --release` 通过；
+3. 换层重建镜像并滚动发布。启动时一次性迁移写入 **10,011 条事件**（用 96 秒起好，
+   0 重启；探针 liveness 30 s×5 足够容忍）。
+
+### 11.3 实测效果
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| 10 秒内写入 Postgres | **149.4 MB**（66 × 3.8 MB） | **5.7 MB**（最大单条 819 KB） |
+| observability 快照 | 4,067,449 B | **5,087 B** |
+| `/v1/nodes` 单请求（strace 下） | 1.47–2.18 s | **0.008–0.030 s** |
+| `/v1/telemetry` n=8 并发 | 10.2–13.7 s（齐平卡住） | **0.052–0.057 s（齐平完成）** |
+| 32 并发 `/v1/nodes` | 排队 | 全部 14–98 ms 完成，墙钟 125 ms |
+| 192 个请求（landing 集合 ×32） | — | 墙钟 **671 ms** |
+| 控制台首屏 | 7–12 s | **0.3–0.5 s** |
+
+逐页回归：Audit（1462 事件）、Alerts（今天 11/206）、Models（2 models · 4 artifacts +
+导入列表）、Catalog/Deployments（DeploymentReads）、Leases（AccessReads 5 条路径，28 行）
+全部正常，无回退。
+
+### 11.4 对 10.5 节三步的结论
+
+- **第 2 步（别再每个事件重写整个域）**：主要部分已随版本对齐落地（上面 26 倍写入量下降
+  就是它）。剩下的最大项是 `control` 域 858 KB/次、由心跳驱动约 0.8 次/秒（≈0.7 MB/s，
+  即个位数百分比的事件循环占用）；心跳合并写仍有价值但已不是瓶颈。
+- **第 1 步（读路径去锁）**：在这组数字下收益已很小 —— n=8 并发已经是“同时完成”的
+  健康形态，没有排队。属于可选加固。
+- **第 3 步（把 libpq 移出事件循环）**：在当前写入量（0.57 MB/s）下不再必要。
+  真正的教训是**别在请求路径上写多兆字节快照**，而不是“给阻塞调用加线程”：
+  4 MB 的序列化是 CPU 开销，换线程也省不掉。
