@@ -1082,7 +1082,51 @@ ModelScope 清单，逐文件比对 size + SHA-256；缺失或漂移的文件**�
 通过控制台的 **Retry** 按钮（不是后台命令）重新排队，返回 202 与
 *"The import was requeued and will reuse verified partial files."*
 
-### 14.8 还没做的
+### 14.8 登记列表只看到一层，漏了约 680 GiB
+
+`local-directories` 原本只扫 `/data/models` 一层，且**跳过以 `.` 开头的目录**。而实际
+checkpoint 大量存放在隐藏的 staging 目录里（`.spark-picture-20260916/models/...`、
+`.new-models-20260915/models/...`）。于是下面这些**真实权重**在控制台里根本不存在：
+
+| 目录 | 上游仓库 | 盘上 | 逐文件对齐 |
+| --- | --- | --- | --- |
+| `.spark-picture-phase2-20260916/models/LibertAIDAI/GLM-5.3-Flash-NVFP4` | `LibertAIDAI/GLM-5.3-Flash-NVFP4` | 181 GiB | 131/131 |
+| `.spark-picture-20260916/models/Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw` | `Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw` | 164 GiB | 144/144 |
+| `.spark-picture-20260916/models/RadixArk/Qwen3.8-Flash-Next-NVFP4` | `RadixArk/Qwen3.8-Flash-Next-NVFP4` | 126 GiB | 419/419 |
+| `.spark-picture-20260916/models/Mia-AiLab/Qwen3.8-Flash-Next-NVFP4` | `Mia-AiLab/Qwen3.8-Flash-Next-NVFP4` | 99 GiB | 51/51 |
+| `.new-models-20260915/models/Qwen/Qwen3-VL-32B-Instruct-FP8` | `Qwen/Qwen3-VL-32B-Instruct-FP8` | 33 GiB | 19/19 |
+| `.new-models-20260915/models/Qwen/Qwen3.8-27B-FP8` | `Qwen/Qwen3.8-27B-FP8` | 29 GiB | 82/82 |
+| `.spark-picture-20260916/models/unsloth/Qwen3.8-27B-NVFP4` | `unsloth/Qwen3.8-27B-NVFP4` | 22 GiB | 13/13 |
+| `.spark-picture-20260916/models/RadixArk/Qwen3.8-27B-NVFP4` | `RadixArk/Qwen3.8-27B-NVFP4` | 20 GiB | 21/21 |
+| `.spark-picture-20260916/models/z-lab/Qwen3.8-27B-DFlash2` | `z-lab/Qwen3.8-27B-DFlash2` | 3.6 GiB | 5/5 |
+| `.spark-picture-20260916/models/incoai/GLM-5.3-Flash-DFlash2` | `incoai/GLM-5.3-Flash-DFlash2` | 2.2 GiB | 5/5 |
+
+现在扫描会递归（深度 4）并报告"直接含模型入口"的目录：`config.json`、`model_index.json`
+或 `*.gguf`。这样 diffusers / ComfyUI 那种把组件拆到子目录的布局会归到上层根，
+而不会把 `vae/`、`text_encoder/` 当成独立版本。适配器自己的下载区（`models/modelscope`）
+排除在外——它已经以导入的形式进平面了。
+
+### 14.9 修复预算：命名错仓库不再等于"下载几百 GB"
+
+改成两遍：第一遍整目录逐文件哈希并收集不一致项，第二遍只修复这些文件，
+且**修复总量必须 < 该版本总量的 1% 或 1 GiB（取大者）**。理由是"某个 revision"本身就是
+对这份目录的一个断言；差得太多就说明目录不是这个 revision，静默补齐可能从上拉几百 GB。
+现在命名错仓库会以 `size-mismatch` 失败。
+
+### 14.10 关于 "DeepSeek V4.1"
+
+在 192.168.2.175 上**没有 V4.1 的权重**。全盘按名字和大小的排查结论：
+
+- 唯一的 DeepSeek 权重目录是 `/data/models/deepseekv4flashdspark`，逐文件比对是
+  `deepseek-ai/DeepSeek-V4-Flash-DSpark`（74/76 命中）；对
+  `deepseek-ai/DeepSeek-V4.1-Flash` 比对为 17 缺失 / 71 大小不符，**明确不是 V4.1**。
+- 与 V4.1 相关的只有两份**配方**压缩包（`/data/models/.spark-picture-20260916/sources/`，
+  194 KB + 93 KB）：`MiaAI-Lab/DeepSeek-v4.1-Flash-EXL3-2x-DGX-Sparks` 与
+  `sfxnz/DeepSeek-V4.1-Flash-EXL3-vLLM-2x-DGX-Spark`。它们是 README、补丁和量化脚本，
+  其中的 README 引用的 196 GiB / 39 分片（`model-*-of-00048`）checkpoint 不在这台机器上。
+- 四台 spark 的 `/var/lib/lunanexa-models` 里只有 `minimaxh3`；192.168.2.180 已下线。
+
+### 14.11 还没做的
 
 - **ARM64 节点镜像没有重建/滚动**。节点侧代码已写、已测，但线上 4 台 spark 跑的还是
   `lunanexa-node:20260918-arm64-r3`，所以**现在没有任何 spark 真正用 revision 拉过模型**；
