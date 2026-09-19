@@ -17,6 +17,7 @@ pub(all) enum OperatorRoute {
   Benchmarks
   Policies
   Audit
+  Blank
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -39,5 +40,6 @@ pub fn all_routes() -> Array[OperatorRoute] {
     Benchmarks,
     Policies,
     Audit,
+    Blank,
   ]
 }
