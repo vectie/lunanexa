@@ -441,5 +441,76 @@ POST http://127.0.0.1:4174/h3/v1/videos/sync
 09-19 有 11 条——这正是“默认看今天”能把首屏告警量从 206 条压到 11 条的原因。
 
 仍然存在的限制：控制面是串行处理请求（一次只服务一个连接），因此首屏时间仍约等于
-核心 6 个请求的**串行耗时之和**；要让首屏进入 2 秒级，需要控制面并发处理请求或提供
+核心 6 个请求的**串行耗时和**；要让首屏进入 2 秒级，需要控制面并发处理请求或提供
 批量聚合端点，这属于控制面改动，本轮未做。
+
+## 9. ModelScope 适配器 503 与模型列表（2026-09-19 晚）
+
+### 9.1 `/v1/model-sources/modelscope/imports` 返回 503
+
+- **现象**：Models 页的模型库面板报 `503 ModelSourceUnavailable / model-source adapter
+  request failed`，每次要等 3–6 秒。
+- **诊断链**：
+  1. `api/model_source_http.mbt` 把 `/v1/model-sources/modelscope/*` 代理到
+     `LUNANEXA_MODEL_SOURCE_ADAPTER_ENDPOINT`；控制面该环境变量为
+     `http://lunanexa-model-source:8090`，且 token 取自 secret
+     `lunanexa-model-source-credentials`（两边一致，不是配置问题）。
+  2. `lunanexa-model-source` 的 Pod 已 ImagePullBackOff **45 小时**：镜像
+     `lunanexa/model-source:management-20260828-modelsource-range-13` 只存在于 docker.io，
+     而该节点拉 docker.io 超时（`dial tcp 31.13.95.95:443: i/o timeout`）。
+  3. 集群内 registry（`10.43.216.245:5000`，HTTPS）里**没有** model-source 镜像；
+     本地 containerd 也没有。
+  4. 反向确认 egress 正常：`curl https://modelscope.cn` 返回 302、
+     `modelscope.cn/api/v1/models` 返回 404（即 API 可达），所以缺的只是镜像。
+- **修复**：在没有 zig、也没有 docker.io 的前提下，用「层交换」在管理节点现造镜像：
+  1. 管理节点有 amd64 MoonBit 工具链 `~/moon-public/toolchains/moon-linux-amd64`
+     （0.1.20260824）与一份完整源码 `~/control-build/src`（与仓库的
+     `cmd/model-source`、`modelsource/*` 逐字节一致，已用 md5 核对）；
+  2. `moon build cmd/model-source --target native --release` → 2.1 MB 静态依赖极少的
+     二进制（`objdump -T` 最高只要求 `GLIBC_2.29`，因此在 bookworm 基础镜像里可运行）；
+  3. 取本机已有的 `lunanexa-control:20260918`（同为 bookworm-amd64）导出成 OCI，
+     追加一层 `/usr/local/bin/lunanexa-model-source`，改写 config 的
+     `Entrypoint/Cmd/ExposedPorts`，再 `k3s ctr -n k8s.io images import`；
+     脚本：`~/model-source-build/build-model-source-image.py`；
+  4. `kubectl set image deploy/lunanexa-model-source model-source=lunanexa/model-source:20260919`
+     （`imagePullPolicy` 已是 `IfNotPresent`，本地镜像即可）。
+- **验证**：Pod `1/1 Running` 0 重启；
+  `/v1/model-sources/modelscope/imports` 与 `.../search` 均返回 **200**（3.3 s / 4.8 s），
+  Models 页能列出 2 条导入记录。
+- **待补**：这次是手工在节点上补镜像。正路应该把 `images/Containerfile.model-source`
+  纳入发布流水线并把镜像推入集群内 registry（现在 `deploy/model-source.yaml` 用的还是
+  占位名 `registry.invalid/...`），否则节点重建后 503 会复现。
+
+### 9.2 模型列表里出现 `{import_.revision}` 之类的字面量
+
+- **现象**：Models 页的导入卡片直接把模板占位符打印出来：
+  `{import_.revision} · {import_.import_id}`、
+  `{model_import_progress(import_)}% · {import_.files_completed}/{import_.files_total}`，
+  进度条宽度也写成 `width: {model_import_progress(import_)}%`。
+- **根因**：MoonBit 字符串插值必须写成 `\{...}`。这三处在 `ui/console.mbt` 里写成了
+  普通字面量 `"{...}"`，于是原样输出。同一文件里搜索结果的同类代码用的是正确的
+  `\{...}`，说明只是这几行写漏了。
+- **修复**：三处改为 `\{...}`；全仓库用 `[^\\]\{[a-z_]` 扫过一遍，只剩
+  `ui/enterprise/self_service.mbt` 里一段 API 路由说明是刻意保留的 `{id}`。
+
+### 9.3 “很多附属被列入模型列表里”
+
+- **现状（修复前）**：注册表把每个**限定档位（qualification profile）**当成独立模型列出，
+  于是 `qwen3-0.6b` 以 `qualified-20260901-r58-c32` / `r63-host-sampling-c32` /
+  `r67-output-envelope-c32` 三条并排出现，再加一个测试制品 `tiny-bf16`，页头写
+  “4 artifacts”，看起来像 4 个模型。
+- **修复**：按 `model_id` 分组——
+  - 新增 `ui/console.mbt::group_models_by_model_id`（纯投影，不碰控制面契约）；
+  - 表体改为「模型标题行 + 该模型的各制品行」（`model_artifact_rows`），
+    每个模型仍保留各自的制品行，治理信息（生命周期/证据/别名/操作）一行都不少；
+  - 页头计数改为 `2 models · 4 artifacts`；
+  - `ui/console_grouping_test.mbt` 增 1 个测试（114 通过）。
+- **边界**：`/v1/registry` 与 `/v1/models` 的契约未改。`/v1/models`（OpenAI 兼容，
+  ComfyUI/MoonGate 真正读的那个）只返回 registry 的 **alias**，当前 alias 只有
+  `tiny-bf16`，所以线上真正在服务的 `minimax-h3` 并不在这个列表里——要让客户端看到它，
+  需要把 minimax-h3 正式登记进 registry（签名制品 + 许可证 + 评测），
+  这属于数据与治理动作，不能靠改前端伪造。
+- **另一处可能被混淆的地方**：Models 页顶部的 “Imports awaiting a next action” 面板
+  列的是 **ModelScope 下载记录**（`Qwen/Qwen3-0.6B`、`OpenBMB/MiniCPM5-1B`），
+  它们不是 LunaNexa 模型，而是等待完成 S3 发布/签名/评测/批准的导入项。
+  本轮保留该面板（正是 9.1 恢复的功能），只是让它与注册表分组不再混读成一份模型清单。
