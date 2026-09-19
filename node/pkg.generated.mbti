@@ -81,6 +81,7 @@ pub(all) struct AcceleratorSensorSnapshot {
   accelerator_count : Int
   memory_used_mib : Double
   memory_total_mib : Double
+  memory_measured : Bool
   utilization_per_mille : Double
   maximum_temperature_celsius : Double
   power_watts : Double
@@ -162,6 +163,10 @@ pub(all) struct HostResources {
   memory_total_mib : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn HostResources::inventory(Self, @contracts.NodeInventory) -> @contracts.NodeInventory
+
+type ManagedRevisionFile derive(@json.FromJson)
+
+type ManagedRevisionManifest derive(@json.FromJson)
 
 pub(all) enum ManagedRuntimeSupervisor {
   Oci(OciRuntimeSupervisor)

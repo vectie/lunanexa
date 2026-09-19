@@ -124,7 +124,8 @@ fn validate_runtime_assignment(
     !@contracts.valid_sha256_digest(assignment.artifact.digest) ||
     assignment.artifact.signature_ref == "" ||
     !(assignment.artifact.uri.has_prefix("s3://") ||
-    assignment.artifact.uri.has_prefix("oci://")) ||
+    assignment.artifact.uri.has_prefix("oci://") ||
+    assignment.artifact.uri.has_prefix(@contracts.model_store_scheme)) ||
     assignment.resources.accelerator_count <= 0 ||
     assignment.resources.accelerator_count != assignment.devices.length() ||
     assignment.resources.accelerator_memory_mib <= 0 ||
@@ -177,6 +178,15 @@ fn runtime_run_arguments(
   pid_limit : Int,
 ) -> Array[String] {
   let memory_bytes = assignment.resources.memory_mib.to_int64() * 1024L * 1024L
+  // A managed revision is a directory of files rather than one blob, so the
+  // whole revision is mounted and the runtime is pointed at the directory.
+  // Single-object artifacts keep the exact file mount they always had.
+  let revision = managed_revision_directory(assignment.artifact.uri) is Some(_)
+  let mount_target = if revision {
+    "/var/lib/lunanexa/model"
+  } else {
+    "/var/lib/lunanexa/model/model"
+  }
   [
     "run",
     "--detach",
@@ -198,11 +208,11 @@ fn runtime_run_arguments(
     "--network",
     network,
     "--mount",
-    "type=bind,src=\{materialized.host_path},dst=/var/lib/lunanexa/model/model,readonly",
+    "type=bind,src=\{materialized.host_path},dst=\{mount_target},readonly",
     "--env",
     "NVIDIA_VISIBLE_DEVICES=\{assignment.devices.join(",")}",
     "--env",
-    "LUNANEXA_MODEL_PATH=/var/lib/lunanexa/model/model",
+    "LUNANEXA_MODEL_PATH=\{mount_target}",
     "--env",
     "LUNANEXA_ARTIFACT_DIGEST=\{assignment.artifact.digest}",
     image_ref,
