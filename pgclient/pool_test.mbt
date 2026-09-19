@@ -1,6 +1,37 @@
 ///|
+/// Points the suite at a disposable database. These tests write, so a URL that
+/// does not name a `*_test` database is refused loudly instead of being run
+/// against a live deployment.
 fn test_url() -> String? {
-  @env.get_env_var("LUNANEXA_TEST_DATABASE_URL")
+  test_database_url()
+}
+
+///|
+fn test_database_url() -> String? {
+  let url = @env.get_env_var("LUNANEXA_TEST_DATABASE_URL")
+  match url {
+    None => None
+    Some(value) => {
+      let name = match value.split("/").last() {
+        Some(segment) => {
+          match segment.split("?") {
+            Some(parts) => match parts.get(0) {
+              Some(head) => head
+              None => segment
+            }
+            None => segment
+          }
+        }
+        None => ""
+      }
+      if !name.has_suffix("_test") {
+        fail(
+          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
+        )
+      }
+      Some(value)
+    }
+  }
 }
 
 ///|
