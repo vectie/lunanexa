@@ -771,6 +771,39 @@ timeout 杀死后，恢复步骤没执行，于是生产库里这 4 个域的真
 | `lnx-loaded-update`（`Outcome(Loaded)` 处理器执行） | ✅ |
 | `lnx-view…`（`app_view` 再次渲染） | ❌ 一次都没有 |
 
+**关键补充（在生产构建上实测，不是测试夹具）**：
+
+```
+lnx-view  auth=false                      <- 首次渲染：未认证
+lnx-merge auth=true  eq=false loading=false <- 合并后的 console 状态：已认证、且与当前不同
+lnx-return eq=false auth=true             <- update 处理器返回的 AppModel：与入参不同、已认证
+```
+
+也就是说 **update 返回了"已改变且已认证"的模型，但 UI 运行时没有重绘** ——
+`app_view` 只被调用了一次。所以问题不在数据、不在状态合并、不在 `operator_authenticated`
+的取值，而在 **Rabbita 的 Val/状态机重绘链路**：状态机模型变了却没有通知视图。
+
+排除项（都实测过）：
+- 数据层：6 个核心读全部 200、响应体到齐（~120 ms），无 pending、无失败请求；
+- `LoadFailed` 未触发（它会写入 `error_message` 并显示）；
+- 集群轮询失败不清认证；
+- `merge_loaded_console` 取 `loaded` 的 `operator_authenticated`，实测合并结果为 `true`；
+- "从 init 命令派发"不是原因：改成挂载后经消息（`StartOpenDeployment`）派发仍然不重绘。
+
+**一次自摆乌龙**：中途看到的 `lnx-merge auth=false` 是 `moon test` 里打印的（测试夹具状态），
+不是生产值；同时那次的构建**没有上传部署**，所以浏览器探针读到的仍是上一版 bundle。
+后来每次部署都先核对线上 `console.js?v=` 摘要与本地一致，才得到上面这组可信数据。
+教训：**探针结论必须绑定"线上摘要 == 本地构建摘要"**，否则测的是旧包。
+
+下一步（最小复现）：写一个只含 `create_state_with_init` + 一个 `perform` 的页面，
+看 init 派发的 outcome 能否触发重绘；若不能，检查是否发生了重复挂载
+（`@rabbita.new(...).mount("app")` 被调用两次会让状态机与 DOM 分属两张图，
+症状正是"状态变了但视图不动"）。
+
+佐证：同一部署下 `.console-root` 从未出现，且 17:05 之前的成功渲染走的是
+**会话路径**（`GatewaySessionLoaded` → 消息派发 `load_command`），而当前走的是
+init 命令派发。
+
 即：**数据加载成功、状态更新执行了，但视图没有重绘**，页面一直保留首次渲染的
 DOM（因此表现为登录页/加载页常驻）。`LoadFailed` 没触发（它会把原因写进
 `error_message` 并显示出来），集群轮询失败也不清认证（`Outcome(ClusterPollFailed)`
