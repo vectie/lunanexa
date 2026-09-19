@@ -7285,14 +7285,20 @@ fn update(
 }
 
 ///|
-/// True when this deployment declared the console open (see `main`).
+/// True when this deployment declared the console open (see `main`). The
+/// gateway then attaches operator authority to every same-origin request, so
+/// the credential field only needs a marker instead of a real token.
 fn deployment_console_open() -> Bool {
   let declared = operator_open_origin()
   declared != "" && (declared == "*" || declared == console_page_origin())
 }
 
 ///|
-fn console_loading_view(locale : @i18n.Locale) -> @rabbita.Html {
+fn console_loading_view(
+  locale : @i18n.Locale,
+  detail : String,
+  open_deployment : Bool,
+) -> @rabbita.Html {
   let copy = console_copy(
     locale, "Loading the operator console…", "正在加载运维控制台…",
   )
@@ -7306,11 +7312,26 @@ fn console_loading_view(locale : @i18n.Locale) -> @rabbita.Html {
         @html.h2(copy),
         @html.p(
           class="login-help",
-          console_copy(
-            locale, "Fetching cluster inventory, telemetry and governance state from the controller.",
-            "正在从控制器获取集群清单、遥测与治理状态。",
-          ),
+          if open_deployment {
+            console_copy(
+              locale, "Fetching cluster inventory, telemetry and governance state from the controller.",
+              "正在从控制器获取集群清单、遥测与治理状态。",
+            )
+          } else {
+            console_copy(
+              locale, "Contacting the controller with the credentials from this session.",
+              "正在使用本会话的凭据连接控制器。",
+            )
+          },
         ),
+        // A read that fails while the deployment is open leaves the console
+        // with nothing to show. Reporting the reason here turns a silent
+        // "loading" screen into something an operator can act on.
+        if detail == "" {
+          @html.nothing
+        } else {
+          @html.p(class="login-help", detail)
+        },
       ]),
     ],
   )
@@ -7322,9 +7343,20 @@ fn app_view(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Html {
   let locale = model.console.locale
+  // A deployment that declares itself open authenticates every request at the
+  // same-origin gateway, so a session flag must not send the operator back to
+  // the login form. Without this the console falls back to the login view the
+  // moment any background read reports an authentication failure, even though
+  // the gateway is still attaching operator authority to each request.
   if !model.demo_mode && !model.console.operator_authenticated {
-    if model.console.loading && deployment_console_open() {
-      return console_loading_view(locale)
+    if model.console.loading {
+      // Progress while the first read is in flight. The reason is carried
+      // through so a read that fails does not leave an unexplained spinner.
+      return console_loading_view(
+        locale,
+        model.console.error_message.unwrap_or(""),
+        deployment_console_open(),
+      )
     }
     return login_view(model, emit)
   }
