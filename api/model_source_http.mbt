@@ -3,6 +3,8 @@ fn model_source_path(path : String) -> Bool {
   path == "/v1/model-sources/modelscope/search" ||
   path == "/v1/model-sources/modelscope/detail" ||
   path == "/v1/model-sources/modelscope/imports" ||
+  path == "/v1/model-sources/modelscope/imports:register-local" ||
+  path == "/v1/model-sources/modelscope/local-directories" ||
   (
     path.has_prefix("/v1/model-sources/modelscope/imports/") &&
     (
@@ -11,6 +13,25 @@ fn model_source_path(path : String) -> Bool {
       path.has_suffix(":adopt")
     )
   )
+}
+
+///|
+/// A verified import can enter the registry from either transport the control
+/// plane actually serves: an upstream object store, or the management node's
+/// own ModelScope-verified model store.
+fn model_source_adoptable_uri(uri : String) -> Bool {
+  uri.has_prefix("s3://") || uri.has_prefix(@contracts.model_store_scheme)
+}
+
+///|
+/// The artifact of a managed revision is its source manifest, so that is what
+/// its verification subject names.
+fn model_source_signature_ref(uri : String) -> String {
+  if uri.has_prefix(@contracts.model_store_scheme) {
+    "\{uri}/\{@contracts.model_store_manifest_name}"
+  } else {
+    "\{uri}.sig"
+  }
 }
 
 ///|
@@ -202,13 +223,13 @@ async fn ApiService::handle_model_source(
       )
     }
     if operation.state != Verified ||
-      !operation.artifact_uri.has_prefix("s3://") ||
+      !model_source_adoptable_uri(operation.artifact_uri) ||
       !@contracts.valid_sha256_digest(operation.manifest_digest) ||
       operation.bytes_total <= 0L ||
       operation.bytes_completed != operation.bytes_total ||
       operation.license.trim() == "" {
       return api_error(
-        409, "ImportNotAdoptable", "only a complete S3-published verified import can enter the registry",
+        409, "ImportNotAdoptable", "only a complete verified import on an artifact transport the control plane serves can enter the registry",
         false,
       )
     }
@@ -219,7 +240,7 @@ async fn ApiService::handle_model_source(
         digest: operation.manifest_digest,
         uri: operation.artifact_uri,
         size_bytes: operation.bytes_total,
-        signature_ref: "\{operation.artifact_uri}.sig",
+        signature_ref: model_source_signature_ref(operation.artifact_uri),
       },
       license_id: intent.license_id,
       provenance: "modelscope:\{operation.model_id}@\{operation.revision}:\{operation.import_id}",

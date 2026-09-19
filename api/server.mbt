@@ -4378,6 +4378,32 @@ async fn ApiService::dispatch_with_transport(
           400, "InvalidRequest", "invalid signature verification request", false,
         )
       }
+      if request.kind == "managed-revision" {
+        guard self.managed_revision_attestation(request.subject, request.digest) else {
+          return api_error(
+            409, "SignatureRejected", "the managed revision did not attest to that digest",
+            false,
+          )
+        }
+        let verification : @registry.ArtifactVerification = {
+          digest: request.digest,
+          signature_verified: true,
+          provenance_verified: request.provenance_verified,
+          verified_unix_ms: @async.now(),
+          verifier: "modelstore-manifest:\{request.subject}",
+        }
+        try registry.record_verification(verification) catch {
+          _ =>
+            return api_error(
+              400, "RegistryRejected", "verification metadata was rejected", false,
+            )
+        } noraise {
+          _ => ()
+        }
+        let receipt = "verification:\{verification.digest}"
+        self.operator_audit("artifact.verify", verification.digest, receipt)
+        return json_reply(202, { "accepted": true, "receipt": receipt })
+      }
       guard self.signature_verifier is Some(verifier) else {
         return api_error(
           503, "VerifierUnavailable", "the configured signature verifier is unavailable",
