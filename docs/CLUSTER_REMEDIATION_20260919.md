@@ -754,3 +754,37 @@ timeout 杀死后，恢复步骤没执行，于是生产库里这 4 个域的真
    再构建部署；部署后立刻核对 Pod 2/2、`/v1/nodes` 200、控制台是否能进。
 3. 建一个真正独立的测试库（`lunanexa_test`），把 `LUNANEXA_TEST_DATABASE_URL` 指过去，
    生产库不再作为测试目标。
+
+### 12.4 控制台首屏：load 成功但视图不重绘（未解决）
+
+症状：控制台停在登录页（后为"Loading…"），但网络层完全正常 —— CDP 记录显示
+`/v1/nodes`、`/v1/registry`、`/v1/scheduler`、`/v1/telemetry`、`/v1/catalog/templates`
+都在 ~120 ms 内返回 200 且**响应体到齐**，`/v1/readiness` 的 503 被正常处理；
+`meta lunanexa-operator-open = "*"`、`location.origin` 正确。
+
+用临时 `println` 打点（已移除）得到的确定结论：
+
+| 打点 | 是否出现 |
+|---|---|
+| `lnx-load-start` | ✅ |
+| `lnx-load-ok`（`load_console` 正常返回） | ✅ |
+| `lnx-loaded-update`（`Outcome(Loaded)` 处理器执行） | ✅ |
+| `lnx-view…`（`app_view` 再次渲染） | ❌ 一次都没有 |
+
+即：**数据加载成功、状态更新执行了，但视图没有重绘**，页面一直保留首次渲染的
+DOM（因此表现为登录页/加载页常驻）。`LoadFailed` 没触发（它会把原因写进
+`error_message` 并显示出来），集群轮询失败也不清认证（`Outcome(ClusterPollFailed)`
+只停止轮询）。`merge_loaded_console` 以 `{ ..loaded, … }` 构造，不覆盖
+`operator_authenticated`，`load_console` 返回的状态里它是 `true`。
+
+试过但**没有生效**的改法：把开放部署的首次加载从 `create_state_with_init` 的命令
+改为挂载后经消息（`StartOpenDeployment`）再派发 —— 仍然不重绘。因此问题不在
+"init 还是消息"，而在**派发用的 `emit` 与被渲染的模型不是同一份**这一类
+Rabbita 绑定问题（会话路径下曾经正常，是因为它的 `load_command` 由后续消息的
+`emit` 派发）。
+
+下一步诊断建议：在 `app_view` 被调用的地方打点确认是否只有一次；检查
+`model.map(model => app_view(model, emit))` 里 `emit` 的绑定与
+`@rabbita.batch([...])` 的返回值；最小复现是"init 派发一次 perform，其 outcome
+能否触发重绘"。当前线上是 `12128a2` 的行为（登录页可见、加载中显示进度、失败原因可见），
+已确认可用但需要人工登录。
