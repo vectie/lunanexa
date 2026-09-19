@@ -1,5 +1,5 @@
 ///|
-pub let schema_version : Int = 4
+pub let schema_version : Int = 5
 
 ///|
 pub let schema_sql : String =
@@ -99,6 +99,13 @@ pub let schema_sql : String =
   #|);
   #|CREATE INDEX IF NOT EXISTS workspace_leases_subject_state
   #|  ON lunanexa.workspace_leases(subject_ref, state, expires_unix_ms);
+  #|CREATE TABLE IF NOT EXISTS lunanexa.operational_events (
+  #|  event_id text PRIMARY KEY,
+  #|  timestamp_unix_ms bigint NOT NULL CHECK (timestamp_unix_ms > 0),
+  #|  payload jsonb NOT NULL
+  #|);
+  #|CREATE INDEX IF NOT EXISTS operational_events_timestamp
+  #|  ON lunanexa.operational_events(timestamp_unix_ms);
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (1)
   #|ON CONFLICT (version) DO NOTHING;
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (2)
@@ -106,6 +113,8 @@ pub let schema_sql : String =
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (3)
   #|ON CONFLICT (version) DO NOTHING;
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (4)
+  #|ON CONFLICT (version) DO NOTHING;
+  #|INSERT INTO lunanexa.schema_migrations(version) VALUES (5)
   #|ON CONFLICT (version) DO NOTHING;
   #|COMMIT;
 

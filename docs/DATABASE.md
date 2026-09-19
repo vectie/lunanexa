@@ -7,7 +7,7 @@ to this database.
 
 ## Stored records
 
-Schema version 3 maintains the following normalized, indexed projections and
+Schema version 5 maintains the following normalized, indexed projections and
 leadership state:
 
 - `lunanexa.enterprise_memberships` — enterprise organization membership,
@@ -21,6 +21,10 @@ leadership state:
   evidence;
 - `lunanexa.workspace_access_grants` — scoped, expiring access authority;
 - `lunanexa.workspace_leases` — time-bounded model/workbench entitlement;
+- `lunanexa.operational_events` — the append-only bounded recent operational
+  event window, keyed by event identifier so a retried append cannot duplicate
+  an event. Events are appended one row at a time and therefore never rewrite a
+  snapshot;
 - `lunanexa.snapshots` — canonical typed snapshots used for deterministic
   restart recovery, including admission reservations, hashed API credentials,
   the commercial ledger and callback history, technical prewarm/replay state,
@@ -44,9 +48,10 @@ The `notifications` snapshot row retains subject/platform-scoped events,
 lifecycle generations, channel preferences and retry/dead-letter delivery
 records. It stores bounded localization parameters and evidence receipts, not
 message-provider credentials or raw email/SMS content.
-The `observability` row holds only a bounded recent operational event window
-and monotonic low-cardinality counters. It supports restart continuity and
-local alerting, but does not replace the deployment log backend.
+The `observability` row holds only the monotonic low-cardinality counters and
+the external export freshness receipt; the recent operational event window
+lives in `lunanexa.operational_events`. Together they support restart
+continuity and local alerting, but do not replace the deployment log backend.
 
 Every mutation writes the canonical snapshot and its normalized projections in
 one transaction. A failed projection constraint rolls back the snapshot too.
