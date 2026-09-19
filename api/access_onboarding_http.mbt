@@ -333,7 +333,7 @@ async fn ApiService::access_package_view_for_membership(
     "email": account.email,
     "organization_id": membership.organization_id,
     "tenant_ref": membership.tenant_ref,
-    "user_id": user.map(value => value.user_id),
+    "user_id": user.map(value => value.user_id).unwrap_or(""),
     "membership_id": membership.membership_id,
     "grant_id": grant.map(value => value.grant_id),
     "lease_id": lease.map(value => value.lease_id),
