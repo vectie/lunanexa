@@ -1584,7 +1584,18 @@ fn route_label(locale : @i18n.Locale, route : OperatorRoute) -> String {
     Benchmarks => localized(locale, "Benchmarks", "基准测试")
     Policies => localized(locale, "Policies", "策略")
     Audit => localized(locale, "Audit", "审计")
+    Blank => localized(locale, "Blank page", "空白页")
   }
+}
+
+///|
+/// An intentionally empty page. It renders the page frame and nothing else, so
+/// whatever is placed here later starts from a blank surface rather than from
+/// someone else's layout.
+fn blank_view(state : ConsoleState) -> @rabbita.Html {
+  @html.section(attrs=@html.Attrs::build().aria_labelledby("blank-title"), [
+    @html.h2(id="blank-title", route_label(state.locale, Blank)),
+  ])
 }
 
 ///|
@@ -1673,6 +1684,11 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
         locale, "Immutable decisions, evidence, results, and correlation receipts.",
         "追踪不可变的决策、证据、结果与关联回执。",
       )
+    Blank =>
+      localized(
+        locale, "Deliberately empty, for whatever is placed here next.",
+        "刻意留空的页面，供后续放置内容。",
+      )
   }
 }
 
@@ -1729,6 +1745,7 @@ fn navigation(
       nav_link(locale, QualifiedServices, current, emit),
       nav_link(locale, Benchmarks, current, emit),
       nav_link(locale, Audit, current, emit),
+      nav_link(locale, Blank, current, emit),
     ],
   )
 }
@@ -8676,6 +8693,7 @@ fn console_view(
     Benchmarks => benchmarks_view(state)
     Policies => policies_view(state, emit)
     Audit => audit_view(state)
+    Blank => blank_view(state)
   }
   @html.div(class="app-shell", [
     @html.style_tag(
