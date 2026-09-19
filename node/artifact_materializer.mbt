@@ -390,7 +390,7 @@ fn endpoint_host(
 ///|
 fn ArtifactMaterializer::s3_headers(
   self : ArtifactMaterializer,
-  uri : String,
+  object_key : String,
   now_unix_ms : Int64,
 ) -> Map[String, String] raise ArtifactMaterializationError {
   guard self.s3_sigv4 is Some(config) else { return Map([]) }
@@ -398,7 +398,7 @@ fn ArtifactMaterializer::s3_headers(
     raise InvalidConfiguration
   }
   let host = endpoint_host(self.endpoint)
-  let canonical_uri = "/\{s3_object_key(uri)}"
+  let canonical_uri = "/\{object_key}"
   let (date, timestamp) = sigv4_timestamp(now_unix_ms)
   let payload_hash = "UNSIGNED-PAYLOAD"
   let mut canonical_headers = "host:\{host}\nx-amz-content-sha256:\{payload_hash}\nx-amz-date:\{timestamp}\n"
@@ -437,9 +437,21 @@ fn ArtifactMaterializer::s3_headers(
 ///|
 fn ArtifactMaterializer::object_url(
   self : ArtifactMaterializer,
-  uri : String,
-) -> String raise ArtifactMaterializationError {
-  "\{self.endpoint}/\{s3_object_key(uri)}"
+  object_key : String,
+) -> String {
+  "\{self.endpoint}/\{object_key}"
+}
+
+///| A revision lives under a directory instead of in one object, so every
+/// fetch hits `/<directory>/<path>` on the same authenticated artifact route.
+fn managed_revision_directory(uri : String) -> String? {
+  guard uri.has_prefix(@contracts.model_store_scheme) else { return None }
+  let directory = uri[@contracts.model_store_scheme.length():].to_owned()
+  if safe_object_key(directory) {
+    Some(directory)
+  } else {
+    None
+  }
 }
 
 ///|
@@ -496,7 +508,7 @@ async fn quarantine_if_present(path : String) -> Unit {
 ///|
 async fn ArtifactMaterializer::download(
   self : ArtifactMaterializer,
-  uri : String,
+  object_key : String,
   partial_path : String,
   expected_size_bytes : Int64,
   maximum_size_bytes : Int64,
@@ -525,7 +537,7 @@ async fn ArtifactMaterializer::download(
       remove_if_present(partial_path)
     }
   }
-  let headers : Map[String, String] = self.s3_headers(uri, @async.now())
+  let headers : Map[String, String] = self.s3_headers(object_key, @async.now())
   if self.s3_sigv4 is None && self.credential != "" {
     if self.node_id == "" {
       headers["Authorization"] = "Bearer \{self.credential}"
@@ -540,7 +552,7 @@ async fn ArtifactMaterializer::download(
   if offset > 0L {
     headers["Range"] = "bytes=\{offset}-"
   }
-  let (response, stream) = @http.get_stream(self.object_url(uri), headers~)
+  let (response, stream) = @http.get_stream(self.object_url(object_key), headers~)
   defer stream.close()
   let append = offset > 0L && response.code == 206
   if response.code < 200 || response.code >= 300 {
@@ -615,6 +627,253 @@ async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::verify_cached(
 }
 
 ///|
+/// A revision's own manifest, written by the model-source adapter that proved
+/// every file against ModelScope. It is the artifact the controller pins.
+struct ManagedRevisionManifest {
+  schema_version : String
+  model_id : String
+  observed_revision : String
+  files : Array[ManagedRevisionFile]
+} derive(FromJson)
+
+///|
+struct ManagedRevisionFile {
+  path : String
+  sha256 : String
+  size : Int64
+} derive(FromJson)
+
+///|
+fn ArtifactMaterializer::revision_root(
+  self : ArtifactMaterializer,
+  digest : String,
+) -> String raise ArtifactMaterializationError {
+  "\{self.cache_root}/\{digest_hex(digest)}.revision"
+}
+
+///|
+fn ArtifactMaterializer::revision_staging(
+  self : ArtifactMaterializer,
+  digest : String,
+) -> String raise ArtifactMaterializationError {
+  "\{self.cache_root}/\{digest_hex(digest)}.revision.partial"
+}
+
+///|
+fn ArtifactMaterializer::revision_ready_path(
+  self : ArtifactMaterializer,
+  digest : String,
+) -> String raise ArtifactMaterializationError {
+  "\{self.cache_root}/\{digest_hex(digest)}.revision.ready"
+}
+
+///|
+fn sha256_of_bytes(bytes : Bytes) -> String {
+  "sha256:\{@crypto.bytes_to_hex_string(@crypto.sha256(bytes))}"
+}
+
+///|
+fn managed_revision_manifest_errors(
+  manifest : ManagedRevisionManifest,
+) -> Bool {
+  if manifest.schema_version != @contracts.source_manifest_schema_version ||
+    manifest.model_id == "" ||
+    manifest.model_id.length() > 180 ||
+    manifest.observed_revision == "" ||
+    manifest.observed_revision.length() > 96 ||
+    manifest.files.length() == 0 ||
+    manifest.files.length() > 20000 {
+    return true
+  }
+  let seen : Map[String, Bool] = Map([])
+  for file in manifest.files {
+    if !safe_object_key(file.path) || seen.contains(file.path) {
+      return true
+    }
+    seen[file.path] = true
+  }
+  false
+}
+
+///| Read a revision from the management node's model store. The manifest the
+/// controller signed is fetched first and must hash to the assigned digest;
+/// every file it lists is then streamed, resumed across restarts, and hashed
+/// to the digest that manifest declares. There is no detached cosign
+/// signature over a directory, so the manifest binding *is* the signature: a
+/// tree that does not reproduce the signed manifest is rejected outright.
+async fn ArtifactMaterializer::materialize_revision(
+  self : ArtifactMaterializer,
+  assignment : @contracts.DesiredAssignment,
+  directory : String,
+) -> MaterializedArtifact {
+  let artifact = assignment.artifact
+  if artifact.size_bytes <= 0L ||
+    artifact.size_bytes > self.maximum_artifact_size_bytes {
+    raise ArtifactTooLarge
+  }
+  let root = self.revision_root(artifact.digest)
+  let staging = self.revision_staging(artifact.digest)
+  let ready_path = self.revision_ready_path(artifact.digest)
+  if @fs.exists(ready_path) && @fs.exists(root) {
+    try verify_materialized_revision(root, artifact, ready_path) catch {
+      _ => {
+        quarantine_if_present(ready_path)
+        quarantine_if_present(root)
+      }
+    } noraise {
+      cached => return cached
+    }
+  }
+  let manifest_key = "\{directory}/\{@contracts.model_store_manifest_name}"
+  let manifest_path = "\{staging}/\{@contracts.model_store_manifest_name}"
+  if !@fs.exists(staging) {
+    @fs.mkdir(staging, permission=0o700, recursive=true)
+  }
+  let (manifest_digest, manifest_size) = self.download(
+    manifest_key,
+    manifest_path,
+    0L,
+    self.signature_maximum_bytes.max(1048576L),
+    assignment,
+  )
+  if manifest_digest != artifact.digest {
+    quarantine_if_present(manifest_path)
+    raise ArtifactDigestMismatch
+  }
+  let manifest_bytes = try @fs.read_file(manifest_path).binary() catch {
+    _ => raise ArtifactFetchFailed
+  } noraise {
+    value => value
+  }
+  ignore(manifest_size)
+  let manifest : ManagedRevisionManifest = try
+    @json.from_json(@json.parse(@utf8.decode(manifest_bytes)))
+  catch {
+    _ => raise ArtifactSizeMismatch
+  } noraise {
+    value => value
+  }
+  if managed_revision_manifest_errors(manifest) {
+    raise ArtifactSizeMismatch
+  }
+  let mut total = 0L
+  for file in manifest.files {
+    if file.size <= 0L || file.size > self.maximum_artifact_size_bytes - total {
+      raise ArtifactTooLarge
+    }
+    total += file.size
+  }
+  if total != artifact.size_bytes {
+    raise ArtifactSizeMismatch
+  }
+  for file in manifest.files {
+    let destination = "\{staging}/\{file.path}"
+    match destination.rev_find("/") {
+      Some(index) => {
+        let parent = destination[:index].to_owned()
+        if !@fs.exists(parent) {
+          @fs.mkdir(parent, permission=0o700, recursive=true)
+        }
+      }
+      None => ()
+    }
+    let (digest, size) = self.download(
+      "\{directory}/\{file.path}",
+      destination,
+      file.size,
+      file.size,
+      assignment,
+    )
+    if size != file.size || digest != "sha256:\{file.sha256}" {
+      quarantine_if_present(destination)
+      raise ArtifactDigestMismatch
+    }
+  }
+  if @fs.exists(root) {
+    @fs.rmdir(root, recursive=true)
+  }
+  @fs.rename(staging, root, replace=false)
+  let ready_partial = "\{ready_path}.partial"
+  @fs.write_file(
+    ready_partial,
+    artifact.digest,
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+    sync=Full,
+  )
+  @fs.rename(ready_partial, ready_path, replace=true)
+  {
+    digest: artifact.digest,
+    host_path: root,
+    size_bytes: total,
+  }
+}
+
+///| Reuse re-checks the manifest binding and the shape of the tree. Hashing
+/// 1.2 TB again on every reconcile would keep a node busy forever; the file
+/// digests were proved when the revision was written and the ready marker is
+/// only written after that proof succeeded.
+async fn verify_materialized_revision(
+  root : String,
+  artifact : @contracts.ArtifactRef,
+  ready_path : String,
+) -> MaterializedArtifact {
+  let marker = @fs.read_file(ready_path).text()
+  if marker != artifact.digest {
+    raise ArtifactDigestMismatch
+  }
+  let manifest_path = "\{root}/\{@contracts.model_store_manifest_name}"
+  let manifest_bytes = try @fs.read_file(manifest_path).binary() catch {
+    _ => raise ArtifactFetchFailed
+  } noraise {
+    value => value
+  }
+  if sha256_of_bytes(manifest_bytes) != artifact.digest {
+    raise ArtifactDigestMismatch
+  }
+  let manifest : ManagedRevisionManifest = try
+    @json.from_json(@json.parse(@utf8.decode(manifest_bytes)))
+  catch {
+    _ => raise ArtifactSizeMismatch
+  } noraise {
+    value => value
+  }
+  if managed_revision_manifest_errors(manifest) {
+    raise ArtifactSizeMismatch
+  }
+  let mut total = 0L
+  for file in manifest.files {
+    let path = "\{root}/\{file.path}"
+    if !@fs.exists(path) {
+      raise ArtifactFetchFailed
+    }
+    let file_handle = try @fs.open(path, mode=ReadOnly) catch {
+      _ => raise ArtifactFetchFailed
+    } noraise {
+      value => value
+    }
+    let size = try file_handle.size() catch {
+      _ => raise ArtifactFetchFailed
+    } noraise {
+      value => value
+    }
+    file_handle.close()
+    if size != file.size {
+      raise ArtifactSizeMismatch
+    }
+    total += file.size
+  }
+  if total != artifact.size_bytes {
+    raise ArtifactSizeMismatch
+  }
+  {
+    digest: artifact.digest,
+    host_path: root,
+    size_bytes: total,
+  }
+}
+
+///|
 pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   self : ArtifactMaterializer,
   assignment : @contracts.DesiredAssignment,
@@ -624,7 +883,10 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   if !assignment.network.allow_artifact_store {
     raise ArtifactStoreDenied
   }
-  ignore(s3_object_key(artifact.uri))
+  if managed_revision_directory(artifact.uri) is Some(directory) {
+    return self.materialize_revision(assignment, directory)
+  }
+  let object_key = s3_object_key(artifact.uri)
   let detached_signature_uri = signature_uri(artifact)
   ignore(s3_object_key(detached_signature_uri))
   if artifact.size_bytes <= 0L ||
@@ -660,7 +922,7 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   let artifact_partial = "\{artifact_path}.partial"
   let signature_partial = "\{signature_path}.partial"
   let (actual_digest, actual_size) = self.download(
-    artifact.uri,
+    object_key,
     artifact_partial,
     artifact.size_bytes,
     self.maximum_artifact_size_bytes,
@@ -675,7 +937,7 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   }
   ignore(
     self.download(
-      detached_signature_uri,
+      s3_object_key(detached_signature_uri),
       signature_partial,
       0L,
       self.signature_maximum_bytes,
