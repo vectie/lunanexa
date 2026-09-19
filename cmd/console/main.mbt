@@ -233,27 +233,6 @@ extern "js" fn console_page_origin() -> String =
   #| () => globalThis.location?.origin || ''
 
 ///|
-/// Operator credential this deployment is willing to hand the login form. The
-/// deployment injects it as a meta tag; an empty value means "ask the operator
-/// to paste one". It is never stored in the repository.
-extern "js" fn deployment_operator_credential() -> String =
-  #| () => globalThis.document?.querySelector('meta[name="lunanexa-operator-credential"]')?.getAttribute('content') || ''
-
-///|
-/// Writes a value into the login field and fires an `input` event, so the form
-/// shows the credential and the typed state learns about it in one step. The
-/// write goes to the DOM node directly: it must not depend on a re-render,
-/// because a page whose render loop has stalled can still be signed in.
-extern "js" fn fill_login_field(field_id : String, value : String) -> Bool =
-  #| (field_id, value) => {
-  #|   const field = globalThis.document?.getElementById(field_id);
-  #|   if (!field || !value) return false;
-  #|   field.value = value;
-  #|   field.dispatchEvent(new globalThis.Event("input", { bubbles: true }));
-  #|   return true;
-  #| }
-
-///|
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
 
 ///|
@@ -2340,7 +2319,6 @@ priv struct AppModel {
 
 ///|
 priv enum AppMessage {
-  FillOperatorCredential
   GatewaySessionLoaded(GatewayBrowserSession)
   GatewaySessionUnavailable
   AccountSessionChanged(String)
@@ -4096,23 +4074,6 @@ fn update_live(
       } else {
         (model, cluster_poll_request_command(model, generation, emit))
       }
-    FillOperatorCredential => {
-      // An open deployment authenticates through the same-origin gateway, so
-      // the marker is enough: the browser never holds the operator token.
-      let offered = match deployment_operator_credential() {
-        value if value != "" => value
-        _ => if deployment_console_open() { "deployment-open" } else { "" }
-      }
-      if offered == "" {
-        (model, @rabbita.none)
-      } else {
-        ignore(fill_login_field("login-account-session", offered))
-        (
-          { ..model, credential: offered, console: { ..model.console, error_message: None } },
-          @rabbita.none,
-        )
-      }
-    }
     Connect => {
       if !commercial_organization_is_valid(model.commercial_organization) {
         return (
@@ -7827,29 +7788,10 @@ fn login_view(
                 "仅在身份验证并成功加载后显示控制台。",
               ),
             ),
-            // Fills the session field with the credential this deployment
-            // offers, so the operator only has to confirm. The button is shown
-            // whenever the deployment offers one; otherwise there is nothing
-            // to fill.
-            if deployment_operator_credential() != "" ||
-              deployment_console_open() {
-              @html.button(
-                type_="button",
-                class="secondary-button",
-                on_click=emit(FillOperatorCredential),
-                console_copy(
-                  locale,
-                  "Fill operator credential",
-                  "填入运维凭据",
-                ),
-              )
-            } else {
-              @html.nothing
-            },
             @html.button(
               type_="button",
               disabled=!transport_allowed ||
-                model.credential == "" ||
+                !model.credential.has_prefix("lnxs_") ||
                 model.console.loading,
               on_click=emit(Connect),
               if model.console.loading {
