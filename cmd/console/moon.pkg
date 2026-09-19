@@ -24,3 +24,7 @@ import {
 supported_targets = "js"
 
 pkgtype(kind: "executable")
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)
