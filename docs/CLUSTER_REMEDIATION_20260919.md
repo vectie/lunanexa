@@ -821,3 +821,59 @@ Rabbita 绑定问题（会话路径下曾经正常，是因为它的 `load_comma
 `@rabbita.batch([...])` 的返回值；最小复现是"init 派发一次 perform，其 outcome
 能否触发重绘"。当前线上是 `12128a2` 的行为（登录页可见、加载中显示进度、失败原因可见），
 已确认可用但需要人工登录。
+
+### 12.5 重绘失败的运行时定位（2026-09-20 凌晨）
+
+把 12.4 的结论再往前推了一层，读到 UI 运行时的源码后可以给出**两个候选机制**，
+都指向同一个设计缺陷：**运行时用"标志位 + 事后复位"保护重入，却没有 try/finally**。
+
+`rabbita/internal/runtime/sandbox.mbt`：
+
+```moonbit
+pub impl Scheduler for Sandbox with fn drain_message(self) {
+  if !self.drain_scheduled {
+    self.drain_scheduled = true
+    while self.msg_queue.pop() is Some((id, erased_msg)) { (store.on_update)(self, erased_msg) }
+    self.drain_scheduled = false     // ← 只有正常走完才复位
+    self.flush()
+  }
+}
+
+pub fn Sandbox::flush(self : Self) -> Unit {
+  if !self.paint_scheduled {
+    self.paint_scheduled = true
+    @dom.window().request_animation_frame(fn(_) {
+      ... diff_node(...) ...
+      self.paint_scheduled = false   // ← 只有 diff 正常返回才复位
+    })
+  }
+}
+```
+
+- **机制 A**：`on_update`（我们的 `update` + `set_model` + `scheduler.add(cmd)`）里任何一处抛错，
+  `drain_scheduled` 永远为 `true` → 之后**所有消息都不再处理**、`flush()` 再也不被调用；
+- **机制 B**：`request_animation_frame` 回调里 `diff_node` 抛错，`paint_scheduled` 永远为 `true`
+  → 之后**再也不申请新的动画帧**。
+
+两种机制都精确产生我们观察到的现象："状态更新执行了、返回的模型也确实变了，但 DOM 从此不动"。
+另外 `App::mount` 的首次渲染走的是 `sandbox.initialize()`（**同步插入 DOM，不经 RAF**），
+所以"首屏能出、之后就死"与机制 B 完全吻合。
+
+**这一轮排除的**：不是我们的控制台改动。把 `cmd/console/main.mbt` / `ui/console.mbt`
+回退到今天曾经正常渲染过的 `8282443` 再构建部署，症状**完全一样**（登录页常驻、
+`.console-root` 不出现）→ 触发条件来自后端状态，而非前端代码。CDP 侧也没有捕获到
+任何未捕获异常（`Runtime.exceptionThrown` 为空），说明抛错被吞在运行时自己的调用栈里。
+
+**为什么不能在本仓库直接修**：`.mooncakes/` 在 `.gitignore` 里、未被 git 跟踪，
+`rabbita` 是外部依赖；改本地 `.mooncakes` 既不可复现，也可能被 `moon` 覆盖。
+
+**可行的修法（按推荐顺序）**：
+1. 把 `rabbita` vendoring 进仓库（复制到 `third_party/rabbita` 并把 `moon.pkg` 的 import
+   指向它），然后在 `drain_message` 与 `flush` 上加 `try/finally`，
+   并在 `on_update` 外层记录异常而不是让它逃逸 —— 这样一次失败不会永久废掉重绘；
+2. 或升级 `rabbita` 到修复该问题的版本；
+3. 或向上游提 issue：`drain_message`/`flush` 的标志位缺少 `try/finally`，
+   任何一次异常都会让整个应用的后续渲染静默失效。
+
+当前线上是回退到 `8282443` 的等价构建（摘要 `d8298ec19a26`，与 HEAD 一致），
+表现为登录页常驻 —— 与回退前一致，说明这不是本轮前端改动引入的。
