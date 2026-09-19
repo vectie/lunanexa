@@ -64,15 +64,48 @@ async fn PgOperation::execute(
 }
 
 ///|
-async fn PgOperation::release(self : PgOperation) -> Unit {
-  if self.failed {
-    ignore(self.connection.execute("ROLLBACK")) catch {
+/// Returns the borrowed connection. This stays synchronous on purpose: it runs
+/// from `defer`, and a deferred async call would leave the lease held forever.
+/// Transactions roll back through `with_transaction` before they get here.
+fn PgOperation::release(self : PgOperation) -> Unit {
+  self.connection.release()
+}
+
+///|
+/// Runs `body` inside a transaction on a borrowed connection, rolling back and
+/// releasing the connection when the body raises. Without this a failed
+/// statement would return its connection to the pool with a transaction still
+/// open, and the next statement on that worker would join it.
+async fn with_transaction(
+  connection : PgOperation,
+  body : async (PgOperation) -> Unit,
+) -> Unit raise DatabaseError {
+  let mut failure : Error? = None
+  let committed = try {
+    ignore(run(connection, "BEGIN"))
+    body(connection)
+    ignore(run(connection, "COMMIT"))
+    true
+  } catch {
+    error => {
+      failure = Some(error)
+      false
+    }
+  } noraise {
+    _ => false
+  }
+  if !committed {
+    ignore(connection.execute("ROLLBACK")) catch {
       _ => ()
     } noraise {
       _ => ()
     }
   }
-  self.connection.release()
+  connection.release()
+  match failure {
+    Some(error) => raise error
+    None => ()
+  }
 }
 
 ///|
@@ -353,6 +386,13 @@ async fn elect_controller(
   if succeeded {
     Some(elected)
   } else {
+    // An election that failed mid-transaction must not hand the worker back
+    // with the transaction still open.
+    ignore(connection.execute("ROLLBACK")) catch {
+      _ => ()
+    } noraise {
+      _ => ()
+    }
     release_controller_lock(connection)
     match failure {
       Some(error) => raise error
@@ -479,10 +519,9 @@ pub async fn PostgresDatabase::save_opaque_snapshot(
   }
   ignore(@json.parse(payload) catch { _ => raise UnsupportedSnapshot(domain) })
   let connection = self.begin_operation()
-  defer connection.release()
-  ignore(run(connection, "BEGIN"))
+  with_transaction(connection, op => {
   write_snapshot_row(connection, domain, version, payload)
-  ignore(run(connection, "COMMIT"))
+  })
 }
 
 ///|
@@ -511,13 +550,12 @@ pub async fn PostgresDatabase::save_opaque_snapshots(
     domains[domain] = ()
   }
   let connection = self.begin_operation()
-  defer connection.release()
-  ignore(run(connection, "BEGIN"))
+  with_transaction(connection, op => {
   for snapshot in snapshots {
     let (domain, version, payload) = snapshot
     write_snapshot_row(connection, domain, version, payload)
   }
-  ignore(run(connection, "COMMIT"))
+  })
 }
 
 ///| Appends one operational event to the append-only event relation. The event
@@ -646,17 +684,16 @@ pub async fn PostgresDatabase::save_portal_snapshot(
     raise UnsupportedSnapshot(snapshot.schema_version)
   }
   let connection = self.begin_operation()
-  defer connection.release()
-  ignore(run(connection, "BEGIN"))
+  with_transaction(connection, op => {
   write_snapshot_row(
-    connection,
+    op,
     "enterprise_portal",
     snapshot.schema_version,
     snapshot.to_json().stringify(),
   )
-  ignore(run(connection, "DELETE FROM lunanexa.portal_lease_requests"))
-  ignore(run(connection, "DELETE FROM lunanexa.portal_agreements"))
-  ignore(run(connection, "DELETE FROM lunanexa.enterprise_memberships"))
+  ignore(run(op, "DELETE FROM lunanexa.portal_lease_requests"))
+  ignore(run(op, "DELETE FROM lunanexa.portal_agreements"))
+  ignore(run(op, "DELETE FROM lunanexa.enterprise_memberships"))
   for membership in snapshot.memberships {
     ignore(
       run(
@@ -724,7 +761,7 @@ pub async fn PostgresDatabase::save_portal_snapshot(
       ),
     )
   }
-  ignore(run(connection, "COMMIT"))
+  })
 }
 
 ///|
@@ -736,17 +773,16 @@ pub async fn PostgresDatabase::save_workspace_snapshot(
     raise UnsupportedSnapshot(snapshot.schema_version)
   }
   let connection = self.begin_operation()
-  defer connection.release()
-  ignore(run(connection, "BEGIN"))
+  with_transaction(connection, op => {
   write_snapshot_row(
-    connection,
+    op,
     "workspace_directory",
     snapshot.schema_version,
     snapshot.to_json().stringify(),
   )
-  ignore(run(connection, "DELETE FROM lunanexa.workspace_access_grants"))
-  ignore(run(connection, "DELETE FROM lunanexa.workspace_leases"))
-  ignore(run(connection, "DELETE FROM lunanexa.workspace_users"))
+  ignore(run(op, "DELETE FROM lunanexa.workspace_access_grants"))
+  ignore(run(op, "DELETE FROM lunanexa.workspace_leases"))
+  ignore(run(op, "DELETE FROM lunanexa.workspace_users"))
   for user in snapshot.users {
     ignore(
       run(
@@ -808,5 +844,5 @@ pub async fn PostgresDatabase::save_workspace_snapshot(
       ),
     )
   }
-  ignore(run(connection, "COMMIT"))
+  })
 }
