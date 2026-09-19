@@ -4944,6 +4944,29 @@ fn verified_import_gate(
 }
 
 ///|
+/// Registered artifacts grouped by model, in the order the controller reported
+/// them. A model carries one artifact per qualification profile, so an
+/// ungrouped table reads as many models when only a few exist.
+pub fn group_models_by_model_id(
+  rows : Array[ModelRow],
+) -> Array[(String, Array[ModelRow])] {
+  let groups : Array[(String, Array[ModelRow])] = []
+  for row in rows {
+    let mut bucket : Array[ModelRow]? = None
+    for group in groups {
+      if group.0 == row.model_id {
+        bucket = Some(group.1)
+      }
+    }
+    match bucket {
+      Some(existing) => existing.push(row)
+      None => groups.push((row.model_id, [row]))
+    }
+  }
+  groups
+}
+
+///|
 fn models_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -4956,6 +4979,7 @@ fn models_view(
       }
     })
   })
+  let registered_models = group_models_by_model_id(state.models)
   @html.section(attrs=@html.Attrs::build().aria_labelledby("models-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -4976,8 +5000,8 @@ fn models_view(
         class="resource-count",
         localized(
           state.locale,
-          "\{state.models.length()} artifacts",
-          "\{state.models.length()} 个模型制品",
+          "\{registered_models.length()} models · \{state.models.length()} artifacts",
+          "\{registered_models.length()} 个模型 · \{state.models.length()} 个制品",
         ),
       ),
     ]),
@@ -5253,7 +5277,7 @@ fn models_view(
                         @html.strong(import_.model_id),
                         @html.span(
                           class="mono secondary",
-                          "{import_.revision} · {import_.import_id}",
+                          "\{import_.revision} · \{import_.import_id}",
                         ),
                       ]),
                       @html.span(
@@ -5301,13 +5325,13 @@ fn models_view(
                         ),
                         @html.span(
                           class="secondary mono",
-                          "{model_import_progress(import_)}% · {import_.files_completed}/{import_.files_total}",
+                          "\{model_import_progress(import_)}% · \{import_.files_completed}/\{import_.files_total}",
                         ),
                       ]),
                       @html.div(class="model-import-track", [
                         @html.span(
                           class="model-import-fill",
-                          style=["width: {model_import_progress(import_)}%"],
+                          style=["width: \{model_import_progress(import_)}%"],
                           "",
                         ),
                       ]),
@@ -5410,15 +5434,49 @@ fn models_view(
               @html.th(scope=Col, localized(state.locale, "Action", "操作")),
             ]),
           ),
-          @html.tbody(
-            [
-              for model in state.models => model_item(state.locale, model, emit)
-            ],
-          ),
+          @html.tbody(model_artifact_rows(state, emit, registered_models)),
         ]),
       ])
     },
   ])
+}
+
+///|
+/// Registry table body: one heading naming the model, then one row per
+/// registered artifact of that model. Heading a model's artifacts keeps the
+/// table readable when one model carries several qualification profiles.
+fn model_artifact_rows(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+  groups : Array[(String, Array[ModelRow])],
+) -> Array[@rabbita.Html] {
+  let body : Array[@rabbita.Html] = []
+  for group in groups {
+    let (model_id, artifacts) = group
+    body.push(
+      @html.tr(class="models-group-heading", [
+        @html.th(
+          scope=RowGroup,
+          colspan=6,
+          [
+            @html.strong(model_id),
+            @html.span(
+              class="secondary",
+              localized(
+                state.locale,
+                "\{artifacts.length()} registered artifacts",
+                "\{artifacts.length()} 个已注册制品",
+              ),
+            ),
+          ],
+        ),
+      ]),
+    )
+    for model in artifacts {
+      body.push(model_item(state.locale, model, emit))
+    }
+  }
+  body
 }
 
 ///|
@@ -8236,6 +8294,8 @@ fn console_styles() -> String {
     #|.alerts-window-select { min-height: 44px; padding: .45rem 1.9rem .45rem .6rem; border: 1px solid var(--line-strong); border-radius: .5rem; background: var(--surface); color: var(--text); font: inherit; }
     #|.alerts-window-summary { color: var(--muted); font-size: .75rem; }
     #|.alerts-day-heading th { text-transform: none; letter-spacing: .02em; font-size: .74rem; font-weight: 760; color: var(--muted-strong); }
+    #|.models-group-heading th { padding-top: 1.15rem; border-bottom: 1px solid var(--line); text-transform: none; letter-spacing: 0; font-size: .85rem; font-weight: 760; color: var(--text); background: none; }
+    #|.models-group-heading th strong { margin-right: .5rem; }
     #|.subsection-heading { align-items: center; margin: 1.6rem 0 .65rem; }
     #|.subsection-heading h3 { margin: 0; }
     #|.lease-cleanup-policy { margin: .9rem 0 1.15rem; padding: .85rem 1rem; border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--line)); border-left: 4px solid var(--warning); border-radius: .55rem; background: color-mix(in srgb, var(--warning-soft) 68%, var(--surface)); }
