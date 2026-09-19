@@ -622,27 +622,53 @@ async fn reconcile_once(
   }
   match sensors {
     Some(sensor) => {
-      samples.push({
-        node_id,
-        deployment_id: "",
-        metric: "accelerator_memory_total_mib",
-        value: sensor.memory_total_mib,
-        timestamp_unix_ms,
-      })
-      samples.push({
-        node_id,
-        deployment_id: "",
-        metric: "accelerator_memory_used_mib",
-        value: sensor.memory_used_mib,
-        timestamp_unix_ms,
-      })
-      samples.push({
-        node_id,
-        deployment_id: "",
-        metric: "accelerator_memory_free_mib",
-        value: sensor.memory_total_mib - sensor.memory_used_mib,
-        timestamp_unix_ms,
-      })
+      if sensor.memory_measured {
+        samples.push({
+          node_id,
+          deployment_id: "",
+          metric: "accelerator_memory_total_mib",
+          value: sensor.memory_total_mib,
+          timestamp_unix_ms,
+        })
+        samples.push({
+          node_id,
+          deployment_id: "",
+          metric: "accelerator_memory_used_mib",
+          value: sensor.memory_used_mib,
+          timestamp_unix_ms,
+        })
+        samples.push({
+          node_id,
+          deployment_id: "",
+          metric: "accelerator_memory_free_mib",
+          value: sensor.memory_total_mib - sensor.memory_used_mib,
+          timestamp_unix_ms,
+        })
+      } else {
+        // Unified-memory accelerators (for example NVIDIA GB10) report no
+        // memory counters over NVML; fall back to the truthfully measured
+        // host inventory values while keeping driver sensor readings below.
+        let mut total_memory = 0.0
+        let mut free_memory = 0.0
+        for accelerator in inventory.accelerators {
+          total_memory += accelerator.memory_total_mib.to_double()
+          free_memory += accelerator.memory_free_mib.to_double()
+        }
+        samples.push({
+          node_id,
+          deployment_id: "",
+          metric: "accelerator_memory_total_mib",
+          value: total_memory,
+          timestamp_unix_ms,
+        })
+        samples.push({
+          node_id,
+          deployment_id: "",
+          metric: "accelerator_memory_free_mib",
+          value: free_memory,
+          timestamp_unix_ms,
+        })
+      }
       samples.push({
         node_id,
         deployment_id: "",
