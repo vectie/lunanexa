@@ -157,14 +157,14 @@ async fn undertaking_test_snapshot(
 test "undertaking fixed tariffs reject discounts extra taxes currencies and duration mismatch" {
   let base = undertaking_test_order()
   let quote = base.quote.unwrap()
-  for
-    (unit, days, amount) in [
+  for case in [
       ("day", 1L, 4900L),
       ("week", 7L, 32200L),
       ("month", 30L, 129000L),
       ("quarter", 90L, 360000L),
       ("year", 365L, 1387000L),
     ] {
+    let (unit, days, amount) = case
     let money = undertaking_test_money(amount)
     let q = {
       ..quote,
@@ -327,11 +327,11 @@ async test "undertaking API submits approves persists and revokes with its prepa
   let packet = undertaking_test_packet()
   ignore(documents.create_packet(packet, "subject-a"))
   let portal = @portal_store.FilePortalStore::open("\{dir}/portal.json")
-  for
-    (subject, tenant, organization) in [
+  for case in [
       ("subject-a", "tenant-a", "org-a"),
       ("subject-b", "tenant-b", "org-b"),
     ] {
+    let (subject, tenant, organization) = case
     ignore(
       portal.put_membership({
         membership_id: subject,
