@@ -156,3 +156,42 @@ async test "the pool serves more concurrent statements than it has workers" {
   // if the pool only ever used one worker.
   assert_true(elapsed < 500L)
 }
+
+///|
+async test "consecutive statements on one lease report their own results" {
+  guard test_url() is Some(url) else {
+    return
+  }
+  let pool = @pgclient.PgPool::connect(url, workers=1)
+  let connection = pool.acquire()
+  let lock = connection.execute(
+    "SELECT pg_try_advisory_lock($1::bigint)::text",
+    parameters=[Some("5496452340495695181")],
+  )
+  let shown = match lock.value(0, 0) {
+    Some(value) => value
+    None => "<none>"
+  }
+  println("probe lock=" + shown + " rows=" + lock.row_count().to_string())
+  let second = connection.execute("SELECT 2::text")
+  let shown_second = match second.value(0, 0) {
+    Some(value) => value
+    None => "<none>"
+  }
+  println("probe second=" + shown_second)
+  let third = connection.execute(
+    "SELECT $1::text",
+    parameters=[Some("three")],
+  )
+  let shown_third = match third.value(0, 0) {
+    Some(value) => value
+    None => "<none>"
+  }
+  println("probe third=" + shown_third)
+  let _ = connection.execute(
+    "SELECT pg_advisory_unlock($1::bigint)",
+    parameters=[Some("5496452340495695181")],
+  )
+  connection.release()
+  pool.close()
+}

@@ -923,3 +923,60 @@ view: CLUSTER POSTURE | Cluster operational | ... | Node availability | 4 of 4 |
 **教训（写给未来的自己）**：在无头浏览器里用 DOM 查询判断"应用是否更新了"时，
 必须**显式要求一帧**（`Page.captureScreenshot` 或 `Emulation.setVisibleSize` 等），
 否则会把"渲染被节流"误判成"应用坏了"，并由此推出一整套错误的根因分析。
+
+## 13. pgclient 接线：两个假信号 + 一个真 bug（2026-09-20 凌晨）
+
+### 13.1 假信号一：领导选举测试的失败是"锁被生产占用"
+
+`moon test database` 里的领导选举用例反复在
+`try_acquire_controller_leadership(...).unwrap()` 处 PanicError。
+一度被我当成池化改造的回归，据此把池化层挡在了部署之外。**这个判断是错的。**
+
+直接查 `pg_locks` 看到：
+
+```
+pid=421548  database=lunanexa  objid=1075592525  mode=ExclusiveLock
+query=INSERT INTO lunanexa.operational_events(...)
+```
+
+即 **单参数 `pg_advisory_lock(bigint)` 的键空间是集群级的**，正在运行的**生产控制面
+（连的是 `lunanexa` 库）持有那把锁**，所以无论测试连哪个库、都抢不到领导权 →
+`try_acquire` 返回 `None` → 用例 unwrap 失败。这与池化改造无关：**只要生产控制面在跑，
+这个用例就不可能通过**（早先对生产库跑同一用例时的 "test controller did not acquire
+leadership" 也是同一个原因）。
+
+要验证它，必须先把 `deploy/lunanexa-control` 缩到 0 再跑。
+
+### 13.2 真 bug：`noraise` 的成功分支被我写成了常量
+
+池化层里我写的两处 `try/catch/noraise` 都是这个形状：
+
+```moonbit
+let committed = try { ...; true } catch { error => { failure = Some(error); false } }
+  noraise { _ => false }        // ← 错：noraise 拿到的是 try 块成功时的值
+```
+
+MoonBit 把 `try` 块**成功时的值**交给 `noraise`，写成 `_ => false` 就等于"永远失败"：
+`with_transaction` 会把**每一个事务都回滚**，`elect_controller` 会把**每一次成功选举
+都当成失败**。正确写法是 `noraise { value => value }`。已修正（但该层仍未验证通过，
+所以没进部署树）。
+
+教训：**`try/catch/noraise` 的 `noraise` 分支必须把入参传出去**，返回常量会静默改变语义。
+
+### 13.3 仍未解决
+
+把生产控制面缩到 0（确认锁已释放）之后再跑，选举用例**依然**返回 `None`，说明池化后的
+选举路径里还有别的问题没定位。因此：
+- 部署树保持**非池化**版本（已验证、正在线上跑），`HEAD` 可部署；
+- `pgclient` 包本身保留（6/6 通过，含"两条 400 ms 语句重叠"、"租约保持会话亲和性"）；
+- 失败细节：`database_test.mbt:131` unwrap 于 `try_acquire_controller_leadership`
+  （`postgres.mbt:309`）→ `PgPool::run_on`。下一步应在 `try_acquire_controller_leadership`
+  里把 `pg_try_advisory_lock(...)` 的返回值与 `row_count` 打出来（注意：不能用
+  `println("x" + match ... )` 直接拼 `match`，MoonBit 会报语法错，要先赋值给局部变量），
+  并确认选举用的 `BEGIN/INSERT/COMMIT` 是否真的在**同一个租约连接**上执行。
+
+### 13.4 环境记录
+
+- 新建了隔离测试库 `lunanexa_test`（此前测试直接打生产库，是 12.2 那场数据损坏的根源）；
+- 干净库上 `moon test pgclient` 7/7 通过（含新加的"同一租约上连续语句各自返回结果"探针：
+  `probe lock=true rows=1 / second=2 / third=three`）。
