@@ -220,7 +220,8 @@ pub fn ModelRegistry::register_model(
     model.artifact.uri.contains("<script") ||
     model.artifact.uri.contains_char('\n') ||
     !(model.artifact.uri.has_prefix("s3://") ||
-    model.artifact.uri.has_prefix("oci://")) ||
+    model.artifact.uri.has_prefix("oci://") ||
+    model.artifact.uri.has_prefix(@contracts.model_store_scheme)) ||
     !@contracts.valid_sha256_digest(model.artifact.digest) ||
     model.artifact.size_bytes <= 0L ||
     model.artifact.signature_ref == "" ||

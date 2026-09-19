@@ -37,6 +37,49 @@ fn artifact_key(uri : String) -> String? {
 }
 
 ///|
+/// Where an assignment's bytes live. `s3://` names one immutable object;
+/// `modelstore://<directory>` names a ModelScope-verified revision inside the
+/// management node's own model store, served file by file.
+priv enum ArtifactLocation {
+  Object(String)
+  Revision(String)
+}
+
+///|
+fn artifact_location(uri : String) -> ArtifactLocation? {
+  if uri.has_prefix("s3://") {
+    let key = uri[5:].to_owned()
+    if safe_artifact_key(key) && key.contains_char('/') {
+      Some(Object(key))
+    } else {
+      None
+    }
+  } else if uri.has_prefix(@contracts.model_store_scheme) {
+    let directory = uri[@contracts.model_store_scheme.length():].to_owned()
+    if safe_artifact_key(directory) {
+      Some(Revision(directory))
+    } else {
+      None
+    }
+  } else {
+    None
+  }
+}
+
+///|
+priv struct SourceRevisionManifest {
+  schema_version : String
+  model_id : String
+  observed_revision : String
+  files : Array[@modelsource.ModelScopeFile]
+} derive(FromJson)
+
+///|
+fn sha256_digest(text : String) -> String {
+  "sha256:\{@crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(text)))}"
+}
+
+///|
 fn assignment_signature_key(
   assignment : @contracts.DesiredAssignment,
 ) -> String? {
@@ -106,17 +149,168 @@ async fn resolved_artifact_path(root : String, key : String) -> String? {
 }
 
 ///|
-fn artifact_size_allowed(
+/// The manifest is the artifact for a managed revision: the assignment pins
+/// its digest, and only files that manifest lists are ever served. Nothing
+/// else inside the model store is reachable through this route.
+async fn managed_revision_size(
+  root : String,
+  directory : String,
+  key : String,
+  expected_digest : String,
+) -> Int64? {
+  if !key.has_prefix("\{directory}/") {
+    return None
+  }
+  let relative = key[directory.length() + 1:].to_owned()
+  guard resolved_artifact_path(
+    root,
+    "\{directory}/\{@contracts.model_store_manifest_name}",
+  ) is Some(manifest_path) else {
+    return None
+  }
+  let text = try @fs.read_file(manifest_path).text() catch {
+    _ => return None
+  } noraise {
+    value => value
+  }
+  if sha256_digest(text) != expected_digest {
+    return None
+  }
+  if relative == @contracts.model_store_manifest_name {
+    return Some(@utf8.encode(text).length().to_int64())
+  }
+  let manifest : SourceRevisionManifest = try
+    @json.from_json(@json.parse(text))
+  catch {
+    _ => return None
+  } noraise {
+    value => value
+  }
+  if manifest.schema_version != @contracts.source_manifest_schema_version ||
+    !@modelsource.valid_model_id(manifest.model_id) ||
+    !@modelsource.valid_revision(manifest.observed_revision) {
+    return None
+  }
+  match manifest.files.iter().find_first(file => file.path == relative) {
+    Some(file) => Some(file.size)
+    None => None
+  }
+}
+
+///|
+/// Decide whether the control plane may serve exactly this byte range for the
+/// assignment that claims it. Every branch is anchored to something the
+/// controller signed: the object size for `s3://`, the revision manifest for
+/// `modelstore://`, and a bounded size for the detached signature.
+async fn authorized_artifact_size(
+  root : String,
   assignment : @contracts.DesiredAssignment,
   key : String,
   size : Int64,
   signature_maximum_bytes : Int64,
+) -> Int64? {
+  match artifact_location(assignment.artifact.uri) {
+    Some(Object(_)) =>
+      if key == artifact_key(assignment.artifact.uri).unwrap_or("") &&
+        size == assignment.artifact.size_bytes {
+        Some(size)
+      } else {
+        None
+      }
+    Some(Revision(directory)) =>
+      match
+        managed_revision_size(
+          root,
+          directory,
+          key,
+          assignment.artifact.digest,
+        ) {
+        Some(registered) => if size == registered { Some(size) } else { None }
+        None => None
+      }
+    None =>
+      if assignment_signature_key(assignment) == Some(key) &&
+        size <= signature_maximum_bytes {
+        Some(size)
+      } else {
+        None
+      }
+  }
+}
+
+///|
+/// Attest a managed revision from the control plane's own store: re-read the
+/// revision manifest, confirm it is the digest the operator is recording, and
+/// confirm every file it declares is still present at its declared size. The
+/// per-file SHA-256 was already proved by the model-source adapter when the
+/// revision was registered; re-hashing 1.2 TB per verification request would
+/// buy nothing, so this attestation covers the manifest binding and the tree
+/// shape, and `verifier` records exactly which authority vouched for it.
+async fn ApiService::managed_revision_attestation(
+  self : ApiService,
+  uri : String,
+  expected_digest : String,
 ) -> Bool {
-  if artifact_key(assignment.artifact.uri) == Some(key) {
-    size == assignment.artifact.size_bytes
-  } else {
-    assignment_signature_key(assignment) == Some(key) &&
-    size <= signature_maximum_bytes
+  guard self.artifact_root is Some(root) &&
+    root.has_prefix("/") &&
+    !root.contains("..") else {
+    return false
+  }
+  guard artifact_location(uri) is Some(Revision(directory)) else {
+    return false
+  }
+  guard resolved_artifact_path(
+    root,
+    "\{directory}/\{@contracts.model_store_manifest_name}",
+  ) is Some(manifest_path) else {
+    return false
+  }
+  let text = try @fs.read_file(manifest_path).text() catch {
+    _ => return false
+  } noraise {
+    value => value
+  }
+  if sha256_digest(text) != expected_digest {
+    return false
+  }
+  let manifest : SourceRevisionManifest = try
+    @json.from_json(@json.parse(text))
+  catch {
+    _ => return false
+  } noraise {
+    value => value
+  }
+  if manifest.schema_version != @contracts.source_manifest_schema_version ||
+    !@modelsource.valid_model_id(manifest.model_id) ||
+    !@modelsource.valid_revision(manifest.observed_revision) ||
+    manifest.files.length() == 0 {
+    return false
+  }
+  for file in manifest.files {
+    guard resolved_artifact_path(root, "\{directory}/\{file.path}")
+      is Some(path) else {
+      return false
+    }
+    guard stored_file_size(path) is Some(size) else { return false }
+    if size != file.size {
+      return false
+    }
+  }
+  true
+}
+
+///|
+async fn stored_file_size(path : String) -> Int64? {
+  let file = try @fs.open(path, mode=ReadOnly) catch {
+    _ => return None
+  } noraise {
+    value => value
+  }
+  defer file.close()
+  try file.size() catch {
+    _ => None
+  } noraise {
+    value => Some(value)
   }
 }
 
@@ -145,12 +339,17 @@ async fn ApiService::artifact_assignment(
     @node.assignment_signature(assignment, self.assignment_signing_secret) {
     return None
   }
-  let model_key = artifact_key(assignment.artifact.uri)
-  let signature_key = assignment_signature_key(assignment)
-  if model_key != Some(key) && signature_key != Some(key) {
-    None
-  } else {
+  let bound = match artifact_location(assignment.artifact.uri) {
+    Some(Object(expected)) => key == expected
+    // A managed revision is a tree: any file under it is a candidate, and
+    // `managed_revision_size` decides whether that exact file was registered.
+    Some(Revision(directory)) => key.has_prefix("\{directory}/")
+    None => false
+  }
+  if bound || assignment_signature_key(assignment) == Some(key) {
     Some(assignment)
+  } else {
+    None
   }
 }
 
@@ -264,13 +463,18 @@ async fn ApiService::serve_artifact(
   } noraise {
     value => value
   }
-  if size <= 0L ||
-    !artifact_size_allowed(
-      assignment,
-      key,
-      size,
-      self.global_settings.node_runtime.signature_artifact_maximum_bytes,
-    ) {
+  if size <= 0L {
+    send_artifact_error(connection, 409, "artifact metadata is unavailable")
+    return true
+  }
+  let allowed_size : Int64? = authorized_artifact_size(
+    root,
+    assignment,
+    key,
+    size,
+    self.global_settings.node_runtime.signature_artifact_maximum_bytes,
+  )
+  guard allowed_size is Some(_) else {
     send_artifact_error(
       connection, 409, "artifact metadata does not match its assignment",
     )
