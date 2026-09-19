@@ -9,8 +9,8 @@ import {
 supported_targets = "native"
 
 options(
-  "native-stub": [ "libpq.c" ],
-  targets: { "postgres.mbt": [ "native" ], "postgres_test.mbt": [ "native" ] },
+  "native-stub": [ "libpq.c", "pool.c" ],
+  targets: { "postgres.mbt": [ "native" ], "pool.mbt": [ "native" ], "postgres_test.mbt": [ "native" ], "pool_test.mbt": [ "native" ] },
   link: {
     "native": {
       "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",

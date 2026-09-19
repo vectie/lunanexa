@@ -1,25 +1,8 @@
-#include "moonbit.h"
-
-#if __has_include(<libpq-fe.h>)
-#include <libpq-fe.h>
-#elif __has_include(<postgresql/libpq-fe.h>)
-#include <postgresql/libpq-fe.h>
-#else
-#error "libpq headers are required to build LunaNexa PostgreSQL support"
-#endif
+#include "libpq_internal.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
-typedef struct {
-  PGconn *connection;
-} lunanexa_pg_connection_t;
-
-typedef struct {
-  PGconn *connection;
-  PGresult *result;
-} lunanexa_pg_result_t;
 
 static void lunanexa_pg_connection_finalize(void *pointer) {
   lunanexa_pg_connection_t *value = (lunanexa_pg_connection_t *)pointer;
@@ -35,6 +18,33 @@ static void lunanexa_pg_result_finalize(void *pointer) {
     PQclear(value->result);
     value->result = NULL;
   }
+  if (value->owned_error != NULL) {
+    free(value->owned_error);
+    value->owned_error = NULL;
+  }
+}
+
+lunanexa_pg_result_t *lunanexa_pg_result_adopt_error(
+  PGconn *connection,
+  PGresult *result,
+  char *owned_error
+) {
+  lunanexa_pg_result_t *output =
+    (lunanexa_pg_result_t *)moonbit_make_external_object(
+      lunanexa_pg_result_finalize,
+      sizeof(PGconn *) + sizeof(PGresult *) + sizeof(char *)
+    );
+  output->connection = connection;
+  output->result = result;
+  output->owned_error = owned_error;
+  return output;
+}
+
+lunanexa_pg_result_t *lunanexa_pg_result_adopt(
+  PGconn *connection,
+  PGresult *result
+) {
+  return lunanexa_pg_result_adopt_error(connection, result, NULL);
 }
 
 static moonbit_bytes_t lunanexa_pg_copy_bytes(const char *value, size_t length) {
@@ -94,38 +104,44 @@ lunanexa_pg_result_t *lunanexa_pg_execute(
   moonbit_bytes_t encoded_parameters,
   int32_t parameter_count
 ) {
-  lunanexa_pg_result_t *output =
-    (lunanexa_pg_result_t *)moonbit_make_external_object(
-      lunanexa_pg_result_finalize,
-      sizeof(PGconn *) + sizeof(PGresult *)
-    );
-  output->connection = connection == NULL ? NULL : connection->connection;
-  output->result = NULL;
-  if (output->connection == NULL || parameter_count < 0 || parameter_count > 64) {
-    return output;
+  PGconn *handle = connection == NULL ? NULL : connection->connection;
+  if (handle == NULL || parameter_count < 0 || parameter_count > 64) {
+    return lunanexa_pg_result_adopt(handle, NULL);
   }
 
   if (parameter_count == 0) {
-    output->result = PQexec(output->connection, (const char *)sql);
-    return output;
+    return lunanexa_pg_result_adopt(handle, PQexec(handle, (const char *)sql));
   }
 
   const char **values = NULL;
-  char **owned = NULL;
   int32_t *lengths = NULL;
-  int32_t *formats = NULL;
-  if (parameter_count > 0) {
-    values = (const char **)calloc((size_t)parameter_count, sizeof(char *));
-    owned = (char **)calloc((size_t)parameter_count, sizeof(char *));
-    lengths = (int32_t *)calloc((size_t)parameter_count, sizeof(int32_t));
-    formats = (int32_t *)calloc((size_t)parameter_count, sizeof(int32_t));
-    if (values == NULL || owned == NULL || lengths == NULL || formats == NULL) {
-      free(values);
-      free(owned);
-      free(lengths);
-      free(formats);
-      return output;
-    }
+  PGresult *result = NULL;
+  if (lunanexa_pg_parse_parameters(
+        encoded_parameters, parameter_count, &values, &lengths)) {
+    result = PQexecParams(
+      handle, (const char *)sql, parameter_count, NULL, values, lengths, NULL, 0
+    );
+  }
+  lunanexa_pg_release_parameters(values, lengths, parameter_count);
+  return lunanexa_pg_result_adopt(handle, result);
+}
+
+int32_t lunanexa_pg_parse_parameters(
+  moonbit_bytes_t encoded_parameters,
+  int32_t parameter_count,
+  const char ***values_out,
+  int32_t **lengths_out
+) {
+  const char **values =
+    (const char **)calloc((size_t)parameter_count, sizeof(char *));
+  char **owned = (char **)calloc((size_t)parameter_count, sizeof(char *));
+  int32_t *lengths =
+    (int32_t *)calloc((size_t)parameter_count, sizeof(int32_t));
+  if (values == NULL || owned == NULL || lengths == NULL) {
+    free(values);
+    free(owned);
+    free(lengths);
+    return 0;
   }
 
   const uint8_t *cursor = (const uint8_t *)encoded_parameters;
@@ -156,34 +172,49 @@ lunanexa_pg_result_t *lunanexa_pg_execute(
     owned[index][length] = '\0';
     values[index] = owned[index];
     lengths[index] = length;
-    formats[index] = 0;
     cursor += length;
     remaining -= (size_t)length;
   }
   if (remaining != 0) {
     valid = 0;
   }
-
-  if (valid) {
-    output->result = PQexecParams(
-      output->connection,
-      (const char *)sql,
-      parameter_count,
-      NULL,
-      values,
-      lengths,
-      formats,
-      0
-    );
+  if (!valid) {
+    for (int32_t index = 0; index < parameter_count; index += 1) {
+      free(owned[index]);
+    }
+    free(values);
+    free(owned);
+    free(lengths);
+    return 0;
   }
-  for (int32_t index = 0; index < parameter_count; index += 1) {
-    free(owned[index]);
-  }
-  free(values);
+  /* The owned strings are reachable through `values`, so the ownership array
+     itself can go; release walks `values` and frees each non-NULL entry. */
   free(owned);
+  *values_out = values;
+  *lengths_out = lengths;
+  return 1;
+}
+
+void lunanexa_pg_release_parameters(
+  const char **values,
+  int32_t *lengths,
+  int32_t parameter_count
+) {
+  if (values != NULL) {
+    for (int32_t index = 0; index < parameter_count; index += 1) {
+      free((void *)values[index]);
+    }
+    free((void *)values);
+  }
   free(lengths);
-  free(formats);
-  return output;
+}
+
+/* Distinguishes "a statement finished" from "the handle is NULL", which the
+   pooled path uses because a worker reports completion through a pipe and the
+   result object is built afterwards on the MoonBit thread. */
+MOONBIT_FFI_EXPORT
+int32_t lunanexa_pg_result_present(lunanexa_pg_result_t *value) {
+  return value == NULL ? 0 : 1;
 }
 
 MOONBIT_FFI_EXPORT
@@ -200,6 +231,10 @@ moonbit_bytes_t lunanexa_pg_result_error(lunanexa_pg_result_t *value) {
   const char *message = NULL;
   if (value != NULL && value->result != NULL) {
     message = PQresultErrorMessage(value->result);
+  }
+  if ((message == NULL || message[0] == '\0') && value != NULL &&
+      value->owned_error != NULL) {
+    message = value->owned_error;
   }
   if ((message == NULL || message[0] == '\0') && value != NULL &&
       value->connection != NULL) {
