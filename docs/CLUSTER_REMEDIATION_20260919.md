@@ -514,3 +514,78 @@ POST http://127.0.0.1:4174/h3/v1/videos/sync
   列的是 **ModelScope 下载记录**（`Qwen/Qwen3-0.6B`、`OpenBMB/MiniCPM5-1B`），
   它们不是 LunaNexa 模型，而是等待完成 S3 发布/签名/评测/批准的导入项。
   本轮保留该面板（正是 9.1 恢复的功能），只是让它与注册表分组不再混读成一份模型清单。
+
+## 10. “控制面串行”到底是不是真的（2026-09-19 晚）
+
+用户判断请求被串行处理。实测结论是：**连接层确实并发，但请求的服务时间是串行且抖动的**，
+两者都要分开看。
+
+### 10.1 连接层是并发的
+
+控制面 `@http.Server::run_forever` → `@socket.TcpServer::run_forever` 里
+`group.spawn_bg` **每个连接一个 task**，并设置 `TCP_NODELAY`。实测（直连
+`10.43.192.21:8080`，operator token）：6 个并发 `/v1/nodes` 墙钟 1.79 s，
+而单个累加约 4–12 s，说明请求确实重叠。所以“完全不能并发”不成立。
+
+### 10.2 但服务时间不并发，而且很抖
+
+同一 endpoint、并发 n 个相同请求（每个请求各自的 `time_total`）：
+
+| endpoint | n=1 | n=2 | n=4 | n=8 |
+|---|---|---|---|---|
+| `/v1/telemetry`（56 KB） | 0.53 | 0.67 | **1.11 1.11 1.11 1.11**（齐平） | **10.2–11.5**（齐平） |
+| `/v1/nodes`（3 KB） | 0.65 | 0.22 0.44 | 0.44→1.11（阶梯） | 0.87→2.38（阶梯） |
+| `/v1/registry`（9 KB） | 2.75 | 5.6 5.9 | 3.1→3.8 | 2.45→2.92 |
+
+- `/v1/accounts`、`/v1/audit`、`/v1/nodes` 的 n=8 是**阶梯**（每个比前一个多约 0.22 s），
+  即依次服务；总量不大。
+- `/v1/telemetry` 的 n=4 / n=8 是**齐平**：所有请求在同一时刻结束，说明它们
+  卡在同一个事件上等了好几秒，然后一起被放行。
+- 用 `%{time_starttransfer}` 拆开看，问题主要在**响应体写出**而不是首字节：
+  单个 `/v1/telemetry` TTFB 1.23 s，但总时长 10.0 s —— 56 KB 写了 8.8 s（约 6 KB/s）。
+  并发 8 个时反而只要 2.78 s。也就是说这不是带宽问题，而是**写响应需要的调度轮次
+  被别的活挡住**。
+
+### 10.3 代码层面的原因（已确认）
+
+1. **单线程协作式运行时 + 同步 libpq**：`internal/postgres/libpq.c` 是 FFI 直调
+   `PQexec`，不是异步 I/O。任何一次数据库调用期间事件循环整条被占住。
+2. **每次写入都重写整个域，而且握着锁**：
+   `store/file.mbt:148 FileStore::update` =
+   `mutex.acquire()` → `state.candidate()`（整份状态 clone）→ 序列化 →
+   `persist()`（Postgres `UPDATE` 整块 jsonb，同步）→ `state = next`，
+   **全程持锁**。心跳由 4 台节点每 5 s 各写一次，所以每秒都有若干次“整份 855 KB 重写”。
+   `telemetry/file.mbt` 的 `record` 同样是持锁 `persist`（每来一个样本重写整份历史）。
+3. 于是读者要么排在这把锁后面，要么（即使不抢锁）因为事件循环被占住而拿到不到 CPU 轮次；
+   响应体越大，需要的轮次越多，被拉得越长（56 KB → 数秒）。
+4. 旁证：`pg_stat_activity` 里没有任何长查询（最长 0.02 s），数据库本身不慢；
+   节点 24 核 load 2.1，控制容器上限 4 CPU/8 GiB，也不是资源不足。
+
+### 10.4 本轮已做
+
+- `telemetry/file.mbt`：新增 `published` 快照，写入方在 `persist()` **成功之后**才发布，
+  `snapshot()` 直接返回已发布快照（不再取锁，不再拷贝）。这样读者不会排在
+  “写历史 + 落库”的锁后面，也不会看到未落库的状态。
+  部署后 `/v1/nodes` 的**顺序**读从 0.46–2.1 s 抖动变成稳定 0.22 s；
+  `moon test telemetry --target native` 7/7 通过。
+- `telemetry/moon.pkg` 补上 `-pthread -ldl`（与 `store/moon.pkg` 一致）：
+  该包用了带线程池的 `moonbitlang/async` 事件循环，缺这两个 flag 时原生测试
+  直接链接失败（`undefined reference to pthread_setsockopt`）。
+- 已把新控制面二进制（`md5 1a7ebadc…`，与部署中进程 `/proc/<pid>/exe` 校验一致）
+  换层重建镜像并滚动发布，验证 2/2 Running、0 重启。
+
+### 10.5 还没做（真正要“并发”，需要改这三处）
+
+1. **读路径不吃写锁**：把 `FileStore` 的 8 个纯读方法（`heartbeats()`、
+   `audit_events()`、`assignments()`、`controller_epoch()` …）改成直接读
+   `self.state`（写方在锁内构建好 `next` 后一次性替换 `self.state`，单线程下
+   读者只会看到替换前或替换后的完整状态）。这与 10.4 对 telemetry 的做法同型，
+   是改动最小、收益最直接的一步。
+2. **别再每个事件重写整个域**：把持久化改成增量/批量（心跳本身是易失数据，
+   可以考虑不逐条落库，或按时间窗合并写入）。
+3. **把阻塞的数据库调用移出事件循环**：`moonbitlang/async` 的 event loop 里已经有
+   `thread_pool.o`，可以把 libpq 调用投到线程池，或改用非阻塞客户端；
+   否则任何一次数据库写入都会卡住所有在途请求。
+
+这三步都属于控制面结构改动，需要回归 `moon test`、契约夹具与重启对账，
+本轮只完成了第 1 步在 telemetry 上的落地与实测。
