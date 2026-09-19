@@ -338,6 +338,123 @@ pub async fn PostgresDatabase::save_opaque_snapshots(
   ignore(run(self.connection, "COMMIT"))
 }
 
+///| Appends one operational event to the append-only event relation. The event
+/// identifier is the primary key, so replaying an already stored event is a
+/// no-op instead of a duplicate row. Operational events intentionally are not
+/// part of `lunanexa.snapshots`: rewriting the whole recent window on every
+/// request is what made an event cost a multi-megabyte write.
+pub async fn PostgresDatabase::append_operational_event(
+  self : PostgresDatabase,
+  event_id : String,
+  timestamp_unix_ms : Int64,
+  payload : String,
+) -> Unit {
+  if event_id.trim() == "" || event_id.length() > 256 || timestamp_unix_ms <= 0L {
+    raise QueryFailed("operational event row is invalid")
+  }
+  ignore(
+    @json.parse(payload) catch {
+      _ => raise QueryFailed("operational event payload is invalid")
+    },
+  )
+  self.mutex.acquire()
+  defer self.mutex.release()
+  ignore(
+    run(
+      self.connection,
+      (
+        #|INSERT INTO lunanexa.operational_events(event_id, timestamp_unix_ms, payload)
+        #|VALUES ($1, $2::bigint, $3::jsonb)
+        #|ON CONFLICT (event_id) DO NOTHING
+      ),
+      parameters=[
+        Some(event_id),
+        Some(timestamp_unix_ms.to_string()),
+        Some(payload),
+      ],
+    ),
+  )
+}
+
+///| Loads the newest bounded operational event window as JSON payloads,
+/// oldest-first so a caller can rebuild its in-memory ordering directly. Rows
+/// sharing one millisecond are ordered by event identifier; that tie-break is
+/// stable across restarts but is not necessarily the original arrival order.
+pub async fn PostgresDatabase::load_recent_operational_events(
+  self : PostgresDatabase,
+  limit : Int,
+) -> Array[String] {
+  if limit <= 0 || limit > 1000000 {
+    raise QueryFailed("operational event window is invalid")
+  }
+  self.mutex.acquire()
+  defer self.mutex.release()
+  let result = run(
+    self.connection,
+    (
+      #|SELECT payload::text FROM lunanexa.operational_events
+      #|ORDER BY timestamp_unix_ms DESC, event_id DESC
+      #|LIMIT $1::bigint
+    ),
+    parameters=[Some(limit.to_string())],
+  )
+  let events : Array[String] = []
+  for index in 0..<result.row_count() {
+    guard result.value(index, 0) is Some(payload) else {
+      raise QueryFailed("operational event row is incomplete")
+    }
+    events.push(payload)
+  }
+  events.rev_in_place()
+  events
+}
+
+///| Counts durable operational events.
+pub async fn PostgresDatabase::operational_event_count(
+  self : PostgresDatabase,
+) -> Int64 {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  let result = run(
+    self.connection,
+    "SELECT count(*)::text FROM lunanexa.operational_events",
+  )
+  guard result.value(0, 0) is Some(value) else {
+    raise QueryFailed("operational event count result is empty")
+  }
+  @string.parse_int64(value) catch {
+    _ => raise QueryFailed("operational event count is invalid")
+  }
+}
+
+///| Deletes operational events outside the newest `keep` window. Callers run
+/// this on open and thereafter on an amortised schedule, because the durable
+/// relation only has to stay bounded, not exactly trimmed on every request.
+pub async fn PostgresDatabase::prune_operational_events(
+  self : PostgresDatabase,
+  keep : Int,
+) -> Unit {
+  if keep <= 0 || keep > 1000000 {
+    raise QueryFailed("operational event retention window is invalid")
+  }
+  self.mutex.acquire()
+  defer self.mutex.release()
+  ignore(
+    run(
+      self.connection,
+      (
+        #|DELETE FROM lunanexa.operational_events
+        #|WHERE event_id NOT IN (
+        #|  SELECT event_id FROM lunanexa.operational_events
+        #|  ORDER BY timestamp_unix_ms DESC, event_id DESC
+        #|  LIMIT $1::bigint
+        #|)
+      ),
+      parameters=[Some(keep.to_string())],
+    ),
+  )
+}
+
 ///|
 pub async fn PostgresDatabase::save_portal_snapshot(
   self : PostgresDatabase,

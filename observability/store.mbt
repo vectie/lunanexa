@@ -12,6 +12,7 @@ pub struct ObservabilityStore {
   mut events : Array[OperationalEvent]
   mut counters : Map[String, OperationalCounter]
   mut last_external_export_unix_ms : Int64?
+  mut appended_since_prune : Int
   mutex : @async.Mutex
 }
 
@@ -167,6 +168,20 @@ fn ObservabilityStore::snapshot_unlocked(
   }
 }
 
+///| The durable projection for the PostgreSQL backend: counters and external
+/// export freshness only. Operational events live in their own append-only
+/// relation, so the per-domain snapshot no longer carries the recent window.
+fn ObservabilityStore::counter_snapshot_unlocked(
+  self : ObservabilityStore,
+) -> ObservabilitySnapshot {
+  {
+    schema_version: snapshot_schema_version,
+    events: [],
+    counters: sorted_counters(self.counters),
+    last_external_export_unix_ms: self.last_external_export_unix_ms,
+  }
+}
+
 ///|
 async fn write_snapshot(
   path : String,
@@ -199,6 +214,7 @@ fn ObservabilityStore::empty(
     events: [],
     counters: Map([]),
     last_external_export_unix_ms: None,
+    appended_since_prune: 0,
     mutex: Mutex(),
   }
 }
@@ -306,7 +322,53 @@ pub async fn ObservabilityStore::open(
   store
 }
 
-///|
+///| Loads and validates the recent event window from the append-only event
+/// relation. Each row is validated on its own; the counter cross-checks that
+/// `restore` applies to a self-contained snapshot deliberately do not apply
+/// here, because the counters snapshot and the event relation are written by
+/// separate statements and may legitimately differ by the events of the
+/// request that was in flight when a writer stopped.
+async fn ObservabilityStore::load_event_window(
+  self : ObservabilityStore,
+  database : @database.PostgresDatabase,
+) -> Array[OperationalEvent] {
+  let payloads = database.load_recent_operational_events(
+    self.event_history_limit,
+  )
+  let events : Array[OperationalEvent] = []
+  let identifiers : Map[String, Unit] = Map([])
+  for payload in payloads {
+    let value = @json.parse(payload) catch {
+      _ => raise InvalidSnapshot("invalid operational event payload")
+    }
+    let event : OperationalEvent = @json.from_json(value) catch {
+      _ => raise InvalidSnapshot("invalid operational event payload")
+    }
+    validate_event(event) catch {
+      InvalidEvent(reason) =>
+        raise InvalidSnapshot("invalid operational event: \{reason}")
+      error => raise error
+    }
+    if identifiers.contains(event.event_id) {
+      raise InvalidSnapshot("duplicate operational event identifier")
+    }
+    identifiers[event.event_id] = ()
+    events.push(event)
+  }
+  events
+}
+
+///| Opens the PostgreSQL-backed store. Operational events are restored from
+/// the append-only event relation; the `observability` snapshot supplies the
+/// counters and the external export freshness.
+///
+/// Backwards compatibility: a snapshot written before events moved out of it
+/// still carries the recent window inside its `events` array. Those events are
+/// migrated into the event relation once per stored row — the insert is
+/// idempotent on `event_id` — and the snapshot is then rewritten without them,
+/// so the relation is the only source of truth afterwards and a retried
+/// migration cannot duplicate an event. Old snapshot windows are therefore
+/// preserved across the upgrade rather than dropped.
 pub async fn ObservabilityStore::open_postgres(
   database : @database.PostgresDatabase,
   event_history_limit? : Int = 10000,
@@ -326,28 +388,78 @@ pub async fn ObservabilityStore::open_postgres(
           )
       }
       store.restore(snapshot)
+      if store.events.length() > 0 {
+        for event in store.events {
+          database.append_operational_event(
+            event.event_id,
+            event.timestamp_unix_ms,
+            ToJson::to_json(event).stringify(),
+          )
+        }
+        store.events = []
+        store.persist()
+      }
     }
     None =>
       database.save_opaque_snapshot(
         "observability",
         snapshot_schema_version,
-        ToJson::to_json(store.snapshot_unlocked()).stringify(),
+        ToJson::to_json(store.counter_snapshot_unlocked()).stringify(),
       )
   }
+  store.events = store.load_event_window(database)
+  store.appended_since_prune = 0
+  database.prune_operational_events(store.event_history_limit)
   store
 }
 
-///|
+///| Writes the durable projection the backend keeps for the store. The file
+/// backend owns one JSON document and therefore still rewrites the whole
+/// document; the PostgreSQL backend stores events separately and only has to
+/// keep counters and external export freshness in `lunanexa.snapshots`.
 async fn ObservabilityStore::persist(self : ObservabilityStore) -> Unit {
-  let snapshot = self.snapshot_unlocked()
   match self.persistence {
-    ObservabilityFile(path) => write_snapshot(path, snapshot)
+    ObservabilityFile(path) => write_snapshot(path, self.snapshot_unlocked())
     ObservabilityPostgres(database) =>
       database.save_opaque_snapshot(
         "observability",
         snapshot_schema_version,
-        ToJson::to_json(snapshot).stringify(),
+        ToJson::to_json(self.counter_snapshot_unlocked()).stringify(),
       )
+  }
+}
+
+///| Durably records one appended event. The file backend rewrites its single
+/// document, because a local file has no append-only relation.
+///
+/// The PostgreSQL backend writes the counters projection first and the event
+/// row second. That order means every stored event is already covered by the
+/// durable counters, so a crash between the two statements can only leave the
+/// counters ahead of the event window, never behind it.
+///
+/// Pruning runs at most once per `event_history_limit` appends — matching how
+/// the in-memory window itself only discards events once it is full — so the
+/// relation stays bounded near twice the configured window without adding a
+/// DELETE to every request.
+async fn ObservabilityStore::persist_recorded_event(
+  self : ObservabilityStore,
+  event : OperationalEvent,
+) -> Unit {
+  match self.persistence {
+    ObservabilityFile(_) => self.persist()
+    ObservabilityPostgres(database) => {
+      self.persist()
+      database.append_operational_event(
+        event.event_id,
+        event.timestamp_unix_ms,
+        ToJson::to_json(event).stringify(),
+      )
+      self.appended_since_prune = self.appended_since_prune + 1
+      if self.appended_since_prune >= self.event_history_limit {
+        database.prune_operational_events(self.event_history_limit)
+        self.appended_since_prune = 0
+      }
+    }
   }
 }
 
@@ -394,7 +506,7 @@ pub async fn ObservabilityStore::record(
     status_class: class,
     value: next,
   }
-  self.persist()
+  self.persist_recorded_event(event)
   if self.emit_json_lines {
     println(ToJson::to_json(event).stringify())
   }
@@ -448,7 +560,7 @@ pub async fn ObservabilityStore::record_generated(
     status_class: class,
     value: next,
   }
-  self.persist()
+  self.persist_recorded_event(generated)
   if self.emit_json_lines {
     println(ToJson::to_json(generated).stringify())
   }
