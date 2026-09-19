@@ -1,0 +1,24 @@
+import {
+  "vectie/lunanexa/internal/postgres",
+  "moonbitlang/async",
+  "moonbitlang/async/raw_fd",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/core/env",
+} for "test"
+
+options(
+  targets: {
+    "pool.mbt": [ "native" ],
+    "types.mbt": [ "native" ],
+    "pool_test.mbt": [ "native" ],
+  },
+  link: {
+    "native": {
+      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",
+    },
+  },
+)
