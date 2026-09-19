@@ -14,6 +14,16 @@ priv struct DetailRequest {
 } derive(FromJson)
 
 ///|
+/// A revision the operator already placed inside the managed model store. The
+/// adapter re-derives every digest from ModelScope; `directory` is only a
+/// location claim, never an integrity claim.
+priv struct LocalRegistrationRequest {
+  model_id : String
+  revision : String
+  directory : String
+} derive(FromJson)
+
+///|
 priv struct VerifiedManifest {
   schema_version : String
   source : String
@@ -103,6 +113,8 @@ fn safe_error_code(error : Error) -> String {
     @modelsource.ModelSourceError::UpstreamRejected => "upstream-rejected"
     @modelsource.ModelSourceError::InvalidUpstreamResponse =>
       "invalid-upstream-response"
+    @modelsource.ModelSourceError::FilesystemRejected => "filesystem-rejected"
+    @modelsource.ModelSourceError::InvalidRepositoryPath => "invalid-directory"
     _ => "import-failed"
   }
 }
@@ -114,6 +126,39 @@ fn parent_path(path : String) -> String {
     None => path
   }
 }
+
+///|
+fn source_manifest(
+  operation : @modelsource.ImportOperation,
+  tree : @modelsource.ModelScopeTree,
+) -> String {
+  let manifest : VerifiedManifest = {
+    schema_version: "lunanexa.modelsource.verified.v1",
+    source: "modelscope",
+    model_id: operation.model_id,
+    requested_revision: operation.revision,
+    observed_revision: tree.revision,
+    generated_unix_ms: @async.now(),
+    files: tree.files,
+  }
+  manifest.to_json().stringify(indent=2)
+}
+
+///| The manifest is the artifact: its digest names the revision, and every
+/// consumer enumerates exactly the files it lists.
+async fn write_source_manifest(directory : String, text : String) -> String {
+  @fs.write_file(
+    "\{directory}/\{SourceManifestFileName}",
+    text,
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+    sync=Full,
+  )
+  "sha256:\{@crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(text)))}"
+}
+
+///|
+const SourceManifestFileName : String = "lunanexa-source-manifest.json"
 
 ///|
 async fn ensure_directory(path : String, permission : Int) -> Unit {
@@ -206,18 +251,9 @@ async fn run_import(
       }
       ignore(store.replace(latest))
     }
-    let manifest : VerifiedManifest = {
-      schema_version: "lunanexa.modelsource.verified.v1",
-      source: "modelscope",
-      model_id: operation.model_id,
-      requested_revision: operation.revision,
-      observed_revision: tree.revision,
-      generated_unix_ms: @async.now(),
-      files: tree.files,
-    }
-    let manifest_text = manifest.to_json().stringify(indent=2)
+    let manifest_text = source_manifest(operation, tree)
     @fs.write_file(
-      "\{staging}/lunanexa-source-manifest.json",
+      "\{staging}/\{SourceManifestFileName}",
       manifest_text,
       create_mode=CreateOrTruncate,
       permission=0o600,
@@ -236,7 +272,11 @@ async fn run_import(
       state: Verified,
       bytes_completed: total,
       manifest_digest: "sha256:\{digest}",
-      artifact_uri: "modelstore://modelscope/\{operation.import_id}",
+      // The artifact URI is the store-relative key of the revision, so the
+      // control plane can serve exactly these bytes without a second mapping.
+      artifact_uri: @modelsource.local_artifact_uri(
+        "models/modelscope/\{operation.import_id}",
+      ),
       error_code: "",
       updated_unix_ms: @async.now(),
     }
@@ -261,6 +301,258 @@ async fn run_import(
 }
 
 ///|
+/// Re-derive a local revision from ModelScope. Every file the upstream
+/// revision declares must already be present with the upstream size and
+/// SHA-256; a file that is absent, truncated, or drifted is restored from
+/// ModelScope instead of being silently accepted, because the upstream
+/// revision — not the local copy — is the authority for this plane.
+async fn run_local_registration(
+  store : @modelsource.FileImportStore,
+  client : @modelsource.ModelScopeClient,
+  model_root : String,
+  operation : @modelsource.ImportOperation,
+) -> Unit {
+  let directory = "\{model_root}/\{operation.local_directory}"
+  let mut latest = operation
+  let completed = try {
+    if !@fs.exists(directory) {
+      raise @modelsource.ModelSourceError::FilesystemRejected
+    }
+    let tree = client.tree(operation.model_id, operation.revision)
+    let mut total = 0L
+    for file in tree.files {
+      total += file.size
+    }
+    if total <= 0L {
+      raise @modelsource.ModelSourceError::ArtifactTooLarge
+    }
+    latest = {
+      ..operation,
+      files_total: tree.files.length(),
+      files_completed: 0,
+      bytes_total: total,
+      bytes_completed: 0L,
+      manifest_digest: "",
+      artifact_uri: "",
+      error_code: "",
+      cancel_requested: false,
+      updated_unix_ms: @async.now(),
+    }
+    ignore(store.replace(latest))
+    let mut confirmed = 0L
+    let mut in_flight = 0L
+    let mut unsaved_progress = 0L
+    let mut restored = 0
+    let record_progress : async (Int64) -> Unit = delta => {
+      in_flight += delta
+      if delta > 0L {
+        unsaved_progress += delta
+      }
+      latest = {
+        ..latest,
+        bytes_completed: confirmed + in_flight,
+        updated_unix_ms: @async.now(),
+      }
+      if unsaved_progress >= 268435456L {
+        guard store.get(operation.import_id) is Some(progress_state) else {
+          raise @modelsource.ModelSourceError::ImportNotFound
+        }
+        if progress_state.cancel_requested {
+          raise @modelsource.ModelSourceError::ImportCancelled
+        }
+        ignore(store.replace(latest))
+        unsaved_progress = 0L
+      }
+    }
+    for file in tree.files {
+      guard store.get(operation.import_id) is Some(observed) else {
+        raise @modelsource.ModelSourceError::ImportNotFound
+      }
+      if observed.cancel_requested {
+        raise @modelsource.ModelSourceError::ImportCancelled
+      }
+      let path = "\{directory}/\{file.path}"
+      let mut matched = false
+      if @fs.exists(path) {
+        let existing = @fs.open(path, mode=ReadOnly)
+        if existing.size() == file.size {
+          let digest = @crypto.SHA256::new()
+          while existing.read_some(max_len=1048576) is Some(chunk) {
+            digest.update(chunk)
+            record_progress(chunk.length().to_int64())
+          }
+          if @crypto.bytes_to_hex_string(digest.finalize()) == file.sha256 {
+            matched = true
+          }
+        }
+        existing.close()
+      }
+      if !matched {
+        // Publish the restore to a sibling first so a failure never leaves a
+        // half-written file at the served path.
+        in_flight = 0L
+        restored += 1
+        let staging = "\{path}.lunanexa-restore"
+        ensure_directory(parent_path(path), 0o750)
+        errdefer (@fs.remove(staging) catch { _ => () })
+        client.download_file(
+          operation.model_id,
+          tree.revision,
+          file,
+          staging,
+          record_progress,
+          () => {
+            match store.get(operation.import_id) {
+              Some(value) => value.cancel_requested
+              None => true
+            }
+          },
+        )
+        @fs.rename(staging, path, replace=true)
+      }
+      confirmed += file.size
+      in_flight = 0L
+      unsaved_progress = 0L
+      latest = {
+        ..latest,
+        files_completed: latest.files_completed + 1,
+        bytes_completed: confirmed,
+        error_code: if restored > 0 {
+          "restored-\{restored}-from-modelscope"
+        } else {
+          ""
+        },
+        updated_unix_ms: @async.now(),
+      }
+      ignore(store.replace(latest))
+    }
+    let manifest_text = source_manifest(operation, tree)
+    let manifest_digest = write_source_manifest(directory, manifest_text)
+    {
+      ..latest,
+      state: Verified,
+      bytes_completed: total,
+      manifest_digest,
+      artifact_uri: @modelsource.local_artifact_uri(operation.local_directory),
+      error_code: if restored > 0 {
+        "restored-\{restored}-from-modelscope"
+      } else {
+        ""
+      },
+      updated_unix_ms: @async.now(),
+    }
+  } catch {
+    error => {
+      let cancelled = error is @modelsource.ModelSourceError::ImportCancelled
+      {
+        ..latest,
+        state: if cancelled {
+          Cancelled
+        } else {
+          Failed
+        },
+        error_code: safe_error_code(error),
+        updated_unix_ms: @async.now(),
+      }
+    }
+  } noraise {
+    value => value
+  }
+  ignore(store.replace(completed))
+}
+
+///|
+async fn read_directory(path : String) -> Array[String] {
+  try @fs.readdir(path, sort=true) catch {
+    _ => []
+  } noraise {
+    value => value
+  }
+}
+
+///|
+async fn entry_size(path : String) -> Int64 {
+  let file = try @fs.open(path, mode=ReadOnly) catch {
+    _ => return 0L
+  } noraise {
+    value => value
+  }
+  defer file.close()
+  try file.size() catch {
+    _ => 0L
+  } noraise {
+    value => value
+  }
+}
+
+///| Bounded tree measurement: enough for an operator to recognise a directory,
+/// cheap enough that listing the store root stays a fast read.
+async fn measure_tree(root : String, depth : Int) -> (Int, Int64) {
+  if depth > 6 {
+    return (0, 0L)
+  }
+  let mut files = 0
+  let mut bytes = 0L
+  for name in read_directory(root) {
+    let path = "\{root}/\{name}"
+    let kind = try @fs.kind(path, follow_symlink=false) catch {
+      _ => continue
+    } noraise {
+      value => value
+    }
+    match kind {
+      Regular => {
+        files += 1
+        bytes += entry_size(path)
+      }
+      Directory => {
+        let (nested_files, nested_bytes) = measure_tree(path, depth + 1)
+        files += nested_files
+        bytes += nested_bytes
+      }
+      _ => ()
+    }
+  }
+  (files, bytes)
+}
+
+///| Directories the operator can already register. Size and file count are
+/// advisory; the revision is only believed after ModelScope confirms it.
+async fn local_directory_listing(
+  store : @modelsource.FileImportStore,
+  model_root : String,
+) -> Json {
+  let registered : Map[String, Bool] = Map([])
+  for operation in store.list() {
+    if operation.local_directory != "" {
+      registered[operation.local_directory] = true
+    }
+  }
+  let entries : Array[Json] = []
+  for name in read_directory(model_root) {
+    if name.has_prefix(".") || !@modelsource.valid_local_directory(name) {
+      continue
+    }
+    let path = "\{model_root}/\{name}"
+    let kind = try @fs.kind(path, follow_symlink=false) catch {
+      _ => continue
+    } noraise {
+      value => value
+    }
+    if kind != Directory {
+      continue
+    }
+    let (files, bytes) = measure_tree(path, 0)
+    entries.push(
+      @modelsource.local_directory_entry(
+        name, files, bytes, registered.get(name).unwrap_or(false),
+      ),
+    )
+  }
+  Json::object({ "directories": Json::array(entries) })
+}
+
+///|
 async fn worker_loop(
   store : @modelsource.FileImportStore,
   client : @modelsource.ModelScopeClient,
@@ -270,7 +562,11 @@ async fn worker_loop(
   for ;; {
     match store.next_queued() {
       Some(operation) =>
-        run_import(store, client, model_root, maximum_import_bytes, operation)
+        if operation.local_directory == "" {
+          run_import(store, client, model_root, maximum_import_bytes, operation)
+        } else {
+          run_local_registration(store, client, model_root, operation)
+        }
       None => @async.sleep(500)
     }
   }
@@ -282,6 +578,7 @@ async fn serve(
   token : String,
   store : @modelsource.FileImportStore,
   client : @modelsource.ModelScopeClient,
+  model_root : String,
 ) -> Unit {
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   server.run_forever(allow_failure=true, max_connections=32) <| ((
@@ -317,6 +614,8 @@ async fn serve(
           let input : DetailRequest = decode(body)
           (200, client.detail(input.model_id).to_json())
         }
+        (Get, "/internal/v1/modelscope/local-directories") =>
+          (200, local_directory_listing(store, model_root))
         (Get, "/internal/v1/modelscope/imports") =>
           (200, store.list().to_json())
         (Post, "/internal/v1/modelscope/imports") => {
@@ -326,6 +625,29 @@ async fn serve(
             raise @modelsource.ModelSourceError::UpstreamRejected
           }
           let created = store.create(input, detail.license, @async.now())
+          (202, created.to_json())
+        }
+        (Post, "/internal/v1/modelscope/imports:register-local") => {
+          let input : LocalRegistrationRequest = decode(body)
+          if !@modelsource.valid_model_id(input.model_id) {
+            raise @modelsource.ModelSourceError::InvalidModelId
+          }
+          if !@modelsource.valid_revision(input.revision) {
+            raise @modelsource.ModelSourceError::InvalidRevision
+          }
+          if !@modelsource.valid_local_directory(input.directory) {
+            raise @modelsource.ModelSourceError::InvalidRepositoryPath
+          }
+          let detail = client.detail(input.model_id)
+          if detail.private || detail.gated {
+            raise @modelsource.ModelSourceError::UpstreamRejected
+          }
+          let created = store.create_local(
+            { model_id: input.model_id, revision: input.revision },
+            detail.license,
+            input.directory,
+            @async.now(),
+          )
           (202, created.to_json())
         }
         (Post, path) if path.has_prefix("/internal/v1/modelscope/imports/") &&
@@ -420,7 +742,7 @@ async fn main {
       worker_loop(store, client, model_root, maximum_import_bytes)
     }
     group.spawn_bg(allow_failure=false) <| () => {
-      serve(address, token, store, client)
+      serve(address, token, store, client, model_root)
     }
   }
 }

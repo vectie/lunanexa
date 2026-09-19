@@ -10,6 +10,12 @@ import {
 // Values
 pub fn import_id(String, String) -> String raise ModelSourceError
 
+pub fn local_artifact_uri(String) -> String raise ModelSourceError
+
+pub fn local_directory_entry(String, Int, Int64, Bool) -> Json raise ModelSourceError
+
+pub fn valid_local_directory(String) -> Bool
+
 pub fn valid_model_id(String) -> Bool
 
 pub fn valid_repository_path(String) -> Bool
@@ -67,6 +73,7 @@ pub struct FileImportStore {
 }
 pub async fn FileImportStore::cancel(Self, String, Int64) -> ImportOperation
 pub async fn FileImportStore::create(Self, ImportRequest, String, Int64) -> ImportOperation
+pub async fn FileImportStore::create_local(Self, ImportRequest, String, String, Int64) -> ImportOperation
 pub async fn FileImportStore::get(Self, String) -> ImportOperation?
 pub async fn FileImportStore::list(Self) -> Array[ImportOperation]
 pub async fn FileImportStore::next_queued(Self) -> ImportOperation?
@@ -87,6 +94,7 @@ pub(all) struct ImportOperation {
   manifest_digest : String
   artifact_uri : String
   license : String
+  local_directory : String
   error_code : String
   cancel_requested : Bool
   created_unix_ms : Int64
@@ -101,6 +109,7 @@ pub(all) struct ImportRequest {
 pub(all) enum ImportState {
   Queued
   Downloading
+  Verifying
   Verified
   Failed
   Cancelled

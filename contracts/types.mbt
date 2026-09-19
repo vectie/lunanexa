@@ -2,6 +2,20 @@
 pub let contract_version : String = "lunanexa.v1"
 
 ///|
+/// A model artifact travels either from an upstream object store or from
+/// LunaNexa's own ModelScope-verified model store. The store form names a
+/// revision directory; every file in it is listed by the revision manifest
+/// below, and that manifest — not a detached signature — is the artifact.
+pub let model_store_scheme : String = "modelstore://"
+
+///|
+pub let model_store_manifest_name : String = "lunanexa-source-manifest.json"
+
+///|
+pub let source_manifest_schema_version : String =
+  "lunanexa.modelsource.verified.v1"
+
+///|
 pub(all) enum Capability {
   TextGenerate
   EmbeddingCreate

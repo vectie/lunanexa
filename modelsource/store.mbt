@@ -8,6 +8,44 @@ priv struct ImportSnapshot {
 extend ImportSnapshot with ToJson::{to_json}
 
 ///|
+const ImportSnapshotSchemaVersion : Int = 2
+
+///|
+fn snapshot_schema_version(value : Json) -> Double? {
+  guard value is Object(fields) &&
+    fields.get("schema_version") is Some(Number(version, ..)) else {
+    return None
+  }
+  Some(version)
+}
+
+///| Snapshot v1 predates `local_directory`. Normalize the decoded document
+/// instead of failing the read, so an upgrade keeps every existing import.
+fn migrate_snapshot(value : Json) -> Json {
+  guard value is Object(fields) &&
+    fields.get("operations") is Some(Array(items)) else {
+    return value
+  }
+  let migrated : Array[Json] = []
+  for item in items {
+    match item {
+      Object(entry) if !entry.contains("local_directory") => {
+        let entry = entry.copy()
+        entry["local_directory"] = Json::string("")
+        migrated.push(Json::object(entry))
+      }
+      _ => migrated.push(item)
+    }
+  }
+  let normalized = fields.copy()
+  normalized["operations"] = Json::array(migrated)
+  normalized["schema_version"] = Json::number(
+    ImportSnapshotSchemaVersion.to_double(),
+  )
+  Json::object(normalized)
+}
+
+///|
 pub struct FileImportStore {
   path : String
   mut operations : Map[String, ImportOperation]
@@ -28,7 +66,10 @@ async fn write_snapshot(
       created
     }
   })
-  let snapshot : ImportSnapshot = { schema_version: 1, operations: records, }
+  let snapshot : ImportSnapshot = {
+    schema_version: ImportSnapshotSchemaVersion,
+    operations: records,
+  }
   let next = "\{path}.next"
   errdefer (@fs.remove(next) catch { _ => () })
   @fs.write_file(
@@ -46,14 +87,18 @@ pub async fn FileImportStore::open(path : String) -> FileImportStore {
   let operations : Map[String, ImportOperation] = Map([])
   if @fs.exists(path) {
     try {
-      let snapshot : ImportSnapshot = @json.from_json(
-        @json.parse(@fs.read_file(path).text()),
-      )
-      if snapshot.schema_version != 1 {
+      let document = @json.parse(@fs.read_file(path).text())
+      guard snapshot_schema_version(document) is Some(version) &&
+        version >= 1.0 &&
+        version <= ImportSnapshotSchemaVersion.to_double() else {
         raise Failure("unsupported model-source snapshot")
       }
+      let snapshot : ImportSnapshot = @json.from_json(
+        migrate_snapshot(document),
+      )
       for operation in snapshot.operations {
-        let restored = if operation.state == Downloading {
+        let restored = if operation.state == Downloading ||
+          operation.state == Verifying {
           { ..operation, state: Queued, error_code: "recovered-after-restart", }
         } else {
           operation
@@ -77,10 +122,11 @@ async fn FileImportStore::persist(self : FileImportStore) -> Unit {
 }
 
 ///|
-pub async fn FileImportStore::create(
+async fn FileImportStore::create_record(
   self : FileImportStore,
   request : ImportRequest,
   license : String,
+  local_directory : String,
   now_unix_ms : Int64,
 ) -> ImportOperation {
   let id = import_id(request.model_id, request.revision)
@@ -106,6 +152,7 @@ pub async fn FileImportStore::create(
     manifest_digest: "",
     artifact_uri: "",
     license,
+    local_directory,
     error_code: "",
     cancel_requested: false,
     created_unix_ms: now_unix_ms,
@@ -114,6 +161,32 @@ pub async fn FileImportStore::create(
   self.operations[id] = record
   self.persist()
   record
+}
+
+///|
+pub async fn FileImportStore::create(
+  self : FileImportStore,
+  request : ImportRequest,
+  license : String,
+  now_unix_ms : Int64,
+) -> ImportOperation {
+  self.create_record(request, license, "", now_unix_ms)
+}
+
+///| Register a revision the operator already placed inside the managed model
+/// store. The worker still has to prove every file against ModelScope before
+/// the import becomes `Verified`; nothing here is trusted on assertion.
+pub async fn FileImportStore::create_local(
+  self : FileImportStore,
+  request : ImportRequest,
+  license : String,
+  local_directory : String,
+  now_unix_ms : Int64,
+) -> ImportOperation {
+  if !valid_local_directory(local_directory) {
+    raise InvalidRepositoryPath
+  }
+  self.create_record(request, license, local_directory, now_unix_ms)
 }
 
 ///|
@@ -165,7 +238,11 @@ pub async fn FileImportStore::next_queued(
     Some(record) => {
       let next = {
         ..record,
-        state: Downloading,
+        state: if record.local_directory == "" {
+          Downloading
+        } else {
+          Verifying
+        },
         error_code: "",
         updated_unix_ms: @async.now(),
       }
