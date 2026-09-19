@@ -4559,6 +4559,21 @@ fn model_import_label(
   }
 }
 
+///| Where an import's bytes live, in the operator's words: an upstream
+/// object, the model store the control plane serves, or nowhere yet.
+fn model_import_transport_label(
+  locale : @i18n.Locale,
+  import_ : ModelImportRow,
+) -> String {
+  if import_.artifact_uri.has_prefix("s3://") {
+    localized(locale, "Published to S3", "已发布到 S3")
+  } else if import_.artifact_uri.has_prefix(@contracts.model_store_scheme) {
+    localized(locale, "Servable from the model store", "可由模型库直接服务")
+  } else {
+    localized(locale, "Awaiting artifact publication", "等待制品发布")
+  }
+}
+
 ///|
 fn model_import_progress(import_ : ModelImportRow) -> Int {
   if import_.bytes_total <= 0L {
@@ -5521,19 +5536,7 @@ fn models_view(
                         },
                       ),
                       @html.span(
-                        if import_.artifact_uri.has_prefix("s3://") {
-                          localized(
-                            state.locale,
-                            "Published to S3",
-                            "已发布到 S3",
-                          )
-                        } else {
-                          localized(
-                            state.locale,
-                            "Awaiting S3 publication",
-                            "等待发布到 S3",
-                          )
-                        },
+                        model_import_transport_label(state.locale, import_),
                       ),
                     ]),
                     @html.div(class="model-import-status", [
