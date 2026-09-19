@@ -222,10 +222,24 @@ extern "js" fn demo_mode() -> Bool =
   #| }
 
 ///|
+/// Deployment-declared open operator origin. When this meta value exactly
+/// matches the page origin, the console skips the login gate and lets the
+/// same-origin gateway attach operator authority server-side.
+extern "js" fn operator_open_origin() -> String =
+  #| () => globalThis.document?.querySelector('meta[name="lunanexa-operator-open"]')?.getAttribute('content') || ''
+
+///|
+extern "js" fn console_page_origin() -> String =
+  #| () => globalThis.location?.origin || ''
+
+///|
 extern "js" fn current_unix_ms() -> Int64 = "() => BigInt(Date.now())"
 
 ///|
 extern "js" fn model_import_poll_promise() -> @js.Promise = "() => new Promise(resolve => setTimeout(resolve, 1500))"
+
+///|
+extern "js" fn cluster_poll_promise() -> @js.Promise = "() => new Promise(resolve => setTimeout(resolve, 5000))"
 
 ///|
 extern "js" fn random_identifier(prefix : String) -> String =
@@ -548,6 +562,59 @@ extern "js" fn stream_request_promise(
   #| }
 
 ///|
+/// Start every initial console read at once; `request` consumes these
+/// promises when the load path reaches them, so the page waits on the
+/// slowest call instead of the sum of all of them.
+extern "js" fn prefetch_get(urls : Array[String], token : String) -> Unit =
+  #| (urls, token) => {
+  #|   const cache = {};
+  #|   globalThis.__lunanexaGetCache = cache;
+  #|   for (const url of urls) {
+  #|     cache[url] = fetch(url, {
+  #|       method: "GET",
+  #|       headers: {
+  #|         "Accept": "application/json",
+  #|         "Content-Type": "application/json",
+  #|         "Authorization": `Bearer ${token}`
+  #|       },
+  #|       credentials: "same-origin",
+  #|       cache: "no-store",
+  #|       redirect: "error"
+  #|     }).then(async response => {
+  #|       const text = await response.text();
+  #|       if (!response.ok) {
+  #|         const detail = text.slice(0, 1024).replace(/[\r\n\t]+/g, " ");
+  #|         throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  #|       }
+  #|       return text;
+  #|     });
+  #|   }
+  #| }
+
+///|
+/// Warm the read cache for one operator load. Paths must match the ones the
+/// load path requests so every lookup hits the cache exactly once.
+fn prefetch_console_reads(endpoint : String, token : String) -> Unit {
+  let base = if endpoint.has_suffix("/") {
+    endpoint[:-1].to_owned()
+  } else {
+    endpoint
+  }
+  let paths = [
+    "/v1/readiness", "/v1/nodes", "/v1/assignments", "/v1/audit", "/v1/registry",
+    "/v1/scheduler", "/v1/telemetry", "/v1/workspace", "/v1/accounts", "/v1/accounts/trial-summary",
+    "/v1/onboarding/access-packages", "/v1/catalog/templates", "/v1/service-deployments",
+    "/v1/model-sources/modelscope/imports", "/v1/exclusive-node-leases", "/v1/notifications/operator",
+    "/v1/notifications/operator/deliveries", "/v1/offline-commerce/operator/snapshot",
+    "/v1/contract-documents/manifest/catalog", "/v1/contract-documents/operator/snapshot",
+    "/v1/portal/operator/snapshot",
+  ]
+  prefetch_get([ for path in paths => "\{base}\{path}" ], token)
+}
+
+///|
+
+///|
 async fn request(
   verb : String,
   endpoint : String,
@@ -687,6 +754,85 @@ fn portal_lease_holder(
 }
 
 ///|
+fn build_node_rows(
+  heartbeats : Array[@contracts.NodeHeartbeat],
+  telemetry : ConsoleTelemetrySnapshot,
+  portal_snapshot : @portal.PortalSnapshot?,
+  locale : @i18n.Locale,
+) -> Array[@ui.NodeRow] {
+  let now = current_unix_ms()
+  [
+    for heartbeat in heartbeats => {
+      let reported_total = latest_node_metric(
+        telemetry.samples,
+        heartbeat.node_id,
+        "accelerator_memory_total_mib",
+      )
+      let reported_used = latest_node_metric(
+        telemetry.samples,
+        heartbeat.node_id,
+        "accelerator_memory_used_mib",
+      )
+      let assignments = heartbeat.running_deployments.join(", ")
+      {
+        node_id: heartbeat.node_id,
+        state: if now - heartbeat.timestamp_unix_ms > 15000L {
+          Unreachable
+        } else {
+          heartbeat.state
+        },
+        architecture: architecture(heartbeat),
+        total_memory_mib: if reported_total > 0 {
+          reported_total
+        } else {
+          total_memory(heartbeat)
+        },
+        free_memory_mib: free_memory(heartbeat),
+        used_memory_mib: if reported_used > 0 {
+          reported_used
+        } else {
+          (total_memory(heartbeat) - free_memory(heartbeat)).max(0)
+        },
+        utilization_per_mille: latest_node_metric(
+          telemetry.samples,
+          heartbeat.node_id,
+          "accelerator_utilization_per_mille",
+        ),
+        temperature_celsius: latest_node_metric(
+          telemetry.samples,
+          heartbeat.node_id,
+          "accelerator_temperature_celsius",
+        ),
+        power_watts: latest_node_metric(
+          telemetry.samples,
+          heartbeat.node_id,
+          "accelerator_power_watts",
+        ),
+        workloads: heartbeat.running_deployments.length(),
+        lease_holder: portal_lease_holder(
+          locale,
+          portal_snapshot,
+          heartbeat.node_id,
+        ),
+        active_assignment: if assignments == "" {
+          if locale.is_chinese() {
+            "空闲"
+          } else {
+            "Idle"
+          }
+        } else {
+          assignments
+        },
+        last_seen: heartbeat_age_label(
+          locale,
+          (now - heartbeat.timestamp_unix_ms).max(0L),
+        ),
+      }
+    }
+  ]
+}
+
+///|
 fn license_status(
   registry : @contracts.RegistryReadContract,
   license_id : String,
@@ -788,7 +934,7 @@ fn quick_deployment_intent(
     version: @contracts.contract_version,
     idempotency_key: "console:\{deployment_id}",
     deployment_id,
-    template: { template_id: template.template_id, version: template.version, },
+    template: { template_id: template.template_id, version: template.version },
     replicas: 1,
     data_class: template.data_policy.classification,
     lease_duration_ms: 86400000L,
@@ -884,6 +1030,22 @@ fn prepare_account_confirmation(
 }
 
 ///|
+/// The control plane encodes absent optional fields as explicit `null`, while
+/// MoonBit's derived `Option` decoder accepts only an absent key. Drop null
+/// object entries before decoding so both encodings agree.
+fn parse_console_json(text : String) -> Json raise {
+  let replacer = @json.Replacer((_, value) => {
+    match value {
+      Null => None
+      _ => Some(value)
+    }
+  })
+  @json.parse(text).transform(replacer)
+}
+
+///|
+
+///|
 async fn load_console(
   endpoint : String,
   token : String,
@@ -892,48 +1054,51 @@ async fn load_console(
   route : @ui.OperatorRoute,
   locale : @i18n.Locale,
 ) -> @ui.ConsoleState {
+  prefetch_console_reads(endpoint, token)
   let production_readiness = load_production_readiness(endpoint, token)
   let heartbeats : Array[@contracts.NodeHeartbeat] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/nodes", token)),
+    parse_console_json(request("GET", endpoint, "/v1/nodes", token)),
   )
   let assignments : Array[@contracts.DesiredAssignment] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/assignments", token)),
+    parse_console_json(request("GET", endpoint, "/v1/assignments", token)),
   )
   let audit : Array[@contracts.AuditEvent] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/audit", audit_token)),
+    parse_console_json(request("GET", endpoint, "/v1/audit", audit_token)),
   )
   let registry : @contracts.RegistryReadContract = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/registry", token)),
+    parse_console_json(request("GET", endpoint, "/v1/registry", token)),
   )
   let scheduler : @contracts.SchedulerReadContract = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/scheduler", token)),
+    parse_console_json(request("GET", endpoint, "/v1/scheduler", token)),
   )
   let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/telemetry", token)),
+    parse_console_json(request("GET", endpoint, "/v1/telemetry", token)),
   )
   let workspace : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/workspace", token)),
+    parse_console_json(request("GET", endpoint, "/v1/workspace", token)),
   )
   let accounts : Array[@ui.AccountView] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/accounts", token)),
+    parse_console_json(request("GET", endpoint, "/v1/accounts", token)),
   )
   let trial_summary : @ui.TrialSummary? = Some(
     @json.from_json(
-      @json.parse(request("GET", endpoint, "/v1/accounts/trial-summary", token)),
+      parse_console_json(
+        request("GET", endpoint, "/v1/accounts/trial-summary", token),
+      ),
     ),
   ) catch {
     // Supplemental statistics are unavailable, never zero, on older controllers.
     _ => None
   }
   let access_packages : Array[@ui.AccessPackageView] = @json.from_json(
-    @json.parse(
+    parse_console_json(
       request("GET", endpoint, "/v1/onboarding/access-packages", token),
     ),
   )
   let authenticated_account : @ui.AccountView? = if token.has_prefix("lnxs_") {
     Some(
       @json.from_json(
-        @json.parse(request("GET", endpoint, "/v1/auth/self", token)),
+        parse_console_json(request("GET", endpoint, "/v1/auth/self", token)),
       ),
     )
   } else {
@@ -943,32 +1108,38 @@ async fn load_console(
       "lnxs_",
     ) {
     @json.from_json(
-      @json.parse(request("GET", endpoint, "/v1/auth/sessions", token)),
+      parse_console_json(request("GET", endpoint, "/v1/auth/sessions", token)),
     )
   } else {
     []
   }
   let catalog_templates : Array[@deployment.ModelServiceTemplate] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/catalog/templates", token)),
+    parse_console_json(request("GET", endpoint, "/v1/catalog/templates", token)),
   )
   let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/service-deployments", token)),
+    parse_console_json(
+      request("GET", endpoint, "/v1/service-deployments", token),
+    ),
   )
   let model_imports : Array[@ui.ModelImportRow] = @json.from_json(
-    @json.parse(
+    parse_console_json(
       request("GET", endpoint, "/v1/model-sources/modelscope/imports", token),
     ),
   ) catch {
     _ => []
   }
   let exclusive_leases : Array[@nodelease.ExclusiveNodeLease] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/exclusive-node-leases", token)),
+    parse_console_json(
+      request("GET", endpoint, "/v1/exclusive-node-leases", token),
+    ),
   )
   let notification_records : Array[@notifications.NotificationRecord] = @json.from_json(
-    @json.parse(request("GET", endpoint, "/v1/notifications/operator", token)),
+    parse_console_json(
+      request("GET", endpoint, "/v1/notifications/operator", token),
+    ),
   )
   let notification_delivery_records : Array[@notifications.NotificationDelivery] = @json.from_json(
-    @json.parse(
+    parse_console_json(
       request("GET", endpoint, "/v1/notifications/operator/deliveries", token),
     ),
   ) catch {
@@ -981,7 +1152,7 @@ async fn load_console(
   // This snapshot carries release and fulfillment authority. Loading failures
   // must be visible and must never masquerade as an empty commerce queue.
   let offline_snapshot : @offline.OfflineCommerceSnapshot = @json.from_json(
-    @json.parse(
+    parse_console_json(
       request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
     ),
   )
@@ -989,12 +1160,12 @@ async fn load_console(
   // console. Using the same source of truth here also keeps the web client
   // compatible with controllers that expose it only to the customer portal.
   let contract_manifests : Array[@contractdoc.ContractTemplateManifest] = @json.from_json(
-    @json.parse(
+    parse_console_json(
       request("GET", endpoint, "/v1/contract-documents/manifest/catalog", token),
     ),
   )
   let contract_snapshot : @contractdoc.ContractDocumentSnapshot = @json.from_json(
-    @json.parse(
+    parse_console_json(
       request(
         "GET", endpoint, "/v1/contract-documents/operator/snapshot", token,
       ),
@@ -1018,7 +1189,7 @@ async fn load_console(
       try
         Some(
           @json.from_json(
-            @json.parse(
+            parse_console_json(
               request(
                 "POST",
                 endpoint,
@@ -1039,7 +1210,7 @@ async fn load_console(
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
-        @json.parse(
+        parse_console_json(
           request("GET", endpoint, "/v1/portal/operator/snapshot", token),
         ),
       ),
@@ -1055,7 +1226,7 @@ async fn load_console(
   } else {
     Some(
       @json.from_json(
-        @json.parse(
+        parse_console_json(
           request(
             "GET",
             endpoint,
@@ -1072,7 +1243,7 @@ async fn load_console(
   } else {
     Some(
       @json.from_json(
-        @json.parse(
+        parse_console_json(
           request(
             "GET",
             endpoint,
@@ -1084,75 +1255,7 @@ async fn load_console(
     )
   }
   let now = current_unix_ms()
-  let nodes : Array[@ui.NodeRow] = [
-    for heartbeat in heartbeats => {
-      let reported_total = latest_node_metric(
-        telemetry.samples,
-        heartbeat.node_id,
-        "accelerator_memory_total_mib",
-      )
-      let reported_used = latest_node_metric(
-        telemetry.samples,
-        heartbeat.node_id,
-        "accelerator_memory_used_mib",
-      )
-      let assignments = heartbeat.running_deployments.join(", ")
-      {
-        node_id: heartbeat.node_id,
-        state: if now - heartbeat.timestamp_unix_ms > 15000L {
-          Unreachable
-        } else {
-          heartbeat.state
-        },
-        architecture: architecture(heartbeat),
-        total_memory_mib: if reported_total > 0 {
-          reported_total
-        } else {
-          total_memory(heartbeat)
-        },
-        free_memory_mib: free_memory(heartbeat),
-        used_memory_mib: if reported_used > 0 {
-          reported_used
-        } else {
-          (total_memory(heartbeat) - free_memory(heartbeat)).max(0)
-        },
-        utilization_per_mille: latest_node_metric(
-          telemetry.samples,
-          heartbeat.node_id,
-          "accelerator_utilization_per_mille",
-        ),
-        temperature_celsius: latest_node_metric(
-          telemetry.samples,
-          heartbeat.node_id,
-          "accelerator_temperature_celsius",
-        ),
-        power_watts: latest_node_metric(
-          telemetry.samples,
-          heartbeat.node_id,
-          "accelerator_power_watts",
-        ),
-        workloads: heartbeat.running_deployments.length(),
-        lease_holder: portal_lease_holder(
-          locale,
-          portal_snapshot,
-          heartbeat.node_id,
-        ),
-        active_assignment: if assignments == "" {
-          if locale.is_chinese() {
-            "空闲"
-          } else {
-            "Idle"
-          }
-        } else {
-          assignments
-        },
-        last_seen: heartbeat_age_label(
-          locale,
-          (now - heartbeat.timestamp_unix_ms).max(0L),
-        ),
-      }
-    }
-  ]
+  let nodes = build_node_rows(heartbeats, telemetry, portal_snapshot, locale)
   let models : Array[@ui.ModelRow] = [
     for model in registry.models => {
       {
@@ -1581,6 +1684,8 @@ priv enum LoadOutcome {
   ModelImportsLoaded(@i18n.Locale, Array[@ui.ModelImportRow], String?)
   ModelImportsPolled(Int64, Array[@ui.ModelImportRow])
   ModelImportPollFailed(Int64, @i18n.Locale)
+  ClusterPolled(Int64, Array[@ui.NodeRow])
+  ClusterPollFailed(Int64, Bool)
   ModelAdopted(@i18n.Locale, String, String)
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
@@ -1608,6 +1713,7 @@ priv struct AppModel {
   next_directive_generation : Int64
   contract_preview_generation : Int64
   model_import_poll_generation : Int64
+  cluster_poll_generation : Int64
 } derive(Eq)
 
 ///|
@@ -1626,6 +1732,7 @@ priv enum AppMessage {
   Console(@ui.ConsoleMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
   ModelImportPollDue(Int64)
+  ClusterPollDue(Int64)
   Outcome(LoadOutcome)
 }
 
@@ -1707,7 +1814,7 @@ fn switch_console_locale(
 
 ///|
 fn switch_app_locale(model : AppModel, locale : @i18n.Locale) -> AppModel {
-  { ..model, console: switch_console_locale(model.console, locale), }
+  { ..model, console: switch_console_locale(model.console, locale) }
 }
 
 ///|
@@ -1816,10 +1923,7 @@ fn operator_contract_command(
         model.endpoint,
         "/v1/contract-documents/operator/packets/\{packet_id}:information",
         model.credential,
-        body=ContractInformationUpdate::{
-            expected_revision: revision,
-            changes,
-          }
+        body=ContractInformationUpdate::{ expected_revision: revision, changes }
           .to_json()
           .stringify(),
       )
@@ -2109,7 +2213,7 @@ fn demo_contract_lifecycle_action(
         (
           packet.close_packet(
             revision,
-            { kind, reason, closed_by: "operator", closed_unix_ms: now, },
+            { kind, reason, closed_by: "operator", closed_unix_ms: now },
             true,
             now,
           ),
@@ -2311,7 +2415,7 @@ fn schedule_contract_preview(
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
     return (
-      { ..model, console: { ..model.console, contract_documents: documents, }, },
+      { ..model, console: { ..model.console, contract_documents: documents } },
       @rabbita.none,
     )
   }
@@ -2320,7 +2424,7 @@ fn schedule_contract_preview(
   let next = {
     ..model,
     contract_preview_generation: generation,
-    console: { ..model.console, contract_documents: pending, },
+    console: { ..model.console, contract_documents: pending },
   }
   let command = @rabbita.perform(message => emit(message), async fn() noraise {
     try contract_preview_delay_promise(delay_ms).wait() catch {
@@ -2514,7 +2618,7 @@ fn model_import_poll_request_command(
   @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
     try {
       let imports : Array[@ui.ModelImportRow] = @json.from_json(
-        @json.parse(
+        parse_console_json(
           request(
             "GET",
             model.endpoint,
@@ -2526,6 +2630,65 @@ fn model_import_poll_request_command(
       ModelImportsPolled(generation, imports)
     } catch {
       _ => ModelImportPollFailed(generation, model.console.locale)
+    }
+  })
+}
+
+///|
+fn cluster_poll_delay_command(
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(message => emit(message), async fn() noraise {
+    try cluster_poll_promise().wait() catch {
+      _ => ClusterPollDue(generation)
+    } noraise {
+      _ => ClusterPollDue(generation)
+    }
+  })
+}
+
+///|
+fn cluster_poll_request_command(
+  model : AppModel,
+  generation : Int64,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try {
+      let heartbeats : Array[@contracts.NodeHeartbeat] = @json.from_json(
+        parse_console_json(
+          request("GET", model.endpoint, "/v1/nodes", model.credential),
+        ),
+      )
+      let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
+        parse_console_json(
+          request("GET", model.endpoint, "/v1/telemetry", model.credential),
+        ),
+      )
+      let existing = model.console.nodes
+      let nodes = build_node_rows(
+        heartbeats,
+        telemetry,
+        None,
+        model.console.locale,
+      ).map(row => {
+        ..row,
+        lease_holder: existing
+        .iter()
+        .find_first(current => current.node_id == row.node_id)
+        .map(current => current.lease_holder)
+        .unwrap_or(row.lease_holder),
+      })
+      ClusterPolled(generation, nodes)
+    } catch {
+      error => {
+        let detail = "\{Repr(error)}"
+        ClusterPollFailed(
+          generation,
+          detail.contains("HTTP 401") || detail.contains("HTTP 403"),
+        )
+      }
     }
   })
 }
@@ -2561,7 +2724,8 @@ fn update_live(
           audit_credential: value,
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false, },
+          cluster_poll_generation: model.cluster_poll_generation + 1L,
+          console: { ..model.console, operator_authenticated: false },
         },
         @rabbita.none,
       )
@@ -2572,18 +2736,19 @@ fn update_live(
           credential: value,
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false, },
+          cluster_poll_generation: model.cluster_poll_generation + 1L,
+          console: { ..model.console, operator_authenticated: false },
         },
         @rabbita.none,
       )
     AuditCredentialChanged(value) =>
-      ({ ..model, audit_credential: value, }, @rabbita.none)
+      ({ ..model, audit_credential: value }, @rabbita.none)
     InferenceCredentialChanged(value) =>
-      ({ ..model, inference_credential: value, }, @rabbita.none)
+      ({ ..model, inference_credential: value }, @rabbita.none)
     InferenceSubjectChanged(value) =>
-      ({ ..model, inference_subject_ref: value, }, @rabbita.none)
+      ({ ..model, inference_subject_ref: value }, @rabbita.none)
     CommercialOrganizationChanged(value) =>
-      ({ ..model, commercial_organization: value, }, @rabbita.none)
+      ({ ..model, commercial_organization: value }, @rabbita.none)
     Console(AccountInviteIdChanged(value)) =>
       (
         {
@@ -2660,7 +2825,7 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            account_invite: { ..model.console.account_invite, email: value, },
+            account_invite: { ..model.console.account_invite, email: value },
           },
         },
         @rabbita.none,
@@ -3208,6 +3373,7 @@ fn update_live(
           inference_subject_ref: "",
           commercial_organization: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
+          cluster_poll_generation: model.cluster_poll_generation + 1L,
           console: {
             ..@ui.default_state(),
             locale: model.console.locale,
@@ -3259,6 +3425,14 @@ fn update_live(
       } else {
         (model, model_import_poll_request_command(model, generation, emit))
       }
+    ClusterPollDue(generation) =>
+      if generation != model.cluster_poll_generation ||
+        model.demo_mode ||
+        !model.console.operator_authenticated {
+        (model, @rabbita.none)
+      } else {
+        (model, cluster_poll_request_command(model, generation, emit))
+      }
     Connect => {
       if !commercial_organization_is_valid(model.commercial_organization) {
         return (
@@ -3280,24 +3454,33 @@ fn update_live(
       }
       let next = {
         ..model,
-        console: { ..model.console, loading: true, error_message: None, },
+        console: { ..model.console, loading: true, error_message: None },
       }
       (next, load_command(next, emit))
     }
     Outcome(Loaded(state)) => {
       let generation = model.model_import_poll_generation + 1L
+      let cluster_generation = model.cluster_poll_generation + 1L
       let next = {
         ..model,
         console: merge_loaded_console(model.console, state),
         model_import_poll_generation: generation,
+        cluster_poll_generation: cluster_generation,
       }
       (
         next,
-        if model_imports_active(next.console.model_imports) {
-          model_import_poll_delay_command(generation, emit)
-        } else {
-          @rabbita.none
-        },
+        @rabbita.batch([
+          if model_imports_active(next.console.model_imports) {
+            model_import_poll_delay_command(generation, emit)
+          } else {
+            @rabbita.none
+          },
+          if next.demo_mode {
+            @rabbita.none
+          } else {
+            cluster_poll_delay_command(cluster_generation, emit)
+          },
+        ]),
       )
     }
     Outcome(LoadFailed(dispatched_locale, message)) =>
@@ -3477,6 +3660,35 @@ fn update_live(
             @rabbita.none
           },
         )
+      }
+    Outcome(ClusterPolled(generation, nodes)) =>
+      if generation != model.cluster_poll_generation ||
+        !model.console.operator_authenticated {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              nodes,
+              overview: {
+                ..model.console.overview,
+                active_nodes: nodes.count_if(node => node.state == Active),
+                total_nodes: nodes.length(),
+              },
+            },
+          },
+          cluster_poll_delay_command(generation, emit),
+        )
+      }
+    Outcome(ClusterPollFailed(generation, unauthorized)) =>
+      if generation != model.cluster_poll_generation ||
+        !model.console.operator_authenticated ||
+        unauthorized {
+        (model, @rabbita.none)
+      } else {
+        (model, cluster_poll_delay_command(generation, emit))
       }
     Outcome(ModelAdopted(dispatched_locale, import_id, message)) => {
       let adopted_imports = model.console.model_adopted_imports.filter(value => {
@@ -3881,7 +4093,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ActivateUser(user_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4087,7 +4299,7 @@ fn update_live(
       )
     Console(DismissConfirmation) =>
       (
-        { ..model, console: { ..model.console, confirmation: None, }, },
+        { ..model, console: { ..model.console, confirmation: None } },
         @rabbita.none,
       )
     Console(AcknowledgeAlert(notification_id, generation)) => {
@@ -4125,7 +4337,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(AssignAlertToSelf(notification_id, generation)) => {
       let body = {
@@ -4165,7 +4377,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(SilenceAlert(notification_id, generation)) => {
       let body = {
@@ -4205,7 +4417,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ResolveAlert(notification_id, generation)) => {
       let body = { "expected_generation": generation.to_json() }
@@ -4242,12 +4454,12 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(Refresh) => (model, load_command(model, emit))
     Console(ModelSourceQueryChanged(value)) =>
       (
-        { ..model, console: { ..model.console, model_source_query: value, }, },
+        { ..model, console: { ..model.console, model_source_query: value } },
         @rabbita.none,
       )
     Console(SearchModelSource) => {
@@ -4280,7 +4492,7 @@ fn update_live(
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try {
           let page : @ui.ModelSourceCatalogPage = @json.from_json(
-            @json.parse(
+            parse_console_json(
               request(
                 "POST",
                 model.endpoint,
@@ -4303,7 +4515,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(DownloadModelSource(model_id)) => {
       let body = { "model_id": model_id, "revision": "master" }
@@ -4312,7 +4524,7 @@ fn update_live(
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try {
           let created : @ui.ModelImportRow = @json.from_json(
-            @json.parse(
+            parse_console_json(
               request(
                 "POST",
                 model.endpoint,
@@ -4349,7 +4561,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(CancelModelImport(import_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4364,7 +4576,7 @@ fn update_live(
             ),
           )
           let imports : Array[@ui.ModelImportRow] = @json.from_json(
-            @json.parse(
+            parse_console_json(
               request(
                 "GET",
                 model.endpoint,
@@ -4396,7 +4608,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(RetryModelImport(import_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -4411,7 +4623,7 @@ fn update_live(
             ),
           )
           let imports : Array[@ui.ModelImportRow] = @json.from_json(
-            @json.parse(
+            parse_console_json(
               request(
                 "GET",
                 model.endpoint,
@@ -4443,13 +4655,13 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(RefreshModelImports) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try {
           let imports : Array[@ui.ModelImportRow] = @json.from_json(
-            @json.parse(
+            parse_console_json(
               request(
                 "GET",
                 model.endpoint,
@@ -4471,7 +4683,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(BeginModelAdoption(import_id)) => {
       guard model.console.operator_authenticated &&
@@ -4670,27 +4882,27 @@ fn update_live(
     }
     Console(OperationChanged(value)) =>
       (
-        { ..model, console: { ..model.console, operation_name: value, }, },
+        { ..model, console: { ..model.console, operation_name: value } },
         @rabbita.none,
       )
     Console(OperationBodyChanged(value)) =>
       (
-        { ..model, console: { ..model.console, operation_body: value, }, },
+        { ..model, console: { ..model.console, operation_body: value } },
         @rabbita.none,
       )
     Console(QuickDeploymentIdChanged(value)) =>
       (
-        { ..model, console: { ..model.console, quick_deployment_id: value, }, },
+        { ..model, console: { ..model.console, quick_deployment_id: value } },
         @rabbita.none,
       )
     Console(QuickTemplateChanged(value)) =>
       (
-        { ..model, console: { ..model.console, quick_template: value, }, },
+        { ..model, console: { ..model.console, quick_template: value } },
         @rabbita.none,
       )
     Console(PortalNodeChanged(value)) =>
       (
-        { ..model, console: { ..model.console, portal_node_id: value, }, },
+        { ..model, console: { ..model.console, portal_node_id: value } },
         @rabbita.none,
       )
     Console(ApproveEnterpriseLease(request_id, generation)) => {
@@ -4754,7 +4966,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(RejectEnterpriseLease(request_id, generation)) => {
       let body = @portal.LeaseReview::{
@@ -4797,7 +5009,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(SubmitQuickDeployment) => {
       guard quick_deployment_intent(model.console, current_unix_ms())
@@ -4851,7 +5063,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(SubmitOperation) => {
       let (verb, path, inference) = match model.console.operation_name {
@@ -4916,7 +5128,7 @@ fn update_live(
         return (
           {
             ..model,
-            console: { ..model.console, error_message: Some(message), },
+            console: { ..model.console, error_message: Some(message) },
           },
           @rabbita.none,
         )
@@ -4994,7 +5206,7 @@ fn update_live(
           }
         })
       }
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(DrainNode(node_id))) => {
       let generation = current_unix_ms()
@@ -5036,7 +5248,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(CordonNode(node_id))) => {
       let generation = current_unix_ms()
@@ -5078,7 +5290,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(RollbackAlias(alias_name))) => {
       let body : Json = {
@@ -5116,7 +5328,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(StopDeployment(assignment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5149,7 +5361,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(RollbackServiceDeployment(deployment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5182,7 +5394,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(DeleteServiceDeployment(deployment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5215,7 +5427,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(ActivateAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5250,7 +5462,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(SuspendAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5285,7 +5497,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(RevokeAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5320,7 +5532,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(SetAccountRoles(account_id, roles))) => {
       let body = AccountRolesIntent::{ roles, }.to_json().stringify()
@@ -5357,7 +5569,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(SuspendUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5390,7 +5602,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(RevokeUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5423,7 +5635,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(RevokeAccessGrant(grant_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5456,7 +5668,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(EndComputeLease(lease_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5489,7 +5701,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(ConfirmAction(TerminateExclusiveNodeLease(lease_id, generation))) => {
       let body = @nodelease.ExclusiveLeaseTerminationRequest::{
@@ -5529,7 +5741,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(
       ConfirmAction(
@@ -5577,7 +5789,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(OfflineCommerce(Refresh)) => (model, load_command(model, emit))
     Console(OfflineCommerce(RequestArtifactDownload(artifact_id))) =>
@@ -5634,7 +5846,7 @@ fn update_live(
         "已请求生成并验证文档。",
         emit,
       )
-      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
     Console(OfflineCommerce(ConfirmAction(action))) => {
       let now = current_unix_ms()
@@ -5680,7 +5892,7 @@ fn update_live(
           } noraise {
             value => value
           }
-          let value : OfflineQuoteAction = { order_id, quote, }
+          let value : OfflineQuoteAction = { order_id, quote }
           {
             path: "/v1/offline-commerce/operator/quotes",
             body: value.to_json().stringify(),
@@ -5745,13 +5957,13 @@ fn update_live(
               },
             ],
             subtotal: money,
-            tax: { minor_units: 0L, currency: "CNY", scale: 2, },
+            tax: { minor_units: 0L, currency: "CNY", scale: 2 },
             total: money,
             valid_until_unix_ms: valid_until,
             terms_digest,
             created_unix_ms: now,
           }
-          let value : OfflineQuoteAction = { order_id, quote, }
+          let value : OfflineQuoteAction = { order_id, quote }
           ignore(confirmed_actor)
           {
             path: "/v1/offline-commerce/operator/quotes",
@@ -5997,7 +6209,7 @@ fn update_live(
       (
         {
           ..model,
-          console: { ..model.console, contract_documents: next_documents, },
+          console: { ..model.console, contract_documents: next_documents },
         },
         operator_contract_command(model, packet_id, revision, changes, emit),
       )
@@ -6009,7 +6221,7 @@ fn update_live(
       (
         {
           ..model,
-          console: { ..model.console, contract_documents: next_documents, },
+          console: { ..model.console, contract_documents: next_documents },
         },
         @rabbita.none,
       )
@@ -6033,7 +6245,7 @@ fn update_live(
       )
       let next = {
         ..model,
-        console: { ..model.console, contract_documents: next_documents, },
+        console: { ..model.console, contract_documents: next_documents },
       }
       match action {
         RegisterExecution(_)
@@ -6358,12 +6570,47 @@ fn update(
 }
 
 ///|
+/// True when this deployment declared the console open (see `main`).
+fn deployment_console_open() -> Bool {
+  let declared = operator_open_origin()
+  declared != "" && (declared == "*" || declared == console_page_origin())
+}
+
+///|
+fn console_loading_view(locale : @i18n.Locale) -> @rabbita.Html {
+  let copy = console_copy(
+    locale, "Loading the operator console…", "正在加载运维控制台…",
+  )
+  @html.main_(
+    class="login-shell",
+    attrs=@html.Attrs::build().style(
+      "login-shell", "display:grid;place-items:center;min-height:100vh",
+    ),
+    [
+      @html.div(class="login-card", [
+        @html.h2(copy),
+        @html.p(
+          class="login-help",
+          console_copy(
+            locale, "Fetching cluster inventory, telemetry and governance state from the controller.",
+            "正在从控制器获取集群清单、遥测与治理状态。",
+          ),
+        ),
+      ]),
+    ],
+  )
+}
+
+///|
 fn app_view(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Html {
   let locale = model.console.locale
   if !model.demo_mode && !model.console.operator_authenticated {
+    if model.console.loading && deployment_console_open() {
+      return console_loading_view(locale)
+    }
     return login_view(model, emit)
   }
   @html.div(class="console-root", [
@@ -6887,10 +7134,19 @@ fn login_view(
 fn main {
   let locale = @i18n.parse_locale(stored_locale_preference())
   let is_demo = demo_mode()
+  // "*" declares the deployment open for every origin that can reach it; any
+  // other value must match the exact page origin.
+  let open_origin = operator_open_origin()
+  let open_mode = open_origin != "" &&
+    (open_origin == "*" || open_origin == console_page_origin())
   apply_console_locale(locale)
-  let initial_model : AppModel = {
+  let base_model : AppModel = {
     endpoint: configured_endpoint(),
-    credential: "",
+    credential: if open_mode {
+      "deployment-open"
+    } else {
+      ""
+    },
     audit_credential: "",
     csrf_token: "",
     inference_credential: "",
@@ -6913,14 +7169,20 @@ fn main {
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
   }
   @rabbita.new(fn() {
     let (model, emit) = @rabbita.create_state_with_init(
       init=fn(emit) {
         (
-          initial_model,
+          base_model,
           if is_demo {
             @rabbita.none
+          } else if open_mode {
+            // Open deployment: the same-origin gateway injects operator
+            // authority into API calls, so the console loads immediately
+            // without a browser-held credential.
+            load_command(base_model, emit)
           } else {
             gateway_session_bootstrap_command(emit)
           },

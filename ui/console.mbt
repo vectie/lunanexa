@@ -276,6 +276,7 @@ pub(all) struct AccessPackageView {
   approved_model_aliases : Array[String]
   account_ready : Bool
   membership_ready : Bool
+  contract_required : Bool
   contract_ready : Bool
   workspace_ready : Bool
   models_ready : Bool
@@ -1164,6 +1165,7 @@ pub fn demo_state() -> ConsoleState {
         approved_model_aliases: ["text.default"],
         account_ready: true,
         membership_ready: true,
+        contract_required: false,
         contract_ready: true,
         workspace_ready: true,
         models_ready: true,
