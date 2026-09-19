@@ -1072,7 +1072,17 @@ ModelScope 清单，逐文件比对 size + SHA-256；缺失或漂移的文件**�
 - 登记是**逐文件重算 SHA-256**，管理节点顺序读盘实测 226 MB/s（四路并发约 480 MB/s），
   1.24 TB 全量校验约需 1.5 小时，五个 revision 由单 worker 顺序处理。
 
-### 14.7 还没做的
+### 14.7 一个被真实数据抓出来的上游形态 bug
+
+`deepseek-ai/DeepSeek-V4-Flash-DSpark` 第一次登记失败，错误码 `invalid-upstream-response`。
+原因不是这个仓库特殊，而是**递归清单里目录也作为条目返回**：`encoding`、`encoding/tests`、
+`inference` 三条 `Type=tree`、`Sha256=""`、`Size=0`，而 `legacy_file` 要求 64 位十六进制摘要，
+于是一个子目录就否掉了整个 revision。之前只登记过没有子目录的仓库，所以一直没暴露。
+现在在解码前跳过 `Type=tree`，并且"整份清单全是目录"仍然判为无效。修复部署后，
+通过控制台的 **Retry** 按钮（不是后台命令）重新排队，返回 202 与
+*"The import was requeued and will reuse verified partial files."*
+
+### 14.8 还没做的
 
 - **ARM64 节点镜像没有重建/滚动**。节点侧代码已写、已测，但线上 4 台 spark 跑的还是
   `lunanexa-node:20260918-arm64-r3`，所以**现在没有任何 spark 真正用 revision 拉过模型**；
