@@ -8,12 +8,171 @@ pub(all) suberror DatabaseError {
 
 ///|
 pub struct PostgresDatabase {
+  /// Used for startup work only: schema migration, close, ping, and the
+  /// projection count. It is a blocking libpq connection, so nothing on a
+  /// request path may go through it.
   connection : @postgres.Connection
   mutex : @async.Mutex
+  url : String
+  /// Pooled worker connections. Every statement issued after startup runs
+  /// here, on a worker thread, awaited instead of blocked on.
+  mut work : @pgclient.PgPool?
+  /// A one-connection pool reserved for session-scoped authority. Leadership
+  /// is bound to a backend pid, so those statements must not share a
+  /// connection with anything else.
+  mut leader : @pgclient.PgPool?
 }
 
 ///|
-fn run(
+/// One pooled connection borrowed for the length of a single operation. A
+/// statement that fails may have left a transaction open, so the connection is
+/// rolled back before it is returned to the pool.
+pub struct PgOperation {
+  connection : @pgclient.PgConnection
+  mut failed : Bool
+}
+
+///|
+async fn PgOperation::execute(
+  self : PgOperation,
+  sql : String,
+  parameters? : Array[String?] = [],
+) -> @pgclient.PgResult raise DatabaseError {
+  self.connection.execute(sql, parameters~) catch {
+    @pgclient.PgError::QueryRejected(message) => {
+      self.failed = true
+      raise QueryFailed(message)
+    }
+    @pgclient.PgError::InvalidArgument(message) => {
+      self.failed = true
+      raise QueryFailed(message)
+    }
+    @pgclient.PgError::ConnectionUnavailable(message) => {
+      self.failed = true
+      raise ConnectionUnavailable(message)
+    }
+    @pgclient.PgError::Timeout => {
+      self.failed = true
+      raise ConnectionUnavailable("database statement timed out")
+    }
+    @pgclient.PgError::Closed => raise ConnectionUnavailable("database pool is closed")
+    _ => {
+      self.failed = true
+      raise ConnectionUnavailable("database statement failed")
+    }
+  }
+}
+
+///|
+fn PgOperation::release(self : PgOperation) -> Unit {
+  self.connection.release()
+}
+
+///|
+/// Runs `body` inside a transaction on a borrowed connection, committing when
+/// the body returns and rolling back when it raises, then releases the
+/// connection. The successful value of a `try` block is delivered to `noraise`,
+/// so that arm must pass its value through: returning a constant there makes
+/// every transaction look failed.
+async fn with_transaction(
+  connection : PgOperation,
+  body : async (PgOperation) -> Unit,
+) -> Unit {
+  let mut failure : Error? = None
+  let committed = try {
+    ignore(run(connection, "BEGIN"))
+    body(connection)
+    ignore(run(connection, "COMMIT"))
+    true
+  } catch {
+    error => {
+      failure = Some(error)
+      false
+    }
+  } noraise {
+    value => value
+  }
+  if !committed {
+    ignore(connection.execute("ROLLBACK")) catch {
+      _ => ()
+    } noraise {
+      _ => ()
+    }
+  }
+  connection.release()
+  match failure {
+    Some(error) => raise error
+    None => ()
+  }
+}
+
+///|
+/// Borrows a worker connection from the shared pool.
+async fn PostgresDatabase::begin_operation(self : PostgresDatabase) -> PgOperation {
+  let pool = self.work_pool()
+  { connection: pool.acquire(), failed: false, }
+}
+
+///|
+/// Borrows the reserved connection. Statements that read or take
+/// session-scoped authority must use this so `pg_backend_pid()` matches.
+async fn PostgresDatabase::begin_leader_operation(
+  self : PostgresDatabase,
+) -> PgOperation {
+  let pool = self.leader_pool()
+  { connection: pool.acquire(), failed: false, }
+}
+
+///|
+async fn PostgresDatabase::work_pool(
+  self : PostgresDatabase,
+) -> @pgclient.PgPool {
+  match self.work {
+    Some(pool) => pool
+    None => {
+      let pool = self.make_pool(worker_count())
+      self.work = Some(pool)
+      pool
+    }
+  }
+}
+
+///|
+async fn PostgresDatabase::leader_pool(
+  self : PostgresDatabase,
+) -> @pgclient.PgPool {
+  match self.leader {
+    Some(pool) => pool
+    None => {
+      let pool = self.make_pool(1)
+      self.leader = Some(pool)
+      pool
+    }
+  }
+}
+
+///|
+/// Starts a pool, or raises if the operating system refuses its threads.
+async fn PostgresDatabase::make_pool(
+  self : PostgresDatabase,
+  workers : Int,
+) -> @pgclient.PgPool {
+  @pgclient.PgPool::connect(self.url, workers=workers) catch {
+    @pgclient.PgError::InvalidArgument(message) =>
+      raise QueryFailed(message)
+    @pgclient.PgError::ConnectionUnavailable(message) =>
+      raise ConnectionUnavailable(message)
+    @pgclient.PgError::QueryRejected(message) => raise QueryFailed(message)
+    _ => raise ConnectionUnavailable("database pool is unavailable")
+  } noraise {
+    pool => pool
+  }
+}
+
+///|
+/// The blocking path, used only for startup work and liveness probes. Nothing
+/// on a request path may call this: it holds the event loop for the round trip.
+fn run_admin(
   connection : @postgres.Connection,
   sql : String,
   parameters? : Array[String?] = [],
@@ -24,10 +183,12 @@ fn run(
 }
 
 ///|
-fn rollback(connection : @postgres.Connection) -> Unit {
-  ignore(connection.execute("ROLLBACK")) catch {
-    _ => ()
-  }
+async fn run(
+  connection : PgOperation,
+  sql : String,
+  parameters? : Array[String?] = [],
+) -> @pgclient.PgResult raise DatabaseError {
+  connection.execute(sql, parameters~)
 }
 
 ///|
@@ -37,24 +198,51 @@ pub fn PostgresDatabase::open(
   let connection = @postgres.connect(connection_url) catch {
     error => raise ConnectionUnavailable("\{Repr(error)}")
   }
-  ignore(run(connection, schema_sql)) catch {
+  ignore(run_admin(connection, schema_sql)) catch {
     error => {
       connection.close()
       raise MigrationFailed("\{Repr(error)}")
     }
   }
-  { connection, mutex: Mutex(), }
+  { connection, mutex: Mutex(), url: connection_url, work: None, leader: None, }
+}
+
+///|
+/// Workers to run statements on. Reads and writes wait on these instead of on
+/// one shared connection, so a slow statement no longer queues every other
+/// request behind it.
+fn worker_count() -> Int {
+  let configured = @env
+    .get_env_var("LUNANEXA_DATABASE_WORKERS")
+    .map(value => @string.parse_int(value) catch { _ => 0 } noraise { v => v })
+    .unwrap_or(0)
+  if configured > 0 && configured <= 32 {
+    configured
+  } else {
+    4
+  }
 }
 
 ///|
 pub fn PostgresDatabase::close(self : PostgresDatabase) -> Unit {
+  // Closing the pooled connections matters as much as closing the admin one:
+  // the controller's leadership is a session lock on the leader connection, so
+  // until that connection goes away no other controller can take over.
+  match self.work {
+    Some(pool) => pool.close()
+    None => ()
+  }
+  match self.leader {
+    Some(pool) => pool.close()
+    None => ()
+  }
   self.connection.close()
 }
 
 ///|
 pub fn PostgresDatabase::ping(self : PostgresDatabase) -> Bool {
   try {
-    let result = run(self.connection, "SELECT 1")
+    let result = run_admin(self.connection, "SELECT 1")
     result.row_count() == 1 && result.value(0, 0) == Some("1")
   } catch {
     _ => false
@@ -69,7 +257,7 @@ pub fn PostgresDatabase::projection_count(
   if !projection_table_names.contains(table) {
     raise QueryFailed("projection table is not allowlisted")
   }
-  let result = run(
+  let result = run_admin(
     self.connection,
     "SELECT count(*)::text FROM lunanexa.\{table}",
   )
@@ -129,68 +317,111 @@ pub async fn PostgresDatabase::try_acquire_controller_leadership(
   if !valid_controller_holder(holder_id) {
     raise QueryFailed("controller holder id is invalid")
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
-  errdefer {
-    rollback(self.connection)
-    ignore(
-      run(self.connection, "SELECT pg_advisory_unlock($1::bigint)", parameters=[
-        Some(controller_advisory_lock_id),
-      ]),
-    ) catch {
-      _ => ()
-    }
-  }
+  let connection = self.begin_leader_operation()
+  defer connection.release()
   let locked = run(
-    self.connection,
+    connection,
     "SELECT pg_try_advisory_lock($1::bigint)::text",
     parameters=[Some(controller_advisory_lock_id)],
   )
   if locked.value(0, 0) != Some("true") && locked.value(0, 0) != Some("t") {
     return None
   }
-  ignore(run(self.connection, "BEGIN"))
-  let elected = run(
-    self.connection,
-    (
-      #|INSERT INTO lunanexa.controller_leadership
-      #|  (singleton, fencing_token, holder_id, backend_pid, acquired_at)
-      #|VALUES (
-      #|  true,
-      #|  GREATEST(
-      #|    1,
-      #|    COALESCE((
-      #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
-      #|      FROM lunanexa.snapshots WHERE domain = 'control'
-      #|    ), 1)
-      #|  ),
-      #|  $1,
-      #|  pg_backend_pid(),
-      #|  now()
-      #|)
-      #|ON CONFLICT (singleton) DO UPDATE SET
-      #|  fencing_token = GREATEST(
-      #|    lunanexa.controller_leadership.fencing_token + 1,
-      #|    COALESCE((
-      #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
-      #|      FROM lunanexa.snapshots WHERE domain = 'control'
-      #|    ), 1)
-      #|  ),
-      #|  holder_id = EXCLUDED.holder_id,
-      #|  backend_pid = pg_backend_pid(),
-      #|  acquired_at = now()
-      #|RETURNING fencing_token::text
-    ),
-    parameters=[Some(holder_id.trim().to_owned())],
-  )
-  guard elected.value(0, 0) is Some(raw_token) else {
-    raise QueryFailed("controller leadership token is missing")
+  elect_controller(connection, holder_id)
+}
+
+
+///|
+/// Runs the election, then drops the session advisory lock when any step after
+/// taking it fails. The lock lives on the leader connection, so a failed
+/// attempt must give it back instead of stranding it for the next controller.
+async fn elect_controller(
+  connection : PgOperation,
+  holder_id : String,
+) -> Int64? {
+  let mut failure : Error? = None
+  let mut elected : Int64 = 0L
+  let succeeded = try {
+    ignore(connection.execute("BEGIN"))
+    let inserted = connection.execute(
+      (
+        #|INSERT INTO lunanexa.controller_leadership
+        #|  (singleton, fencing_token, holder_id, backend_pid, acquired_at)
+        #|VALUES (
+        #|  true,
+        #|  GREATEST(
+        #|    1,
+        #|    COALESCE((
+        #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
+        #|      FROM lunanexa.snapshots WHERE domain = 'control'
+        #|    ), 1)
+        #|  ),
+        #|  $1,
+        #|  pg_backend_pid(),
+        #|  now()
+        #|)
+        #|ON CONFLICT (singleton) DO UPDATE SET
+        #|  fencing_token = GREATEST(
+        #|    lunanexa.controller_leadership.fencing_token + 1,
+        #|    COALESCE((
+        #|      SELECT (payload ->> 'controller_epoch')::bigint + 1
+        #|      FROM lunanexa.snapshots WHERE domain = 'control'
+        #|    ), 1)
+        #|  ),
+        #|  holder_id = EXCLUDED.holder_id,
+        #|  backend_pid = pg_backend_pid(),
+        #|  acquired_at = now()
+        #|RETURNING fencing_token::text
+      ),
+      parameters=[Some(holder_id.trim().to_owned())],
+    )
+    match inserted.value(0, 0) {
+      Some(raw_token) =>
+        elected = @string.parse_int64(raw_token) catch {
+          _ => raise QueryFailed("controller leadership token is invalid")
+        }
+      None => raise QueryFailed("controller leadership token is missing")
+    }
+    ignore(connection.execute("COMMIT"))
+    true
+  } catch {
+    error => {
+      failure = Some(error)
+      false
+    }
+  } noraise {
+    value => value
   }
-  let token = @string.parse_int64(raw_token) catch {
-    _ => raise QueryFailed("controller leadership token is invalid")
+  if succeeded {
+    Some(elected)
+  } else {
+    ignore(connection.execute("ROLLBACK")) catch {
+      _ => ()
+    } noraise {
+      _ => ()
+    }
+    release_controller_lock(connection)
+    match failure {
+      Some(error) => raise error
+      None => None
+    }
   }
-  ignore(run(self.connection, "COMMIT"))
-  Some(token)
+}
+
+///|
+/// Drops the session advisory lock after a failed election attempt so another
+/// controller can take over. Runs on the leader connection itself, which is
+/// why it cannot be expressed as `errdefer`: it awaits.
+async fn release_controller_lock(connection : PgOperation) -> Unit {
+  ignore(
+    connection.execute("SELECT pg_advisory_unlock($1::bigint)", parameters=[
+      Some(controller_advisory_lock_id),
+    ]),
+  ) catch {
+    _ => ()
+  } noraise {
+    _ => ()
+  }
 }
 
 ///|
@@ -204,11 +435,11 @@ pub async fn PostgresDatabase::controller_leadership_is_current(
   if !valid_controller_holder(holder_id) || fencing_token <= 0L {
     return false
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
+  let connection = self.begin_leader_operation()
+  defer connection.release()
   let result = try {
     let checked = run(
-      self.connection,
+      connection,
       (
         #|SELECT EXISTS (
         #|  SELECT 1 FROM lunanexa.controller_leadership
@@ -239,10 +470,10 @@ pub async fn PostgresDatabase::load_snapshot(
   if !allowed_domain(domain) || expected_schema_version.trim() == "" {
     raise UnsupportedSnapshot(domain)
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
+  let connection = self.begin_operation()
+  defer connection.release()
   let result = run(
-    self.connection,
+    connection,
     "SELECT schema_version, payload::text FROM lunanexa.snapshots WHERE domain = $1",
     parameters=[Some(domain)],
   )
@@ -260,8 +491,8 @@ pub async fn PostgresDatabase::load_snapshot(
 }
 
 ///|
-fn write_snapshot_row(
-  connection : @postgres.Connection,
+async fn write_snapshot_row(
+  connection : PgOperation,
   domain : String,
   version : String,
   payload : String,
@@ -294,12 +525,10 @@ pub async fn PostgresDatabase::save_opaque_snapshot(
     raise UnsupportedSnapshot(domain)
   }
   ignore(@json.parse(payload) catch { _ => raise UnsupportedSnapshot(domain) })
-  self.mutex.acquire()
-  defer self.mutex.release()
-  errdefer rollback(self.connection)
-  ignore(run(self.connection, "BEGIN"))
-  write_snapshot_row(self.connection, domain, version, payload)
-  ignore(run(self.connection, "COMMIT"))
+  let connection = self.begin_operation()
+  with_transaction(connection, op => {
+    write_snapshot_row(op, domain, version, payload)
+  })
 }
 
 ///|
@@ -327,15 +556,13 @@ pub async fn PostgresDatabase::save_opaque_snapshots(
     )
     domains[domain] = ()
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
-  errdefer rollback(self.connection)
-  ignore(run(self.connection, "BEGIN"))
-  for snapshot in snapshots {
-    let (domain, version, payload) = snapshot
-    write_snapshot_row(self.connection, domain, version, payload)
-  }
-  ignore(run(self.connection, "COMMIT"))
+  let connection = self.begin_operation()
+  with_transaction(connection, op => {
+    for snapshot in snapshots {
+      let (domain, version, payload) = snapshot
+      write_snapshot_row(op, domain, version, payload)
+    }
+  })
 }
 
 ///| Appends one operational event to the append-only event relation. The event
@@ -357,11 +584,11 @@ pub async fn PostgresDatabase::append_operational_event(
       _ => raise QueryFailed("operational event payload is invalid")
     },
   )
-  self.mutex.acquire()
-  defer self.mutex.release()
+  let connection = self.begin_operation()
+  defer connection.release()
   ignore(
     run(
-      self.connection,
+      connection,
       (
         #|INSERT INTO lunanexa.operational_events(event_id, timestamp_unix_ms, payload)
         #|VALUES ($1, $2::bigint, $3::jsonb)
@@ -387,10 +614,10 @@ pub async fn PostgresDatabase::load_recent_operational_events(
   if limit <= 0 || limit > 1000000 {
     raise QueryFailed("operational event window is invalid")
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
+  let connection = self.begin_operation()
+  defer connection.release()
   let result = run(
-    self.connection,
+    connection,
     (
       #|SELECT payload::text FROM lunanexa.operational_events
       #|ORDER BY timestamp_unix_ms DESC, event_id DESC
@@ -413,10 +640,10 @@ pub async fn PostgresDatabase::load_recent_operational_events(
 pub async fn PostgresDatabase::operational_event_count(
   self : PostgresDatabase,
 ) -> Int64 {
-  self.mutex.acquire()
-  defer self.mutex.release()
+  let connection = self.begin_operation()
+  defer connection.release()
   let result = run(
-    self.connection,
+    connection,
     "SELECT count(*)::text FROM lunanexa.operational_events",
   )
   guard result.value(0, 0) is Some(value) else {
@@ -437,11 +664,11 @@ pub async fn PostgresDatabase::prune_operational_events(
   if keep <= 0 || keep > 1000000 {
     raise QueryFailed("operational event retention window is invalid")
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
+  let connection = self.begin_operation()
+  defer connection.release()
   ignore(
     run(
-      self.connection,
+      connection,
       (
         #|DELETE FROM lunanexa.operational_events
         #|WHERE event_id NOT IN (
@@ -463,87 +690,85 @@ pub async fn PostgresDatabase::save_portal_snapshot(
   if snapshot.schema_version != @portal.snapshot_schema_version {
     raise UnsupportedSnapshot(snapshot.schema_version)
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
-  errdefer rollback(self.connection)
-  ignore(run(self.connection, "BEGIN"))
-  write_snapshot_row(
-    self.connection,
-    "enterprise_portal",
-    snapshot.schema_version,
-    snapshot.to_json().stringify(),
-  )
-  ignore(run(self.connection, "DELETE FROM lunanexa.portal_lease_requests"))
-  ignore(run(self.connection, "DELETE FROM lunanexa.portal_agreements"))
-  ignore(run(self.connection, "DELETE FROM lunanexa.enterprise_memberships"))
-  for membership in snapshot.memberships {
-    ignore(
-      run(
-        self.connection,
-        (
-          #|INSERT INTO lunanexa.enterprise_memberships
-          #|  (membership_id, tenant_ref, organization_id, subject_ref, active, created_unix_ms, payload)
-          #|VALUES ($1, $2, $3, $4, $5::boolean, $6::bigint, $7::jsonb)
-        ),
-        parameters=[
-          Some(membership.membership_id),
-          Some(membership.tenant_ref),
-          Some(membership.organization_id),
-          Some(membership.subject_ref),
-          Some(membership.active.to_string()),
-          Some(membership.created_unix_ms.to_string()),
-          Some(membership.to_json().stringify()),
-        ],
-      ),
+  let connection = self.begin_operation()
+  with_transaction(connection, op => {
+    write_snapshot_row(
+      connection,
+      "enterprise_portal",
+      snapshot.schema_version,
+      snapshot.to_json().stringify(),
     )
-  }
-  for agreement in snapshot.agreements {
-    ignore(
-      run(
-        self.connection,
-        (
-          #|INSERT INTO lunanexa.portal_agreements
-          #|  (agreement_id, tenant_ref, organization_id, state, generation, signer_subject_ref, updated_unix_ms, payload)
-          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6, $7::bigint, $8::jsonb)
+    ignore(run(op, "DELETE FROM lunanexa.portal_lease_requests"))
+    ignore(run(op, "DELETE FROM lunanexa.portal_agreements"))
+    ignore(run(op, "DELETE FROM lunanexa.enterprise_memberships"))
+    for membership in snapshot.memberships {
+      ignore(
+        run(
+          connection,
+          (
+            #|INSERT INTO lunanexa.enterprise_memberships
+            #|  (membership_id, tenant_ref, organization_id, subject_ref, active, created_unix_ms, payload)
+            #|VALUES ($1, $2, $3, $4, $5::boolean, $6::bigint, $7::jsonb)
+          ),
+          parameters=[
+            Some(membership.membership_id),
+            Some(membership.tenant_ref),
+            Some(membership.organization_id),
+            Some(membership.subject_ref),
+            Some(membership.active.to_string()),
+            Some(membership.created_unix_ms.to_string()),
+            Some(membership.to_json().stringify()),
+          ],
         ),
-        parameters=[
-          Some(agreement.agreement_id),
-          Some(agreement.tenant_ref),
-          Some(agreement.organization_id),
-          Some(agreement.state.to_json().stringify()),
-          Some(agreement.generation.to_string()),
-          agreement.signer_subject_ref,
-          Some(agreement.updated_unix_ms.to_string()),
-          Some(agreement.to_json().stringify()),
-        ],
-      ),
-    )
-  }
-  for request in snapshot.lease_requests {
-    ignore(
-      run(
-        self.connection,
-        (
-          #|INSERT INTO lunanexa.portal_lease_requests
-          #|  (request_id, idempotency_key, tenant_ref, organization_id, subject_ref, state, generation, assigned_node_id, updated_unix_ms, payload)
-          #|VALUES ($1, $2, $3, $4, $5, $6::jsonb #>> '{}', $7::bigint, $8, $9::bigint, $10::jsonb)
+      )
+    }
+    for agreement in snapshot.agreements {
+      ignore(
+        run(
+          connection,
+          (
+            #|INSERT INTO lunanexa.portal_agreements
+            #|  (agreement_id, tenant_ref, organization_id, state, generation, signer_subject_ref, updated_unix_ms, payload)
+            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6, $7::bigint, $8::jsonb)
+          ),
+          parameters=[
+            Some(agreement.agreement_id),
+            Some(agreement.tenant_ref),
+            Some(agreement.organization_id),
+            Some(agreement.state.to_json().stringify()),
+            Some(agreement.generation.to_string()),
+            agreement.signer_subject_ref,
+            Some(agreement.updated_unix_ms.to_string()),
+            Some(agreement.to_json().stringify()),
+          ],
         ),
-        parameters=[
-          Some(request.submission.request_id),
-          Some(request.submission.idempotency_key),
-          Some(request.submission.tenant_ref),
-          Some(request.submission.organization_id),
-          Some(request.subject_ref),
-          Some(request.state.to_json().stringify()),
-          Some(request.generation.to_string()),
-          request.assigned_node_id,
-          Some(request.updated_unix_ms.to_string()),
-          Some(request.to_json().stringify()),
-        ],
-      ),
-    )
-  }
-  ignore(run(self.connection, "COMMIT"))
+      )
+    }
+    for request in snapshot.lease_requests {
+      ignore(
+        run(
+          connection,
+          (
+            #|INSERT INTO lunanexa.portal_lease_requests
+            #|  (request_id, idempotency_key, tenant_ref, organization_id, subject_ref, state, generation, assigned_node_id, updated_unix_ms, payload)
+            #|VALUES ($1, $2, $3, $4, $5, $6::jsonb #>> '{}', $7::bigint, $8, $9::bigint, $10::jsonb)
+          ),
+          parameters=[
+            Some(request.submission.request_id),
+            Some(request.submission.idempotency_key),
+            Some(request.submission.tenant_ref),
+            Some(request.submission.organization_id),
+            Some(request.subject_ref),
+            Some(request.state.to_json().stringify()),
+            Some(request.generation.to_string()),
+            request.assigned_node_id,
+            Some(request.updated_unix_ms.to_string()),
+            Some(request.to_json().stringify()),
+          ],
+        ),
+      )
+    }
+  })
 }
 
 ///|
@@ -554,79 +779,77 @@ pub async fn PostgresDatabase::save_workspace_snapshot(
   if snapshot.schema_version != @workspace.directory_schema_version {
     raise UnsupportedSnapshot(snapshot.schema_version)
   }
-  self.mutex.acquire()
-  defer self.mutex.release()
-  errdefer rollback(self.connection)
-  ignore(run(self.connection, "BEGIN"))
-  write_snapshot_row(
-    self.connection,
-    "workspace_directory",
-    snapshot.schema_version,
-    snapshot.to_json().stringify(),
-  )
-  ignore(run(self.connection, "DELETE FROM lunanexa.workspace_access_grants"))
-  ignore(run(self.connection, "DELETE FROM lunanexa.workspace_leases"))
-  ignore(run(self.connection, "DELETE FROM lunanexa.workspace_users"))
-  for user in snapshot.users {
-    ignore(
-      run(
-        self.connection,
-        (
-          #|INSERT INTO lunanexa.workspace_users
-          #|  (user_id, subject_ref, email, state, created_unix_ms, payload)
-          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
-        ),
-        parameters=[
-          Some(user.user_id),
-          Some(user.subject_ref),
-          Some(user.email),
-          Some(user.state.to_json().stringify()),
-          Some(user.created_unix_ms.to_string()),
-          Some(user.to_json().stringify()),
-        ],
-      ),
+  let connection = self.begin_operation()
+  with_transaction(connection, op => {
+    write_snapshot_row(
+      connection,
+      "workspace_directory",
+      snapshot.schema_version,
+      snapshot.to_json().stringify(),
     )
-  }
-  for grant in snapshot.access_grants {
-    ignore(
-      run(
-        self.connection,
-        (
-          #|INSERT INTO lunanexa.workspace_access_grants
-          #|  (grant_id, user_id, tenant_ref, state, expires_unix_ms, payload)
-          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
+    ignore(run(op, "DELETE FROM lunanexa.workspace_access_grants"))
+    ignore(run(op, "DELETE FROM lunanexa.workspace_leases"))
+    ignore(run(op, "DELETE FROM lunanexa.workspace_users"))
+    for user in snapshot.users {
+      ignore(
+        run(
+          connection,
+          (
+            #|INSERT INTO lunanexa.workspace_users
+            #|  (user_id, subject_ref, email, state, created_unix_ms, payload)
+            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
+          ),
+          parameters=[
+            Some(user.user_id),
+            Some(user.subject_ref),
+            Some(user.email),
+            Some(user.state.to_json().stringify()),
+            Some(user.created_unix_ms.to_string()),
+            Some(user.to_json().stringify()),
+          ],
         ),
-        parameters=[
-          Some(grant.grant_id),
-          Some(grant.user_id),
-          Some(grant.tenant_ref),
-          Some(grant.state.to_json().stringify()),
-          Some(grant.expires_unix_ms.to_string()),
-          Some(grant.to_json().stringify()),
-        ],
-      ),
-    )
-  }
-  for lease in snapshot.leases {
-    ignore(
-      run(
-        self.connection,
-        (
-          #|INSERT INTO lunanexa.workspace_leases
-          #|  (lease_id, tenant_ref, subject_ref, state, starts_unix_ms, expires_unix_ms, payload)
-          #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::bigint, $7::jsonb)
+      )
+    }
+    for grant in snapshot.access_grants {
+      ignore(
+        run(
+          connection,
+          (
+            #|INSERT INTO lunanexa.workspace_access_grants
+            #|  (grant_id, user_id, tenant_ref, state, expires_unix_ms, payload)
+            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::jsonb)
+          ),
+          parameters=[
+            Some(grant.grant_id),
+            Some(grant.user_id),
+            Some(grant.tenant_ref),
+            Some(grant.state.to_json().stringify()),
+            Some(grant.expires_unix_ms.to_string()),
+            Some(grant.to_json().stringify()),
+          ],
         ),
-        parameters=[
-          Some(lease.lease_id),
-          Some(lease.tenant_ref),
-          Some(lease.subject_ref),
-          Some(lease.state.to_json().stringify()),
-          Some(lease.starts_unix_ms.to_string()),
-          Some(lease.expires_unix_ms.to_string()),
-          Some(lease.to_json().stringify()),
-        ],
-      ),
-    )
-  }
-  ignore(run(self.connection, "COMMIT"))
+      )
+    }
+    for lease in snapshot.leases {
+      ignore(
+        run(
+          connection,
+          (
+            #|INSERT INTO lunanexa.workspace_leases
+            #|  (lease_id, tenant_ref, subject_ref, state, starts_unix_ms, expires_unix_ms, payload)
+            #|VALUES ($1, $2, $3, $4::jsonb #>> '{}', $5::bigint, $6::bigint, $7::jsonb)
+          ),
+          parameters=[
+            Some(lease.lease_id),
+            Some(lease.tenant_ref),
+            Some(lease.subject_ref),
+            Some(lease.state.to_json().stringify()),
+            Some(lease.starts_unix_ms.to_string()),
+            Some(lease.expires_unix_ms.to_string()),
+            Some(lease.to_json().stringify()),
+          ],
+        ),
+      )
+    }
+  })
 }

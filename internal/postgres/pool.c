@@ -308,6 +308,46 @@ lunanexa_pg_pool_t *lunanexa_pg_pool_create(
   return pool;
 }
 
+/* Stops every worker and closes its connection. Session-scoped state such as
+   an advisory lock lives on those connections, so a controller that steps down
+   must be able to drop them deterministically instead of waiting for the pool
+   object to be collected. */
+MOONBIT_FFI_EXPORT
+void lunanexa_pg_pool_shutdown(lunanexa_pg_pool_t *pool) {
+  if (pool == NULL || pool->workers == NULL) {
+    return;
+  }
+  for (int32_t index = 0; index < pool->count; index += 1) {
+    lunanexa_pg_worker_t *worker = &pool->workers[index];
+    if (worker->started) {
+      pthread_mutex_lock(&worker->lock);
+      worker->stop = 1;
+      pthread_cond_signal(&worker->cond);
+      pthread_mutex_unlock(&worker->lock);
+      pthread_join(worker->thread, NULL);
+      worker->started = 0;
+    }
+    if (worker->connection != NULL) {
+      PQfinish(worker->connection);
+      worker->connection = NULL;
+    }
+    if (worker->result != NULL) {
+      PQclear(worker->result);
+      worker->result = NULL;
+    }
+    free(worker->error);
+    worker->error = NULL;
+    lunanexa_pg_job_free(&worker->job);
+    if (worker->wake_write >= 0) {
+      close(worker->wake_write);
+      worker->wake_write = -1;
+    }
+  }
+  free(pool->workers);
+  pool->workers = NULL;
+  pool->count = 0;
+}
+
 MOONBIT_FFI_EXPORT
 int32_t lunanexa_pg_pool_worker_count(lunanexa_pg_pool_t *pool) {
   return pool == NULL ? 0 : pool->count;
