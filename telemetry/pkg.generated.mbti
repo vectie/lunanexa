@@ -143,13 +143,14 @@ pub struct FileTelemetry {
   samples : Array[@contracts.TelemetrySample]
   benchmark_runs : Array[BenchmarkRun]
   benchmark_summaries : Array[BenchmarkSummary]
+  mut published : TelemetrySnapshot
   mutex : @async.Mutex
 }
 pub async fn FileTelemetry::open(String, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
 pub async fn FileTelemetry::open_postgres(@database.PostgresDatabase, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
 pub async fn FileTelemetry::record_benchmark(Self, BenchmarkRun) -> BenchmarkSummary
 pub async fn FileTelemetry::record_sample(Self, @contracts.TelemetrySample) -> Unit
-pub async fn FileTelemetry::snapshot(Self) -> TelemetrySnapshot
+pub fn FileTelemetry::snapshot(Self) -> TelemetrySnapshot
 
 pub(all) struct RecommendationEvidence {
   summary : BenchmarkSummary

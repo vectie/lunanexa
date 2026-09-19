@@ -66,6 +66,7 @@ pub struct ObservabilityStore {
   mut events : Array[OperationalEvent]
   mut counters : Map[String, OperationalCounter]
   mut last_external_export_unix_ms : Int64?
+  mut appended_since_prune : Int
   mutex : @async.Mutex
 }
 pub async fn ObservabilityStore::latency_buckets(Self) -> Array[OperationalLatencyBucket]

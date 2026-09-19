@@ -8,6 +8,8 @@ import {
 // Values
 pub fn connect(String) -> Connection raise PostgresError
 
+pub fn pool_create(String, workers? : Int) -> Pool raise PostgresError
+
 // Errors
 pub(all) suberror PostgresError {
   ConnectionFailed(String)
@@ -24,13 +26,27 @@ pub fn Connection::execute(Self, String, parameters? : Array[String?]) -> QueryR
 
 type NativeConnection
 
+type NativePool
+
 type NativeResult
+
+pub struct Pool {
+  handle : NativePool
+}
+pub fn Pool::is_connected(Self, Int) -> Bool
+pub fn Pool::shutdown(Self) -> Unit
+pub fn Pool::submit(Self, Int, String, Array[String?]) -> Unit raise PostgresError
+pub fn Pool::take(Self, Int) -> QueryResult?
+pub fn Pool::take_wake_fd(Self, Int) -> Int
+pub fn Pool::worker_count(Self) -> Int
 
 pub struct QueryResult {
   handle : NativeResult
 }
 pub fn QueryResult::affected_rows(Self) -> Int64
 pub fn QueryResult::column_count(Self) -> Int
+pub fn QueryResult::error_message(Self) -> String
+pub fn QueryResult::is_ok(Self) -> Bool
 pub fn QueryResult::row_count(Self) -> Int
 pub fn QueryResult::value(Self, Int, Int) -> String?
 
