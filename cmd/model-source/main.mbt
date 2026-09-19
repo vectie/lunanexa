@@ -733,6 +733,7 @@ async fn serve(
             { model_id: input.model_id, revision: input.revision },
             detail.license,
             input.directory,
+            model_root,
             @async.now(),
           )
           (202, created.to_json())

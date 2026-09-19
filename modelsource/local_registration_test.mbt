@@ -65,6 +65,7 @@ async test "a local revision is verified before it is believed" {
     { model_id: "stepfun-ai/Step-3.5-Flash", revision: "master" },
     "apache-2.0",
     "stepfun",
+    directory,
     1000L,
   )
   assert_eq(created.state, Queued)
@@ -83,6 +84,7 @@ async test "a local revision is verified before it is believed" {
         { model_id: "stepfun-ai/Step-3.5-Flash", revision: "main" },
         "apache-2.0",
         "../escape",
+        directory,
         1100L,
       ),
     )
@@ -146,4 +148,53 @@ test "a store-directory entry keeps byte counts on the Int64 wire form" {
     value => value
   }
   assert_true(escaped)
+}
+
+///|
+async test "a moved directory can be registered again, a live one cannot" {
+  let directory = @fs.tmpdir(prefix="lunanexa-modelsource-move-")
+  let store = @modelsource.FileImportStore::open("\{directory}/imports.json")
+  let request : @modelsource.ImportRequest = {
+    model_id: "Qwen/Qwen3.6-35B-A3B-FP8",
+    revision: "master",
+  }
+  let root = "\{directory}/store"
+  @fs.mkdir("\{root}/old-name", permission=0o700, recursive=true)
+  @fs.write_file(
+    "\{root}/old-name/config.json",
+    "{}",
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  let first = store.create_local(request, "apache-2.0", "old-name", root, 1000L)
+  assert_eq(first.local_directory, "old-name")
+
+  // The directory is still there, so the same identity is a duplicate.
+  let duplicate = try {
+    ignore(store.create_local(request, "apache-2.0", "new-name", root, 1100L))
+    false
+  } catch {
+    @modelsource.ModelSourceError::ImportAlreadyExists => true
+    _ => false
+  } noraise {
+    value => value
+  }
+  assert_true(duplicate)
+
+  // Moving it is a layout change, not a different revision: the record that
+  // pointed at the old path could serve nothing, so it is replaced.
+  @fs.mkdir("\{root}/new-name", permission=0o700, recursive=true)
+  @fs.write_file(
+    "\{root}/new-name/config.json",
+    "{}",
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  @fs.rmdir("\{root}/old-name", recursive=true)
+  let reregistered = store.create_local(
+    request, "apache-2.0", "new-name", root, 1200L,
+  )
+  assert_eq(reregistered.import_id, first.import_id)
+  assert_eq(reregistered.local_directory, "new-name")
+  assert_eq(store.list().length(), 1)
 }
