@@ -27,6 +27,11 @@ pub struct FileTelemetry {
   samples : Array[@contracts.TelemetrySample]
   benchmark_runs : Array[BenchmarkRun]
   benchmark_summaries : Array[BenchmarkSummary]
+  /// The copy readers observe. A writer replaces it once its persistence
+  /// succeeded, so a reader never waits behind a disk or database write.
+  /// Without this, every reader queued on the mutex that `record` holds across
+  /// `persist`, and a burst of reads all returned together when it released.
+  mut published : TelemetrySnapshot
   mutex : @async.Mutex
 }
 
@@ -37,6 +42,23 @@ fn FileTelemetry::snapshot_unlocked(self : FileTelemetry) -> TelemetrySnapshot {
     samples: self.samples.copy(),
     benchmark_runs: self.benchmark_runs.copy(),
     benchmark_summaries: self.benchmark_summaries.copy(),
+  }
+}
+
+///|
+/// Make the committed history visible to readers. Called by a writer only after
+/// its persistence succeeded, so published state never runs ahead of storage.
+fn FileTelemetry::publish(self : FileTelemetry) -> Unit {
+  self.published = self.snapshot_unlocked()
+}
+
+///|
+fn empty_telemetry_snapshot() -> TelemetrySnapshot {
+  {
+    schema_version: "lunanexa.telemetry.v1",
+    samples: [],
+    benchmark_runs: [],
+    benchmark_summaries: [],
   }
 }
 
@@ -74,6 +96,7 @@ pub async fn FileTelemetry::open(
     samples: [],
     benchmark_runs: [],
     benchmark_summaries: [],
+    published: empty_telemetry_snapshot(),
     mutex: Mutex(),
   }
   if @fs.exists(path) {
@@ -104,6 +127,7 @@ pub async fn FileTelemetry::open(
   } else {
     write_telemetry(path, telemetry.snapshot_unlocked())
   }
+  telemetry.publish()
   telemetry
 }
 
@@ -128,6 +152,7 @@ pub async fn FileTelemetry::open_postgres(
     samples: [],
     benchmark_runs: [],
     benchmark_summaries: [],
+    published: empty_telemetry_snapshot(),
     mutex: Mutex(),
   }
   let payload = database.load_snapshot("telemetry", "lunanexa.telemetry.v1")
@@ -155,6 +180,7 @@ pub async fn FileTelemetry::open_postgres(
     }
     None => telemetry.persist()
   }
+  telemetry.publish()
   telemetry
 }
 
@@ -194,6 +220,7 @@ pub async fn FileTelemetry::record_sample(
   }
   self.persist()
   committed = true
+  self.publish()
 }
 
 ///|
@@ -221,13 +248,13 @@ pub async fn FileTelemetry::record_benchmark(
   }
   self.persist()
   committed = true
+  self.publish()
   summary
 }
 
 ///|
-pub async fn FileTelemetry::snapshot(self : FileTelemetry) -> TelemetrySnapshot {
-  self.mutex.acquire()
-  let snapshot = self.snapshot_unlocked()
-  self.mutex.release()
-  snapshot
+/// The last committed history. The returned value is the published copy, so a
+/// reader never takes the mutex and never waits behind a writer's persistence.
+pub fn FileTelemetry::snapshot(self : FileTelemetry) -> TelemetrySnapshot {
+  self.published
 }
