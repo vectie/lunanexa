@@ -130,3 +130,58 @@ test "a recursive tree listing drops directory entries and keeps files" {
   }
   assert_true(empty)
 }
+
+///|
+/// One repository (MiniMax/MiniMax-H3) reports an empty per-file `Revision` on
+/// every entry; the tree's own revision is what every file is fetched at, so an
+/// empty value must not reject the whole revision. A malformed one still does.
+test "a file entry with an empty per-file revision still decodes" {
+  let files = decode_tree_files([
+    Json::object({
+      "Path": Json::string("README.md"),
+      "Revision": Json::string(""),
+      "Sha256": Json::string(
+        "f0116a90332496bdfcc827320c603a26b849c73bf804f2674d03682fbbd2334a",
+      ),
+      "Size": Json::number(38406.0),
+      "IsLFS": Json::boolean(false),
+      "Type": Json::string("blob"),
+    }),
+    Json::object({
+      "Path": Json::string("assets"),
+      "Revision": Json::string(""),
+      "Sha256": Json::string(""),
+      "Size": Json::number(0.0),
+      "IsLFS": Json::boolean(false),
+      "Type": Json::string("tree"),
+    }),
+  ])
+  assert_eq(files.length(), 1)
+  assert_eq(files[0].path, "README.md")
+  assert_eq(files[0].revision, "")
+  assert_eq(files[0].size, 38406L)
+
+  let malformed = try {
+    ignore(
+      decode_tree_files([
+        Json::object({
+          "Path": Json::string("README.md"),
+          "Revision": Json::string("../escape"),
+          "Sha256": Json::string(
+            "f0116a90332496bdfcc827320c603a26b849c73bf804f2674d03682fbbd2334a",
+          ),
+          "Size": Json::number(38406.0),
+          "IsLFS": Json::boolean(false),
+          "Type": Json::string("blob"),
+        }),
+      ]),
+    )
+    false
+  } catch {
+    InvalidUpstreamResponse => true
+    _ => false
+  } noraise {
+    value => value
+  }
+  assert_true(malformed)
+}
