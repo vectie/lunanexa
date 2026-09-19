@@ -128,6 +128,7 @@ async fn FileImportStore::create_record(
   license : String,
   local_directory : String,
   now_unix_ms : Int64,
+  supersede? : Bool = false,
 ) -> ImportOperation {
   let id = import_id(request.model_id, request.revision)
   self.mutex.acquire()
@@ -136,7 +137,7 @@ async fn FileImportStore::create_record(
   errdefer {
     self.operations = before
   }
-  if self.operations.contains(id) {
+  if !supersede && self.operations.contains(id) {
     raise ImportAlreadyExists
   }
   let record : ImportOperation = {
@@ -176,17 +177,35 @@ pub async fn FileImportStore::create(
 ///| Register a revision the operator already placed inside the managed model
 /// store. The worker still has to prove every file against ModelScope before
 /// the import becomes `Verified`; nothing here is trusted on assertion.
+///
+/// The same upstream revision may be registered again when the directory the
+/// old record pointed at no longer exists: moving or renaming a directory is a
+/// layout change, not a different revision, and the stale record could not
+/// serve anything anyway. The record is replaced, never duplicated.
 pub async fn FileImportStore::create_local(
   self : FileImportStore,
   request : ImportRequest,
   license : String,
   local_directory : String,
+  model_root : String,
   now_unix_ms : Int64,
 ) -> ImportOperation {
   if !valid_local_directory(local_directory) {
     raise InvalidRepositoryPath
   }
-  self.create_record(request, license, local_directory, now_unix_ms)
+  let id = import_id(request.model_id, request.revision)
+  self.mutex.acquire()
+  let previous = self.operations.get(id)
+  self.mutex.release()
+  let supersede = match previous {
+    Some(record) =>
+      record.local_directory != "" &&
+      !@fs.exists("\{model_root}/\{record.local_directory}")
+    None => false
+  }
+  self.create_record(
+    request, license, local_directory, now_unix_ms, supersede~,
+  )
 }
 
 ///|
@@ -288,7 +307,9 @@ pub async fn FileImportStore::cancel(
   guard self.operations.get(id) is Some(record) else { raise ImportNotFound }
   let next = match record.state {
     Queued => { ..record, state: Cancelled, updated_unix_ms: now_unix_ms, }
-    Downloading =>
+    // Both in-flight states have to accept a cancellation request, otherwise a
+    // revision being re-derived can never be withdrawn.
+    Downloading | Verifying =>
       { ..record, cancel_requested: true, updated_unix_ms: now_unix_ms, }
     _ => raise ImportNotCancelable
   }

@@ -5560,7 +5560,9 @@ fn models_view(
                           "",
                         ),
                       ]),
-                      if import_.state == Downloading || import_.state == Queued {
+                      if import_.state == Downloading ||
+                        import_.state == Queued ||
+                        import_.state == Verifying {
                         @html.button(
                           type_="button",
                           class="secondary-button danger-button",
