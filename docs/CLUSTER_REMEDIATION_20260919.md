@@ -1126,7 +1126,53 @@ checkpoint 大量存放在隐藏的 staging 目录里（`.spark-picture-20260916
   其中的 README 引用的 196 GiB / 39 分片（`model-*-of-00048`）checkpoint 不在这台机器上。
 - 四台 spark 的 `/var/lib/lunanexa-models` 里只有 `minimaxh3`；192.168.2.180 已下线。
 
-### 14.11 还没做的
+### 14.11 统一布局：全部搬到 `/data/models/<owner>/<repo>`
+
+规整之后每个模型在库里的 key **就是它的上游身份**，不再有 `minimaxh3`、`stepfun35int4`
+这类自造缩写，也不再散落在隐藏 staging 目录里：
+
+| 旧位置 | 新位置 |
+| --- | --- |
+| `minimaxh3` | `MiniMax/MiniMax-H3` |
+| `stepfun` | `stepfun-ai/Step-3.5-Flash` |
+| `stepfun35int4` | `stepfun-ai/Step-3.5-Flash-GGUF-Q4_K_S` |
+| `deepseekv4flashdspark` | `deepseek-ai/DeepSeek-V4-Flash-DSpark` |
+| `qwen3635ba3bfp8` | `Qwen/Qwen3.6-35B-A3B-FP8` |
+| `.spark-picture-phase2-20260916/models/LibertAIDAI/GLM-5.3-Flash-NVFP4` | `LibertAIDAI/GLM-5.3-Flash-NVFP4` |
+| `.spark-picture-20260916/models/Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw` | `Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw` |
+| `.spark-picture-20260916/models/{RadixArk,Mia-AiLab}/Qwen3.8-Flash-Next-NVFP4` | `{RadixArk,Mia-AiLab}/Qwen3.8-Flash-Next-NVFP4` |
+| `.spark-picture-20260916/models/{RadixArk,unsloth}/Qwen3.8-27B-NVFP4` | `{RadixArk,unsloth}/Qwen3.8-27B-NVFP4` |
+| `.new-models-20260915/models/Qwen/Qwen3.8-27B-FP8` | `Qwen/Qwen3.8-27B-FP8` |
+| `.new-models-20260915/models/Qwen/Qwen3-VL-32B-Instruct-FP8` | `Qwen/Qwen3-VL-32B-Instruct-FP8` |
+| `.spark-picture-20260916/models/z-lab/Qwen3.8-27B-DFlash2` | `z-lab/Qwen3.8-27B-DFlash2` |
+| `.spark-picture-20260916/models/incoai/GLM-5.3-Flash-DFlash2` | `incoai/GLM-5.3-Flash-DFlash2` |
+
+15 个目录全部是同一文件系统内的 `mv`（rename），瞬时完成、可回退；
+搬空后那三个 staging 的 `models/` 目录已删除。执行前确认过：没有任何活着的负载引用这些路径
+（`comfyui-acceptance` 用的是它自己的 `/opt/ComfyUI/models`，`/data/models` 只是挂了个卷）。
+
+顺序上必须先把平面停住，否则 worker 会读到被搬走的目录：
+
+1. 先把 13 个在飞/排队的登记**通过 UI 逐个撤回**（含那个正在 Verifying 的——为此修了
+   "verifying 不可取消"这个缺口）；
+2. 再搬 + 改名；
+3. 再**通过 UI** 重新登记 15 个。已 Verified 的两条记录因为目录已经不存在，按 14.12 的规则被替换。
+
+### 14.12 搬完之后能重新登记：目录不在了就允许替换
+
+`artifact_uri = modelstore://<store 相对路径>`，所以改名必然让旧记录指向一个不存在的路径，
+而 `import_id` 只由 (model_id, revision) 决定，直接重登会撞 `ImportAlreadyExists`。
+规则改为：**同名同版本允许替换，当且仅当旧记录指向的目录已经不存在**。理由是这个记录本来就
+服务不了任何东西了；目录还在时仍然算重复、仍然拒绝。有单测覆盖"移动后重登成功、原地重登被拒"。
+
+### 14.13 又一个上游形态问题：空的 per-file revision
+
+`MiniMax/MiniMax-H3` 的每一条文件条目都返回 `Revision: ""`，而 `legacy_file` 要求它满足
+`valid_revision`，于是整个 revision 被拒（`invalid-upstream-response`）。它的目录条目同样带
+`Type: tree`、`Sha256: ""`。修法：per-file 的 revision 只是说明性字段（真正决定下载 URL 的是
+tree 解析出来的那个 revision），空值放行，非空值仍必须合法。这条也补了单测。
+
+### 14.14 还没做的
 
 - **ARM64 节点镜像没有重建/滚动**。节点侧代码已写、已测，但线上 4 台 spark 跑的还是
   `lunanexa-node:20260918-arm64-r3`，所以**现在没有任何 spark 真正用 revision 拉过模型**；
