@@ -11,6 +11,10 @@ extern "c" fn native_pool_create(
 
 ///|
 #borrow(pool)
+extern "c" fn native_pool_shutdown(pool : NativePool) -> Unit = "lunanexa_pg_pool_shutdown"
+
+///|
+#borrow(pool)
 extern "c" fn native_pool_worker_count(pool : NativePool) -> Int = "lunanexa_pg_pool_worker_count"
 
 ///|
@@ -63,6 +67,13 @@ pub fn pool_create(
 ///|
 /// The number of workers the pool actually started. A short pool means the
 /// operating system refused a thread or a pipe.
+///| Stops the workers and closes their connections. Anything session-scoped on
+/// those connections, such as an advisory lock, is released here.
+pub fn Pool::shutdown(self : Pool) -> Unit {
+  native_pool_shutdown(self.handle)
+}
+
+///|
 pub fn Pool::worker_count(self : Pool) -> Int {
   native_pool_worker_count(self.handle)
 }

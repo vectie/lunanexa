@@ -77,10 +77,11 @@ pub fn PgPool::worker_count(self : PgPool) -> Int {
 }
 
 ///|
-/// Stops handing out work. Statements already running still finish; this only
-/// prevents new ones, so shutdown cannot race a worker mid-statement.
+/// Stops handing out work and closes the worker connections, releasing anything
+/// session-scoped they were holding. Statements already running finish first.
 pub fn PgPool::close(self : PgPool) -> Unit {
   self.closed = true
+  self.driver.shutdown()
 }
 
 ///|
