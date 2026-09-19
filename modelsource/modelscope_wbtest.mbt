@@ -77,3 +77,56 @@ async test "ModelScope retry reuses an already verified file without network" {
   assert_eq(@fs.read_file(destination).text(), "artifact-bytes")
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+/// A recursive listing carries directory entries as well as files. They have
+/// no content digest, and rejecting the whole revision because one appeared
+/// made any repository with a subdirectory fail to register.
+test "a recursive tree listing drops directory entries and keeps files" {
+  let files = decode_tree_files([
+    Json::object({
+      "Path": Json::string("encoding"),
+      "Revision": Json::string("6fb3d8ba"),
+      "Sha256": Json::string(""),
+      "Size": Json::number(0.0),
+      "IsLFS": Json::boolean(false),
+      "Type": Json::string("tree"),
+    }),
+    Json::object({
+      "Path": Json::string("config.json"),
+      "Revision": Json::string("6fb3d8ba"),
+      "Sha256": Json::string(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ),
+      "Size": Json::number(2048.0),
+      "IsLFS": Json::boolean(false),
+      "Type": Json::string("blob"),
+    }),
+  ])
+  assert_eq(files.length(), 1)
+  assert_eq(files[0].path, "config.json")
+  assert_eq(files[0].size, 2048L)
+
+  // A listing that is nothing but directories is still not a revision.
+  let empty = try {
+    ignore(
+      decode_tree_files([
+        Json::object({
+          "Path": Json::string("encoding"),
+          "Revision": Json::string("6fb3d8ba"),
+          "Sha256": Json::string(""),
+          "Size": Json::number(0.0),
+          "IsLFS": Json::boolean(false),
+          "Type": Json::string("tree"),
+        }),
+      ]),
+    )
+    false
+  } catch {
+    InvalidUpstreamResponse => true
+    _ => false
+  } noraise {
+    value => value
+  }
+  assert_true(empty)
+}
