@@ -13,7 +13,7 @@ options(
   targets: { "postgres.mbt": [ "native" ], "postgres_test.mbt": [ "native" ] },
   link: {
     "native": {
-      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq",
+      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",
       "stub-cc-flags": "-O2 -I/usr/include/postgresql -I/opt/homebrew/include/postgresql@17",
     },
   },
