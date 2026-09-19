@@ -877,3 +877,49 @@ pub fn Sandbox::flush(self : Self) -> Unit {
 
 当前线上是回退到 `8282443` 的等价构建（摘要 `d8298ec19a26`，与 HEAD 一致），
 表现为登录页常驻 —— 与回退前一致，说明这不是本轮前端改动引入的。
+
+### 12.6 更正：12.4 / 12.5 的"重绘故障"是我的测量假象
+
+**结论先行：控制台没有重绘故障。** 12.4 与 12.5 推断的"视图不重绘"是
+**无头浏览器的 `requestAnimationFrame` 节流**造成的观测假象，请以本节为准。
+
+决定性实验（同一台无头 Brave、同一个页面、同一次操作）：
+
+```
+root before frame: false      ← 登录后，DOM 仍是登录卡片
+（执行 CDP Page.captureScreenshot，强制渲染器产出一帧）
+root after frame : true       ← 控制台界面出现
+```
+
+之后读取页面内容，控制台带着真实数据渲染：
+
+```
+view: CLUSTER POSTURE | Cluster operational | ... | Node availability | 4 of 4 |
+      Serving models | 2 | Pending queue | 0 | CHANGE ACTIVITY | 0 ...
+```
+
+**机制**：Rabbita 的 `Sandbox::flush` 用 `requestAnimationFrame` 提交绘制。在
+`--headless=new --disable-gpu` 下，没有合成器、页面也不可见时，RAF 回调**不会被派发**，
+直到有东西要求一帧（截图、切到前台等）。于是：
+- 首屏（`App::mount` 里 `initialize()` 同步插入 DOM）能看到；
+- 之后的更新要等 RAF，而 RAF 一直不来 → 探测脚本永远读不到 `.console-root`。
+
+**为什么之前"可以"、后来"不可以"**：不是部署变了，而是**探测脚本的行为变了** ——
+早期那几次探针恰好触发了渲染（截屏/切页等 CDP 调用），后来连续几次只做
+`Runtime.evaluate` 轮询，就不再有任何东西去要帧。所以 12.4 里"证据"（`lnx-view`
+只出现一次）本身没错，错在把"没人要帧"解释成了"运行时坏了"。
+
+**由此撤销**：
+- 12.5 关于"必须 vendor `rabbita` 并加 try/finally"的建议 —— 不再需要；
+- 我为定位而临时给 `.mooncakes/.../sandbox.mbt` 打的 try/catch 补丁 —— 已还原，
+  依赖保持原样（该补丁也没有改变现象，这本身就是线索：根本没抛错）。
+
+**保留的改动**（用户要求的那条路，已部署已验证）：
+- 登录表单**首帧就预填凭据**（开放部署用 `deployment-open` 标记，网关转发时换成真凭据；
+  也可用部署注入的 `<meta name="lunanexa-operator-credential">` 放真令牌）；
+- 「登录」按钮不再要求凭据以 `lnxs_` 开头（之前永远点不动）；
+- 保留一个「填入运维凭据」按钮备用。
+
+**教训（写给未来的自己）**：在无头浏览器里用 DOM 查询判断"应用是否更新了"时，
+必须**显式要求一帧**（`Page.captureScreenshot` 或 `Emulation.setVisibleSize` 等），
+否则会把"渲染被节流"误判成"应用坏了"，并由此推出一整套错误的根因分析。
