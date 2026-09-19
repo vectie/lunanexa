@@ -343,6 +343,7 @@ async fn run_local_registration(
     let mut in_flight = 0L
     let mut unsaved_progress = 0L
     let mut restored = 0
+    let mut file_index = 0
     let record_progress : async (Int64) -> Unit = delta => {
       in_flight += delta
       if delta > 0L {
@@ -364,6 +365,10 @@ async fn run_local_registration(
         unsaved_progress = 0L
       }
     }
+    // Pass one proves the tree; pass two repairs only what disagreed. Keeping
+    // the two apart is what makes the repair budget decidable before a single
+    // byte is fetched.
+    let repairs : Array[@modelsource.ModelScopeFile] = []
     for file in tree.files {
       guard store.get(operation.import_id) is Some(observed) else {
         raise @modelsource.ModelSourceError::ImportNotFound
@@ -388,40 +393,63 @@ async fn run_local_registration(
         existing.close()
       }
       if !matched {
-        // Publish the restore to a sibling first so a failure never leaves a
-        // half-written file at the served path.
-        in_flight = 0L
-        restored += 1
-        let staging = "\{path}.lunanexa-restore"
-        ensure_directory(parent_path(path), 0o750)
-        errdefer (@fs.remove(staging) catch { _ => () })
-        client.download_file(
-          operation.model_id,
-          tree.revision,
-          file,
-          staging,
-          record_progress,
-          () => {
-            match store.get(operation.import_id) {
-              Some(value) => value.cancel_requested
-              None => true
-            }
-          },
-        )
-        @fs.rename(staging, path, replace=true)
+        repairs.push(file)
       }
       confirmed += file.size
       in_flight = 0L
       unsaved_progress = 0L
+      file_index += 1
       latest = {
         ..latest,
-        files_completed: latest.files_completed + 1,
+        files_completed: file_index,
         bytes_completed: confirmed,
-        error_code: if restored > 0 {
-          "restored-\{restored}-from-modelscope"
-        } else {
-          ""
+        updated_unix_ms: @async.now(),
+      }
+      ignore(store.replace(latest))
+    }
+    // A named revision is a claim about *this* directory. When the two
+    // disagree by more than a sliver, the directory is not that revision, and
+    // silently fetching the difference could pull hundreds of gigabytes from
+    // upstream. Refuse instead so the operator names the right revision.
+    let mut repair_bytes = 0L
+    for file in repairs {
+      repair_bytes += file.size
+    }
+    if repair_bytes > (total / 100L).max(1073741824L) {
+      raise @modelsource.ModelSourceError::FileSizeMismatch
+    }
+    for file in repairs {
+      guard store.get(operation.import_id) is Some(observed) else {
+        raise @modelsource.ModelSourceError::ImportNotFound
+      }
+      if observed.cancel_requested {
+        raise @modelsource.ModelSourceError::ImportCancelled
+      }
+      let path = "\{directory}/\{file.path}"
+      // Publish the restore to a sibling first so a failure never leaves a
+      // half-written file at the served path.
+      in_flight = 0L
+      restored += 1
+      let staging = "\{path}.lunanexa-restore"
+      ensure_directory(parent_path(path), 0o750)
+      errdefer (@fs.remove(staging) catch { _ => () })
+      client.download_file(
+        operation.model_id,
+        tree.revision,
+        file,
+        staging,
+        record_progress,
+        () => {
+          match store.get(operation.import_id) {
+            Some(value) => value.cancel_requested
+            None => true
+          }
         },
+      )
+      @fs.rename(staging, path, replace=true)
+      latest = {
+        ..latest,
+        error_code: "restored-\{restored}-from-modelscope",
         updated_unix_ms: @async.now(),
       }
       ignore(store.replace(latest))
@@ -516,8 +544,76 @@ async fn measure_tree(root : String, depth : Int) -> (Int, Int64) {
   (files, bytes)
 }
 
-///| Directories the operator can already register. Size and file count are
-/// advisory; the revision is only believed after ModelScope confirms it.
+///| A revision root is the directory that directly holds a model's entry
+/// point. A deeper layout (a diffusers tree, a ComfyUI asset split) belongs to
+/// the root above it, so the walk stops as soon as it finds one.
+async fn is_model_root(path : String) -> Bool {
+  if @fs.exists("\{path}/config.json") ||
+    @fs.exists("\{path}/model_index.json") {
+    return true
+  }
+  read_directory(path).any(name => name.has_suffix(".gguf"))
+}
+
+///| Where the adapter writes what it downloaded. That area is already in the
+/// plane as imports, so it is not offered as a directory to register.
+let managed_download_prefix : String = "models/modelscope"
+
+///|
+let model_root_search_depth : Int = 4
+
+///|
+let model_root_search_limit : Int = 256
+
+///| Find every revision root under the store. Hidden directories count: a
+/// leading dot is how these staging areas were named, and skipping them hid
+/// roughly 700 GB of real checkpoints from the operator entirely.
+async fn collect_model_roots(
+  root : String,
+  relative : String,
+  depth : Int,
+  found : Array[String],
+) -> Unit {
+  if depth > model_root_search_depth || found.length() >= model_root_search_limit {
+    return
+  }
+  let path = if relative == "" { root } else { "\{root}/\{relative}" }
+  for name in read_directory(path) {
+    if name == "_build" || name == ".git" || name == "receipts" ||
+      name == "sources" {
+      continue
+    }
+    if !@modelsource.valid_local_directory(name) {
+      continue
+    }
+    let child = "\{path}/\{name}"
+    let child_relative = if relative == "" {
+      name
+    } else {
+      "\{relative}/\{name}"
+    }
+    if child_relative == managed_download_prefix ||
+      child_relative.has_prefix("\{managed_download_prefix}/") {
+      continue
+    }
+    let kind = try @fs.kind(child, follow_symlink=false) catch {
+      _ => continue
+    } noraise {
+      value => value
+    }
+    if kind != Directory {
+      continue
+    }
+    if is_model_root(child) {
+      found.push(child_relative)
+    } else {
+      collect_model_roots(root, child_relative, depth + 1, found)
+    }
+  }
+}
+
+///| Directories the operator can register. Size and file count are advisory;
+/// the revision is only believed after ModelScope confirms it.
 async fn local_directory_listing(
   store : @modelsource.FileImportStore,
   model_root : String,
@@ -528,24 +624,15 @@ async fn local_directory_listing(
       registered[operation.local_directory] = true
     }
   }
+  let roots : Array[String] = []
+  collect_model_roots(model_root, "", 0, roots)
+  roots.sort_by((left, right) => left.compare(right))
   let entries : Array[Json] = []
-  for name in read_directory(model_root) {
-    if name.has_prefix(".") || !@modelsource.valid_local_directory(name) {
-      continue
-    }
-    let path = "\{model_root}/\{name}"
-    let kind = try @fs.kind(path, follow_symlink=false) catch {
-      _ => continue
-    } noraise {
-      value => value
-    }
-    if kind != Directory {
-      continue
-    }
-    let (files, bytes) = measure_tree(path, 0)
+  for relative in roots {
+    let (files, bytes) = measure_tree("\{model_root}/\{relative}", 0)
     entries.push(
       @modelsource.local_directory_entry(
-        name, files, bytes, registered.get(name).unwrap_or(false),
+        relative, files, bytes, registered.get(relative).unwrap_or(false),
       ),
     )
   }
