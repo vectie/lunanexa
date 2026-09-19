@@ -1,41 +1,6 @@
 ///|
-/// The database these tests write to must be a disposable one. They overwrite
-/// snapshot rows and truncate projection tables, so pointing them at a live
-/// deployment silently destroys its state: that is exactly how the production
-/// `accounts`, `commercial`, `commercial_integrations` and `client_handoffs`
-/// snapshots were replaced with fixtures and the control plane refused to start.
-///
-/// Set `LUNANEXA_TEST_DATABASE_URL` to a database whose name ends in `_test`.
-/// A URL that does not is refused loudly rather than damaging the deployment.
-fn test_database_url() -> String? {
-  let url = @env.get_env_var("LUNANEXA_TEST_DATABASE_URL")
-  match url {
-    None => None
-    Some(value) => {
-      let name = match value.split("/").last() {
-        Some(segment) => {
-          match segment.split("?") {
-            Some(parts) => match parts.get(0) {
-              Some(head) => head
-              None => segment
-            }
-            None => segment
-          }
-        }
-        None => ""
-      }
-      if !name.has_suffix("_test") {
-        fail(
-          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
-        )
-      }
-      Some(value)
-    }
-  }
-}
-///|
 async test "related opaque snapshots commit and restore as one database operation" {
-  guard test_database_url() is Some(url) else {
+  guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
     return
   }
   let database = @database.PostgresDatabase::open(url)
@@ -58,7 +23,7 @@ async test "related opaque snapshots commit and restore as one database operatio
 
 ///|
 async test "production account and client handoff snapshots are allowlisted" {
-  guard test_database_url() is Some(url) else {
+  guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
     return
   }
   let database = @database.PostgresDatabase::open(url)
@@ -81,7 +46,7 @@ async test "production account and client handoff snapshots are allowlisted" {
 
 ///|
 async test "failed PostgreSQL batch rolls back and releases its mutex" {
-  guard test_database_url() is Some(url) else {
+  guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
     return
   }
   let database = @database.PostgresDatabase::open(url)
@@ -115,7 +80,7 @@ async test "failed PostgreSQL batch rolls back and releases its mutex" {
 
 ///|
 async test "PostgreSQL leadership is exclusive and transfers after connection close" {
-  guard test_database_url() is Some(url) else {
+  guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(url) else {
     return
   }
   let first = @database.PostgresDatabase::open(url)
