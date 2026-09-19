@@ -160,7 +160,9 @@ test "exclusive machine termination confirmation binds node user and generation"
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: state,
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -214,7 +216,9 @@ test "locale switch is local and preserves operational session state" {
     inference_subject_ref: "subject:opaque-1",
     commercial_organization: "org-1",
     demo_mode: false,
+    alerts_window: Today,
     console: state,
+    console_read_groups: Map([]),
     next_directive_generation: 42L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -294,11 +298,13 @@ test "model source search is edited independently from generic operations" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       route: Models,
       operation_body: "{\"tenant_ref\":\"team-a\"}",
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -372,12 +378,14 @@ test "verified S3 model adoption is validated, stateful, and route-bound" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       route: Models,
       operator_authenticated: true,
       model_imports: [verified],
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -442,7 +450,9 @@ test "changing an operator credential clears authenticated UI authority" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: { ..@ui.default_state(), operator_authenticated: true },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -516,11 +526,13 @@ test "Simplified Chinese connection drawer localizes security copy" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       locale: ChineseSimplified,
       operator_authenticated: true,
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -553,7 +565,9 @@ test "unauthenticated operator sees login gate instead of console shell" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: { ..@ui.default_state(), locale: English },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -585,7 +599,9 @@ test "public plain HTTP renders login landing but blocks credential entry" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: @ui.default_state(),
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -619,7 +635,9 @@ test "remote HTTPS login offers OIDC and never renders static token fallback" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: @ui.default_state(),
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -648,7 +666,9 @@ test "one account session supplies operator and audit authority in memory" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: @ui.default_state(),
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -688,11 +708,13 @@ test "logout clears authorities and loaded operator state" {
     inference_subject_ref: "subject-one",
     commercial_organization: "org-one",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.demo_state(),
       operator_authenticated: true,
       locale: ChineseSimplified,
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -721,7 +743,9 @@ test "demo mode presents a read-only cluster snapshot" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
+    alerts_window: Today,
     console: @ui.demo_state(),
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -746,7 +770,9 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
+    alerts_window: Today,
     console: { ..@ui.demo_state(), route: Leases },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -787,7 +813,9 @@ test "demo mode previews every destructive node operation without mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
+    alerts_window: Today,
     console: { ..@ui.demo_state(), route: Nodes },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -821,7 +849,9 @@ test "demo mode exercises one-click preflight without controller mutation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
+    alerts_window: Today,
     console: { ..@ui.demo_state(), route: Catalog },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -859,6 +889,7 @@ test "navigation clears stale operation notices and confirmation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
+    alerts_window: Today,
     console: {
       ..initial,
       success_message: Some("stale success"),
@@ -867,6 +898,7 @@ test "navigation clears stale operation notices and confirmation" {
         @ui.confirmation_receipt(CordonNode("dgx-spark-01"), "dgx-spark-01"),
       ),
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -891,7 +923,9 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: true,
+    alerts_window: Today,
     console: { ..@ui.demo_state(), route: ContractDocuments },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -967,6 +1001,7 @@ test "contract approval and governance controls route through the operator shell
     inference_subject_ref: "",
     commercial_organization: "tenant-shell",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       route: ContractDocuments,
@@ -978,6 +1013,7 @@ test "contract approval and governance controls route through the operator shell
         approvals: [approval],
       },
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -1067,12 +1103,14 @@ test "model import polling is generation fenced and logout invalidates it" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       operator_authenticated: true,
       route: Models,
       model_imports: [downloading],
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 7L,
@@ -1132,12 +1170,14 @@ test "cluster poll refreshes nodes only for the live generation" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       operator_authenticated: true,
       route: Overview,
       nodes: [cluster_poll_test_row("node-1", Active, "org-1 · tenant1")],
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -1173,11 +1213,13 @@ test "cluster poll failure retries quietly and stops on authorization loss" {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: false,
+    alerts_window: Today,
     console: {
       ..@ui.default_state(),
       operator_authenticated: true,
       route: Overview,
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
@@ -1212,4 +1254,813 @@ test "cluster poll failure retries quietly and stops on authorization loss" {
     emit,
   )
   assert_false(signed_out.console.operator_authenticated)
+}
+
+///|
+fn alerts_window_test_row(
+  notification_id : String,
+  created_unix_ms : Int64,
+  lifecycle : @notifications.NotificationLifecycle,
+) -> @ui.NotificationRow {
+  {
+    notification_id,
+    code: "node.heartbeat_stale",
+    severity: Critical,
+    lifecycle,
+    topic: ClusterHealth,
+    created_unix_ms,
+    generation: 1L,
+    node_ref: "node-1",
+    assigned_to: "",
+    silenced_until_unix_ms: None,
+  }
+}
+
+///|
+/// 2026-09-19T09:00:00Z, the operator's "now" for the alert window cases.
+let alerts_window_now_ms : Int64 = 1789808400000L
+
+///|
+test "alert window narrows the incident calendar to whole UTC days" {
+  let today = alerts_window_test_row("alert-today", 1789808400000L, Unread)
+  let yesterday = alerts_window_test_row(
+    "alert-yesterday",
+    1789774200000L,
+    Unread,
+  )
+  let last_week = alerts_window_test_row(
+    "alert-last-week",
+    1789560000000L,
+    Acknowledged,
+  )
+  let last_month = alerts_window_test_row(
+    "alert-last-month",
+    1788220800000L,
+    Unread,
+  )
+  let older = alerts_window_test_row("alert-older", 1786752000000L, Resolved)
+  let rows = [today, yesterday, last_week, last_month, older]
+  let today_window : @ui.AlertsWindow = Today
+  assert_eq(
+    @ui.filter_alerts(rows, today_window, alerts_window_now_ms).length(),
+    1,
+  )
+  assert_eq(
+    @ui.filter_alerts(rows, today_window, alerts_window_now_ms)[0].notification_id,
+    "alert-today",
+  )
+  assert_eq(
+    @ui.filter_alerts(rows, Last7Days, alerts_window_now_ms).length(),
+    3,
+  )
+  assert_eq(
+    @ui.filter_alerts(rows, Last30Days, alerts_window_now_ms).length(),
+    4,
+  )
+  assert_eq(
+    @ui.filter_alerts(rows, AllAlerts, alerts_window_now_ms).length(),
+    5,
+  )
+  // The window control round-trips through its storage value.
+  assert_eq(today_window.storage_value(), "today")
+  assert_eq(@ui.parse_alerts_window("last-30-days"), Last30Days)
+  assert_eq(@ui.parse_alerts_window("unrecognized"), AllAlerts)
+}
+
+///|
+test "alert calendar groups by day newest first and counts only filtered open incidents" {
+  let rows = [
+    alerts_window_test_row("alert-today-open", 1789808400000L, Unread),
+    alerts_window_test_row("alert-today-resolved", 1789808400000L, Resolved),
+    alerts_window_test_row("alert-yesterday-open", 1789774200000L, Acknowledged),
+  ]
+  assert_eq(@ui.alert_day_label(1789808400000L), "2026-09-19")
+  let visible = @ui.filter_alerts(rows, AllAlerts, alerts_window_now_ms)
+  let days = @ui.group_alerts_by_day(visible)
+  assert_eq(days.length(), 2)
+  assert_eq(days[0].0, "2026-09-19")
+  assert_eq(days[0].1.length(), 2)
+  assert_eq(days[1].0, "2026-09-18")
+  assert_eq(days[1].1[0].notification_id, "alert-yesterday-open")
+  // The open counter follows the window: yesterday's incident is excluded by
+  // `Today`, and resolved incidents are never open.
+  assert_eq(
+    @ui.open_alert_count(@ui.filter_alerts(rows, Today, alerts_window_now_ms)),
+    1,
+  )
+  assert_eq(@ui.open_alert_count(visible), 2)
+}
+
+///|
+test "alert window selection is carried on the operator model" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "operator-token",
+    audit_credential: "audit-token",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: false,
+    alerts_window: Today,
+    console: { ..@ui.default_state(), operator_authenticated: true },
+    console_read_groups: Map([]),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (narrowed, _) = update_live(
+    model,
+    Console(AlertsWindowChanged(Today)),
+    emit,
+  )
+  assert_eq(narrowed.alerts_window, Today)
+  let (widened, _) = update_live(
+    narrowed,
+    Console(AlertsWindowChanged(AllAlerts)),
+    emit,
+  )
+  assert_eq(widened.alerts_window, AllAlerts)
+  // Changing the window is local view state: no controller read is scheduled.
+  assert_true(widened == { ..narrowed, alerts_window: AllAlerts })
+}
+
+///|
+fn deferred_read_test_model(route : @ui.OperatorRoute) -> AppModel {
+  {
+    endpoint: "http://127.0.0.1:4174",
+    credential: "operator-token",
+    audit_credential: "audit-token",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "org-northstar",
+    demo_mode: false,
+    alerts_window: Today,
+    console: { ..@ui.default_state(), operator_authenticated: true, route },
+    console_read_groups: Map([]),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
+  }
+}
+
+///|
+test "page-scoped reads map routes to groups and load each group once" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  assert_true(console_read_group_for_route(Alerts) is Some(AlertsReads))
+  assert_true(console_read_group_for_route(Models) is Some(ModelsReads))
+  assert_true(console_read_group_for_route(Catalog) is Some(DeploymentReads))
+  assert_true(
+    console_read_group_for_route(Deployments) is Some(DeploymentReads),
+  )
+  assert_true(console_read_group_for_route(Audit) is Some(AuditReads))
+  assert_true(console_read_group_for_route(Requests) is Some(AuditReads))
+  assert_true(console_read_group_for_route(Users) is Some(AccessReads))
+  assert_true(console_read_group_for_route(Leases) is Some(AccessReads))
+  assert_true(
+    console_read_group_for_route(ContractDocuments) is Some(ContractReads),
+  )
+  assert_true(console_read_group_for_route(CostCenters) is Some(CommerceReads))
+  assert_true(console_read_group_for_route(Agreements) is Some(CommerceReads))
+  assert_true(
+    console_read_group_for_route(QualifiedServices) is Some(CommerceReads),
+  )
+  assert_true(
+    console_read_group_for_route(OfflineCommerce) is Some(CommerceReads),
+  )
+  // The landing page stays core-only: it must not pay for the alert list, the
+  // model-source import list, or the account and deployment directory.
+  assert_true(console_read_group_for_route(Overview) is None)
+  assert_true(
+    deferred_read_pending(deferred_read_test_model(Overview), Alerts)
+    is Some(AlertsReads),
+  )
+  assert_true(
+    deferred_read_pending(deferred_read_test_model(Overview), Models)
+    is Some(ModelsReads),
+  )
+  assert_true(
+    deferred_read_pending(deferred_read_test_model(Overview), Deployments)
+    is Some(DeploymentReads),
+  )
+  assert_true(console_read_group_for_route(Nodes) is None)
+  // The warm-up list for a group is the list its loader requests, apart from
+  // the core paths the loader shares with the first paint. The deployment
+  // loader reads `/v1/nodes` for the `observed` flag, and that path is already
+  // in the core warm-up list.
+  assert_eq(console_read_group_paths(AlertsReads, ""), [
+    "/v1/notifications/operator", "/v1/notifications/operator/deliveries",
+  ])
+  assert_eq(console_read_group_paths(ModelsReads, ""), [
+    "/v1/model-sources/modelscope/imports",
+  ])
+  assert_eq(console_read_group_paths(AccessReads, ""), [
+    "/v1/accounts",
+    "/v1/accounts/trial-summary",
+    "/v1/onboarding/access-packages",
+    "/v1/workspace",
+    "/v1/exclusive-node-leases",
+  ])
+  assert_eq(console_read_group_paths(DeploymentReads, ""), [
+    "/v1/assignments", "/v1/service-deployments",
+  ])
+
+  let model = deferred_read_test_model(Overview)
+  assert_true(deferred_read_pending(model, Audit) is Some(AuditReads))
+  let (opened, _) = update_live(model, Console(Navigate(Audit)), emit)
+  assert_true(opened.console_read_groups.contains(AuditReads))
+  assert_eq(opened.console_read_groups.length(), 1)
+  // The group is scheduled, so a repeat visit must not fetch again.
+  assert_true(deferred_read_pending(opened, Audit) is None)
+  let (away, _) = update_live(opened, Console(Navigate(Overview)), emit)
+  assert_eq(away.console_read_groups.length(), 1)
+  let (returned, _) = update_live(away, Console(Navigate(Audit)), emit)
+  assert_eq(returned.console_read_groups.length(), 1)
+  assert_true(returned.console_read_groups.contains(AuditReads))
+  // A route without a group never records one.
+  let (overview, _) = update_live(returned, Console(Navigate(Nodes)), emit)
+  assert_eq(overview.console_read_groups.length(), 1)
+  assert_true(deferred_read_pending(model, Nodes) is None)
+
+  // A failed read leaves the group unloaded, silent, and signed in, so the next
+  // visit retries it.
+  let (failed, _) = update_live(
+    returned,
+    Outcome(DeferredReadFailed(AuditReads)),
+    emit,
+  )
+  assert_false(failed.console_read_groups.contains(AuditReads))
+  assert_eq(failed.console.error_message, None)
+  assert_eq(failed.console.success_message, None)
+  assert_true(failed.console.operator_authenticated)
+  assert_eq(failed.credential, "operator-token")
+  assert_true(deferred_read_pending(failed, Audit) is Some(AuditReads))
+
+  // The read-only demo snapshot never schedules a controller read.
+  let demo = { ..deferred_read_test_model(Audit), demo_mode: true }
+  let (demo_opened, _) = update_live(demo, Console(Navigate(Audit)), emit)
+  assert_eq(demo_opened.console_read_groups.length(), 0)
+
+  // A signed-out console never schedules one either.
+  let signed_out = {
+    ..deferred_read_test_model(Audit),
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: false,
+      route: Audit,
+    },
+  }
+  assert_true(deferred_read_pending(signed_out, Audit) is None)
+}
+
+///|
+test "a merged page-scoped read touches only its own group" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = deferred_read_test_model(Audit)
+  let payload : AuditReadPayload = {
+    rows: [
+      {
+        actor: "operator-a",
+        decision: "workload.invoke",
+        evidence: "text.default",
+        result: "accepted",
+        receipt: "audit:1",
+      },
+    ],
+    request_details: [
+      {
+        timestamp_unix_ms: 1789808400000L,
+        action: "workload.invoke",
+        model_selector: "text.default",
+        result: "accepted",
+        receipt: "audit:1",
+      },
+    ],
+    request_count: 7,
+    request_errors: 2,
+    recent_changes: 1,
+  }
+  let (opened, _) = update_live(model, Console(Navigate(Audit)), emit)
+  let (merged, _) = update_live(
+    opened,
+    Outcome(DeferredReadLoaded(English, AuditReads, GroupAudit(payload))),
+    emit,
+  )
+  assert_true(merged.console_read_groups.contains(AuditReads))
+  assert_eq(merged.console_read_groups.get(AuditReads), Some(true))
+  assert_eq(merged.console.audit.length(), 1)
+  assert_eq(merged.console.request_details.length(), 1)
+  assert_eq(merged.console.requests.count, 7)
+  assert_eq(merged.console.requests.errors, 2)
+  assert_eq(merged.console.overview.recent_changes, 1)
+  // Fields owned by other groups and by the operator stay untouched.
+  assert_eq(merged.console.cost_centers.length(), 0)
+  assert_eq(merged.console.route, Audit)
+  assert_eq(merged.console.notifications.length(), 0)
+  assert_eq(merged.console_read_groups.length(), 1)
+
+  // A locale switch between scheduling and completion drops the read, re-arms
+  // the group, and keeps the console silent.
+  let (chinese, _) = update_live(
+    opened,
+    Console(LocaleChanged(ChineseSimplified)),
+    emit,
+  )
+  let (fenced, _) = update_live(
+    chinese,
+    Outcome(DeferredReadLoaded(English, AuditReads, GroupAudit(payload))),
+    emit,
+  )
+  assert_eq(fenced.console.audit.length(), 0)
+  assert_false(fenced.console_read_groups.contains(AuditReads))
+  assert_eq(fenced.console.error_message, None)
+  assert_true(deferred_read_pending(fenced, Audit) is Some(AuditReads))
+
+  // A read that outlived its session (sign-out or credential change) is
+  // dropped instead of merged into the next session's state.
+  let (signed_out, _) = update_live(opened, Logout, emit)
+  assert_eq(signed_out.console_read_groups.length(), 0)
+  let (dropped, _) = update_live(
+    signed_out,
+    Outcome(DeferredReadLoaded(English, AuditReads, GroupAudit(payload))),
+    emit,
+  )
+  assert_eq(dropped.console.audit.length(), 0)
+  assert_eq(dropped.console.requests.count, 0)
+  assert_false(dropped.console_read_groups.contains(AuditReads))
+}
+
+///|
+test "the commerce group carries node lessee labels without refetching nodes" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = {
+    ..deferred_read_test_model(CostCenters),
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: CostCenters,
+      nodes: [cluster_poll_test_row("node-1", Active, "Unassigned")],
+    },
+  }
+  let payload : CommerceReadPayload = {
+    cost_centers: [],
+    agreements: [],
+    qualified_services: [],
+    enterprise_lease_requests: [],
+    offline_commerce: @offline_commerce.default_state(English, OperatorCommerce),
+    node_lease_holders: [("node-1", "org-northstar · alice")],
+  }
+  let (opened, _) = update_live(model, Console(Navigate(CostCenters)), emit)
+  assert_true(opened.console_read_groups.contains(CommerceReads))
+  let (merged, _) = update_live(
+    opened,
+    Outcome(DeferredReadLoaded(English, CommerceReads, GroupCommerce(payload))),
+    emit,
+  )
+  assert_true(merged.console_read_groups.contains(CommerceReads))
+  assert_eq(merged.console.nodes.length(), 1)
+  assert_eq(merged.console.nodes[0].lease_holder, "org-northstar · alice")
+  // Every other node field is carried over from the core read.
+  assert_eq(merged.console.nodes[0].state, Active)
+  assert_eq(merged.console.nodes[0].architecture, "dgx-spark")
+}
+
+///|
+test "the alerts group replaces only the notification projections" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = {
+    ..deferred_read_test_model(Overview),
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Overview,
+      // Core-loaded fields that the deferred merge must leave alone.
+      accounts: @ui.default_state().accounts,
+      cost_centers: [],
+      audit: [
+        {
+          actor: "operator-a",
+          decision: "cluster.snapshot",
+          evidence: "fleet",
+          result: "accepted",
+          receipt: "audit:core",
+        },
+      ],
+    },
+  }
+  // Opening the Alerts page is what schedules the group; the landing page never
+  // does.
+  assert_true(deferred_read_pending(model, Overview) is None)
+  let (opened, _) = update_live(model, Console(Navigate(Alerts)), emit)
+  assert_true(opened.console_read_groups.contains(AlertsReads))
+  let payload : AlertsReadPayload = {
+    notifications: [
+      alerts_window_test_row("alert-open", 1789808400000L, Unread),
+      alerts_window_test_row("alert-resolved", 1789808400000L, Resolved),
+    ],
+    notification_deliveries: [
+      {
+        delivery_id: "delivery-alert-open-email",
+        notification_id: "alert-open",
+        channel: Email,
+        state: DeadLetter,
+        attempt_count: 5,
+        updated_unix_ms: 1789808500000L,
+        last_error_code: "ProviderUnavailable",
+      },
+    ],
+  }
+  let (merged, _) = update_live(
+    opened,
+    Outcome(DeferredReadLoaded(English, AlertsReads, GroupAlerts(payload))),
+    emit,
+  )
+  assert_true(merged.console_read_groups.contains(AlertsReads))
+  assert_eq(merged.console.notifications.length(), 2)
+  assert_eq(merged.console.notification_deliveries.length(), 1)
+  assert_eq(
+    merged.console.notification_deliveries[0].delivery_id,
+    "delivery-alert-open-email",
+  )
+  // The open-alert counter is a projection of the merged rows, so it follows
+  // them instead of staying at the core's zero.
+  assert_eq(merged.console.overview.alerts, 1)
+  // Fields owned by other groups stay untouched.
+  assert_eq(merged.console.audit.length(), 1)
+  assert_eq(merged.console.audit[0].receipt, "audit:core")
+  assert_eq(merged.console.route, Alerts)
+  assert_eq(merged.console_read_groups.length(), 1)
+  // A later core reload preserves the merged alert list and its counter.
+  let (reloaded, _) = update_live(
+    merged,
+    Outcome(Loaded({ ..@ui.default_state(), route: Alerts, loading: false })),
+    emit,
+  )
+  assert_eq(reloaded.console.notifications.length(), 2)
+  assert_eq(reloaded.console.notification_deliveries.length(), 1)
+  assert_eq(reloaded.console.overview.alerts, 1)
+}
+
+///|
+test "the models group replaces only the model-import list" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = {
+    ..deferred_read_test_model(Models),
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Models,
+      // Core- and other-group-owned rows the merge must leave alone.
+      notifications: [
+        alerts_window_test_row("alert-open", 1789808400000L, Unread),
+      ],
+      audit: [
+        {
+          actor: "operator-a",
+          decision: "cluster.snapshot",
+          evidence: "fleet",
+          result: "accepted",
+          receipt: "audit:core",
+        },
+      ],
+    },
+  }
+  assert_true(deferred_read_pending(model, Models) is Some(ModelsReads))
+  let (opened, _) = update_live(model, Console(Navigate(Models)), emit)
+  assert_true(opened.console_read_groups.contains(ModelsReads))
+  let payload : ModelImportReadPayload = {
+    imports: [
+      {
+        import_id: "ms-import-1",
+        source: "modelscope",
+        model_id: "OpenBMB/MiniCPM5-1B",
+        revision: "master",
+        state: Downloading,
+        files_total: 11,
+        files_completed: 2,
+        bytes_total: 2171355326L,
+        bytes_completed: 1048576L,
+        manifest_digest: "",
+        artifact_uri: "",
+        license: "apache-2.0",
+        error_code: "",
+        cancel_requested: false,
+        created_unix_ms: 1000L,
+        updated_unix_ms: 1100L,
+      },
+    ],
+  }
+  let (merged, _) = update_live(
+    opened,
+    Outcome(DeferredReadLoaded(English, ModelsReads, GroupModels(payload))),
+    emit,
+  )
+  assert_true(merged.console_read_groups.contains(ModelsReads))
+  assert_eq(merged.console.model_imports.length(), 1)
+  assert_eq(merged.console.model_imports[0].import_id, "ms-import-1")
+  // Fields owned by the core read and by other groups stay untouched.
+  assert_eq(merged.console.notifications.length(), 1)
+  assert_eq(merged.console.audit.length(), 1)
+  assert_eq(merged.console.audit[0].receipt, "audit:core")
+  assert_eq(merged.console.route, Models)
+  assert_eq(merged.console_read_groups.length(), 1)
+  // An active download re-arms the import poll, which the core load can no
+  // longer start because it does not carry the list.
+  assert_eq(
+    merged.model_import_poll_generation,
+    opened.model_import_poll_generation + 1L,
+  )
+  // A later core reload preserves the merged import list.
+  let (reloaded, _) = update_live(
+    merged,
+    Outcome(Loaded({ ..@ui.default_state(), route: Models, loading: false })),
+    emit,
+  )
+  assert_eq(reloaded.console.model_imports.length(), 1)
+  assert_eq(reloaded.console.notifications.length(), 1)
+}
+
+///|
+test "the deployment group replaces the deployment rows and their operations" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = {
+    ..deferred_read_test_model(Deployments),
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Deployments,
+      // Access-group rows the deployment merge must leave alone.
+      exclusive_node_leases: [
+        {
+          lease_id: "lease-exclusive-1",
+          node_id: "node-1",
+          subject_ref: "subject-a",
+          unix_username: "alice",
+          expires_at: "Unavailable",
+          state: "Active",
+          generation: 1L,
+        },
+      ],
+    },
+  }
+  assert_true(
+    deferred_read_pending(model, Deployments) is Some(DeploymentReads),
+  )
+  let (opened, _) = update_live(model, Console(Navigate(Deployments)), emit)
+  assert_true(opened.console_read_groups.contains(DeploymentReads))
+  let intent : @deployment.ModelServiceIntent = {
+    version: @contracts.contract_version,
+    idempotency_key: "console:service-1:1000",
+    deployment_id: "service-1",
+    template: { template_id: "text-small", version: "v1", },
+    replicas: 1,
+    data_class: Internal,
+    lease_duration_ms: 86400000L,
+    promote_when_ready: false,
+  }
+  let operation : @deployment.DeploymentOperation = {
+    operation_id: "operation-1",
+    deployment_id: "service-1",
+    generation: 1L,
+    state: Reconciling,
+    plan: {
+      plan_id: "plan:service-1:text-small:v1",
+      intent,
+      template: None,
+      replicas: [],
+      findings: [],
+      executable: true,
+      endpoint: None,
+    },
+    assignment_ids: ["service-1-r1"],
+    endpoint: None,
+    message: "",
+    audit_receipt: "audit:service-1:1",
+    created_unix_ms: 1000L,
+    updated_unix_ms: 2000L,
+  }
+  let payload : DeploymentReadPayload = {
+    deployments: [
+      {
+        assignment_id: "service-1-r1",
+        deployment_id: "service-1",
+        desired: Ready,
+        observed: Preparing,
+        placement_reason: "node-1 · #1",
+      },
+    ],
+    service_deployments: [operation],
+  }
+  let (merged, _) = update_live(
+    opened,
+    Outcome(
+      DeferredReadLoaded(English, DeploymentReads, GroupDeployment(payload)),
+    ),
+    emit,
+  )
+  assert_true(merged.console_read_groups.contains(DeploymentReads))
+  assert_eq(merged.console.deployments.length(), 1)
+  assert_eq(merged.console.deployments[0].assignment_id, "service-1-r1")
+  // The `observed` flag is computed by the loader against the heartbeats it
+  // reads itself, and the merge carries the verdict through unchanged.
+  assert_eq(merged.console.deployments[0].observed, Preparing)
+  assert_eq(merged.console.service_deployments.length(), 1)
+  assert_eq(merged.console.service_deployments[0].operation_id, "operation-1")
+  // Fields owned by other groups and by the core read stay untouched.
+  assert_eq(merged.console.exclusive_node_leases.length(), 1)
+  assert_eq(merged.console.users.length(), 0)
+  assert_eq(merged.console.route, Deployments)
+  assert_eq(merged.console_read_groups.length(), 1)
+  // A later core reload preserves both merged fields, so the Deployments-page
+  // actions that read the operation list still see it.
+  let (reloaded, _) = update_live(
+    merged,
+    Outcome(Loaded({ ..@ui.default_state(), route: Deployments, loading: false })),
+    emit,
+  )
+  assert_eq(reloaded.console.deployments.length(), 1)
+  assert_eq(reloaded.console.service_deployments.length(), 1)
+}
+
+///|
+test "the access group replaces only the account and workspace rows" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = {
+    ..deferred_read_test_model(Users),
+    console: {
+      ..@ui.default_state(),
+      operator_authenticated: true,
+      route: Users,
+      // Deployment-group rows the access merge must leave alone.
+      deployments: [
+        {
+          assignment_id: "service-1-r1",
+          deployment_id: "service-1",
+          desired: Ready,
+          observed: Ready,
+          placement_reason: "node-1 · #1",
+        },
+      ],
+    },
+  }
+  let (opened, _) = update_live(model, Console(Navigate(Users)), emit)
+  assert_true(opened.console_read_groups.contains(AccessReads))
+  let payload : AccessReadPayload = {
+    accounts: [
+      {
+        account_id: "account-1",
+        subject_ref: "subject-a",
+        identity_issuer: "https://identity.example",
+        display_name: "Alice",
+        email: "alice@example.com",
+        identity_receipt: "receipt:1",
+        roles: [EnterpriseUser],
+        state: Active,
+        created_unix_ms: 1000L,
+        updated_unix_ms: 2000L,
+      },
+    ],
+    trial_summary: Some({
+      registered_trials: 3,
+      active_trials: 2,
+      expired_trials: 1,
+      converted_trials: 0,
+    }),
+    access_packages: [],
+    users: [
+      {
+        user_id: "user-1",
+        display_name: "Alice",
+        email: "alice@example.com",
+        state: UserActive,
+        last_active: "Never",
+        grant_count: 1,
+      },
+    ],
+    access_grants: [
+      {
+        grant_id: "grant-1",
+        user_id: "user-1",
+        role: Developer,
+        scope: "org-northstar",
+        expires_at: "Unavailable",
+        state: GrantActive,
+      },
+    ],
+    compute_leases: [
+      {
+        lease_id: "lease-1",
+        user_id: "user-1",
+        workspace: "org-northstar",
+        resource: "1 × dgx-spark",
+        started_at: "Unavailable",
+        expires_at: "Unavailable",
+        state: Active,
+      },
+    ],
+    exclusive_node_leases: [],
+  }
+  let (merged, _) = update_live(
+    opened,
+    Outcome(DeferredReadLoaded(English, AccessReads, GroupAccess(payload))),
+    emit,
+  )
+  assert_true(merged.console_read_groups.contains(AccessReads))
+  assert_eq(merged.console.accounts.length(), 1)
+  assert_eq(merged.console.accounts[0].display_name, "Alice")
+  assert_eq(merged.console.trial_summary.map(summary => summary.active_trials), Some(2))
+  assert_eq(merged.console.users.length(), 1)
+  assert_eq(merged.console.users[0].user_id, "user-1")
+  assert_eq(merged.console.access_grants.length(), 1)
+  assert_eq(merged.console.compute_leases.length(), 1)
+  assert_eq(merged.console.exclusive_node_leases.length(), 0)
+  // The deployment rows belong to the other group and stay as they were.
+  assert_eq(merged.console.deployments.length(), 1)
+  assert_eq(merged.console.deployments[0].assignment_id, "service-1-r1")
+  assert_eq(merged.console_read_groups.length(), 1)
+  // A later core reload preserves the merged account and workspace rows.
+  let (reloaded, _) = update_live(
+    merged,
+    Outcome(Loaded({ ..@ui.default_state(), route: Users, loading: false })),
+    emit,
+  )
+  assert_eq(reloaded.console.accounts.length(), 1)
+  assert_eq(reloaded.console.users.length(), 1)
+  assert_eq(reloaded.console.access_grants.length(), 1)
+  assert_eq(reloaded.console.deployments.length(), 1)
+}
+
+///|
+test "pages whose read group is not loaded render their empty state" {
+  let routes : Array[@ui.OperatorRoute] = [
+    Alerts,
+    Models,
+    Catalog,
+    Deployments,
+    Users,
+    Leases,
+    Audit,
+    Requests,
+    ContractDocuments,
+    CostCenters,
+    Agreements,
+    QualifiedServices,
+    OfflineCommerce,
+  ]
+  for route in routes {
+    // The core read set leaves these pages empty until their group arrives;
+    // that intermediate state must render cleanly.
+    let html = @ui.render({
+      ..@ui.default_state(),
+      route,
+      operator_authenticated: true,
+    })
+    assert_true(html.length() > 0)
+  }
+}
+
+///|
+#warnings("-alert_unstable")
+test "the alerts page renders its day calendar for the selected window" {
+  let emit : @rabbita.Emit[@ui.ConsoleMessage] = Emit(_ => @rabbita.none)
+  let state = {
+    ..@ui.default_state(),
+    route: Alerts,
+    notifications: [
+      alerts_window_test_row("alert-today", 1789808400000L, Unread),
+      alerts_window_test_row("alert-yesterday", 1789774200000L, Acknowledged),
+    ],
+  }
+  let today_html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(
+      @ui.interactive_view(
+        state,
+        emit,
+        alerts_window=Today,
+        now_unix_ms=alerts_window_now_ms,
+      ),
+    )
+  })
+  // The window picker is present and the counter follows the filtered set.
+  assert_true(today_html.contains("alerts-window"))
+  assert_true(today_html.contains("2026-09-19"))
+  assert_false(today_html.contains("2026-09-18"))
+  assert_true(today_html.contains("1 of 2 incidents shown"))
+  let all_html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(
+      @ui.interactive_view(
+        state,
+        emit,
+        alerts_window=AllAlerts,
+        now_unix_ms=alerts_window_now_ms,
+      ),
+    )
+  })
+  assert_true(all_html.contains("2026-09-19"))
+  assert_true(all_html.contains("2026-09-18"))
+  assert_true(all_html.contains("2 of 2 incidents shown"))
 }

@@ -399,6 +399,52 @@ pub(all) struct ProductionReadinessState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// Time window applied to the operator alert list. It narrows the
+/// notifications already held in the typed state; it never triggers a
+/// controller read.
+pub(all) enum AlertsWindow {
+  Today
+  Last7Days
+  Last30Days
+  AllAlerts
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Stable storage value for the alert window picker, so the control survives
+/// locale changes and the demo snapshot.
+pub fn AlertsWindow::storage_value(self : AlertsWindow) -> String {
+  match self {
+    Today => "today"
+    Last7Days => "last-7-days"
+    Last30Days => "last-30-days"
+    AllAlerts => "all"
+  }
+}
+
+///|
+pub fn parse_alerts_window(value : String) -> AlertsWindow {
+  match value {
+    "today" => Today
+    "last-7-days" => Last7Days
+    "last-30-days" => Last30Days
+    _ => AllAlerts
+  }
+}
+
+///|
+pub fn AlertsWindow::label(
+  self : AlertsWindow,
+  locale : @i18n.Locale,
+) -> String {
+  match self {
+    Today => @i18n.copy(locale, "Today", "今天")
+    Last7Days => @i18n.copy(locale, "Last 7 days", "最近 7 天")
+    Last30Days => @i18n.copy(locale, "Last 30 days", "最近 30 天")
+    AllAlerts => @i18n.copy(locale, "All", "全部")
+  }
+}
+
+///|
 pub(all) struct ConsoleState {
   locale : @i18n.Locale
   route : OperatorRoute
@@ -457,6 +503,7 @@ pub(all) struct ConsoleState {
 pub(all) enum ConsoleMessage {
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
+  AlertsWindowChanged(AlertsWindow)
   BeginCordon(String)
   BeginDrain(String)
   BeginRollback(String)
@@ -567,7 +614,7 @@ pub fn default_state() -> ConsoleState {
     deployments: [],
     catalog_templates: [],
     service_deployments: [],
-    requests: { count: 0, p95_ms: 0, throughput_per_second: 0, errors: 0, },
+    requests: { count: 0, p95_ms: 0, throughput_per_second: 0, errors: 0 },
     request_details: [],
     stream_events: [],
     benchmark_evidence: [],
@@ -672,7 +719,7 @@ pub fn demo_state() -> ConsoleState {
     order_ref: "order-demo-2026-001",
     preceding_packet_ref: None,
     active_forms: contract_manifest.forms.map(form => form.form),
-    values: [{ field_id: "lessee.name", value: "Northstar Research", }],
+    values: [{ field_id: "lessee.name", value: "Northstar Research" }],
     assignments: [
       {
         field_id: "lessee.name",
@@ -702,9 +749,9 @@ pub fn demo_state() -> ConsoleState {
     idempotency_key: "contract-packet-effective-demo-key",
     order_ref: "order-demo-2026-000",
     values: [
-      { field_id: "lessee.name", value: "Northstar Research", },
-      { field_id: "lease.start_date", value: "2026-08-01", },
-      { field_id: "lease.end_date", value: "2027-07-31", },
+      { field_id: "lessee.name", value: "Northstar Research" },
+      { field_id: "lease.start_date", value: "2026-08-01" },
+      { field_id: "lease.end_date", value: "2027-07-31" },
     ],
     values_sha256: Some(
       "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -952,7 +999,7 @@ pub fn demo_state() -> ConsoleState {
     version: @contracts.contract_version,
     idempotency_key: "demo:text-service:1",
     deployment_id: "text-service",
-    template: { template_id: "text-small", version: "v1", },
+    template: { template_id: "text-small", version: "v1" },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 86400000L,
@@ -1021,12 +1068,7 @@ pub fn demo_state() -> ConsoleState {
     ],
     catalog_templates: templates,
     service_deployments: [service_operation],
-    requests: {
-      count: 1842,
-      p95_ms: 142,
-      throughput_per_second: 38,
-      errors: 3,
-    },
+    requests: { count: 1842, p95_ms: 142, throughput_per_second: 38, errors: 3 },
     request_details: [
       {
         timestamp_unix_ms: 1786500320000L,
@@ -6218,11 +6260,214 @@ fn notification_delivery_error_label(
 }
 
 ///|
+/// Whole UTC days since the Unix epoch. The alert calendar buckets by UTC day
+/// so one console shows the same day headings in every operator timezone.
+fn alert_day_index(unix_ms : Int64) -> Int64 {
+  unix_ms / 86400000L
+}
+
+///|
+/// First UTC day included by a window, relative to `now_unix_ms`. `AllAlerts`
+/// has no lower bound. The bound is inclusive upward so a clock that is behind
+/// the controller never hides a freshly created alert.
+fn alerts_window_lower_day(
+  window : AlertsWindow,
+  now_unix_ms : Int64,
+) -> Int64? {
+  let today = alert_day_index(now_unix_ms)
+  match window {
+    Today => Some(today)
+    Last7Days => Some(today - 6L)
+    Last30Days => Some(today - 29L)
+    AllAlerts => None
+  }
+}
+
+///|
+/// Narrow the loaded notifications to one window. Pure projection: the
+/// controller read set is unchanged.
+pub fn filter_alerts(
+  rows : Array[NotificationRow],
+  window : AlertsWindow,
+  now_unix_ms : Int64,
+) -> Array[NotificationRow] {
+  match alerts_window_lower_day(window, now_unix_ms) {
+    None => rows.copy()
+    Some(lower) =>
+      rows.filter(row => alert_day_index(row.created_unix_ms) >= lower)
+  }
+}
+
+///|
+/// Open alerts in a set that the operator is looking at.
+pub fn open_alert_count(rows : Array[NotificationRow]) -> Int {
+  rows.count_if(row => row.lifecycle != Resolved)
+}
+
+///|
+/// UTC calendar day of an alert, for example `2026-09-19`.
+pub fn alert_day_label(unix_ms : Int64) -> String {
+  let stamp = @contractdoc.format_unix_ms_utc(unix_ms)
+  let mut day = stamp
+  for part in stamp.split(" ") {
+    day = part.to_owned()
+    break
+  }
+  day
+}
+
+///|
+/// Bucket alert rows by UTC day, newest day first. Ordering inside one day is
+/// the caller's ordering.
+pub fn group_alerts_by_day(
+  rows : Array[NotificationRow],
+) -> Array[(String, Array[NotificationRow])] {
+  let groups : Array[(String, Array[NotificationRow])] = []
+  for row in rows {
+    let day = alert_day_label(row.created_unix_ms)
+    let mut bucket : Array[NotificationRow]? = None
+    for group in groups {
+      if group.0 == day {
+        bucket = Some(group.1)
+      }
+    }
+    match bucket {
+      Some(bucket_rows) => bucket_rows.push(row)
+      None => groups.push((day, [row]))
+    }
+  }
+  groups.sort_by((left, right) => {
+    if left.0 == right.0 {
+      0
+    } else if left.0 > right.0 {
+      -1
+    } else {
+      1
+    }
+  })
+  groups
+}
+
+///|
+fn alert_row(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+  row : NotificationRow,
+) -> @rabbita.Html {
+  @html.tr([
+    @html.td([
+      @html.strong(alert_code_label(state.locale, row.code)),
+      @html.span(
+        class="mono secondary",
+        if row.node_ref == "" {
+          row.notification_id
+        } else {
+          "\{row.node_ref} · \{row.notification_id}"
+        },
+      ),
+    ]),
+    @html.td(
+      status_badge(
+        alert_severity_label(state.locale, row.severity),
+        if row.severity == Critical {
+          "danger"
+        } else {
+          "warning"
+        },
+      ),
+    ),
+    @html.td(
+      status_badge(
+        alert_lifecycle_label(state.locale, row.lifecycle),
+        if row.lifecycle == Resolved {
+          "ok"
+        } else {
+          "warning"
+        },
+      ),
+    ),
+    @html.td(class="mono secondary", row.created_unix_ms.to_string()),
+    @html.td(if row.assigned_to == "" { "—" } else { row.assigned_to }),
+    @html.td(
+      @html.div(class="table-actions", [
+        @html.button(
+          type_="button",
+          disabled=row.lifecycle == Acknowledged || row.lifecycle == Resolved,
+          on_click=command(
+            emit,
+            AcknowledgeAlert(row.notification_id, row.generation),
+          ),
+          localized(state.locale, "Acknowledge", "确认"),
+        ),
+        @html.button(
+          type_="button",
+          disabled=row.lifecycle == Resolved ||
+            row.assigned_to == "platform-operator",
+          on_click=command(
+            emit,
+            AssignAlertToSelf(row.notification_id, row.generation),
+          ),
+          localized(state.locale, "Assign to me", "分配给我"),
+        ),
+        @html.button(
+          type_="button",
+          disabled=row.lifecycle == Resolved,
+          on_click=command(
+            emit,
+            SilenceAlert(row.notification_id, row.generation),
+          ),
+          localized(state.locale, "Silence 1h", "静默 1 小时"),
+        ),
+        @html.button(
+          type_="button",
+          disabled=row.lifecycle == Resolved,
+          on_click=command(
+            emit,
+            ResolveAlert(row.notification_id, row.generation),
+          ),
+          localized(state.locale, "Resolve", "解决"),
+        ),
+      ]),
+    ),
+  ])
+}
+
+///|
+/// Alert table body: one heading row per UTC day, newest day first, then that
+/// day's incidents in their existing order.
+fn alert_rows_by_day(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+  rows : Array[NotificationRow],
+) -> Array[@rabbita.Html] {
+  let body : Array[@rabbita.Html] = []
+  for group in group_alerts_by_day(rows) {
+    let (day, alerts) = group
+    body.push(
+      @html.tr(class="alerts-day-heading", [
+        @html.th(
+          scope=ColGroup,
+          colspan=6,
+          "\{day} · \{localized(state.locale, "\{alerts.length()} incidents", "\{alerts.length()} 个事件")}",
+        ),
+      ]),
+    )
+    for row in alerts {
+      body.push(alert_row(state, emit, row))
+    }
+  }
+  body
+}
+
+///|
 fn alerts_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
+  window : AlertsWindow,
+  now_unix_ms : Int64,
 ) -> @rabbita.Html {
-  let open_count = state.notifications.count_if(row => row.lifecycle != Resolved)
+  let visible = filter_alerts(state.notifications, window, now_unix_ms)
+  let open_count = open_alert_count(visible)
   @html.section(attrs=@html.Attrs::build().aria_labelledby("alerts-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -6248,10 +6493,47 @@ fn alerts_view(
         ),
       ),
     ]),
+    @html.div(class="alerts-window-control", [
+      @html.label(
+        for_="alerts-window",
+        localized(state.locale, "Time window", "时间范围"),
+      ),
+      @html.select(
+        id="alerts-window",
+        class="alerts-window-select",
+        on_change=text_command(emit, value => {
+          AlertsWindowChanged(parse_alerts_window(value))
+        }),
+        [
+          for choice in [Today, Last7Days, Last30Days, AllAlerts] => {
+            @html.option(
+              value=choice.storage_value(),
+              selected=choice == window,
+              choice.label(state.locale),
+            )
+          }
+        ],
+      ),
+      @html.span(
+        class="alerts-window-summary",
+        localized(
+          state.locale,
+          "\{visible.length()} of \{state.notifications.length()} incidents shown",
+          "显示 \{visible.length()} / \{state.notifications.length()} 个事件",
+        ),
+      ),
+    ]),
     alert_impact_graph(state),
     announcement_form(state, emit),
-    if state.notifications.length() == 0 {
-      @html.nothing
+    if visible.length() == 0 {
+      @html.p(
+        class="empty-state",
+        localized(
+          state.locale,
+          "No incidents were created in this window.",
+          "该时间范围内没有事件。",
+        ),
+      )
     } else {
       @html.div(class="table-scroll", [
         @html.table(class="resource-table", [
@@ -6276,98 +6558,7 @@ fn alerts_view(
               @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
             ]),
           ),
-          @html.tbody(
-            [
-              for row in state.notifications => {
-                @html.tr([
-                  @html.td([
-                    @html.strong(alert_code_label(state.locale, row.code)),
-                    @html.span(
-                      class="mono secondary",
-                      if row.node_ref == "" {
-                        row.notification_id
-                      } else {
-                        "\{row.node_ref} · \{row.notification_id}"
-                      },
-                    ),
-                  ]),
-                  @html.td(
-                    status_badge(
-                      alert_severity_label(state.locale, row.severity),
-                      if row.severity == Critical {
-                        "danger"
-                      } else {
-                        "warning"
-                      },
-                    ),
-                  ),
-                  @html.td(
-                    status_badge(
-                      alert_lifecycle_label(state.locale, row.lifecycle),
-                      if row.lifecycle == Resolved {
-                        "ok"
-                      } else {
-                        "warning"
-                      },
-                    ),
-                  ),
-                  @html.td(
-                    class="mono secondary",
-                    row.created_unix_ms.to_string(),
-                  ),
-                  @html.td(
-                    if row.assigned_to == "" {
-                      "—"
-                    } else {
-                      row.assigned_to
-                    },
-                  ),
-                  @html.td(
-                    @html.div(class="table-actions", [
-                      @html.button(
-                        type_="button",
-                        disabled=row.lifecycle == Acknowledged ||
-                          row.lifecycle == Resolved,
-                        on_click=command(
-                          emit,
-                          AcknowledgeAlert(row.notification_id, row.generation),
-                        ),
-                        localized(state.locale, "Acknowledge", "确认"),
-                      ),
-                      @html.button(
-                        type_="button",
-                        disabled=row.lifecycle == Resolved ||
-                          row.assigned_to == "platform-operator",
-                        on_click=command(
-                          emit,
-                          AssignAlertToSelf(row.notification_id, row.generation),
-                        ),
-                        localized(state.locale, "Assign to me", "分配给我"),
-                      ),
-                      @html.button(
-                        type_="button",
-                        disabled=row.lifecycle == Resolved,
-                        on_click=command(
-                          emit,
-                          SilenceAlert(row.notification_id, row.generation),
-                        ),
-                        localized(state.locale, "Silence 1h", "静默 1 小时"),
-                      ),
-                      @html.button(
-                        type_="button",
-                        disabled=row.lifecycle == Resolved,
-                        on_click=command(
-                          emit,
-                          ResolveAlert(row.notification_id, row.generation),
-                        ),
-                        localized(state.locale, "Resolve", "解决"),
-                      ),
-                    ]),
-                  ),
-                ])
-              }
-            ],
-          ),
+          @html.tbody(alert_rows_by_day(state, emit, visible)),
         ]),
       ])
     },
@@ -8040,6 +8231,11 @@ fn console_styles() -> String {
     #|.action-button:disabled { opacity: .45; cursor: not-allowed; }
     #|.section-copy { max-width: 52rem; margin: 0; color: var(--muted); }
     #|.resource-count { flex: none; margin-top: .15rem; color: var(--muted); font-size: .75rem; }
+    #|.alerts-window-control { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; margin: 0 0 1rem; }
+    #|.alerts-window-control label { color: var(--muted); font-size: .72rem; font-weight: 700; }
+    #|.alerts-window-select { min-height: 44px; padding: .45rem 1.9rem .45rem .6rem; border: 1px solid var(--line-strong); border-radius: .5rem; background: var(--surface); color: var(--text); font: inherit; }
+    #|.alerts-window-summary { color: var(--muted); font-size: .75rem; }
+    #|.alerts-day-heading th { text-transform: none; letter-spacing: .02em; font-size: .74rem; font-weight: 760; color: var(--muted-strong); }
     #|.subsection-heading { align-items: center; margin: 1.6rem 0 .65rem; }
     #|.subsection-heading h3 { margin: 0; }
     #|.lease-cleanup-policy { margin: .9rem 0 1.15rem; padding: .85rem 1rem; border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--line)); border-left: 4px solid var(--warning); border-radius: .55rem; background: color-mix(in srgb, var(--warning-soft) 68%, var(--surface)); }
@@ -8378,16 +8574,18 @@ fn console_styles() -> String {
 fn console_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
+  alerts_window : AlertsWindow,
+  now_unix_ms : Int64,
 ) -> @rabbita.Html {
   let content = match state.route {
     Overview => overview_view(state, emit)
-    Alerts => alerts_view(state, emit)
+    Alerts => alerts_view(state, emit, alerts_window, now_unix_ms)
     Users => users_view(state, emit)
     Leases => leases_view(state, emit)
     CostCenters => cost_centers_view(state)
     Agreements => agreements_view(state, emit)
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale, }
+      let commerce = { ..state.offline_commerce, locale: state.locale }
       let page = match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -8399,7 +8597,7 @@ fn console_view(
       @html.div([offline_commerce_lifecycle_graph(state), page])
     }
     ContractDocuments => {
-      let documents = { ..state.contract_documents, locale: state.locale, }
+      let documents = { ..state.contract_documents, locale: state.locale }
       match emit {
         Some(send) =>
           @contract_documents.interactive_view(
@@ -8594,15 +8792,17 @@ fn console_view(
 
 ///|
 pub fn view(state : ConsoleState) -> @rabbita.Html {
-  console_view(state, None)
+  console_view(state, None, AllAlerts, 0L)
 }
 
 ///|
 pub fn interactive_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage],
+  alerts_window? : AlertsWindow = AllAlerts,
+  now_unix_ms? : Int64 = 0L,
 ) -> @rabbita.Html {
-  console_view(state, Some(emit))
+  console_view(state, Some(emit), alerts_window, now_unix_ms)
 }
 
 ///|

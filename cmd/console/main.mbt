@@ -592,23 +592,110 @@ extern "js" fn prefetch_get(urls : Array[String], token : String) -> Unit =
   #| }
 
 ///|
+/// The GET side of `request`: consume the prefetched promise for this exact URL
+/// when one is outstanding, and issue the request only when there is none. The
+/// entry is removed as it is taken, so a later refresh still reads fresh data.
+/// Without this the prefetch above would be dead weight and every read in the
+/// load path would travel to the controller a second time.
+extern "js" fn get_promise(url : String, token : String) -> @js.Promise =
+  #| async (url, token) => {
+  #|   const cache = globalThis.__lunanexaGetCache;
+  #|   if (cache && Object.prototype.hasOwnProperty.call(cache, url)) {
+  #|     const pending = cache[url];
+  #|     delete cache[url];
+  #|     return await pending;
+  #|   }
+  #|   const response = await fetch(url, {
+  #|     method: "GET",
+  #|     headers: {
+  #|       "Accept": "application/json",
+  #|       "Content-Type": "application/json",
+  #|       "Authorization": `Bearer ${token}`
+  #|     },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error"
+  #|   });
+  #|   const text = await response.text();
+  #|   if (!response.ok) {
+  #|     const detail = text.slice(0, 1024).replace(/[\r\n\t]+/g, " ");
+  #|     throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  #|   }
+  #|   return text;
+  #| }
+
+///|
+/// Read paths owned by one deferred, page-scoped read group. The commercial
+/// snapshot paths only exist when the deployment declares an organization.
+fn console_read_group_paths(
+  group : ConsoleReadGroup,
+  commercial_organization : String,
+) -> Array[String] {
+  match group {
+    AlertsReads =>
+      ["/v1/notifications/operator", "/v1/notifications/operator/deliveries"]
+    ModelsReads => ["/v1/model-sources/modelscope/imports"]
+    AuditReads => ["/v1/audit"]
+    /// Accounts, sessions, access packages, and the workspace directory are
+    /// read by `Users` and `Leases` and by nothing else.
+    AccessReads =>
+      [
+        "/v1/accounts",
+        "/v1/accounts/trial-summary",
+        "/v1/onboarding/access-packages",
+        "/v1/workspace",
+        "/v1/exclusive-node-leases",
+      ]
+    /// Desired assignments and service deployments are read by `Deployments`
+    /// and `Catalog` and by nothing else. Assignments are the only source of
+    /// the deployment rows, so they travel with the pages that list them.
+    DeploymentReads => ["/v1/assignments", "/v1/service-deployments"]
+    ContractReads =>
+      [
+        "/v1/contract-documents/manifest/catalog", "/v1/contract-documents/operator/snapshot",
+      ]
+    CommerceReads =>
+      if commercial_organization == "" {
+        [
+          "/v1/portal/operator/snapshot", "/v1/offline-commerce/operator/snapshot",
+        ]
+      } else {
+        [
+          "/v1/portal/operator/snapshot",
+          "/v1/offline-commerce/operator/snapshot",
+          "/v1/commercial/organizations/\{commercial_organization}/snapshot",
+          "/v1/commercial/organizations/\{commercial_organization}/integrations",
+        ]
+      }
+  }
+}
+
+///|
 /// Warm the read cache for one operator load. Paths must match the ones the
-/// load path requests so every lookup hits the cache exactly once.
-fn prefetch_console_reads(endpoint : String, token : String) -> Unit {
+/// load path requests so every lookup hits the cache exactly once: the always
+/// loaded core reads plus the group owned by the route being opened.
+fn prefetch_console_reads(
+  endpoint : String,
+  token : String,
+  route : @ui.OperatorRoute,
+  commercial_organization : String,
+) -> Unit {
   let base = if endpoint.has_suffix("/") {
     endpoint[:-1].to_owned()
   } else {
     endpoint
   }
   let paths = [
-    "/v1/readiness", "/v1/nodes", "/v1/assignments", "/v1/audit", "/v1/registry",
-    "/v1/scheduler", "/v1/telemetry", "/v1/workspace", "/v1/accounts", "/v1/accounts/trial-summary",
-    "/v1/onboarding/access-packages", "/v1/catalog/templates", "/v1/service-deployments",
-    "/v1/model-sources/modelscope/imports", "/v1/exclusive-node-leases", "/v1/notifications/operator",
-    "/v1/notifications/operator/deliveries", "/v1/offline-commerce/operator/snapshot",
-    "/v1/contract-documents/manifest/catalog", "/v1/contract-documents/operator/snapshot",
-    "/v1/portal/operator/snapshot",
+    "/v1/nodes", "/v1/registry", "/v1/scheduler", "/v1/telemetry",
+    "/v1/catalog/templates",
   ]
+  match console_read_group_for_route(route) {
+    Some(group) =>
+      for path in console_read_group_paths(group, commercial_organization) {
+        paths.push(path)
+      }
+    None => ()
+  }
   prefetch_get([ for path in paths => "\{base}\{path}" ], token)
 }
 
@@ -628,7 +715,12 @@ async fn request(
   } else {
     endpoint
   }
-  let value = request_promise(verb, "\{base}\{path}", token, subject_ref, body).wait()
+  let url = "\{base}\{path}"
+  let value = if verb == "GET" {
+    get_promise(url, token).wait()
+  } else {
+    request_promise(verb, url, token, subject_ref, body).wait()
+  }
   value.cast()
 }
 
@@ -710,18 +802,18 @@ fn latest_node_metric(
 }
 
 ///|
+/// One node liveness threshold for node state, the deployment reachability
+/// filter, and the last-seen label. It must match the controller's
+/// `control_timing.heartbeat_timeout_ms`, which this console binds to.
+let node_heartbeat_stale_ms : Int64 = 60000L
+
+///|
 fn heartbeat_age_label(locale : @i18n.Locale, age_ms : Int64) -> String {
-  if age_ms < 15000L {
+  if age_ms < node_heartbeat_stale_ms {
     if locale.is_chinese() {
       "刚刚"
     } else {
       "Just now"
-    }
-  } else if age_ms < 60000L {
-    if locale.is_chinese() {
-      "\{age_ms / 1000L} 秒前"
-    } else {
-      "\{age_ms / 1000L} seconds ago"
     }
   } else if locale.is_chinese() {
     "\{age_ms / 60000L} 分钟前"
@@ -776,7 +868,7 @@ fn build_node_rows(
       let assignments = heartbeat.running_deployments.join(", ")
       {
         node_id: heartbeat.node_id,
-        state: if now - heartbeat.timestamp_unix_ms > 15000L {
+        state: if now - heartbeat.timestamp_unix_ms > node_heartbeat_stale_ms {
           Unreachable
         } else {
           heartbeat.state
@@ -1033,37 +1125,51 @@ fn prepare_account_confirmation(
 /// The control plane encodes absent optional fields as explicit `null`, while
 /// MoonBit's derived `Option` decoder accepts only an absent key. Drop null
 /// object entries before decoding so both encodings agree.
+
+///|
+/// True when the tree contains any `null`, so payloads without one keep their
+/// parsed form and skip the rebuild below entirely.
+fn json_contains_null(value : Json) -> Bool {
+  match value {
+    Null => true
+    Array(items) => items.any(json_contains_null)
+    Object(entries) => entries.values().any(json_contains_null)
+    _ => false
+  }
+}
+
+///|
 fn parse_console_json(text : String) -> Json raise {
+  let parsed = @json.parse(text)
+  if !json_contains_null(parsed) {
+    return parsed
+  }
   let replacer = @json.Replacer((_, value) => {
     match value {
       Null => None
       _ => Some(value)
     }
   })
-  @json.parse(text).transform(replacer)
+  parsed.transform(replacer)
 }
 
 ///|
 
 ///|
+/// The always-loaded core read set. Page-scoped reads (audit, contract
+/// documents, commerce and portal snapshots) are loaded by the read group that
+/// owns them, the first time their route is opened.
 async fn load_console(
   endpoint : String,
   token : String,
-  audit_token : String,
   commercial_organization : String,
   route : @ui.OperatorRoute,
   locale : @i18n.Locale,
 ) -> @ui.ConsoleState {
-  prefetch_console_reads(endpoint, token)
+  prefetch_console_reads(endpoint, token, route, commercial_organization)
   let production_readiness = load_production_readiness(endpoint, token)
   let heartbeats : Array[@contracts.NodeHeartbeat] = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/nodes", token)),
-  )
-  let assignments : Array[@contracts.DesiredAssignment] = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/assignments", token)),
-  )
-  let audit : Array[@contracts.AuditEvent] = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/audit", audit_token)),
   )
   let registry : @contracts.RegistryReadContract = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/registry", token)),
@@ -1073,27 +1179,6 @@ async fn load_console(
   )
   let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/telemetry", token)),
-  )
-  let workspace : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/workspace", token)),
-  )
-  let accounts : Array[@ui.AccountView] = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/accounts", token)),
-  )
-  let trial_summary : @ui.TrialSummary? = Some(
-    @json.from_json(
-      parse_console_json(
-        request("GET", endpoint, "/v1/accounts/trial-summary", token),
-      ),
-    ),
-  ) catch {
-    // Supplemental statistics are unavailable, never zero, on older controllers.
-    _ => None
-  }
-  let access_packages : Array[@ui.AccessPackageView] = @json.from_json(
-    parse_console_json(
-      request("GET", endpoint, "/v1/onboarding/access-packages", token),
-    ),
   )
   let authenticated_account : @ui.AccountView? = if token.has_prefix("lnxs_") {
     Some(
@@ -1116,23 +1201,393 @@ async fn load_console(
   let catalog_templates : Array[@deployment.ModelServiceTemplate] = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/catalog/templates", token)),
   )
-  let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
-    parse_console_json(
-      request("GET", endpoint, "/v1/service-deployments", token),
+  // The operator alert list and its delivery outbox are the alerts read group;
+  // at ~137 KB they dominate the core read set and are only needed by the
+  // `Alerts` page. The modelscope import list belongs to the models read group
+  // because its source service can be slow or down without the console being
+  // unusable. The accounts, sessions, access packages, workspace directory, and
+  // exclusive node leases are the access read group, and the assignments,
+  // service deployments, and deployment rows are the deployment read group;
+  // both are read by `load_console_group_reads` when the operator opens a route
+  // that needs them, so the first paint only waits on the core read set above.
+  let nodes = build_node_rows(heartbeats, telemetry, None, locale)
+  let models : Array[@ui.ModelRow] = [
+    for model in registry.models => {
+      {
+        model_id: model.model_id,
+        version: model.version,
+        state: model.state,
+        license_status: license_status(registry, model.license_id),
+        evaluation_status: evaluation_status(
+          registry,
+          model.model_id,
+          model.version,
+        ),
+        compatibility: model.compatible_architectures.join(", "),
+        alias_name: alias_name(registry, model.model_id, model.version),
+      }
+    }
+  ]
+  let active_nodes = nodes.count_if(node => node.state == Active)
+  // Accounts, trial statistics, access packages, workspace users, access
+  // grants, compute leases, and exclusive node leases are built by the access
+  // read group; deployments and service deployments are built by the deployment
+  // read group. Cost centers, agreements, qualified services, and portal lease
+  // requests are built by the commerce read group.
+  {
+    locale,
+    route,
+    overview: {
+      active_nodes,
+      total_nodes: heartbeats.length(),
+      active_models: models.count_if(model => model.state == Approved),
+      queue_depth: scheduler.queued_count.unwrap_or(scheduler.active.length()),
+      // The alert list is the alerts read group, so the core load has no open
+      // count to report. The landing badge stays at zero until that group is
+      // merged; every core reload then preserves the merged count.
+      alerts: 0,
+      recent_changes: 0,
+    },
+    nodes,
+    models,
+    // Owned by the deployment read group.
+    deployments: [],
+    catalog_templates,
+    service_deployments: [],
+    requests: {
+      count: 0,
+      p95_ms: telemetry.benchmark_summaries
+      .last()
+      .map(summary => summary.latency_p95_ms)
+      .unwrap_or(0),
+      throughput_per_second: telemetry.benchmark_summaries
+      .last()
+      .map(summary => summary.throughput_units_per_second)
+      .unwrap_or(0),
+      errors: 0,
+    },
+    request_details: [],
+    stream_events: [],
+    benchmark_evidence: [
+      for summary in telemetry.benchmark_summaries => {
+        "\{summary.profile} · p95 \{summary.latency_p95_ms} ms · \{summary.throughput_units_per_second}/s · failures \{summary.failure_per_mille}‰ · \{summary.run_id}"
+      }
+    ],
+    policies: {
+      quota_count: scheduler.quotas.length(),
+      data_class_count: 4,
+      default_retention: Ephemeral,
+      allowed_runtimes: [
+        for runtime in registry.runtimes => runtime.name
+      ],
+    },
+    audit: [],
+    notifications: [],
+    notification_deliveries: [],
+    // Owned by the access read group.
+    accounts: [],
+    trial_summary: None,
+    announcement_draft: @ui.empty_announcement_draft(),
+    authenticated_account,
+    account_sessions,
+    account_invite: {
+      account_id: "",
+      subject_ref: "",
+      identity_issuer: "",
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      identity_receipt: "",
+      roles: [EnterpriseUser],
+    },
+    access_package_draft: {
+      identity_issuer: authenticated_account
+      .map(account => account.identity_issuer)
+      .unwrap_or(""),
+      identity_subject: "",
+      display_name: "",
+      email: "",
+      organization_id: commercial_organization,
+      tenant_ref: "",
+      lifetime_days: 30,
+      identity_verified: false,
+    },
+    access_packages: [],
+    users: [],
+    access_grants: [],
+    compute_leases: [],
+    exclusive_node_leases: [],
+    cost_centers: [],
+    agreements: [],
+    enterprise_lease_requests: [],
+    portal_node_id: "",
+    qualified_services: [],
+    offline_commerce: @offline_commerce.default_state(locale, OperatorCommerce),
+    contract_documents: @contract_documents.default_state(
+      locale,
+      actor_owner=ManagerOperator,
     ),
-  )
-  let model_imports : Array[@ui.ModelImportRow] = @json.from_json(
-    parse_console_json(
-      request("GET", endpoint, "/v1/model-sources/modelscope/imports", token),
-    ),
-  ) catch {
-    _ => []
+    production_readiness,
+    confirmation: None,
+    error_message: None,
+    success_message: None,
+    loading: false,
+    operator_authenticated: true,
+    model_source_query: "MiniCPM",
+    model_source_results: [],
+    model_source_total: 0L,
+    model_imports: [],
+    model_adoption_draft: {
+      import_id: "",
+      model_id: "",
+      version: "",
+      license_id: "",
+      compatible_architectures: "",
+      minimum_memory_mib: "",
+    },
+    model_adopted_imports: [],
+    operation_name: "register-model",
+    operation_body: "",
+    quick_deployment_id: "",
+    quick_template: catalog_templates
+    .get(0)
+    .map(catalog_template_key)
+    .unwrap_or(""),
   }
-  let exclusive_leases : Array[@nodelease.ExclusiveNodeLease] = @json.from_json(
-    parse_console_json(
-      request("GET", endpoint, "/v1/exclusive-node-leases", token),
-    ),
-  )
+}
+
+///|
+/// The read group a route depends on. Routes that are served completely by the
+/// core read set have none.
+///
+/// Deliberately unmapped: `Overview`. The landing page must not pay for the
+/// alert list, so its alert tile and topbar badge read zero until the operator
+/// opens `Alerts` (which maps to `AlertsReads` and is the only route that
+/// does).
+fn console_read_group_for_route(route : @ui.OperatorRoute) -> ConsoleReadGroup? {
+  match route {
+    Alerts => Some(AlertsReads)
+    // The import/adoption surfaces only live on this page.
+    Models => Some(ModelsReads)
+    Catalog | Deployments => Some(DeploymentReads)
+    Users | Leases => Some(AccessReads)
+    Audit | Requests => Some(AuditReads)
+    ContractDocuments => Some(ContractReads)
+    CostCenters | Agreements | QualifiedServices | OfflineCommerce =>
+      Some(CommerceReads)
+    _ => None
+  }
+}
+
+///|
+/// The read group a route still needs, or `None` when its read is already
+/// scheduled, already merged, or owned by the read-only demo snapshot.
+fn deferred_read_pending(
+  model : AppModel,
+  route : @ui.OperatorRoute,
+) -> ConsoleReadGroup? {
+  if model.demo_mode || !model.console.operator_authenticated {
+    None
+  } else {
+    match console_read_group_for_route(route) {
+      Some(group) =>
+        if model.console_read_groups.contains(group) {
+          None
+        } else {
+          Some(group)
+        }
+      None => None
+    }
+  }
+}
+
+///|
+/// Schedule the deferred read a route needs, exactly once per group.
+fn schedule_deferred_reads(
+  model : AppModel,
+  route : @ui.OperatorRoute,
+  emit : @rabbita.Emit[AppMessage],
+) -> (AppModel, @rabbita.Cmd) {
+  match deferred_read_pending(model, route) {
+    Some(group) => {
+      let groups = model.console_read_groups.copy()
+      groups.set(group, false)
+      (
+        { ..model, console_read_groups: groups },
+        deferred_read_command(model, group, emit),
+      )
+    }
+    None => (model, @rabbita.none)
+  }
+}
+
+///|
+fn deferred_read_command(
+  model : AppModel,
+  group : ConsoleReadGroup,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let endpoint = model.endpoint
+  let token = model.credential
+  let audit_token = model.audit_credential
+  let organization = model.commercial_organization
+  let locale = model.console.locale
+  @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+    try
+      DeferredReadLoaded(
+        locale,
+        group,
+        load_console_group_reads(
+          endpoint, token, audit_token, organization, locale, group,
+        ),
+      )
+    catch {
+      _ => DeferredReadFailed(group)
+    } noraise {
+      value => value
+    }
+  })
+}
+
+///|
+/// Everything the audit read group contributes to the typed state.
+priv struct AuditReadPayload {
+  rows : Array[@ui.AuditRow]
+  request_details : Array[@ui.RequestDetail]
+  request_count : Int
+  request_errors : Int
+  recent_changes : Int
+}
+
+///|
+/// The alerts read group's slice of the console state. The operator alert list
+/// and its delivery outbox are the largest core-shaped reads (~137 KB in the
+/// measured deployment), so they belong to the page that shows them.
+priv struct AlertsReadPayload {
+  notifications : Array[@ui.NotificationRow]
+  notification_deliveries : Array[@ui.NotificationDeliveryRow]
+}
+
+///|
+/// The model-import read group's slice of the console state. The modelscope
+/// import list is served by the model-source service, which is allowed to be
+/// slow or down without delaying the first paint.
+priv struct ModelImportReadPayload {
+  imports : Array[@ui.ModelImportRow]
+}
+
+///|
+/// The access read group's slice of the console state. Accounts, sessions,
+/// access packages, and the workspace directory are read by the `Users` and
+/// `Leases` pages and by nothing else.
+priv struct AccessReadPayload {
+  accounts : Array[@ui.AccountView]
+  trial_summary : @ui.TrialSummary?
+  access_packages : Array[@ui.AccessPackageView]
+  users : Array[@ui.UserAccessRow]
+  access_grants : Array[@ui.AccessGrantRow]
+  compute_leases : Array[@ui.ComputeLeaseRow]
+  exclusive_node_leases : Array[@ui.ExclusiveNodeLeaseRow]
+}
+
+///|
+/// The deployment read group's slice of the console state. Assignments are the
+/// only source of the deployment rows and are read by the `Catalog` and
+/// `Deployments` pages and by nothing else. Each row's `observed` state
+/// compares the assignment with the node heartbeats, so the loader reads
+/// `/v1/nodes` itself instead of approximating the flag from the core read set.
+priv struct DeploymentReadPayload {
+  deployments : Array[@ui.DeploymentRow]
+  service_deployments : Array[@deployment.DeploymentOperation]
+}
+
+///|
+/// The contract read group's slice of the console state.
+priv struct ContractReadPayload {
+  documents : @contract_documents.ContractDocumentsState
+}
+
+///|
+/// The commerce read group's slice of the console state. `node_lease_holders`
+/// carries the portal projection of each node's current lessee so the node
+/// table can show it without holding the whole portal snapshot.
+priv struct CommerceReadPayload {
+  cost_centers : Array[@ui.CostCenterRow]
+  agreements : Array[@ui.AgreementRow]
+  qualified_services : Array[@ui.QualifiedServiceRow]
+  enterprise_lease_requests : Array[@ui.EnterpriseLeaseRequestRow]
+  offline_commerce : @offline_commerce.OfflineCommerceState
+  node_lease_holders : Array[(String, String)]
+}
+
+///|
+priv enum ConsoleGroupRead {
+  GroupAlerts(AlertsReadPayload)
+  GroupModels(ModelImportReadPayload)
+  GroupAudit(AuditReadPayload)
+  GroupAccess(AccessReadPayload)
+  GroupDeployment(DeploymentReadPayload)
+  GroupContracts(ContractReadPayload)
+  GroupCommerce(CommerceReadPayload)
+}
+
+///|
+/// Fetch one page-scoped read group. The core read set is not touched, so a
+/// group load stays as small as the page it belongs to.
+async fn load_console_group_reads(
+  endpoint : String,
+  token : String,
+  audit_token : String,
+  commercial_organization : String,
+  locale : @i18n.Locale,
+  group : ConsoleReadGroup,
+) -> ConsoleGroupRead {
+  match group {
+    AlertsReads => GroupAlerts(load_console_alerts_reads(endpoint, token))
+    ModelsReads => GroupModels(load_console_models_reads(endpoint, token))
+    AuditReads => GroupAudit(load_console_audit_reads(endpoint, audit_token))
+    AccessReads => GroupAccess(load_console_access_reads(endpoint, token))
+    DeploymentReads =>
+      GroupDeployment(load_console_deployment_reads(endpoint, token))
+    ContractReads =>
+      GroupContracts(
+        load_console_contract_reads(
+          endpoint, token, commercial_organization, locale,
+        ),
+      )
+    CommerceReads =>
+      GroupCommerce(
+        load_console_commerce_reads(
+          endpoint, token, commercial_organization, locale,
+        ),
+      )
+  }
+}
+
+///|
+async fn load_console_models_reads(
+  endpoint : String,
+  token : String,
+) -> ModelImportReadPayload {
+  {
+    imports: @json.from_json(
+      parse_console_json(
+        request("GET", endpoint, "/v1/model-sources/modelscope/imports", token),
+      ),
+    ) catch {
+      // Compatibility with controllers that predate the modelscope import
+      // route: the import list is supplemental, so an unreachable or older
+      // source service renders as an empty list instead of failing the page.
+      _ => []
+    },
+  }
+}
+
+///|
+async fn load_console_alerts_reads(
+  endpoint : String,
+  token : String,
+) -> AlertsReadPayload {
   let notification_records : Array[@notifications.NotificationRecord] = @json.from_json(
     parse_console_json(
       request("GET", endpoint, "/v1/notifications/operator", token),
@@ -1149,13 +1604,227 @@ async fn load_console(
     // the rest of the console usable while the controller is upgraded.
     _ => []
   }
-  // This snapshot carries release and fulfillment authority. Loading failures
-  // must be visible and must never masquerade as an empty commerce queue.
-  let offline_snapshot : @offline.OfflineCommerceSnapshot = @json.from_json(
+  {
+    notifications: [
+      for record in notification_records => {
+        {
+          notification_id: record.event.notification_id,
+          code: record.event.code,
+          severity: record.event.severity,
+          lifecycle: record.lifecycle,
+          topic: record.event.topic,
+          created_unix_ms: record.event.created_unix_ms,
+          generation: record.generation,
+          node_ref: record.event.parameters.get("node_ref").unwrap_or(""),
+          assigned_to: record.assigned_to.unwrap_or(""),
+          silenced_until_unix_ms: record.silenced_until_unix_ms,
+        }
+      }
+    ],
+    notification_deliveries: [
+      for delivery in notification_delivery_records => {
+        {
+          delivery_id: delivery.delivery_id,
+          notification_id: delivery.notification_id,
+          channel: delivery.channel,
+          state: delivery.state,
+          attempt_count: delivery.attempt_count,
+          updated_unix_ms: delivery.updated_unix_ms,
+          last_error_code: delivery.last_error_code.unwrap_or(""),
+        }
+      }
+    ],
+  }
+}
+
+///|
+async fn load_console_access_reads(
+  endpoint : String,
+  token : String,
+) -> AccessReadPayload {
+  let workspace : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
+    parse_console_json(request("GET", endpoint, "/v1/workspace", token)),
+  )
+  let accounts : Array[@ui.AccountView] = @json.from_json(
+    parse_console_json(request("GET", endpoint, "/v1/accounts", token)),
+  )
+  let trial_summary : @ui.TrialSummary? = Some(
+    @json.from_json(
+      parse_console_json(
+        request("GET", endpoint, "/v1/accounts/trial-summary", token),
+      ),
+    ),
+  ) catch {
+    // Supplemental statistics are unavailable, never zero, on older controllers.
+    _ => None
+  }
+  let access_packages : Array[@ui.AccessPackageView] = @json.from_json(
     parse_console_json(
-      request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
+      request("GET", endpoint, "/v1/onboarding/access-packages", token),
     ),
   )
+  let exclusive_leases : Array[@nodelease.ExclusiveNodeLease] = @json.from_json(
+    parse_console_json(
+      request("GET", endpoint, "/v1/exclusive-node-leases", token),
+    ),
+  )
+  {
+    accounts,
+    trial_summary,
+    access_packages,
+    users: [
+      for user in workspace.users => {
+        {
+          user_id: user.user_id,
+          display_name: user.display_name,
+          email: user.email,
+          state: user.state,
+          last_active: user.last_active_unix_ms
+          .map(timestamp => format_unix_ms(timestamp, "Unavailable"))
+          .unwrap_or("Never"),
+          grant_count: workspace.access_grants.count_if(grant => {
+            grant.user_id == user.user_id
+          }),
+        }
+      }
+    ],
+    access_grants: [
+      for grant in workspace.access_grants => {
+        {
+          grant_id: grant.grant_id,
+          user_id: grant.user_id,
+          role: grant.access,
+          scope: grant.tenant_ref,
+          expires_at: format_unix_ms(grant.expires_unix_ms, "Unavailable"),
+          state: grant.state,
+        }
+      }
+    ],
+    compute_leases: [
+      for lease in workspace.leases => {
+        {
+          lease_id: lease.lease_id,
+          user_id: workspace_user_id(workspace.users, lease.subject_ref),
+          workspace: lease.tenant_ref,
+          resource: workspace_resource(lease.limits),
+          started_at: format_unix_ms(lease.starts_unix_ms, "Unavailable"),
+          expires_at: format_unix_ms(lease.expires_unix_ms, "Unavailable"),
+          state: lease.state,
+        }
+      }
+    ],
+    exclusive_node_leases: [
+      for lease in exclusive_leases => {
+        {
+          lease_id: lease.intent.lease_id,
+          node_id: lease.intent.node_id,
+          subject_ref: lease.intent.subject_ref,
+          unix_username: lease.intent.unix_username,
+          expires_at: format_unix_ms(lease.intent.expires_unix_ms, "Unavailable"),
+          state: "\{Repr(lease.state)}",
+          generation: lease.generation,
+        }
+      }
+    ],
+  }
+}
+
+///|
+async fn load_console_deployment_reads(
+  endpoint : String,
+  token : String,
+) -> DeploymentReadPayload {
+  // The heartbeats are part of the core read set, but the merge of a group read
+  // only sees the state it returns. Reading `/v1/nodes` again here keeps each
+  // row's `observed` flag a truthful comparison instead of an approximation.
+  let heartbeats : Array[@contracts.NodeHeartbeat] = @json.from_json(
+    parse_console_json(request("GET", endpoint, "/v1/nodes", token)),
+  )
+  let assignments : Array[@contracts.DesiredAssignment] = @json.from_json(
+    parse_console_json(request("GET", endpoint, "/v1/assignments", token)),
+  )
+  let service_deployments : Array[@deployment.DeploymentOperation] = @json.from_json(
+    parse_console_json(
+      request("GET", endpoint, "/v1/service-deployments", token),
+    ),
+  )
+  let now = current_unix_ms()
+  {
+    deployments: [
+      for assignment in assignments => {
+        let running = heartbeats.any(heartbeat => {
+          heartbeat.node_id == assignment.node_id &&
+          now - heartbeat.timestamp_unix_ms <= node_heartbeat_stale_ms &&
+          heartbeat.running_deployments.any(id => id == assignment.deployment_id)
+        })
+        {
+          assignment_id: assignment.assignment_id,
+          deployment_id: assignment.deployment_id,
+          desired: Ready,
+          observed: if running {
+            Ready
+          } else {
+            Preparing
+          },
+          placement_reason: "\{assignment.node_id} · #\{assignment.generation}",
+        }
+      }
+    ],
+    service_deployments,
+  }
+}
+
+///|
+async fn load_console_audit_reads(
+  endpoint : String,
+  audit_token : String,
+) -> AuditReadPayload {
+  let audit : Array[@contracts.AuditEvent] = @json.from_json(
+    parse_console_json(request("GET", endpoint, "/v1/audit", audit_token)),
+  )
+  let request_details : Array[@ui.RequestDetail] = []
+  for event in audit {
+    if event.action.has_prefix("workload.") {
+      request_details.push({
+        timestamp_unix_ms: event.timestamp_unix_ms,
+        action: event.action,
+        model_selector: event.target,
+        result: event.result,
+        receipt: event.correlation_receipt,
+      })
+    }
+  }
+  while request_details.length() > 50 {
+    ignore(request_details.remove(0))
+  }
+  {
+    rows: [
+      for event in audit => {
+        {
+          actor: event.actor,
+          decision: event.action,
+          evidence: event.target,
+          result: event.result,
+          receipt: event.correlation_receipt,
+        }
+      }
+    ],
+    request_details,
+    request_count: audit.count_if(event => event.action.has_prefix("workload.")),
+    request_errors: audit.count_if(event => {
+      event.action == "workload.fail" || event.result != "accepted"
+    }),
+    recent_changes: audit.length().min(20),
+  }
+}
+
+///|
+async fn load_console_contract_reads(
+  endpoint : String,
+  token : String,
+  commercial_organization : String,
+  locale : @i18n.Locale,
+) -> ContractReadPayload {
   // The manifest is a public, versioned product artifact compiled into the
   // console. Using the same source of truth here also keeps the web client
   // compatible with controllers that expose it only to the customer portal.
@@ -1207,6 +1876,48 @@ async fn load_console(
       }
     }
   }
+  {
+    documents: {
+      ..@contract_documents.default_state(locale, actor_owner=ManagerOperator),
+      manifest: contract_manifests.get(0),
+      available_manifests: contract_manifests,
+      packets: contract_packets,
+      events: contract_snapshot.events,
+      approvals: contract_approvals,
+      amendments: contract_snapshot.amendments,
+      obligations: contract_snapshot.obligations,
+      closure_proposals: contract_snapshot.closure_proposals,
+      contract_numbers: contract_snapshot.numbers,
+      now_unix_ms: current_unix_ms(),
+      governance_dashboard: contract_governance_dashboard,
+      selected_packet_id: contract_packets
+      .get(0)
+      .map(packet => packet.packet_id),
+      selected_form: match contract_packets.get(0) {
+        Some(packet) => packet.active_forms.get(0)
+        None => None
+      },
+      draft_values: contract_packets
+      .get(0)
+      .map_or([], packet => packet.values.copy()),
+    },
+  }
+}
+
+///|
+async fn load_console_commerce_reads(
+  endpoint : String,
+  token : String,
+  commercial_organization : String,
+  locale : @i18n.Locale,
+) -> CommerceReadPayload {
+  // This snapshot carries release and fulfillment authority. Loading failures
+  // must be visible and must never masquerade as an empty commerce queue.
+  let offline_snapshot : @offline.OfflineCommerceSnapshot = @json.from_json(
+    parse_console_json(
+      request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
+    ),
+  )
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -1254,144 +1965,6 @@ async fn load_console(
       ),
     )
   }
-  let now = current_unix_ms()
-  let nodes = build_node_rows(heartbeats, telemetry, portal_snapshot, locale)
-  let models : Array[@ui.ModelRow] = [
-    for model in registry.models => {
-      {
-        model_id: model.model_id,
-        version: model.version,
-        state: model.state,
-        license_status: license_status(registry, model.license_id),
-        evaluation_status: evaluation_status(
-          registry,
-          model.model_id,
-          model.version,
-        ),
-        compatibility: model.compatible_architectures.join(", "),
-        alias_name: alias_name(registry, model.model_id, model.version),
-      }
-    }
-  ]
-  let deployments : Array[@ui.DeploymentRow] = [
-    for assignment in assignments => {
-      let running = heartbeats.any(heartbeat => {
-        heartbeat.node_id == assignment.node_id &&
-        now - heartbeat.timestamp_unix_ms <= 15000L &&
-        heartbeat.running_deployments.any(id => id == assignment.deployment_id)
-      })
-      {
-        assignment_id: assignment.assignment_id,
-        deployment_id: assignment.deployment_id,
-        desired: Ready,
-        observed: if running {
-          Ready
-        } else {
-          Preparing
-        },
-        placement_reason: "\{assignment.node_id} · #\{assignment.generation}",
-      }
-    }
-  ]
-  let active_nodes = nodes.count_if(node => node.state == Active)
-  let users : Array[@ui.UserAccessRow] = [
-    for user in workspace.users => {
-      {
-        user_id: user.user_id,
-        display_name: user.display_name,
-        email: user.email,
-        state: user.state,
-        last_active: user.last_active_unix_ms
-        .map(timestamp => format_unix_ms(timestamp, "Unavailable"))
-        .unwrap_or("Never"),
-        grant_count: workspace.access_grants.count_if(grant => {
-          grant.user_id == user.user_id
-        }),
-      }
-    }
-  ]
-  let access_grants : Array[@ui.AccessGrantRow] = [
-    for grant in workspace.access_grants => {
-      {
-        grant_id: grant.grant_id,
-        user_id: grant.user_id,
-        role: grant.access,
-        scope: grant.tenant_ref,
-        expires_at: format_unix_ms(grant.expires_unix_ms, "Unavailable"),
-        state: grant.state,
-      }
-    }
-  ]
-  let compute_leases : Array[@ui.ComputeLeaseRow] = [
-    for lease in workspace.leases => {
-      {
-        lease_id: lease.lease_id,
-        user_id: workspace_user_id(workspace.users, lease.subject_ref),
-        workspace: lease.tenant_ref,
-        resource: workspace_resource(lease.limits),
-        started_at: format_unix_ms(lease.starts_unix_ms, "Unavailable"),
-        expires_at: format_unix_ms(lease.expires_unix_ms, "Unavailable"),
-        state: lease.state,
-      }
-    }
-  ]
-  let exclusive_node_leases : Array[@ui.ExclusiveNodeLeaseRow] = [
-    for lease in exclusive_leases => {
-      {
-        lease_id: lease.intent.lease_id,
-        node_id: lease.intent.node_id,
-        subject_ref: lease.intent.subject_ref,
-        unix_username: lease.intent.unix_username,
-        expires_at: format_unix_ms(lease.intent.expires_unix_ms, "Unavailable"),
-        state: "\{Repr(lease.state)}",
-        generation: lease.generation,
-      }
-    }
-  ]
-  let request_details : Array[@ui.RequestDetail] = []
-  for event in audit {
-    if event.action.has_prefix("workload.") {
-      request_details.push({
-        timestamp_unix_ms: event.timestamp_unix_ms,
-        action: event.action,
-        model_selector: event.target,
-        result: event.result,
-        receipt: event.correlation_receipt,
-      })
-    }
-  }
-  while request_details.length() > 50 {
-    ignore(request_details.remove(0))
-  }
-  let notifications : Array[@ui.NotificationRow] = [
-    for record in notification_records => {
-      {
-        notification_id: record.event.notification_id,
-        code: record.event.code,
-        severity: record.event.severity,
-        lifecycle: record.lifecycle,
-        topic: record.event.topic,
-        created_unix_ms: record.event.created_unix_ms,
-        generation: record.generation,
-        node_ref: record.event.parameters.get("node_ref").unwrap_or(""),
-        assigned_to: record.assigned_to.unwrap_or(""),
-        silenced_until_unix_ms: record.silenced_until_unix_ms,
-      }
-    }
-  ]
-  let notification_deliveries : Array[@ui.NotificationDeliveryRow] = [
-    for delivery in notification_delivery_records => {
-      {
-        delivery_id: delivery.delivery_id,
-        notification_id: delivery.notification_id,
-        channel: delivery.channel,
-        state: delivery.state,
-        attempt_count: delivery.attempt_count,
-        updated_unix_ms: delivery.updated_unix_ms,
-        last_error_code: delivery.last_error_code.unwrap_or(""),
-      }
-    }
-  ]
   let cost_centers : Array[@ui.CostCenterRow] = match commercial_snapshot {
     Some(snapshot) =>
       [
@@ -1497,102 +2070,10 @@ async fn load_console(
     None => []
   }
   {
-    locale,
-    route,
-    overview: {
-      active_nodes,
-      total_nodes: heartbeats.length(),
-      active_models: models.count_if(model => model.state == Approved),
-      queue_depth: scheduler.queued_count.unwrap_or(scheduler.active.length()),
-      alerts: notifications.count_if(notification => {
-        notification.lifecycle != Resolved
-      }),
-      recent_changes: audit.length().min(20),
-    },
-    nodes,
-    models,
-    deployments,
-    catalog_templates,
-    service_deployments,
-    requests: {
-      count: audit.count_if(event => event.action.has_prefix("workload.")),
-      p95_ms: telemetry.benchmark_summaries
-      .last()
-      .map(summary => summary.latency_p95_ms)
-      .unwrap_or(0),
-      throughput_per_second: telemetry.benchmark_summaries
-      .last()
-      .map(summary => summary.throughput_units_per_second)
-      .unwrap_or(0),
-      errors: audit.count_if(event => {
-        event.action == "workload.fail" || event.result != "accepted"
-      }),
-    },
-    request_details,
-    stream_events: [],
-    benchmark_evidence: [
-      for summary in telemetry.benchmark_summaries => {
-        "\{summary.profile} · p95 \{summary.latency_p95_ms} ms · \{summary.throughput_units_per_second}/s · failures \{summary.failure_per_mille}‰ · \{summary.run_id}"
-      }
-    ],
-    policies: {
-      quota_count: scheduler.quotas.length(),
-      data_class_count: 4,
-      default_retention: Ephemeral,
-      allowed_runtimes: [
-        for runtime in registry.runtimes => runtime.name
-      ],
-    },
-    audit: [
-      for event in audit => {
-        {
-          actor: event.actor,
-          decision: event.action,
-          evidence: event.target,
-          result: event.result,
-          receipt: event.correlation_receipt,
-        }
-      }
-    ],
-    notifications,
-    notification_deliveries,
-    accounts,
-    trial_summary,
-    announcement_draft: @ui.empty_announcement_draft(),
-    authenticated_account,
-    account_sessions,
-    account_invite: {
-      account_id: "",
-      subject_ref: "",
-      identity_issuer: "",
-      identity_subject: "",
-      display_name: "",
-      email: "",
-      identity_receipt: "",
-      roles: [EnterpriseUser],
-    },
-    access_package_draft: {
-      identity_issuer: authenticated_account
-      .map(account => account.identity_issuer)
-      .unwrap_or(""),
-      identity_subject: "",
-      display_name: "",
-      email: "",
-      organization_id: commercial_organization,
-      tenant_ref: "",
-      lifetime_days: 30,
-      identity_verified: false,
-    },
-    access_packages,
-    users,
-    access_grants,
-    compute_leases,
-    exclusive_node_leases,
     cost_centers,
     agreements,
-    enterprise_lease_requests,
-    portal_node_id: "",
     qualified_services,
+    enterprise_lease_requests,
     offline_commerce: {
       ..@offline_commerce.default_state(locale, OperatorCommerce),
       orders: offline_snapshot.orders,
@@ -1621,56 +2102,155 @@ async fn load_console(
         None
       },
     },
-    contract_documents: {
-      ..@contract_documents.default_state(locale, actor_owner=ManagerOperator),
-      manifest: contract_manifests.get(0),
-      available_manifests: contract_manifests,
-      packets: contract_packets,
-      events: contract_snapshot.events,
-      approvals: contract_approvals,
-      amendments: contract_snapshot.amendments,
-      obligations: contract_snapshot.obligations,
-      closure_proposals: contract_snapshot.closure_proposals,
-      contract_numbers: contract_snapshot.numbers,
-      now_unix_ms: current_unix_ms(),
-      governance_dashboard: contract_governance_dashboard,
-      selected_packet_id: contract_packets
-      .get(0)
-      .map(packet => packet.packet_id),
-      selected_form: match contract_packets.get(0) {
-        Some(packet) => packet.active_forms.get(0)
-        None => None
-      },
-      draft_values: contract_packets
-      .get(0)
-      .map_or([], packet => packet.values.copy()),
-    },
-    production_readiness,
-    confirmation: None,
-    error_message: None,
-    success_message: None,
-    loading: false,
-    operator_authenticated: true,
-    model_source_query: "MiniCPM",
-    model_source_results: [],
-    model_source_total: 0L,
-    model_imports,
-    model_adoption_draft: {
-      import_id: "",
-      model_id: "",
-      version: "",
-      license_id: "",
-      compatible_architectures: "",
-      minimum_memory_mib: "",
-    },
-    model_adopted_imports: [],
-    operation_name: "register-model",
-    operation_body: "",
-    quick_deployment_id: "",
-    quick_template: catalog_templates
-    .get(0)
-    .map(catalog_template_key)
-    .unwrap_or(""),
+    node_lease_holders: portal_node_lease_holders(portal_snapshot),
+  }
+}
+
+///|
+/// Node id to lessee label, projected from the portal snapshot the commerce
+/// read group just fetched.
+fn portal_node_lease_holders(
+  snapshot : @portal.PortalSnapshot?,
+) -> Array[(String, String)] {
+  let holders : Array[(String, String)] = []
+  match snapshot {
+    Some(value) =>
+      for request in value.lease_requests {
+        match request.assigned_node_id {
+          Some(node_id) =>
+            if request.state == Approved {
+              holders.push(
+                (
+                  node_id,
+                  "\{request.submission.organization_id} · \{request.submission.unix_username}",
+                ),
+              )
+            }
+          None => ()
+        }
+      }
+    None => ()
+  }
+  holders
+}
+
+///|
+/// Apply freshly read lessee labels to the node rows already on screen. Every
+/// other node field is left untouched.
+fn node_rows_with_lease_holders(
+  locale : @i18n.Locale,
+  rows : Array[@ui.NodeRow],
+  holders : Array[(String, String)],
+) -> Array[@ui.NodeRow] {
+  rows.map(row => {
+    let holder = holders
+      .iter()
+      .find_first(entry => entry.0 == row.node_id)
+      .map(entry => entry.1)
+    let lease_holder = match holder {
+      Some(value) => value
+      None => if locale.is_chinese() { "未分配" } else { "Unassigned" }
+    }
+    { ..row, lease_holder, }
+  })
+}
+
+///|
+/// Merge one deferred read into the console state. Only the fields owned by
+/// that read group change; every other field is carried over untouched. A
+/// counter that is a direct projection of the group's own rows (the open-alert
+/// count, the per-node lessee label) is refreshed with them, because nothing
+/// else can recompute it.
+fn merge_console_group_read(
+  current : @ui.ConsoleState,
+  read : ConsoleGroupRead,
+) -> @ui.ConsoleState {
+  match read {
+    GroupAlerts(payload) =>
+      {
+        ..current,
+        notifications: payload.notifications,
+        notification_deliveries: payload.notification_deliveries,
+        overview: {
+          ..current.overview,
+          alerts: payload.notifications.count_if(notification => {
+            notification.lifecycle != Resolved
+          }),
+        },
+      }
+    GroupModels(payload) => { ..current, model_imports: payload.imports }
+    GroupAudit(payload) =>
+      {
+        ..current,
+        audit: payload.rows,
+        request_details: payload.request_details,
+        requests: {
+          ..current.requests,
+          count: payload.request_count,
+          errors: payload.request_errors,
+        },
+        overview: { ..current.overview, recent_changes: payload.recent_changes },
+      }
+    GroupAccess(payload) =>
+      {
+        ..current,
+        accounts: payload.accounts,
+        trial_summary: payload.trial_summary,
+        access_packages: payload.access_packages,
+        users: payload.users,
+        access_grants: payload.access_grants,
+        compute_leases: payload.compute_leases,
+        exclusive_node_leases: payload.exclusive_node_leases,
+      }
+    GroupDeployment(payload) =>
+      {
+        ..current,
+        deployments: payload.deployments,
+        service_deployments: payload.service_deployments,
+      }
+    GroupContracts(payload) =>
+      {
+        ..current,
+        contract_documents: {
+          ..payload.documents,
+          locale: current.locale,
+          selected_tenant_ref: current.contract_documents.selected_tenant_ref,
+          search_query: current.contract_documents.search_query,
+          selected_packet_id: if current.contract_documents.selected_packet_id
+            is None {
+            payload.documents.selected_packet_id
+          } else {
+            current.contract_documents.selected_packet_id
+          },
+          selected_form: if current.contract_documents.selected_form is None {
+            payload.documents.selected_form
+          } else {
+            current.contract_documents.selected_form
+          },
+          preview: current.contract_documents.preview,
+        },
+      }
+    GroupCommerce(payload) =>
+      {
+        ..current,
+        cost_centers: payload.cost_centers,
+        agreements: payload.agreements,
+        qualified_services: payload.qualified_services,
+        enterprise_lease_requests: payload.enterprise_lease_requests,
+        offline_commerce: {
+          ..payload.offline_commerce,
+          locale: current.locale,
+          operator_actor_ref: current.offline_commerce.operator_actor_ref,
+          quote_minor_units: current.offline_commerce.quote_minor_units,
+          terms_digest: current.offline_commerce.terms_digest,
+          entitlement_ref: current.offline_commerce.entitlement_ref,
+        },
+        nodes: node_rows_with_lease_holders(
+          current.locale,
+          current.nodes,
+          payload.node_lease_holders,
+        ),
+      }
   }
 }
 
@@ -1686,6 +2266,8 @@ priv enum LoadOutcome {
   ModelImportPollFailed(Int64, @i18n.Locale)
   ClusterPolled(Int64, Array[@ui.NodeRow])
   ClusterPollFailed(Int64, Bool)
+  DeferredReadLoaded(@i18n.Locale, ConsoleReadGroup, ConsoleGroupRead)
+  DeferredReadFailed(ConsoleReadGroup)
   ModelAdopted(@i18n.Locale, String, String)
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
@@ -1700,6 +2282,19 @@ priv enum LoadOutcome {
 }
 
 ///|
+/// Page-scoped operator reads. The first paint loads only the core read set;
+/// each group is fetched the first time a route that needs it is opened.
+priv enum ConsoleReadGroup {
+  AlertsReads
+  ModelsReads
+  AuditReads
+  AccessReads
+  DeploymentReads
+  ContractReads
+  CommerceReads
+} derive(Eq, Hash)
+
+///|
 priv struct AppModel {
   endpoint : String
   credential : String
@@ -1709,7 +2304,13 @@ priv struct AppModel {
   inference_subject_ref : String
   commercial_organization : String
   demo_mode : Bool
+  alerts_window : @ui.AlertsWindow
   console : @ui.ConsoleState
+  /// Read groups already scheduled or merged. A key is absent until a route
+  /// needs the group, `false` while its read is in flight, and `true` once its
+  /// fields were merged. A failed read removes the key so the next visit
+  /// retries it.
+  console_read_groups : Map[ConsoleReadGroup, Bool]
   next_directive_generation : Int64
   contract_preview_generation : Int64
   model_import_poll_generation : Int64
@@ -1737,6 +2338,24 @@ priv enum AppMessage {
 }
 
 ///|
+/// Keep the lessee each node already displayed. The core read set does not
+/// carry the portal snapshot, so a rebuilt node row would otherwise fall back
+/// to "unassigned".
+fn preserve_node_lease_holders(
+  current : Array[@ui.NodeRow],
+  refreshed : Array[@ui.NodeRow],
+) -> Array[@ui.NodeRow] {
+  refreshed.map(row => {
+    ..row,
+    lease_holder: current
+    .iter()
+    .find_first(existing => existing.node_id == row.node_id)
+    .map(existing => existing.lease_holder)
+    .unwrap_or(row.lease_holder),
+  })
+}
+
+///|
 fn merge_loaded_console(
   current : @ui.ConsoleState,
   loaded : @ui.ConsoleState,
@@ -1748,7 +2367,9 @@ fn merge_loaded_console(
     model_source_query: current.model_source_query,
     model_source_results: current.model_source_results,
     model_source_total: current.model_source_total,
-    model_imports: loaded.model_imports,
+    // The import list is owned by a deferred read group, so a core reload must
+    // keep the rows the group already merged.
+    model_imports: current.model_imports,
     model_adoption_draft: current.model_adoption_draft,
     model_adopted_imports: current.model_adopted_imports,
     operation_name: current.operation_name,
@@ -1773,22 +2394,40 @@ fn merge_loaded_console(
       current.quick_template
     },
     portal_node_id: current.portal_node_id,
-    offline_commerce: {
-      ..loaded.offline_commerce,
-      locale: current.locale,
-      operator_actor_ref: current.offline_commerce.operator_actor_ref,
-      quote_minor_units: current.offline_commerce.quote_minor_units,
-      terms_digest: current.offline_commerce.terms_digest,
-      entitlement_ref: current.offline_commerce.entitlement_ref,
+    // Deferred, page-scoped reads own these fields. A core reload must not
+    // erase a group that was already merged.
+    audit: current.audit,
+    request_details: current.request_details,
+    requests: {
+      ..loaded.requests,
+      count: current.requests.count,
+      errors: current.requests.errors,
     },
+    overview: {
+      ..loaded.overview,
+      alerts: current.overview.alerts,
+      recent_changes: current.overview.recent_changes,
+    },
+    notifications: current.notifications,
+    notification_deliveries: current.notification_deliveries,
+    accounts: current.accounts,
+    trial_summary: current.trial_summary,
+    access_packages: current.access_packages,
+    users: current.users,
+    access_grants: current.access_grants,
+    compute_leases: current.compute_leases,
+    exclusive_node_leases: current.exclusive_node_leases,
+    deployments: current.deployments,
+    service_deployments: current.service_deployments,
+    cost_centers: current.cost_centers,
+    agreements: current.agreements,
+    qualified_services: current.qualified_services,
+    enterprise_lease_requests: current.enterprise_lease_requests,
+    nodes: preserve_node_lease_holders(current.nodes, loaded.nodes),
+    offline_commerce: { ..current.offline_commerce, locale: current.locale },
     contract_documents: {
-      ..loaded.contract_documents,
+      ..current.contract_documents,
       locale: current.locale,
-      selected_tenant_ref: current.contract_documents.selected_tenant_ref,
-      search_query: current.contract_documents.search_query,
-      selected_packet_id: current.contract_documents.selected_packet_id,
-      selected_form: current.contract_documents.selected_form,
-      preview: current.contract_documents.preview,
       preview_loading: false,
     },
     success_message: current.success_message,
@@ -2464,7 +3103,6 @@ fn load_command(
       load_console(
         model.endpoint,
         model.credential,
-        model.audit_credential,
         model.commercial_organization,
         model.console.route,
         model.console.locale,
@@ -2667,19 +3305,10 @@ fn cluster_poll_request_command(
         ),
       )
       let existing = model.console.nodes
-      let nodes = build_node_rows(
-        heartbeats,
-        telemetry,
-        None,
-        model.console.locale,
-      ).map(row => {
-        ..row,
-        lease_holder: existing
-        .iter()
-        .find_first(current => current.node_id == row.node_id)
-        .map(current => current.lease_holder)
-        .unwrap_or(row.lease_holder),
-      })
+      let nodes = preserve_node_lease_holders(
+        existing,
+        build_node_rows(heartbeats, telemetry, None, model.console.locale),
+      )
       ClusterPolled(generation, nodes)
     } catch {
       error => {
@@ -2726,6 +3355,7 @@ fn update_live(
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
           console: { ..model.console, operator_authenticated: false },
+          console_read_groups: Map([]),
         },
         @rabbita.none,
       )
@@ -2738,6 +3368,7 @@ fn update_live(
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
           console: { ..model.console, operator_authenticated: false },
+          console_read_groups: Map([]),
         },
         @rabbita.none,
       )
@@ -2747,8 +3378,15 @@ fn update_live(
       ({ ..model, inference_credential: value }, @rabbita.none)
     InferenceSubjectChanged(value) =>
       ({ ..model, inference_subject_ref: value }, @rabbita.none)
-    CommercialOrganizationChanged(value) =>
-      ({ ..model, commercial_organization: value }, @rabbita.none)
+    CommercialOrganizationChanged(value) => {
+      // The commerce read group belongs to the previous organization.
+      let groups = model.console_read_groups.copy()
+      groups.remove(CommerceReads)
+      (
+        { ..model, commercial_organization: value, console_read_groups: groups },
+        @rabbita.none,
+      )
+    }
     Console(AccountInviteIdChanged(value)) =>
       (
         {
@@ -3374,6 +4012,7 @@ fn update_live(
           commercial_organization: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
+          console_read_groups: Map([]),
           console: {
             ..@ui.default_state(),
             locale: model.console.locale,
@@ -3396,6 +4035,8 @@ fn update_live(
       apply_console_locale(locale)
       (switch_app_locale(model, locale), @rabbita.none)
     }
+    Console(AlertsWindowChanged(window)) =>
+      ({ ..model, alerts_window: window }, @rabbita.none)
     ContractPreviewDue(generation, request) =>
       if generation != model.contract_preview_generation {
         (model, @rabbita.none)
@@ -3461,25 +4102,39 @@ fn update_live(
     Outcome(Loaded(state)) => {
       let generation = model.model_import_poll_generation + 1L
       let cluster_generation = model.cluster_poll_generation + 1L
+      // The core read set does not carry the current page's deferred group, so
+      // that group is reloaded for the page the operator is looking at.
+      let stale_groups = model.console_read_groups.copy()
+      match console_read_group_for_route(model.console.route) {
+        Some(group) => stale_groups.remove(group)
+        None => ()
+      }
       let next = {
         ..model,
         console: merge_loaded_console(model.console, state),
+        console_read_groups: stale_groups,
         model_import_poll_generation: generation,
         cluster_poll_generation: cluster_generation,
       }
-      (
+      let (scheduled, deferred) = schedule_deferred_reads(
         next,
+        next.console.route,
+        emit,
+      )
+      (
+        scheduled,
         @rabbita.batch([
-          if model_imports_active(next.console.model_imports) {
+          if model_imports_active(scheduled.console.model_imports) {
             model_import_poll_delay_command(generation, emit)
           } else {
             @rabbita.none
           },
-          if next.demo_mode {
+          if scheduled.demo_mode {
             @rabbita.none
           } else {
             cluster_poll_delay_command(cluster_generation, emit)
           },
+          deferred,
         ]),
       )
     }
@@ -3690,6 +4345,63 @@ fn update_live(
       } else {
         (model, cluster_poll_delay_command(generation, emit))
       }
+    Outcome(DeferredReadLoaded(dispatched_locale, group, read)) => {
+      let groups = model.console_read_groups.copy()
+      if !groups.contains(group) {
+        // The read was invalidated (sign-out, credential or organization
+        // change) before it finished. Drop it rather than merge state the
+        // current session did not ask for.
+        (model, @rabbita.none)
+      } else if dispatched_locale != model.console.locale ||
+        !model.console.operator_authenticated {
+        // Locale- or session-bound labels came back stale. Drop the read and
+        // let the next visit reload it.
+        groups.remove(group)
+        ({ ..model, console_read_groups: groups }, @rabbita.none)
+      } else {
+        groups.set(group, true)
+        let next = {
+          ..model,
+          console_read_groups: groups,
+          console: merge_console_group_read(model.console, read),
+        }
+        match read {
+          GroupContracts(_) =>
+            if next.console.route == ContractDocuments {
+              // The preview that navigating to this page schedules needs the
+              // packets that just arrived.
+              schedule_contract_preview(
+                next,
+                next.console.contract_documents,
+                0,
+                emit,
+              )
+            } else {
+              (next, @rabbita.none)
+            }
+          GroupModels(_) =>
+            if model_imports_active(next.console.model_imports) {
+              // The core load no longer carries the import list, so the poll
+              // that watches an in-flight download is armed here instead.
+              let generation = next.model_import_poll_generation + 1L
+              (
+                { ..next, model_import_poll_generation: generation },
+                model_import_poll_delay_command(generation, emit),
+              )
+            } else {
+              (next, @rabbita.none)
+            }
+          _ => (next, @rabbita.none)
+        }
+      }
+    }
+    Outcome(DeferredReadFailed(group)) => {
+      // A page-scoped read failure stays quiet: the page keeps its empty state,
+      // the operator keeps their session, and the next visit retries.
+      let groups = model.console_read_groups.copy()
+      groups.remove(group)
+      ({ ..model, console_read_groups: groups }, @rabbita.none)
+    }
     Outcome(ModelAdopted(dispatched_locale, import_id, message)) => {
       let adopted_imports = model.console.model_adopted_imports.filter(value => {
         value != import_id
@@ -3964,16 +4676,18 @@ fn update_live(
           success_message: None,
         },
       }
-      match route {
+      let (scheduled, deferred) = schedule_deferred_reads(next, route, emit)
+      let (previewed, preview) = match route {
         ContractDocuments =>
           schedule_contract_preview(
-            next,
-            next.console.contract_documents,
+            scheduled,
+            scheduled.console.contract_documents,
             0,
             emit,
           )
-        _ => (next, @rabbita.none)
+        _ => (scheduled, @rabbita.none)
       }
+      (previewed, @rabbita.batch([deferred, preview]))
     }
     Console(BeginDrain(node_id)) =>
       (
@@ -6382,6 +7096,7 @@ fn update(
     match message {
       Console(LocaleChanged(_))
       | Console(Navigate(_))
+      | Console(AlertsWindowChanged(_))
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
       | Console(PortalNodeChanged(_))
@@ -6835,7 +7550,12 @@ fn app_view(
     } else {
       @html.nothing
     },
-    @ui.interactive_view(model.console, emit.map(message => Console(message))),
+    @ui.interactive_view(
+      model.console,
+      emit.map(message => Console(message)),
+      alerts_window=model.alerts_window,
+      now_unix_ms=current_unix_ms(),
+    ),
   ])
 }
 
@@ -7153,6 +7873,7 @@ fn main {
     inference_subject_ref: "",
     commercial_organization: "",
     demo_mode: is_demo,
+    alerts_window: Today,
     console: if is_demo {
       {
         ..@ui.demo_state(),
@@ -7166,6 +7887,7 @@ fn main {
         offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
       }
     },
+    console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
