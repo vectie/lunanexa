@@ -980,3 +980,102 @@ MoonBit 把 `try` 块**成功时的值**交给 `noraise`，写成 `_ => false` �
 - 新建了隔离测试库 `lunanexa_test`（此前测试直接打生产库，是 12.2 那场数据损坏的根源）；
 - 干净库上 `moon test pgclient` 7/7 通过（含新加的"同一租约上连续语句各自返回结果"探针：
   `probe lock=true rows=1 / second=2 / third=three`）。
+
+## 14. 模型平面统一：把手工下载的模型接进同一条流水线（2026-09-20）
+
+### 14.1 缺口
+
+`/data/models` 里的五个大模型（合计 1.24 TB）是**手工**下载的，从未进入导入平面：
+
+- 适配器的状态目录里没有它们（`/data/models/.imports` 为空，真实状态在
+  `LUNANEXA_MODEL_SOURCE_STATE_ROOT`）；
+- 已经进平面的两个小模型（`Qwen/Qwen3-0.6B`、`OpenBMB/MiniCPM5-1B`）的
+  `artifact_uri` 是 `modelstore://modelscope/<import_id>`，而节点侧**没有任何代码能消费它**：
+  `node/artifact_materializer.mbt` 的 `s3_object_key` 只认 `s3://`，
+  `api/artifact_http.mbt` 的 `artifact_key` 同样只认 `s3://`，于是 UI 里的认养门槛
+  （`api/model_source_http.mbt` 的 `has_prefix("s3://")`）把这两条已经校验通过的导入挡在门外。
+
+方案 A（已选定）：**把受管模型库以 HTTP 暴露给节点**，不引入 S3/Moongate，也不打包 1.24 TB 镜像。
+
+### 14.2 上游身份怎么确定的
+
+不是猜的：用本机文件路径 + 字节大小逐条对齐 ModelScope 仓库清单（`/api/v1/models/.../repo/files`）。
+注意仓库的 `file_size` 与盘上字节数并不总是相等（下载后又改过 README/文档），所以判据是
+**每个文件的 path+size 是否能对上**：
+
+| 目录 | 上游仓库 | 盘上 | 对齐情况 |
+| --- | --- | --- | --- |
+| `qwen3635ba3bfp8` | `Qwen/Qwen3.6-35B-A3B-FP8` | 34 GiB / 57 文件 | 56 个上游文件全部 size 命中；多出 `.msc`/`.mv`（魔搭 CLI 元数据） |
+| `deepseekv4flashdspark` | `deepseek-ai/DeepSeek-V4-Flash-DSpark` | 155 GiB / 76 文件 | 74/76 命中，README 等文档漂移 |
+| `stepfun35int4` | `stepfun-ai/Step-3.5-Flash-GGUF-Q4_K_S` | 207 GiB / 30 文件 | 上游 18 个文件全部 size 命中；盘上多 13 个 `.part-*`（约 112 GB 的历史残片） |
+| `stepfun` | `stepfun-ai/Step-3.5-Flash` | 371 GiB / 59 文件 | 缺 `.eval_results/*.yaml` 与 `.gitattributes`，README/config 漂移 |
+| `minimaxh3` | `MiniMax/MiniMax-H3` | 464 GiB / 282 文件 | 281 个上游文件，只有 `README.md`、`docs/QA-about-License.md` 漂移 |
+
+`models`、`runtimes`、`acceptance` 是脚手架，不作为模型登记。
+
+### 14.3 适配器：登记本地版本（`POST /internal/v1/modelscope/imports:register-local`）
+
+登记只声明"哪个目录属于哪个上游 revision"，**不声明任何完整性**。worker 拉取该 revision 的
+ModelScope 清单，逐文件比对 size + SHA-256；缺失或漂移的文件**从 ModelScope 取回**（上游才是权威），
+全部通过后才写入 `lunanexa-source-manifest.json` 并把状态置为 `Verified`。被修复的文件数记在
+`error_code`（形如 `restored-1-from-modelscope`），不是失败。
+
+新增 `GET /internal/v1/modelscope/local-directories` 供控制台列出可登记目录。
+
+两个实现细节值得记下：
+
+- `ImportOperation` 增加了 `local_directory`，快照 `schema_version` 升到 2。旧快照**不再直接失败**：
+  读取前先做一次 JSON 归一化（补 `local_directory: ""`），旧记录原样保留。写回时用当前版本号
+  （此前 writer 里硬编码 `schema_version: 1`，被新加的迁移测试抓出来）。
+- 目录列表里的 `bytes` 必须走 **JSON 字符串**。第一版写成数字，控制面返回 200、内容也对，
+  但控制台的 `Int64` 解码失败，于是"扫描模型库"永远报无法读取。现在有一条测试钉住这个线格式。
+
+### 14.4 控制面：把受管模型库当制品服务
+
+- 契约里新增 `modelstore://<store 相对路径>` 与 `lunanexa-source-manifest.json` 两个常量；
+- `api/artifact_http.mbt` 的 `artifact_location()` 把 `s3://`（单对象）与 `modelstore://`（目录树）分开：
+  目录树按**清单**授权——每次请求都读该 revision 的 `lunanexa-source-manifest.json`，
+  校验其 SHA-256 等于 assignment 里签名过的 `artifact.digest`，再要求被请求的文件确实在清单里、
+  且大小一致。清单之外的文件（例如 `stepfun35int4` 那 13 个 `.part-*`）**永远不会被送出**；
+- 新增 `managed-revision` 校验种类：控制面用自己的模型库自查（清单摘要 + 每个文件存在且大小一致）
+  来落 `ArtifactVerification`，`verifier` 记作 `modelstore-manifest:<uri>`。**这不是 cosign 签名**，
+  是平台对自己存储的背书，所以字符串里写清楚是谁背的书；
+- 认养门槛从"必须 `s3://`"放宽为"必须是控制面真正能服务的传输"，`signature_ref` 对目录树指向清单本身。
+
+### 14.5 节点侧：把 revision 当目录树拉取
+
+`node/artifact_materializer.mbt` 新增 `materialize_revision()`：
+
+1. 先取清单，SHA-256 必须等于 assignment 的摘要（**清单就是签名**——目录树没有 detached cosign 签名，
+   这一条要如实说明）；
+2. 校验清单的形状（schema、model_id、非空、无重复路径），并校验清单里所有文件大小之和等于
+   `artifact.size_bytes`；
+3. 逐文件流式下载到 `sha256/<digest>.revision.partial/<path>`，支持断点续传，逐个比对 SHA-256，
+   全部通过后整体 `rename` 成 `sha256/<digest>.revision` 并写 ready 标记；
+4. 复用只重查"清单摘要 + 每个文件存在且大小一致"，不再重算 1.2 TB 的摘要（写进注释说明理由）。
+
+`node/runtime_supervisor.mbt` 接受该 scheme：目录树挂载到 `/var/lib/lunanexa/model`，
+`LUNANEXA_MODEL_PATH` 指向该目录；单对象制品保持原来的 `/var/lib/lunanexa/model/model` 文件挂载不变。
+
+单测 `node/managed_revision_test.mbt` 用一个本地 HTTP server 覆盖：正常拉取、复用不重取、
+清单被篡改、总大小与 assignment 不符，四种情况。
+
+### 14.6 实测
+
+- `moon check --target native --deny-warn` 通过（api / registry / ui / node / cmd.control /
+  cmd.console / cmd.model-source / modelsource / contracts）；
+- `moon test --target native --deny-warn`：`modelsource` 15/15、`node` 29/29、`ui` 70/70、
+  `contracts` 5/5、`registry` 12/12；
+- 通过浏览器（无头 CDP）在**控制台 UI** 上登记了全部五个目录，逐个点了 "Scan the model store" →
+  选目录 → 填上游仓库 → "Register & verify"，返回提示
+  *"Registration queued. The adapter re-derives every SHA-256 from ModelScope before the revision is verified."*；
+- 登记是**逐文件重算 SHA-256**，管理节点顺序读盘实测 226 MB/s（四路并发约 480 MB/s），
+  1.24 TB 全量校验约需 1.5 小时，五个 revision 由单 worker 顺序处理。
+
+### 14.7 还没做的
+
+- **ARM64 节点镜像没有重建/滚动**。节点侧代码已写、已测，但线上 4 台 spark 跑的还是
+  `lunanexa-node:20260918-arm64-r3`，所以**现在没有任何 spark 真正用 revision 拉过模型**；
+  "注册可用"目前止步于"已登记、已校验、控制面可服务、节点代码就绪"。
+- 校验是单 worker 顺序执行的（见 14.6 的吞吐实测）。要做并发需要给进度累加器加锁并处理取消，
+  这是明确可做的下一步，但本轮没有做。
