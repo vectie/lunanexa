@@ -7,31 +7,21 @@
 ///
 /// Set `LUNANEXA_TEST_DATABASE_URL` to a database whose name ends in `_test`.
 /// A URL that does not is refused loudly rather than damaging the deployment.
-fn test_database_url() -> String? {
-  let url = @env.get_env_var("LUNANEXA_TEST_DATABASE_URL")
-  match url {
-    None => None
-    Some(value) => {
-      let name = match value.split("/").last() {
-        Some(segment) => {
-          match segment.split("?") {
-            Some(parts) => match parts.get(0) {
-              Some(head) => head
-              None => segment
-            }
-            None => segment
-          }
-        }
-        None => ""
-      }
-      if !name.has_suffix("_test") {
-        fail(
-          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
-        )
-      }
-      Some(value)
-    }
+fn test_database_url() -> String? raise {
+  guard @env.get_env_var("LUNANEXA_TEST_DATABASE_URL") is Some(value) else {
+    return None
   }
+  let tail = value.split("/").last().unwrap_or("")
+  let name = match tail.split("?").to_array() {
+    [] => tail.to_owned()
+    [head, ..] => head.to_owned()
+  }
+  if !name.has_suffix("_test") {
+    fail(
+      "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
+    )
+  }
+  Some(value)
 }
 ///|
 async test "model registry uses PostgreSQL in the production adapter" {
