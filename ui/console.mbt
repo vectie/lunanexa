@@ -66,6 +66,7 @@ pub(all) struct ModelSourceCatalogPage {
 pub(all) enum ModelImportState {
   Queued
   Downloading
+  Verifying
   Verified
   Failed
   Cancelled
@@ -85,10 +86,34 @@ pub(all) struct ModelImportRow {
   manifest_digest : String
   artifact_uri : String
   license : String
+  local_directory : String
   error_code : String
   cancel_requested : Bool
   created_unix_ms : Int64
   updated_unix_ms : Int64
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// A directory an operator already populated inside the managed model store.
+pub(all) struct ModelLocalDirectoryRow {
+  directory : String
+  files : Int
+  bytes : Int64
+  registered : Bool
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) struct ModelLocalDirectoryListing {
+  directories : Array[ModelLocalDirectoryRow]
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+/// Operator intent to bring one local directory into the model plane under a
+/// named upstream revision. Nothing is believed until the adapter proves it.
+pub(all) struct ModelLocalRegistrationDraft {
+  directory : String
+  repository : String
+  revision : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -493,6 +518,8 @@ pub(all) struct ConsoleState {
   model_imports : Array[ModelImportRow]
   model_adoption_draft : ModelAdoptionDraft
   model_adopted_imports : Array[String]
+  model_local_directories : Array[ModelLocalDirectoryRow]
+  model_local_draft : ModelLocalRegistrationDraft
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -535,6 +562,11 @@ pub(all) enum ConsoleMessage {
   ModelAdoptionArchitecturesChanged(String)
   ModelAdoptionMemoryChanged(String)
   SubmitModelAdoption
+  RefreshModelLocalDirectories
+  ModelLocalDirectoryChanged(String)
+  ModelLocalRepositoryChanged(String)
+  ModelLocalRevisionChanged(String)
+  SubmitModelLocalRegistration
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -694,6 +726,8 @@ pub fn default_state() -> ConsoleState {
       minimum_memory_mib: "",
     },
     model_adopted_imports: [],
+    model_local_directories: [],
+    model_local_draft: { directory: "", repository: "", revision: "master", },
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -4516,8 +4550,9 @@ fn model_import_label(
   state : ModelImportState,
 ) -> String {
   match state {
-    Queued => localized(locale, "Queued", "等待下载")
+    Queued => localized(locale, "Queued", "等待处理")
     Downloading => localized(locale, "Downloading", "下载中")
+    Verifying => localized(locale, "Verifying against ModelScope", "对照魔搭校验中")
     Verified => localized(locale, "Checksum verified", "校验和已验证")
     Failed => localized(locale, "Failed", "失败")
     Cancelled => localized(locale, "Cancelled", "已取消")
@@ -4542,7 +4577,8 @@ fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
   import_.files_completed == import_.files_total &&
   import_.bytes_total > 0L &&
   import_.bytes_completed == import_.bytes_total &&
-  import_.artifact_uri.has_prefix("s3://") &&
+  (import_.artifact_uri.has_prefix("s3://") ||
+    import_.artifact_uri.has_prefix(@contracts.model_store_scheme)) &&
   @contracts.valid_sha256_digest(import_.manifest_digest) &&
   import_.license.trim() != ""
 }
@@ -4585,7 +4621,175 @@ fn model_adoption_draft_valid(draft : ModelAdoptionDraft) -> Bool {
 }
 
 ///|
+fn model_local_segment_valid(segment : String) -> Bool {
+  let length = segment.length()
+  length >= 1 &&
+  length <= 90 &&
+  segment.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.'
+  })
+}
+
+///|
+/// `owner/name` exactly: the same identity rule the model-source adapter and
+/// the control plane enforce, so the console never offers a doomed submission.
+fn model_local_repository_valid(value : String) -> Bool {
+  let segments = value.trim().split("/").collect()
+  segments.length() == 2 &&
+  segments.all(segment => model_local_segment_valid(segment.to_owned()))
+}
+
+///|
+fn model_local_directory_label(row : ModelLocalDirectoryRow) -> String {
+  "\{row.directory} · \{row.files} files · \{row.bytes / 1073741824L} GiB"
+}
+
+///|
+pub fn model_local_registration_valid(
+  state : ConsoleState,
+  draft : ModelLocalRegistrationDraft,
+) -> Bool {
+  draft.directory != "" &&
+  state.model_local_directories.any(row => {
+    row.directory == draft.directory && !row.registered
+  }) &&
+  model_local_repository_valid(draft.repository) &&
+  model_local_segment_valid(draft.revision.trim().to_owned())
+}
+
+///|
+/// Bring a directory that was populated outside LunaNexa into the same plane
+/// as a download. The console only states intent; the adapter re-derives every
+/// digest from the named ModelScope revision before the import is verified.
+fn model_local_registration_form(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let draft = state.model_local_draft
+  let directory_options : Array[@rabbita.Html] = [
+    @html.option(
+      value="",
+      selected=draft.directory == "",
+      localized(state.locale, "Select a directory", "选择目录"),
+    ),
+  ]
+  for row in state.model_local_directories {
+    directory_options.push(
+      @html.option(
+        value=row.directory,
+        selected=draft.directory == row.directory,
+        if row.registered {
+          "\{model_local_directory_label(row)} · \{localized(state.locale, "already registered", "已登记")}"
+        } else {
+          model_local_directory_label(row)
+        },
+      ),
+    )
+  }
+  let repository_invalid = draft.repository != "" &&
+    !model_local_repository_valid(draft.repository)
+  @html.form(
+    class="model-local-registration",
+    on_submit=command(emit, SubmitModelLocalRegistration),
+    [
+      @html.fieldset(disabled=state.loading, [
+        @html.legend(
+          localized(
+            state.locale,
+            "Register a revision already in the managed store",
+            "登记受管模型库中已有的版本",
+          ),
+        ),
+        @html.p(
+          class="field-help",
+          localized(
+            state.locale,
+            "A directory populated outside LunaNexa enters the same plane as a download. The adapter re-derives every SHA-256 from the named ModelScope revision, restores any file that drifted, and only then records the revision as verified.",
+            "在 LunaNexa 之外准备的目录会走与下载相同的流水线：适配器按指定的魔搭版本重新计算每个文件的 SHA-256，修复任何漂移的文件，然后才把该版本记录为已校验。",
+          ),
+        ),
+        @html.div(class="model-local-grid", [
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-local-directory",
+              localized(state.locale, "Directory", "目录"),
+            ),
+            @html.select(
+              id="model-local-directory",
+              on_change=text_command(
+                emit,
+                value => ModelLocalDirectoryChanged(value),
+              ),
+              directory_options,
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-local-repository",
+              localized(state.locale, "ModelScope repository", "魔搭仓库"),
+            ),
+            @html.input(
+              id="model-local-repository",
+              input_type=Text,
+              maxlength=180,
+              placeholder="MiniMax/MiniMax-H3",
+              value=draft.repository,
+              attrs=@html.Attrs::build()
+                .aria_invalid(if repository_invalid { "true" } else { "false" }),
+              on_input=text_command(
+                emit,
+                value => ModelLocalRepositoryChanged(value),
+              ),
+            ),
+          ]),
+          @html.div(class="field-group", [
+            @html.label(
+              for_="model-local-revision",
+              localized(state.locale, "Revision", "版本"),
+            ),
+            @html.input(
+              id="model-local-revision",
+              input_type=Text,
+              maxlength=96,
+              placeholder="master",
+              value=draft.revision,
+              on_input=text_command(
+                emit,
+                value => ModelLocalRevisionChanged(value),
+              ),
+            ),
+          ]),
+        ]),
+        @html.div(class="operation-actions", [
+          @html.button(
+            type_="button",
+            class="secondary-button",
+            disabled=!state.operator_authenticated || state.loading,
+            on_click=command(emit, RefreshModelLocalDirectories),
+            localized(state.locale, "Scan the model store", "扫描模型库"),
+          ),
+          @html.button(
+            type_="submit",
+            class="primary-button",
+            disabled=!state.operator_authenticated ||
+              state.loading ||
+              !model_local_registration_valid(state, draft),
+            localized(state.locale, "Register & verify", "登记并校验"),
+          ),
+        ]),
+      ]),
+    ],
+  )
+}
+
+///|
 fn model_adoption_form(
+
   state : ConsoleState,
   import_ : ModelImportRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -4627,8 +4831,8 @@ fn model_adoption_form(
       @html.span(
         localized(
           state.locale,
-          "The import must be complete, checksum-verified, license-declared, and published at an immutable s3:// URI through Moongate.",
-          "导入必须完整、通过校验、声明许可证，并经 Moongate 发布到不可变的 s3:// URI。",
+          "The import must be complete, checksum-verified, license-declared, and materialized on a transport LunaNexa itself serves: an immutable s3:// object, or a ModelScope-verified revision in the managed model store.",
+          "导入必须完整、通过校验、声明许可证，并落在 LunaNexa 自身可服务的传输上：不可变的 s3:// 对象，或受管模型库中经魔搭校验的版本。",
         ),
       ),
     ])
@@ -5102,6 +5306,7 @@ fn models_view(
           localized(state.locale, "Search", "搜索"),
         ),
       ]),
+      model_local_registration_form(state, emit),
       @html.div(class="operation-actions", [
         @html.span(
           class="secondary",

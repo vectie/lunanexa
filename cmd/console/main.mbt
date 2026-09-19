@@ -1346,6 +1346,8 @@ async fn load_console(
       minimum_memory_mib: "",
     },
     model_adopted_imports: [],
+    model_local_directories: [],
+    model_local_draft: { directory: "", repository: "", revision: "master", },
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -2262,6 +2264,7 @@ priv enum LoadOutcome {
   LocalCopyComplete(Bool)
   ModelSourceSearchLoaded(@i18n.Locale, @ui.ModelSourceCatalogPage)
   ModelImportsLoaded(@i18n.Locale, Array[@ui.ModelImportRow], String?)
+  ModelLocalDirectoriesLoaded(@i18n.Locale, Array[@ui.ModelLocalDirectoryRow])
   ModelImportsPolled(Int64, Array[@ui.ModelImportRow])
   ModelImportPollFailed(Int64, @i18n.Locale)
   ClusterPolled(Int64, Array[@ui.NodeRow])
@@ -2372,6 +2375,8 @@ fn merge_loaded_console(
     model_imports: current.model_imports,
     model_adoption_draft: current.model_adoption_draft,
     model_adopted_imports: current.model_adopted_imports,
+    model_local_directories: current.model_local_directories,
+    model_local_draft: current.model_local_draft,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
     access_package_draft: {
@@ -4235,6 +4240,36 @@ fn update_live(
         },
         @rabbita.none,
       )
+    Outcome(ModelLocalDirectoriesLoaded(dispatched_locale, directories)) => {
+      let registered = directories.iter().find_first(row => !row.registered)
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_local_directories: directories,
+            model_local_draft: if registered is Some(row) &&
+              model.console.model_local_draft.directory == "" {
+              { ..model.console.model_local_draft, directory: row.directory, }
+            } else {
+              model.console.model_local_draft
+            },
+            loading: false,
+            error_message: None,
+            success_message: Some(
+              locale_fenced_notice(
+                model.console.locale,
+                dispatched_locale,
+                "Found \{directories.length()} directories in the managed model store.",
+                "Managed model store scanned.",
+                "受管模型库扫描完成。",
+              ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
+    }
     Outcome(ModelImportsLoaded(dispatched_locale, imports, notice)) => {
       let generation = model.model_import_poll_generation + 1L
       let next = {
@@ -5271,6 +5306,138 @@ fn update_live(
                 model.console.locale,
                 "The model download could not be queued.",
                 "无法将模型下载加入队列。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(RefreshModelLocalDirectories) => {
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let listing : @ui.ModelLocalDirectoryListing = @json.from_json(
+            parse_console_json(
+              request(
+                "GET",
+                model.endpoint,
+                "/v1/model-sources/modelscope/local-directories",
+                model.credential,
+              ),
+            ),
+          )
+          ModelLocalDirectoriesLoaded(model.console.locale, listing.directories)
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The managed model store could not be scanned. Check the model-source adapter and its model-store mount.",
+                "无法扫描受管模型库。请检查模型源适配器及其模型库挂载。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+    }
+    Console(ModelLocalDirectoryChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_local_draft: { ..model.console.model_local_draft, directory: value, },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelLocalRepositoryChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_local_draft: { ..model.console.model_local_draft, repository: value, },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(ModelLocalRevisionChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_local_draft: { ..model.console.model_local_draft, revision: value, },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitModelLocalRegistration) => {
+      let draft = model.console.model_local_draft
+      if !@ui.model_local_registration_valid(model.console, draft) {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Select a non-registered directory and name its exact ModelScope repository and revision.",
+                  "请选择一个尚未登记的目录，并填写其确切的魔搭仓库与版本。",
+                ),
+              ),
+              success_message: None,
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let body = {
+          "model_id": draft.repository.trim().to_json(),
+          "revision": draft.revision.trim().to_json(),
+          "directory": draft.directory.to_json(),
+        }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let created : @ui.ModelImportRow = @json.from_json(
+            parse_console_json(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/model-sources/modelscope/imports:register-local",
+                model.credential,
+                body~,
+              ),
+            ),
+          )
+          let imports = model.console.model_imports.filter(value => {
+            value.import_id != created.import_id
+          })
+          imports.push(created)
+          ModelImportsLoaded(
+            model.console.locale,
+            imports,
+            Some(
+              console_copy(
+                model.console.locale,
+                "Registration queued. The adapter re-derives every SHA-256 from ModelScope before the revision is verified.",
+                "登记已排队。适配器会先按魔搭清单重新计算每个文件的 SHA-256，校验通过后才标记为已校验。",
+              ),
+            ),
+          )
+        } catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The local revision could not be registered. Check that the directory exists in the model store and that the ModelScope repository and revision are reachable.",
+                "无法登记本地版本。请确认该目录存在于模型库中，且魔搭仓库与版本可访问。",
               ),
             )
         }
@@ -7108,6 +7275,9 @@ fn update(
       | Console(ModelAdoptionLicenseChanged(_))
       | Console(ModelAdoptionArchitecturesChanged(_))
       | Console(ModelAdoptionMemoryChanged(_))
+      | Console(ModelLocalDirectoryChanged(_))
+      | Console(ModelLocalRepositoryChanged(_))
+      | Console(ModelLocalRevisionChanged(_))
       | Console(OperationChanged(_))
       | Console(OperationBodyChanged(_))
       | Console(BeginDrain(_))
@@ -7184,6 +7354,8 @@ fn update(
       | Console(RetryModelImport(_))
       | Console(RefreshModelImports)
       | Console(SubmitModelAdoption)
+      | Console(RefreshModelLocalDirectories)
+      | Console(SubmitModelLocalRegistration)
       | Console(SubmitOperation) =>
         (
           {

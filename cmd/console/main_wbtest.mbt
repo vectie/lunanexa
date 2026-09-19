@@ -362,6 +362,7 @@ test "verified S3 model adoption is validated, stateful, and route-bound" {
     bytes_total: 2171355326L,
     bytes_completed: 2171355326L,
     manifest_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    local_directory: "",
     artifact_uri: "s3://models/modelscope/ms-import-1",
     license: "apache-2.0",
     error_code: "",
@@ -1079,6 +1080,7 @@ test "model import polling is generation fenced and logout invalidates it" {
     bytes_total: 2171355326L,
     bytes_completed: 1048576L,
     manifest_digest: "",
+    local_directory: "",
     artifact_uri: "",
     license: "apache-2.0",
     error_code: "",
@@ -1092,6 +1094,7 @@ test "model import polling is generation fenced and logout invalidates it" {
     files_completed: 11,
     bytes_completed: downloading.bytes_total,
     manifest_digest: "sha256:0123456789abcdef",
+    local_directory: "",
     updated_unix_ms: 1200L,
   }
   let model : AppModel = {
@@ -1745,6 +1748,7 @@ test "the models group replaces only the model-import list" {
         bytes_total: 2171355326L,
         bytes_completed: 1048576L,
         manifest_digest: "",
+        local_directory: "",
         artifact_uri: "",
         license: "apache-2.0",
         error_code: "",

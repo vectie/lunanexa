@@ -18,6 +18,8 @@ import {
 // Values
 pub fn account_roles_after_toggle(Array[UiAccountRole], UiAccountRole) -> Array[UiAccountRole]
 
+pub fn alert_day_label(Int64) -> String
+
 pub fn all_routes() -> Array[OperatorRoute]
 
 pub fn announcement_ready(AnnouncementDraft) -> Bool
@@ -30,7 +32,19 @@ pub fn demo_state() -> ConsoleState
 
 pub fn empty_announcement_draft() -> AnnouncementDraft
 
-pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage]) -> @html.Html
+pub fn filter_alerts(Array[NotificationRow], AlertsWindow, Int64) -> Array[NotificationRow]
+
+pub fn group_alerts_by_day(Array[NotificationRow]) -> Array[(String, Array[NotificationRow])]
+
+pub fn group_models_by_model_id(Array[ModelRow]) -> Array[(String, Array[ModelRow])]
+
+pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage], alerts_window? : AlertsWindow, now_unix_ms? : Int64) -> @html.Html
+
+pub fn model_local_registration_valid(ConsoleState, ModelLocalRegistrationDraft) -> Bool
+
+pub fn open_alert_count(Array[NotificationRow]) -> Int
+
+pub fn parse_alerts_window(String) -> AlertsWindow
 
 pub fn render(ConsoleState) -> String
 
@@ -79,6 +93,7 @@ pub(all) struct AccessPackageView {
   approved_model_aliases : Array[String]
   account_ready : Bool
   membership_ready : Bool
+  contract_required : Bool
   contract_ready : Bool
   workspace_ready : Bool
   models_ready : Bool
@@ -119,6 +134,15 @@ pub(all) struct AgreementRow {
   state : String
   evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum AlertsWindow {
+  Today
+  Last7Days
+  Last30Days
+  AllAlerts
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AlertsWindow::label(Self, @i18n.Locale) -> String
+pub fn AlertsWindow::storage_value(Self) -> String
 
 pub(all) struct AnnouncementDraft {
   announcement_id : String
@@ -165,6 +189,7 @@ pub(all) struct Confirmation {
 pub(all) enum ConsoleMessage {
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
+  AlertsWindowChanged(AlertsWindow)
   BeginCordon(String)
   BeginDrain(String)
   BeginRollback(String)
@@ -196,6 +221,11 @@ pub(all) enum ConsoleMessage {
   ModelAdoptionArchitecturesChanged(String)
   ModelAdoptionMemoryChanged(String)
   SubmitModelAdoption
+  RefreshModelLocalDirectories
+  ModelLocalDirectoryChanged(String)
+  ModelLocalRepositoryChanged(String)
+  ModelLocalRevisionChanged(String)
+  SubmitModelLocalRegistration
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -292,6 +322,8 @@ pub(all) struct ConsoleState {
   model_imports : Array[ModelImportRow]
   model_adoption_draft : ModelAdoptionDraft
   model_adopted_imports : Array[String]
+  model_local_directories : Array[ModelLocalDirectoryRow]
+  model_local_draft : ModelLocalRegistrationDraft
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -379,6 +411,7 @@ pub(all) struct ModelImportRow {
   manifest_digest : String
   artifact_uri : String
   license : String
+  local_directory : String
   error_code : String
   cancel_requested : Bool
   created_unix_ms : Int64
@@ -388,9 +421,27 @@ pub(all) struct ModelImportRow {
 pub(all) enum ModelImportState {
   Queued
   Downloading
+  Verifying
   Verified
   Failed
   Cancelled
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelLocalDirectoryListing {
+  directories : Array[ModelLocalDirectoryRow]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelLocalDirectoryRow {
+  directory : String
+  files : Int
+  bytes : Int64
+  registered : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct ModelLocalRegistrationDraft {
+  directory : String
+  repository : String
+  revision : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelRow {
@@ -499,6 +550,7 @@ pub(all) enum OperatorRoute {
   Benchmarks
   Policies
   Audit
+  Blank
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct OperatorWorkflow {
