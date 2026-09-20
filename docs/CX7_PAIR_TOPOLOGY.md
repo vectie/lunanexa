@@ -53,30 +53,69 @@
 | 192.168.2.178 | `spark-57f5-98a504ed` | `spark-368c-0f2ee8b2` | 10.0.22.1 |
 | 192.168.2.179 | `spark-368c-0f2ee8b2` | `spark-57f5-98a504ed` | 10.0.22.2 |
 
-.176↔.177 的 192.168.100/101 双路是静态地址；**10.0.22.x 是 `ip addr replace` 临时加上去的**
-（见 `~/switch-cx7-addr.sh`），重启即失效，需要落成 NetworkManager 配置才算长期事实。
+.176↔.177 的 192.168.100/101 双路是**声明式**的：`/etc/netplan/60-lunanexa-cx7.yaml`
+（`optional: true`）声明了两条地址，netplan 每次启动生成 `netplan-enp1s0f1np1`
+profile 交给 NetworkManager，重启后自动回来。
+
+.178/.179 原来**只活在内存里**：`/etc/netplan/` 没有对应文件，
+`/etc/NetworkManager/system-connections/` 是空的，唯一的 profile 在
+`/run/NetworkManager/system-connections/`，mtime 正好是加地址那一刻
+（.178 `enp1s0f1np1.nmconnection` 2026-09-20 14:00:46，.179 `enp1s0f0np0.nmconnection`
+14:00:47），`/etc` 下没有任何文件提到这两个网口——那台机器一重启，10.0.22.x 就没了，
+配对标签会随之变成假话。
+
+现在已经照 .176/.177 的样子补上声明式配置：
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    enp1s0f1np1:                      # .179 上是 enp1s0f0np0
+      addresses: [10.0.0.1/24, 10.0.22.1/24]
+      optional: true
+```
+
+写入 `/etc/netplan/60-lunanexa-cx7.yaml`（0600 root），`netplan get` 已确认合并视图
+读得到这两条地址。**没有执行 `netplan apply`**：两条地址现在本来就在线（GLM-5.3 正跑在
+上面），apply 只会让 NetworkManager 接管，没有必要在服务运行中去动它；重启后由 netplan
+自动生效。
 
 ## 仍然挡在前面的：节点运行时后端
 
-配对执行要求节点 agent 能真的拉起容器。当前 4 台 spark 的 agent 环境变量是
+**宿主机上根本没有 podman。** 4 台 spark 上 `command -v podman` 无输出，只有
+`/usr/bin/docker`（socket 在 `/var/run/docker.sock`）和 `ctr`；GLM-5.3 的 head 现在是
+宿主机上的 docker 容器（`glm53-exl3-head`、`glm53-nfs`），不是被平台拉起来的。
+
+而仓库自己的两个部署形态里，OCI 形态假定的引擎（`deploy/lunanexa-node.env.example`）
+正是 podman 的 socket：
 
 ```
+LUNANEXA_RUNTIME_BACKEND=oci
 LUNANEXA_CONTAINER_ENGINE=/usr/bin/podman
-LUNANEXA_CONTAINER_ENGINE_ENDPOINT=local://
-# LUNANEXA_RUNTIME_BACKEND 未设置 → 默认 "oci"
+LUNANEXA_CONTAINER_ENGINE_ENDPOINT=unix:///run/podman/podman.sock
 ```
 
-而 agent 镜像里没有 `sh`，更不会有 `/usr/bin/podman`：`kubectl exec` 直接报
-`exec: "sh": executable file not found in $PATH`，说明这是一个只含 agent 二进制的镜像。
-所以无论单机还是双机，托管运行时都起不来——这与"GLM-5.3 双机是手工脚本拉起来的"一致。
+集群形态（`deploy/node-daemonset.yaml`）则相反，它设 `LUNANEXA_RUNTIME_BACKEND=kubernetes`
+并且**刻意不挂任何容器 socket**——那条路不需要 podman。
+
+现场这 4 个 agent 是第三种组合：集群形态的镜像 + OCI 形态的后端，而且 endpoint 被改成
+`local://`。于是 agent 会在自己的容器里去找 `/usr/bin/podman`——那个镜像连 `sh` 都没有
+（`kubectl exec` 报 `exec: "sh": executable file not found in $PATH`）。
+
+旁证是"这条路从来没跑通过"：4 台机器上 `/var/lib/lunanexa/` 下只有 `node-agent` 状态目录，
+**`models/` 缓存目录根本不存在**，`/v1/nodes` 里 4 个节点的 `running_deployments` 也是空的。
+也就是说托管运行时既没在双机上跑过，也没在单机上跑过——所以"以前也不需要 podman"是对的，
+podman 从来不是既有事实的一部分，它只是这套配置写在纸面上的假定。
 
 要让配对真正跑起来，需要在节点上二选一：
 
 1. **Kubernetes 后端**：`LUNANEXA_RUNTIME_BACKEND=kubernetes` +
    `/etc/lunanexa/kubernetes-runtime.json`（含 `fabric_address`）+ `deploy/node-kubernetes-rbac.yaml`
    里的权限 + DRA 设备类。本仓库的渲染路径已经支持配对，缺的是部署面；
-2. **OCI 后端**：让 agent 能访问宿主机的容器引擎（挂 socket，而不是 `local://`），
-   并把配对渲染补进 `node/runtime_supervisor.mbt`（本次只补了 Kubernetes 后端）。
+2. **OCI 后端**：要么在宿主机装 podman 并把 socket 挂进 agent（按 env example 的
+   `unix:///run/podman/podman.sock`），要么承认这个集群用的是 docker、把引擎换成
+   `/usr/bin/docker` 并挂 `/var/run/docker.sock`；无论哪种，`local://` 都得改掉，
+   并且要把配对渲染补进 `node/runtime_supervisor.mbt`（本次只补了 Kubernetes 后端）。
 
 原始设计说明如下。
 
