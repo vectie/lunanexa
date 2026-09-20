@@ -1208,7 +1208,78 @@ proxy 打成一个 OCI tar）。第一次构建失败在 `libpq headers are requ
 并重启过一次 k3s-agent（该节点当时没有业务负载）。**其余三台没有做这些改动**，只是本地导入
 + 换镜像，因此没有重启过 k3s-agent，.176/.177 上的 minimaxh3 推理 pod 全程未受影响。
 
-### 14.15 还没做的
+### 14.15 双机 GLM-5.3 Flash EXL3 跑通（2026-09-20）
+
+**结果**：`.178`(rank0) + `.179`(rank1) 两台 DGX Spark 经 CX7 组成 TP=2，
+vLLM 服务 `GLM-5.3-Flash-EXL3`，对外 URL：
+
+```
+GET  http://106.39.18.146:4174/glm53/v1/models
+POST http://106.39.18.146:4174/glm53/v1/chat/completions
+```
+
+（走已有的 4174 前门，与 `/h3/`、`/h3r/` 同一套机制——见 14.16。）
+
+**链路**：权重用配方 `Mia-AiLab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks`，镜像是
+`ghcr.nju.edu.cn/miaai-lab/glm-5.3-flash-2x-dgx-sparks:exl3-e3-20260907`，
+`NFS_SHARE=1`（只 head 存一份 164 GiB，worker 经 CX7 读 NFSv4）。
+
+**测得的吞吐**（`max_tokens=256`，thinking off，含 DFlash2 投机解码）：
+
+| 并发 | 请求数 | tokens | 墙钟 | 聚合 tok/s | p50 延迟 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 3 | 592 | 32.43 s | **18.25** | 10.88 s |
+| 2 | 6 | 1117 | 42.52 s | **26.27** | 13.99 s |
+| 4 | 12 | 2142 | 54.39 s | **39.38** | 17.31 s |
+
+并发 4 是引擎的 `MAX_NUM_SEQS`，再高只会排队。扩展性是次线性的（1→4 只有 2.15×），
+符合这个配方"低并发、长上下文"的定位。另测到单流在**高度可预测**提示上可达 55.6 tok/s
+（"从 1 数到 60"），而叙述性提示只有 ~18 tok/s——**差异来自投机解码的接受率**，
+不是引擎波动；报吞吐时必须连提示类型一起报。
+
+**踩掉的十一个坑（按遇到顺序）**：
+
+1. 镜像构建在 spark 上（`~/moon` + `~/pkg-node-image.sh`）；libpq 缺失用 `dpkg-deb -x` 解到
+   `~/libpq-root`，不动主机包状态。
+2. **spark 连不上 docker.io/ghcr.io/huggingface.co 直连，但国内镜像通**：
+   ghcr → `ghcr.nju.edu.cn`（22 MiB/s，直连只有 95 KiB/s）；docker.io → `docker.m.daocloud.io`；
+   HuggingFace → `HF_ENDPOINT=https://hf-mirror.com`。
+3. `start.sh` 用**CX7 地址** ssh worker → head 的 `known_hosts` 要先 `ssh-keyscan`。
+4. **不能在 `sudo` 下跑**：ssh 会忽略属主不是当前用户的私钥，于是"cannot ssh (key-based)"。
+   正解是 `usermod -aG docker` + 普通用户运行。
+5. 早先 sudo 运行留下的 `.env` 是 root 属主 → `chown -R`。
+6. 配方会比较 **recipe stamp** 并默认重建镜像（重建要拉 docker.io）→ **`SKIP_BUILD=1`**。
+7. **权重必须在 HF cache 标准命名下**：`hub/models--<owner>--<repo>/snapshots/<rev>/` + `refs/main`，
+   而不是 `hub/<owner>/<repo>/snapshots/main/`。
+8. 需要 `hf` CLI；PEP 668 拦用户安装 → `pip3 install --user --break-system-packages`。
+9. 主权重用 `HF_HUB_OFFLINE=1`，但 DFlash2 draft 要先拉下来（2.2 GiB）。
+10. NFS 导出容器**镜像缺 ENTRYPOINT**（`docker inspect` 显示 `entry=[]`、`cmd=[/bin/sh]`），
+    容器起个 shell 就退出、退出码 0、日志空——极难猜；补 `ENTRYPOINT ["/entrypoint.sh"]` 解决。
+    `apk add nfs-utils` 还要把源改到国内镜像；宿主 `nfsd` 模块要先 `modprobe`。
+11. 配方把 `10.0.0.x` 判为 loopback，实际用 **`10.0.22.1`/`10.0.22.2`**；
+    导出 ACL 本身正确，真正拦路的是 **worker 上缺 `alpine:latest`**——配方用它读 NFS 卷做校验，
+    镜像缺失导致 pull 超时，却被报成 "cannot read … over NFS"（误导性报错）。
+    另需 `chmod o+rx` 打开导出路径的目录穿越权限。
+
+**脚本**（都在对应机器的家目录）：`pull-glm53.sh`、`export-glm53.sh`、`deliver-glm53-image.sh`、
+`setup-cx7-ip.sh`、`switch-cx7-addr.sh`、`launch-glm53.sh`、`verify-glm53.sh`、`bench-glm53.py`。
+
+### 14.16 对外暴露模型 API 的既有机制
+
+前门是 `lunanexa` 命名空间的 `operator-4173-proxy`（nginx，`lunanexa-web` 镜像），
+监听 `0.0.0.0:4174`，配置在 configmap `operator-4173-proxy` 的 `nginx.conf`：
+
+```
+location /h3/  { proxy_pass http://minimaxh3-fl2va:8000/;  proxy_read_timeout 7200s; ... }
+location /h3r/ { proxy_pass http://minimaxh3-ref2va:8000/; ... }
+location /glm53/ { proxy_pass http://192.168.2.178:8888/; ... }   # 本次新增
+```
+
+**注意它的滚动更新会卡住**：容器用 `hostPort`（4174/5000），新 pod 因端口被旧 pod 占用而
+`Pending`，必须手工 `delete pod` 让新的接管（4174 会有十几秒中断）。以后改这个 configmap
+都要按这个顺序做。
+
+### 14.17 还没做的
 
 - **ARM64 节点镜像没有重建/滚动**。节点侧代码已写、已测，但线上 4 台 spark 跑的还是
   `lunanexa-node:20260918-arm64-r3`，所以**现在没有任何 spark 真正用 revision 拉过模型**；
