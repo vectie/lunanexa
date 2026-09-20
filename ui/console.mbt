@@ -413,6 +413,12 @@ pub(all) enum TemplateField {
 /// The switches a template carries. Multi-node support is what an admitted CX7
 /// pair needs; the two capture switches only mean anything inside an evaluation
 /// capture.
+///
+/// The retention itself is the capture switch: a template is immutable and
+/// every workload created from it shares one policy, so the third retention the
+/// contracts admit, an absolute `RetainUntil` expiry, has no stable meaning
+/// here. Ephemeral and evaluation capture are the two a catalog entry can
+/// carry, and there is no fourth.
 pub(all) enum TemplateFlag {
   RuntimeMultiNode
   CaptureForEvaluation
@@ -1061,8 +1067,7 @@ fn template_text_acceptable(field : TemplateField, value : String) -> Bool {
         value.trim().to_owned(),
         maximum_length=128,
       )
-    TemplateDisplayName =>
-      value.trim() != "" && value.trim().length() <= 256
+    TemplateDisplayName => value.trim() != "" && value.length() <= 256
     TemplateDescription => value.length() <= 2048
     TemplateModelSelector =>
       @contracts.valid_identifier(
@@ -7422,31 +7427,19 @@ fn template_field_group(
   })
   @html.div(class="field-group", [
     @html.label(for_=id, localized(state.locale, spec.label_en, spec.label_zh)),
-    match spec.kind {
-      FreeText =>
-        @html.input(
-          id=id,
-          input_type=Text,
-          required=!spec.optional,
-          placeholder=spec.placeholder,
-          value=value,
-          attrs=attrs,
-          on_input=on_input,
-        )
-      _ =>
-        @html.input(
-          id=id,
-          input_type=Number,
-          required=!spec.optional,
-          min=1,
-          step=1,
-          inputmode="numeric",
-          placeholder=spec.placeholder,
-          value=value,
-          attrs=attrs,
-          on_input=on_input,
-        )
-    },
+    // A bounded field is a text control with a numeric keypad: the bound is the
+    // planner's, so it is enforced by the rule below rather than by the
+    // browser, which would answer in the wrong language.
+    @html.input(
+      id=id,
+      input_type=Text,
+      inputmode=if spec.kind is FreeText { "text" } else { "numeric" },
+      required=!spec.optional,
+      placeholder=spec.placeholder,
+      value=value,
+      attrs=attrs,
+      on_input=on_input,
+    ),
     @html.p(
       id="\{id}-help",
       class=if invalid { "field-help field-error" } else { "field-help" },
