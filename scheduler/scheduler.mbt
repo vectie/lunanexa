@@ -16,6 +16,10 @@ pub(all) enum RejectionReason {
 ///|
 pub(all) struct NodeSnapshot {
   node_id : String
+  /// The node this one names as its CX7 peer, or "" when it claims none. The
+  /// link fact lives here rather than in a general label map because it is the
+  /// one fact placement is allowed to act on.
+  cx7_peer : String
   state : @contracts.NodeState
   architecture : String
   memory_free_mib : Int
@@ -77,9 +81,67 @@ pub(all) struct PlacementDecision {
   workload_id : String
   policy_version : String
   selected_node_id : String?
+  /// The validated CX7 pair for a multi-node request: empty for a single-node
+  /// placement, and always exactly two members when non-empty.
+  selected_pair : Array[String]
   candidates : Array[CandidateScore]
   rejected : Array[RejectedNode]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub(all) suberror Cx7PairError {
+  /// The request did not name the one profile this platform admits.
+  PairTopologyNotValidated(String)
+  /// No two schedulable nodes named each other over CX7.
+  NoValidatedCx7Pair
+} derive(Debug, Eq)
+
+///| Select the pair a multi-node request runs on.
+///
+/// The rule is mutual naming, not proximity: a node is only half of a pair if
+/// it names a peer that names it back, and both halves must have passed every
+/// other placement check. That makes the three refusals fall out of the shape
+/// of the data rather than out of a count -- an unlinked pair never names each
+/// other, a one-way claim never matches, and a third node can never join a
+/// relationship that is defined as two-way.
+pub fn validated_cx7_pair(
+  candidates : Array[NodeSnapshot],
+  requirements : PlacementRequirements,
+  policy : ScorePolicy,
+) -> Array[String] raise Cx7PairError {
+  let profile = match requirements.topology_profile {
+    Some(value) => value
+    None => raise PairTopologyNotValidated("")
+  }
+  if profile != @contracts.cx7_pair_topology_profile ||
+    !contains_string(policy.validated_topology_profiles, profile) {
+    raise PairTopologyNotValidated(profile)
+  }
+  // Deterministic: iterate the candidates in node order and take the first
+  // admissible pair, so the same inventory always yields the same answer.
+  let ordered = candidates.copy()
+  ordered.sort_by_key(item => item.node_id)
+  let mut selected : Array[String] = []
+  for node in ordered {
+    if selected.length() > 0 || node.cx7_peer == "" {
+      continue
+    }
+    for peer in ordered {
+      if peer.node_id == node.cx7_peer && peer.cx7_peer == node.node_id {
+        if node.node_id.compare(peer.node_id) < 0 {
+          selected = [node.node_id, peer.node_id]
+        } else {
+          selected = [peer.node_id, node.node_id]
+        }
+        break
+      }
+    }
+  }
+  if selected.length() != @contracts.cx7_pair_member_count {
+    raise NoValidatedCx7Pair
+  }
+  selected
+}
 
 ///|
 fn contains_string(values : Array[String], expected : String) -> Bool {
@@ -90,7 +152,6 @@ fn contains_string(values : Array[String], expected : String) -> Bool {
 fn rejection_reasons(
   node : NodeSnapshot,
   requirements : PlacementRequirements,
-  policy : ScorePolicy,
 ) -> Array[RejectionReason] {
   let reasons : Array[RejectionReason] = []
   if node.state != Active {
@@ -118,16 +179,9 @@ fn rejection_reasons(
     requirements.deadline_unix_ms {
     reasons.push(DeadlineImpossible)
   }
-  if requirements.multi_node &&
-    (
-      requirements.topology_profile is None ||
-      (
-        requirements.topology_profile is Some(profile) &&
-        !contains_string(policy.validated_topology_profiles, profile)
-      )
-    ) {
-    reasons.push(RuntimeUnsupported)
-  }
+  // Multi-node eligibility is decided on the pair as a whole by
+  // `validated_cx7_pair`, not per node: rejecting every node here would leave
+  // no candidates and make the pair unfindable.
   reasons
 }
 
@@ -169,11 +223,13 @@ pub fn place(
   policy : ScorePolicy,
 ) -> PlacementDecision {
   let candidates : Array[CandidateScore] = []
+  let eligible : Array[NodeSnapshot] = []
   let rejected : Array[RejectedNode] = []
   for node in nodes {
-    let reasons = rejection_reasons(node, requirements, policy)
+    let reasons = rejection_reasons(node, requirements)
     if reasons.length() == 0 {
       candidates.push(score_node(node, requirements, policy))
+      eligible.push(node)
     } else {
       rejected.push({ node_id: node.node_id, reasons, })
     }
@@ -187,10 +243,38 @@ pub fn place(
     }
   })
   rejected.sort_by_key(item => item.node_id)
+  if requirements.multi_node {
+    // A multi-node request never falls back to a single node: it is the pair or
+    // nothing. The pair is chosen from the nodes that passed every check, and
+    // the head (the lexicographically first member) is the selected node.
+    let pair = validated_cx7_pair(eligible, requirements, policy) catch {
+      _ => {
+        return {
+          workload_id: requirements.workload_id,
+          policy_version: policy.version,
+          selected_node_id: None,
+          selected_pair: [],
+          candidates,
+          rejected,
+        }
+      }
+    } noraise {
+      value => value
+    }
+    return {
+      workload_id: requirements.workload_id,
+      policy_version: policy.version,
+      selected_node_id: pair.get(0),
+      selected_pair: pair,
+      candidates,
+      rejected,
+    }
+  }
   {
     workload_id: requirements.workload_id,
     policy_version: policy.version,
     selected_node_id: candidates.get(0).map(item => item.node_id),
+    selected_pair: [],
     candidates,
     rejected,
   }

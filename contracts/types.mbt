@@ -15,6 +15,20 @@ pub let model_store_manifest_name : String = "lunanexa-source-manifest.json"
 pub let source_manifest_schema_version : String =
   "lunanexa.modelsource.verified.v1"
 
+///| The only multi-node geometry LunaNexa admits: exactly two nodes joined by a
+/// verified CX7 link. It is a *pair*, not a node count, so there is no profile
+/// that would admit three or more, and "any two nodes" cannot be expressed.
+pub let cx7_pair_topology_profile : String = "cx7-pair-v1"
+
+///|
+pub let cx7_pair_member_count : Int = 2
+
+///| The inventory label through which a node names its CX7 peer. A pair is
+/// mutual by construction: a one-way claim is not a pair, and a peer that is
+/// absent or unschedulable silently takes the pair out of service rather than
+/// placing half of a tensor-parallel group.
+pub let cx7_peer_label : String = "lunanexa.io/cx7-peer"
+
 ///|
 pub(all) enum Capability {
   TextGenerate
