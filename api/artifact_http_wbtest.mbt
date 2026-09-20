@@ -225,7 +225,7 @@ async test "managed revision serves the manifest and only the files it lists" {
     "model_id": Json::string("stepfun-ai/Step-3.5-Flash"),
     "requested_revision": Json::string("master"),
     "observed_revision": Json::string("abc123"),
-    "generated_unix_ms": Json::number(1.0),
+    "generated_unix_ms": Json::string("1"),
     "files": Json::array([
       Json::object({
         "path": Json::string("config.json"),
@@ -233,7 +233,7 @@ async test "managed revision serves the manifest and only the files it lists" {
         "sha256": Json::string(
           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ),
-        "size": Json::number(2048.0),
+        "size": Json::string("2048"),
         "lfs": Json::boolean(false),
       }),
     ]),
