@@ -70,6 +70,7 @@ fn passed_evaluation(
 fn registry_evidence(
   snapshot : @registry.RegistrySnapshot,
   now_unix_ms : Int64,
+  require_evaluation : Bool,
 ) -> Array[@deployment.RegistryEvidence] {
   let evidence : Array[@deployment.RegistryEvidence] = []
   for model in snapshot.models {
@@ -96,7 +97,13 @@ fn registry_evidence(
                 model.artifact.digest,
               ),
               runtime_verified: verified_digest(snapshot, runtime.image_digest),
-              evaluation_passed: passed_evaluation(snapshot, model),
+              // Under a policy that has shelved evaluation there is no
+              // evaluation gate to satisfy, so evidence reports the gate as
+              // met. It is not a claim that a benchmark ran: the receipts of
+              // any approval granted this way carry no evaluation id, and the
+              // policy itself is a deployment-level switch.
+              evaluation_passed: !require_evaluation ||
+                passed_evaluation(snapshot, model),
               alias_points_to_model: true,
             })
           }
@@ -159,7 +166,11 @@ async fn ApiService::deployment_planning_context(
   let now = @async.now()
   let snapshot = registry.snapshot()
   {
-    registry: registry_evidence(snapshot, now),
+    registry: registry_evidence(
+      snapshot,
+      now,
+      registry.requires_evaluation(),
+    ),
     nodes: [
       for heartbeat in self.store.heartbeats() => {
         let node = management_node(

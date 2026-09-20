@@ -26,11 +26,17 @@ pub fn announcement_ready(AnnouncementDraft) -> Bool
 
 pub fn confirmation_receipt(DestructiveAction, String) -> Confirmation
 
+pub fn default_runtime_draft() -> RuntimeProfileDraft
+
 pub fn default_state() -> ConsoleState
 
 pub fn demo_state() -> ConsoleState
 
 pub fn empty_announcement_draft() -> AnnouncementDraft
+
+pub fn empty_model_alias_draft() -> ModelAliasDraft
+
+pub fn empty_model_license_draft() -> ModelLicenseDraft
 
 pub fn filter_alerts(Array[NotificationRow], AlertsWindow, Int64) -> Array[NotificationRow]
 
@@ -40,6 +46,14 @@ pub fn group_models_by_model_id(Array[ModelRow]) -> Array[(String, Array[ModelRo
 
 pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage], alerts_window? : AlertsWindow, now_unix_ms? : Int64) -> @html.Html
 
+pub fn model_alias_draft_valid(ModelAliasDraft) -> Bool
+
+pub fn model_alias_slug(String) -> String
+
+pub fn model_import_adoptable(ModelImportRow) -> Bool
+
+pub fn model_license_draft_valid(ModelLicenseDraft) -> Bool
+
 pub fn model_local_registration_valid(ConsoleState, ModelLocalRegistrationDraft) -> Bool
 
 pub fn open_alert_count(Array[NotificationRow]) -> Int
@@ -48,7 +62,17 @@ pub fn parse_alerts_window(String) -> AlertsWindow
 
 pub fn parse_quick_topology(String) -> QuickTopology
 
+pub fn parse_runtime_capability(String) -> @contracts.Capability
+
 pub fn render(ConsoleState) -> String
+
+pub fn runtime_capability_name(@contracts.Capability) -> String
+
+pub fn runtime_capability_options() -> Array[@contracts.Capability]
+
+pub fn runtime_profile_draft_valid(RuntimeProfileDraft) -> Bool
+
+pub fn runtime_profile_name_valid(String) -> Bool
 
 pub fn view(ConsoleState) -> @html.Html
 
@@ -228,6 +252,25 @@ pub(all) enum ConsoleMessage {
   ModelLocalRepositoryChanged(String)
   ModelLocalRevisionChanged(String)
   SubmitModelLocalRegistration
+  BeginLicenseAcceptance(String, String)
+  DismissLicenseAcceptance
+  LicenseRecordIdChanged(String)
+  LicenseEvidenceChanged(String)
+  SubmitModelLicense
+  VerifyModelArtifact(String, String)
+  ApproveModelVersion(String, String)
+  BeginAliasPromotion(String, String)
+  DismissAliasPromotion
+  AliasNameChanged(String)
+  SubmitAliasPromotion
+  RuntimeNameChanged(String)
+  RuntimeVersionChanged(String)
+  RuntimeImageDigestChanged(String)
+  RuntimeArchitectureChanged(String)
+  RuntimeCapabilityChanged(String)
+  RuntimeBatchingToggled
+  RuntimeMultiNodeToggled
+  SubmitRuntimeRegistration
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -327,6 +370,9 @@ pub(all) struct ConsoleState {
   model_adopted_imports : Array[String]
   model_local_directories : Array[ModelLocalDirectoryRow]
   model_local_draft : ModelLocalRegistrationDraft
+  model_license_draft : ModelLicenseDraft
+  model_alias_draft : ModelAliasDraft
+  runtime_draft : RuntimeProfileDraft
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -402,6 +448,12 @@ pub(all) struct ModelAdoptionDraft {
   minimum_memory_mib : String
 } derive(Eq, @debug.Debug)
 
+pub(all) struct ModelAliasDraft {
+  model_id : String
+  version : String
+  alias_name : String
+} derive(Eq, @debug.Debug)
+
 pub(all) struct ModelImportRow {
   import_id : String
   source : String
@@ -431,6 +483,13 @@ pub(all) enum ModelImportState {
   Cancelled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
+pub(all) struct ModelLicenseDraft {
+  model_id : String
+  version : String
+  license_id : String
+  evidence_ref : String
+} derive(Eq, @debug.Debug)
+
 pub(all) struct ModelLocalDirectoryListing {
   directories : Array[ModelLocalDirectoryRow]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
@@ -456,6 +515,9 @@ pub(all) struct ModelRow {
   evaluation_status : String
   compatibility : String
   alias_name : String
+  license_id : String
+  artifact_uri : String
+  artifact_digest : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelSourceCatalogPage {
@@ -622,6 +684,16 @@ pub(all) struct RequestMetrics {
   throughput_per_second : Int
   errors : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) struct RuntimeProfileDraft {
+  name : String
+  version : String
+  image_digest : String
+  architecture : String
+  capability : @contracts.Capability
+  supports_batching : Bool
+  supports_multi_node : Bool
+} derive(Eq, @debug.Debug)
 
 pub(all) struct StreamEventView {
   sequence : Int

@@ -2136,3 +2136,279 @@ test "the alerts page renders its day calendar for the selected window" {
   assert_true(all_html.contains("2026-09-18"))
   assert_true(all_html.contains("2 of 2 incidents shown"))
 }
+
+///|
+/// The digest, licence identity and managed-store revision one adopted
+/// candidate carries into the per-row onboarding controls.
+fn onboarding_candidate_row() -> @ui.ModelRow {
+  {
+    model_id: "model.minicpm5-1b",
+    version: "modelscope-main",
+    state: Candidate,
+    license_status: "missing",
+    evaluation_status: "missing",
+    compatibility: "nvidia-sm121",
+    alias_name: "—",
+    license_id: "license.minicpm5-apache",
+    artifact_uri: "modelstore://qwen3635ba3bfp8",
+    artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  }
+}
+
+///|
+/// The verified import the adopted candidate came from. Its declared SPDX text
+/// is what the licence form prefills, exactly as the control plane records it
+/// at adoption.
+fn onboarding_verified_import() -> @ui.ModelImportRow {
+  {
+    import_id: "ms-import-1",
+    source: "modelscope",
+    model_id: "OpenBMB/MiniCPM5-1B",
+    revision: "master",
+    state: Verified,
+    files_total: 11,
+    files_completed: 11,
+    bytes_total: 2171355326L,
+    bytes_completed: 2171355326L,
+    manifest_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    local_directory: "qwen3635ba3bfp8",
+    artifact_uri: "modelstore://qwen3635ba3bfp8",
+    license: "apache-2.0",
+    error_code: "",
+    cancel_requested: false,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1100L,
+  }
+}
+
+///|
+fn model_onboarding_test_model() -> AppModel {
+  let base = deferred_read_test_model(Models)
+  {
+    ..base,
+    console: {
+      ..base.console,
+      models: [onboarding_candidate_row()],
+      model_imports: [onboarding_verified_import()],
+    },
+  }
+}
+
+///|
+test "model onboarding controls address the canonical registry routes" {
+  assert_eq(model_onboarding_path(AcceptLicense), "/v1/licenses")
+  assert_eq(model_onboarding_path(VerifyArtifact), "/v1/verifications")
+  assert_eq(model_onboarding_path(ApproveVersion), "/v1/models/approve")
+  assert_eq(model_onboarding_path(PromoteAlias), "/v1/aliases/promote")
+  assert_eq(runtime_registration_path(), "/v1/runtimes")
+}
+
+///|
+test "a registry refusal is reported with the control plane's own message" {
+  let error : Error = Failure::Failure(
+    "HTTP 409: {\"error\":{\"code\":\"RegistryRejected\",\"message\":\"model approval prerequisites were not met\",\"retryable\":false}}",
+  )
+  assert_eq(
+    http_failure_detail(error),
+    "model approval prerequisites were not met",
+  )
+  // A body that is not the canonical envelope keeps the raw transport detail
+  // rather than inventing an explanation.
+  let plain : Error = Failure::Failure("HTTP 503: upstream unavailable")
+  assert_true(
+    http_failure_detail(plain).contains("HTTP 503: upstream unavailable"),
+  )
+}
+
+///|
+test "licence acceptance validates, prefills the citation, and builds the record" {
+  let model = model_onboarding_test_model()
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (opened, _) = update(
+    model,
+    Console(BeginLicenseAcceptance("model.minicpm5-1b", "modelscope-main")),
+    emit,
+  )
+  let draft = opened.console.model_license_draft
+  assert_eq(draft.model_id, "model.minicpm5-1b")
+  assert_eq(draft.version, "modelscope-main")
+  assert_eq(draft.license_id, "license.minicpm5-apache")
+  assert_eq(draft.evidence_ref, "modelscope-license:apache-2.0")
+  let (submitting, _) = update(opened, Console(SubmitModelLicense), emit)
+  assert_true(submitting.console.loading)
+  assert_eq(submitting.console.error_message, None)
+  assert_eq(
+    model_license_body(draft),
+    "{\"license_id\":\"license.minicpm5-apache\",\"model_id\":\"model.minicpm5-1b\",\"status\":\"Accepted\",\"accepted_by\":\"operator\",\"evidence_ref\":\"modelscope-license:apache-2.0\"}",
+  )
+  // An empty citation is the one field the operator must not omit.
+  let (cleared, _) = update(
+    opened,
+    Console(LicenseEvidenceChanged("   ")),
+    emit,
+  )
+  let (rejected, _) = update(cleared, Console(SubmitModelLicense), emit)
+  assert_false(rejected.console.loading)
+  assert_true(rejected.console.error_message is Some(_))
+  let (dismissed, _) = update(
+    opened,
+    Console(DismissLicenseAcceptance),
+    emit,
+  )
+  assert_eq(dismissed.console.model_license_draft.model_id, "")
+}
+
+///|
+test "artifact verification and approval both come from the row's own evidence" {
+  let model = model_onboarding_test_model()
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let row = onboarding_candidate_row()
+  let (verifying, _) = update(
+    model,
+    Console(VerifyModelArtifact(row.model_id, row.version)),
+    emit,
+  )
+  assert_true(verifying.console.loading)
+  assert_eq(verifying.console.error_message, None)
+  assert_eq(
+    model_verification_body(row),
+    "{\"kind\":\"managed-revision\",\"subject\":\"modelstore://qwen3635ba3bfp8\",\"digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"provenance_verified\":true}",
+  )
+  let (approving, _) = update(
+    model,
+    Console(ApproveModelVersion(row.model_id, row.version)),
+    emit,
+  )
+  assert_true(approving.console.loading)
+  assert_eq(
+    model_approval_body(row.model_id, row.version),
+    "{\"model_id\":\"model.minicpm5-1b\",\"version\":\"modelscope-main\"}",
+  )
+  // A version the console never listed cannot be verified from thin air.
+  let (missing, _) = update(
+    model,
+    Console(VerifyModelArtifact("model.unknown", "v1")),
+    emit,
+  )
+  assert_false(missing.console.loading)
+  assert_true(missing.console.error_message is Some(_))
+}
+
+///|
+test "alias promotion defaults to a model-id slug and submits a canary stage" {
+  let model = model_onboarding_test_model()
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (opened, _) = update(
+    model,
+    Console(BeginAliasPromotion("model.minicpm5-1b", "modelscope-main")),
+    emit,
+  )
+  let draft = opened.console.model_alias_draft
+  assert_eq(draft.alias_name, "model.minicpm5-1b")
+  let (named, _) = update(opened, Console(AliasNameChanged("text.default")), emit)
+  assert_eq(named.console.model_alias_draft.alias_name, "text.default")
+  let (submitting, _) = update(named, Console(SubmitAliasPromotion), emit)
+  assert_true(submitting.console.loading)
+  assert_eq(submitting.console.error_message, None)
+  assert_eq(
+    model_promotion_body(named.console.model_alias_draft),
+    "{\"alias_name\":\"text.default\",\"model_id\":\"model.minicpm5-1b\",\"version\":\"modelscope-main\",\"stage\":\"Canary\",\"actor\":\"operator\"}",
+  )
+  let (blank, _) = update(opened, Console(AliasNameChanged("  ")), emit)
+  let (rejected, _) = update(blank, Console(SubmitAliasPromotion), emit)
+  assert_false(rejected.console.loading)
+  assert_true(rejected.console.error_message is Some(_))
+}
+
+///|
+test "runtime registration mirrors the registry's own shape checks" {
+  let model = model_onboarding_test_model()
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let draft = model.console.runtime_draft
+  assert_eq(draft.name, "")
+  assert_eq(draft.version, "")
+  assert_eq(draft.architecture, "nvidia-sm121")
+  assert_eq(draft.capability, TextGenerate)
+  assert_false(draft.supports_batching)
+  assert_false(draft.supports_multi_node)
+  // A malformed digest is refused before a request is built.
+  let (named, _) = update(
+    model,
+    Console(RuntimeNameChanged("text-runtime-v2")),
+    emit,
+  )
+  let (versioned, _) = update(named, Console(RuntimeVersionChanged("runtime-v2")), emit)
+  let (digested, _) = update(
+    versioned,
+    Console(RuntimeImageDigestChanged("sha256:not-a-digest")),
+    emit,
+  )
+  let (refused, _) = update(digested, Console(SubmitRuntimeRegistration), emit)
+  assert_false(refused.console.loading)
+  assert_true(refused.console.error_message is Some(_))
+  let (valid, _) = update(
+    versioned,
+    Console(
+      RuntimeImageDigestChanged(
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      ),
+    ),
+    emit,
+  )
+  let (toggled, _) = update(valid, Console(RuntimeBatchingToggled), emit)
+  assert_true(toggled.console.runtime_draft.supports_batching)
+  let (submitted, _) = update(toggled, Console(SubmitRuntimeRegistration), emit)
+  assert_true(submitted.console.loading)
+  assert_eq(submitted.console.error_message, None)
+  assert_eq(
+    runtime_registration_body(toggled.console.runtime_draft),
+    "{\"name\":\"text-runtime-v2\",\"image_digest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"version\":\"runtime-v2\",\"architectures\":[\"nvidia-sm121\"],\"capabilities\":[\"TextGenerate\"],\"supports_batching\":true,\"supports_multi_node\":false}",
+  )
+  // A rejected or retried registration keeps the operator's own fields.
+  assert_eq(submitted.console.runtime_draft, toggled.console.runtime_draft)
+}
+
+///|
+test "demo mode previews the onboarding and runtime controls without mutation" {
+  let base = @ui.demo_state()
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    alerts_window: Today,
+    console: { ..base, route: Models },
+    console_read_groups: Map([]),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (opened, _) = update(
+    model,
+    Console(BeginLicenseAcceptance("lunanexa.text.general", "v3")),
+    emit,
+  )
+  assert_eq(opened.console.model_license_draft.model_id, "lunanexa.text.general")
+  let (submitted, _) = update(
+    opened,
+    Console(SubmitModelLicense),
+    emit,
+  )
+  assert_eq(
+    submitted.console.success_message,
+    Some(
+      "Demo is read-only; no controller operation was sent or persisted.",
+    ),
+  )
+  assert_eq(submitted.console.models, base.models)
+  assert_eq(
+    submitted.console.model_license_draft,
+    opened.console.model_license_draft,
+  )
+}

@@ -37,10 +37,13 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [],
+      "runtimeNames": [
+        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
+      ],
       "fabricAddress": "198.18.1.10",
       "fabricPeer": "spark-example-node",
-      "fabricInterface": "enp1s0f1np1"
+      "fabricInterface": "enp1s0f1np1",
+      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
     },
     {
       "id": "spark-example-node",
@@ -53,10 +56,13 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [],
+      "runtimeNames": [
+        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
+      ],
       "fabricAddress": "198.18.1.10",
       "fabricPeer": "spark-example-node",
-      "fabricInterface": "enp1s0f0np0"
+      "fabricInterface": "enp1s0f0np0",
+      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
     },
     {
       "id": "spark-example-node",
@@ -69,10 +75,13 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [],
+      "runtimeNames": [
+        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
+      ],
       "fabricAddress": "198.18.0.1",
       "fabricPeer": "spark-example-node",
-      "fabricInterface": "enp1s0f1np1"
+      "fabricInterface": "enp1s0f1np1",
+      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
     },
     {
       "id": "spark-example-node",
@@ -85,10 +94,13 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [],
+      "runtimeNames": [
+        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
+      ],
       "fabricAddress": "198.18.0.1",
       "fabricPeer": "spark-example-node",
-      "fabricInterface": "enp1s0f0np0"
+      "fabricInterface": "enp1s0f0np0",
+      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
     }
   ],
   "registry": {

@@ -9,6 +9,11 @@ pub struct FileRegistry {
   persistence : RegistryPersistence
   mut registry : ModelRegistry
   mutex : @async.Mutex
+  /// Whether an approval must be backed by a passed evaluation. Defaults to
+  /// requiring one; a deployment that has shelved evaluation says so at open
+  /// time, and every receipt written under that policy records that no
+  /// evaluation took part.
+  require_evaluation : Bool
 }
 
 ///|
@@ -25,13 +30,21 @@ async fn write_registry(path : String, snapshot : String) -> Unit {
 }
 
 ///|
-pub async fn FileRegistry::open(path : String) -> FileRegistry {
+pub async fn FileRegistry::open(
+  path : String,
+  require_evaluation? : Bool = true,
+) -> FileRegistry {
   let registry = if @fs.exists(path) {
     ModelRegistry::restore(@fs.read_file(path).text())
   } else {
     ModelRegistry::new()
   }
-  let durable = { persistence: RegistryFile(path), registry, mutex: Mutex(), }
+  let durable = {
+    persistence: RegistryFile(path),
+    registry,
+    mutex: Mutex(),
+    require_evaluation,
+  }
   if !@fs.exists(path) {
     write_registry(path, registry.snapshot())
   }
@@ -41,6 +54,7 @@ pub async fn FileRegistry::open(path : String) -> FileRegistry {
 ///|
 pub async fn FileRegistry::open_postgres(
   database : @database.PostgresDatabase,
+  require_evaluation? : Bool = true,
 ) -> FileRegistry {
   let payload = database.load_snapshot("model_registry", "lunanexa.registry.v1")
   let registry = match payload {
@@ -50,6 +64,7 @@ pub async fn FileRegistry::open_postgres(
   let durable = {
     persistence: RegistryPostgres(database),
     registry,
+    require_evaluation,
     mutex: Mutex(),
   }
   if payload is None {
@@ -190,13 +205,24 @@ pub async fn FileRegistry::record_evaluation(
 }
 
 ///|
+/// Whether this deployment requires a passed evaluation before a model can be
+/// approved. Exposed so the deployment gate can follow the same policy the
+/// registry was opened with, instead of the two disagreeing.
+pub fn FileRegistry::requires_evaluation(self : FileRegistry) -> Bool {
+  self.require_evaluation
+}
+
+///|
 pub async fn FileRegistry::approve(
   self : FileRegistry,
   model_id : String,
   version : String,
   now_unix_ms : Int64,
 ) -> @contracts.ModelRecord {
-  self.update(registry => registry.approve(model_id, version, now_unix_ms))
+  let require_evaluation = self.require_evaluation
+  self.update(registry => {
+    registry.approve(model_id, version, now_unix_ms, require_evaluation~)
+  })
 }
 
 ///|
@@ -209,8 +235,11 @@ pub async fn FileRegistry::promote(
   actor : String,
   now_unix_ms : Int64,
 ) -> PromotionReceipt {
+  let require_evaluation = self.require_evaluation
   self.update(registry => {
-    registry.promote(alias_name, model_id, version, stage, actor, now_unix_ms)
+    registry.promote(
+      alias_name, model_id, version, stage, actor, now_unix_ms, require_evaluation~,
+    )
   })
 }
 

@@ -360,3 +360,80 @@ test "scheduling binds the promoted model to its evaluated runtime" {
   }
   assert_eq(target.runtime, evaluated_runtime)
 }
+
+///|
+/// A deployment that has shelved evaluation says so at open time. The model
+/// still has to have been verified for real -- a candidate is never approvable
+/// -- and the promotion receipt records that no evaluation took part, so the
+/// absence is visible in the audit trail rather than implied by it.
+test "a shelved evaluation still requires verification and is recorded as absent" {
+  let registry = @registry.ModelRegistry::new()
+  let model = candidate("v-shelved")
+  registry.register_model(model)
+  registry.record_license({
+    license_id: "license.text",
+    model_id: "model.text",
+    status: Accepted,
+    accepted_by: "operator",
+    evidence_ref: "modelstore://owner/repo/LICENSE#sha256=abc",
+    expires_unix_ms: None,
+  })
+
+  // Verified but unevaluated: refused while evaluation is required.
+  registry.record_verification({
+    digest: model.artifact.digest,
+    signature_verified: true,
+    provenance_verified: true,
+    verified_unix_ms: 1L,
+    verifier: "modelstore-manifest:modelstore://owner/repo",
+  })
+  try
+    ignore(registry.approve("model.text", "v-shelved", 1000L))
+  catch {
+    @registry.RegistryError::EvaluationNotPassed(_) => ()
+    _ => fail("wrong refusal: a missing evaluation was not the reason")
+  } noraise {
+    _ => fail("an unevaluated model was approved while evaluation was required")
+  }
+
+  // Shelved: approvable from Verified, and the receipt says no evaluation ran.
+  let approved = registry.approve(
+    "model.text", "v-shelved", 1000L, require_evaluation=false,
+  )
+  assert_eq(approved.state, Approved)
+  let receipt = registry.promote(
+    "text.default",
+    "model.text",
+    "v-shelved",
+    @registry.RolloutStage::Canary,
+    "operator",
+    1000L,
+    require_evaluation=false,
+  )
+  assert_eq(receipt.evaluation_id, "")
+  assert_eq(registry.model("model.text", "v-shelved").unwrap().state, Approved)
+}
+
+///|
+/// The shelved policy is not a way in for an unverified artifact: that gate is
+/// untouched and still refuses.
+test "a shelved evaluation does not admit an unverified artifact" {
+  let registry = @registry.ModelRegistry::new()
+  registry.register_model(candidate("v-unverified"))
+  registry.record_license({
+    license_id: "license.text",
+    model_id: "model.text",
+    status: Accepted,
+    accepted_by: "operator",
+    evidence_ref: "evidence:license",
+    expires_unix_ms: None,
+  })
+  try
+    ignore(registry.approve("model.text", "v-unverified", 1000L, require_evaluation=false))
+  catch {
+    @registry.RegistryError::ArtifactNotVerified(_) => ()
+    _ => fail("wrong refusal: verification was not the reason")
+  } noraise {
+    _ => fail("an unverified model was approved")
+  }
+}

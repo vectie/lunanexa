@@ -428,3 +428,52 @@ test "an intent document without the geometry field still decodes" {
     None => ()
   }
 }
+
+///|
+/// The model store is a real transport for this platform's own verified
+/// revisions: the artifact gateway serves them, the node materializes them,
+/// and the signature subject is the revision's source manifest rather than a
+/// detached object. A template that names one must be registrable.
+test "a verified model-store revision is a materializable artifact" {
+  let revision : @deployment.ModelServiceTemplate = {
+    ..template(),
+    artifact: {
+      digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      uri: "modelstore://owner/repo",
+      size_bytes: 1L,
+      signature_ref: "modelstore://owner/repo/lunanexa-source-manifest.json",
+    },
+  }
+  @deployment.validate_template(revision)
+
+  let plan = @deployment.preflight(
+    [revision],
+    intent(),
+    {
+      registry: [],
+      nodes: [],
+      available_secret_refs: ["runtime-token"],
+    },
+  )
+  assert_false(
+    plan.findings.any(value => value.code == ArtifactMaterializationUnsupported),
+  )
+
+  // A transport this platform cannot materialize is still refused, and so is a
+  // revision whose signature subject is missing.
+  for
+    unusable in [
+      { ..revision, artifact: { ..revision.artifact, uri: "oci://registry/repo", }, },
+      {
+        ..revision,
+        artifact: { ..revision.artifact, uri: "modelstore://owner/../etc", },
+      },
+      { ..revision, artifact: { ..revision.artifact, signature_ref: "", }, },
+    ] {
+    try @deployment.validate_template(unusable) catch {
+      _ => continue
+    } noraise {
+      _ => fail("an unmaterializable artifact reference was accepted")
+    }
+  }
+}

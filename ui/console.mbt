@@ -34,6 +34,11 @@ pub(all) struct ModelRow {
   evaluation_status : String
   compatibility : String
   alias_name : String
+  /// The pending licence record the registry binds to this model version.
+  license_id : String
+  /// The immutable artifact the registry attests for this model version.
+  artifact_uri : String
+  artifact_digest : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -128,6 +133,165 @@ pub(all) struct ModelAdoptionDraft {
   compatible_architectures : String
   minimum_memory_mib : String
 } derive(Debug, Eq)
+
+///|
+/// Operator acceptance of one candidate's declared upstream licence. Both the
+/// record identity and the citation are operator text; the control plane
+/// verifies the digest separately and accepts no inferred evidence here.
+pub(all) struct ModelLicenseDraft {
+  model_id : String
+  version : String
+  license_id : String
+  evidence_ref : String
+} derive(Debug, Eq)
+
+///|
+/// Operator promotion of one approved model version onto a serving alias.
+pub(all) struct ModelAliasDraft {
+  model_id : String
+  version : String
+  alias_name : String
+} derive(Debug, Eq)
+
+///|
+/// One runtime profile an operator registers with the control plane. The
+/// capability is the typed contract value, not a free-form string.
+pub(all) struct RuntimeProfileDraft {
+  name : String
+  version : String
+  image_digest : String
+  architecture : String
+  capability : @contracts.Capability
+  supports_batching : Bool
+  supports_multi_node : Bool
+} derive(Debug, Eq)
+
+///|
+pub fn empty_model_license_draft() -> ModelLicenseDraft {
+  { model_id: "", version: "", license_id: "", evidence_ref: "" }
+}
+
+///|
+pub fn empty_model_alias_draft() -> ModelAliasDraft {
+  { model_id: "", version: "", alias_name: "" }
+}
+
+///|
+/// The defaults are the deployment's admitted accelerator profile and the one
+/// serving capability every model in this plane begins with.
+pub fn default_runtime_draft() -> RuntimeProfileDraft {
+  {
+    name: "",
+    version: "",
+    image_digest: "",
+    architecture: "nvidia-sm121",
+    capability: TextGenerate,
+    supports_batching: false,
+    supports_multi_node: false,
+  }
+}
+
+///|
+/// A default serving-alias name for a model id: every character outside the
+/// identifier alphabet becomes a hyphen, so the operator edits rather than
+/// types a first draft.
+pub fn model_alias_slug(model_id : String) -> String {
+  let mut slug = ""
+  for character in model_id.to_lower() {
+    if (character >= 'a' && character <= 'z') ||
+      (character >= '0' && character <= '9') ||
+      character == '-' ||
+      character == '_' ||
+      character == '.' ||
+      character == ':' {
+      slug = slug + "\{character}"
+    } else {
+      slug = slug + "-"
+    }
+  }
+  slug
+}
+
+///|
+pub fn model_license_draft_valid(draft : ModelLicenseDraft) -> Bool {
+  @contracts.valid_identifier(draft.model_id, maximum_length=128) &&
+  @contracts.valid_identifier(draft.version, maximum_length=128) &&
+  @contracts.valid_identifier(
+    draft.license_id.trim().to_owned(),
+    maximum_length=128,
+  ) &&
+  draft.evidence_ref.trim() != ""
+}
+
+///|
+pub fn model_alias_draft_valid(draft : ModelAliasDraft) -> Bool {
+  @contracts.valid_identifier(draft.model_id, maximum_length=128) &&
+  @contracts.valid_identifier(draft.version, maximum_length=128) &&
+  @contracts.valid_identifier(
+    draft.alias_name.trim().to_owned(),
+    maximum_length=128,
+  )
+}
+
+///|
+/// The same shape the registry enforces for a runtime name: no `@`, space, or
+/// traversal sequence, bounded length, so the console never offers a doomed
+/// registration.
+pub fn runtime_profile_name_valid(value : String) -> Bool {
+  let name = value.trim().to_owned()
+  name != "" &&
+  name.length() <= 256 &&
+  !name.contains("..") &&
+  !name.contains_char('@') &&
+  !name.contains_char(' ') &&
+  !name.contains_char('\n') &&
+  !name.contains_char('\r')
+}
+
+///|
+pub fn runtime_profile_draft_valid(draft : RuntimeProfileDraft) -> Bool {
+  runtime_profile_name_valid(draft.name) &&
+  @contracts.valid_identifier(
+    draft.version.trim().to_owned(),
+    maximum_length=128,
+  ) &&
+  @contracts.valid_sha256_digest(draft.image_digest.trim().to_owned()) &&
+  @contracts.valid_identifier(
+    draft.architecture.trim().to_owned(),
+    maximum_length=128,
+  )
+}
+
+///|
+/// The serving capabilities the console can register. Model evaluation and
+/// training are registry-side work, never a runtime-profile capability here.
+pub fn runtime_capability_options() -> Array[@contracts.Capability] {
+  [TextGenerate, EmbeddingCreate, ImageGenerate, VideoGenerate, AudioGenerate]
+}
+
+///|
+pub fn runtime_capability_name(capability : @contracts.Capability) -> String {
+  match capability {
+    TextGenerate => "TextGenerate"
+    EmbeddingCreate => "EmbeddingCreate"
+    ImageGenerate => "ImageGenerate"
+    VideoGenerate => "VideoGenerate"
+    AudioGenerate => "AudioGenerate"
+    ModelEvaluate => "ModelEvaluate"
+    ModelTrain => "ModelTrain"
+  }
+}
+
+///|
+pub fn parse_runtime_capability(value : String) -> @contracts.Capability {
+  match value {
+    "EmbeddingCreate" => EmbeddingCreate
+    "ImageGenerate" => ImageGenerate
+    "VideoGenerate" => VideoGenerate
+    "AudioGenerate" => AudioGenerate
+    _ => TextGenerate
+  }
+}
 
 ///|
 pub(all) struct DeploymentRow {
@@ -520,6 +684,9 @@ pub(all) struct ConsoleState {
   model_adopted_imports : Array[String]
   model_local_directories : Array[ModelLocalDirectoryRow]
   model_local_draft : ModelLocalRegistrationDraft
+  model_license_draft : ModelLicenseDraft
+  model_alias_draft : ModelAliasDraft
+  runtime_draft : RuntimeProfileDraft
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -568,6 +735,25 @@ pub(all) enum ConsoleMessage {
   ModelLocalRepositoryChanged(String)
   ModelLocalRevisionChanged(String)
   SubmitModelLocalRegistration
+  BeginLicenseAcceptance(String, String)
+  DismissLicenseAcceptance
+  LicenseRecordIdChanged(String)
+  LicenseEvidenceChanged(String)
+  SubmitModelLicense
+  VerifyModelArtifact(String, String)
+  ApproveModelVersion(String, String)
+  BeginAliasPromotion(String, String)
+  DismissAliasPromotion
+  AliasNameChanged(String)
+  SubmitAliasPromotion
+  RuntimeNameChanged(String)
+  RuntimeVersionChanged(String)
+  RuntimeImageDigestChanged(String)
+  RuntimeArchitectureChanged(String)
+  RuntimeCapabilityChanged(String)
+  RuntimeBatchingToggled
+  RuntimeMultiNodeToggled
+  SubmitRuntimeRegistration
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -730,11 +916,37 @@ pub fn default_state() -> ConsoleState {
     model_adopted_imports: [],
     model_local_directories: [],
     model_local_draft: { directory: "", repository: "", revision: "master" },
+    model_license_draft: empty_model_license_draft(),
+    model_alias_draft: empty_model_alias_draft(),
+    runtime_draft: default_runtime_draft(),
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
     quick_template: "",
     quick_topology: SingleMachine,
+  }
+}
+
+///|
+/// One approved demo artifact, with the licence record and managed-store
+/// revision the per-row onboarding controls cite.
+fn demo_model_row(
+  model_id : String,
+  version : String,
+  alias_name : String,
+  digest : String,
+) -> ModelRow {
+  {
+    model_id,
+    version,
+    state: Approved,
+    license_status: "accepted",
+    evaluation_status: "passed",
+    compatibility: "DGX Spark",
+    alias_name,
+    license_id: "license.\{alias_name}",
+    artifact_uri: "modelstore://\{model_id}/\{version}",
+    artifact_digest: digest,
   }
 }
 
@@ -890,87 +1102,60 @@ pub fn demo_state() -> ConsoleState {
     },
   ]
   let models : Array[ModelRow] = [
-    {
-      model_id: "lunanexa.text.general",
-      version: "v3",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "text.default",
-    },
-    {
-      model_id: "lunanexa.text.fast",
-      version: "v2",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "text.fast",
-    },
-    {
-      model_id: "lunanexa.text.reasoning",
-      version: "v1",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "text.reasoning",
-    },
-    {
-      model_id: "lunanexa.code.assist",
-      version: "v4",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "code.assist",
-    },
-    {
-      model_id: "lunanexa.embedding.multilingual",
-      version: "v2",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "embedding.multilingual",
-    },
-    {
-      model_id: "lunanexa.embedding.base",
-      version: "v1",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "embedding.default",
-    },
-    {
-      model_id: "lunanexa.vision.general",
-      version: "v2",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "vision.default",
-    },
-    {
-      model_id: "lunanexa.rerank.base",
-      version: "v1",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "rerank.default",
-    },
-    {
-      model_id: "lunanexa.speech.transcribe",
-      version: "v2",
-      state: Approved,
-      license_status: "accepted",
-      evaluation_status: "passed",
-      compatibility: "DGX Spark",
-      alias_name: "speech.transcribe",
-    },
+    demo_model_row(
+      "lunanexa.text.general",
+      "v3",
+      "text.default",
+      "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    ),
+    demo_model_row(
+      "lunanexa.text.fast",
+      "v2",
+      "text.fast",
+      "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    ),
+    demo_model_row(
+      "lunanexa.text.reasoning",
+      "v1",
+      "text.reasoning",
+      "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    ),
+    demo_model_row(
+      "lunanexa.code.assist",
+      "v4",
+      "code.assist",
+      "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    ),
+    demo_model_row(
+      "lunanexa.embedding.multilingual",
+      "v2",
+      "embedding.multilingual",
+      "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    ),
+    demo_model_row(
+      "lunanexa.embedding.base",
+      "v1",
+      "embedding.default",
+      "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    ),
+    demo_model_row(
+      "lunanexa.vision.general",
+      "v2",
+      "vision.default",
+      "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    ),
+    demo_model_row(
+      "lunanexa.rerank.base",
+      "v1",
+      "rerank.default",
+      "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+    ),
+    demo_model_row(
+      "lunanexa.speech.transcribe",
+      "v2",
+      "speech.transcribe",
+      "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    ),
   ]
   let templates : Array[@deployment.ModelServiceTemplate] = [
     {
@@ -5710,7 +5895,9 @@ fn model_artifact_rows(
       ]),
     )
     for model in artifacts {
-      body.push(model_item(state.locale, model, emit))
+      for row in model_item(state, model, emit) {
+        body.push(row)
+      }
     }
   }
   body
@@ -5718,50 +5905,348 @@ fn model_artifact_rows(
 
 ///|
 fn model_item(
-  locale : @i18n.Locale,
+  state : ConsoleState,
+  model : ModelRow,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> Array[@rabbita.Html] {
+  let locale = state.locale
+  let rows : Array[@rabbita.Html] = [
+    @html.tr([
+      @html.td([
+        @html.strong(model.model_id),
+        @html.span(class="mono secondary", model.version),
+      ]),
+      @html.td(model_state_badge(locale, model.state)),
+      @html.td([
+        @html.span(
+          localized(
+            locale,
+            "License · \{license_evidence_label(locale, model.license_status)}",
+            "许可证 · \{license_evidence_label(locale, model.license_status)}",
+          ),
+        ),
+        @html.span(
+          class="secondary",
+          localized(
+            locale,
+            "Evaluation · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+            "评测 · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+          ),
+        ),
+      ]),
+      @html.td(model.compatibility),
+      @html.td(class="mono", model.alias_name),
+      @html.td(model_candidate_actions(state, model, emit)),
+    ]),
+  ]
+  if state.model_license_draft.model_id == model.model_id &&
+    state.model_license_draft.version == model.version {
+    rows.push(model_license_form_row(state, model, emit))
+  }
+  if state.model_alias_draft.model_id == model.model_id &&
+    state.model_alias_draft.version == model.version {
+    rows.push(model_alias_form_row(state, model, emit))
+  }
+  rows
+}
+
+///|
+/// The per-candidate actions the registry already exposes. None of them is
+/// disabled for looking premature: the registry owns the order and answers an
+/// early step with its own refusal, which the console reports verbatim.
+fn model_candidate_actions(
+  state : ConsoleState,
   model : ModelRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
-  @html.tr([
-    @html.td([
-      @html.strong(model.model_id),
-      @html.span(class="mono secondary", model.version),
-    ]),
-    @html.td(model_state_badge(locale, model.state)),
-    @html.td([
-      @html.span(
-        localized(
-          locale,
-          "License · \{license_evidence_label(locale, model.license_status)}",
-          "许可证 · \{license_evidence_label(locale, model.license_status)}",
-        ),
+  let locale = state.locale
+  let offered = state.operator_authenticated && !state.loading
+  @html.div(class="row-actions model-candidate-actions", [
+    @html.button(
+      type_="button",
+      class="secondary-button",
+      disabled=!offered,
+      on_click=command(
+        emit,
+        BeginLicenseAcceptance(model.model_id, model.version),
       ),
+      localized(locale, "Accept licence…", "接受许可证…"),
+    ),
+    @html.button(
+      type_="button",
+      class="secondary-button",
+      disabled=!offered,
+      on_click=command(
+        emit,
+        VerifyModelArtifact(model.model_id, model.version),
+      ),
+      localized(locale, "Verify artifact", "验证制品"),
+    ),
+    @html.button(
+      type_="button",
+      class="secondary-button",
+      disabled=!offered,
+      on_click=command(
+        emit,
+        ApproveModelVersion(model.model_id, model.version),
+      ),
+      localized(locale, "Approve", "批准"),
+    ),
+    @html.button(
+      type_="button",
+      class="secondary-button",
+      disabled=!offered,
+      on_click=command(
+        emit,
+        BeginAliasPromotion(model.model_id, model.version),
+      ),
+      localized(locale, "Promote alias…", "提升别名…"),
+    ),
+    if model.alias_name == "—" {
       @html.span(
         class="secondary",
-        localized(
-          locale,
-          "Evaluation · \{evaluation_evidence_label(locale, model.evaluation_status)}",
-          "评测 · \{evaluation_evidence_label(locale, model.evaluation_status)}",
-        ),
+        localized(locale, "No alias", "无模型别名"),
+      )
+    } else {
+      @html.button(
+        type_="button",
+        class="danger-secondary",
+        on_click=command(emit, BeginRollback(model.alias_name)),
+        localized(locale, "Roll back…", "回滚…"),
+      )
+    },
+  ])
+}
+
+///|
+/// The licence citation is operator text: the console prefills a
+/// `modelscope-license:` reference derived from the model's declared licence
+/// and never fabricates a path or digest.
+fn model_license_form_row(
+  state : ConsoleState,
+  model : ModelRow,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let locale = state.locale
+  let draft = state.model_license_draft
+  let valid = model_license_draft_valid(draft)
+  let license_invalid = draft.license_id != "" &&
+    !@contracts.valid_identifier(
+      draft.license_id.trim().to_owned(),
+      maximum_length=128,
+    )
+  let evidence_missing = draft.evidence_ref.trim() == ""
+  @html.tr(class="model-onboarding-form-row", [
+    @html.td(colspan=6, [
+      @html.form(
+        class="model-onboarding-form",
+        on_submit=command(emit, SubmitModelLicense),
+        attrs=@html.Attrs::build().aria_labelledby("model-license-title"),
+        [
+          @html.fieldset(disabled=state.loading, [
+            @html.legend(
+              id="model-license-title",
+              localized(
+                locale,
+                "Accept licence for \{model.model_id} · \{model.version}",
+                "接受 \{model.model_id} · \{model.version} 的许可证",
+              ),
+            ),
+            @html.p(
+              class="field-help",
+              localized(
+                locale,
+                "Records an accepted licence for this exact model version. Artifact verification, evaluation, and explicit approval remain separate gates.",
+                "为这一精确模型版本记录已接受的许可证。制品验证、评测与明确批准仍是独立的安全门。",
+              ),
+            ),
+            @html.div(class="model-onboarding-grid", [
+              @html.div(class="field-group", [
+                @html.label(
+                  for_="model-license-id",
+                  localized(locale, "Licence record ID", "许可证记录 ID"),
+                ),
+                @html.input(
+                  id="model-license-id",
+                  input_type=Text,
+                  required=true,
+                  maxlength=128,
+                  placeholder="license.minicpm5-apache",
+                  value=draft.license_id,
+                  attrs=@html.Attrs::build()
+                    .aria_describedby("model-license-id-help")
+                    .aria_invalid(
+                      if license_invalid { "true" } else { "false" },
+                    ),
+                  on_input=text_command(emit, value => {
+                    LicenseRecordIdChanged(value)
+                  }),
+                ),
+                @html.p(
+                  id="model-license-id-help",
+                  class=if license_invalid {
+                    "field-help field-error"
+                  } else {
+                    "field-help"
+                  },
+                  localized(
+                    locale,
+                    "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                    "使用稳定的字母、数字、点、冒号、连字符或下划线。",
+                  ),
+                ),
+              ]),
+              @html.div(class="field-group", [
+                @html.label(
+                  for_="model-license-evidence",
+                  localized(
+                    locale,
+                    "Licence evidence citation",
+                    "许可证证据引用",
+                  ),
+                ),
+                @html.input(
+                  id="model-license-evidence",
+                  input_type=Text,
+                  required=true,
+                  maxlength=256,
+                  value=draft.evidence_ref,
+                  attrs=@html.Attrs::build()
+                    .aria_describedby("model-license-evidence-help")
+                    .aria_invalid(
+                      if evidence_missing { "true" } else { "false" },
+                    ),
+                  on_input=text_command(emit, value => {
+                    LicenseEvidenceChanged(value)
+                  }),
+                ),
+                @html.p(
+                  id="model-license-evidence-help",
+                  class=if evidence_missing {
+                    "field-help field-error"
+                  } else {
+                    "field-help"
+                  },
+                  localized(
+                    locale,
+                    "Free-form operator citation taken from the model's declared licence; no path or digest is invented here.",
+                    "自由填写的运维引用，取自模型声明的许可证；此处不会虚构路径或摘要。",
+                  ),
+                ),
+              ]),
+            ]),
+            @html.div(class="row-actions", [
+              @html.button(
+                type_="button",
+                class="secondary-button",
+                disabled=state.loading,
+                on_click=command(emit, DismissLicenseAcceptance),
+                localized(locale, "Cancel", "取消"),
+              ),
+              @html.button(
+                type_="submit",
+                class="primary-button",
+                disabled=!valid || state.loading,
+                localized(locale, "Accept licence", "接受许可证"),
+              ),
+            ]),
+          ]),
+        ],
       ),
     ]),
-    @html.td(model.compatibility),
-    @html.td(class="mono", model.alias_name),
-    @html.td(
-      if model.alias_name == "—" {
-        @html.span(
-          class="secondary",
-          localized(locale, "No alias", "无模型别名"),
-        )
-      } else {
-        @html.button(
-          type_="button",
-          class="danger-secondary",
-          on_click=command(emit, BeginRollback(model.alias_name)),
-          localized(locale, "Roll back…", "回滚…"),
-        )
-      },
-    ),
+  ])
+}
+
+///|
+fn model_alias_form_row(
+  state : ConsoleState,
+  model : ModelRow,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let locale = state.locale
+  let draft = state.model_alias_draft
+  let valid = model_alias_draft_valid(draft)
+  let alias_invalid = draft.alias_name != "" &&
+    !@contracts.valid_identifier(
+      draft.alias_name.trim().to_owned(),
+      maximum_length=128,
+    )
+  @html.tr(class="model-onboarding-form-row", [
+    @html.td(colspan=6, [
+      @html.form(
+        class="model-onboarding-form",
+        on_submit=command(emit, SubmitAliasPromotion),
+        attrs=@html.Attrs::build().aria_labelledby("model-alias-title"),
+        [
+          @html.fieldset(disabled=state.loading, [
+            @html.legend(
+              id="model-alias-title",
+              localized(
+                locale,
+                "Promote \{model.model_id} · \{model.version} onto an alias",
+                "将 \{model.model_id} · \{model.version} 提升到别名",
+              ),
+            ),
+            @html.p(
+              class="field-help",
+              localized(
+                locale,
+                "Publishes a Canary alias for the approved version. A version the registry has not approved is refused, and that refusal is shown here.",
+                "为已批准版本发布 Canary 别名。注册表尚未批准的版本会被拒绝，拒绝原因会显示在此处。",
+              ),
+            ),
+            @html.div(class="model-onboarding-grid", [
+              @html.div(class="field-group", [
+                @html.label(
+                  for_="model-alias-name",
+                  localized(locale, "Serving alias", "服务别名"),
+                ),
+                @html.input(
+                  id="model-alias-name",
+                  input_type=Text,
+                  required=true,
+                  maxlength=128,
+                  placeholder="text.default",
+                  value=draft.alias_name,
+                  attrs=@html.Attrs::build()
+                    .aria_describedby("model-alias-name-help")
+                    .aria_invalid(if alias_invalid { "true" } else { "false" }),
+                  on_input=text_command(emit, value => AliasNameChanged(value)),
+                ),
+                @html.p(
+                  id="model-alias-name-help",
+                  class=if alias_invalid {
+                    "field-help field-error"
+                  } else {
+                    "field-help"
+                  },
+                  localized(
+                    locale,
+                    "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                    "使用稳定的字母、数字、点、冒号、连字符或下划线。",
+                  ),
+                ),
+              ]),
+            ]),
+            @html.div(class="row-actions", [
+              @html.button(
+                type_="button",
+                class="secondary-button",
+                disabled=state.loading,
+                on_click=command(emit, DismissAliasPromotion),
+                localized(locale, "Cancel", "取消"),
+              ),
+              @html.button(
+                type_="submit",
+                class="primary-button",
+                disabled=!valid || state.loading,
+                localized(locale, "Promote alias", "提升别名"),
+              ),
+            ]),
+          ]),
+        ],
+      ),
+    ]),
   ])
 }
 
@@ -7137,6 +7622,295 @@ fn retention_label(
 }
 
 ///|
+fn runtime_capability_label(
+  locale : @i18n.Locale,
+  capability : @contracts.Capability,
+) -> String {
+  match capability {
+    TextGenerate => localized(locale, "Text generation", "文本生成")
+    EmbeddingCreate => localized(locale, "Embeddings", "嵌入")
+    ImageGenerate => localized(locale, "Image generation", "图像生成")
+    VideoGenerate => localized(locale, "Video generation", "视频生成")
+    AudioGenerate => localized(locale, "Audio generation", "音频生成")
+    ModelEvaluate => localized(locale, "Model evaluation", "模型评测")
+    ModelTrain => localized(locale, "Model training", "模型训练")
+  }
+}
+
+///|
+/// The operator-facing runtime registration the registry already accepts. The
+/// client mirrors the registry's own shape checks so the console never offers
+/// a profile the control plane would reject as malformed; ordering and policy
+/// decisions still come back from the server.
+fn runtime_registration_form(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let locale = state.locale
+  let draft = state.runtime_draft
+  let valid = runtime_profile_draft_valid(draft)
+  let name_invalid = draft.name != "" &&
+    !runtime_profile_name_valid(draft.name)
+  let version_invalid = draft.version != "" &&
+    !@contracts.valid_identifier(
+      draft.version.trim().to_owned(),
+      maximum_length=128,
+    )
+  let digest_invalid = draft.image_digest != "" &&
+    !@contracts.valid_sha256_digest(draft.image_digest.trim().to_owned())
+  let architecture_invalid = draft.architecture != "" &&
+    !@contracts.valid_identifier(
+      draft.architecture.trim().to_owned(),
+      maximum_length=128,
+    )
+  @html.div(class="operation-panel runtime-profile-panel", [
+    @html.div(class="operation-heading", [
+      @html.div([
+        @html.p(
+          class="eyebrow",
+          localized(locale, "Runtime profiles", "运行时配置"),
+        ),
+        @html.h3(
+          localized(locale, "Register a runtime profile", "注册运行时配置"),
+        ),
+      ]),
+      @html.span(
+        class="status status-pending",
+        localized(locale, "Registry validated", "注册表校验"),
+      ),
+    ]),
+    @html.p(
+      class="section-copy",
+      localized(
+        locale,
+        "Registers one immutable runtime image for the registry to admit. A profile is deployable only after its image digest is verified, so registration alone grants no workload.",
+        "登记一个供注册表接纳的不可变运行时镜像。只有在镜像摘要通过验证后配置才可部署，因此仅登记不会授予任何工作负载。",
+      ),
+    ),
+    @html.form(
+      class="operation-form runtime-profile-form",
+      on_submit=command(emit, SubmitRuntimeRegistration),
+      attrs=@html.Attrs::build().aria_labelledby("runtime-profile-title"),
+      [
+        @html.fieldset(disabled=state.loading, [
+          @html.legend(
+            id="runtime-profile-title",
+            localized(
+              locale,
+              "Runtime identity and placement",
+              "运行时身份与放置",
+            ),
+          ),
+          @html.div(class="model-onboarding-grid", [
+            @html.div(class="field-group", [
+              @html.label(
+                for_="runtime-name",
+                localized(locale, "Runtime name", "运行时名称"),
+              ),
+              @html.input(
+                id="runtime-name",
+                input_type=Text,
+                required=true,
+                maxlength=256,
+                placeholder="text-runtime-v2",
+                value=draft.name,
+                attrs=@html.Attrs::build()
+                  .aria_describedby("runtime-name-help")
+                  .aria_invalid(if name_invalid { "true" } else { "false" }),
+                on_input=text_command(emit, value => RuntimeNameChanged(value)),
+              ),
+              @html.p(
+                id="runtime-name-help",
+                class=if name_invalid {
+                  "field-help field-error"
+                } else {
+                  "field-help"
+                },
+                localized(
+                  locale,
+                  "Up to 256 characters with no '@', no spaces, and no '..'.",
+                  "最多 256 个字符，不能包含 '@'、空格或 '..'。",
+                ),
+              ),
+            ]),
+            @html.div(class="field-group", [
+              @html.label(
+                for_="runtime-version",
+                localized(locale, "Runtime version", "运行时版本"),
+              ),
+              @html.input(
+                id="runtime-version",
+                input_type=Text,
+                required=true,
+                maxlength=128,
+                placeholder="runtime-v2",
+                value=draft.version,
+                attrs=@html.Attrs::build()
+                  .aria_describedby("runtime-version-help")
+                  .aria_invalid(if version_invalid { "true" } else { "false" }),
+                on_input=text_command(emit, value => {
+                  RuntimeVersionChanged(value)
+                }),
+              ),
+              @html.p(
+                id="runtime-version-help",
+                class=if version_invalid {
+                  "field-help field-error"
+                } else {
+                  "field-help"
+                },
+                localized(
+                  locale,
+                  "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                  "使用稳定的字母、数字、点、冒号、连字符或下划线。",
+                ),
+              ),
+            ]),
+            @html.div(class="field-group", [
+              @html.label(
+                for_="runtime-image-digest",
+                localized(locale, "Runtime image digest", "运行时镜像摘要"),
+              ),
+              @html.input(
+                id="runtime-image-digest",
+                input_type=Text,
+                required=true,
+                maxlength=71,
+                placeholder="sha256:…",
+                value=draft.image_digest,
+                attrs=@html.Attrs::build()
+                  .aria_describedby("runtime-image-digest-help")
+                  .aria_invalid(if digest_invalid { "true" } else { "false" }),
+                on_input=text_command(emit, value => {
+                  RuntimeImageDigestChanged(value)
+                }),
+              ),
+              @html.p(
+                id="runtime-image-digest-help",
+                class=if digest_invalid {
+                  "field-help field-error"
+                } else {
+                  "field-help"
+                },
+                localized(
+                  locale,
+                  "Exactly sha256: followed by 64 hexadecimal characters.",
+                  "必须为 sha256: 加 64 个十六进制字符。",
+                ),
+              ),
+            ]),
+            @html.div(class="field-group", [
+              @html.label(
+                for_="runtime-architecture",
+                localized(locale, "Accelerator architecture", "加速器架构"),
+              ),
+              @html.input(
+                id="runtime-architecture",
+                input_type=Text,
+                required=true,
+                maxlength=128,
+                placeholder="nvidia-sm121",
+                value=draft.architecture,
+                attrs=@html.Attrs::build()
+                  .aria_describedby("runtime-architecture-help")
+                  .aria_invalid(
+                    if architecture_invalid { "true" } else { "false" },
+                  ),
+                on_input=text_command(emit, value => {
+                  RuntimeArchitectureChanged(value)
+                }),
+              ),
+              @html.p(
+                id="runtime-architecture-help",
+                class=if architecture_invalid {
+                  "field-help field-error"
+                } else {
+                  "field-help"
+                },
+                localized(
+                  locale,
+                  "The deployment's admitted accelerator profile.",
+                  "部署所允许的加速器配置。",
+                ),
+              ),
+            ]),
+            @html.div(class="field-group", [
+              @html.label(
+                for_="runtime-capability",
+                localized(locale, "Serving capability", "服务能力"),
+              ),
+              @html.select(
+                id="runtime-capability",
+                on_change=text_command(emit, value => {
+                  RuntimeCapabilityChanged(value)
+                }),
+                [
+                  for capability in runtime_capability_options() => {
+                    @html.option(
+                      value=runtime_capability_name(capability),
+                      selected=capability == draft.capability,
+                      runtime_capability_label(locale, capability),
+                    )
+                  }
+                ],
+              ),
+            ]),
+          ]),
+          @html.div(class="runtime-profile-flags", [
+            @html.label(
+              class="runtime-profile-flag",
+              for_="runtime-batching",
+              [
+                @html.input(
+                  input_type=Checkbox,
+                  id="runtime-batching",
+                  checked=draft.supports_batching,
+                  on_change=text_command(emit, _ => RuntimeBatchingToggled),
+                ),
+                @html.span(
+                  localized(locale, "Supports batching", "支持批处理"),
+                ),
+              ],
+            ),
+            @html.label(
+              class="runtime-profile-flag",
+              for_="runtime-multi-node",
+              [
+                @html.input(
+                  input_type=Checkbox,
+                  id="runtime-multi-node",
+                  checked=draft.supports_multi_node,
+                  on_change=text_command(emit, _ => RuntimeMultiNodeToggled),
+                ),
+                @html.span(
+                  localized(locale, "Supports multi-node", "支持多机"),
+                ),
+              ],
+            ),
+          ]),
+          @html.div(class="operation-actions", [
+            @html.span(
+              class="secondary",
+              localized(
+                locale,
+                "Registration does not verify the image; the registry records the digest an operator cited.",
+                "登记不会验证镜像；注册表只记录运维人员引用的摘要。",
+              ),
+            ),
+            @html.button(
+              type_="submit",
+              class="primary-button",
+              disabled=!state.operator_authenticated || !valid || state.loading,
+              localized(locale, "Register runtime", "注册运行时"),
+            ),
+          ]),
+        ]),
+      ],
+    ),
+  ])
+}
+
+///|
 fn policies_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -7188,6 +7962,7 @@ fn policies_view(
         ),
       ]),
     ]),
+    runtime_registration_form(state, emit),
     @html.div(class="operation-panel", [
       @html.div(class="operation-heading", [
         @html.div([
@@ -8859,6 +9634,16 @@ fn console_styles() -> String {
     #|.model-adoption-grid .field-group:last-child { grid-column: 1 / -1; max-width: 24rem; }
     #|.model-adoption-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .85rem; }
     #|.model-adoption-actions .row-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+    #|.model-candidate-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; white-space: normal; }
+    #|.model-onboarding-form-row td { padding: .55rem .7rem 1rem; background: var(--surface-subtle); }
+    #|.model-onboarding-form { padding-top: .5rem; border-top: 1px solid var(--line); }
+    #|.model-onboarding-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #|.model-onboarding-form legend { padding: 0; color: var(--ink); font-size: .82rem; font-weight: 760; }
+    #|.model-onboarding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem .85rem; margin-top: .75rem; }
+    #|.model-onboarding-form .row-actions, .runtime-profile-form .operation-actions { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; margin-top: .85rem; }
+    #|.runtime-profile-flags { display: flex; flex-wrap: wrap; gap: 1.1rem; margin-top: .9rem; }
+    #|.runtime-profile-flag { display: inline-flex; align-items: center; gap: .45rem; min-height: 44px; color: var(--muted-strong); font-size: .78rem; font-weight: 650; }
+    #|.runtime-profile-flag input { width: 1.05rem; height: 1.05rem; }
     #|.model-adoption-complete, .model-adoption-blocked { display: grid; gap: .25rem; padding: .65rem; border-left: .2rem solid var(--success); border-radius: .35rem; background: var(--success-soft); }
     #|.model-adoption-blocked { border-left-color: var(--warning); background: var(--warning-soft); }
     #|.model-adoption-complete span, .model-adoption-blocked span { color: var(--muted-strong); font-size: .7rem; line-height: 1.45; }
@@ -8949,6 +9734,9 @@ fn console_styles() -> String {
     #|  .model-adoption-actions, .detached-imports-heading { align-items: stretch; flex-direction: column; }
     #|  .model-adoption-actions .row-actions { display: grid; grid-template-columns: 1fr; }
     #|  .model-adoption-actions button { width: 100%; }
+    #|  .model-onboarding-grid { grid-template-columns: 1fr; }
+    #|  .model-onboarding-form .row-actions, .runtime-profile-form .operation-actions { display: grid; grid-template-columns: 1fr; }
+    #|  .model-onboarding-form button, .runtime-profile-form .operation-actions button { width: 100%; }
     #|  .topology-graph { min-width: 44rem; padding: 1rem; }
     #|  .node-summary { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
     #|  .node-summary-cell { display: none; }

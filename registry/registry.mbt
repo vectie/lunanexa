@@ -316,11 +316,18 @@ pub fn ModelRegistry::model(
 }
 
 ///|
+///|
+/// `require_evaluation = false` is the shelved-evaluation policy: a verified
+/// model may be approved without a benchmark behind it. It is deliberately a
+/// caller-supplied decision rather than a default, so the only way to approve
+/// without a measurement is to say so out loud, and a promotion receipt from
+/// such an approval carries no evaluation id because there was none.
 pub fn ModelRegistry::approve(
   self : ModelRegistry,
   model_id : String,
   version : String,
   now_unix_ms : Int64,
+  require_evaluation? : Bool = true,
 ) -> @contracts.ModelRecord raise RegistryError {
   let key = model_key(model_id, version)
   guard self.models.get(key) is Some(model) else { raise ModelNotFound(key) }
@@ -338,10 +345,16 @@ pub fn ModelRegistry::approve(
     verification.provenance_verified else {
     raise ArtifactNotVerified(model.artifact.digest)
   }
-  guard self.evaluations.get(key) is Some(evaluation) && evaluation.passed else {
-    raise EvaluationNotPassed(key)
-  }
-  if model.state != Evaluated {
+  if require_evaluation {
+    guard self.evaluations.get(key) is Some(evaluation) && evaluation.passed else {
+      raise EvaluationNotPassed(key)
+    }
+    if model.state != Evaluated {
+      raise EvaluationNotPassed(key)
+    }
+  } else if model.state != Verified && model.state != Evaluated {
+    // Without an evaluation the only honest entry is the state a real
+    // verification produced; a candidate is still not approvable.
     raise EvaluationNotPassed(key)
   }
   let approved : @contracts.ModelRecord = { ..model, state: Approved, }
@@ -358,6 +371,7 @@ pub fn ModelRegistry::promote(
   stage : RolloutStage,
   actor : String,
   now_unix_ms : Int64,
+  require_evaluation? : Bool = true,
 ) -> PromotionReceipt raise RegistryError {
   if !@contracts.valid_identifier(alias_name, maximum_length=128) ||
     !@contracts.valid_identifier(model_id, maximum_length=128) ||
@@ -369,8 +383,14 @@ pub fn ModelRegistry::promote(
   if model.state != Approved {
     raise ModelNotApproved(key)
   }
-  guard self.evaluations.get(key) is Some(evaluation) && evaluation.passed else {
-    raise EvaluationNotPassed(key)
+  let evaluation_id = if require_evaluation {
+    guard self.evaluations.get(key) is Some(evaluation) && evaluation.passed else {
+      raise EvaluationNotPassed(key)
+    }
+    evaluation.evaluation_id
+  } else {
+    // No measurement backed this promotion, and the receipt says so.
+    ""
   }
   let prior = self.aliases.get(alias_name)
   let generation = match prior {
@@ -396,7 +416,7 @@ pub fn ModelRegistry::promote(
     to_version: version,
     stage,
     actor,
-    evaluation_id: evaluation.evaluation_id,
+    evaluation_id,
     generation,
     timestamp_unix_ms: now_unix_ms,
   }
