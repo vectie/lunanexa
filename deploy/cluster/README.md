@@ -180,6 +180,23 @@ registry 里因此有 19 个模型 id。它**不做** license 接受、verificat
 节点上的 `runtimeNames` 现在是**运维声明**（`cluster.json` 里写明），不是节点的实测上报；
 真实部署里这个字段由节点 agent 从宿主机读取。
 
+## `runtime_names` 现在是测出来的，不是声明的
+
+节点的 `runtime_names` 决定"这台机器能不能被安排上某个服务"。它一度是 `cluster.json`
+里我手写的声明——那等于让平台按一句没有依据的话去放置服务。现在：
+
+- `cluster.json` 里**不再有** `runtimeNames`；
+- `one-click.sh` 的每个渲染入口都会问控制面要已注册的运行时清单，再逐台去看**该节点容器存储里
+  到底有没有那个镜像**，要求**摘要完全一致**（渲染器和节点都用 `<name>@<image_digest>` 作为
+  身份，只对仓库名不算数）；
+- 结果写进 inventory，节点的心跳把它报上来。
+
+为了让这个"事实"成立，`registry.pull` 列出节点在能被安排之前必须持有的镜像，
+`registry` 阶段负责把它们拉下来。目前是 `moon/lunaflux:sha256-bec8730…`，四台都已持有。
+
+（中途抓到过一次自己的假阳性：第一版只按仓库名匹配，而没测到东西时又回退到 `cluster.json`
+里的声明——两处都已修掉，现在测不到就是空。）
+
 ## 与仓库其余部分的关系
 
 - `deploy/node-kubernetes-rbac.yaml` 现在是这份脚本渲染的模板（`lunanexa-node` +

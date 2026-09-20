@@ -491,7 +491,7 @@ async fn load_production_readiness(
         ready: false,
         loading: false,
         blocker_codes: [],
-        error: Some("\{Repr(error)}"),
+        error: Some(http_failure_detail(error)),
       }
   }
 }
@@ -2532,8 +2532,8 @@ fn offline_action_command(
           model.console.locale,
           console_copy(
             model.console.locale,
-            "Offline commercial action failed: \{Repr(error)}",
-            "线下商务操作失败：\{Repr(error)}",
+            "Offline commercial action failed: \{http_failure_detail(error)}",
+            "线下商务操作失败：\{http_failure_detail(error)}",
           ),
         )
     } noraise {
@@ -2591,7 +2591,7 @@ fn operator_contract_command(
       ContractPacketUpdated(updated)
     } catch {
       error =>
-        if "\{Repr(error)}".contains("HTTP 409") {
+        if http_status_is(error, 409) {
           ContractConflict(model.console.locale)
         } else {
           ContractActionFailed(
@@ -2699,7 +2699,7 @@ fn operator_contract_lifecycle_command(
       }
     } catch {
       error =>
-        if "\{Repr(error)}".contains("HTTP 409") {
+        if http_status_is(error, 409) {
           ContractConflict(model.console.locale)
         } else {
           ContractActionFailed(
@@ -2755,7 +2755,7 @@ fn operator_contract_approval_command(
       )
     } catch {
       error =>
-        if "\{Repr(error)}".contains("HTTP 409") {
+        if http_status_is(error, 409) {
           ContractConflict(model.console.locale)
         } else {
           ContractActionFailed(
@@ -2956,8 +2956,8 @@ fn demo_contract_lifecycle_action(
               error_message: Some(
                 console_copy(
                   model.console.locale,
-                  "Demo contract lifecycle action was rejected: \{Repr(error)}",
-                  "演示合同生命周期操作被拒绝：\{Repr(error)}",
+                  "Demo contract lifecycle action was rejected: \{http_failure_detail(error)}",
+                  "演示合同生命周期操作被拒绝：\{http_failure_detail(error)}",
                 ),
               ),
             },
@@ -3316,6 +3316,16 @@ fn json_string_member(text : String, key : String) -> String? {
 }
 
 ///|
+/// True when the control plane refused a console call with exactly this HTTP
+/// status. The status lives only in the transport text: the debug `Repr` of a
+/// Rabbita error is opaque, and the detail helper below strips the envelope that
+/// carries the status line, so a handler that must tell one refusal from
+/// another keys on `Show` alone.
+fn http_status_is(error : Error, status : Int) -> Bool {
+  error.to_string().contains("HTTP \{status}")
+}
+
+///|
 /// A console write that the control plane refused carries its own explanation:
 /// the registry answers an out-of-order or unverified step with
 /// `{"error":{"code":...,"message":...}}`. Report that message verbatim, and
@@ -3418,6 +3428,116 @@ fn runtime_registration_body(draft : @ui.RuntimeProfileDraft) -> String {
   }
   .to_json()
   .stringify()
+}
+
+///|
+/// The body of `POST /v1/catalog/templates`. The control plane signs a catalog
+/// template itself and refuses a caller that supplies either half, so the two
+/// signature fields go out empty. An empty list answers `None`: the draft is
+/// then one the client-side mirror already refused to submit.
+fn template_registration_body(draft : @ui.TemplateDraft) -> String? {
+  guard @ui.template_draft_valid(draft) &&
+    @ui.template_identifier_list(
+      draft.runtime_architectures,
+      maximum=64,
+      identifier_length=128,
+    )
+    is Some(architectures) &&
+    @ui.template_identifier_list(draft.secret_refs, maximum=64)
+    is Some(secret_refs) &&
+    @ui.template_int_field(draft.accelerator_count, maximum=64)
+    is Some(accelerator_count) &&
+    @ui.template_int_field(draft.accelerator_memory_mib, maximum=1048576)
+    is Some(accelerator_memory_mib) &&
+    @ui.template_int_field(draft.cpu_millis, maximum=1000000)
+    is Some(cpu_millis) &&
+    @ui.template_int_field(draft.memory_mib, maximum=1048576)
+    is Some(memory_mib) &&
+    @ui.template_int_field(draft.health_interval_ms, maximum=3600000)
+    is Some(interval_ms) &&
+    @ui.template_int_field(draft.failure_threshold, maximum=100)
+    is Some(failure_threshold) &&
+    @ui.template_int_field(draft.termination_grace_ms, maximum=3600000)
+    is Some(termination_grace_ms) &&
+    @ui.template_int_field(draft.canary_replicas, maximum=64)
+    is Some(canary_replicas) &&
+    @ui.template_int64_field(draft.artifact_size_bytes, maximum=1099511627776L)
+    is Some(size_bytes) &&
+    @ui.template_int64_field(draft.readiness_timeout_ms, maximum=86400000L)
+    is Some(readiness_timeout_ms) else {
+    return None
+  }
+  let retention : @contracts.RetentionPolicy = if draft.capture_for_evaluation {
+    EvaluationCapture(consent_receipt=draft.evaluation_consent_receipt.trim().to_owned())
+  } else {
+    Ephemeral
+  }
+  Some(
+    @deployment.ModelServiceTemplate::{
+      template_id: draft.template_id.trim().to_owned(),
+      version: draft.version.trim().to_owned(),
+      display_name: draft.display_name.trim().to_owned(),
+      description: draft.description,
+      model_selector: draft.model_selector.trim().to_owned(),
+      model_id: draft.model_id.trim().to_owned(),
+      model_version: draft.model_version.trim().to_owned(),
+      artifact: {
+        digest: draft.artifact_digest.trim().to_owned(),
+        uri: draft.artifact_uri.trim().to_owned(),
+        size_bytes,
+        signature_ref: draft.artifact_signature_ref.trim().to_owned(),
+      },
+      runtime: {
+        name: draft.runtime_name.trim().to_owned(),
+        image_digest: draft.runtime_image_digest.trim().to_owned(),
+        version: draft.runtime_version.trim().to_owned(),
+        architectures,
+        capabilities: [draft.capability],
+        // The planner refuses a template that asks for batching; the switch is
+        // a runtime property, never a template one.
+        supports_batching: false,
+        supports_multi_node: draft.runtime_multi_node,
+      },
+      capability: draft.capability,
+      architecture: draft.architecture.trim().to_owned(),
+      resources: {
+        accelerator_count,
+        accelerator_memory_mib,
+        cpu_millis,
+        memory_mib,
+      },
+      // A template that reached a node reaches only the controller and the
+      // artifact store, so both are admitted and no egress is.
+      network: {
+        allow_controller: true,
+        allow_artifact_store: true,
+        allowed_egress: [],
+      },
+      health: {
+        readiness_path: draft.readiness_path.trim().to_owned(),
+        interval_ms,
+        failure_threshold,
+        termination_grace_ms,
+      },
+      data_policy: {
+        classification: draft.classification,
+        retention,
+        allow_cache: draft.allow_cache,
+        allow_training_reuse: draft.allow_training_reuse,
+      },
+      secret_refs,
+      rollout: {
+        canary_replicas,
+        automatic_promotion: draft.automatic_promotion,
+        automatic_rollback: draft.automatic_rollback,
+        readiness_timeout_ms,
+      },
+      approval_receipt: "",
+      signature: "",
+    }
+    .to_json()
+    .stringify(),
+  )
 }
 
 ///|
@@ -3547,13 +3667,11 @@ fn cluster_poll_request_command(
       )
       ClusterPolled(generation, nodes)
     } catch {
-      error => {
-        let detail = "\{Repr(error)}"
+      error =>
         ClusterPollFailed(
           generation,
-          detail.contains("HTTP 401") || detail.contains("HTTP 403"),
+          http_status_is(error, 401) || http_status_is(error, 403),
         )
-      }
     }
   })
 }

@@ -74,12 +74,16 @@ def check_pairing(nodes):
         raise SystemExit(f"fabric declarations do not pair up: {paired}")
 
 
-def inventory(node, cluster):
+def inventory(node, cluster, runtime_names):
+    """`runtime_names` is measured on the node, not declared here: the caller
+    passes what the node's own image store holds, intersected with the runtimes
+    the platform has registered. A declaration would let a node be placed on
+    for something it cannot run."""
     return {
         "node_id": node["id"],
         "agent_version": node.get("agentVersion", "0.2.0-20260918-arm64"),
         "os_release": node.get("osRelease", "Ubuntu 24.04.5 LTS"),
-        "runtime_names": node.get("runtimeNames", []),
+        "runtime_names": runtime_names,
         "accelerators": [
             {
                 "device_id": require(node, "gpuUuid"),
@@ -175,6 +179,11 @@ def main():
                         help="controller address for a controller outside the cluster; omitted when the runtime config names a controller namespace")
     parser.add_argument("--node", action="append", default=[])
     parser.add_argument("--without-fabric", action="store_true")
+    parser.add_argument(
+        "--runtime-names",
+        default="",
+        help="node=runtime[,...]; what that node's image store actually holds",
+    )
     arguments = parser.parse_args()
 
     cluster = load(arguments.manifest)
@@ -193,6 +202,14 @@ def main():
     runtime = cluster["runtime"]
     images = cluster["images"]
     control_addresses = arguments.control_address
+    measured = {}
+    for entry in filter(None, arguments.runtime_names.split(",")):
+        node_id, _, name = entry.partition("=")
+        if node_id:
+            measured.setdefault(node_id, [])
+            if name:
+                measured[node_id].append(name)
+
     output = pathlib.Path(arguments.output)
     output.mkdir(parents=True, exist_ok=True)
 
@@ -212,7 +229,15 @@ def main():
         }
         (output / f"node-agent-{node_id}.yaml").write_text(render(template, node_values))
         (output / f"inventory-{node_id}.json").write_text(
-            json.dumps(inventory(node, cluster), indent=2) + "\n"
+            json.dumps(
+                inventory(
+                    node,
+                    cluster,
+                    measured.get(node_id, node.get("runtimeNames", [])),
+                ),
+                indent=2,
+            )
+            + "\n"
         )
         (output / f"kubernetes-runtime-{node_id}.json").write_text(
             json.dumps(runtime_config(node, cluster, control_addresses), indent=2) + "\n"
