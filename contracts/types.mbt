@@ -281,6 +281,21 @@ pub(all) struct HealthPolicy {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+/// One member of a paired placement. The four values are all-or-nothing: a
+/// rank is meaningless without the group it belongs to and the size of that
+/// group, so they travel together or not at all.
+pub(all) struct AssignmentGroup {
+  group_id : String
+  /// 0 is the head: the member that serves traffic and exports the peer's
+  /// model store when the pair shares one copy of the weights.
+  rank : Int
+  /// The number of members in the group. Only two is admitted.
+  world_size : Int
+  /// The peer's address on the private fabric, for rank coordination.
+  peer_endpoint : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
 pub(all) struct DesiredAssignment {
   assignment_id : String
   deployment_id : String
@@ -295,6 +310,10 @@ pub(all) struct DesiredAssignment {
   generation : Int64
   lease_expires_unix_ms : Int64
   controller_epoch : Int64
+  /// Present only when this assignment is one member of a paired placement.
+  /// Absent -- which is what every document written before pairs existed
+  /// carries -- means one machine, and leaves the MAC material untouched.
+  group : AssignmentGroup?
   signature : String
 } derive(Debug, Eq, ToJson, FromJson)
 

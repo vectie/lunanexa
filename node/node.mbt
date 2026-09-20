@@ -280,6 +280,11 @@ pub fn assignment_signature(
   secret : String,
 ) -> String {
   let unsigned = { ..assignment, signature: "", }
+  // A single-machine assignment serializes exactly as it did before pairs
+  // existed: an absent group is omitted from the payload, not written as null,
+  // so the v1 MAC material is byte-identical and a node running an older build
+  // still authenticates one during a rolling update. `assignment_group_test`
+  // pins that omission -- if it ever regresses, signatures change silently.
   let key = @utf8.encode(secret)
   let material = @utf8.encode(
     "lunanexa.assignment-mac.v1|\{unsigned.to_json().stringify()}",

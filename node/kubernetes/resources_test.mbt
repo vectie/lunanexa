@@ -106,6 +106,7 @@ fn runtime_assignment() -> @contracts.DesiredAssignment {
     },
     generation: 1L,
     controller_epoch: 1L,
+    group: None,
     lease_expires_unix_ms: 60000L,
     signature: "fixture-only-already-verified-by-caller",
   }

@@ -78,6 +78,7 @@ fn api_assignment() -> @contracts.DesiredAssignment {
     generation: 1L,
     lease_expires_unix_ms: @async.now() + 60000L,
     controller_epoch: 1L,
+    group: None,
     signature: "signed",
   }
 }
