@@ -1008,6 +1008,22 @@ fn catalog_template_key(template : @deployment.ModelServiceTemplate) -> String {
 }
 
 ///|
+/// Add a freshly registered template to the catalog, replacing the revision it
+/// supersedes. A template is immutable, so a re-registration only ever answers
+/// a conflict; this keeps one row per template and version either way.
+fn append_catalog_template(
+  templates : Array[@deployment.ModelServiceTemplate],
+  accepted : @deployment.ModelServiceTemplate,
+) -> Array[@deployment.ModelServiceTemplate] {
+  let key = catalog_template_key(accepted)
+  let next = templates.filter(template => {
+    catalog_template_key(template) != key
+  })
+  next.push(accepted)
+  next
+}
+
+///|
 fn quick_deployment_intent(
   state : @ui.ConsoleState,
   _now_unix_ms : Int64,
@@ -1355,6 +1371,8 @@ async fn load_console(
     model_license_draft: @ui.empty_model_license_draft(),
     model_alias_draft: @ui.empty_model_alias_draft(),
     runtime_draft: @ui.default_runtime_draft(),
+    template_draft: @ui.empty_template_draft(),
+    registered_runtimes: registry.runtimes,
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -2290,6 +2308,9 @@ priv enum LoadOutcome {
   ContractConflict(@i18n.Locale)
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
+  /// The signed template the control plane returned, so the picker offers it
+  /// without a second read.
+  TemplateRegistered(@deployment.ModelServiceTemplate)
 }
 
 ///|
@@ -2390,6 +2411,7 @@ fn merge_loaded_console(
     model_license_draft: current.model_license_draft,
     model_alias_draft: current.model_alias_draft,
     runtime_draft: current.runtime_draft,
+    template_draft: current.template_draft,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
     access_package_draft: {
@@ -3263,6 +3285,125 @@ fn console_model_row(
   state.models.iter().find_first(row => {
     row.model_id == model_id && row.version == version
   })
+}
+
+///|
+/// Split a picker value of the form `name@version`. An identifier in this plane
+/// never carries an '@', so the first separator is the only one.
+fn split_selection_key(key : String) -> (String, String)? {
+  match key.split("@").collect() {
+    [name, version] => Some((name.to_owned(), version.to_owned()))
+    _ => None
+  }
+}
+
+///|
+/// The byte count the console already knows for an artifact, so a template does
+/// not make the operator retype what the import reported. Empty when the
+/// console has never seen this artifact.
+fn template_artifact_size(state : @ui.ConsoleState, uri : String) -> String {
+  for import_ in state.model_imports {
+    if import_.artifact_uri == uri && import_.bytes_total > 0L {
+      return import_.bytes_total.to_string()
+    }
+  }
+  for directory in state.model_local_directories {
+    if uri == "\{@contracts.model_store_scheme}\{directory.directory}" &&
+      directory.bytes > 0L {
+      return directory.bytes.to_string()
+    }
+  }
+  ""
+}
+
+///|
+/// Fill the model half of a template draft from a registered model. The
+/// registry attested one artifact per model version, and a managed revision is
+/// signed by the source manifest the control plane wrote next to it, so both
+/// can be named without asking the operator to retype them.
+fn template_draft_for_model(
+  state : @ui.ConsoleState,
+  key : String,
+) -> @ui.TemplateDraft {
+  let draft = state.template_draft
+  guard split_selection_key(key) is Some((model_id, version)) &&
+    console_model_row(state, model_id, version) is Some(row) else {
+    return draft
+  }
+  let signature_ref = if row.artifact_uri.has_prefix(
+    @contracts.model_store_scheme,
+  ) {
+    "\{row.artifact_uri}/\{@contracts.model_store_manifest_name}"
+  } else {
+    ""
+  }
+  let size_bytes = template_artifact_size(state, row.artifact_uri)
+  // The registry alias is the name workloads address; a model without one is
+  // still shaped like a selector by its own id. Either way the preflight has
+  // the last word on whether the alias is approved.
+  let selector = if @contracts.valid_identifier(
+      row.alias_name.trim().to_owned(),
+      maximum_length=128,
+    ) {
+    row.alias_name.trim().to_owned()
+  } else {
+    model_id
+  }
+  {
+    ..draft,
+    model_id,
+    model_version: version,
+    model_selector: selector,
+    artifact_uri: row.artifact_uri,
+    artifact_digest: row.artifact_digest,
+    artifact_size_bytes: if size_bytes == "" {
+      draft.artifact_size_bytes
+    } else {
+      size_bytes
+    },
+    artifact_signature_ref: if signature_ref == "" {
+      draft.artifact_signature_ref
+    } else {
+      signature_ref
+    },
+  }
+}
+
+///|
+/// Fill the runtime half of a template draft from the roster the registry read
+/// reported. The architecture defaults to the runtime's first admitted one,
+/// which is what the template must place on, and the capability to the first
+/// one this console can serve at all.
+fn template_draft_for_runtime(
+  state : @ui.ConsoleState,
+  key : String,
+) -> @ui.TemplateDraft {
+  let draft = state.template_draft
+  guard @ui.known_runtimes(state)
+    .iter()
+    .find_first(runtime => @ui.runtime_key(runtime) == key) is Some(runtime) else {
+    return draft
+  }
+  let capability = if runtime.capabilities.length() > 0 &&
+    @ui.runtime_capability_options().contains(runtime.capabilities[0]) {
+    runtime.capabilities[0]
+  } else {
+    draft.capability
+  }
+  {
+    ..draft,
+    runtime_name: runtime.name,
+    runtime_version: runtime.version,
+    runtime_image_digest: runtime.image_digest,
+    runtime_architectures: runtime.architectures.join(", "),
+    architecture: if runtime.architectures.length() > 0 {
+      runtime.architectures[0]
+    } else {
+      draft.architecture
+    },
+    runtime_multi_node: runtime.supports_multi_node,
+    capability,
+  }
 }
 
 ///|
@@ -5048,6 +5189,31 @@ fn update_live(
           @rabbita.none,
         )
       }
+    Outcome(TemplateRegistered(template)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            // The control plane signed the template it returned, so the picker
+            // and the table can offer it without a second read.
+            catalog_templates: append_catalog_template(
+              model.console.catalog_templates,
+              template,
+            ),
+            loading: false,
+            error_message: None,
+            success_message: Some(
+              console_copy(
+                model.console.locale,
+                "Template \{template.template_id}@\{template.version} was signed and registered.",
+                "模板 \{template.template_id}@\{template.version} 已签名并注册。",
+              ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
     Console(Navigate(route)) => {
       scroll_console_top()
       let next = {
@@ -6280,6 +6446,141 @@ fn update_live(
                 "运行时 \{runtime_name} 已登记。在任何部署使用它之前，请先验证其镜像摘要。",
               ),
             )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(TemplateTextChanged(field, value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            template_draft: @ui.template_draft_with_text(
+              model.console.template_draft,
+              field,
+              value,
+            ),
+          },
+        },
+        @rabbita.none,
+      )
+    Console(TemplateFlagToggled(flag)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            template_draft: @ui.template_draft_with_flag(
+              model.console.template_draft,
+              flag,
+              !@ui.template_flag_value(model.console.template_draft, flag),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
+    Console(TemplateCapabilityChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            template_draft: {
+              ..model.console.template_draft,
+              capability: @ui.parse_runtime_capability(value),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(TemplateClassificationChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            template_draft: {
+              ..model.console.template_draft,
+              classification: @ui.parse_data_class(value),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(TemplateModelSelected(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            template_draft: template_draft_for_model(model.console, value),
+          },
+        },
+        @rabbita.none,
+      )
+    Console(TemplateRuntimeSelected(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            template_draft: template_draft_for_runtime(model.console, value),
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitTemplateRegistration) => {
+      let draft = model.console.template_draft
+      guard model.console.operator_authenticated &&
+        template_registration_body(draft) is Some(body) else {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Name the template, pick a registered model and runtime, and give every admitted value its rule's shape.",
+                  "请命名模板、选择已注册的模型与运行时，并让每个被接纳的值符合其规则。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try {
+          let response = request(
+            "POST",
+            model.endpoint,
+            "/v1/catalog/templates",
+            model.credential,
+            body~,
+          )
+          let accepted : @deployment.ModelServiceTemplate = @json.from_json(
+            @json.parse(response),
+          )
+          TemplateRegistered(accepted)
+        } catch {
+          error =>
+            ActionFailed(model.console.locale, http_failure_detail(error))
+        } noraise {
+          value => value
         }
       })
       (
@@ -8155,6 +8456,12 @@ fn update(
       | Console(RuntimeCapabilityChanged(_))
       | Console(RuntimeBatchingToggled)
       | Console(RuntimeMultiNodeToggled)
+      | Console(TemplateTextChanged(_, _))
+      | Console(TemplateFlagToggled(_))
+      | Console(TemplateCapabilityChanged(_))
+      | Console(TemplateClassificationChanged(_))
+      | Console(TemplateModelSelected(_))
+      | Console(TemplateRuntimeSelected(_))
       | Console(OperationChanged(_))
       | Console(OperationBodyChanged(_))
       | Console(BeginDrain(_))
@@ -8238,6 +8545,7 @@ fn update(
       | Console(ApproveModelVersion(_, _))
       | Console(SubmitAliasPromotion)
       | Console(SubmitRuntimeRegistration)
+      | Console(SubmitTemplateRegistration)
       | Console(SubmitOperation) =>
         (
           {

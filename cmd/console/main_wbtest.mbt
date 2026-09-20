@@ -2412,3 +2412,357 @@ test "demo mode previews the onboarding and runtime controls without mutation" {
     opened.console.model_license_draft,
   )
 }
+
+///|
+test "a refused console write is matched on its transport status, not its Repr" {
+  let conflict : Error = Failure::Failure(
+    "HTTP 409: {\"error\":{\"code\":\"TemplateRejected\",\"message\":\"catalog template registration was rejected\",\"retryable\":false}}",
+  )
+  assert_true(http_status_is(conflict, 409))
+  assert_false(http_status_is(conflict, 403))
+  assert_false(http_status_is(conflict, 401))
+  let denied : Error = Failure::Failure(
+    "HTTP 403: {\"error\":{\"code\":\"Forbidden\",\"message\":\"operator authority is required\",\"retryable\":false}}",
+  )
+  assert_true(http_status_is(denied, 403))
+  assert_false(http_status_is(denied, 409))
+  // The two helpers answer different questions: the detail helper unwraps the
+  // control plane's own envelope, so the status line is gone by the time it
+  // answers and a handler that keyed on it would never match.
+  assert_eq(
+    http_failure_detail(conflict),
+    "catalog template registration was rejected",
+  )
+  assert_false(http_failure_detail(conflict).contains("HTTP 409"))
+  let offline : Error = Failure::Failure("TypeError: Failed to fetch")
+  assert_false(http_status_is(offline, 401))
+  assert_true(http_failure_detail(offline).contains("Failed to fetch"))
+}
+
+///|
+/// The registered model and runtime the catalog template form draws its
+/// prefill from: one adopted candidate with its verified import, and the text
+/// runtime the registry admitted.
+fn template_test_model() -> AppModel {
+  let base = deferred_read_test_model(Catalog)
+  {
+    ..base,
+    console: {
+      ..base.console,
+      models: [onboarding_candidate_row()],
+      model_imports: [onboarding_verified_import()],
+      registered_runtimes: [
+        {
+          name: "text-runtime",
+          image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          version: "runtime-v1",
+          architectures: ["nvidia-gb10"],
+          capabilities: [TextGenerate],
+          supports_batching: false,
+          supports_multi_node: false,
+        },
+      ],
+    },
+  }
+}
+
+///|
+test "the catalog template form prefills from the registry and builds the signed body" {
+  let model = template_test_model()
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (picked, _) = update(
+    model,
+    Console(TemplateModelSelected("model.minicpm5-1b@modelscope-main")),
+    emit,
+  )
+  let draft = picked.console.template_draft
+  assert_eq(draft.model_id, "model.minicpm5-1b")
+  assert_eq(draft.model_version, "modelscope-main")
+  assert_eq(draft.artifact_uri, "modelstore://qwen3635ba3bfp8")
+  assert_eq(
+    draft.artifact_digest,
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  )
+  // The import already reported the byte count, and a managed revision is
+  // signed by the source manifest the control plane wrote beside it.
+  assert_eq(draft.artifact_size_bytes, "2171355326")
+  assert_eq(
+    draft.artifact_signature_ref,
+    "modelstore://qwen3635ba3bfp8/lunanexa-source-manifest.json",
+  )
+  // This candidate carries no registered alias, so its own id is the selector.
+  assert_eq(draft.model_selector, "model.minicpm5-1b")
+  let (runtime_picked, _) = update(
+    picked,
+    Console(TemplateRuntimeSelected("text-runtime@runtime-v1")),
+    emit,
+  )
+  let draft = runtime_picked.console.template_draft
+  assert_eq(draft.runtime_name, "text-runtime")
+  assert_eq(draft.runtime_version, "runtime-v1")
+  assert_eq(
+    draft.runtime_image_digest,
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  )
+  assert_eq(draft.runtime_architectures, "nvidia-gb10")
+  assert_eq(draft.architecture, "nvidia-gb10")
+  assert_eq(draft.capability, TextGenerate)
+  // An unnamed runtime selection leaves the operator's own fields alone.
+  let (unmatched, _) = update(
+    runtime_picked,
+    Console(TemplateRuntimeSelected("vision-runtime@runtime-v9")),
+    emit,
+  )
+  assert_eq(unmatched.console.template_draft, draft)
+  // Naming the template is what makes the draft submittable.
+  let (versioned, _) = update(
+    runtime_picked,
+    Console(TemplateTextChanged(TemplateVersion, "v1")),
+    emit,
+  )
+  let (titled, _) = update(
+    versioned,
+    Console(TemplateTextChanged(TemplateDisplayName, "Text small")),
+    emit,
+  )
+  let (named, _) = update(
+    titled,
+    Console(TemplateTextChanged(TemplateId, "text-small")),
+    emit,
+  )
+  assert_true(@ui.template_draft_valid(named.console.template_draft))
+  // A number outside the planner's bound is caught before a request is built.
+  let (over_bound, _) = update(
+    named,
+    Console(TemplateTextChanged(TemplateAcceleratorCount, "65")),
+    emit,
+  )
+  assert_true(template_registration_body(over_bound.console.template_draft) is None)
+  let (refused, _) = update(
+    over_bound,
+    Console(SubmitTemplateRegistration),
+    emit,
+  )
+  assert_false(refused.console.loading)
+  assert_true(refused.console.error_message is Some(_))
+  let (fixed, _) = update(
+    over_bound,
+    Console(TemplateTextChanged(TemplateAcceleratorCount, "1")),
+    emit,
+  )
+  let (submitted, _) = update(fixed, Console(SubmitTemplateRegistration), emit)
+  assert_true(submitted.console.loading)
+  assert_eq(submitted.console.error_message, None)
+  let body = template_registration_body(fixed.console.template_draft).unwrap()
+  let sent : @deployment.ModelServiceTemplate = @json.from_json(
+    @json.parse(body),
+  )
+  assert_eq(sent.template_id, "text-small")
+  assert_eq(sent.version, "v1")
+  assert_eq(sent.display_name, "Text small")
+  assert_eq(sent.model_id, "model.minicpm5-1b")
+  assert_eq(sent.model_version, "modelscope-main")
+  assert_eq(sent.model_selector, "model.minicpm5-1b")
+  assert_eq(sent.artifact.uri, "modelstore://qwen3635ba3bfp8")
+  assert_eq(sent.artifact.size_bytes, 2171355326L)
+  assert_eq(
+    sent.artifact.signature_ref,
+    "modelstore://qwen3635ba3bfp8/lunanexa-source-manifest.json",
+  )
+  assert_eq(sent.runtime.name, "text-runtime")
+  assert_eq(sent.runtime.architectures, ["nvidia-gb10"])
+  assert_eq(sent.runtime.capabilities, [TextGenerate])
+  assert_false(sent.runtime.supports_batching)
+  assert_false(sent.runtime.supports_multi_node)
+  assert_eq(sent.capability, TextGenerate)
+  assert_eq(sent.architecture, "nvidia-gb10")
+  assert_eq(sent.resources.accelerator_count, 1)
+  assert_eq(sent.resources.accelerator_memory_mib, 32768)
+  assert_eq(sent.resources.cpu_millis, 4000)
+  assert_eq(sent.resources.memory_mib, 65536)
+  // A template reaches the controller and the artifact store, and nothing else.
+  assert_true(sent.network.allow_controller)
+  assert_true(sent.network.allow_artifact_store)
+  assert_eq(sent.network.allowed_egress, [])
+  assert_eq(sent.health.readiness_path, "/health")
+  assert_eq(sent.health.interval_ms, 5000)
+  assert_eq(sent.health.failure_threshold, 6)
+  assert_eq(sent.health.termination_grace_ms, 60000)
+  assert_eq(sent.data_policy.classification, Internal)
+  assert_eq(sent.data_policy.retention, Ephemeral)
+  assert_eq(sent.secret_refs, ["runtime-token"])
+  assert_eq(sent.rollout.canary_replicas, 1)
+  assert_false(sent.rollout.automatic_promotion)
+  assert_true(sent.rollout.automatic_rollback)
+  assert_eq(sent.rollout.readiness_timeout_ms, 600000L)
+  // The control plane signs a template itself and refuses a caller that
+  // supplies either half, so both go out empty.
+  assert_eq(sent.approval_receipt, "")
+  assert_eq(sent.signature, "")
+  // Int64 fields travel as JSON strings; Int fields stay numbers.
+  assert_true(body.contains("\"size_bytes\":\"2171355326\""))
+  assert_true(body.contains("\"readiness_timeout_ms\":\"600000\""))
+  assert_true(body.contains("\"interval_ms\":5000"))
+  assert_true(body.contains("\"accelerator_count\":1"))
+  assert_true(body.contains("\"retention\":\"Ephemeral\""))
+  // The body is a template the deployment service's own planner accepts.
+  try @deployment.validate_template(sent, require_signature=false) catch {
+    _ => fail("the console built a template the planner refuses")
+  } noraise {
+    _ => ()
+  }
+}
+
+///|
+test "an evaluation capture carries its consent receipt into the body" {
+  let model = template_test_model()
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let draft = {
+    ..@ui.empty_template_draft(),
+    template_id: "text-capture",
+    version: "v1",
+    display_name: "Text capture",
+    model_selector: "text.default",
+    model_id: "model.minicpm5-1b",
+    model_version: "modelscope-main",
+    artifact_uri: "modelstore://qwen3635ba3bfp8",
+    artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    artifact_size_bytes: "2171355326",
+    artifact_signature_ref: "modelstore://qwen3635ba3bfp8/lunanexa-source-manifest.json",
+    runtime_name: "text-runtime",
+    runtime_version: "runtime-v1",
+    runtime_image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    runtime_architectures: "nvidia-gb10",
+    architecture: "nvidia-gb10",
+    capability: TextGenerate,
+  }
+  let (captured, _) = update(
+    { ..model, console: { ..model.console, template_draft: draft }, },
+    Console(TemplateFlagToggled(CaptureForEvaluation)),
+    emit,
+  )
+  assert_true(captured.console.template_draft.capture_for_evaluation)
+  // A capture without a receipt is one the planner refuses, so no body is built.
+  assert_true(template_registration_body(captured.console.template_draft) is None)
+  let (receipted, _) = update(
+    captured,
+    Console(TemplateTextChanged(TemplateConsentReceipt, "consent:evaluation:1")),
+    emit,
+  )
+  let body = template_registration_body(receipted.console.template_draft).unwrap()
+  assert_true(body.contains("\"EvaluationCapture\""))
+  assert_true(body.contains("consent:evaluation:1"))
+  assert_true(body.contains("\"Ephemeral\"") == false)
+  // Turning the capture off clears the reuse switches with it.
+  let (released, _) = update(
+    receipted,
+    Console(TemplateFlagToggled(CaptureForEvaluation)),
+    emit,
+  )
+  assert_false(released.console.template_draft.capture_for_evaluation)
+  assert_false(released.console.template_draft.allow_cache)
+  assert_false(released.console.template_draft.allow_training_reuse)
+  assert_true(
+    template_registration_body(released.console.template_draft)
+    .unwrap()
+    .contains("\"Ephemeral\""),
+  )
+}
+
+///|
+test "demo mode previews the catalog template form without mutation" {
+  let base = @ui.demo_state()
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    alerts_window: Today,
+    console: { ..base, route: Catalog },
+    console_read_groups: Map([]),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (picked, _) = update(
+    model,
+    Console(TemplateModelSelected("lunanexa.text.general@v3")),
+    emit,
+  )
+  let draft = picked.console.template_draft
+  assert_eq(draft.model_id, "lunanexa.text.general")
+  assert_eq(draft.artifact_uri, "modelstore://lunanexa.text.general/v3")
+  assert_eq(draft.model_selector, "text.default")
+  let (runtime_picked, _) = update(
+    picked,
+    Console(TemplateRuntimeSelected("text-runtime@runtime-v1")),
+    emit,
+  )
+  assert_eq(
+    runtime_picked.console.template_draft.runtime_architectures,
+    "nvidia-gb10",
+  )
+  let (submitted, _) = update(
+    runtime_picked,
+    Console(SubmitTemplateRegistration),
+    emit,
+  )
+  assert_eq(
+    submitted.console.success_message,
+    Some("Demo is read-only; no controller operation was sent or persisted."),
+  )
+  assert_eq(submitted.console.catalog_templates, base.catalog_templates)
+}
+
+///|
+#warnings("-alert_unstable")
+test "the interactive catalog view renders the template form for a live operator" {
+  let emit : @rabbita.Emit[@ui.ConsoleMessage] = Emit(_ => @rabbita.none)
+  let picked = template_test_model().console.template_draft
+  let state = {
+    ..@ui.demo_state(),
+    route: Catalog,
+    template_draft: {
+      ..picked,
+      template_id: "text-small",
+      version: "v1",
+      display_name: "Text small",
+      model_id: "lunanexa.text.general",
+      model_version: "v3",
+      model_selector: "text.default",
+      artifact_uri: "modelstore://lunanexa.text.general/v3",
+      artifact_digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      artifact_size_bytes: "16000000000",
+      artifact_signature_ref: "modelstore://lunanexa.text.general/v3/lunanexa-source-manifest.json",
+      runtime_name: "text-runtime",
+      runtime_version: "runtime-v1",
+      runtime_image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      runtime_architectures: "nvidia-gb10",
+      architecture: "nvidia-gb10",
+    },
+    operator_authenticated: true,
+  }
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(@ui.interactive_view(state, emit))
+  })
+  // The form is drawn beside the picker it feeds, and the operator's own draft
+  // is what every control carries.
+  assert_true(html.contains("id=\"template-model-picker\""))
+  assert_true(html.contains("value=\"lunanexa.text.general@v3\" selected"))
+  assert_true(html.contains("value=\"text-runtime@runtime-v1\" selected"))
+  assert_true(html.contains("value=\"text-small\""))
+  // A draft that satisfies every rule leaves the submit control live.
+  let label_at = html.find("Register template").unwrap()
+  let mut button_tag = ""
+  for segment in html[:label_at].split("<button") {
+    button_tag = segment.to_owned()
+  }
+  assert_false(button_tag.contains("disabled"))
+}
+

@@ -26,6 +26,12 @@ pub fn announcement_ready(AnnouncementDraft) -> Bool
 
 pub fn confirmation_receipt(DestructiveAction, String) -> Confirmation
 
+pub fn data_class_label(@i18n.Locale, @contracts.DataClass) -> String
+
+pub fn data_class_name(@contracts.DataClass) -> String
+
+pub fn data_class_options() -> Array[@contracts.DataClass]
+
 pub fn default_runtime_draft() -> RuntimeProfileDraft
 
 pub fn default_state() -> ConsoleState
@@ -38,6 +44,8 @@ pub fn empty_model_alias_draft() -> ModelAliasDraft
 
 pub fn empty_model_license_draft() -> ModelLicenseDraft
 
+pub fn empty_template_draft() -> TemplateDraft
+
 pub fn filter_alerts(Array[NotificationRow], AlertsWindow, Int64) -> Array[NotificationRow]
 
 pub fn group_alerts_by_day(Array[NotificationRow]) -> Array[(String, Array[NotificationRow])]
@@ -45,6 +53,8 @@ pub fn group_alerts_by_day(Array[NotificationRow]) -> Array[(String, Array[Notif
 pub fn group_models_by_model_id(Array[ModelRow]) -> Array[(String, Array[ModelRow])]
 
 pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage], alerts_window? : AlertsWindow, now_unix_ms? : Int64) -> @html.Html
+
+pub fn known_runtimes(ConsoleState) -> Array[@contracts.RuntimeSpec]
 
 pub fn model_alias_draft_valid(ModelAliasDraft) -> Bool
 
@@ -60,6 +70,8 @@ pub fn open_alert_count(Array[NotificationRow]) -> Int
 
 pub fn parse_alerts_window(String) -> AlertsWindow
 
+pub fn parse_data_class(String) -> @contracts.DataClass
+
 pub fn parse_quick_topology(String) -> QuickTopology
 
 pub fn parse_runtime_capability(String) -> @contracts.Capability
@@ -70,9 +82,41 @@ pub fn runtime_capability_name(@contracts.Capability) -> String
 
 pub fn runtime_capability_options() -> Array[@contracts.Capability]
 
+pub fn runtime_key(@contracts.RuntimeSpec) -> String
+
 pub fn runtime_profile_draft_valid(RuntimeProfileDraft) -> Bool
 
 pub fn runtime_profile_name_valid(String) -> Bool
+
+pub fn template_artifact_reference_valid(String) -> Bool
+
+pub fn template_draft_valid(TemplateDraft) -> Bool
+
+pub fn template_draft_with_flag(TemplateDraft, TemplateFlag, Bool) -> TemplateDraft
+
+pub fn template_draft_with_text(TemplateDraft, TemplateField, String) -> TemplateDraft
+
+pub fn template_field_id(TemplateField) -> String
+
+pub fn template_field_value(TemplateDraft, TemplateField) -> String
+
+pub fn template_flag_id(TemplateFlag) -> String
+
+pub fn template_flag_label(@i18n.Locale, TemplateFlag) -> String
+
+pub fn template_flag_value(TemplateDraft, TemplateFlag) -> Bool
+
+pub fn template_identifier_list(String, maximum~ : Int, identifier_length? : Int) -> Array[String]?
+
+pub fn template_int64_field(String, maximum~ : Int64) -> Int64?
+
+pub fn template_int_field(String, maximum~ : Int) -> Int?
+
+pub fn template_readiness_path_valid(String) -> Bool
+
+pub fn template_runtime_name_valid(String) -> Bool
+
+pub fn template_signature_reference_valid(String) -> Bool
 
 pub fn view(ConsoleState) -> @html.Html
 
@@ -271,6 +315,13 @@ pub(all) enum ConsoleMessage {
   RuntimeBatchingToggled
   RuntimeMultiNodeToggled
   SubmitRuntimeRegistration
+  TemplateTextChanged(TemplateField, String)
+  TemplateFlagToggled(TemplateFlag)
+  TemplateCapabilityChanged(String)
+  TemplateClassificationChanged(String)
+  TemplateModelSelected(String)
+  TemplateRuntimeSelected(String)
+  SubmitTemplateRegistration
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -373,6 +424,8 @@ pub(all) struct ConsoleState {
   model_license_draft : ModelLicenseDraft
   model_alias_draft : ModelAliasDraft
   runtime_draft : RuntimeProfileDraft
+  template_draft : TemplateDraft
+  registered_runtimes : Array[@contracts.RuntimeSpec]
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -701,6 +754,83 @@ pub(all) struct StreamEventView {
   text : String
   receipt : String
 } derive(Eq)
+
+pub(all) struct TemplateDraft {
+  template_id : String
+  version : String
+  display_name : String
+  description : String
+  model_selector : String
+  model_id : String
+  model_version : String
+  artifact_uri : String
+  artifact_digest : String
+  artifact_size_bytes : String
+  artifact_signature_ref : String
+  runtime_name : String
+  runtime_version : String
+  runtime_image_digest : String
+  runtime_architectures : String
+  runtime_multi_node : Bool
+  capability : @contracts.Capability
+  architecture : String
+  accelerator_count : String
+  accelerator_memory_mib : String
+  cpu_millis : String
+  memory_mib : String
+  readiness_path : String
+  health_interval_ms : String
+  failure_threshold : String
+  termination_grace_ms : String
+  classification : @contracts.DataClass
+  capture_for_evaluation : Bool
+  evaluation_consent_receipt : String
+  allow_cache : Bool
+  allow_training_reuse : Bool
+  secret_refs : String
+  canary_replicas : String
+  automatic_promotion : Bool
+  automatic_rollback : Bool
+  readiness_timeout_ms : String
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TemplateField {
+  TemplateId
+  TemplateVersion
+  TemplateDisplayName
+  TemplateDescription
+  TemplateModelSelector
+  TemplateArtifactUri
+  TemplateArtifactDigest
+  TemplateArtifactSizeBytes
+  TemplateArtifactSignatureRef
+  TemplateRuntimeName
+  TemplateRuntimeVersion
+  TemplateRuntimeImageDigest
+  TemplateRuntimeArchitectures
+  TemplateArchitecture
+  TemplateAcceleratorCount
+  TemplateAcceleratorMemoryMib
+  TemplateCpuMillis
+  TemplateMemoryMib
+  TemplateReadinessPath
+  TemplateHealthIntervalMs
+  TemplateFailureThreshold
+  TemplateTerminationGraceMs
+  TemplateConsentReceipt
+  TemplateSecretRefs
+  TemplateCanaryReplicas
+  TemplateReadinessTimeoutMs
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TemplateFlag {
+  RuntimeMultiNode
+  CaptureForEvaluation
+  AllowCache
+  AllowTrainingReuse
+  AutomaticPromotion
+  AutomaticRollback
+} derive(Eq, @debug.Debug)
 
 pub(all) struct TrialSummary {
   registered_trials : Int

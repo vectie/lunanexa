@@ -1708,6 +1708,25 @@ fn input_tag_for(html : String, id : String) -> String {
 }
 
 ///|
+/// The whole rendered `<input>` element for `id`. A `disabled` attribute is
+/// written before the id, so the tag helper above would cut it off.
+fn input_element_for(html : String, id : String) -> String {
+  let needle = "id=\"" + id + "\""
+  guard html.find(needle) is Some(start) else {
+    return ""
+  }
+  let mut opened = ""
+  for segment in html[:start].split("<input") {
+    opened = segment.to_owned()
+  }
+  let rest = html[start:]
+  guard rest.find(">") is Some(end) else {
+    return ""
+  }
+  "<input" + opened + rest[:end].to_owned()
+}
+
+///|
 /// One adopted candidate, with the licence identity and managed-store revision
 /// the registry reported for it.
 fn candidate_model_row() -> @ui.ModelRow {
@@ -1872,4 +1891,191 @@ test "runtime registration stays localized and needs operator authority" {
     },
   })
   assert_true(button_tag_for(disconnected, "Register runtime").contains("disabled"))
+}
+
+///|
+/// A catalog template every planner rule admits, so a test can flip one field
+/// and watch the decision change.
+fn registered_template_draft() -> @ui.TemplateDraft {
+  {
+    ..@ui.empty_template_draft(),
+    template_id: "text-small",
+    version: "v1",
+    display_name: "Text small",
+    description: "Approved DGX Spark text service",
+    model_selector: "text.default",
+    model_id: "model.text",
+    model_version: "v1",
+    artifact_uri: "modelstore://model.text/v1",
+    artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    artifact_size_bytes: "16000000000",
+    artifact_signature_ref: "modelstore://model.text/v1/lunanexa-source-manifest.json",
+    runtime_name: "text-runtime",
+    runtime_version: "runtime-v1",
+    runtime_image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    runtime_architectures: "nvidia-gb10",
+    architecture: "nvidia-gb10",
+    capability: TextGenerate,
+  }
+}
+
+///|
+test "the template form groups every field, prefilled from what the console knows" {
+  let base = console_state(Catalog)
+  let html = @ui.render({ ..base, template_draft: registered_template_draft() })
+  assert_true(html.contains("Register a catalog template"))
+  assert_true(html.contains("Preflight still applies"))
+  assert_true(html.contains("Registers one immutable model-service template."))
+  for
+    id in [
+      "template-registration-title", "template-model-picker", "template-runtime-picker",
+      "template-id", "template-version", "template-display-name",
+      "template-description", "template-model-selector", "template-artifact-uri",
+      "template-artifact-digest", "template-artifact-size",
+      "template-artifact-signature", "template-runtime-name",
+      "template-runtime-version", "template-runtime-image-digest",
+      "template-runtime-architectures", "template-architecture",
+      "template-capability", "template-classification", "template-accelerator-count",
+      "template-accelerator-memory", "template-cpu-millis", "template-memory",
+      "template-secret-refs", "template-readiness-path", "template-health-interval",
+      "template-failure-threshold", "template-termination-grace",
+      "template-consent-receipt", "template-canary-replicas",
+      "template-readiness-timeout", "template-runtime-multi-node",
+      "template-capture-for-evaluation", "template-allow-cache",
+      "template-allow-training-reuse", "template-automatic-promotion",
+      "template-automatic-rollback",
+    ] {
+    assert_true(html.contains("id=\"\{id}\""))
+  }
+  // Seven decisions rather than one wall of inputs.
+  for
+    legend in [
+      "Template identity", "Model and artifact", "Runtime", "Resources and secrets",
+      "Health probes", "Data policy", "Rollout",
+    ] {
+    assert_true(html.contains(legend))
+  }
+  // The pickers show the registered model and runtime the draft names.
+  assert_true(html.contains("value=\"model.text@v1\" selected"))
+  assert_true(html.contains("value=\"text-runtime@runtime-v1\" selected"))
+  // A bounded field answers to the planner's bound, not to browser validation.
+  assert_false(html.contains("template-accelerator-count\" type=\"number\""))
+  // The reuse switches are only reachable inside an evaluation capture, and
+  // the capability select offers only what the chosen runtime serves.
+  assert_true(input_element_for(html, "template-allow-cache").contains("disabled"))
+  assert_false(
+    input_element_for(html, "template-automatic-rollback").contains("disabled"),
+  )
+  assert_false(
+    html.contains("value=\"EmbeddingCreate\""),
+  )
+  // The raw-JSON panel keeps its registration operation.
+  assert_true(
+    @ui.render(console_state(Policies)).contains("value=\"register-template\""),
+  )
+}
+
+///|
+test "the template form is offered only to an authenticated operator" {
+  let base = console_state(Catalog)
+  let ready = { ..base, template_draft: registered_template_draft(), }
+  let authenticated = @ui.render({ ..ready, operator_authenticated: true, })
+  assert_false(
+    button_tag_for(authenticated, "Register template").contains("disabled"),
+  )
+  let anonymous = @ui.render({ ..ready, operator_authenticated: false, })
+  assert_true(button_tag_for(anonymous, "Register template").contains("disabled"))
+  // The default draft names nothing, so the control plane is never asked.
+  let empty = @ui.render({ ..ready, template_draft: @ui.empty_template_draft(), })
+  assert_true(button_tag_for(empty, "Register template").contains("disabled"))
+}
+
+///|
+test "the template form mirrors the planner's cross-field rules" {
+  let draft = registered_template_draft()
+  assert_true(@ui.template_draft_valid(draft))
+  // The template's architecture must be one its runtime declares.
+  assert_false(@ui.template_draft_valid({ ..draft, architecture: "nvidia-h100", }))
+  assert_false(
+    @ui.template_draft_valid({ ..draft, runtime_architectures: "nvidia-sm121", }),
+  )
+  assert_true(
+    @ui.template_draft_valid({
+      ..draft,
+      runtime_architectures: "nvidia-gb10, nvidia-sm121",
+    }),
+  )
+  // An evaluation capture must name its consent receipt...
+  assert_false(@ui.template_draft_valid({ ..draft, capture_for_evaluation: true, }))
+  assert_true(
+    @ui.template_draft_valid({
+      ..draft,
+      capture_for_evaluation: true,
+      evaluation_consent_receipt: "consent:evaluation:2026-01",
+    }),
+  )
+  // ...and an ephemeral template may neither cache nor reuse a payload.
+  assert_false(@ui.template_draft_valid({ ..draft, allow_cache: true, }))
+  assert_false(@ui.template_draft_valid({ ..draft, allow_training_reuse: true, }))
+  // Clearing the capture clears the two switches with it.
+  let captured = @ui.template_draft_with_flag(
+    {
+      ..draft,
+      capture_for_evaluation: true,
+      evaluation_consent_receipt: "consent:evaluation:2026-01",
+      allow_cache: true,
+      allow_training_reuse: true,
+    },
+    CaptureForEvaluation,
+    false,
+  )
+  assert_false(captured.capture_for_evaluation)
+  assert_false(captured.allow_cache)
+  assert_false(captured.allow_training_reuse)
+  assert_true(@ui.template_draft_valid(captured))
+  // Every number keeps the bound the deployment service enforces.
+  assert_false(@ui.template_draft_valid({ ..draft, accelerator_count: "65", }))
+  assert_false(@ui.template_draft_valid({ ..draft, accelerator_count: "1.5", }))
+  assert_false(@ui.template_draft_valid({ ..draft, canary_replicas: "0", }))
+  assert_false(
+    @ui.template_draft_valid({
+      ..draft,
+      artifact_size_bytes: "1099511627777",
+    }),
+  )
+  assert_false(
+    @ui.template_draft_valid({ ..draft, readiness_timeout_ms: "86400001", }),
+  )
+  assert_false(
+    @ui.template_draft_valid({
+      ..draft,
+      readiness_path: "health",
+    }),
+  )
+  // A secret reference list is comma-separated, unique and optional; the
+  // transports the artifact gateway materializes are `s3://` and `modelstore://`.
+  assert_true(@ui.template_draft_valid({ ..draft, secret_refs: "", }))
+  assert_false(
+    @ui.template_draft_valid({ ..draft, secret_refs: "runtime-token, runtime-token", }),
+  )
+  assert_false(
+    @ui.template_draft_valid({ ..draft, artifact_uri: "file:///data/models/text", }),
+  )
+  assert_true(
+    @ui.template_draft_valid({ ..draft, artifact_uri: "s3://models/text/v1", }),
+  )
+  // A managed revision is signed by its own source manifest.
+  assert_true(
+    @ui.template_draft_valid({
+      ..draft,
+      artifact_signature_ref: "modelstore://model.text/v1/lunanexa-source-manifest.json",
+    }),
+  )
+  assert_false(
+    @ui.template_draft_valid({ ..draft, artifact_signature_ref: "file:///sig", }),
+  )
+  assert_false(
+    @ui.template_draft_valid({ ..draft, display_name: "", }),
+  )
+  assert_false(@ui.template_draft_valid({ ..draft, template_id: "", }))
 }
