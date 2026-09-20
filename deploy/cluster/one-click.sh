@@ -185,6 +185,39 @@ as_root() {
 }
 
 # Render every per-node artefact for the selected nodes into the work directory.
+# What each node can actually serve, measured rather than declared: the
+# runtimes the platform has registered, intersected with the images that node's
+# container store really holds. The digest has to match, not just the
+# repository name, because the renderer and the node both key on
+# `<name>@<image_digest>` -- a node holding a different build of the same
+# repository cannot serve the profile.
+measure_runtime_names() {
+  local registry_json pairs
+  registry_json=$(curl -sf "http://127.0.0.1:${FRONT_DOOR_PORT}/v1/registry" 2>/dev/null || true)
+  [ -n "${registry_json}" ] || return 0
+  pairs=$(printf '%s' "${registry_json}" | python3 -c '
+import json, sys
+registry = json.load(sys.stdin)
+for runtime in registry.get("runtimes") or []:
+    print(runtime["name"] + "\t" + runtime["image_digest"])
+' 2>/dev/null || true)
+  [ -n "${pairs}" ] || return 0
+
+  local node held name digest
+  for node in $(selected_nodes); do
+    # ctr needs root, and it is the only view that carries the digest.
+    held=$(node_sudo "${node}" "k3s ctr -n k8s.io images ls" 2>/dev/null |
+      awk 'NR > 1 { print $1" "$3 }' || true)
+    while IFS=$'\t' read -r name digest; do
+      [ -n "${name}" ] || continue
+      printf '%s\n' "${held}" |
+        awk -v ref="${name}@" -v want="${digest}" \
+          'index($1, ref) == 1 && $2 == want { found = 1 } END { exit !found }' &&
+        printf '%s=%s,' "${node}" "${name}"
+    done <<< "${pairs}"
+  done
+}
+
 render_selected_nodes() {
   local arguments=()
   local node
@@ -195,6 +228,7 @@ render_selected_nodes() {
     --manifest "${MANIFEST}" \
     --output "${RENDERED}" \
     --template-dir "${REPO_ROOT}/deploy/cluster" \
+    --runtime-names "$(measure_runtime_names)" \
     "${arguments[@]}" >/dev/null
 }
 
@@ -477,6 +511,7 @@ phase_registry() {
   done
 
   publish_registry_images
+  pull_registry_images
 
   step "proving a pull from every selected node"
   local proof
@@ -492,6 +527,31 @@ phase_registry() {
       k3s ctr images pull --hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d '${authority}/${proof}' >/dev/null" ||
       die "${node} cannot pull ${authority}/${proof}"
     step "${node}: pulled ${authority}/${proof} from the registry"
+  done
+}
+
+# Images a compute node must hold before it can be asked to serve anything.
+# Pulling them here is what turns "this node can run runtime X" from a
+# declaration into a fact the planner can read back.
+pull_registry_images() {
+  local authority references
+  authority="$(cluster - registry host):$(cluster - registry port)"
+  references=$(python3 -c 'import json,sys
+reg=json.load(open(sys.argv[1]))["registry"]
+print("\n".join(reg.get("pull") or []))' "${MANIFEST}")
+  [ -n "${references}" ] || return 0
+  local node reference
+  for node in $(selected_nodes); do
+    while IFS= read -r reference; do
+      [ -n "${reference}" ] || continue
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        printf '  [dry-run] %s: pull %s/%s\n' "${node}" "${authority}" "${reference}" >&2
+        continue
+      fi
+      node_sudo "${node}" "k3s ctr images pull --hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d '${authority}/${reference}' >/dev/null" ||
+        die "${node} cannot pull ${authority}/${reference}"
+      step "${node}: holds ${reference}"
+    done <<< "${references}"
   done
 }
 

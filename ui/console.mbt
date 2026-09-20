@@ -294,6 +294,900 @@ pub fn parse_runtime_capability(value : String) -> @contracts.Capability {
 }
 
 ///|
+/// The four data classes a template may classify its payloads with.
+pub fn data_class_options() -> Array[@contracts.DataClass] {
+  [Public, Internal, Confidential, Restricted]
+}
+
+///|
+pub fn data_class_name(classification : @contracts.DataClass) -> String {
+  match classification {
+    Public => "Public"
+    Internal => "Internal"
+    Confidential => "Confidential"
+    Restricted => "Restricted"
+  }
+}
+
+///|
+pub fn parse_data_class(value : String) -> @contracts.DataClass {
+  match value {
+    "Public" => Public
+    "Confidential" => Confidential
+    "Restricted" => Restricted
+    _ => Internal
+  }
+}
+
+///|
+pub fn data_class_label(
+  locale : @i18n.Locale,
+  classification : @contracts.DataClass,
+) -> String {
+  match classification {
+    Public => localized(locale, "Public", "公开")
+    Internal => localized(locale, "Internal", "内部")
+    Confidential => localized(locale, "Confidential", "机密")
+    Restricted => localized(locale, "Restricted", "受限")
+  }
+}
+
+///|
+/// One model-service template an operator registers with the control plane.
+/// The control plane signs a catalog template itself, so `approval_receipt` and
+/// `signature` have no field here: a caller that supplied them is refused.
+/// Numeric fields are text because that is what an input carries, and the rules
+/// that accept them live beside them.
+pub(all) struct TemplateDraft {
+  template_id : String
+  version : String
+  display_name : String
+  description : String
+  model_selector : String
+  model_id : String
+  model_version : String
+  artifact_uri : String
+  artifact_digest : String
+  artifact_size_bytes : String
+  artifact_signature_ref : String
+  runtime_name : String
+  runtime_version : String
+  runtime_image_digest : String
+  runtime_architectures : String
+  runtime_multi_node : Bool
+  capability : @contracts.Capability
+  architecture : String
+  accelerator_count : String
+  accelerator_memory_mib : String
+  cpu_millis : String
+  memory_mib : String
+  readiness_path : String
+  health_interval_ms : String
+  failure_threshold : String
+  termination_grace_ms : String
+  classification : @contracts.DataClass
+  capture_for_evaluation : Bool
+  evaluation_consent_receipt : String
+  allow_cache : Bool
+  allow_training_reuse : Bool
+  secret_refs : String
+  canary_replicas : String
+  automatic_promotion : Bool
+  automatic_rollback : Bool
+  readiness_timeout_ms : String
+} derive(Debug, Eq)
+
+///|
+/// Every text control of the template form, addressed by name so one message
+/// covers twenty-five fields instead of twenty-five messages.
+pub(all) enum TemplateField {
+  TemplateId
+  TemplateVersion
+  TemplateDisplayName
+  TemplateDescription
+  TemplateModelSelector
+  TemplateArtifactUri
+  TemplateArtifactDigest
+  TemplateArtifactSizeBytes
+  TemplateArtifactSignatureRef
+  TemplateRuntimeName
+  TemplateRuntimeVersion
+  TemplateRuntimeImageDigest
+  TemplateRuntimeArchitectures
+  TemplateArchitecture
+  TemplateAcceleratorCount
+  TemplateAcceleratorMemoryMib
+  TemplateCpuMillis
+  TemplateMemoryMib
+  TemplateReadinessPath
+  TemplateHealthIntervalMs
+  TemplateFailureThreshold
+  TemplateTerminationGraceMs
+  TemplateConsentReceipt
+  TemplateSecretRefs
+  TemplateCanaryReplicas
+  TemplateReadinessTimeoutMs
+} derive(Debug, Eq)
+
+///|
+/// The switches a template carries. Multi-node support is what an admitted CX7
+/// pair needs; the two capture switches only mean anything inside an evaluation
+/// capture.
+pub(all) enum TemplateFlag {
+  RuntimeMultiNode
+  CaptureForEvaluation
+  AllowCache
+  AllowTrainingReuse
+  AutomaticPromotion
+  AutomaticRollback
+} derive(Debug, Eq)
+
+///|
+/// The defaults are the ones this deployment admits: one accelerator of the
+/// admitted profile, the platform's own readiness probe, ephemeral payloads,
+/// and the `runtime-token` every service assignment in this plane declares.
+pub fn empty_template_draft() -> TemplateDraft {
+  {
+    template_id: "",
+    version: "",
+    display_name: "",
+    description: "",
+    model_selector: "",
+    model_id: "",
+    model_version: "",
+    artifact_uri: "",
+    artifact_digest: "",
+    artifact_size_bytes: "",
+    artifact_signature_ref: "",
+    runtime_name: "",
+    runtime_version: "",
+    runtime_image_digest: "",
+    runtime_architectures: "",
+    runtime_multi_node: false,
+    capability: TextGenerate,
+    architecture: "",
+    accelerator_count: "1",
+    accelerator_memory_mib: "32768",
+    cpu_millis: "4000",
+    memory_mib: "65536",
+    readiness_path: "/health",
+    health_interval_ms: "5000",
+    failure_threshold: "6",
+    termination_grace_ms: "60000",
+    classification: Internal,
+    capture_for_evaluation: false,
+    evaluation_consent_receipt: "",
+    allow_cache: false,
+    allow_training_reuse: false,
+    secret_refs: "runtime-token",
+    canary_replicas: "1",
+    automatic_promotion: false,
+    automatic_rollback: true,
+    readiness_timeout_ms: "600000",
+  }
+}
+
+///|
+/// How one template field travels: free text, an `Int`, or an `Int64` that the
+/// contracts marshal as a JSON string. The bound is the server's own inclusive
+/// upper limit, so the control and the rule cannot drift apart.
+priv enum TemplateFieldKind {
+  FreeText
+  Count(Int)
+  ByteCount(Int64)
+}
+
+///|
+/// The block a field is grouped under. The form renders one fieldset per block,
+/// so a template with twenty-five inputs still reads as seven decisions.
+priv enum TemplateSection {
+  TemplateIdentity
+  TemplateArtifact
+  TemplateRuntime
+  TemplateResources
+  TemplateProbes
+  TemplateDataPolicy
+  TemplateRollout
+} derive(Eq)
+
+///|
+/// One text control of the template form: what it is called, the bound the
+/// control enforces, and the rule as help text.
+priv struct TemplateFieldSpec {
+  field : TemplateField
+  section : TemplateSection
+  label_en : String
+  label_zh : String
+  placeholder : String
+  kind : TemplateFieldKind
+  help_en : String
+  help_zh : String
+  optional : Bool
+}
+
+///|
+fn template_field_spec(
+  field : TemplateField,
+  section : TemplateSection,
+  label_en : String,
+  label_zh : String,
+  placeholder : String,
+  kind : TemplateFieldKind,
+  help_en : String,
+  help_zh : String,
+  optional? : Bool = false,
+) -> TemplateFieldSpec {
+  {
+    field,
+    section,
+    label_en,
+    label_zh,
+    placeholder,
+    kind,
+    help_en,
+    help_zh,
+    optional,
+  }
+}
+
+///|
+/// The whole editable field set of `ModelServiceTemplate`, in the order
+/// `@deployment.validate_template` reads it. `model_id` and `model_version` are
+/// absent because the model picker owns them; `allowed_egress`, the two network
+/// reachability flags, `approval_receipt` and `signature` are absent because the
+/// deployment service admits exactly one value for each.
+fn template_field_specs() -> Array[TemplateFieldSpec] {
+  [
+    template_field_spec(
+      TemplateId,
+      TemplateIdentity,
+      "Template ID",
+      "模板 ID",
+      "text-small",
+      FreeText,
+      "Letters, numbers, dots, colons, hyphens, or underscores, up to 128 characters.",
+      "使用字母、数字、点、冒号、连字符或下划线，最多 128 个字符。",
+    ),
+    template_field_spec(
+      TemplateVersion,
+      TemplateIdentity,
+      "Template version",
+      "模板版本",
+      "v1",
+      FreeText,
+      "The immutable revision this template is registered as.",
+      "该模板注册的不可变版本。",
+    ),
+    template_field_spec(
+      TemplateDisplayName,
+      TemplateIdentity,
+      "Display name",
+      "显示名称",
+      "Approved text service",
+      FreeText,
+      "Shown in the template picker, up to 256 characters.",
+      "显示在模板选择器中，最多 256 个字符。",
+    ),
+    template_field_spec(
+      TemplateDescription,
+      TemplateIdentity,
+      "Description",
+      "说明",
+      "Digest-pinned text generation service",
+      FreeText,
+      "Optional operator note, up to 2048 characters.",
+      "可选的运维说明，最多 2048 个字符。",
+      optional=true,
+    ),
+    template_field_spec(
+      TemplateModelSelector,
+      TemplateArtifact,
+      "Model selector",
+      "模型选择器",
+      "text.default",
+      FreeText,
+      "The routing name workloads address. A registered alias of this model is a safe choice.",
+      "工作负载使用的路由名称。使用该模型已注册的别名是安全的选择。",
+    ),
+    template_field_spec(
+      TemplateArtifactUri,
+      TemplateArtifact,
+      "Artifact URI",
+      "制品 URI",
+      "modelstore://owner/repo",
+      FreeText,
+      "An `s3://` object or this control plane's own `modelstore://` revision.",
+      "`s3://` 对象，或本控制平面自有的 `modelstore://` 版本。",
+    ),
+    template_field_spec(
+      TemplateArtifactDigest,
+      TemplateArtifact,
+      "Artifact digest",
+      "制品摘要",
+      "sha256:…",
+      FreeText,
+      "Exactly sha256: followed by 64 hexadecimal characters.",
+      "必须为 sha256: 加 64 个十六进制字符。",
+    ),
+    template_field_spec(
+      TemplateArtifactSizeBytes,
+      TemplateArtifact,
+      "Artifact size (bytes)",
+      "制品大小（字节）",
+      "16000000000",
+      ByteCount(1099511627776L),
+      "A positive byte count, at most 1 TiB. The control plane carries it as a JSON string.",
+      "正整数字节数，最多 1 TiB。控制平面以 JSON 字符串传输该值。",
+    ),
+    template_field_spec(
+      TemplateArtifactSignatureRef,
+      TemplateArtifact,
+      "Signature reference",
+      "签名引用",
+      "modelstore://owner/repo/lunanexa-source-manifest.json",
+      FreeText,
+      "A managed revision is signed by its own source manifest; an `s3://` object names its detached signature.",
+      "受管版本由自身的来源清单签名；`s3://` 对象指向其分离签名。",
+    ),
+    template_field_spec(
+      TemplateRuntimeName,
+      TemplateRuntime,
+      "Runtime name",
+      "运行时名称",
+      "text-runtime",
+      FreeText,
+      "A registered runtime profile, up to 256 characters with no '@' and no '..'.",
+      "已注册的运行时配置，最多 256 个字符，不能包含 '@' 或 '..'。",
+    ),
+    template_field_spec(
+      TemplateRuntimeVersion,
+      TemplateRuntime,
+      "Runtime version",
+      "运行时版本",
+      "runtime-v1",
+      FreeText,
+      "Must be the version the registry admitted for this runtime.",
+      "必须是注册表为该运行时接纳的版本。",
+    ),
+    template_field_spec(
+      TemplateRuntimeImageDigest,
+      TemplateRuntime,
+      "Runtime image digest",
+      "运行时镜像摘要",
+      "sha256:…",
+      FreeText,
+      "The verified image digest of the registered runtime.",
+      "已注册运行时的、已验证的镜像摘要。",
+    ),
+    template_field_spec(
+      TemplateRuntimeArchitectures,
+      TemplateRuntime,
+      "Runtime architectures",
+      "运行时架构",
+      "nvidia-gb10, nvidia-sm121",
+      FreeText,
+      "Comma-separated. Every entry must be a distinct architecture, and one of them must be this template's architecture.",
+      "以逗号分隔。每个条目必须是不同的架构，且其中之一必须是本模板的架构。",
+    ),
+    template_field_spec(
+      TemplateArchitecture,
+      TemplateRuntime,
+      "Accelerator architecture",
+      "加速器架构",
+      "nvidia-gb10",
+      FreeText,
+      "The architecture this template places on. It must appear in the runtime architectures above.",
+      "本模板放置所用的架构。必须出现在上面的运行时架构中。",
+    ),
+    template_field_spec(
+      TemplateAcceleratorCount,
+      TemplateResources,
+      "Accelerator count",
+      "加速器数量",
+      "1",
+      Count(64),
+      "Between 1 and 64 accelerators per replica.",
+      "每个副本 1 至 64 个加速器。",
+    ),
+    template_field_spec(
+      TemplateAcceleratorMemoryMib,
+      TemplateResources,
+      "Accelerator memory (MiB)",
+      "加速器显存（MiB）",
+      "32768",
+      Count(1048576),
+      "Between 1 and 1048576 MiB.",
+      "1 至 1048576 MiB。",
+    ),
+    template_field_spec(
+      TemplateCpuMillis,
+      TemplateResources,
+      "CPU millicores",
+      "CPU 毫核",
+      "4000",
+      Count(1000000),
+      "Between 1 and 1000000 millicores.",
+      "1 至 1000000 毫核。",
+    ),
+    template_field_spec(
+      TemplateMemoryMib,
+      TemplateResources,
+      "Host memory (MiB)",
+      "主机内存（MiB）",
+      "65536",
+      Count(1048576),
+      "Between 1 and 1048576 MiB.",
+      "1 至 1048576 MiB。",
+    ),
+    template_field_spec(
+      TemplateSecretRefs,
+      TemplateResources,
+      "Secret references",
+      "密钥引用",
+      "runtime-token",
+      FreeText,
+      "Comma-separated names of host secrets the deployment must already declare. Empty means the service needs none.",
+      "以逗号分隔、部署必须已声明的主机密钥名称。留空表示该服务不需要密钥。",
+      optional=true,
+    ),
+    template_field_spec(
+      TemplateReadinessPath,
+      TemplateProbes,
+      "Readiness path",
+      "就绪探针路径",
+      "/health",
+      FreeText,
+      "An absolute path with no '..', up to 256 characters.",
+      "绝对路径，不能包含 '..'，最多 256 个字符。",
+    ),
+    template_field_spec(
+      TemplateHealthIntervalMs,
+      TemplateProbes,
+      "Probe interval (ms)",
+      "探针间隔（毫秒）",
+      "5000",
+      Count(3600000),
+      "Between 1 and 3600000 ms.",
+      "1 至 3600000 毫秒。",
+    ),
+    template_field_spec(
+      TemplateFailureThreshold,
+      TemplateProbes,
+      "Failure threshold",
+      "失败阈值",
+      "6",
+      Count(100),
+      "Consecutive failed probes between 1 and 100.",
+      "连续失败探针数在 1 至 100 之间。",
+    ),
+    template_field_spec(
+      TemplateTerminationGraceMs,
+      TemplateProbes,
+      "Termination grace (ms)",
+      "终止宽限期（毫秒）",
+      "60000",
+      Count(3600000),
+      "Between 1 and 3600000 ms.",
+      "1 至 3600000 毫秒。",
+    ),
+    template_field_spec(
+      TemplateConsentReceipt,
+      TemplateDataPolicy,
+      "Evaluation consent receipt",
+      "评测同意凭据",
+      "consent:evaluation:2026-01",
+      FreeText,
+      "Required by an evaluation capture, and only then: it is the receipt that permits holding payloads.",
+      "仅在启用评测采集时必填：它是允许保留载荷的凭据。",
+      optional=true,
+    ),
+    template_field_spec(
+      TemplateCanaryReplicas,
+      TemplateRollout,
+      "Canary replicas",
+      "金丝雀副本数",
+      "1",
+      Count(64),
+      "Between 1 and 64 replicas carry the canary step.",
+      "1 至 64 个副本承载金丝雀阶段。",
+    ),
+    template_field_spec(
+      TemplateReadinessTimeoutMs,
+      TemplateRollout,
+      "Rollout readiness timeout (ms)",
+      "发布就绪超时（毫秒）",
+      "600000",
+      ByteCount(86400000L),
+      "Between 1 and 86400000 ms before the rollout is judged failed.",
+      "在判定发布失败之前的 1 至 86400000 毫秒。",
+    ),
+  ]
+}
+
+///|
+fn template_section_order() -> Array[TemplateSection] {
+  [
+    TemplateIdentity,
+    TemplateArtifact,
+    TemplateRuntime,
+    TemplateResources,
+    TemplateProbes,
+    TemplateDataPolicy,
+    TemplateRollout,
+  ]
+}
+
+///|
+fn template_section_legend(
+  locale : @i18n.Locale,
+  section : TemplateSection,
+) -> String {
+  match section {
+    TemplateIdentity => localized(locale, "Template identity", "模板身份")
+    TemplateArtifact =>
+      localized(locale, "Model and artifact", "模型与制品")
+    TemplateRuntime => localized(locale, "Runtime", "运行时")
+    TemplateResources =>
+      localized(locale, "Resources and secrets", "资源与密钥")
+    TemplateProbes => localized(locale, "Health probes", "健康探针")
+    TemplateDataPolicy => localized(locale, "Data policy", "数据策略")
+    TemplateRollout => localized(locale, "Rollout", "发布策略")
+  }
+}
+
+///|
+/// The stable identifier of one template control, shared by the label, the help
+/// text, and the render tests.
+pub fn template_field_id(field : TemplateField) -> String {
+  match field {
+    TemplateId => "template-id"
+    TemplateVersion => "template-version"
+    TemplateDisplayName => "template-display-name"
+    TemplateDescription => "template-description"
+    TemplateModelSelector => "template-model-selector"
+    TemplateArtifactUri => "template-artifact-uri"
+    TemplateArtifactDigest => "template-artifact-digest"
+    TemplateArtifactSizeBytes => "template-artifact-size"
+    TemplateArtifactSignatureRef => "template-artifact-signature"
+    TemplateRuntimeName => "template-runtime-name"
+    TemplateRuntimeVersion => "template-runtime-version"
+    TemplateRuntimeImageDigest => "template-runtime-image-digest"
+    TemplateRuntimeArchitectures => "template-runtime-architectures"
+    TemplateArchitecture => "template-architecture"
+    TemplateAcceleratorCount => "template-accelerator-count"
+    TemplateAcceleratorMemoryMib => "template-accelerator-memory"
+    TemplateCpuMillis => "template-cpu-millis"
+    TemplateMemoryMib => "template-memory"
+    TemplateReadinessPath => "template-readiness-path"
+    TemplateHealthIntervalMs => "template-health-interval"
+    TemplateFailureThreshold => "template-failure-threshold"
+    TemplateTerminationGraceMs => "template-termination-grace"
+    TemplateConsentReceipt => "template-consent-receipt"
+    TemplateSecretRefs => "template-secret-refs"
+    TemplateCanaryReplicas => "template-canary-replicas"
+    TemplateReadinessTimeoutMs => "template-readiness-timeout"
+  }
+}
+
+///|
+pub fn template_field_value(draft : TemplateDraft, field : TemplateField) -> String {
+  match field {
+    TemplateId => draft.template_id
+    TemplateVersion => draft.version
+    TemplateDisplayName => draft.display_name
+    TemplateDescription => draft.description
+    TemplateModelSelector => draft.model_selector
+    TemplateArtifactUri => draft.artifact_uri
+    TemplateArtifactDigest => draft.artifact_digest
+    TemplateArtifactSizeBytes => draft.artifact_size_bytes
+    TemplateArtifactSignatureRef => draft.artifact_signature_ref
+    TemplateRuntimeName => draft.runtime_name
+    TemplateRuntimeVersion => draft.runtime_version
+    TemplateRuntimeImageDigest => draft.runtime_image_digest
+    TemplateRuntimeArchitectures => draft.runtime_architectures
+    TemplateArchitecture => draft.architecture
+    TemplateAcceleratorCount => draft.accelerator_count
+    TemplateAcceleratorMemoryMib => draft.accelerator_memory_mib
+    TemplateCpuMillis => draft.cpu_millis
+    TemplateMemoryMib => draft.memory_mib
+    TemplateReadinessPath => draft.readiness_path
+    TemplateHealthIntervalMs => draft.health_interval_ms
+    TemplateFailureThreshold => draft.failure_threshold
+    TemplateTerminationGraceMs => draft.termination_grace_ms
+    TemplateConsentReceipt => draft.evaluation_consent_receipt
+    TemplateSecretRefs => draft.secret_refs
+    TemplateCanaryReplicas => draft.canary_replicas
+    TemplateReadinessTimeoutMs => draft.readiness_timeout_ms
+  }
+}
+
+///|
+/// One `Int` field of a template as the operator typed it. Only the server's
+/// own bound decides: the console never rounds or clamps a submitted number.
+pub fn template_int_field(value : String, maximum~ : Int) -> Int? {
+  let parsed = @string.parse_int(value.trim()) catch {
+    _ => return None
+  }
+  if parsed < 1 || parsed > maximum {
+    None
+  } else {
+    Some(parsed)
+  }
+}
+
+///|
+/// One `Int64` field. The contracts marshal it as a JSON string, so it is parsed
+/// here and re-encoded by the type the request body is built from.
+pub fn template_int64_field(value : String, maximum~ : Int64) -> Int64? {
+  let parsed = @string.parse_int64(value.trim()) catch {
+    _ => return None
+  }
+  if parsed < 1L || parsed > maximum {
+    None
+  } else {
+    Some(parsed)
+  }
+}
+
+///|
+/// A comma-separated identifier list: the shape the runtime architectures and
+/// the secret references both take. Empty is the empty list; a blank entry, a
+/// repeated entry, or an identifier the planner would reject is not.
+pub fn template_identifier_list(
+  value : String,
+  maximum~ : Int,
+  identifier_length~ : Int = 256,
+) -> Array[String]? {
+  if value.trim() == "" {
+    return Some([])
+  }
+  let values : Array[String] = []
+  for part in value.split(",") {
+    let item = part.trim().to_owned()
+    if !@contracts.valid_identifier(item, maximum_length=identifier_length) ||
+      values.contains(item) {
+      return None
+    }
+    values.push(item)
+    if values.length() > maximum {
+      return None
+    }
+  }
+  Some(values)
+}
+
+///|
+/// The same shape `deployment/planner.mbt` admits for an artifact: an upstream
+/// object, or a revision inside this control plane's own verified model store.
+/// The planner stays the authority; this only keeps an obviously doomed
+/// submission off the wire.
+pub fn template_artifact_reference_valid(value : String) -> Bool {
+  template_object_reference_valid(value) || template_model_store_valid(value)
+}
+
+///|
+/// A signature reference is either one of the two transports, or a short
+/// identifier for a verifier the deployment already trusts.
+pub fn template_signature_reference_valid(value : String) -> Bool {
+  template_object_reference_valid(value) ||
+  template_model_store_valid(value) ||
+  @contracts.valid_identifier(value.trim().to_owned(), maximum_length=256)
+}
+
+///|
+fn template_object_reference_valid(value : String) -> Bool {
+  let object = value.trim().to_owned()
+  guard object.has_prefix("s3://") else { return false }
+  let remainder = object[5:].to_owned()
+  remainder != "" &&
+  remainder.length() <= 2048 &&
+  remainder.contains_char('/') &&
+  !remainder.has_prefix("/") &&
+  !remainder.has_suffix("/") &&
+  !remainder.contains("..") &&
+  !remainder.contains("//") &&
+  template_reference_characters(remainder)
+}
+
+///|
+fn template_model_store_valid(value : String) -> Bool {
+  let reference = value.trim().to_owned()
+  guard reference.has_prefix(@contracts.model_store_scheme) else {
+    return false
+  }
+  let directory = reference[@contracts.model_store_scheme.length():].to_owned()
+  directory != "" &&
+  directory.length() <= 2048 &&
+  !directory.has_prefix("/") &&
+  !directory.has_suffix("/") &&
+  !directory.contains("..") &&
+  !directory.contains("//") &&
+  template_reference_characters(directory)
+}
+
+///|
+fn template_reference_characters(value : String) -> Bool {
+  value.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.' ||
+    character == '/'
+  })
+}
+
+///|
+pub fn template_runtime_name_valid(value : String) -> Bool {
+  let name = value.trim().to_owned()
+  name != "" &&
+  name.length() <= 256 &&
+  !name.contains("..") &&
+  !name.contains_char('@') &&
+  name.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.' ||
+    character == ':' ||
+    character == '/'
+  })
+}
+
+///|
+pub fn template_readiness_path_valid(value : String) -> Bool {
+  let path = value.trim().to_owned()
+  path.has_prefix("/") &&
+  path.length() <= 256 &&
+  !path.contains("..") &&
+  template_reference_characters(path)
+}
+
+///|
+/// The rule one free-text field must satisfy. A bounded numeric field is judged
+/// by its bound instead, so it is not repeated here.
+fn template_text_acceptable(field : TemplateField, value : String) -> Bool {
+  match field {
+    TemplateId =>
+      @contracts.valid_identifier(
+        value.trim().to_owned(),
+        maximum_length=128,
+      )
+    TemplateVersion =>
+      @contracts.valid_identifier(
+        value.trim().to_owned(),
+        maximum_length=128,
+      )
+    TemplateDisplayName =>
+      value.trim() != "" && value.trim().length() <= 256
+    TemplateDescription => value.length() <= 2048
+    TemplateModelSelector =>
+      @contracts.valid_identifier(
+        value.trim().to_owned(),
+        maximum_length=128,
+      )
+    TemplateArtifactUri => template_artifact_reference_valid(value)
+    TemplateArtifactDigest =>
+      @contracts.valid_sha256_digest(value.trim().to_owned())
+    TemplateArtifactSignatureRef => template_signature_reference_valid(value)
+    TemplateRuntimeName => template_runtime_name_valid(value)
+    TemplateRuntimeVersion =>
+      @contracts.valid_identifier(
+        value.trim().to_owned(),
+        maximum_length=128,
+      )
+    TemplateRuntimeImageDigest =>
+      @contracts.valid_sha256_digest(value.trim().to_owned())
+    TemplateRuntimeArchitectures =>
+      template_identifier_list(
+        value,
+        maximum=64,
+        identifier_length=128,
+      ) is Some(_)
+    TemplateArchitecture =>
+      @contracts.valid_identifier(
+        value.trim().to_owned(),
+        maximum_length=128,
+      )
+    TemplateReadinessPath => template_readiness_path_valid(value)
+    TemplateConsentReceipt => value.trim().length() <= 256
+    TemplateSecretRefs => template_identifier_list(value, maximum=64) is Some(_)
+    _ => true
+  }
+}
+
+///|
+/// Whether one field is acceptable, mirroring `@deployment.validate_template`.
+fn template_field_acceptable(
+  draft : TemplateDraft,
+  spec : TemplateFieldSpec,
+) -> Bool {
+  let value = template_field_value(draft, spec.field)
+  match spec.kind {
+    FreeText => template_text_acceptable(spec.field, value)
+    Count(maximum) => template_int_field(value, maximum=maximum) is Some(_)
+    ByteCount(maximum) =>
+      template_int64_field(value, maximum=maximum) is Some(_)
+  }
+}
+
+///|
+/// Whether the draft is a template the deployment service can accept. The
+/// planner's shape rules are mirrored here so an obviously invalid submission
+/// is caught before it is sent; whether the model, the runtime, the licence and
+/// the hardware actually admit this template stays the preflight's answer.
+pub fn template_draft_valid(draft : TemplateDraft) -> Bool {
+  if !@contracts.valid_identifier(
+      draft.model_id.trim().to_owned(),
+      maximum_length=128,
+    ) ||
+    !@contracts.valid_identifier(
+      draft.model_version.trim().to_owned(),
+      maximum_length=128,
+    ) ||
+    !@contracts.valid_identifier(
+      draft.architecture.trim().to_owned(),
+      maximum_length=128,
+    ) {
+    return false
+  }
+  for spec in template_field_specs() {
+    if !template_field_acceptable(draft, spec) {
+      return false
+    }
+  }
+  let architectures = match template_identifier_list(
+    draft.runtime_architectures,
+    maximum=64,
+    identifier_length=128,
+  ) {
+    Some(values) => values
+    None => return false
+  }
+  if !architectures.contains(draft.architecture.trim().to_owned()) {
+    return false
+  }
+  // An evaluation capture is the only non-ephemeral retention a template can
+  // declare, and the two reuse switches only mean anything inside one.
+  if draft.capture_for_evaluation {
+    draft.evaluation_consent_receipt.trim() != ""
+  } else {
+    !draft.allow_cache && !draft.allow_training_reuse
+  }
+}
+
+///|
+/// The stable key of one registered runtime. A runtime image is immutable, so
+/// its name and version identify it.
+pub fn runtime_key(runtime : @contracts.RuntimeSpec) -> String {
+  "\{runtime.name}@\{runtime.version}"
+}
+
+///|
+/// Every runtime a template can name: the registry roster first, then any
+/// runtime an already registered template carries that the roster did not list.
+/// One runtime appears once.
+pub fn known_runtimes(state : ConsoleState) -> Array[@contracts.RuntimeSpec] {
+  let runtimes : Array[@contracts.RuntimeSpec] = []
+  for candidate in state.registered_runtimes {
+    if !runtimes.any(existing => runtime_key(existing) == runtime_key(candidate)) {
+      runtimes.push(candidate)
+    }
+  }
+  for template in state.catalog_templates {
+    if !runtimes.any(existing => {
+      runtime_key(existing) == runtime_key(template.runtime)
+    }) {
+      runtimes.push(template.runtime)
+    }
+  }
+  runtimes
+}
+
+///|
 pub(all) struct DeploymentRow {
   assignment_id : String
   deployment_id : String
@@ -687,6 +1581,10 @@ pub(all) struct ConsoleState {
   model_license_draft : ModelLicenseDraft
   model_alias_draft : ModelAliasDraft
   runtime_draft : RuntimeProfileDraft
+  template_draft : TemplateDraft
+  /// The runtime images the registry admits, as the registry read reported
+  /// them. The template form names one of these instead of retyping a digest.
+  registered_runtimes : Array[@contracts.RuntimeSpec]
   operation_name : String
   operation_body : String
   quick_deployment_id : String
@@ -754,6 +1652,15 @@ pub(all) enum ConsoleMessage {
   RuntimeBatchingToggled
   RuntimeMultiNodeToggled
   SubmitRuntimeRegistration
+  TemplateTextChanged(TemplateField, String)
+  TemplateFlagToggled(TemplateFlag)
+  TemplateCapabilityChanged(String)
+  TemplateClassificationChanged(String)
+  /// The model picker: the value is `model_id@version`.
+  TemplateModelSelected(String)
+  /// The runtime picker: the value is `runtime_name@version`.
+  TemplateRuntimeSelected(String)
+  SubmitTemplateRegistration
   OperationChanged(String)
   OperationBodyChanged(String)
   SubmitOperation
@@ -919,6 +1826,8 @@ pub fn default_state() -> ConsoleState {
     model_license_draft: empty_model_license_draft(),
     model_alias_draft: empty_model_alias_draft(),
     runtime_draft: default_runtime_draft(),
+    template_draft: empty_template_draft(),
+    registered_runtimes: [],
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -1217,6 +2126,30 @@ pub fn demo_state() -> ConsoleState {
       signature: "demo-signed",
     },
   ]
+  // The registry roster the template form names a runtime from. The text
+  // runtime is the one `templates[0]` deploys; the other two are registered and
+  // verified but not yet used by a template.
+  let runtimes : Array[@contracts.RuntimeSpec] = [
+    templates[0].runtime,
+    {
+      name: "embedding-runtime",
+      image_digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      version: "runtime-v1",
+      architectures: ["nvidia-gb10"],
+      capabilities: [EmbeddingCreate],
+      supports_batching: false,
+      supports_multi_node: false,
+    },
+    {
+      name: "vision-runtime",
+      image_digest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      version: "runtime-v2",
+      architectures: ["nvidia-gb10"],
+      capabilities: [ImageGenerate, VideoGenerate],
+      supports_batching: false,
+      supports_multi_node: false,
+    },
+  ]
   let service_intent : @deployment.ModelServiceIntent = {
     version: @contracts.contract_version,
     idempotency_key: "demo:text-service:1",
@@ -1291,6 +2224,7 @@ pub fn demo_state() -> ConsoleState {
       },
     ],
     catalog_templates: templates,
+    registered_runtimes: runtimes,
     service_deployments: [service_operation],
     requests: { count: 1842, p95_ms: 142, throughput_per_second: 38, errors: 3 },
     request_details: [
@@ -6304,6 +7238,481 @@ pub fn QuickTopology::topology_profile(self : QuickTopology) -> String? {
 }
 
 ///|
+pub fn template_flag_id(flag : TemplateFlag) -> String {
+  match flag {
+    RuntimeMultiNode => "template-runtime-multi-node"
+    CaptureForEvaluation => "template-capture-for-evaluation"
+    AllowCache => "template-allow-cache"
+    AllowTrainingReuse => "template-allow-training-reuse"
+    AutomaticPromotion => "template-automatic-promotion"
+    AutomaticRollback => "template-automatic-rollback"
+  }
+}
+
+///|
+pub fn template_flag_value(draft : TemplateDraft, flag : TemplateFlag) -> Bool {
+  match flag {
+    RuntimeMultiNode => draft.runtime_multi_node
+    CaptureForEvaluation => draft.capture_for_evaluation
+    AllowCache => draft.allow_cache
+    AllowTrainingReuse => draft.allow_training_reuse
+    AutomaticPromotion => draft.automatic_promotion
+    AutomaticRollback => draft.automatic_rollback
+  }
+}
+
+///|
+pub fn template_flag_label(locale : @i18n.Locale, flag : TemplateFlag) -> String {
+  match flag {
+    RuntimeMultiNode =>
+      localized(locale, "Runtime supports multi-node", "运行时支持多机")
+    CaptureForEvaluation =>
+      localized(
+        locale,
+        "Capture payloads for evaluation",
+        "为评测采集载荷",
+      )
+    AllowCache => localized(locale, "Allow cache", "允许缓存")
+    AllowTrainingReuse =>
+      localized(locale, "Allow training reuse", "允许训练复用")
+    AutomaticPromotion => localized(locale, "Automatic promotion", "自动提升")
+    AutomaticRollback => localized(locale, "Automatic rollback", "自动回滚")
+  }
+}
+
+///|
+pub fn template_draft_with_text(
+  draft : TemplateDraft,
+  field : TemplateField,
+  value : String,
+) -> TemplateDraft {
+  match field {
+    TemplateId => { ..draft, template_id: value }
+    TemplateVersion => { ..draft, version: value }
+    TemplateDisplayName => { ..draft, display_name: value }
+    TemplateDescription => { ..draft, description: value }
+    TemplateModelSelector => { ..draft, model_selector: value }
+    TemplateArtifactUri => { ..draft, artifact_uri: value }
+    TemplateArtifactDigest => { ..draft, artifact_digest: value }
+    TemplateArtifactSizeBytes => { ..draft, artifact_size_bytes: value }
+    TemplateArtifactSignatureRef => { ..draft, artifact_signature_ref: value }
+    TemplateRuntimeName => { ..draft, runtime_name: value }
+    TemplateRuntimeVersion => { ..draft, runtime_version: value }
+    TemplateRuntimeImageDigest => { ..draft, runtime_image_digest: value }
+    TemplateRuntimeArchitectures => { ..draft, runtime_architectures: value }
+    TemplateArchitecture => { ..draft, architecture: value }
+    TemplateAcceleratorCount => { ..draft, accelerator_count: value }
+    TemplateAcceleratorMemoryMib => { ..draft, accelerator_memory_mib: value }
+    TemplateCpuMillis => { ..draft, cpu_millis: value }
+    TemplateMemoryMib => { ..draft, memory_mib: value }
+    TemplateReadinessPath => { ..draft, readiness_path: value }
+    TemplateHealthIntervalMs => { ..draft, health_interval_ms: value }
+    TemplateFailureThreshold => { ..draft, failure_threshold: value }
+    TemplateTerminationGraceMs => { ..draft, termination_grace_ms: value }
+    TemplateConsentReceipt => { ..draft, evaluation_consent_receipt: value }
+    TemplateSecretRefs => { ..draft, secret_refs: value }
+    TemplateCanaryReplicas => { ..draft, canary_replicas: value }
+    TemplateReadinessTimeoutMs => { ..draft, readiness_timeout_ms: value }
+  }
+}
+
+///|
+/// Turn one switch on or off. Clearing an evaluation capture clears the two
+/// reuse switches with it: an ephemeral template may neither cache a payload
+/// nor reuse it for training, so leaving them set would only strand the form in
+/// a state the planner refuses.
+pub fn template_draft_with_flag(
+  draft : TemplateDraft,
+  flag : TemplateFlag,
+  value : Bool,
+) -> TemplateDraft {
+  match flag {
+    RuntimeMultiNode => { ..draft, runtime_multi_node: value }
+    CaptureForEvaluation =>
+      if value {
+        { ..draft, capture_for_evaluation: true }
+      } else {
+        {
+          ..draft,
+          capture_for_evaluation: false,
+          allow_cache: false,
+          allow_training_reuse: false,
+        }
+      }
+    AllowCache => { ..draft, allow_cache: value }
+    AllowTrainingReuse => { ..draft, allow_training_reuse: value }
+    AutomaticPromotion => { ..draft, automatic_promotion: value }
+    AutomaticRollback => { ..draft, automatic_rollback: value }
+  }
+}
+
+///|
+/// The serving capabilities a template may declare. The console's own set is
+/// narrowed to what the chosen runtime declares, so a template cannot name a
+/// capability its runtime does not serve.
+fn template_capability_choices(
+  runtime : @contracts.RuntimeSpec?,
+) -> Array[@contracts.Capability] {
+  match runtime {
+    None => runtime_capability_options()
+    Some(spec) => {
+      let declared = runtime_capability_options().filter(capability => {
+        spec.capabilities.contains(capability)
+      })
+      if declared.length() == 0 {
+        runtime_capability_options()
+      } else {
+        declared
+      }
+    }
+  }
+}
+
+///|
+/// One labelled select of the template form.
+fn template_select_group(
+  locale : @i18n.Locale,
+  id : String,
+  label_en : String,
+  label_zh : String,
+  help_en : String,
+  help_zh : String,
+  options : Array[@rabbita.Html],
+  on_change : @rabbita.Emit[String],
+) -> @rabbita.Html {
+  @html.div(class="field-group", [
+    @html.label(for_=id, localized(locale, label_en, label_zh)),
+    @html.select(
+      id=id,
+      on_change=on_change,
+      attrs=@html.Attrs::build().aria_describedby("\{id}-help"),
+      options,
+    ),
+    @html.p(
+      id="\{id}-help",
+      class="field-help",
+      localized(locale, help_en, help_zh),
+    ),
+  ])
+}
+
+///|
+/// One text control of the template form. The rule it carries is the planner's
+/// own, and the help text says the same thing in words, so a value that turns
+/// red here is one the control plane would have refused.
+fn template_field_group(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+  draft : TemplateDraft,
+  spec : TemplateFieldSpec,
+) -> @rabbita.Html {
+  let id = template_field_id(spec.field)
+  let value = template_field_value(draft, spec.field)
+  let invalid = (value != "" && !template_field_acceptable(draft, spec)) ||
+    (
+      spec.field == TemplateConsentReceipt &&
+      draft.capture_for_evaluation &&
+      value.trim() == ""
+    )
+  let attrs = @html.Attrs::build()
+    .aria_describedby("\{id}-help")
+    .aria_invalid(if invalid { "true" } else { "false" })
+  let on_input = text_command(emit, text => {
+    TemplateTextChanged(spec.field, text)
+  })
+  @html.div(class="field-group", [
+    @html.label(for_=id, localized(state.locale, spec.label_en, spec.label_zh)),
+    match spec.kind {
+      FreeText =>
+        @html.input(
+          id=id,
+          input_type=Text,
+          required=!spec.optional,
+          placeholder=spec.placeholder,
+          value=value,
+          attrs=attrs,
+          on_input=on_input,
+        )
+      _ =>
+        @html.input(
+          id=id,
+          input_type=Number,
+          required=!spec.optional,
+          min=1,
+          step=1,
+          inputmode="numeric",
+          placeholder=spec.placeholder,
+          value=value,
+          attrs=attrs,
+          on_input=on_input,
+        )
+    },
+    @html.p(
+      id="\{id}-help",
+      class=if invalid { "field-help field-error" } else { "field-help" },
+      localized(state.locale, spec.help_en, spec.help_zh),
+    ),
+  ])
+}
+
+///|
+/// One row of switches. The two reuse switches only mean anything inside an
+/// evaluation capture, so they are drawn disabled while the template keeps its
+/// payloads ephemeral.
+fn template_flag_row(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+  draft : TemplateDraft,
+  flags : Array[TemplateFlag],
+) -> @rabbita.Html {
+  @html.div(class="runtime-profile-flags", [
+    for flag in flags => {
+      let capture_only = flag == AllowCache || flag == AllowTrainingReuse
+      @html.label(
+        class="runtime-profile-flag",
+        for_=template_flag_id(flag),
+        [
+          @html.input(
+            input_type=Checkbox,
+            id=template_flag_id(flag),
+            checked=template_flag_value(draft, flag),
+            attrs=@html.Attrs::build()
+              .disabled(capture_only && !draft.capture_for_evaluation),
+            on_change=text_command(emit, _ => TemplateFlagToggled(flag)),
+          ),
+          @html.span(template_flag_label(state.locale, flag)),
+        ],
+      )
+    }
+  ])
+}
+
+///|
+/// The operator-facing catalog-template registration the deployment service
+/// already accepts. The client mirrors the planner's shape checks so the
+/// console never offers a template the control plane would refuse as malformed;
+/// whether the model, the runtime, the licence and the hardware admit it stays
+/// the preflight's answer. The model and runtime pickers exist because both are
+/// already in state: a model row carries the artifact the registry attested,
+/// and the runtime roster carries the image digest it admitted.
+fn template_registration_form(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let locale = state.locale
+  let draft = state.template_draft
+  let valid = template_draft_valid(draft)
+  let runtimes = known_runtimes(state)
+  let selected_runtime = runtimes.iter().find_first(runtime => {
+    runtime_key(runtime) == "\{draft.runtime_name}@\{draft.runtime_version}"
+  })
+  let model_options : Array[@rabbita.Html] = [
+    @html.option(
+      value="",
+      selected=draft.model_id == "",
+      localized(locale, "Select a registered model", "选择已注册模型"),
+    ),
+  ]
+  for row in state.models {
+    model_options.push(
+      @html.option(
+        value="\{row.model_id}@\{row.version}",
+        selected=draft.model_id == row.model_id &&
+          draft.model_version == row.version,
+        "\{row.model_id} · \{row.version} · \{row.alias_name}",
+      ),
+    )
+  }
+  let runtime_options : Array[@rabbita.Html] = [
+    @html.option(
+      value="",
+      selected=draft.runtime_name == "",
+      localized(locale, "Select a registered runtime", "选择已注册运行时"),
+    ),
+  ]
+  for runtime in runtimes {
+    runtime_options.push(
+      @html.option(
+        value=runtime_key(runtime),
+        selected=runtime_key(runtime) ==
+          "\{draft.runtime_name}@\{draft.runtime_version}",
+        "\{runtime.name} · \{runtime.version} · \{runtime.architectures.join(", ")}",
+      ),
+    )
+  }
+  let sections : Array[@rabbita.Html] = []
+  for section in template_section_order() {
+    let fields : Array[@rabbita.Html] = []
+    if section == TemplateDataPolicy {
+      fields.push(
+        template_select_group(
+          locale,
+          "template-classification",
+          "Data classification",
+          "数据分类",
+          "The class of the payloads this service will carry.",
+          "该服务将承载的载荷类别。",
+          [
+            for classification in data_class_options() => {
+              @html.option(
+                value=data_class_name(classification),
+                selected=classification == draft.classification,
+                data_class_label(locale, classification),
+              )
+            }
+          ],
+          text_command(emit, value => TemplateClassificationChanged(value)),
+        ),
+      )
+    }
+    for spec in template_field_specs() {
+      if spec.section == section {
+        fields.push(template_field_group(state, emit, draft, spec))
+      }
+    }
+    if section == TemplateRuntime {
+      fields.push(
+        template_select_group(
+          locale,
+          "template-capability",
+          "Serving capability",
+          "服务能力",
+          "The capability this template serves. Only what the chosen runtime declares is offered.",
+          "本模板提供的能力。仅提供所选运行时所声明的能力。",
+          [
+            for capability in template_capability_choices(selected_runtime) => {
+              @html.option(
+                value=runtime_capability_name(capability),
+                selected=capability == draft.capability,
+                runtime_capability_label(locale, capability),
+              )
+            }
+          ],
+          text_command(emit, value => TemplateCapabilityChanged(value)),
+        ),
+      )
+    }
+    let body : Array[@rabbita.Html] = [
+      @html.legend(template_section_legend(locale, section)),
+      @html.div(class="model-onboarding-grid", fields),
+    ]
+    match section {
+      TemplateRuntime =>
+        body.push(
+          template_flag_row(state, emit, draft, [RuntimeMultiNode]),
+        )
+      TemplateDataPolicy =>
+        body.push(
+          template_flag_row(state, emit, draft, [
+            CaptureForEvaluation, AllowCache, AllowTrainingReuse,
+          ]),
+        )
+      TemplateRollout =>
+        body.push(
+          template_flag_row(state, emit, draft, [
+            AutomaticPromotion, AutomaticRollback,
+          ]),
+        )
+      _ => ()
+    }
+    sections.push(@html.fieldset(class="template-registration-section", body))
+  }
+  // The pickers come first because both halves of the template are already in
+  // state: a model row carries the artifact the registry attested, and the
+  // runtime roster carries the image digest the registry admitted.
+  let body : Array[@rabbita.Html] = [
+    @html.legend(
+      id="template-registration-title",
+      localized(
+        locale,
+        "Start from a registered model and runtime",
+        "从已注册的模型与运行时开始",
+      ),
+    ),
+    @html.div(class="model-onboarding-grid", [
+      template_select_group(
+        locale,
+        "template-model-picker",
+        "Model",
+        "模型",
+        "Fills the model identity and the artifact the registry attested for it.",
+        "填入模型身份以及注册表为其证明的制品。",
+        model_options,
+        text_command(emit, value => TemplateModelSelected(value)),
+      ),
+      template_select_group(
+        locale,
+        "template-runtime-picker",
+        "Runtime",
+        "运行时",
+        "Fills the runtime image, its architectures and the capability it serves.",
+        "填入运行时镜像、其架构以及它提供的能力。",
+        runtime_options,
+        text_command(emit, value => TemplateRuntimeSelected(value)),
+      ),
+    ]),
+  ]
+  body.push_iter(sections.iter())
+  body.push(
+    @html.div(class="operation-actions", [
+      @html.span(
+        class="secondary",
+        if valid {
+          localized(
+            locale,
+            "The receipt and signature are the control plane's own; the caller submits neither.",
+            "回执与签名由控制平面生成；调用方两者都不提交。",
+          )
+        } else {
+          localized(
+            locale,
+            "Submittable when every field matches its rule, the accelerator architecture appears in the runtime architectures, and the capability is one the runtime serves.",
+            "当每个字段符合其规则、加速器架构出现在运行时架构中，且能力为运行时实际提供的能力时，方可提交。",
+          )
+        },
+      ),
+      @html.button(
+        type_="submit",
+        class="primary-button",
+        disabled=!state.operator_authenticated || !valid || state.loading,
+        localized(locale, "Register template", "注册模板"),
+      ),
+    ]),
+  )
+  @html.div(class="operation-panel template-registration-panel", [
+    @html.div(class="operation-heading", [
+      @html.div([
+        @html.p(
+          class="eyebrow",
+          localized(locale, "Catalog templates", "目录模板"),
+        ),
+        @html.h3(
+          localized(locale, "Register a catalog template", "注册目录模板"),
+        ),
+      ]),
+      @html.span(
+        class="status status-pending",
+        localized(locale, "Preflight still applies", "仍需通过预检"),
+      ),
+    ]),
+    @html.p(
+      class="section-copy",
+      localized(
+        locale,
+        "Registers one immutable model-service template. The control plane signs it, so registration alone deploys nothing: the model, the runtime, the licence and the hardware are still checked before any workload is placed.",
+        "注册一个不可变的模型服务模板。控制平面会对其签名，因此仅注册不会部署任何内容：在放置任何工作负载之前，仍会检查模型、运行时、许可证与硬件。",
+      ),
+    ),
+    @html.form(
+      class="template-registration-form",
+      on_submit=command(emit, SubmitTemplateRegistration),
+      attrs=@html.Attrs::build().aria_labelledby("template-registration-title"),
+      [@html.fieldset(disabled=state.loading, body)],
+    ),
+  ])
+}
+
+///|
 fn catalog_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -6612,6 +8021,7 @@ fn catalog_view(
         ]),
       ])
     },
+    template_registration_form(state, emit),
     @html.div(class="section-heading", [
       @html.div([
         @html.h2(localized(state.locale, "Service operations", "服务操作")),
@@ -9640,7 +11050,10 @@ fn console_styles() -> String {
     #|.model-onboarding-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     #|.model-onboarding-form legend { padding: 0; color: var(--ink); font-size: .82rem; font-weight: 760; }
     #|.model-onboarding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem .85rem; margin-top: .75rem; }
-    #|.model-onboarding-form .row-actions, .runtime-profile-form .operation-actions { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; margin-top: .85rem; }
+    #|.model-onboarding-form .row-actions, .runtime-profile-form .operation-actions, .template-registration-form .operation-actions { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; margin-top: .85rem; }
+    #|.template-registration-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #|.template-registration-form legend { padding: 0; color: var(--ink); font-size: .82rem; font-weight: 760; }
+    #|.template-registration-form .template-registration-section { margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--line); }
     #|.runtime-profile-flags { display: flex; flex-wrap: wrap; gap: 1.1rem; margin-top: .9rem; }
     #|.runtime-profile-flag { display: inline-flex; align-items: center; gap: .45rem; min-height: 44px; color: var(--muted-strong); font-size: .78rem; font-weight: 650; }
     #|.runtime-profile-flag input { width: 1.05rem; height: 1.05rem; }
@@ -9735,8 +11148,8 @@ fn console_styles() -> String {
     #|  .model-adoption-actions .row-actions { display: grid; grid-template-columns: 1fr; }
     #|  .model-adoption-actions button { width: 100%; }
     #|  .model-onboarding-grid { grid-template-columns: 1fr; }
-    #|  .model-onboarding-form .row-actions, .runtime-profile-form .operation-actions { display: grid; grid-template-columns: 1fr; }
-    #|  .model-onboarding-form button, .runtime-profile-form .operation-actions button { width: 100%; }
+    #|  .model-onboarding-form .row-actions, .runtime-profile-form .operation-actions, .template-registration-form .operation-actions { display: grid; grid-template-columns: 1fr; }
+    #|  .model-onboarding-form button, .runtime-profile-form .operation-actions button, .template-registration-form .operation-actions button { width: 100%; }
     #|  .topology-graph { min-width: 44rem; padding: 1rem; }
     #|  .node-summary { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
     #|  .node-summary-cell { display: none; }

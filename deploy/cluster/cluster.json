@@ -37,13 +37,9 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [
-        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
-      ],
       "fabricAddress": "192.168.100.10",
       "fabricPeer": "spark-3782-feee26eb",
-      "fabricInterface": "enp1s0f1np1",
-      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
+      "fabricInterface": "enp1s0f1np1"
     },
     {
       "id": "spark-3782-feee26eb",
@@ -56,13 +52,9 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [
-        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
-      ],
       "fabricAddress": "192.168.100.11",
       "fabricPeer": "spark-25e2-3d35c8fd",
-      "fabricInterface": "enp1s0f0np0",
-      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
+      "fabricInterface": "enp1s0f0np0"
     },
     {
       "id": "spark-57f5-98a504ed",
@@ -75,13 +67,9 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [
-        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
-      ],
       "fabricAddress": "10.0.22.1",
       "fabricPeer": "spark-368c-0f2ee8b2",
-      "fabricInterface": "enp1s0f1np1",
-      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
+      "fabricInterface": "enp1s0f1np1"
     },
     {
       "id": "spark-368c-0f2ee8b2",
@@ -94,13 +82,9 @@
       "dataClasses": [
         "Confidential"
       ],
-      "runtimeNames": [
-        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunaflux"
-      ],
       "fabricAddress": "10.0.22.2",
       "fabricPeer": "spark-57f5-98a504ed",
-      "fabricInterface": "enp1s0f0np0",
-      "runtimeNamesComment": "An operator declaration that this node may run the runtime; a node agent derives the same fact from the host. Without it the planner has no compatible node and refuses to place a service."
+      "fabricInterface": "enp1s0f0np0"
     }
   ],
   "registry": {
@@ -127,6 +111,9 @@
       "registry.k8s.io": "https://docker.m.daocloud.io"
     },
     "caOnManagement": "/home/HwHiAiUser/moon-public/trust/registry-20260830/registry-ca.crt",
-    "clusterIP": "10.43.216.245"
+    "clusterIP": "10.43.216.245",
+    "pull": [
+      "moon/lunaflux:sha256-bec873094c71e35bdba5497f8ef42845318ff6af5e8bedc873d89a7558aaecbb"
+    ]
   }
 }

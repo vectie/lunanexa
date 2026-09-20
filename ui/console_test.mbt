@@ -52,6 +52,17 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       },
     ],
     catalog_templates: [],
+    registered_runtimes: [
+      {
+        name: "text-runtime",
+        image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        version: "runtime-v1",
+        architectures: ["nvidia-gb10"],
+        capabilities: [TextGenerate],
+        supports_batching: false,
+        supports_multi_node: false,
+      },
+    ],
     service_deployments: [],
     requests: { count: 10, p95_ms: 50, throughput_per_second: 4, errors: 0, },
     request_details: [
@@ -305,6 +316,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     model_license_draft: @ui.empty_model_license_draft(),
     model_alias_draft: @ui.empty_model_alias_draft(),
     runtime_draft: @ui.default_runtime_draft(),
+    template_draft: @ui.empty_template_draft(),
     operation_name: "register-model",
     operation_body: "{}",
     quick_deployment_id: "",
