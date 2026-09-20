@@ -109,6 +109,7 @@ pub(all) struct RuntimeSettings {
   device_class_name : String
   controller_addresses : Array[String]
   runtime_secrets : Array[RuntimeSecretBinding]?
+  fabric_address : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub struct RuntimeSupervisor {

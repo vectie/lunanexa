@@ -727,7 +727,7 @@ pub fn default_state() -> ConsoleState {
     },
     model_adopted_imports: [],
     model_local_directories: [],
-    model_local_draft: { directory: "", repository: "", revision: "master", },
+    model_local_draft: { directory: "", repository: "", revision: "master" },
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -1054,6 +1054,7 @@ pub fn demo_state() -> ConsoleState {
           replica_id: "text-service-r1",
           node_id: "dgx-spark-03",
           devices: ["gpu-0"],
+          group: None,
         },
       ],
       findings: [],
@@ -1721,8 +1722,7 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
       )
     Blank =>
       localized(
-        locale, "Deliberately empty, for whatever is placed here next.",
-        "刻意留空的页面，供后续放置内容。",
+        locale, "Deliberately empty, for whatever is placed here next.", "刻意留空的页面，供后续放置内容。",
       )
   }
 }
@@ -4553,14 +4553,16 @@ fn model_import_label(
   match state {
     Queued => localized(locale, "Queued", "等待处理")
     Downloading => localized(locale, "Downloading", "下载中")
-    Verifying => localized(locale, "Verifying against ModelScope", "对照魔搭校验中")
+    Verifying =>
+      localized(locale, "Verifying against ModelScope", "对照魔搭校验中")
     Verified => localized(locale, "Checksum verified", "校验和已验证")
     Failed => localized(locale, "Failed", "失败")
     Cancelled => localized(locale, "Cancelled", "已取消")
   }
 }
 
-///| Where an import's bytes live, in the operator's words: an upstream
+///|
+/// Where an import's bytes live, in the operator's words: an upstream
 /// object, the model store the control plane serves, or nowhere yet.
 fn model_import_transport_label(
   locale : @i18n.Locale,
@@ -4569,7 +4571,9 @@ fn model_import_transport_label(
   if import_.artifact_uri.has_prefix("s3://") {
     localized(locale, "Published to S3", "已发布到 S3")
   } else if import_.artifact_uri.has_prefix(@contracts.model_store_scheme) {
-    localized(locale, "Servable from the model store", "可由模型库直接服务")
+    localized(
+      locale, "Servable from the model store", "可由模型库直接服务",
+    )
   } else {
     localized(locale, "Awaiting artifact publication", "等待制品发布")
   }
@@ -4593,8 +4597,10 @@ fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
   import_.files_completed == import_.files_total &&
   import_.bytes_total > 0L &&
   import_.bytes_completed == import_.bytes_total &&
-  (import_.artifact_uri.has_prefix("s3://") ||
-    import_.artifact_uri.has_prefix(@contracts.model_store_scheme)) &&
+  (
+    import_.artifact_uri.has_prefix("s3://") ||
+    import_.artifact_uri.has_prefix(@contracts.model_store_scheme)
+  ) &&
   @contracts.valid_sha256_digest(import_.manifest_digest) &&
   import_.license.trim() != ""
 }
@@ -4737,10 +4743,9 @@ fn model_local_registration_form(
             ),
             @html.select(
               id="model-local-directory",
-              on_change=text_command(
-                emit,
-                value => ModelLocalDirectoryChanged(value),
-              ),
+              on_change=text_command(emit, value => {
+                ModelLocalDirectoryChanged(value)
+              }),
               directory_options,
             ),
           ]),
@@ -4755,12 +4760,16 @@ fn model_local_registration_form(
               maxlength=180,
               placeholder="MiniMax/MiniMax-H3",
               value=draft.repository,
-              attrs=@html.Attrs::build()
-                .aria_invalid(if repository_invalid { "true" } else { "false" }),
-              on_input=text_command(
-                emit,
-                value => ModelLocalRepositoryChanged(value),
+              attrs=@html.Attrs::build().aria_invalid(
+                if repository_invalid {
+                  "true"
+                } else {
+                  "false"
+                },
               ),
+              on_input=text_command(emit, value => {
+                ModelLocalRepositoryChanged(value)
+              }),
             ),
           ]),
           @html.div(class="field-group", [
@@ -4774,10 +4783,9 @@ fn model_local_registration_form(
               maxlength=96,
               placeholder="master",
               value=draft.revision,
-              on_input=text_command(
-                emit,
-                value => ModelLocalRevisionChanged(value),
-              ),
+              on_input=text_command(emit, value => {
+                ModelLocalRevisionChanged(value)
+              }),
             ),
           ]),
         ]),
@@ -4805,7 +4813,6 @@ fn model_local_registration_form(
 
 ///|
 fn model_adoption_form(
-
   state : ConsoleState,
   import_ : ModelImportRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -5683,21 +5690,17 @@ fn model_artifact_rows(
     let (model_id, artifacts) = group
     body.push(
       @html.tr(class="models-group-heading", [
-        @html.th(
-          scope=RowGroup,
-          colspan=6,
-          [
-            @html.strong(model_id),
-            @html.span(
-              class="secondary",
-              localized(
-                state.locale,
-                "\{artifacts.length()} registered artifacts",
-                "\{artifacts.length()} 个已注册制品",
-              ),
+        @html.th(scope=RowGroup, colspan=6, [
+          @html.strong(model_id),
+          @html.span(
+            class="secondary",
+            localized(
+              state.locale,
+              "\{artifacts.length()} registered artifacts",
+              "\{artifacts.length()} 个已注册制品",
             ),
-          ],
-        ),
+          ),
+        ]),
       ]),
     )
     for model in artifacts {

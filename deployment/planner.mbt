@@ -167,7 +167,7 @@ fn finding(
   severity : FindingSeverity,
   message : String,
 ) -> PreflightFinding {
-  { code, severity, message, }
+  { code, severity, message }
 }
 
 ///|
@@ -298,15 +298,6 @@ pub fn preflight(
       ),
     )
   }
-  if declared_pair && template.runtime.supports_multi_node {
-    findings.push(
-      finding(
-        PairExecutionNotImplemented,
-        Blocking,
-        "the pair is validated, but paired execution (two ranked assignments) is not implemented yet",
-      ),
-    )
-  }
   if !template.artifact.uri.has_prefix("s3://") ||
     template.artifact.signature_ref == "" ||
     !template.network.allow_artifact_store {
@@ -401,6 +392,43 @@ pub fn preflight(
     )
   }
   let nodes = compatible_nodes(context, template, intent)
+  // A pair is produced below only from two compatible nodes that name each
+  // other and both declare a fabric address; anything less is refused here
+  // rather than half-placed.
+  let mut pair : Array[ManagementNode] = []
+  if declared_pair && template.runtime.supports_multi_node {
+    let members = @contracts.cx7_pair_members(
+      nodes.map(node => (node.node_id, node.cx7_peer)),
+    )
+    if members.length() != @contracts.cx7_pair_member_count {
+      findings.push(
+        finding(
+          NoCx7Pair,
+          Blocking,
+          "no two compatible nodes name each other as CX7 peers",
+        ),
+      )
+    } else {
+      for member_id in members {
+        for node in nodes {
+          if node.node_id == member_id {
+            pair.push(node)
+          }
+        }
+      }
+      if pair.length() != @contracts.cx7_pair_member_count ||
+        !pair.all(node => node.cx7_address != "") {
+        pair = []
+        findings.push(
+          finding(
+            NoCx7Pair,
+            Blocking,
+            "both members of a pair must declare their address on the private fabric",
+          ),
+        )
+      }
+    }
+  }
   if nodes.length() == 0 {
     findings.push(
       finding(
@@ -409,7 +437,7 @@ pub fn preflight(
         "no active node satisfies runtime, architecture, memory, device and data-class policy",
       ),
     )
-  } else if nodes.length() < intent.replicas {
+  } else if !declared_pair && nodes.length() < intent.replicas {
     findings.push(
       finding(
         InsufficientCapacity,
@@ -419,13 +447,32 @@ pub fn preflight(
     )
   }
   let replicas : Array[PlannedReplica] = []
-  if nodes.length() >= intent.replicas {
+  if declared_pair && pair.length() == @contracts.cx7_pair_member_count {
+    // One logical instance, two ranked members: rank 0 is the head that serves
+    // traffic and holds the weights, rank 1 reads them over the fabric.
+    for index in 0..<pair.length() {
+      let node = pair[index]
+      let peer = pair[if index == 0 { 1 } else { 0 }]
+      replicas.push({
+        replica_id: "\{intent.deployment_id}-r\{index + 1}",
+        node_id: node.node_id,
+        devices: node.device_ids[:template.resources.accelerator_count].to_owned(),
+        group: Some({
+          group_id: "\{intent.deployment_id}-pair",
+          rank: index,
+          world_size: @contracts.cx7_pair_member_count,
+          peer_endpoint: peer.cx7_address,
+        }),
+      })
+    }
+  } else if !declared_pair && nodes.length() >= intent.replicas {
     for index in 0..<intent.replicas {
       let node = nodes[index]
       replicas.push({
         replica_id: "\{intent.deployment_id}-r\{index + 1}",
         node_id: node.node_id,
         devices: node.device_ids[:template.resources.accelerator_count].to_owned(),
+        group: None,
       })
     }
   }
@@ -465,7 +512,7 @@ pub fn preflight_on_node(
   node_id : String,
 ) -> DeploymentPlan {
   if !@contracts.valid_identifier(node_id, maximum_length=96) {
-    return preflight(templates, intent, { ..context, nodes: [], })
+    return preflight(templates, intent, { ..context, nodes: [] })
   }
   preflight(templates, intent, {
     ..context,
@@ -506,10 +553,7 @@ pub fn desired_assignments(
         generation,
         lease_expires_unix_ms: now_unix_ms + plan.intent.lease_duration_ms,
         controller_epoch,
-        // One replica on one machine is a group of one. Paired execution will
-        // replace this with two ranked members of the same group; until then a
-        // pair never reaches here, because preflight blocks it.
-        group: None,
+        group: replica.group,
         signature: "",
       }
     }

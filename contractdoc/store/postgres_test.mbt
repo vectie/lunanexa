@@ -12,32 +12,32 @@ fn test_database_url() -> String? {
   match url {
     None => None
     Some(value) => {
-      let name = match value.split("/").last() {
-        Some(segment) => {
-          match segment.split("?") {
-            Some(parts) => match parts.get(0) {
-              Some(head) => head
-              None => segment
-            }
-            None => segment
-          }
-        }
-        None => ""
+      // Database name: the last path segment, before any query string.
+      let mut name = ""
+      for segment in value.split("/") {
+        name = segment.to_owned()
       }
-      if !name.has_suffix("_test") {
-        fail(
-          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
+      let mut base = ""
+      let mut first = true
+      for part in name.split("?") {
+        if first {
+          base = part.to_owned()
+          first = false
+        }
+      }
+      if !base.has_suffix("_test") {
+        abort(
+          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{base}",
         )
       }
       Some(value)
     }
   }
 }
+
 ///|
 async test "undertaking PostgreSQL reopen and failed write preserve packet audit and idempotency" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   let store = ContractDocumentStore::open_postgres(database)
   let manifest = @contractdoc.undertaking_manifest()
@@ -59,8 +59,8 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
     packet.packet_id,
     packet.revision,
     [
-      { field_id: "lessee.name", value: "数据库验收单位", },
-      { field_id: "undertaking.signed_date", value: "2026-09-16", },
+      { field_id: "lessee.name", value: "数据库验收单位" },
+      { field_id: "undertaking.signed_date", value: "2026-09-16" },
     ],
     CustomerMessenger,
     packet.subject_ref,
@@ -81,7 +81,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
         manifest,
         packet.packet_id,
         updated.revision,
-        [{ field_id: "lessee.name", value: "must-not-persist", }],
+        [{ field_id: "lessee.name", value: "must-not-persist" }],
         CustomerMessenger,
         packet.subject_ref,
         "postgres-acceptance",
@@ -111,7 +111,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
     manifest,
     packet.packet_id,
     updated.revision,
-    [{ field_id: "lessee.name", value: "retry-persisted", }],
+    [{ field_id: "lessee.name", value: "retry-persisted" }],
     CustomerMessenger,
     packet.subject_ref,
     "postgres-acceptance",

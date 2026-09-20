@@ -45,12 +45,13 @@ fn cleanup_store() -> NotificationStore raise {
     }
   }
   for
-    (id, notice, state) in [
+    entry in [
       ("delivery-active", "active", @notifications.DeliveryState::Delivering),
       ("delivery-silenced", "silenced", Delivering),
       ("delivery-dead", "active", DeadLetter),
       ("delivery-pending", "active", PendingDelivery),
     ] {
+    let (id, notice, state) = entry
     store.deliveries[id] = {
       delivery_id: id,
       notification_id: notice,
