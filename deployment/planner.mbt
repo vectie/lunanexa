@@ -39,8 +39,42 @@ fn safe_s3_reference(value : String) -> Bool {
 }
 
 ///|
+/// A managed revision: a directory inside the control plane's own model store.
+/// The store verified every file in it and wrote a source manifest, so the
+/// revision is the artifact and the manifest is its signature subject -- there
+/// is no separate blob and no detached signature object to name.
+fn safe_model_store_reference(value : String) -> Bool {
+  guard value.has_prefix(@contracts.model_store_scheme) else { return false }
+  let directory = value[@contracts.model_store_scheme.length():].to_owned()
+  directory != "" &&
+  directory.length() <= 2048 &&
+  !directory.has_prefix("/") &&
+  !directory.has_suffix("/") &&
+  !directory.contains("..") &&
+  !directory.contains("//") &&
+  directory.all(character => {
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character == '-' ||
+    character == '_' ||
+    character == '.' ||
+    character == '/'
+  })
+}
+
+///|
+/// The two transports a template may name: an upstream object store, or this
+/// control plane's own verified model store. Both are materializable -- the
+/// artifact gateway serves either, and the node picks the matching path.
+fn safe_artifact_reference(value : String) -> Bool {
+  safe_s3_reference(value) || safe_model_store_reference(value)
+}
+
+///|
 fn safe_signature_reference(value : String) -> Bool {
   safe_s3_reference(value) ||
+  safe_model_store_reference(value) ||
   @contracts.valid_identifier(value, maximum_length=256)
 }
 
@@ -87,7 +121,7 @@ pub fn validate_template(
     !@contracts.valid_sha256_digest(template.artifact.digest) ||
     template.artifact.size_bytes <= 0L ||
     template.artifact.size_bytes > 1099511627776L ||
-    !safe_s3_reference(template.artifact.uri) ||
+    !safe_artifact_reference(template.artifact.uri) ||
     !safe_signature_reference(template.artifact.signature_ref) ||
     !template.network.allow_artifact_store ||
     !template.network.allow_controller ||
@@ -298,14 +332,14 @@ pub fn preflight(
       ),
     )
   }
-  if !template.artifact.uri.has_prefix("s3://") ||
+  if !safe_artifact_reference(template.artifact.uri) ||
     template.artifact.signature_ref == "" ||
     !template.network.allow_artifact_store {
     findings.push(
       finding(
         ArtifactMaterializationUnsupported,
         Blocking,
-        "the model blob and detached signature must be materializable from the artifact store",
+        "the model bytes and whatever attests them must be materializable: an object store blob with a detached signature, or a verified revision of this control plane's model store",
       ),
     )
   }

@@ -145,6 +145,41 @@ adopt（每个的 license 用 store 从上游仓库记下来的真实值，显�
 registry 里因此有 19 个模型 id。它**不做** license 接受、verification、evaluation、approval——
 那四步要真凭据，编造比留白更糟。
 
+## 模型与运行时：两条链在 UI 上闭环
+
+模型链（控制台每一行都有按钮）：adopt → 接受 licence → 校验制品 → 批准 → 提升 alias。
+运行时链：注册运行时档案（控制台表单）→ 注册目录模板 → 一键部署。
+
+两个真实的拦路石都移开了：
+
+1. **模板只承认 `s3://` 制品**，而平台自己的模型库里所有模型都是 `modelstore://` 修订版本，
+   于是任何已采纳的模型都无法注册模板。`validate_template` / preflight 现在承认
+   **两种搬运方式**：上游对象存储的 blob + 分离签名，或本控制面模型库里一个**已验证的修订版本**
+   （它的 source manifest 就是签名主体，artifact 网关和节点都是这么处理的）。
+2. **批准硬性要求一条通过的评测**（`Evaluated` 状态 + `evaluations[...].passed`），
+   而这一批模型没有任何基准数据，整条链就停在这里。
+
+第 2 条按你的要求"评测暂时搁置"处理，但**不是悄悄放松**：新增部署级开关
+`LUNANEXA_REQUIRE_MODEL_EVALUATION`（默认 **1**，仍然要求评测），本集群显式设为 0，
+记录在 `deploy/management-foundation/controller-patch.yaml` 里；开关关掉时：
+
+- 批准只允许从 `Verified`（真做过校验）进入，`Candidate` 仍然批不了；
+- 这样产生的每一次 alias 提升，回执里的 `evaluation_id` 是**空字符串**——"没有评测背书"
+  这件事写在审计记录里，而不是靠默认值掩盖；
+- 计划阶段的证据同样跟随这个策略（否则会出现"批准了却规划不了"的自相矛盾）。
+
+现场结果：**15 个模型**完成 licence → 校验 → 批准 → alias；registry 里 17 个 `Approved`、
+16 个 alias。另外 2 个早期 import（`Qwen/Qwen3-0.6B`、`OpenBMB/MiniCPM5-1B`）在"校验制品"
+这一步**被拒**（`SignatureRejected`：修订版本没有如实背书那个摘要）——那两个目录的字节和
+清单对不上，闸门按设计拦住了它们。
+
+运行时链现场结果：注册 `sm121` 的 lunaflux 档案 → 注册模板 `glm53-exl3-text:v2`
+（artifact 是 `modelstore://Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw`）→
+**计划 `executable: true`**，落在 `spark-25e2-3d35c8fd`。
+
+节点上的 `runtimeNames` 现在是**运维声明**（`cluster.json` 里写明），不是节点的实测上报；
+真实部署里这个字段由节点 agent 从宿主机读取。
+
 ## 与仓库其余部分的关系
 
 - `deploy/node-kubernetes-rbac.yaml` 现在是这份脚本渲染的模板（`lunanexa-node` +

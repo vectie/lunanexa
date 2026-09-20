@@ -725,6 +725,12 @@ async fn main {
     }
     None => None
   }
+  // Evaluation may be shelved for a deployment that is not yet measuring
+  // anything; the default is to require it, and an approval granted without it
+  // is visible in every promotion receipt it produces.
+  let require_model_evaluation = @env.get_env_var(
+    "LUNANEXA_REQUIRE_MODEL_EVALUATION",
+  ).unwrap_or("1") == "1"
   let runtime_endpoint = required_environment("LUNANEXA_RUNTIME_ENDPOINT")
   let mut runtime = @runtimes.OpenAiTextRuntime::new(
     runtime_endpoint,
@@ -769,8 +775,14 @@ async fn main {
     error => raise error
   }
   let registry = match management_database {
-    Some(database) => @registry.FileRegistry::open_postgres(database)
-    None => @registry.FileRegistry::open(registry_path)
+    Some(database) =>
+      @registry.FileRegistry::open_postgres(
+        database, require_evaluation=require_model_evaluation,
+      )
+    None =>
+      @registry.FileRegistry::open(
+        registry_path, require_evaluation=require_model_evaluation,
+      )
   }
   let enrollment = match management_database {
     Some(database) => @node.FileEnrollmentService::open_postgres(database)

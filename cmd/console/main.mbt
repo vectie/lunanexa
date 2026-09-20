@@ -1226,6 +1226,9 @@ async fn load_console(
         ),
         compatibility: model.compatible_architectures.join(", "),
         alias_name: alias_name(registry, model.model_id, model.version),
+        license_id: model.license_id,
+        artifact_uri: model.artifact.uri,
+        artifact_digest: model.artifact.digest,
       }
     }
   ]
@@ -1349,6 +1352,9 @@ async fn load_console(
     model_adopted_imports: [],
     model_local_directories: [],
     model_local_draft: { directory: "", repository: "", revision: "master", },
+    model_license_draft: @ui.empty_model_license_draft(),
+    model_alias_draft: @ui.empty_model_alias_draft(),
+    runtime_draft: @ui.default_runtime_draft(),
     operation_name: "register-model",
     operation_body: "",
     quick_deployment_id: "",
@@ -2379,6 +2385,11 @@ fn merge_loaded_console(
     model_adopted_imports: current.model_adopted_imports,
     model_local_directories: current.model_local_directories,
     model_local_draft: current.model_local_draft,
+    // The per-candidate onboarding drafts and the runtime registration form are
+    // UI-owned: a reload must not erase what the operator is editing.
+    model_license_draft: current.model_license_draft,
+    model_alias_draft: current.model_alias_draft,
+    runtime_draft: current.runtime_draft,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
     access_package_draft: {
@@ -3176,6 +3187,237 @@ fn empty_model_adoption_draft() -> @ui.ModelAdoptionDraft {
 ///|
 fn model_adoption_path(import_id : String) -> String {
   "/v1/model-sources/modelscope/imports/\{import_id}:adopt"
+}
+
+///|
+/// The body of `POST /v1/licenses`. The control plane decodes this shape into
+/// its own licence record; the console only owns the operator-supplied
+/// identity and citation.
+priv struct ConsoleLicenseRecord {
+  license_id : String
+  model_id : String
+  status : String
+  accepted_by : String
+  evidence_ref : String
+} derive(ToJson)
+
+///|
+extend ConsoleLicenseRecord with ToJson::{to_json}
+
+///|
+/// The body of `POST /v1/verifications` for a managed revision.
+priv struct ConsoleVerificationRequest {
+  kind : String
+  subject : String
+  digest : String
+  provenance_verified : Bool
+} derive(ToJson)
+
+///|
+extend ConsoleVerificationRequest with ToJson::{to_json}
+
+///|
+/// The body of `POST /v1/models/approve`.
+priv struct ConsoleApprovalRequest {
+  model_id : String
+  version : String
+} derive(ToJson)
+
+///|
+extend ConsoleApprovalRequest with ToJson::{to_json}
+
+///|
+/// The body of `POST /v1/aliases/promote`.
+priv struct ConsolePromotionRequest {
+  alias_name : String
+  model_id : String
+  version : String
+  stage : String
+  actor : String
+} derive(ToJson)
+
+///|
+extend ConsolePromotionRequest with ToJson::{to_json}
+
+///|
+/// The body of `POST /v1/runtimes`.
+priv struct ConsoleRuntimeSpec {
+  name : String
+  image_digest : String
+  version : String
+  architectures : Array[String]
+  capabilities : Array[String]
+  supports_batching : Bool
+  supports_multi_node : Bool
+} derive(ToJson)
+
+///|
+extend ConsoleRuntimeSpec with ToJson::{to_json}
+
+///|
+fn console_model_row(
+  state : @ui.ConsoleState,
+  model_id : String,
+  version : String,
+) -> @ui.ModelRow? {
+  state.models.iter().find_first(row => {
+    row.model_id == model_id && row.version == version
+  })
+}
+
+///|
+/// The evidence citation a candidate's licence review starts from. The exact
+/// upstream SPDX text the import declared is preferred; the registry licence
+/// identity is the fallback. Neither is a path or a digest.
+fn license_evidence_default(
+  state : @ui.ConsoleState,
+  row : @ui.ModelRow,
+) -> String {
+  let mut spdx = ""
+  if row.artifact_digest != "" {
+    for import_ in state.model_imports {
+      if import_.manifest_digest == row.artifact_digest &&
+        import_.license.trim() != "" {
+        spdx = import_.license.trim().to_owned()
+      }
+    }
+  }
+  if spdx == "" {
+    spdx = row.license_id.trim().to_owned()
+  }
+  "modelscope-license:\{spdx}"
+}
+
+///|
+/// The first JSON string value stored under `key`, or `None` when the text
+/// carries no such member. Debug `Repr` escapes the quotes of an embedded
+/// body, so the escaping is undone before the member is read.
+fn json_string_member(text : String, key : String) -> String? {
+  let plain = text
+    .replace_all(old="\\\"", new="\"")
+    .replace_all(old="\\\\", new="\\")
+  let needle = "\"" + key + "\""
+  guard plain.find(needle) is Some(start) else {
+    return None
+  }
+  let after_key = plain[start + needle.length():]
+  guard after_key.find(":") is Some(colon) else {
+    return None
+  }
+  let after_colon = after_key[colon + 1:]
+  guard after_colon.find("\"") is Some(open) else {
+    return None
+  }
+  let body = after_colon[open + 1:]
+  guard body.find("\"") is Some(close) else {
+    return None
+  }
+  Some(body[:close].to_owned())
+}
+
+///|
+/// A console write that the control plane refused carries its own explanation:
+/// the registry answers an out-of-order or unverified step with
+/// `{"error":{"code":...,"message":...}}`. Report that message verbatim, and
+/// fall back to the raw transport detail when the body is not that envelope.
+fn http_failure_detail(error : Error) -> String {
+  // `Show` carries the transport text; the debug `Repr` of the JSON-layer
+  // error type is opaque and would hide the control plane's own words.
+  let detail = error.to_string()
+  match json_string_member(detail, "message") {
+    Some(message) =>
+      if message == "" {
+        detail
+      } else {
+        message
+      }
+    None => detail
+  }
+}
+
+///|
+/// The canonical endpoint of one model-onboarding action. The registry owns
+/// the order; the console only addresses the route.
+priv enum ModelOnboardingAction {
+  AcceptLicense
+  VerifyArtifact
+  ApproveVersion
+  PromoteAlias
+}
+
+///|
+fn model_onboarding_path(action : ModelOnboardingAction) -> String {
+  match action {
+    AcceptLicense => "/v1/licenses"
+    VerifyArtifact => "/v1/verifications"
+    ApproveVersion => "/v1/models/approve"
+    PromoteAlias => "/v1/aliases/promote"
+  }
+}
+
+///|
+fn runtime_registration_path() -> String {
+  "/v1/runtimes"
+}
+
+///|
+fn model_license_body(draft : @ui.ModelLicenseDraft) -> String {
+  ConsoleLicenseRecord::{
+    license_id: draft.license_id.trim().to_owned(),
+    model_id: draft.model_id,
+    status: "Accepted",
+    accepted_by: "operator",
+    evidence_ref: draft.evidence_ref.trim().to_owned(),
+  }
+  .to_json()
+  .stringify()
+}
+
+///|
+/// A `modelstore://` subject is correct here: the control plane attests the
+/// managed revision itself and refuses a digest it cannot re-derive.
+fn model_verification_body(row : @ui.ModelRow) -> String {
+  ConsoleVerificationRequest::{
+    kind: "managed-revision",
+    subject: row.artifact_uri,
+    digest: row.artifact_digest,
+    provenance_verified: true,
+  }
+  .to_json()
+  .stringify()
+}
+
+///|
+fn model_approval_body(model_id : String, version : String) -> String {
+  ConsoleApprovalRequest::{ model_id, version }.to_json().stringify()
+}
+
+///|
+fn model_promotion_body(draft : @ui.ModelAliasDraft) -> String {
+  ConsolePromotionRequest::{
+    alias_name: draft.alias_name.trim().to_owned(),
+    model_id: draft.model_id,
+    version: draft.version,
+    stage: "Canary",
+    actor: "operator",
+  }
+  .to_json()
+  .stringify()
+}
+
+///|
+fn runtime_registration_body(draft : @ui.RuntimeProfileDraft) -> String {
+  ConsoleRuntimeSpec::{
+    name: draft.name.trim().to_owned(),
+    image_digest: draft.image_digest.trim().to_owned(),
+    version: draft.version.trim().to_owned(),
+    architectures: [draft.architecture.trim().to_owned()],
+    capabilities: [@ui.runtime_capability_name(draft.capability)],
+    supports_batching: draft.supports_batching,
+    supports_multi_node: draft.supports_multi_node,
+  }
+  .to_json()
+  .stringify()
 }
 
 ///|
@@ -5433,6 +5675,508 @@ fn update_live(
       })
       ({ ..model, console: { ..model.console, loading: true } }, cmd)
     }
+    Console(BeginLicenseAcceptance(model_id, version)) => {
+      guard console_model_row(model.console, model_id, version) is Some(row) else {
+        return (model, @rabbita.none)
+      }
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_license_draft: {
+              model_id,
+              version,
+              license_id: row.license_id,
+              evidence_ref: license_evidence_default(model.console, row),
+            },
+            model_alias_draft: @ui.empty_model_alias_draft(),
+            error_message: None,
+            success_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Console(DismissLicenseAcceptance) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_license_draft: @ui.empty_model_license_draft(),
+          },
+        },
+        @rabbita.none,
+      )
+    Console(LicenseRecordIdChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_license_draft: {
+              ..model.console.model_license_draft,
+              license_id: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(LicenseEvidenceChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_license_draft: {
+              ..model.console.model_license_draft,
+              evidence_ref: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitModelLicense) => {
+      let draft = model.console.model_license_draft
+      if !model.console.operator_authenticated ||
+        !@ui.model_license_draft_valid(draft) {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Enter a valid licence record ID and a non-empty evidence citation.",
+                  "请填写有效的许可证记录 ID 与非空证据引用。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let license_id = draft.license_id.trim().to_owned()
+      let body = model_license_body(draft)
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              model_onboarding_path(AcceptLicense),
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          error =>
+            ActionFailed(model.console.locale, http_failure_detail(error))
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Licence \{license_id} recorded as Accepted for \{draft.model_id} · \{draft.version}.",
+                "已将 \{draft.model_id} · \{draft.version} 的许可证 \{license_id} 记录为已接受。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(VerifyModelArtifact(model_id, version)) => {
+      guard model.console.operator_authenticated &&
+        console_model_row(model.console, model_id, version) is Some(row) &&
+        @contracts.valid_sha256_digest(row.artifact_digest) &&
+        row.artifact_uri != "" else {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "This registered artifact has no attestable managed revision yet.",
+                  "该已注册制品尚无可以证明的受管版本。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let body = model_verification_body(row)
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              model_onboarding_path(VerifyArtifact),
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          error =>
+            ActionFailed(model.console.locale, http_failure_detail(error))
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The managed revision \{row.artifact_digest} was verified for \{model_id} · \{version}.",
+                "已为 \{model_id} · \{version} 验证受管版本 \{row.artifact_digest}。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(ApproveModelVersion(model_id, version)) => {
+      guard model.console.operator_authenticated else {
+        return (model, @rabbita.none)
+      }
+      let body = model_approval_body(model_id, version)
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              model_onboarding_path(ApproveVersion),
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          error =>
+            ActionFailed(model.console.locale, http_failure_detail(error))
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "\{model_id} · \{version} is approved for users.",
+                "\{model_id} · \{version} 已批准供用户使用。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(BeginAliasPromotion(model_id, version)) => {
+      guard console_model_row(model.console, model_id, version) is Some(row) else {
+        return (model, @rabbita.none)
+      }
+      let existing = if row.alias_name == "—" {
+        @ui.model_alias_slug(model_id)
+      } else {
+        row.alias_name
+      }
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_alias_draft: {
+              model_id,
+              version,
+              alias_name: existing,
+            },
+            model_license_draft: @ui.empty_model_license_draft(),
+            error_message: None,
+            success_message: None,
+          },
+        },
+        @rabbita.none,
+      )
+    }
+    Console(DismissAliasPromotion) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_alias_draft: @ui.empty_model_alias_draft(),
+          },
+        },
+        @rabbita.none,
+      )
+    Console(AliasNameChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            model_alias_draft: {
+              ..model.console.model_alias_draft,
+              alias_name: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitAliasPromotion) => {
+      let draft = model.console.model_alias_draft
+      if !model.console.operator_authenticated ||
+        !@ui.model_alias_draft_valid(draft) {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Enter a valid serving alias before promoting.",
+                  "提升前请填写有效的服务别名。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let alias_name = draft.alias_name.trim().to_owned()
+      let body = model_promotion_body(draft)
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              model_onboarding_path(PromoteAlias),
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          error =>
+            ActionFailed(model.console.locale, http_failure_detail(error))
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Alias \{alias_name} now points at \{draft.model_id} · \{draft.version} as Canary.",
+                "别名 \{alias_name} 现以 Canary 指向 \{draft.model_id} · \{draft.version}。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
+    Console(RuntimeNameChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: { ..model.console.runtime_draft, name: value },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(RuntimeVersionChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: { ..model.console.runtime_draft, version: value },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(RuntimeImageDigestChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: {
+              ..model.console.runtime_draft,
+              image_digest: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(RuntimeArchitectureChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: {
+              ..model.console.runtime_draft,
+              architecture: value,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(RuntimeCapabilityChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: {
+              ..model.console.runtime_draft,
+              capability: @ui.parse_runtime_capability(value),
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(RuntimeBatchingToggled) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: {
+              ..model.console.runtime_draft,
+              supports_batching: !model.console.runtime_draft.supports_batching,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(RuntimeMultiNodeToggled) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            runtime_draft: {
+              ..model.console.runtime_draft,
+              supports_multi_node: !model.console.runtime_draft.supports_multi_node,
+            },
+          },
+        },
+        @rabbita.none,
+      )
+    Console(SubmitRuntimeRegistration) => {
+      let draft = model.console.runtime_draft
+      if !model.console.operator_authenticated ||
+        !@ui.runtime_profile_draft_valid(draft) {
+        return (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              loading: false,
+              error_message: Some(
+                console_copy(
+                  model.console.locale,
+                  "Name the runtime, give a sha256:<64 hex> image digest and a valid version and architecture.",
+                  "请填写运行时名称、sha256:<64 位十六进制> 镜像摘要，以及有效的版本与架构。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let runtime_name = draft.name.trim().to_owned()
+      let body = runtime_registration_body(draft)
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          ignore(
+            request(
+              "POST",
+              model.endpoint,
+              runtime_registration_path(),
+              model.credential,
+              body~,
+            ),
+          )
+        catch {
+          error =>
+            ActionFailed(model.console.locale, http_failure_detail(error))
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Runtime \{runtime_name} was registered. Verify its image digest before any deployment can use it.",
+                "运行时 \{runtime_name} 已登记。在任何部署使用它之前，请先验证其镜像摘要。",
+              ),
+            )
+        }
+      })
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: true,
+            error_message: None,
+            success_message: None,
+          },
+        },
+        cmd,
+      )
+    }
     Console(CancelModelImport(import_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try {
@@ -7279,6 +8023,20 @@ fn update(
       | Console(ModelLocalDirectoryChanged(_))
       | Console(ModelLocalRepositoryChanged(_))
       | Console(ModelLocalRevisionChanged(_))
+      | Console(BeginLicenseAcceptance(_, _))
+      | Console(DismissLicenseAcceptance)
+      | Console(LicenseRecordIdChanged(_))
+      | Console(LicenseEvidenceChanged(_))
+      | Console(BeginAliasPromotion(_, _))
+      | Console(DismissAliasPromotion)
+      | Console(AliasNameChanged(_))
+      | Console(RuntimeNameChanged(_))
+      | Console(RuntimeVersionChanged(_))
+      | Console(RuntimeImageDigestChanged(_))
+      | Console(RuntimeArchitectureChanged(_))
+      | Console(RuntimeCapabilityChanged(_))
+      | Console(RuntimeBatchingToggled)
+      | Console(RuntimeMultiNodeToggled)
       | Console(OperationChanged(_))
       | Console(OperationBodyChanged(_))
       | Console(BeginDrain(_))
@@ -7357,6 +8115,11 @@ fn update(
       | Console(SubmitModelAdoption)
       | Console(RefreshModelLocalDirectories)
       | Console(SubmitModelLocalRegistration)
+      | Console(SubmitModelLicense)
+      | Console(VerifyModelArtifact(_, _))
+      | Console(ApproveModelVersion(_, _))
+      | Console(SubmitAliasPromotion)
+      | Console(SubmitRuntimeRegistration)
       | Console(SubmitOperation) =>
         (
           {

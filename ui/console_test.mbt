@@ -37,6 +37,9 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         evaluation_status: "passed",
         compatibility: "DGX Spark",
         alias_name: "text.default",
+        license_id: "license.model.text",
+        artifact_uri: "modelstore://model.text/v1",
+        artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       },
     ],
     deployments: [
@@ -299,6 +302,9 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     model_adopted_imports: [],
     model_local_directories: [],
     model_local_draft: { directory: "", repository: "", revision: "master", },
+    model_license_draft: @ui.empty_model_license_draft(),
+    model_alias_draft: @ui.empty_model_alias_draft(),
+    runtime_draft: @ui.default_runtime_draft(),
     operation_name: "register-model",
     operation_body: "{}",
     quick_deployment_id: "",
@@ -1657,4 +1663,201 @@ test "a local registration is submittable only with a store directory and an ups
       draft,
     ),
   )
+}
+
+///|
+/// The rendered `<button>` tag whose label is `label`, so a test can tell a
+/// control offered to this operator from one that is only drawn disabled.
+fn button_tag_for(html : String, label : String) -> String {
+  let prefix = match html.find(label) {
+    Some(offset) => html[:offset]
+    None => return ""
+  }
+  let mut tag = ""
+  for segment in prefix.split("<button") {
+    tag = segment.to_owned()
+  }
+  tag
+}
+
+///|
+/// The rendered `<input>` tag opened for `id`, including the `checked` property
+/// that a boolean toggle writes after the attributes.
+fn input_tag_for(html : String, id : String) -> String {
+  let needle = "id=\"" + id + "\""
+  guard html.find(needle) is Some(start) else {
+    return ""
+  }
+  let rest = html[start:]
+  guard rest.find(">") is Some(end) else {
+    return ""
+  }
+  rest[:end].to_owned()
+}
+
+///|
+/// One adopted candidate, with the licence identity and managed-store revision
+/// the registry reported for it.
+fn candidate_model_row() -> @ui.ModelRow {
+  {
+    model_id: "model.minicpm5-1b",
+    version: "modelscope-main",
+    state: Candidate,
+    license_status: "missing",
+    evaluation_status: "missing",
+    compatibility: "nvidia-sm121",
+    alias_name: "—",
+    license_id: "license.minicpm5-apache",
+    artifact_uri: "modelstore://qwen3635ba3bfp8",
+    artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  }
+}
+
+///|
+test "candidate rows expose licence, verification, approval and promotion controls" {
+  let base = console_state(Models)
+  let html = @ui.render({ ..base, models: [candidate_model_row()] })
+  assert_true(html.contains("Accept licence…"))
+  assert_true(html.contains("Verify artifact"))
+  assert_true(html.contains(">Approve</button>"))
+  assert_true(html.contains("Promote alias…"))
+  // The registry owns the order: a premature step is answered with its own
+  // refusal rather than hidden behind a disabled control.
+  assert_false(button_tag_for(html, "Verify artifact").contains("disabled"))
+  assert_false(button_tag_for(html, "Promote alias…").contains("disabled"))
+}
+
+///|
+test "candidate onboarding controls need operator authority" {
+  let base = console_state(Models)
+  let html = @ui.render({
+    ..base,
+    models: [candidate_model_row()],
+    operator_authenticated: false,
+  })
+  for
+    label in [
+      "Accept licence…", "Verify artifact", "Promote alias…",
+    ] {
+    assert_true(button_tag_for(html, label).contains("disabled"))
+  }
+}
+
+///|
+test "licence and alias forms follow the selected candidate row" {
+  let base = console_state(Models)
+  let licence = @ui.render({
+    ..base,
+    models: [candidate_model_row()],
+    model_license_draft: {
+      model_id: "model.minicpm5-1b",
+      version: "modelscope-main",
+      license_id: "license.minicpm5-apache",
+      evidence_ref: "modelscope-license:apache-2.0",
+    },
+  })
+  assert_true(
+    licence.contains(
+      "Accept licence for model.minicpm5-1b · modelscope-main",
+    ),
+  )
+  assert_true(licence.contains("model-license-id"))
+  assert_true(licence.contains("model-license-evidence"))
+  assert_true(licence.contains("value=\"license.minicpm5-apache\""))
+  assert_true(licence.contains("value=\"modelscope-license:apache-2.0\""))
+  assert_true(licence.contains(">Accept licence</button>"))
+  assert_false(licence.contains("model-alias-name"))
+  let alias_html = @ui.render({
+    ..base,
+    models: [candidate_model_row()],
+    model_alias_draft: {
+      model_id: "model.minicpm5-1b",
+      version: "modelscope-main",
+      alias_name: "text.default",
+    },
+  })
+  assert_true(alias_html.contains("model-alias-name"))
+  assert_true(alias_html.contains("value=\"text.default\""))
+  assert_true(alias_html.contains(">Promote alias</button>"))
+  assert_false(alias_html.contains("model-license-id"))
+  // A draft opened for another version never borrows this row's controls.
+  let elsewhere = @ui.render({
+    ..base,
+    models: [candidate_model_row()],
+    model_license_draft: {
+      model_id: "model.somewhere-else",
+      version: "v1",
+      license_id: "license.elsewhere",
+      evidence_ref: "modelscope-license:mit",
+    },
+  })
+  assert_false(elsewhere.contains("model-license-id"))
+}
+
+///|
+test "policies page registers a runtime profile from its own controls" {
+  let base = console_state(Policies)
+  let html = @ui.render(base)
+  assert_true(html.contains("Register a runtime profile"))
+  assert_true(html.contains("runtime-name"))
+  assert_true(html.contains("runtime-version"))
+  assert_true(html.contains("runtime-image-digest"))
+  assert_true(html.contains("runtime-architecture"))
+  assert_true(html.contains("runtime-capability"))
+  assert_true(html.contains("runtime-batching"))
+  assert_true(html.contains("runtime-multi-node"))
+  assert_true(html.contains("value=\"nvidia-sm121\""))
+  assert_true(html.contains("value=\"TextGenerate\" selected"))
+  assert_false(input_tag_for(html, "runtime-batching").contains("checked"))
+  // The default draft is incomplete, so the registry is not asked yet.
+  assert_true(button_tag_for(html, "Register runtime").contains("disabled"))
+  let ready = @ui.render({
+    ..base,
+    runtime_draft: {
+      name: "text-runtime-v2",
+      version: "runtime-v2",
+      image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      architecture: "nvidia-sm121",
+      capability: TextGenerate,
+      supports_batching: true,
+      supports_multi_node: false,
+    },
+  })
+  assert_true(input_tag_for(ready, "runtime-batching").contains("checked"))
+  assert_false(input_tag_for(ready, "runtime-multi-node").contains("checked"))
+  assert_false(button_tag_for(ready, "Register runtime").contains("disabled"))
+}
+
+///|
+test "runtime registration stays localized and needs operator authority" {
+  let base = console_state(Policies)
+  let chinese = @ui.render({
+    ..base,
+    locale: ChineseSimplified,
+    runtime_draft: {
+      name: "text-runtime-v2",
+      version: "runtime-v2",
+      image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      architecture: "nvidia-sm121",
+      capability: TextGenerate,
+      supports_batching: false,
+      supports_multi_node: false,
+    },
+  })
+  assert_true(chinese.contains("注册运行时配置"))
+  assert_true(chinese.contains("注册运行时"))
+  let disconnected = @ui.render({
+    ..base,
+    operator_authenticated: false,
+    runtime_draft: {
+      name: "text-runtime-v2",
+      version: "runtime-v2",
+      image_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      architecture: "nvidia-sm121",
+      capability: TextGenerate,
+      supports_batching: false,
+      supports_multi_node: false,
+    },
+  })
+  assert_true(button_tag_for(disconnected, "Register runtime").contains("disabled"))
 }

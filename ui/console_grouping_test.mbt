@@ -13,6 +13,9 @@ fn model_artifact(
     evaluation_status: "passed",
     compatibility: "nvidia-sm120",
     alias_name: "—",
+    license_id: "license.qualified",
+    artifact_uri: "modelstore://\{model_id}/\{version}",
+    artifact_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   }
 }
 
