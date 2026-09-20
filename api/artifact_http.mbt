@@ -209,25 +209,22 @@ async fn authorized_artifact_size(
   size : Int64,
   signature_maximum_bytes : Int64,
 ) -> Int64? {
-  match artifact_location(assignment.artifact.uri) {
+  let declared : Int64? = match artifact_location(assignment.artifact.uri) {
     Some(Object(_)) =>
-      if key == artifact_key(assignment.artifact.uri).unwrap_or("") &&
-        size == assignment.artifact.size_bytes {
-        Some(size)
+      if key == artifact_key(assignment.artifact.uri).unwrap_or("") {
+        Some(assignment.artifact.size_bytes)
       } else {
         None
       }
     Some(Revision(directory)) =>
-      match
-        managed_revision_size(
-          root,
-          directory,
-          key,
-          assignment.artifact.digest,
-        ) {
-        Some(registered) => if size == registered { Some(size) } else { None }
-        None => None
-      }
+      managed_revision_size(root, directory, key, assignment.artifact.digest)
+    None => None
+  }
+  match declared {
+    Some(expected) => if size == expected { Some(size) } else { None }
+    // The detached signature is its own object beside the artifact rather than
+    // part of whatever the artifact URI names, so it is bound by its own key
+    // and a bounded size instead of by the artifact location.
     None =>
       if assignment_signature_key(assignment) == Some(key) &&
         size <= signature_maximum_bytes {

@@ -140,6 +140,33 @@ test "existing runtime configuration without a secret field remains compatible" 
 }
 
 ///|
+/// The fabric address is what makes a node eligible to host half of a CX7
+/// pair, and a node that is not part of one says so by leaving the key out.
+/// Both spellings an operator might write must keep working: an absent key and
+/// an explicit null.
+test "a node that declares no fabric address still reads its configuration" {
+  let absent = runtime_settings().to_json()
+  guard absent is Object(fields) else { fail("not a settings object") }
+  fields.remove("fabric_address")
+  let restored : @kubernetes.RuntimeSettings = @json.from_json(absent)
+  assert_eq(restored.fabric_address, None)
+
+  let nulled = runtime_settings().to_json()
+  guard nulled is Object(fields) else { fail("not a settings object") }
+  fields["fabric_address"] = Json::null()
+  let from_null : @kubernetes.RuntimeSettings = @json.from_json(nulled)
+  assert_eq(from_null.fabric_address, None)
+
+  let declared : @kubernetes.RuntimeSettings = @json.from_json(
+    {
+      ..runtime_settings().to_json(),
+      "fabric_address": "10.0.22.1",
+    },
+  )
+  assert_eq(declared.fabric_address, Some("10.0.22.1"))
+}
+
+///|
 async test "changed secret references preserve journal cleanup and require a new deployment generation" {
   let checkpoint : Ref[String?] = Ref(None)
   let api = fake_api(checkpoint)

@@ -310,6 +310,12 @@ Keep the runtime namespace dedicated to managed inference. This new backend
 still requires live allocation, serving and failure-fencing acceptance before
 production promotion; source-level support is not deployment evidence.
 
+A node that is one half of a validated CX7 pair additionally sets
+`"fabric_address"` in that file to its own address on the private fabric
+(see `docs/CX7_PAIR_TOPOLOGY.md`). A paired assignment arriving at a node that
+declares no fabric address is refused rather than started unable to reach its
+peer, and nodes that are not part of a pair leave the key out entirely.
+
 Each protected per-node directory for that layout additionally contains
 `node.env`, `lunanexa-controller-tunnel.service`, `tunnel-identity`, and
 `tunnel-known-hosts`. The tunnel is a lab-only loopback transport over the
