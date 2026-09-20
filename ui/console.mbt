@@ -1038,6 +1038,7 @@ pub fn demo_state() -> ConsoleState {
     data_class: Internal,
     lease_duration_ms: 86400000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let service_operation : @deployment.DeploymentOperation = {
     operation_id: "operation-text-service-01",

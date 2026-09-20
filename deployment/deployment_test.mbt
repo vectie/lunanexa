@@ -71,6 +71,7 @@ fn intent() -> @deployment.ModelServiceIntent {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
 }
 
@@ -239,4 +240,77 @@ test "one-click catalog rejects container-managed artifact downloads" {
   assert_true(
     plan.findings.any(value => value.code == ArtifactMaterializationUnsupported),
   )
+}
+
+///|
+fn cx7_context() -> @deployment.PlanningContext {
+  { registry: [], nodes: [], available_secret_refs: [], }
+}
+
+///|
+/// The geometry is a claim the intent makes and the template must honour. These
+/// cases pin that neither alone can authorise a paired placement, and that the
+/// pair is refused honestly until paired execution exists rather than being
+/// planned as one machine.
+test "a paired placement is gated on the intent and the runtime together" {
+  let pair : @contracts.RuntimeSpec = {
+    ..template().runtime,
+    supports_multi_node: true,
+  }
+  let pair_template = { ..template(), runtime: pair, }
+  let pair_intent = {
+    ..intent(),
+    topology_profile: Some(@contracts.cx7_pair_topology_profile),
+  }
+
+  // Runtime can pair, intent names the pair: accepted as a claim, but blocked
+  // because paired execution is not implemented yet.
+  let planned = @deployment.preflight([pair_template], pair_intent, cx7_context())
+  assert_true(
+    planned.findings.any(value => value.code == PairExecutionNotImplemented),
+  )
+  assert_false(planned.executable)
+  assert_false(
+    planned.findings.any(value => value.code == GeometryNotDeclared),
+  )
+
+  // Runtime can pair, intent says nothing: the geometry was not declared.
+  let undeclared = @deployment.preflight([pair_template], intent(), cx7_context())
+  assert_true(
+    undeclared.findings.any(value => value.code == GeometryNotDeclared),
+  )
+
+  // Intent names the pair but the runtime cannot: refused on the template side.
+  let cannot = @deployment.preflight(
+    [template()], pair_intent, cx7_context(),
+  )
+  assert_true(cannot.findings.any(value => value.code == RuntimeCannotPair))
+
+  // A profile other than the single admitted one is an invalid intent.
+  let other = @deployment.preflight(
+    [pair_template],
+    { ..intent(), topology_profile: Some("any-two-nodes") },
+    cx7_context(),
+  )
+  assert_true(other.findings.any(value => value.code == InvalidIntent))
+}
+
+///|
+/// A deployment document written before the geometry field existed must still
+/// decode: clients are not forced to add a key to keep working.
+test "an intent document without the geometry field still decodes" {
+  let document =
+    #|{"version":"lunanexa.v1","idempotency_key":"k","deployment_id":"d","template":{"template_id":"t","version":"v1"},"replicas":1,"data_class":"Confidential","lease_duration_ms":"1000","promote_when_ready":false}
+  let decoded : @deployment.ModelServiceIntent? = try {
+    Some(@json.from_json(@json.parse(document)))
+  } catch {
+    _ => None
+  } noraise {
+    value => value
+  }
+  assert_true(decoded is Some(_))
+  match decoded {
+    Some(value) => assert_eq(value.topology_profile, None)
+    None => ()
+  }
 }

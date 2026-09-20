@@ -23,6 +23,7 @@ async test "deployment write failures roll back catalog operations and transitio
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let plan = @deployment.preflight([template], intent, {
     registry: [],

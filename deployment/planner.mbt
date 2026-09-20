@@ -106,7 +106,6 @@ pub fn validate_template(
     template.runtime.capabilities.length() > 16 ||
     !template.runtime.capabilities.any(value => value == template.capability) ||
     template.runtime.supports_batching ||
-    template.runtime.supports_multi_node ||
     template.resources.accelerator_count <= 0 ||
     template.resources.accelerator_count > 64 ||
     template.resources.accelerator_memory_mib <= 0 ||
@@ -153,7 +152,11 @@ pub fn validate_intent(
     !@contracts.valid_identifier(intent.template.version, maximum_length=128) ||
     intent.replicas != 1 ||
     intent.lease_duration_ms <= 0L ||
-    intent.lease_duration_ms > 2592000000L {
+    intent.lease_duration_ms > 2592000000L ||
+    (
+      intent.topology_profile is Some(profile) &&
+      profile != @contracts.cx7_pair_topology_profile
+    ) {
     raise InvalidIntent(intent.deployment_id)
   }
 }
@@ -270,6 +273,39 @@ pub fn preflight(
       )
   } noraise {
     _ => ()
+  }
+  // The geometry is a claim the intent makes and the template must be able to
+  // honour, checked together here because neither alone can decide it. Until
+  // the paired execution path exists, a pair is reported as not yet executable
+  // rather than silently planned as a single machine.
+  let declared_pair = intent.topology_profile is Some(profile) &&
+    profile == @contracts.cx7_pair_topology_profile
+  if declared_pair && !template.runtime.supports_multi_node {
+    findings.push(
+      finding(
+        RuntimeCannotPair,
+        Blocking,
+        "the runtime does not declare multi-node support, so it cannot be placed as a CX7 pair",
+      ),
+    )
+  }
+  if template.runtime.supports_multi_node && !declared_pair {
+    findings.push(
+      finding(
+        GeometryNotDeclared,
+        Blocking,
+        "this runtime needs two machines; name the cx7-pair-v1 topology on the intent",
+      ),
+    )
+  }
+  if declared_pair && template.runtime.supports_multi_node {
+    findings.push(
+      finding(
+        PairExecutionNotImplemented,
+        Blocking,
+        "the pair is validated, but paired execution (two ranked assignments) is not implemented yet",
+      ),
+    )
   }
   if !template.artifact.uri.has_prefix("s3://") ||
     template.artifact.signature_ref == "" ||

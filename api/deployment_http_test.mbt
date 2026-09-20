@@ -212,6 +212,7 @@ async test "one request creates durable assignments and converges to ready" {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let created = service.handle(
     Post,
@@ -428,6 +429,7 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   for
     hostile_intent in [

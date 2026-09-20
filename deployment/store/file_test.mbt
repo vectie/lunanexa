@@ -76,6 +76,7 @@ async test "catalog and operation state survive restart" {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let plan = @deployment.preflight([template], intent, {
     registry: [],
@@ -138,6 +139,7 @@ async test "concurrent idempotent deployment retries create one operation" {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let plan = @deployment.preflight([template], intent, {
     registry: [],

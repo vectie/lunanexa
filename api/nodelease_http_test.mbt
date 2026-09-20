@@ -755,6 +755,7 @@ async test "exclusive lease also blocks one-click deployment planning" {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let plan_reply = service.handle(
     Post,

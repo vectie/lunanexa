@@ -9,6 +9,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let plan : @deployment.DeploymentPlan = {
     plan_id: "plan-1",
