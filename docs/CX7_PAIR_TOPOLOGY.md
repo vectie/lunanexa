@@ -1,6 +1,33 @@
 # CX7 双机拓扑（唯一被承认的多机形态）
 
-状态：**设计已定，未实现**。本文记录约束、落点和执行顺序，供实现时直接照做。
+状态：**第 1 步已实现（选择侧），其余待做**。
+
+已落地（提交 `8fa8dda`，`scheduler` 9/9 通过）：
+
+- `contracts`：`cx7_pair_topology_profile = "cx7-pair-v1"`、`cx7_pair_member_count = 2`、
+  `cx7_peer_label = "lunanexa.io/cx7-peer"`；
+- `scheduler.NodeSnapshot.cx7_peer`（由 `api` 从节点上报的标签填充）；
+- `scheduler.validated_cx7_pair()`：互相指认才成对，永远返回 2 个，否则
+  `PairTopologyNotValidated` / `NoValidatedCx7Pair`；
+- `place()`：多机请求返回 `selected_pair`，**要么是对、要么什么都不给**，不再退回单机；
+  逐节点的 multi-node 拒绝已移除（否则会拒掉所有节点、让配对无从选起）；
+- 六个用例钉住约束：互相指认 → 成对；单向 → 拒；对端不可调度 → 拒；
+  三台互指 → **仍然只返回 2 个**；profile 未登记 → 拒；无 profile → 拒；单机不受影响。
+
+`NodeSnapshot` 没有 labels，所以设计里"借 labels"那条在这层不成立——改成一个窄字段
+`cx7_peer`，比塞一个通用 map 更诚实：只表达放置真正会依据的那一个事实。
+
+**下一步（按此顺序，每步一次构建）**：
+
+1. **planner 放行**：给 `ModelServiceIntent` 加 `topology_profile : String?`，删掉
+   `validate_template` 里对 `supports_multi_node` 的无条件拒绝，改由"intent 是否指名
+   `cx7-pair-v1`"来判定；注意这会给所有 JSON 夹具加一个字段，要一并更新。
+2. **契约**：`DesiredAssignment` 加 `group_id` / `rank` / `world_size` / `peer_endpoint`，
+   `validate_intent` 里 `replicas != 1` 那条要放宽（一对 = 一个逻辑实例、两个 rank）。
+3. **supervisor + 控制器**：rank 环境变量与 RoCE 直通；重启对账按 `group_id` 整体判定。
+4. **执行**：`desired_assignments` 为一对产生两个 assignment。
+
+原始设计说明如下。
 
 ## 1. 约束（来自产品决定）
 
