@@ -118,9 +118,11 @@ whitespace amplification and forged multiline audit/UI values.
 
 ### Operator console
 
-- The one-click action is disabled until the service identifier matches the
-  public contract and an approved template is selected. Capacity is displayed
-  as one service on one assigned machine and cannot be edited in the UI.
+- The one-click action is disabled until the operator is authenticated, the
+  service identifier matches the public contract and an approved template is
+  selected. Capacity is displayed as one service on one assigned machine, or as
+  one validated CX7 pair when that topology is chosen; the replica count stays
+  fixed at one and cannot be edited in the UI.
 - Inputs expose visible recovery text, `aria-describedby` and `aria-invalid`;
   all controls retain associated labels and a 44 px minimum height.
 - Dynamic template/operator strings remain escaped. The controller remains the

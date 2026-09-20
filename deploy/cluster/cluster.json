@@ -1,0 +1,92 @@
+{
+  "version": "lunanexa.cluster.v1",
+  "namespace": "lunanexa",
+  "managementNode": "ubuntu",
+  "frontDoor": {
+    "host": "192.168.2.175",
+    "port": 4174
+  },
+  "images": {
+    "control": "lunanexa-control:20260918",
+    "node": "lunanexa-node:20260918-arm64",
+    "dra": "registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.5.0",
+    "draSources": [
+      "docker.m.daocloud.io/registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.5.0",
+      "registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.5.0"
+    ]
+  },
+  "runtime": {
+    "backend": "kubernetes",
+    "namespace": "lunanexa-managed-runtime",
+    "modelCacheRoot": "/var/lib/lunanexa/models",
+    "runtimePort": 8080,
+    "runAsUser": 65532,
+    "deviceClassName": "gpu.nvidia.com",
+    "statePath": "/var/lib/lunanexa/kubernetes-runtime-state.json",
+    "configPath": "/etc/lunanexa/kubernetes-runtime.json"
+  },
+  "controlPlane": {
+    "authorization": {
+      "comment": "The controller reaches a runtime from the control pod, which is not host-networked, so this is the live pod address and the one-click script re-derives it on every config pass. See deploy/cluster/README.md for why this cannot be a literal.",
+      "deriveFrom": "kubectl -n lunanexa get pod -l app=lunanexa-control -o jsonpath={.status.podIP}"
+    }
+  },
+  "nodes": [
+    {
+      "id": "spark-25e2-3d35c8fd",
+      "address": "192.168.2.176",
+      "sshUser": "wlc001s",
+      "gpuUuid": "GPU-2743aa67-8079-b5a0-8c62-dbc44e36466e",
+      "architecture": "nvidia-sm121",
+      "memoryTotalMib": 124608,
+      "osRelease": "Ubuntu 24.04.5 LTS",
+      "dataClasses": ["Confidential"],
+      "runtimeNames": [],
+      "fabricAddress": "192.168.100.10",
+      "fabricPeer": "spark-3782-feee26eb",
+      "fabricInterface": "enp1s0f1np1"
+    },
+    {
+      "id": "spark-3782-feee26eb",
+      "address": "192.168.2.177",
+      "sshUser": "wlc002s",
+      "gpuUuid": "GPU-3caf9461-26f7-65c1-4e00-da55afb7a21f",
+      "architecture": "nvidia-sm121",
+      "memoryTotalMib": 124608,
+      "osRelease": "Ubuntu 24.04.5 LTS",
+      "dataClasses": ["Confidential"],
+      "runtimeNames": [],
+      "fabricAddress": "192.168.100.11",
+      "fabricPeer": "spark-25e2-3d35c8fd",
+      "fabricInterface": "enp1s0f0np0"
+    },
+    {
+      "id": "spark-57f5-98a504ed",
+      "address": "192.168.2.178",
+      "sshUser": "wlc003s",
+      "gpuUuid": "GPU-9c3d3cf0-439a-5da2-67e9-20414255879f",
+      "architecture": "nvidia-sm121",
+      "memoryTotalMib": 124608,
+      "osRelease": "Ubuntu 24.04.5 LTS",
+      "dataClasses": ["Confidential"],
+      "runtimeNames": [],
+      "fabricAddress": "10.0.22.1",
+      "fabricPeer": "spark-368c-0f2ee8b2",
+      "fabricInterface": "enp1s0f1np1"
+    },
+    {
+      "id": "spark-368c-0f2ee8b2",
+      "address": "192.168.2.179",
+      "sshUser": "wlc004s",
+      "gpuUuid": "GPU-5b603331-c778-d6ef-7ffa-7c6b774fe4a6",
+      "architecture": "nvidia-sm121",
+      "memoryTotalMib": 124608,
+      "osRelease": "Ubuntu 24.04.5 LTS",
+      "dataClasses": ["Confidential"],
+      "runtimeNames": [],
+      "fabricAddress": "10.0.22.2",
+      "fabricPeer": "spark-57f5-98a504ed",
+      "fabricInterface": "enp1s0f0np0"
+    }
+  ]
+}

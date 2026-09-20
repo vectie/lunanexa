@@ -4,7 +4,6 @@ import {
   "moonbitlang/async/fs",
   "moonbitlang/async/http",
   "moonbitlang/async/io",
-  "moonbitlang/async/process",
   "moonbitlang/async/os_error",
   "moonbitlang/async/tls",
   "moonbitlang/core/encoding/utf8",
@@ -16,5 +15,6 @@ import {
 supported_targets = "native"
 
 options(
+  "native-stub": [ "secure_random.c" ],
   link: { "native": { "cc-link-flags": "-pthread -ldl" } },
 )

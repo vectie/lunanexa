@@ -1,19 +1,26 @@
 ///|
-async fn owner_nonce() -> String {
-  // Use the OS-backed OpenSSL RNG without a shell or inherited environment.
-  // Async file event registration does not support /dev/urandom on all hosts.
-  @async.with_timeout(5000, () => {
-    let (status, output, _) = @process.collect_output(
-      "/usr/bin/openssl",
-      ["rand", "-hex", "32"],
-      inherit_env=false,
-    )
-    let nonce = output.text().trim().to_owned()
-    if status != 0 || !@contracts.valid_sha256_digest("sha256:" + nonce) {
-      raise LifecycleError::InvalidResource
-    }
-    nonce
-  })
+#borrow(output)
+extern "c" fn fill_secure_random(output : Bytes) -> Int = "lunanexa_node_secure_random"
+
+///|
+fn owner_nonce() -> String raise LifecycleError {
+  // The nonce identifies this process as the journal's owner, so it has to be
+  // unique and it must not come from anything an operator could predict. It
+  // used to be read from the `openssl rand` binary, which meant the whole
+  // Kubernetes adapter could not start on an agent image that does not ship
+  // OpenSSL -- and an agent image has no reason to. getentropy reads the same
+  // kernel entropy source without spawning anything or inheriting an
+  // environment; the C stub is the one already used elsewhere in this
+  // repository for the same reason.
+  let bytes = Bytes::make(32, 0)
+  if fill_secure_random(bytes) != 0 {
+    raise LifecycleError::InvalidResource
+  }
+  let nonce = @crypto.bytes_to_hex_string(bytes)
+  if !@contracts.valid_sha256_digest("sha256:" + nonce) {
+    raise LifecycleError::InvalidResource
+  }
+  nonce
 }
 
 ///|

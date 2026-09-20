@@ -524,6 +524,7 @@ pub(all) struct ConsoleState {
   operation_body : String
   quick_deployment_id : String
   quick_template : String
+  quick_topology : QuickTopology
 } derive(Eq)
 
 ///|
@@ -572,6 +573,7 @@ pub(all) enum ConsoleMessage {
   SubmitOperation
   QuickDeploymentIdChanged(String)
   QuickTemplateChanged(String)
+  QuickTopologyChanged(String)
   SubmitQuickDeployment
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
@@ -732,6 +734,7 @@ pub fn default_state() -> ConsoleState {
     operation_body: "",
     quick_deployment_id: "",
     quick_template: "",
+    quick_topology: SingleMachine,
   }
 }
 
@@ -5765,6 +5768,54 @@ fn quick_service_name_valid(value : String) -> Bool {
 }
 
 ///|
+/// The machine geometry a one-click deployment asks for. LunaNexa admits
+/// exactly two: one machine, or the validated CX7 pair.
+pub(all) enum QuickTopology {
+  SingleMachine
+  Cx7Pair
+} derive(Debug, Eq)
+
+///|
+/// Stable storage value for the topology picker, so the control survives locale
+/// changes and the demo snapshot.
+pub fn QuickTopology::storage_value(self : QuickTopology) -> String {
+  match self {
+    SingleMachine => "single-machine"
+    Cx7Pair => "cx7-pair"
+  }
+}
+
+///|
+pub fn parse_quick_topology(value : String) -> QuickTopology {
+  match value {
+    "cx7-pair" => Cx7Pair
+    _ => SingleMachine
+  }
+}
+
+///|
+pub fn QuickTopology::label(
+  self : QuickTopology,
+  locale : @i18n.Locale,
+) -> String {
+  match self {
+    SingleMachine => @i18n.copy(locale, "One machine", "单机")
+    Cx7Pair =>
+      @i18n.copy(locale, "CX7 pair (two machines)", "CX7 双机对（两台机器）")
+  }
+}
+
+///|
+/// The intent field this choice maps to. `None` is one machine; the CX7 pair is
+/// the only admitted multi-node profile.
+pub fn QuickTopology::topology_profile(self : QuickTopology) -> String? {
+  match self {
+    SingleMachine => None
+    Cx7Pair => Some(@contracts.cx7_pair_topology_profile)
+  }
+}
+
+///|
 fn catalog_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -5913,22 +5964,70 @@ fn catalog_view(
             template_options,
           ),
         ]),
+        @html.div(class="field-group", [
+          @html.label(
+            for_="quick-topology",
+            localized(state.locale, "Topology", "拓扑"),
+          ),
+          @html.select(
+            id="quick-topology",
+            on_change=text_command(emit, value => {
+              QuickTopologyChanged(value)
+            }),
+            [
+              for choice in [SingleMachine, Cx7Pair] => {
+                @html.option(
+                  value=choice.storage_value(),
+                  selected=choice == state.quick_topology,
+                  choice.label(state.locale),
+                )
+              }
+            ],
+          ),
+          @html.p(
+            class="field-help",
+            localized(
+              state.locale,
+              "A CX7 pair is placed only when both machines name each other over the private fabric, the runtime declares multi-node support, and the installed score policy lists the profile.",
+              "仅当两台机器在私有互联上互相指认、运行时声明支持多机、且已安装的评分策略列出该拓扑时，才会按 CX7 对放置。",
+            ),
+          ),
+        ]),
         @html.div(class="fixed-capacity", [
-          @html.div(class="fixed-capacity-mark", "1"),
+          @html.div(
+            class="fixed-capacity-mark",
+            if state.quick_topology == Cx7Pair { "2" } else { "1" },
+          ),
           @html.div([
             @html.strong(
-              localized(
-                state.locale,
-                "One service · one assigned machine",
-                "一个服务 · 一台分配机器",
-              ),
+              if state.quick_topology == Cx7Pair {
+                localized(
+                  state.locale,
+                  "One service · one validated CX7 pair",
+                  "一个服务 · 一个已验证的 CX7 对",
+                )
+              } else {
+                localized(
+                  state.locale,
+                  "One service · one assigned machine",
+                  "一个服务 · 一台分配机器",
+                )
+              },
             ),
             @html.p(
-              localized(
-                state.locale,
-                "Capacity is fixed. LunaNexa selects one eligible DGX after preflight; replicas, batch scheduling, and autoscaling are unavailable.",
-                "容量固定。LunaNexa 在预检后选择一台符合条件的 DGX；不提供副本、批处理调度或自动扩缩容。",
-              ),
+              if state.quick_topology == Cx7Pair {
+                localized(
+                  state.locale,
+                  "Capacity is fixed. LunaNexa selects one validated CX7 pair after preflight; replicas, batch scheduling, and autoscaling are unavailable.",
+                  "容量固定。LunaNexa 在预检后选择一个已验证的 CX7 对；不提供副本、批处理调度或自动扩缩容。",
+                )
+              } else {
+                localized(
+                  state.locale,
+                  "Capacity is fixed. LunaNexa selects one eligible DGX after preflight; replicas, batch scheduling, and autoscaling are unavailable.",
+                  "容量固定。LunaNexa 在预检后选择一台符合条件的 DGX；不提供副本、批处理调度或自动扩缩容。",
+                )
+              },
             ),
           ]),
         ]),
@@ -5945,7 +6044,8 @@ fn catalog_view(
         @html.button(
           type_="button",
           class="primary-button",
-          disabled=state.loading ||
+          disabled=!state.operator_authenticated ||
+            state.loading ||
             !service_name_valid ||
             state.quick_template == "",
           on_click=command(emit, SubmitQuickDeployment),

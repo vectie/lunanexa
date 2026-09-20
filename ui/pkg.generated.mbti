@@ -46,6 +46,8 @@ pub fn open_alert_count(Array[NotificationRow]) -> Int
 
 pub fn parse_alerts_window(String) -> AlertsWindow
 
+pub fn parse_quick_topology(String) -> QuickTopology
+
 pub fn render(ConsoleState) -> String
 
 pub fn view(ConsoleState) -> @html.Html
@@ -231,6 +233,7 @@ pub(all) enum ConsoleMessage {
   SubmitOperation
   QuickDeploymentIdChanged(String)
   QuickTemplateChanged(String)
+  QuickTopologyChanged(String)
   SubmitQuickDeployment
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
@@ -328,6 +331,7 @@ pub(all) struct ConsoleState {
   operation_body : String
   quick_deployment_id : String
   quick_template : String
+  quick_topology : QuickTopology
 } derive(Eq)
 
 pub(all) struct CostCenterRow {
@@ -595,6 +599,14 @@ pub(all) struct QualifiedServiceRow {
   evidence_policy : String
   production_ready : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+
+pub(all) enum QuickTopology {
+  SingleMachine
+  Cx7Pair
+} derive(Eq, @debug.Debug)
+pub fn QuickTopology::label(Self, @i18n.Locale) -> String
+pub fn QuickTopology::storage_value(Self) -> String
+pub fn QuickTopology::topology_profile(Self) -> String?
 
 pub(all) struct RequestDetail {
   timestamp_unix_ms : Int64
