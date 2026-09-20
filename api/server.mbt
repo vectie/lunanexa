@@ -1642,6 +1642,12 @@ fn scheduler_node(
   )
   {
     node_id: heartbeat.node_id,
+    // The CX7 peer a node names, if any. Placement only admits a pair when the
+    // two nodes name each other, so a node that overstates this gets nowhere.
+    cx7_peer: label_values(
+      heartbeat.inventory.labels,
+      @contracts.cx7_peer_label,
+    ).get(0).unwrap_or(""),
     state: if now_unix_ms - heartbeat.timestamp_unix_ms > heartbeat_timeout_ms {
       Unreachable
     } else {

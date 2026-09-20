@@ -7,9 +7,11 @@ fn node_snapshot(
   warm : Bool,
   queue : Int,
   licensed? : Bool = true,
+  cx7_peer? : String = "",
 ) -> @scheduler.NodeSnapshot {
   {
     node_id: id,
+    cx7_peer,
     state,
     architecture,
     memory_free_mib: memory,
@@ -333,4 +335,91 @@ async test "durable scheduler preserves quotas usage and placement receipts" {
   assert_eq(snapshot.usage[0].accelerator_ms, 125L)
   assert_eq(snapshot.decisions.length(), 1)
   @fs.rmdir(directory, recursive=true)
+}
+
+///|
+fn cx7_node(
+  id : String,
+  state : @contracts.NodeState,
+  peer? : String = "",
+) -> @scheduler.NodeSnapshot {
+  node_snapshot(id, state, "nvidia-gb10", 80000, false, 0, cx7_peer=peer)
+}
+
+///|
+/// A multi-node request is satisfied by a validated CX7 pair or by nothing.
+/// The point of these cases is that "any two nodes" and "three nodes" are not
+/// rejected by a rule -- they cannot be expressed by the shape of the data.
+test "a multi-node placement takes a mutually named CX7 pair or nothing" {
+  let pair_policy : @scheduler.ScorePolicy = {
+    ..score_policy(),
+    validated_topology_profiles: ["cx7-pair-v1"],
+  }
+  let multi : @scheduler.PlacementRequirements = {
+    ..requirements(),
+    multi_node: true,
+    topology_profile: Some("cx7-pair-v1"),
+  }
+
+  // Mutual naming: a pair.
+  let mutual = @scheduler.place(
+    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Active, peer="node-a2")],
+    multi,
+    pair_policy,
+  )
+  assert_eq(mutual.selected_pair, ["node-a2", "node-b2"])
+  assert_eq(mutual.selected_node_id, Some("node-a2"))
+
+  // One-way naming is not a pair: b never names a back.
+  let one_way = @scheduler.place(
+    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Active)],
+    multi,
+    pair_policy,
+  )
+  assert_eq(one_way.selected_pair.length(), 0)
+  assert_eq(one_way.selected_node_id, None)
+
+  // The peer is in the inventory but not schedulable.
+  let peer_down = @scheduler.place(
+    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Unreachable, peer="node-a2")],
+    multi,
+    pair_policy,
+  )
+  assert_eq(peer_down.selected_pair.length(), 0)
+
+  // Three mutually linked nodes still yield exactly one pair, never three.
+  let triangle = @scheduler.place(
+    [
+      cx7_node("node-a2", Active, peer="node-b2"),
+      cx7_node("node-b2", Active, peer="node-a2"),
+      cx7_node("node-c2", Active, peer="node-a2"),
+    ],
+    multi,
+    pair_policy,
+  )
+  assert_eq(triangle.selected_pair.length(), 2)
+  assert_eq(triangle.selected_pair, ["node-a2", "node-b2"])
+
+  // A profile the policy has not validated is refused even when a pair exists.
+  let unvalidated = @scheduler.place(
+    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Active, peer="node-a2")],
+    multi,
+    { ..pair_policy, validated_topology_profiles: [], },
+  )
+  assert_eq(unvalidated.selected_pair.length(), 0)
+
+  // No profile at all is refused, and a single-node request is unaffected.
+  let no_profile = @scheduler.place(
+    [cx7_node("node-a2", Active)],
+    { ..multi, topology_profile: None },
+    pair_policy,
+  )
+  assert_eq(no_profile.selected_pair.length(), 0)
+  let single = @scheduler.place(
+    [cx7_node("node-a2", Active), cx7_node("node-b2", Active)],
+    { ..multi, multi_node: false, topology_profile: None },
+    pair_policy,
+  )
+  assert_eq(single.selected_pair.length(), 0)
+  assert_eq(single.selected_node_id, Some("node-a2"))
 }
