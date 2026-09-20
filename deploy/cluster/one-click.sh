@@ -15,6 +15,8 @@
 #              manifest claims, before anything is changed
 #   build      build the control binary from this checkout
 #   images     rebuild and import the control image (node image only on request)
+#   registry   make the cluster's own registry pullable by the compute nodes,
+#              and publish this platform's images to it
 #   config     per node: credentials secret (only if absent), inventory
 #              ConfigMap, runtime adapter ConfigMap, host state directory, and
 #              the netplan declaration for the private fabric
@@ -28,7 +30,7 @@ MANIFEST="${REPO_ROOT}/deploy/cluster/cluster.json"
 CREDENTIALS="${LUNANEXA_CLUSTER_CREDENTIALS:-${HOME}/lunanexa-cluster-credentials.json}"
 WORK_ROOT="${LUNANEXA_CLUSTER_WORK:-/tmp/lunanexa-cluster}"
 SOURCE_TREE="${LUNANEXA_SOURCE_TREE:-${HOME}/control-build/src}"
-PHASES="preflight,build,images,config,rbac,apply,verify"
+PHASES="preflight,build,images,config,registry,rbac,apply,verify"
 DRY_RUN=0
 ONLY_NODES=()
 REBUILD_NODE_IMAGE=0
@@ -180,6 +182,20 @@ as_root() {
   else
     sudo "$@"
   fi
+}
+
+# Render every per-node artefact for the selected nodes into the work directory.
+render_selected_nodes() {
+  local arguments=()
+  local node
+  for node in $(selected_nodes); do
+    arguments+=(--node "${node}")
+  done
+  python3 "${REPO_ROOT}/deploy/cluster/render.py" \
+    --manifest "${MANIFEST}" \
+    --output "${RENDERED}" \
+    --template-dir "${REPO_ROOT}/deploy/cluster" \
+    "${arguments[@]}" >/dev/null
 }
 
 kubectl_() { as_root kubectl "$@"; }
@@ -383,13 +399,137 @@ phase_images() {
       scp -q -o BatchMode=yes "${NODE_IMAGE_TAR}" \
         "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:/tmp/node-image.tar"
       # CRI resolves a reference with no registry as docker.io/library/<name>,
-      # so the imported short name has to be tagged that way or the kubelet
-      # never finds the image and pulls instead.
-      node_sudo "${node}" "k3s ctr -n k8s.io images import --digests /tmp/node-image.tar >/dev/null 2>&1 && k3s ctr -n k8s.io images tag --force '${NODE_IMAGE}' 'docker.io/library/${NODE_IMAGE}' >/dev/null 2>&1; rm -f /tmp/node-image.tar"
+      # so an imported short name has to be tagged that way or the kubelet never
+      # finds it. A registry-qualified reference is already unambiguous.
+      local alias_tag=""
+      case "${NODE_IMAGE}" in
+        */*) alias_tag="" ;;
+        *) alias_tag="docker.io/library/${NODE_IMAGE}" ;;
+      esac
+      node_sudo "${node}" "k3s ctr -n k8s.io images import --digests /tmp/node-image.tar >/dev/null 2>&1; ${alias_tag:+k3s ctr -n k8s.io images tag --force '${NODE_IMAGE}' '${alias_tag}' >/dev/null 2>&1;} rm -f /tmp/node-image.tar"
     done
   else
     step "node image ${NODE_IMAGE} is used as-is (pass --rebuild-node-image or --node-image-tar to replace it)"
   fi
+}
+
+# -------------------------------------------------------------------- registry
+# Make the cluster's own registry usable by the compute nodes.
+#
+# Before this phase no node could pull from it, for two independent reasons:
+# the pull policy admitted two addresses that belonged to nodes which no longer
+# exist, and the nodes had no trust material for the registry's private CA.
+# Every image therefore arrived by scp plus `ctr images import`, and the
+# registry was reachable only from the management node.
+phase_registry() {
+  note "registry"
+  local host port authority ca_file cluster_ip ca_source
+  host=$(cluster - registry host)
+  port=$(cluster - registry port)
+  authority="${host}:${port}"
+  ca_file=$(cluster - registry caFile)
+  cluster_ip=$(cluster - registry clusterIP)
+  ca_source=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["registry"].get("caOnManagement",""))' "${MANIFEST}")
+
+  step "pull policy: any node may reach ${authority}"
+  mutate converge "${REPO_ROOT}/deploy/cluster/registry-pull.yaml"
+
+  if [ ! -f "${ca_source}" ]; then
+    die "no registry CA at ${ca_source}; point registry.caOnManagement in ${MANIFEST} at it"
+  fi
+
+  render_selected_nodes
+
+  for node in $(selected_nodes); do
+    step "${node}: installing trust, resolution and the registry configuration"
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      printf '  [dry-run] %s: install %s, pin %s as %s, write registries.yaml, restart k3s-agent\n' \
+        "${node}" "${ca_file}" "${authority}" "${cluster_ip}" >&2
+      continue
+    fi
+    # Staged in the account's home: sudo runs its own shell, so ~ is root's, and
+    # a leftover root-owned file in /tmp cannot be replaced by this account.
+    local staged_ca="/home/${NODE_USER[${node}]}/.lunanexa-registry-ca.crt"
+    local staged_conf="/home/${NODE_USER[${node}]}/.lunanexa-registries.yaml"
+    # scp reproduces the source file's mode, and the CA is read-only, so a
+    # leftover stage from an interrupted run cannot be overwritten.
+    node_ssh "${node}" "rm -f '${staged_ca}' '${staged_conf}'" || true
+    scp -q -o BatchMode=yes "${ca_source}" \
+      "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:${staged_ca}" ||
+      die "${node}: cannot copy the registry CA"
+    scp -q -o BatchMode=yes "${RENDERED}/registries-${node}.yaml" \
+      "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:${staged_conf}" ||
+      die "${node}: cannot copy the registry configuration"
+    node_sudo "${node}" "
+      set -e
+      install -m 644 '${staged_ca}' '${ca_file}'
+      install -m 600 '${staged_conf}' /etc/rancher/k3s/registries.yaml
+      # /etc/hosts takes a bare hostname: a "host:port" entry never matches a
+      # lookup for the name and the resolver falls through to DNS. Rewrite the
+      # file with exactly one line for this registry rather than appending.
+      grep -v '${host}' /etc/hosts > /tmp/.lunanexa-hosts || true
+      echo '${cluster_ip} ${host}' >> /tmp/.lunanexa-hosts
+      cp /tmp/.lunanexa-hosts /etc/hosts && rm -f /tmp/.lunanexa-hosts
+      rm -f '${staged_ca}' '${staged_conf}'
+      systemctl restart k3s-agent
+    " || die "${node}: installing registry trust failed"
+    step "${node}: trust installed and k3s-agent restarted"
+  done
+
+  publish_registry_images
+
+  step "proving a pull from every selected node"
+  local proof
+  proof=$(python3 -c 'import json,sys;reg=json.load(open(sys.argv[1]))["registry"];p=reg.get("publish") or [];print(p[0]["target"] if p else "")' "${MANIFEST}")
+  [ -n "${proof}" ] || return 0
+  for node in $(selected_nodes); do
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      printf '  [dry-run] %s: pull %s/%s\n' "${node}" "${authority}" "${proof}" >&2
+      continue
+    fi
+    node_sudo "${node}" "set -e
+      k3s ctr images rm '${authority}/${proof}' >/dev/null 2>&1 || true
+      k3s ctr images pull --hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d '${authority}/${proof}' >/dev/null" ||
+      die "${node} cannot pull ${authority}/${proof}"
+    step "${node}: pulled ${authority}/${proof} from the registry"
+  done
+}
+
+# Publish the platform's own images, so a node pulls them instead of being
+# handed a tarball. An entry may name the node that holds the image: the arm64
+# agent exists only on the spark that built it.
+publish_registry_images() {
+  local authority
+  authority="$(cluster - registry host):$(cluster - registry port)"
+  local entries
+  entries=$(python3 -c 'import json,sys
+reg=json.load(open(sys.argv[1]))["registry"]
+for e in reg.get("publish") or []:
+    print("\t".join([e["source"], e["target"], e.get("node","-")]))' "${MANIFEST}")
+
+  while IFS=$'\t' read -r source target from_node; do
+    [ -n "${source}" ] || continue
+    local reference="${authority}/${target}"
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      printf '  [dry-run] publish %s as %s\n' "${source}" "${reference}" >&2
+      continue
+    fi
+    if [ "${from_node}" = "-" ]; then
+      # A raw `ctr` does not read k3s' registries.yaml; the trust it needs is
+      # in the certs.d directory k3s generated from it, so it must be named.
+      as_root k3s ctr images tag --force "${source}" "${reference}" >/dev/null 2>&1 || true
+      as_root k3s ctr images push \
+        --hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d \
+        "${reference}" >/dev/null ||
+        die "cannot push ${reference} from the management node"
+    else
+      node_sudo "${from_node}" "
+        k3s ctr images tag --force '${source}' '${reference}' >/dev/null 2>&1 || true
+        k3s ctr images push --hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d '${reference}' >/dev/null
+      " || die "cannot push ${reference} from ${from_node}"
+    fi
+    step "published ${reference}"
+  done <<< "${entries}"
 }
 
 # ---------------------------------------------------------------------- config
@@ -432,16 +572,7 @@ phase_config() {
     node_sudo "${node}" "mkdir -p /var/lib/lunanexa/node-agent /var/lib/lunanexa/models && chown -R 65532:65532 /var/lib/lunanexa/node-agent /var/lib/lunanexa/models"
   done
 
-  local render_node_arguments=()
-  local node
-  for node in "${ONLY_NODES[@]}"; do
-    render_node_arguments+=(--node "${node}")
-  done
-  python3 "${REPO_ROOT}/deploy/cluster/render.py" \
-    --manifest "${MANIFEST}" \
-    --output "${RENDERED}" \
-    --template-dir "${REPO_ROOT}/deploy/cluster" \
-    "${render_node_arguments[@]}"
+  render_selected_nodes
   step "rendered into ${RENDERED}"
 
   for node in $(selected_nodes); do
@@ -486,7 +617,10 @@ phase_rbac() {
 # ----------------------------------------------------------------------- apply
 phase_apply() {
   note "apply"
-  [ -d "${RENDERED}" ] || die "run the config phase first"
+  # Render here rather than trusting whatever a previous run left behind: a
+  # stale rendered manifest is how an image or a variable change silently does
+  # not reach the cluster.
+  render_selected_nodes
 
   # Changing a node's runtime backend is not a rendering detail: the agent
   # binary inside the deployed image has to support the backend it is told to
@@ -562,7 +696,7 @@ main() {
   IFS=',' read -r -a wanted <<< "${PHASES}"
   for phase in "${wanted[@]}"; do
     case "${phase}" in
-      preflight|build|images|config|rbac|apply|verify)
+      preflight|build|images|config|registry|rbac|apply|verify)
         "phase_${phase}" ;;
       "") ;;
       *) die "unknown phase '${phase}'" ;;

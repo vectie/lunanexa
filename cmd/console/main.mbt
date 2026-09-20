@@ -3174,20 +3174,6 @@ fn empty_model_adoption_draft() -> @ui.ModelAdoptionDraft {
 }
 
 ///|
-fn model_import_adoptable(import_ : @ui.ModelImportRow) -> Bool {
-  import_.source == "modelscope" &&
-  @contracts.valid_identifier(import_.import_id, maximum_length=128) &&
-  import_.state == Verified &&
-  import_.files_total > 0 &&
-  import_.files_completed == import_.files_total &&
-  import_.bytes_total > 0L &&
-  import_.bytes_completed == import_.bytes_total &&
-  import_.artifact_uri.has_prefix("s3://") &&
-  @contracts.valid_sha256_digest(import_.manifest_digest) &&
-  import_.license.trim() != ""
-}
-
-///|
 fn model_adoption_path(import_id : String) -> String {
   "/v1/model-sources/modelscope/imports/\{import_id}:adopt"
 }
@@ -5574,7 +5560,7 @@ fn update_live(
         model.console.model_imports
         .iter()
         .find_first(import_ => {
-          import_.import_id == import_id && model_import_adoptable(import_)
+          import_.import_id == import_id && @ui.model_import_adoptable(import_)
         })
         is Some(_) else {
         return (
@@ -5696,7 +5682,7 @@ fn update_live(
         .iter()
         .find_first(import_ => {
           import_.import_id == draft.import_id &&
-          model_import_adoptable(import_)
+          @ui.model_import_adoptable(import_)
         })
         is Some(_) &&
         model_adoption_intent(draft) is Some(intent) else {

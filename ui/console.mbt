@@ -4592,7 +4592,10 @@ fn model_import_progress(import_ : ModelImportRow) -> Int {
 }
 
 ///|
-fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
+/// Adoptability is decided in one place on purpose: the renderer that offers
+/// the button and the handler that acts on it disagreed once, and the button
+/// silently did nothing for every import the store had verified.
+pub fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
   import_.source == "modelscope" &&
   @contracts.valid_identifier(import_.import_id, maximum_length=128) &&
   import_.state == Verified &&

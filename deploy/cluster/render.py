@@ -126,6 +126,27 @@ def runtime_config(node, cluster, control_addresses):
     return config
 
 
+def registries_yaml(cluster):
+    """The k3s registry config: the pull-through mirrors this cluster uses, plus
+    the private registry this platform publishes to. Written whole rather than
+    appended to, because appending a second top-level `configs:` key to an
+    existing file produces YAML that no longer parses."""
+    registry = cluster.get("registry")
+    if not registry:
+        return None
+    lines = ["mirrors:"]
+    for name, endpoint in (registry.get("mirrors") or {}).items():
+        lines.append(f'  "{name}":')
+        lines.append("    endpoint:")
+        lines.append(f'      - "{endpoint}"')
+    authority = f'{registry["host"]}:{registry["port"]}'
+    lines.append("configs:")
+    lines.append(f'  "{authority}":')
+    lines.append("    tls:")
+    lines.append(f'      ca_file: "{registry["caFile"]}"')
+    return "\n".join(lines) + "\n"
+
+
 def fabric_plan(node):
     """The netplan file that makes the fabric address survive a reboot.
 
@@ -196,6 +217,9 @@ def main():
         (output / f"kubernetes-runtime-{node_id}.json").write_text(
             json.dumps(runtime_config(node, cluster, control_addresses), indent=2) + "\n"
         )
+        registries = registries_yaml(cluster)
+        if registries is not None:
+            (output / f"registries-{node_id}.yaml").write_text(registries)
         if node.get("fabricInterface"):
             (output / f"fabric-{node_id}.yaml").write_text(
                 json.dumps(fabric_plan(node), indent=2) + "\n"
@@ -206,6 +230,16 @@ def main():
                 " so no netplan file was rendered and the address will not survive a reboot",
                 file=sys.stderr,
             )
+
+    if cluster.get("registry"):
+        registry = cluster["registry"]
+        summary = {
+            "authority": f'{registry["host"]}:{registry["port"]}',
+            "clusterIP": registry.get("clusterIP", ""),
+            "caFile": registry["caFile"],
+            "publish": registry.get("publish", []),
+        }
+        (output / "registry.json").write_text(json.dumps(summary, indent=2) + "\n")
 
     rbac = (pathlib.Path(arguments.template_dir) / ".." / "node-kubernetes-rbac.yaml").resolve()
     (output / "rbac.yaml").write_text(
