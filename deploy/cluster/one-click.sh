@@ -15,8 +15,6 @@
 #              manifest claims, before anything is changed
 #   build      build the control binary from this checkout
 #   images     rebuild and import the control image (node image only on request)
-#   dra        make the DRA kubelet plugin image present on every GPU node, so
-#              the device class a runtime claims actually exists
 #   config     per node: credentials secret (only if absent), inventory
 #              ConfigMap, runtime adapter ConfigMap, host state directory, and
 #              the netplan declaration for the private fabric
@@ -30,7 +28,7 @@ MANIFEST="${REPO_ROOT}/deploy/cluster/cluster.json"
 CREDENTIALS="${LUNANEXA_CLUSTER_CREDENTIALS:-${HOME}/lunanexa-cluster-credentials.json}"
 WORK_ROOT="${LUNANEXA_CLUSTER_WORK:-/tmp/lunanexa-cluster}"
 SOURCE_TREE="${LUNANEXA_SOURCE_TREE:-${HOME}/control-build/src}"
-PHASES="preflight,build,images,dra,config,rbac,apply,verify"
+PHASES="preflight,build,images,config,rbac,apply,verify"
 DRY_RUN=0
 ONLY_NODES=()
 REBUILD_NODE_IMAGE=0
@@ -186,6 +184,18 @@ as_root() {
 
 kubectl_() { as_root kubectl "$@"; }
 
+# Converge a manifest onto the cluster rather than patching it. A client-side
+# apply three-way-merges lists and maps, so a variable or a key that the
+# previous manifest had and this one does not would survive forever -- which is
+# exactly how a node agent ends up configured for a runtime backend nobody
+# declares any more. replace drops what the file does not mention; when the
+# object does not exist yet, there is nothing to replace and apply creates it.
+converge() {
+  local manifest="$1"
+  kubectl_ replace -f "${manifest}" >/dev/null 2>&1 ||
+    kubectl_ apply -f "${manifest}" >/dev/null
+}
+
 mutate() {
   if [ "${DRY_RUN}" -eq 1 ]; then
     printf '  [dry-run] %s\n' "$*" >&2
@@ -276,9 +286,12 @@ phase_preflight() {
   host_network=$(kubectl_ -n "${NAMESPACE}" get deploy lunanexa-control \
     -o jsonpath='{.spec.template.spec.hostNetwork}')
   step "control pod is ${CONTROL_POD_IP} (hostNetwork=${host_network:-false})"
-  if [ "${host_network}" != "true" ]; then
-    step "note: the runtime NetworkPolicy will name ${CONTROL_POD_IP}, which is a pod"
-    step "      address and therefore changes when the control pod is replaced"
+  if [ "$(cluster - runtime controllerNamespace 2>/dev/null || echo -)" != "-" ]; then
+    step "a runtime accepts its controller by namespace, so nothing here depends on"
+    step "  the control pod keeping this address"
+  else
+    step "! no runtime.controllerNamespace is declared; every runtime's policy will name"
+    step "  ${CONTROL_POD_IP}, which changes whenever the control pod is replaced"
   fi
 
   local service_account
@@ -291,17 +304,25 @@ phase_preflight() {
   done
   step "ssh reaches every selected node"
 
-  local dra_ready
-  dra_ready=$(kubectl_ -n dra-driver-nvidia-gpu get pods \
-    -o jsonpath='{range .items[*]}{.spec.nodeName}{" "}{.status.phase}{"\n"}{end}' 2>/dev/null || true)
-  for node in $(selected_nodes); do
-    if printf '%s\n' "${dra_ready}" | grep -q "^${node} Running"; then
-      step "DRA kubelet plugin is running on ${node}"
-    else
-      step "! DRA kubelet plugin is NOT running on ${node}; the 'dra' phase fixes this"
-      step "  (a runtime rendered for this node cannot be allocated a GPU until it does)"
-    fi
-  done
+  local gpu_resource
+  gpu_resource=$(cluster - runtime devicePluginResource 2>/dev/null || echo -)
+  if [ "${gpu_resource}" = "-" ]; then
+    step "! no runtime.devicePluginResource is declared, so a runtime would allocate"
+    step "  its GPUs through the DRA device class and nothing here checks it is present"
+  else
+    for node in $(selected_nodes); do
+      local advertised
+      advertised=$(kubectl_ get node "${node}" -o json |
+        python3 -c "
+import json, sys
+node = json.load(sys.stdin)
+print(node['status']['allocatable'].get('${gpu_resource}', '0'))")
+      if [ "${advertised}" = "0" ] || [ -z "${advertised}" ]; then
+        die "node ${node} does not advertise ${gpu_resource}; a runtime placed there could never be given a GPU"
+      fi
+      step "${node} advertises ${advertised} x ${gpu_resource}"
+    done
+  fi
 }
 
 # ----------------------------------------------------------------------- build
@@ -310,23 +331,28 @@ phase_build() {
   [ -d "${SOURCE_TREE}" ] || die "no source tree at ${SOURCE_TREE}"
   local moon="${HOME}/moon-public/toolchains/moon-linux-amd64/bin"
   [ -d "${moon}" ] || die "no moon toolchain at ${moon}"
-  step "building cmd/control in ${SOURCE_TREE}"
+  step "building cmd/control and the agent-side loopback proxy in ${SOURCE_TREE}"
   if [ "${DRY_RUN}" -eq 1 ]; then
-    printf '  [dry-run] moon build --target native --release cmd/control\n' >&2
+    printf '  [dry-run] moon build --target native --release cmd/control cmd/loopback-proxy\n' >&2
     return 0
   fi
   ( cd "${SOURCE_TREE}" && PATH="${moon}:${PATH}" \
-      moon build --target native --release cmd/control )
+      moon build --target native --release cmd/control cmd/loopback-proxy )
   step "built $(ls -l "${SOURCE_TREE}/_build/native/release/build/cmd/control/control.exe" | awk '{print $5}') bytes"
 }
 
 # ---------------------------------------------------------------------- images
 phase_images() {
   note "images"
-  step "control image ${CONTROL_IMAGE} from the freshly built binary"
+  step "control image ${CONTROL_IMAGE} from the freshly built binaries"
+  local control_binary="${SOURCE_TREE}/_build/native/release/build/cmd/control/control.exe"
+  local proxy_binary="${SOURCE_TREE}/_build/native/release/build/cmd/loopback-proxy/loopback-proxy.exe"
+  [ -f "${proxy_binary}" ] || proxy_binary="${SOURCE_TREE}/_build/native/release/build/cmd/loopback-proxy/loopback-proxy"
+  [ -f "${proxy_binary}" ] || die "no loopback proxy binary; run the build phase first"
   mutate python3 "${REPO_ROOT}/deploy/cluster/build-control-image.py" \
     --image "${CONTROL_IMAGE}" \
-    --binary "${SOURCE_TREE}/_build/native/release/build/cmd/control/control.exe" \
+    --binary "${control_binary}" \
+    --aux-binary "${proxy_binary}" \
     --sudo-password "${MANAGEMENT_SUDO}"
 
   if [ "${REBUILD_NODE_IMAGE}" -eq 1 ] && [ -z "${NODE_IMAGE_TAR}" ]; then
@@ -356,82 +382,14 @@ phase_images() {
       fi
       scp -q -o BatchMode=yes "${NODE_IMAGE_TAR}" \
         "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:/tmp/node-image.tar"
-      node_sudo "${node}" "k3s ctr -n k8s.io images import --digests /tmp/node-image.tar >/dev/null 2>&1 && k3s ctr -n k8s.io images tag --force 'docker.io/library/${NODE_IMAGE}' 'docker.io/library/${NODE_IMAGE}' >/dev/null 2>&1; rm -f /tmp/node-image.tar"
+      # CRI resolves a reference with no registry as docker.io/library/<name>,
+      # so the imported short name has to be tagged that way or the kubelet
+      # never finds the image and pulls instead.
+      node_sudo "${node}" "k3s ctr -n k8s.io images import --digests /tmp/node-image.tar >/dev/null 2>&1 && k3s ctr -n k8s.io images tag --force '${NODE_IMAGE}' 'docker.io/library/${NODE_IMAGE}' >/dev/null 2>&1; rm -f /tmp/node-image.tar"
     done
   else
     step "node image ${NODE_IMAGE} is used as-is (pass --rebuild-node-image or --node-image-tar to replace it)"
   fi
-}
-
-# ------------------------------------------------------------------------- dra
-# The Kubernetes runtime backend allocates a GPU through the DRA device class.
-# The driver image is large and the GPU nodes have no route to registry.k8s.io,
-# so it is pulled once here and imported locally on each of them.
-phase_dra() {
-  note "dra"
-  local image
-  image=$(cluster - images dra)
-  local platform="linux/arm64"
-  local missing=()
-  local dra_state
-  dra_state=$(kubectl_ -n dra-driver-nvidia-gpu get pods \
-    -o jsonpath='{range .items[*]}{.spec.nodeName}{" "}{.status.phase}{"\n"}{end}' 2>/dev/null || true)
-  for node in $(selected_nodes); do
-    printf '%s\n' "${dra_state}" | grep -q "^${node} Running" || missing+=("${node}")
-  done
-  if [ ${#missing[@]} -eq 0 ]; then
-    step "the DRA kubelet plugin is already running on every selected node"
-    return 0
-  fi
-  step "the DRA kubelet plugin is missing on: ${missing[*]}"
-
-  if [ "${DRY_RUN}" -eq 1 ]; then
-    printf '  [dry-run] pull %s (%s) here and import it on every node above\n' "${image}" "${platform}" >&2
-    return 0
-  fi
-
-  # registry.k8s.io resolves but its blob backend does not answer from here, so
-  # the mirror is tried first and the canonical name is restored on import: the
-  # DaemonSet keeps referencing registry.k8s.io, which is what must be present.
-  local sources=()
-  while IFS= read -r candidate; do
-    [ -n "${candidate}" ] && sources+=("${candidate}")
-  done < <(python3 - "$MANIFEST" <<'PY'
-import json, sys
-images = json.load(open(sys.argv[1]))["images"]
-print("\n".join(images.get("draSources") or [images["dra"]]))
-PY
-)
-  local pulled=""
-  local attempts=0
-  for candidate in "${sources[@]}"; do
-    step "pulling ${candidate} for ${platform}"
-    if as_root k3s ctr -n k8s.io images pull \
-        --platform "${platform}" "${candidate}" >/dev/null 2>&1; then
-      pulled="${candidate}"
-      break
-    fi
-    attempts=$((attempts + 1))
-    step "  source unreachable; trying the next one"
-  done
-  [ -n "${pulled}" ] || die "could not pull any configured source for ${image}"
-
-  local archive="${WORK}/dra-driver-arm64.tar"
-  as_root k3s ctr -n k8s.io images export \
-    --platform "${platform}" "${archive}" "${pulled}" >/dev/null ||
-    die "cannot export ${pulled}"
-  as_root chmod 644 "${archive}"
-
-  for node in "${missing[@]}"; do
-    step "importing ${image} on ${node}"
-    scp -q -o BatchMode=yes "${archive}" \
-      "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:/tmp/dra-driver.tar"
-    node_sudo "${node}" "k3s ctr -n k8s.io images import --digests /tmp/dra-driver.tar >/dev/null 2>&1; k3s ctr -n k8s.io images tag --force '${pulled}' '${image}' >/dev/null 2>&1; rm -f /tmp/dra-driver.tar"
-    kubectl_ -n dra-driver-nvidia-gpu delete pod \
-      -l "app.kubernetes.io/name=dra-driver-nvidia-gpu" \
-      --field-selector "spec.nodeName=${node}" --ignore-not-found >/dev/null 2>&1 || true
-  done
-  step "imported and tagged as ${image}; the plugin pods will be recreated"
 }
 
 # ---------------------------------------------------------------------- config
@@ -483,7 +441,6 @@ phase_config() {
     --manifest "${MANIFEST}" \
     --output "${RENDERED}" \
     --template-dir "${REPO_ROOT}/deploy/cluster" \
-    --control-address "${CONTROL_POD_IP}" \
     "${render_node_arguments[@]}"
   step "rendered into ${RENDERED}"
 
@@ -493,20 +450,26 @@ phase_config() {
       kubectl_ -n "${NAMESPACE}" create configmap "lunanexa-node-inventory-${node}" \
         --from-file="inventory.json=${RENDERED}/inventory-${node}.json" \
         --dry-run=client -o yaml >"${WORK}/inventory-${node}.yaml"
-      kubectl_ -n "${NAMESPACE}" apply -f "${WORK}/inventory-${node}.yaml" >/dev/null
+      converge "${WORK}/inventory-${node}.yaml"
       kubectl_ -n "${NAMESPACE}" create configmap "lunanexa-node-runtime-${node}" \
         --from-file="kubernetes-runtime.json=${RENDERED}/kubernetes-runtime-${node}.json" \
         --dry-run=client -o yaml >"${WORK}/runtime-${node}.yaml"
-      kubectl_ -n "${NAMESPACE}" apply -f "${WORK}/runtime-${node}.yaml" >/dev/null
+      converge "${WORK}/runtime-${node}.yaml"
     fi
 
     if [ -f "${RENDERED}/fabric-${node}.yaml" ]; then
       step "${node}: declaring ${NODE_FABRIC[${node}]} on ${NODE_FABRIC_INTERFACE[${node}]}"
       if [ "${DRY_RUN}" -eq 0 ]; then
+        # Staged in the account's home rather than /tmp: a leftover root-owned
+        # file in /tmp cannot be overwritten by the unprivileged account.
+        local staging=".lunanexa-cx7.yaml"
         scp -q -o BatchMode=yes "${RENDERED}/fabric-${node}.yaml" \
-          "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:/tmp/60-lunanexa-cx7.yaml"
-        node_sudo "${node}" "install -m 600 -o root -g root /tmp/60-lunanexa-cx7.yaml /etc/netplan/60-lunanexa-cx7.yaml && rm -f /tmp/60-lunanexa-cx7.yaml && netplan get >/dev/null"
-        step "${node}: declared but not applied; the address is already live"
+          "${NODE_USER[${node}]}@${NODE_ADDRESS[${node}]}:${staging}"
+        # An absolute path: sudo runs its own shell, so ~ would be root's home.
+        local staged="/home/${NODE_USER[${node}]}/${staging}"
+        node_sudo "${node}" "install -m 600 -o root -g root ${staged} /etc/netplan/60-lunanexa-cx7.yaml && rm -f ${staged}"
+        node_sudo "${node}" "netplan get >/dev/null" &&
+          step "${node}: declared but not applied; the address is already live"
       fi
     fi
   done
@@ -517,7 +480,7 @@ phase_rbac() {
   note "rbac"
   [ -f "${RENDERED}/rbac.yaml" ] || die "run the config phase first (or use --phases all)"
   step "runtime namespace ${RUNTIME_NAMESPACE} and the agent's role in it"
-  mutate kubectl_ apply -f "${RENDERED}/rbac.yaml" >/dev/null
+  mutate converge "${RENDERED}/rbac.yaml"
 }
 
 # ----------------------------------------------------------------------- apply
@@ -541,7 +504,7 @@ The image in use must be built from this tree first (see deploy/cluster/README.m
 
   for node in $(selected_nodes); do
     step "${node}: applying the node agent"
-    mutate kubectl_ -n "${NAMESPACE}" apply -f "${RENDERED}/node-agent-${node}.yaml" >/dev/null
+    mutate converge "${RENDERED}/node-agent-${node}.yaml"
   done
   if [ "${DRY_RUN}" -eq 0 ]; then
     step "waiting for the agents to become available"
@@ -599,7 +562,7 @@ main() {
   IFS=',' read -r -a wanted <<< "${PHASES}"
   for phase in "${wanted[@]}"; do
     case "${phase}" in
-      preflight|build|images|dra|config|rbac|apply|verify)
+      preflight|build|images|config|rbac|apply|verify)
         "phase_${phase}" ;;
       "") ;;
       *) die "unknown phase '${phase}'" ;;

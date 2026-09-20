@@ -108,6 +108,9 @@ pub(all) struct RuntimeSettings {
   run_as_user : Int
   device_class_name : String
   controller_addresses : Array[String]
+  device_plugin_resource : String?
+  runtime_class_name : String?
+  controller_namespace : String?
   runtime_secrets : Array[RuntimeSecretBinding]?
   fabric_address : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)

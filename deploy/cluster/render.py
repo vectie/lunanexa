@@ -103,7 +103,7 @@ def inventory(node, cluster):
 
 def runtime_config(node, cluster, control_addresses):
     runtime = cluster["runtime"]
-    return {
+    config = {
         "namespace_name": runtime["namespace"],
         "node_name": node["id"],
         "node_id": node["id"],
@@ -115,6 +115,15 @@ def runtime_config(node, cluster, control_addresses):
         "runtime_secrets": [],
         **({"fabric_address": node["fabricAddress"]} if node.get("fabricAddress") else {}),
     }
+    # How this cluster hands a pod its GPUs, and how a runtime recognises its
+    # controller, are cluster facts rather than per-node ones.
+    if runtime.get("devicePluginResource"):
+        config["device_plugin_resource"] = runtime["devicePluginResource"]
+    if runtime.get("runtimeClassName"):
+        config["runtime_class_name"] = runtime["runtimeClassName"]
+    if runtime.get("controllerNamespace"):
+        config["controller_namespace"] = runtime["controllerNamespace"]
+    return config
 
 
 def fabric_plan(node):
@@ -141,7 +150,8 @@ def main():
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--template-dir", required=True)
-    parser.add_argument("--control-address", action="append", default=[])
+    parser.add_argument("--control-address", action="append", default=[],
+                        help="controller address for a controller outside the cluster; omitted when the runtime config names a controller namespace")
     parser.add_argument("--node", action="append", default=[])
     parser.add_argument("--without-fabric", action="store_true")
     arguments = parser.parse_args()
@@ -161,7 +171,7 @@ def main():
     namespace = cluster["namespace"]
     runtime = cluster["runtime"]
     images = cluster["images"]
-    control_addresses = arguments.control_address or ["127.0.0.1"]
+    control_addresses = arguments.control_address
     output = pathlib.Path(arguments.output)
     output.mkdir(parents=True, exist_ok=True)
 

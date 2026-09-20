@@ -45,27 +45,67 @@ bash deploy/cluster/one-click.sh --dry-run
 
 所有阶段幂等：重复运行不会轮换已有凭据、不会重建已有的 Secret、不会重复声明地址。
 
-## 仍然挡在前面的三件事（都已如实反映在脚本行为里）
+## 三个阻塞的根因与处理
 
-1. **节点镜像还没从这棵树重建过。** Kubernetes 后端要求 agent 二进制在启动时拿一个
-   journal owner nonce；原实现去 spawn `/usr/bin/openssl`，而 agent 镜像里没有 openssl，
-   于是 agent 一起就 `OSError("@process.run(): No such file or directory")` 崩溃。
-   代码已改成走 `getentropy(2)` 的 C stub（`node/kubernetes/secure_random.c`，与
-   `workspace/webide` 里那套同源），**但这需要重新构建 arm64 节点镜像**。
-   当前 4 台跑的是重建之前的镜像，所以 `apply` 阶段默认**拒绝**改变运行时后端，
-   除非显式传 `--accept-runtime-backend-change`。这是刻意的：跳过它就会让整队在
-   CrashLoop 里。
-   重建的前置条件目前并不齐：spark 上原来的 arm64 构建环境（`~/moon`、`~/src`）已不存在，
-   而且 `lunanexa-loopback-proxy` 这个镜像里的二进制**在仓库里没有源码**。
-2. **DRA 驱动镜像拉不到。** Kubernetes 后端用 `gpu.nvidia.com` 设备类给运行时分配 GPU，
-   而该驱动（`registry.k8s.io/dra-driver-nvidia/...:v0.5.0`）的管理节点只能到达前端、
-   到不了 blob 后端（超时），试过的四个公共镜像源都对它 403 或没有这个仓库。
-   `dra` 阶段会把源列表（`images.draSources`）逐个试过去，源可达时全自动完成；
-   现在四个源都不可达，所以 4 台 GPU 节点上该驱动仍是 `ImagePullBackOff`。
-3. **控制面给运行时授权用的地址是 Pod 地址。** 控制面不是 host network，运行时的
-   NetworkPolicy 只能写死它的 Pod IP，而该 IP 随 Pod 替换而变。脚本在每次 `config`
-   时重新取当前值（`cluster.controlPlane.authorization.deriveFrom`），但这终究是权宜；
-   真正的解法是让控制面走 host network，或者把这条策略改成基于 Service 的等价物。
+**1. GPU 怎么分配：不用 DRA，用设备插件（已改）**
+
+仓库的渲染器原来只会走 DRA（`gpu.nvidia.com` 设备类 + ResourceClaimTemplate）。
+但现场事实是：4 台 GPU 节点上 DRA kubelet 驱动起不来（镜像拉不到），而
+**nvidia 设备插件**在跑、而且在服务的每个模型 Pod 都是靠它拿 GPU 的
+（`nvidia.com/gpu` + `runtimeClassName: nvidia`）。所以这不是"换个镜像"的问题，
+是"平台假定了一种这台集群没有的分配机制"。
+
+现在 `RuntimeSettings` 多了一条可选路径：给了 `device_plugin_resource`（本例
+`nvidia.com/gpu`）就渲染成计数型扩展资源、加 `runtimeClassName`、**不再**生成
+ResourceClaimTemplate；`devices` 里被签名钉住的那几张卡通过
+`NVIDIA_VISIBLE_DEVICES` 精确指定，所以"分配哪张卡"这件事没有被放弃。
+`controller_namespace` 同理：它让运行时**按命名空间**接受控制器，而不是写死一个
+每次重建都会变的 Pod 地址。
+
+配套地，`preflight` 现在检查的是**节点是否真的广播那个扩展资源**（本例 4/4 都是
+`1 x nvidia.com/gpu`），DRA 阶段从脚本里删掉了——它在本集群没有意义。
+
+**2. 节点镜像重建不了（已修）**
+
+三件事让它不可重建，现在都补上了：
+
+- **缺源码**：`lunanexa-loopback-proxy` 这个 sidecar 在镜像里存在、仓库里没有源码；
+  现场只有一份没提交的 `~/lunanexa-loopback-proxy.c`。现在
+  `cmd/loopback-proxy/` 有实现（MoonBit + 一个半关闭用的 C stub）和测试。
+- **缺打包脚本**：镜像怎么打只存在于 `~/pkg-node-image-r4.sh`。现在
+  `deploy/cluster/build-node-image.sh` 是同一套流程（单层 rootfs：agent 二进制、
+  代理、nvidia-smi、宿主机 glibc/NSS/NVML、ca 证书、passwd/group/nsswitch），
+  只是参数化并进了仓库。
+- **缺可复现的构建环境**：4 台里只有 **.176** 还留着完整 arm64 工具链
+  （`~/moon` 含 core bundle）和 `~/src`。`stage-and-build-node.sh` 能把工具链、
+  mooncakes 快照、libpq deb 从管理节点铺到任意一台 Spark 并完成构建；
+  .178 上这次就是这么铺的（注意工具链 tar 不能 `--strip-components`，
+  否则 core bundle 会被剥掉、报 `Cannot load the core file`）。
+
+**3. 控制面地址会漂（已消）**
+
+运行时的 NetworkPolicy 原来只能点名控制面的 **Pod IP**（控制面不是 host network，
+这个地址每次重建都变）。既然策略的意图是"只有控制面能进来"，现在改用
+**namespaceSelector**（`kubernetes.io/metadata.name: lunanexa`），地址可以完全不给；
+两者同时给也支持（集群外的控制器用得上）。`controller_addresses` 因此不再必须非空
+——只要有一个 peer 就够，两个都没有才会被拒。
+
+## 还有一件与平台无关、但同样会拦住"真的跑起来"的事
+
+kubelet **拉不到私有 registry**（`lunanexa-registry-private` 的 NetworkPolicy 只放行控制面
+Pod 与 staging）。所以任何要作为 `assignment.runtime` 起来的模型运行时镜像，都必须像节点
+agent 镜像一样**先在节点上本地导入**。`images` 阶段已经有这套导入逻辑（节点镜像走的就是
+它），但"把某个模型运行时的镜像导到该链路的每台节点"还没有对应的阶段，因为目前还没有
+这样一个镜像存在。这是让平台真的服务一个模型之前必须补的一步。
+
+## 仍然没做的
+
+- 本集群**不用 DRA**，所以 `deploy/kubernetes-runtime.example.json` 里的
+  `device_class_name` 只是沿用字段，不会生效；要切回 DRA 只需去掉
+  `device_plugin_resource`。
+- 半关闭：MoonBit 的 socket API 表达不了 `shutdown(SHUT_WR)`，`cmd/loopback-proxy`
+  为此带了一个 24 行的 C stub。这是仓库里第三个同类 stub（另两处在
+  `workspace/webide`、`cmd/identity-gateway`）。
 
 ## 与仓库其余部分的关系
 

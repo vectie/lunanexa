@@ -8,12 +8,7 @@
   },
   "images": {
     "control": "lunanexa-control:20260918",
-    "node": "lunanexa-node:20260918-arm64",
-    "dra": "registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.5.0",
-    "draSources": [
-      "docker.m.daocloud.io/registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.5.0",
-      "registry.k8s.io/dra-driver-nvidia/dra-driver-nvidia-gpu:v0.5.0"
-    ]
+    "node": "lunanexa-node:20260920-arm64-r5"
   },
   "runtime": {
     "backend": "kubernetes",
@@ -22,14 +17,12 @@
     "runtimePort": 8080,
     "runAsUser": 65532,
     "deviceClassName": "gpu.nvidia.com",
+    "comment": "This cluster exposes its GPUs through the device plugin, not through DRA: the nvidia device plugin is running and admits every model pod that currently serves, while the DRA kubelet plugin cannot start on these nodes. devicePluginResource therefore names the extended resource, runtimeClassName names the handler that hands the pod its device nodes, and controllerNamespace lets a runtime accept its controller without naming a pod address that changes.",
+    "devicePluginResource": "nvidia.com/gpu",
+    "runtimeClassName": "nvidia",
+    "controllerNamespace": "lunanexa",
     "statePath": "/var/lib/lunanexa/kubernetes-runtime-state.json",
     "configPath": "/etc/lunanexa/kubernetes-runtime.json"
-  },
-  "controlPlane": {
-    "authorization": {
-      "comment": "The controller reaches a runtime from the control pod, which is not host-networked, so this is the live pod address and the one-click script re-derives it on every config pass. See deploy/cluster/README.md for why this cannot be a literal.",
-      "deriveFrom": "kubectl -n lunanexa get pod -l app=lunanexa-control -o jsonpath={.status.podIP}"
-    }
   },
   "nodes": [
     {
