@@ -58,3 +58,20 @@ Any contract or cluster-boundary change additionally runs contract fixtures,
 dependency isolation checks, response leak scans, restart reconciliation, and
 the relevant UI-to-UI scenario described in `docs/PLAN.md`.
 
+### Prerequisites the toolchain does not supply
+
+Most packages never declared the C link flags that the native backend needs, so
+on a Linux build host the phase gate fails before it tests anything unless the
+environment supplies them:
+
+- **`-pthread -ldl` on every native link.** Without it, most packages fail with
+  `undefined reference to 'pthread_setspecific'`. A `cc` wrapper that appends
+  those flags, pointed at by `MOON_CC`, unblocks the whole module without
+  editing 40 manifests; declaring the flags in each package's `moon.pkg` is the
+  durable fix and is still outstanding.
+- **A large stack for the linker, plus `ulimit -s unlimited`.** Linking the
+  `api` test binary otherwise kills `moonc` with a `Stack overflow` ICE.
+
+`ulimit -s unlimited` matters even with a generous soft limit: `moonc` sets its
+own thread stack, and the ICE only disappears once the shell's limit is lifted.
+

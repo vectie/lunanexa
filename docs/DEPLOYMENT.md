@@ -314,7 +314,9 @@ A node that is one half of a validated CX7 pair additionally sets
 `"fabric_address"` in that file to its own address on the private fabric
 (see `docs/CX7_PAIR_TOPOLOGY.md`). A paired assignment arriving at a node that
 declares no fabric address is refused rather than started unable to reach its
-peer, and nodes that are not part of a pair leave the key out entirely.
+peer, and nodes that are not part of a pair leave the key out entirely: the
+decoder wants a string, so writing `"fabric_address": null` is refused rather
+than read as "no pair".
 
 Each protected per-node directory for that layout additionally contains
 `node.env`, `lunanexa-controller-tunnel.service`, `tunnel-identity`, and
