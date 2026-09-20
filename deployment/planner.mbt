@@ -506,6 +506,10 @@ pub fn desired_assignments(
         generation,
         lease_expires_unix_ms: now_unix_ms + plan.intent.lease_duration_ms,
         controller_epoch,
+        // One replica on one machine is a group of one. Paired execution will
+        // replace this with two ranked members of the same group; until then a
+        // pair never reaches here, because preflight blocks it.
+        group: None,
         signature: "",
       }
     }

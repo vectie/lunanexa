@@ -81,6 +81,7 @@ fn materialization_assignment() -> @contracts.DesiredAssignment {
     generation: 1L,
     lease_expires_unix_ms: 1900000000000L,
     controller_epoch: 1L,
+    group: None,
     signature: "signed",
   }
 }

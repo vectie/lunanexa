@@ -81,6 +81,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
     generation: 2L,
     lease_expires_unix_ms: 100000L,
     controller_epoch: 1L,
+    group: None,
     signature: "signed",
   }
   let heartbeat : @contracts.NodeHeartbeat = {
