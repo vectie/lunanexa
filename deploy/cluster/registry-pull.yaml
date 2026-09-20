@@ -1,0 +1,37 @@
+# Who may pull from the private registry.
+#
+# Two things had to be true for a node's kubelet, and only one of them was:
+# the registry runs on the management node and a ClusterIP is enough, because
+# kube-proxy DNATs on the client node -- but it does not masquerade in-cluster
+# sources, so the registry sees the *client node's* flannel address
+# (10.42.<node>.0) and never the node's LAN address. The previous rule named
+# two addresses (192.168.2.180, 10.42.1.0) that belonged to nodes which no
+# longer exist, so every pull was rejected while the object still looked
+# plausible. The cluster's pod network is the stable way to say "any node may
+# pull", and it cannot go stale when a node is added.
+#
+# The registry itself is unauthenticated (no REGISTRY_AUTH is configured), so
+# this policy is the only access control there is. Allowing the whole pod
+# network therefore allows any pod in the cluster to read and push images.
+# That is the intended scope for a cluster-internal artifact registry; if the
+# registry is to be restricted per tenant, it needs authentication first,
+# because a policy cannot express "this namespace but not that one" for a
+# kubelet that arrives on the node's own address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-registry-compute-pull
+  namespace: lunanexa-registry
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-registry
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - port: 5000
+          protocol: TCP

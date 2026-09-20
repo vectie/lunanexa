@@ -8,7 +8,8 @@
   },
   "images": {
     "control": "lunanexa-control:20260918",
-    "node": "lunanexa-node:20260920-arm64-r5"
+    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node:20260920-arm64-r5",
+    "nodeComment": "Now pulled from the cluster's own registry. The import path remains for the first install, when the registry may be empty."
   },
   "runtime": {
     "backend": "kubernetes",
@@ -33,7 +34,9 @@
       "architecture": "nvidia-sm121",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
-      "dataClasses": ["Confidential"],
+      "dataClasses": [
+        "Confidential"
+      ],
       "runtimeNames": [],
       "fabricAddress": "192.168.100.10",
       "fabricPeer": "spark-3782-feee26eb",
@@ -47,7 +50,9 @@
       "architecture": "nvidia-sm121",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
-      "dataClasses": ["Confidential"],
+      "dataClasses": [
+        "Confidential"
+      ],
       "runtimeNames": [],
       "fabricAddress": "192.168.100.11",
       "fabricPeer": "spark-25e2-3d35c8fd",
@@ -61,7 +66,9 @@
       "architecture": "nvidia-sm121",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
-      "dataClasses": ["Confidential"],
+      "dataClasses": [
+        "Confidential"
+      ],
       "runtimeNames": [],
       "fabricAddress": "10.0.22.1",
       "fabricPeer": "spark-368c-0f2ee8b2",
@@ -75,11 +82,39 @@
       "architecture": "nvidia-sm121",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
-      "dataClasses": ["Confidential"],
+      "dataClasses": [
+        "Confidential"
+      ],
       "runtimeNames": [],
       "fabricAddress": "10.0.22.2",
       "fabricPeer": "spark-57f5-98a504ed",
       "fabricInterface": "enp1s0f0np0"
     }
-  ]
+  ],
+  "registry": {
+    "host": "lunanexa-registry.lunanexa-registry.svc.cluster.local",
+    "port": 5000,
+    "namespace": "lunanexa-registry",
+    "trustSecret": "lunanexa-registry-tls",
+    "caFile": "/etc/rancher/k3s/lunanexa-registry-ca.crt",
+    "hostsEntry": "/etc/hosts",
+    "comment": "kubelets resolve on the node, not through CoreDNS, so the address of the Service is pinned in /etc/hosts and the CA is installed on every node. The node addresses are not listed in the pull policy because kube-proxy does not masquerade in-cluster sources: the registry sees the node's pod-network address.",
+    "publish": [
+      {
+        "source": "lunanexa-control:20260918",
+        "target": "moon/lunanexa-control:20260918"
+      },
+      {
+        "source": "lunanexa-node:20260920-arm64-r5",
+        "target": "lunanexa/node:20260920-arm64-r5",
+        "node": "spark-25e2-3d35c8fd"
+      }
+    ],
+    "mirrors": {
+      "docker.io": "https://docker.m.daocloud.io",
+      "registry.k8s.io": "https://docker.m.daocloud.io"
+    },
+    "caOnManagement": "/home/HwHiAiUser/moon-public/trust/registry-20260830/registry-ca.crt",
+    "clusterIP": "10.43.216.245"
+  }
 }

@@ -107,6 +107,44 @@ agent 镜像一样**先在节点上本地导入**。`images` 阶段已经有这�
   为此带了一个 24 行的 C stub。这是仓库里第三个同类 stub（另两处在
   `workspace/webide`、`cmd/identity-gateway`）。
 
+## 私有 registry（`registry` 阶段）
+
+集群里一直有一个 registry（`lunanexa-registry`，ClusterIP `10.43.216.245:5000`，TLS 由私有 CA 签），
+但**没有任何节点能用它**：放行策略里写的是 `192.168.2.180/32` 和 `10.42.1.0/32`——两个已经不存在的
+节点地址；节点上也没有信任材料。于是所有镜像都靠 scp + `ctr images import` 送过去。
+
+`registry` 阶段一次把这条路易主：
+
+1. **放行按 Pod 网段**（`registry-pull.yaml`，`10.42.0.0/16`）。原因是 kube-proxy 对集群内源地址
+   不做 masquerade：registry 看到的源地址是**客户端节点的 flannel 地址**（`10.42.<node>.0`），
+   不是节点的 LAN 地址。按地址逐个列，就是它上次腐烂的原因；写网段则新增节点自动成立。
+   代价要说清楚：registry **没有鉴权**，这条策略就是唯一的访问控制，放开网段等于放开给集群里
+   所有 Pod。要按租户收紧，得先给 registry 加认证。
+2. **每台节点的信任与解析**：装 CA 到 `/etc/rancher/k3s/lunanexa-registry-ca.crt`，
+   在 `/etc/hosts` 里钉 ClusterIP（kubelet 在节点上解析，不走 CoreDNS），
+   用渲染出来的 `registries.yaml` **整体重写**（原来的做法是追加，会在已有 `configs:` 的文件里
+   产生第二个同名顶层键，YAML 就废了），然后重启 `k3s-agent`。
+3. **发布平台自己的镜像**并把节点 agent 切到 registry 引用（`lunanexa/node:20260920-arm64-r5`
+   现在是从 registry 拉的，不再是 tarball）。
+4. **验证**：删掉节点本地副本后真的从 registry 拉一次，四台都过。
+
+一个坑记在这里：`ctr` 不读 k3s 的 `registries.yaml`，它要的是 k3s 生成出来的
+`certs.d` 目录（`--hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d`），
+否则 push/pull 会报 `x509: certificate signed by unknown authority`。
+
+## 模型列表（`scripts/adopt-model-store.py`）
+
+控制台的模型列表读的是 `GET /v1/registry`，而 `/data/models` 里的 15 个模型只进到了
+model-source 的 import 存储（都是 `Verified`），**从未被 adopted**，所以列表里只有 2 个。
+另外控制台两个地方各写了一份 adopt 判定，`ui` 那份接受 `modelstore://`、`cmd/console` 那份
+只接受 `s3://`——按钮渲染出来了，点下去必然被拒。现在判定只有 `ui` 一份（`pub fn
+model_import_adoptable`），`cmd/console` 调用它。
+
+`scripts/adopt-model-store.py` 用**控制台按钮调用的同一个端点**把这 17 个已验证 import 走完
+adopt（每个的 license 用 store 从上游仓库记下来的真实值，显存下限用 store 校验过的字节数），
+registry 里因此有 19 个模型 id。它**不做** license 接受、verification、evaluation、approval——
+那四步要真凭据，编造比留白更糟。
+
 ## 与仓库其余部分的关系
 
 - `deploy/node-kubernetes-rbac.yaml` 现在是这份脚本渲染的模板（`lunanexa-node` +
