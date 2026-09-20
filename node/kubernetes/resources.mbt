@@ -9,6 +9,17 @@ pub(all) struct RuntimeSettings {
   run_as_user : Int
   device_class_name : String
   controller_addresses : Array[String]
+  /// The extended resource a cluster exposes its GPUs through when it uses the
+  /// device plugin rather than DRA, e.g. "nvidia.com/gpu". Absent means devices
+  /// are allocated through the device class above.
+  device_plugin_resource : String?
+  /// The RuntimeClass the container runtime needs in order to hand the pod its
+  /// GPUs, e.g. "nvidia". Only meaningful with `device_plugin_resource`.
+  runtime_class_name : String?
+  /// The namespace the controller runs in. When set, a runtime accepts traffic
+  /// from that namespace by selector instead of by address, which is what makes
+  /// the policy stable across controller pod restarts.
+  controller_namespace : String?
   runtime_secrets : Array[RuntimeSecretBinding]?
   /// This node's own address on the private fabric between a pair. Absent on a
   /// node that is not part of one; a paired assignment on such a node is
@@ -106,6 +117,27 @@ fn paired_group(
 }
 
 ///|
+/// An extended resource name as Kubernetes accepts it: an optional DNS
+/// subdomain, a slash, and a lowercase name, e.g. "nvidia.com/gpu".
+fn extended_resource_name(value : String) -> Bool {
+  let parts = value.split("/").collect()
+  if parts.length() != 2 {
+    return false
+  }
+  let (domain, resource) = (parts[0].to_owned(), parts[1].to_owned())
+  // The domain is a DNS subdomain, so it carries dots; each of its labels is a
+  // plain DNS label.
+  domain.length() <= 253 &&
+  domain.split(".").all(label => dns_label(label.to_owned())) &&
+  resource != "" &&
+  resource.length() <= 63 &&
+  resource
+  .all(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_') &&
+  !resource.has_prefix("-") &&
+  !resource.has_suffix("-")
+}
+
+///|
 fn metadata(
   settings : RuntimeSettings,
   assignment : @contracts.DesiredAssignment,
@@ -154,8 +186,21 @@ pub fn render_runtime(
     settings.runtime_port > 65535 ||
     settings.run_as_user < 1 ||
     settings.device_class_name != "gpu.nvidia.com" ||
-    settings.controller_addresses.is_empty() ||
+    (
+      settings.controller_addresses.is_empty() &&
+      settings.controller_namespace is None
+    ) ||
     !settings.controller_addresses.all(private_address) ||
+    (
+      settings.controller_namespace is Some(name) && !dns_label(name)
+    ) ||
+    (
+      settings.device_plugin_resource is Some(resource) &&
+      !extended_resource_name(resource)
+    ) ||
+    (
+      settings.runtime_class_name is Some(name) && !dns_label(name)
+    ) ||
     !dns_label(assignment.assignment_id) ||
     assignment.signature == "" ||
     assignment.generation < 0L ||
@@ -211,29 +256,39 @@ pub fn render_runtime(
   let resource_metadata = metadata(settings, assignment, name)
   let group = paired_group(settings, assignment)
   let paired = group is Some(_)
-  let requests : Array[Json] = [
-    for i, device in assignment.devices => {
-      {
-        "name": ("gpu-" + i.to_string()).to_json(),
-        "exactly": {
-          "deviceClassName": settings.device_class_name.to_json(),
-          "allocationMode": "ExactCount",
-          "count": 1,
-          "selectors": [
-            {
-              "cel": {
-                "expression": ("device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].uuid == '" +
-                device +
-                "' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('" +
-                assignment.resources.accelerator_memory_mib.to_string() +
-                "Mi')) >= 0").to_json(),
+  // Two ways a cluster can hand a pod its GPUs, and they are mutually
+  // exclusive. DRA allocates an exact device through a device class, which is
+  // what the selectors below pin. The device plugin instead counts extended
+  // resources, so the exact device is pinned through the environment the
+  // container runtime reads -- see the container's NVIDIA_VISIBLE_DEVICES.
+  let device_plugin = settings.device_plugin_resource
+  let requests : Array[Json] = if device_plugin is Some(_) {
+    []
+  } else {
+    [
+      for i, device in assignment.devices => {
+        {
+          "name": ("gpu-" + i.to_string()).to_json(),
+          "exactly": {
+            "deviceClassName": settings.device_class_name.to_json(),
+            "allocationMode": "ExactCount",
+            "count": 1,
+            "selectors": [
+              {
+                "cel": {
+                  "expression": ("device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].uuid == '" +
+                  device +
+                  "' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('" +
+                  assignment.resources.accelerator_memory_mib.to_string() +
+                  "Mi')) >= 0").to_json(),
+                },
               },
-            },
-          ],
-        },
+            ],
+          },
+        }
       }
-    }
-  ]
+    ]
+  }
   let claim_template : Json? = if requests.is_empty() {
     None
   } else {
@@ -257,6 +312,13 @@ pub fn render_runtime(
   let limits : Json = {
     "cpu": canonical_cpu_quantity(assignment.resources.cpu_millis).to_json(),
     "memory": canonical_memory_quantity(assignment.resources.memory_mib).to_json(),
+  }
+  if device_plugin is Some(resource) && assignment.resources.accelerator_count > 0 {
+    // The device plugin allocates by count of an extended resource, which is
+    // the only thing the scheduler can see. `devices` still decides which
+    // physical GPUs the container may open, through NVIDIA_VISIBLE_DEVICES.
+    guard limits is Object(fields) else { raise InvalidResource }
+    fields[resource] = assignment.resources.accelerator_count.to_json()
   }
   let volumes : Array[Json] = [
     {
@@ -404,12 +466,36 @@ pub fn render_runtime(
       _ => raise InvalidResource
     }
   }
+  if settings.runtime_class_name is Some(runtime_class) {
+    // Which handler the container runtime uses to hand the pod its GPUs is a
+    // host fact: this cluster exposes them through the `nvidia` RuntimeClass,
+    // and a pod that asks for a GPU without it never gets the device nodes.
+    match pod {
+      Object(root) =>
+        match root.get("spec") {
+          Some(Object(spec)) => spec["runtimeClassName"] = runtime_class.to_json()
+          _ => raise InvalidResource
+        }
+      _ => raise InvalidResource
+    }
+  }
   let peers : Array[Json] = [
     for address in settings.controller_addresses => {
       { "ipBlock": { "cidr": (address + "/32").to_json() } }
     }
   ]
   let policy_peers : Array[Json] = []
+  // A namespace peer outlives the controller pod that happens to be running
+  // now, which is the whole reason to prefer it to an address.
+  if settings.controller_namespace is Some(namespace_name) {
+    policy_peers.push({
+      "namespaceSelector": {
+        "matchLabels": {
+          "kubernetes.io/metadata.name": namespace_name.to_json(),
+        },
+      },
+    })
+  }
   for peer in peers {
     policy_peers.push(peer)
   }

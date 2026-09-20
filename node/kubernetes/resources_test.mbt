@@ -9,6 +9,9 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
     run_as_user: 1000,
     device_class_name: "gpu.nvidia.com",
     controller_addresses: ["192.168.2.175"],
+    device_plugin_resource: None,
+    runtime_class_name: None,
+    controller_namespace: None,
     runtime_secrets: None,
     fabric_address: None,
   }
@@ -520,4 +523,182 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
   assert_false(single.pod.stringify().contains("hostNetwork\":true"))
   assert_false(single.pod.stringify().contains("LUNANEXA_RANK"))
   assert_true(single.network_policy is { "spec": { "egress": [], .. }, .. })
+}
+
+///|
+/// A cluster that exposes its GPUs through the device plugin cannot be given a
+/// DRA claim: nothing would allocate it. The same assignment is therefore
+/// rendered as a counted extended resource, with the exact devices the
+/// signature pinned kept in the variable the GPU runtime reads.
+test "a device-plugin cluster renders a counted resource and keeps the exact devices" {
+  let assignment = runtime_assignment()
+  let settings : @kubernetes.RuntimeSettings = {
+    ..runtime_settings(),
+    device_plugin_resource: Some("nvidia.com/gpu"),
+    runtime_class_name: Some("nvidia"),
+  }
+  let resources = @kubernetes.render_runtime(
+    settings,
+    assignment,
+    "/var/lib/lunanexa/models/model",
+    assignment.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_eq(resources.claim_template, None)
+  assert_true(
+    resources.pod
+    is {
+      "spec": {
+        "runtimeClassName": "nvidia",
+        "resourceClaims": [],
+        "containers": [
+          {
+            "resources": {
+              "requests": { "nvidia.com/gpu": 1, .. },
+              "limits": { "nvidia.com/gpu": 1, .. },
+              "claims": [],
+              ..
+            },
+            ..
+          },
+        ],
+        ..
+      },
+      ..
+    },
+  )
+  let environment = pod_environment(resources.pod)
+  assert_false(
+    environment.any(value => {
+      value is { "name": "LUNANEXA_RANK", .. }
+    }),
+  )
+  assert_eq(
+    environment_value(environment, "NVIDIA_VISIBLE_DEVICES"),
+    Some(assignment.devices[0]),
+  )
+
+  // A CPU-only assignment asks for no GPU either way.
+  let cpu_only = { ..assignment, devices: [], resources: { ..assignment.resources, accelerator_count: 0, }, }
+  let resources = @kubernetes.render_runtime(
+    settings,
+    cpu_only,
+    "/var/lib/lunanexa/models/model",
+    cpu_only.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_false(resources.pod.stringify().contains("nvidia.com/gpu"))
+  assert_false(resources.pod.stringify().contains("NVIDIA_VISIBLE_DEVICES"))
+
+  for
+    unusable in [
+      { ..settings, device_plugin_resource: Some("nvidia.com") },
+      { ..settings, device_plugin_resource: Some("not a resource") },
+      { ..settings, device_plugin_resource: Some("nvidia.com/") },
+      { ..settings, runtime_class_name: Some("Nvidia Class") },
+    ] {
+    try
+      ignore(
+        @kubernetes.render_runtime(
+          unusable,
+          assignment,
+          "/var/lib/lunanexa/models/model",
+          assignment.artifact.digest,
+          5L,
+          1000L,
+        ),
+      )
+    catch {
+      InvalidResource => ()
+      _ => fail("wrong validation failure")
+    } noraise {
+      _ => fail("invalid device-plugin configuration accepted")
+    }
+  }
+}
+
+///|
+/// The controller's pod address changes whenever the pod is replaced, so a
+/// policy that names it goes stale. Naming the namespace instead keeps the
+/// runtime reachable without re-deriving anything, and an address may still be
+/// listed alongside it for a controller outside the cluster.
+test "the runtime accepts its controller by namespace rather than by address" {
+  let assignment = runtime_assignment()
+  let by_namespace : @kubernetes.RuntimeSettings = {
+    ..runtime_settings(),
+    controller_addresses: [],
+    controller_namespace: Some("lunanexa"),
+  }
+  let resources = @kubernetes.render_runtime(
+    by_namespace,
+    assignment,
+    "/var/lib/lunanexa/models/model",
+    assignment.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_true(
+    resources.network_policy
+    is {
+      "spec": {
+        "ingress": [
+          {
+            "from": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": { "kubernetes.io/metadata.name": "lunanexa", .. },
+                  ..
+                },
+                ..
+              },
+            ],
+            ..
+          },
+        ],
+        ..
+      },
+      ..
+    },
+  )
+
+  let both = @kubernetes.render_runtime(
+    { ..runtime_settings(), controller_namespace: Some("lunanexa"), },
+    assignment,
+    "/var/lib/lunanexa/models/model",
+    assignment.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_true(
+    both.network_policy
+    is {
+      "spec": {
+        "ingress": [{ "from": [{ .. }, { "ipBlock": { "cidr": "192.168.2.175/32", .. }, .. }], .. }],
+        ..
+      },
+      ..
+    },
+  )
+
+  // Neither a namespace nor an address would leave the runtime with no
+  // controller that is allowed to reach it, which is not a usable state.
+  try
+    ignore(
+      @kubernetes.render_runtime(
+        { ..runtime_settings(), controller_addresses: [], controller_namespace: Some("Not A Namespace"), },
+        assignment,
+        "/var/lib/lunanexa/models/model",
+        assignment.artifact.digest,
+        5L,
+        1000L,
+      ),
+    )
+  catch {
+    InvalidResource => ()
+    _ => fail("wrong validation failure")
+  } noraise {
+    _ => fail("an unreachable runtime was rendered")
+  }
 }

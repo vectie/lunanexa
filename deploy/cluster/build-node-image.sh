@@ -1,115 +1,136 @@
 #!/bin/bash
-# Build the ARM64 node agent on a DGX Spark and package it as an OCI archive.
+# Package the arm64 node agent image on a Spark.
 #
-# Runs ON a Spark. libpq is not installed system-wide there, so the dev package
-# is unpacked into the home directory instead: no root, no change to the host's
-# package state. The archive is consumed by one-click.sh --node-image-tar.
+# This is the procedure that produced the image currently running on all four
+# nodes, moved out of a home directory and into the repository. It builds a
+# single-layer rootfs rather than a base image plus layers because the agent
+# binary is linked against the Spark's own toolchain: the glibc it needs, the
+# resolver modules it dlopens, nvidia-smi and the NVML library it calls all
+# come from the host it runs on, so they are copied in explicitly. Nothing is
+# fetched from a registry.
 #
-# usage: build-node-image.sh [--source ~/src] [--tag lunanexa-node:20260918-arm64]
+# The image is imported locally on each node by one-click.sh; the cluster's
+# registry cannot be reached by kubelets, so a pull would never work.
 #
-# NOTE: the build half is the procedure that produced the image currently
-# running on all four nodes. The packaging half mirrors
-# deploy/cluster/build-control-image.py, but has not been exercised end to end
-# on this cluster -- the running image is still used as-is by default.
+# usage: build-node-image.sh [--source ~/src] [--tag lunanexa-node:20260918-arm64-r5]
+#                            [--proxy ~/lunanexa-loopback-proxy-arm64]
 set -euo pipefail
 
 SOURCE="$HOME/src"
-TAG="lunanexa-node:20260918-arm64"
+TAG="lunanexa-node:20260920-arm64-r5"
+PROXY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) SOURCE="$2"; shift 2 ;;
     --tag) TAG="$2"; shift 2 ;;
+    --proxy) PROXY="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
-export MOON_HOME="$HOME/moon"
-export PATH="$HOME/moon/bin:$PATH"
-PQ="$HOME/libpq-root"
-if [ ! -d "$PQ" ]; then
-  mkdir -p "$PQ"
-  for deb in "$HOME"/libpq-dev_*_arm64.deb "$HOME"/libpq5_*_arm64.deb; do
-    [ -f "$deb" ] && dpkg-deb -x "$deb" "$PQ"
+AGENT="$SOURCE/_build/native/release/build/cmd/node/node.exe"
+[ -x "$AGENT" ] || { echo "no agent binary at $AGENT; build cmd/node first" >&2; exit 1; }
+if [ -z "$PROXY" ]; then
+  for candidate in \
+    "$SOURCE/_build/native/release/build/cmd/loopback-proxy/loopback-proxy" \
+    "$SOURCE/_build/native/release/build/cmd/loopback-proxy/loopback-proxy.exe" \
+    "$HOME/lunanexa-loopback-proxy-arm64" \
+    "$HOME/lunanexa-loopback-proxy"; do
+    [ -x "$candidate" ] && PROXY="$candidate" && break
   done
 fi
-export C_INCLUDE_PATH="$PQ/usr/include/postgresql:$PQ/usr/include"
-export LIBRARY_PATH="$PQ/usr/lib/aarch64-linux-gnu"
+[ -n "$PROXY" ] && [ -x "$PROXY" ] || { echo "no loopback proxy binary found" >&2; exit 1; }
 
-cd "$SOURCE"
-moon build --target native --release cmd/node
-BINARY="$SOURCE/_build/native/release/build/cmd/node/node.exe"
-PROXY="$HOME/lunanexa-loopback-proxy-arm64"
-[ -x "$PROXY" ] || { echo "missing $PROXY (the loopback proxy must ship beside the agent)" >&2; exit 1; }
+WORK="$HOME/node-image"
+ROOT="$WORK/rootfs"
+rm -rf "$WORK"
+mkdir -p "$ROOT"/usr/local/bin "$ROOT"/usr/bin "$ROOT"/lib/aarch64-linux-gnu \
+  "$ROOT"/usr/lib/aarch64-linux-gnu "$ROOT"/etc/ssl/certs "$ROOT"/data/models \
+  "$ROOT"/var/lib/lunanexa "$WORK"/oci/blobs/sha256
 
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-cat > "$WORK/config.json" <<JSON
+install -m 0755 "$AGENT" "$ROOT/usr/local/bin/lunanexa-node"
+install -m 0755 "$PROXY" "$ROOT/usr/local/bin/lunanexa-loopback-proxy"
+install -m 0755 /usr/bin/nvidia-smi "$ROOT/usr/bin/nvidia-smi"
+
+# The agent measures the GPUs it owns through nvidia-smi and the NVML library.
+for lib in libc.so.6 libpthread.so.0 libm.so.6 libdl.so.2 librt.so.1 \
+  libnss_dns.so.2 libnss_files.so.2 libresolv.so.2; do
+  cp -L "/lib/aarch64-linux-gnu/$lib" "$ROOT/lib/aarch64-linux-gnu/$lib"
+done
+cp -L /lib/ld-linux-aarch64.so.1 "$ROOT/lib/ld-linux-aarch64.so.1"
+cp -L /usr/lib/aarch64-linux-gnu/libnvidia-ml.so.1 "$ROOT/usr/lib/aarch64-linux-gnu/libnvidia-ml.so.1"
+cp /etc/ssl/certs/ca-certificates.crt "$ROOT/etc/ssl/certs/ca-certificates.crt"
+
+grep -E 'root|65532' /etc/passwd > "$ROOT/etc/passwd" || cp /etc/passwd "$ROOT/etc/passwd"
+grep -E 'root|65532' /etc/group > "$ROOT/etc/group" || cp /etc/group "$ROOT/etc/group"
+printf 'hosts: files dns\n' > "$ROOT/etc/nsswitch.conf"
+echo 'nogroup:x:65534:' >> "$ROOT/etc/group"
+echo 'nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin' >> "$ROOT/etc/passwd"
+
+cd "$ROOT"
+tar --numeric-owner --owner=0 --group=0 -cf "$WORK/layer.tar" .
+cd "$WORK"
+gzip -n -9 layer.tar
+LAYER_SHA=$(sha256sum layer.tar.gz | cut -d' ' -f1)
+mv layer.tar.gz "oci/blobs/sha256/$LAYER_SHA"
+LAYER_SIZE=$(stat -c%s "oci/blobs/sha256/$LAYER_SHA")
+DIFF_ID=$(gunzip -c "oci/blobs/sha256/$LAYER_SHA" | sha256sum | cut -d' ' -f1)
+
+cat > config.json <<EOF
 {
   "architecture": "arm64",
   "os": "linux",
+  "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "config": {
     "Entrypoint": ["/usr/local/bin/lunanexa-node"],
-    "Env": ["PATH=/usr/local/bin:/usr/bin:/bin"],
-    "WorkingDir": "/"
+    "WorkingDir": "/",
+    "Env": ["PATH=/usr/local/bin:/usr/bin:/bin"]
   },
-  "rootfs": {"type": "layers", "diff_ids": []}
+  "rootfs": {"type": "layers", "diff_ids": ["sha256:$DIFF_ID"]}
 }
-JSON
+EOF
+CFG_SHA=$(sha256sum config.json | cut -d' ' -f1)
+CFG_SIZE=$(stat -c%s config.json)
+mv config.json "oci/blobs/sha256/$CFG_SHA"
 
-# The binaries are linked against the Spark's own toolchain, so their library
-# closure is shipped alongside them rather than relied on from a base image.
-LIBS=$(ldd "$BINARY" "$PROXY" | awk '/=>/ {print $3} /^[[:space:]]*\// {print $1}' | grep '^/' | sort -u)
-python3 - "$BINARY" "$PROXY" "$WORK" "$TAG" "$LIBS" <<'PY'
-import gzip, hashlib, io, json, os, subprocess, sys, tarfile, time
-
-binary, proxy, work, tag, libraries = sys.argv[1:6]
-sources = [(binary, "usr/local/bin/lunanexa-node"), (proxy, "usr/local/bin/lunanexa-loopback-proxy")]
-for library in sorted(set(x for x in libraries.split() if os.path.exists(x))):
-    sources.append((os.path.realpath(library), library.lstrip("/")))
-
-buffer = io.BytesIO()
-with tarfile.open(fileobj=buffer, mode="w") as archive:
-    for source, target in sources:
-        info = tarfile.TarInfo(target)
-        info.mode = 0o755
-        info.mtime = int(time.time())
-        info.size = os.path.getsize(source)
-        with open(source, "rb") as handle:
-            archive.addfile(info, handle)
-raw = buffer.getvalue()
-compressed = gzip.compress(raw, mtime=0)
-layer_digest = hashlib.sha256(compressed).hexdigest()
-
-config = json.load(open(f"{work}/config.json"))
-config["rootfs"]["diff_ids"] = [f"sha256:{hashlib.sha256(raw).hexdigest()}"]
-config["created"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-config_raw = json.dumps(config).encode()
-config_digest = hashlib.sha256(config_raw).hexdigest()
-manifest = {
-    "schemaVersion": 2,
-    "mediaType": "application/vnd.oci.image.manifest.v1+json",
-    "config": {"mediaType": "application/vnd.oci.image.config.v1+json",
-               "digest": f"sha256:{config_digest}", "size": len(config_raw)},
-    "layers": [{"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-                "digest": f"sha256:{layer_digest}", "size": len(compressed)}],
+cat > manifest.json <<EOF
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "digest": "sha256:$CFG_SHA",
+    "size": $CFG_SIZE
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:$LAYER_SHA",
+      "size": $LAYER_SIZE
+    }
+  ]
 }
-manifest_raw = json.dumps(manifest).encode()
-manifest_digest = hashlib.sha256(manifest_raw).hexdigest()
-index = {"schemaVersion": 2,
-         "manifests": [{"mediaType": "application/vnd.oci.image.manifest.v1+json",
-                        "digest": f"sha256:{manifest_digest}", "size": len(manifest_raw),
-                        "annotations": {"org.opencontainers.image.ref.name": tag},
-                        "platform": {"architecture": "arm64", "os": "linux"}}]}
+EOF
+MAN_SHA=$(sha256sum manifest.json | cut -d' ' -f1)
+MAN_SIZE=$(stat -c%s manifest.json)
+mv manifest.json "oci/blobs/sha256/$MAN_SHA"
 
-base = os.path.join(work, "image")
-os.makedirs(os.path.join(base, "blobs/sha256"), exist_ok=True)
-for digest, payload in ((layer_digest, compressed), (config_digest, config_raw), (manifest_digest, manifest_raw)):
-    open(os.path.join(base, "blobs/sha256", digest), "wb").write(payload)
-open(os.path.join(base, "index.json"), "w").write(json.dumps(index))
-open(os.path.join(base, "oci-layout"), "w").write('{"imageLayoutVersion": "1.0.0"}')
+cat > oci/index.json <<EOF
+{
+  "schemaVersion": 2,
+  "manifests": [
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:$MAN_SHA",
+      "size": $MAN_SIZE,
+      "annotations": {"org.opencontainers.image.ref.name": "$TAG"},
+      "platform": {"architecture": "arm64", "os": "linux"}
+    }
+  ]
+}
+EOF
+echo '{"imageLayoutVersion": "1.0.0"}' > oci/oci-layout
 
-out = os.path.expanduser(f"~/lunanexa-node-{tag.split(':')[1]}.oci.tar")
-with tarfile.open(out, "w") as archive:
-    archive.add(base, arcname=".")
-print(f"NODE-IMAGE-OK {tag} {out}")
-PY
+ARCHIVE="$HOME/$(echo "$TAG" | tr ':' '-').oci.tar"
+cd oci && tar -cf "$ARCHIVE" .
+echo "NODE-IMAGE-OK $TAG $ARCHIVE layer=$LAYER_SHA"

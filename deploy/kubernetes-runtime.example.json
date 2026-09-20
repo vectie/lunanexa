@@ -6,6 +6,9 @@
   "runtime_port": 8080,
   "run_as_user": 1000,
   "device_class_name": "gpu.nvidia.com",
-  "controller_addresses": ["192.168.0.10"],
+  "controller_addresses": [],
+  "controller_namespace": "lunanexa",
+  "device_plugin_resource": "nvidia.com/gpu",
+  "runtime_class_name": "nvidia",
   "runtime_secrets": []
 }

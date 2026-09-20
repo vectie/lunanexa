@@ -86,6 +86,16 @@ fn runtime_environment(
     },
   ]
   let image = assignment.runtime.name + "@" + assignment.runtime.image_digest
+  // The device plugin hands out a count, not an identity, so the exact devices
+  // the assignment was signed for are pinned through the variable the GPU
+  // runtime reads. Without this, a pod would get whatever GPU the kubelet
+  // happened to pick on that node.
+  if settings.device_plugin_resource is Some(_) && assignment.devices.length() > 0 {
+    result.push({
+      "name": "NVIDIA_VISIBLE_DEVICES",
+      "value": assignment.devices.join(",").to_json(),
+    })
+  }
   // A member of a pair is told where it sits and where its one peer is, on the
   // address this node declared for the private fabric. Rank 0 is the head, so
   // both members take their rendezvous point from the head's address.

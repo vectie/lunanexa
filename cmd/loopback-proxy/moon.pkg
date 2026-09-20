@@ -1,0 +1,19 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/socket",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+
+supported_targets = "native"
+
+import {
+  "moonbitlang/core/encoding/utf8",
+} for "wbtest"
+
+pkgtype(kind: "executable")
+
+options(
+  "native-stub": [ "half_close.c" ],
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)
