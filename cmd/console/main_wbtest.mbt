@@ -1825,6 +1825,7 @@ test "the deployment group replaces the deployment rows and their operations" {
     data_class: Internal,
     lease_duration_ms: 86400000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
   let operation : @deployment.DeploymentOperation = {
     operation_id: "operation-1",

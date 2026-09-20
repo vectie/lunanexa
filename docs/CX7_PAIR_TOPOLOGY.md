@@ -17,12 +17,21 @@
 `NodeSnapshot` 没有 labels，所以设计里"借 labels"那条在这层不成立——改成一个窄字段
 `cx7_peer`，比塞一个通用 map 更诚实：只表达放置真正会依据的那一个事实。
 
+**第 2 步也已实现（门槛，未含执行）**：
+
+- `ModelServiceIntent.topology_profile : String?`——`None` 是单机，唯一的另一取值是 CX7 对；
+- `validate_intent` 拒绝任何其它 profile；
+- `validate_template` 不再无条件拒绝 `supports_multi_node`：需要两台机器的运行时是**合法模板**，
+  能不能部署是 intent 的事；
+- `preflight` 把两方放在一起判：运行时能配对但 intent 没指名 → `GeometryNotDeclared`；
+  intent 指名但运行时不支持 → `RuntimeCannotPair`；两者都成立 → **`PairExecutionNotImplemented`**
+  （配对执行还没做，所以**如实挡住**，绝不悄悄按单机规划）；
+- **兼容性已验证**：`Option` 字段缺键按 `None` 解码，所以不含新字段的部署文档照旧可用
+  （有用例钉住）。对抗语料里"多机模板必须被模板校验拒绝"那条已下移到 preflight 层。
+
 **下一步（按此顺序，每步一次构建）**：
 
-1. **planner 放行**：给 `ModelServiceIntent` 加 `topology_profile : String?`，删掉
-   `validate_template` 里对 `supports_multi_node` 的无条件拒绝，改由"intent 是否指名
-   `cx7-pair-v1`"来判定；注意这会给所有 JSON 夹具加一个字段，要一并更新。
-2. **契约**：`DesiredAssignment` 加 `group_id` / `rank` / `world_size` / `peer_endpoint`，
+1. **契约**：`DesiredAssignment` 加 `group_id` / `rank` / `world_size` / `peer_endpoint`，
    `validate_intent` 里 `replicas != 1` 那条要放宽（一对 = 一个逻辑实例、两个 rank）。
 3. **supervisor + 控制器**：rank 环境变量与 RoCE 直通；重启对账按 `group_id` 整体判定。
 4. **执行**：`desired_assignments` 为一对产生两个 assignment。

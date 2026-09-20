@@ -1031,6 +1031,7 @@ fn quick_deployment_intent(
     data_class: template.data_policy.classification,
     lease_duration_ms: 86400000L,
     promote_when_ready: false,
+    topology_profile: None,
   })
 }
 

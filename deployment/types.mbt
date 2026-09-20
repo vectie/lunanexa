@@ -45,6 +45,10 @@ pub(all) struct ModelServiceIntent {
   data_class : @contracts.DataClass
   lease_duration_ms : Int64
   promote_when_ready : Bool
+  /// The geometry this deployment asks for. `None` is one machine; the only
+  /// other value LunaNexa admits is the validated CX7 pair, because that is the
+  /// one multi-node shape whose membership rule is verifiable.
+  topology_profile : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -106,6 +110,13 @@ pub(all) enum FindingCode {
   NoCompatibleNode
   InsufficientCapacity
   AutomaticPromotionDenied
+  /// The runtime needs two machines but the intent did not name the admitted
+  /// topology.
+  GeometryNotDeclared
+  /// The pair is validated but cannot be executed yet.
+  PairExecutionNotImplemented
+  /// A paired placement was asked for from a runtime that does not declare it.
+  RuntimeCannotPair
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

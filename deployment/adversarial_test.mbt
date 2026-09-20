@@ -71,6 +71,7 @@ fn adversarial_intent() -> @deployment.ModelServiceIntent {
     data_class: Internal,
     lease_duration_ms: 60000L,
     promote_when_ready: false,
+    topology_profile: None,
   }
 }
 
@@ -181,7 +182,6 @@ test "adversarial catalog corpus fails before assignment planning" {
     },
     { ..base, runtime: { ..base.runtime, capabilities: [], }, },
     { ..base, runtime: { ..base.runtime, supports_batching: true, }, },
-    { ..base, runtime: { ..base.runtime, supports_multi_node: true, }, },
     { ..base, capability: ImageGenerate, },
     { ..base, resources: { ..base.resources, accelerator_count: 65, }, },
     { ..base, resources: { ..base.resources, memory_mib: 1048577, }, },
@@ -286,4 +286,27 @@ test "placement fuzz is deterministic and duplicate-node fail closed" {
     multi_machine_plan.findings.any(value => value.code == InvalidIntent),
   )
   assert_eq(multi_machine_plan.replicas, [])
+}
+
+///|
+/// A runtime that needs two machines is a legitimate catalog entry; what it may
+/// not do is get deployed as one machine. The refusal moved from the template
+/// to the intent, so the adversarial case is asserted where the decision now
+/// lives: a paired runtime with no declared geometry is blocked before any
+/// assignment is planned.
+test "a paired runtime cannot be deployed without declaring the geometry" {
+  let base = adversarial_template()
+  let paired = { ..base, runtime: { ..base.runtime, supports_multi_node: true, }, }
+  @deployment.validate_template(paired)
+  let plan = @deployment.preflight([paired], {
+    ..adversarial_intent(),
+    topology_profile: None,
+  }, {
+      registry: [], nodes: [], available_secret_refs: [],
+    })
+  assert_false(plan.executable)
+  assert_true(
+    plan.findings.any(value => value.code == GeometryNotDeclared),
+  )
+  assert_eq(plan.replicas.length(), 0)
 }

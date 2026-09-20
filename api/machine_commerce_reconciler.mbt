@@ -187,6 +187,7 @@ async fn ApiService::start_paid_machine_order(
         data_class: Internal,
         lease_duration_ms: order.duration_seconds * 1000L,
         promote_when_ready: false,
+        topology_profile: None,
       }
       let context = try self.deployment_planning_context() catch {
         _ => return
