@@ -66,7 +66,7 @@ fn intent() -> @deployment.ModelServiceIntent {
     version: @contracts.contract_version,
     idempotency_key: "deploy-text-small",
     deployment_id: "text-small-service",
-    template: { template_id: "text-small", version: "v1", },
+    template: { template_id: "text-small", version: "v1" },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -105,6 +105,8 @@ test "approved template produces deterministic executable plan" {
         runtime_names: ["text-runtime"],
         device_ids: ["gpu-0"],
         allowed_data_classes: [Internal],
+        cx7_peer: "",
+        cx7_address: "",
       },
     ],
     available_secret_refs: ["runtime-token"],
@@ -159,13 +161,15 @@ test "dedicated preflight is pinned to the controller-reserved node" {
     runtime_names: ["text-runtime"],
     device_ids: ["gpu-a"],
     allowed_data_classes: [Internal],
+    cx7_peer: "",
+    cx7_address: "",
   }
   let plan = @deployment.preflight_on_node(
     [catalog],
     intent(),
     {
       registry: [evidence],
-      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"], }],
+      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"] }],
       available_secret_refs: ["runtime-token"],
     },
     "node-b",
@@ -208,6 +212,8 @@ test "dedicated preflight cannot waive node eligibility" {
           runtime_names: ["text-runtime"],
           device_ids: ["gpu-a"],
           allowed_data_classes: [Internal],
+          cx7_peer: "",
+          cx7_address: "",
         },
       ],
       available_secret_refs: ["runtime-token"],
@@ -222,7 +228,7 @@ test "dedicated preflight cannot waive node eligibility" {
 test "one-click catalog rejects container-managed artifact downloads" {
   let unsupported = {
     ..template(),
-    artifact: { ..template().artifact, uri: "oci://models/model.text:v1", },
+    artifact: { ..template().artifact, uri: "oci://models/model.text:v1" },
   }
   try
     @deployment.validate_template(unsupported, require_signature=false)
@@ -243,56 +249,164 @@ test "one-click catalog rejects container-managed artifact downloads" {
 }
 
 ///|
-fn cx7_context() -> @deployment.PlanningContext {
-  { registry: [], nodes: [], available_secret_refs: [], }
+fn cx7_evidence() -> @deployment.RegistryEvidence {
+  let catalog = template()
+  {
+    model_id: catalog.model_id,
+    model_version: catalog.model_version,
+    model_state: Approved,
+    artifact_digest: catalog.artifact.digest,
+    runtime_name: catalog.runtime.name,
+    runtime_version: catalog.runtime.version,
+    runtime_image_digest: catalog.runtime.image_digest,
+    model_selector: catalog.model_selector,
+    license_accepted: true,
+    artifact_verified: true,
+    runtime_verified: true,
+    evaluation_passed: true,
+    alias_points_to_model: true,
+  }
 }
 
 ///|
-/// The geometry is a claim the intent makes and the template must honour. These
-/// cases pin that neither alone can authorise a paired placement, and that the
-/// pair is refused honestly until paired execution exists rather than being
-/// planned as one machine.
-test "a paired placement is gated on the intent and the runtime together" {
+fn cx7_node(
+  node_id : String,
+  peer : String,
+  address : String,
+) -> @deployment.ManagementNode {
+  {
+    node_id,
+    state: Active,
+    architecture: "nvidia-gb10",
+    memory_free_mib: 8000,
+    runtime_names: ["text-runtime"],
+    device_ids: ["gpu-0"],
+    allowed_data_classes: [Internal],
+    cx7_peer: peer,
+    cx7_address: address,
+  }
+}
+
+///|
+fn cx7_context(
+  nodes : Array[@deployment.ManagementNode],
+) -> @deployment.PlanningContext {
+  {
+    registry: [cx7_evidence()],
+    nodes,
+    available_secret_refs: ["runtime-token"],
+  }
+}
+
+///|
+fn cx7_pair_template() -> @deployment.ModelServiceTemplate {
   let pair : @contracts.RuntimeSpec = {
     ..template().runtime,
     supports_multi_node: true,
   }
-  let pair_template = { ..template(), runtime: pair, }
-  let pair_intent = {
-    ..intent(),
-    topology_profile: Some(@contracts.cx7_pair_topology_profile),
-  }
+  { ..template(), runtime: pair }
+}
 
-  // Runtime can pair, intent names the pair: accepted as a claim, but blocked
-  // because paired execution is not implemented yet.
-  let planned = @deployment.preflight([pair_template], pair_intent, cx7_context())
-  assert_true(
-    planned.findings.any(value => value.code == PairExecutionNotImplemented),
-  )
-  assert_false(planned.executable)
-  assert_false(
-    planned.findings.any(value => value.code == GeometryNotDeclared),
-  )
+///|
+fn cx7_pair_intent() -> @deployment.ModelServiceIntent {
+  { ..intent(), topology_profile: Some(@contracts.cx7_pair_topology_profile) }
+}
+
+///|
+/// The geometry is a claim the intent makes and the template must honour. These
+/// cases pin that neither alone can authorise a paired placement, and that a
+/// pair is produced only from two compatible nodes that name each other and
+/// both declare a fabric address.
+test "a paired placement is gated on the intent and the runtime together" {
+  let pair_template = cx7_pair_template()
+  let pair_intent = cx7_pair_intent()
 
   // Runtime can pair, intent says nothing: the geometry was not declared.
-  let undeclared = @deployment.preflight([pair_template], intent(), cx7_context())
+  let undeclared = @deployment.preflight(
+    [pair_template],
+    intent(),
+    cx7_context([]),
+  )
   assert_true(
     undeclared.findings.any(value => value.code == GeometryNotDeclared),
   )
 
   // Intent names the pair but the runtime cannot: refused on the template side.
-  let cannot = @deployment.preflight(
-    [template()], pair_intent, cx7_context(),
-  )
+  let cannot = @deployment.preflight([template()], pair_intent, cx7_context([]))
   assert_true(cannot.findings.any(value => value.code == RuntimeCannotPair))
 
   // A profile other than the single admitted one is an invalid intent.
   let other = @deployment.preflight(
     [pair_template],
     { ..intent(), topology_profile: Some("any-two-nodes") },
-    cx7_context(),
+    cx7_context([]),
   )
   assert_true(other.findings.any(value => value.code == InvalidIntent))
+
+  // Both claims hold and two compatible nodes name each other with an address
+  // each: one logical instance, two ranked members.
+  let planned = @deployment.preflight(
+    [pair_template],
+    pair_intent,
+    cx7_context([
+      cx7_node("node-a", "node-b", "10.0.22.1"),
+      cx7_node("node-b", "node-a", "10.0.22.2"),
+    ]),
+  )
+  assert_true(planned.executable)
+  assert_eq(planned.replicas.length(), 2)
+  assert_eq(planned.replicas[0].node_id, "node-a")
+  assert_eq(planned.replicas[1].node_id, "node-b")
+  let head = planned.replicas[0].group.unwrap()
+  assert_eq(head.group_id, "text-small-service-pair")
+  assert_eq(head.rank, 0)
+  assert_eq(head.world_size, 2)
+  assert_eq(head.peer_endpoint, "10.0.22.2")
+  let worker = planned.replicas[1].group.unwrap()
+  assert_eq(worker.rank, 1)
+  assert_eq(worker.peer_endpoint, "10.0.22.1")
+  let assignments = @deployment.desired_assignments(planned, 2L, 1L, 1000L)
+  assert_eq(assignments.length(), 2)
+  assert_eq(assignments[1].group.unwrap().rank, 1)
+  assert_eq(assignments[1].group.unwrap().peer_endpoint, "10.0.22.1")
+
+  // One-way naming is not a pair: nothing is half-placed.
+  let one_way = @deployment.preflight(
+    [pair_template],
+    pair_intent,
+    cx7_context([cx7_node("node-a", "node-b", "10.0.22.1")]),
+  )
+  assert_false(one_way.executable)
+  assert_true(one_way.findings.any(value => value.code == NoCx7Pair))
+  assert_eq(one_way.replicas.length(), 0)
+
+  // Mutual naming without an address on the private fabric is refused too.
+  let addressless = @deployment.preflight(
+    [pair_template],
+    pair_intent,
+    cx7_context([
+      cx7_node("node-a", "node-b", ""),
+      cx7_node("node-b", "node-a", "10.0.22.2"),
+    ]),
+  )
+  assert_false(addressless.executable)
+  assert_true(addressless.findings.any(value => value.code == NoCx7Pair))
+  assert_eq(addressless.replicas.length(), 0)
+
+  // Three compatible nodes still yield one pair, never three.
+  let triangle = @deployment.preflight(
+    [pair_template],
+    pair_intent,
+    cx7_context([
+      cx7_node("node-a", "node-b", "10.0.22.1"),
+      cx7_node("node-b", "node-a", "10.0.22.2"),
+      cx7_node("node-c", "node-a", "10.0.22.3"),
+    ]),
+  )
+  assert_true(triangle.executable)
+  assert_eq(triangle.replicas.length(), 2)
+  assert_eq(triangle.replicas[0].node_id, "node-a")
+  assert_eq(triangle.replicas[1].node_id, "node-b")
 }
 
 ///|
@@ -301,9 +415,9 @@ test "a paired placement is gated on the intent and the runtime together" {
 test "an intent document without the geometry field still decodes" {
   let document =
     #|{"version":"lunanexa.v1","idempotency_key":"k","deployment_id":"d","template":{"template_id":"t","version":"v1"},"replicas":1,"data_class":"Confidential","lease_duration_ms":"1000","promote_when_ready":false}
-  let decoded : @deployment.ModelServiceIntent? = try {
+  let decoded : @deployment.ModelServiceIntent? = try
     Some(@json.from_json(@json.parse(document)))
-  } catch {
+  catch {
     _ => None
   } noraise {
     value => value

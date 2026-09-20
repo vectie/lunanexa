@@ -73,7 +73,7 @@ pub struct FileImportStore {
 }
 pub async fn FileImportStore::cancel(Self, String, Int64) -> ImportOperation
 pub async fn FileImportStore::create(Self, ImportRequest, String, Int64) -> ImportOperation
-pub async fn FileImportStore::create_local(Self, ImportRequest, String, String, Int64) -> ImportOperation
+pub async fn FileImportStore::create_local(Self, ImportRequest, String, String, String, Int64) -> ImportOperation
 pub async fn FileImportStore::get(Self, String) -> ImportOperation?
 pub async fn FileImportStore::list(Self) -> Array[ImportOperation]
 pub async fn FileImportStore::next_queued(Self) -> ImportOperation?

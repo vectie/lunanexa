@@ -77,6 +77,14 @@ pub(all) struct ManagementNode {
   runtime_names : Array[String]
   device_ids : Array[String]
   allowed_data_classes : Array[@contracts.DataClass]
+  /// The CX7 peer this node names, or "" when it claims none. Planning reads it
+  /// from the same inventory label placement does, so a pair that placement
+  /// would refuse cannot be planned either.
+  cx7_peer : String
+  /// This node's own address on the private fabric, or "" when undeclared. A
+  /// pair needs both ends addressed, because rank coordination happens over
+  /// that link and not over the management network.
+  cx7_address : String
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -113,10 +121,11 @@ pub(all) enum FindingCode {
   /// The runtime needs two machines but the intent did not name the admitted
   /// topology.
   GeometryNotDeclared
-  /// The pair is validated but cannot be executed yet.
-  PairExecutionNotImplemented
   /// A paired placement was asked for from a runtime that does not declare it.
   RuntimeCannotPair
+  /// The pair was asked for but no two compatible nodes name each other, or one
+  /// end declared no fabric address.
+  NoCx7Pair
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -131,6 +140,9 @@ pub(all) struct PlannedReplica {
   replica_id : String
   node_id : String
   devices : Array[String]
+  /// Present only when this replica is one member of a paired placement, in
+  /// which case the group carries its rank and its peer's fabric address.
+  group : @contracts.AssignmentGroup?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

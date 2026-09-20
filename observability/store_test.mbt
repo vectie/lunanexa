@@ -12,27 +12,29 @@ fn test_database_url() -> String? {
   match url {
     None => None
     Some(value) => {
-      let name = match value.split("/").last() {
-        Some(segment) => {
-          match segment.split("?") {
-            Some(parts) => match parts.get(0) {
-              Some(head) => head
-              None => segment
-            }
-            None => segment
-          }
-        }
-        None => ""
+      // Database name: the last path segment, before any query string.
+      let mut name = ""
+      for segment in value.split("/") {
+        name = segment.to_owned()
       }
-      if !name.has_suffix("_test") {
-        fail(
-          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
+      let mut base = ""
+      let mut first = true
+      for part in name.split("?") {
+        if first {
+          base = part.to_owned()
+          first = false
+        }
+      }
+      if !base.has_suffix("_test") {
+        abort(
+          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{base}",
         )
       }
       Some(value)
     }
   }
 }
+
 ///|
 fn event(
   id : String,
@@ -185,7 +187,7 @@ async test "event identifiers are idempotent but conflicting replay is rejected"
   )
   store.record(event("event-replay", 1L))
   store.record(event("event-replay", 1L))
-  try store.record({ ..event("event-replay", 1L), duration_ms: 13L, }) catch {
+  try store.record({ ..event("event-replay", 1L), duration_ms: 13L }) catch {
     @observability.ObservabilityError::EventConflict("event-replay") => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
@@ -534,9 +536,7 @@ test "production reconciliation event vocabulary remains bounded" {
 
 ///|
 async test "observability snapshot and counters restart through PostgreSQL" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   database.save_opaque_snapshot(
     "observability",

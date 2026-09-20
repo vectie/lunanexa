@@ -10,6 +10,7 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
     device_class_name: "gpu.nvidia.com",
     controller_addresses: ["192.168.2.175"],
     runtime_secrets: None,
+    fabric_address: None,
   }
 }
 
@@ -27,7 +28,7 @@ test "runtime quantities match Kubernetes canonical serialization" {
     let (cpu, memory, expected_cpu, expected_memory) = sample
     let assignment = {
       ..base,
-      resources: { ..base.resources, cpu_millis: cpu, memory_mib: memory, },
+      resources: { ..base.resources, cpu_millis: cpu, memory_mib: memory },
     }
     let rendered = @kubernetes.render_runtime(
       runtime_settings(),
@@ -243,14 +244,14 @@ test "expired mismatched and duplicate GPU assignments fail before resource crea
   let original = runtime_assignment()
   for
     assignment in [
-      { ..original, lease_expires_unix_ms: 1000L, },
-      { ..original, node_id: "other", },
-      { ..original, signature: "", },
-      { ..original, devices: ["fake-spark"], },
+      { ..original, lease_expires_unix_ms: 1000L },
+      { ..original, node_id: "other" },
+      { ..original, signature: "" },
+      { ..original, devices: ["fake-spark"] },
       {
         ..original,
         devices: [original.devices[0], original.devices[0]],
-        resources: { ..original.resources, accelerator_count: 2, },
+        resources: { ..original.resources, accelerator_count: 2 },
       },
     ] {
     try
@@ -301,7 +302,7 @@ test "model mounts cannot escape the verified cache and ingress cannot become pu
     ] {
     try
       @kubernetes.render_runtime(
-        { ..runtime_settings(), controller_addresses: [address], },
+        { ..runtime_settings(), controller_addresses: [address] },
         assignment,
         "/var/lib/lunanexa/models/model",
         assignment.artifact.digest,
@@ -315,4 +316,208 @@ test "model mounts cannot escape the verified cache and ingress cannot become pu
       _ => fail("unsafe ingress accepted")
     }
   }
+}
+
+///|
+fn paired_assignment(rank : Int, peer : String) -> @contracts.DesiredAssignment {
+  {
+    ..runtime_assignment(),
+    group: Some({
+      group_id: "deployment-1-pair",
+      rank,
+      world_size: 2,
+      peer_endpoint: peer,
+    }),
+  }
+}
+
+///|
+fn pod_environment(pod : Json) -> Array[Json] {
+  guard pod
+    is { "spec": { "containers": [{ "env": Array(environment), .. }], .. }, .. } else {
+    abort("rendered pod carries no container environment")
+  }
+  environment
+}
+
+///|
+fn environment_value(environment : Array[Json], name : String) -> String? {
+  for entry in environment {
+    if entry is { "name": String(observed), "value": String(value), .. } &&
+      observed == name {
+      return Some(value)
+    }
+  }
+  None
+}
+
+///|
+/// A member of a pair is rendered only when both the assignment and the node
+/// name the fabric address this member answers on, and the rendered pod says
+/// which rank it is and takes its isolated network away in favour of the host
+/// fabric. Nothing here is guessed from the peer's side.
+test "a paired runtime renders rank identity, fabric passthrough and a named peer" {
+  let head = paired_assignment(0, "192.168.2.179")
+  let settings = { ..runtime_settings(), fabric_address: Some("192.168.2.178") }
+  let resources = @kubernetes.render_runtime(
+    settings,
+    head,
+    "/var/lib/lunanexa/models/model",
+    head.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_true(
+    resources.pod
+    is {
+      "spec": {
+        "hostNetwork": true,
+        "dnsPolicy": "ClusterFirstWithHostNet",
+        "volumes": [
+          { "name": "model", .. },
+          { "name": "infiniband", .. },
+          { "name": "shm", .. },
+        ],
+        "containers": [
+          {
+            "securityContext": {
+              "capabilities": { "add": ["IPC_LOCK"], .. },
+              ..
+            },
+            "volumeMounts": [
+              { "name": "model", .. },
+              { "name": "infiniband", .. },
+              { "name": "shm", .. },
+            ],
+            ..
+          },
+        ],
+        ..
+      },
+      ..
+    },
+  )
+  let environment = pod_environment(resources.pod)
+  assert_eq(environment_value(environment, "LUNANEXA_RANK"), Some("0"))
+  assert_eq(environment_value(environment, "LUNANEXA_WORLD_SIZE"), Some("2"))
+  assert_eq(
+    environment_value(environment, "LUNANEXA_PEER_ENDPOINT"),
+    Some("192.168.2.179"),
+  )
+  assert_eq(
+    environment_value(environment, "LUNANEXA_HEAD_ENDPOINT"),
+    Some("192.168.2.178"),
+  )
+  assert_true(
+    resources.network_policy
+    is {
+      "spec": {
+        "ingress": [
+          {
+            "from": [
+              { "ipBlock": { "cidr": "192.168.2.175/32", .. }, .. },
+              { "ipBlock": { "cidr": "192.168.2.179/32", .. }, .. },
+            ],
+            ..
+          },
+        ],
+        "egress": [
+          { "to": [{ "ipBlock": { "cidr": "192.168.2.179/32", .. }, .. }], .. },
+        ],
+        ..
+      },
+      ..
+    },
+  )
+
+  // The peer takes its rendezvous point from the head, not from itself.
+  let worker = @kubernetes.render_runtime(
+    { ..settings, fabric_address: Some("192.168.2.179") },
+    paired_assignment(1, "192.168.2.178"),
+    "/var/lib/lunanexa/models/model",
+    head.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_eq(
+    environment_value(pod_environment(worker.pod), "LUNANEXA_RANK"),
+    Some("1"),
+  )
+  assert_eq(
+    environment_value(pod_environment(worker.pod), "LUNANEXA_HEAD_ENDPOINT"),
+    Some("192.168.2.178"),
+  )
+
+  // A node that declares no fabric address cannot host half a pair: the two
+  // containers would never find each other, so nothing is rendered.
+  for
+    unusable in [
+      { ..settings, fabric_address: None },
+      { ..settings, fabric_address: Some("") },
+      { ..settings, fabric_address: Some("10.1.2.3/8") },
+      { ..settings, fabric_address: Some("192.168.2.179") },
+    ] {
+    try
+      ignore(
+        @kubernetes.render_runtime(
+          unusable,
+          head,
+          "/var/lib/lunanexa/models/model",
+          head.artifact.digest,
+          5L,
+          1000L,
+        ),
+      )
+    catch {
+      InvalidResource => ()
+      _ => fail("wrong validation failure")
+    } noraise {
+      _ => fail("paired runtime accepted without a usable fabric address")
+    }
+  }
+  for
+    broken in [
+      { ..head, group: Some({ ..head.group.unwrap(), rank: 2 }) },
+      { ..head, group: Some({ ..head.group.unwrap(), world_size: 3 }) },
+      {
+        ..head,
+        group: Some({ ..head.group.unwrap(), peer_endpoint: "127.0.0.1" }),
+      },
+      { ..head, group: Some({ ..head.group.unwrap(), peer_endpoint: "" }) },
+      {
+        ..head,
+        group: Some({ ..head.group.unwrap(), group_id: "Deployment Pairs" }),
+      },
+    ] {
+    try
+      ignore(
+        @kubernetes.render_runtime(
+          settings,
+          broken,
+          "/var/lib/lunanexa/models/model",
+          head.artifact.digest,
+          5L,
+          1000L,
+        ),
+      )
+    catch {
+      InvalidResource => ()
+      _ => fail("wrong validation failure")
+    } noraise {
+      _ => fail("invalid pair accepted")
+    }
+  }
+
+  // A single-machine assignment is untouched: same pod, no fence opened.
+  let single = @kubernetes.render_runtime(
+    settings,
+    runtime_assignment(),
+    "/var/lib/lunanexa/models/model",
+    head.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_false(single.pod.stringify().contains("hostNetwork\":true"))
+  assert_false(single.pod.stringify().contains("LUNANEXA_RANK"))
+  assert_true(single.network_policy is { "spec": { "egress": [], .. }, .. })
 }

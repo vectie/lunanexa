@@ -10,6 +10,10 @@ pub(all) struct RuntimeSettings {
   device_class_name : String
   controller_addresses : Array[String]
   runtime_secrets : Array[RuntimeSecretBinding]?
+  /// This node's own address on the private fabric between a pair. Absent on a
+  /// node that is not part of one; a paired assignment on such a node is
+  /// refused rather than started unable to reach its peer.
+  fabric_address : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -75,6 +79,30 @@ fn gpu_uuid(value : String) -> Bool {
     }
   }
   true
+}
+
+///|
+/// The member's view of its pair, or nothing when this is a single-machine
+/// assignment. A paired pod is only rendered for a node that declares its own
+/// fabric address: without it the two containers cannot find each other, and
+/// half a pair is worse than none.
+fn paired_group(
+  settings : RuntimeSettings,
+  assignment : @contracts.DesiredAssignment,
+) -> @contracts.AssignmentGroup? raise LifecycleError {
+  let group = assignment.group
+  guard group is Some(group) else { return None }
+  let self_address = settings.fabric_address.unwrap_or("")
+  if !dns_label(group.group_id) ||
+    group.rank < 0 ||
+    group.rank >= group.world_size ||
+    group.world_size != @contracts.cx7_pair_member_count ||
+    !private_address(group.peer_endpoint) ||
+    !private_address(self_address) ||
+    self_address == group.peer_endpoint {
+    raise InvalidResource
+  }
+  Some(group)
 }
 
 ///|
@@ -181,6 +209,8 @@ pub fn render_runtime(
   )
   let name = "lunanexa-" + hash[:40].to_owned()
   let resource_metadata = metadata(settings, assignment, name)
+  let group = paired_group(settings, assignment)
+  let paired = group is Some(_)
   let requests : Array[Json] = [
     for i, device in assignment.devices => {
       {
@@ -228,13 +258,46 @@ pub fn render_runtime(
     "cpu": canonical_cpu_quantity(assignment.resources.cpu_millis).to_json(),
     "memory": canonical_memory_quantity(assignment.resources.memory_mib).to_json(),
   }
+  let volumes : Array[Json] = [
+    {
+      "name": "model",
+      "hostPath": { "path": artifact_path.to_json(), "type": "File" },
+    },
+  ]
+  let mounts : Array[Json] = [
+    {
+      "name": "model",
+      "mountPath": "/var/lib/lunanexa/model/model",
+      "readOnly": true,
+    },
+  ]
+  let added_capabilities : Array[String] = []
+  // Half of a TP group is not isolated from its peer: it must reach the peer's
+  // private-fabric address on the same port, so the peer is named explicitly
+  // rather than the policy being dropped.
+  let peer_rules : Array[Json] = []
+  if group is Some(group) {
+    volumes.push({
+      "name": "infiniband",
+      "hostPath": { "path": "/dev/infiniband" },
+    })
+    volumes.push({ "name": "shm", "emptyDir": { "medium": "Memory" } })
+    mounts.push({ "name": "infiniband", "mountPath": "/dev/infiniband" })
+    mounts.push({ "name": "shm", "mountPath": "/dev/shm" })
+    // Registering the GPU buffers that NCcl hands to the HCA needs the locked
+    // memory allowance, which is what this capability grants the runtime.
+    added_capabilities.push("IPC_LOCK")
+    peer_rules.push({
+      "ipBlock": { "cidr": (group.peer_endpoint + "/32").to_json() },
+    })
+  }
   let pod : Json = {
     "apiVersion": "v1",
     "kind": "Pod",
     "metadata": resource_metadata,
     "spec": {
       "automountServiceAccountToken": false,
-      "hostNetwork": false,
+      "hostNetwork": paired,
       "hostPID": false,
       "hostIPC": false,
       "enableServiceLinks": false,
@@ -301,7 +364,10 @@ pub fn render_runtime(
             "privileged": false,
             "allowPrivilegeEscalation": false,
             "readOnlyRootFilesystem": true,
-            "capabilities": { "drop": ["ALL"], "add": [] },
+            "capabilities": {
+              "drop": ["ALL"],
+              "add": added_capabilities.to_json(),
+            },
           },
           "ports": [
             {
@@ -319,28 +385,45 @@ pub fn render_runtime(
             "failureThreshold": assignment.health.failure_threshold.to_json(),
           },
           "env": runtime_environment(settings, assignment).to_json(),
-          "volumeMounts": [
-            {
-              "name": "model",
-              "mountPath": "/var/lib/lunanexa/model/model",
-              "readOnly": true,
-            },
-          ],
+          "volumeMounts": mounts.to_json(),
         },
       ],
-      "volumes": [
-        {
-          "name": "model",
-          "hostPath": { "path": artifact_path.to_json(), "type": "File" },
-        },
-      ],
+      "volumes": volumes.to_json(),
     },
+  }
+  if paired {
+    // A host-networked pod that cannot resolve cluster DNS cannot reach the
+    // controller it takes its lease from.
+    match pod {
+      Object(root) =>
+        match root.get("spec") {
+          Some(Object(spec)) =>
+            spec["dnsPolicy"] = "ClusterFirstWithHostNet".to_json()
+          _ => raise InvalidResource
+        }
+      _ => raise InvalidResource
+    }
   }
   let peers : Array[Json] = [
     for address in settings.controller_addresses => {
       { "ipBlock": { "cidr": (address + "/32").to_json() } }
     }
   ]
+  let policy_peers : Array[Json] = []
+  for peer in peers {
+    policy_peers.push(peer)
+  }
+  for peer in peer_rules {
+    policy_peers.push(peer)
+  }
+  let egress_rules : Array[Json] = []
+  if paired {
+    // Rank coordination is the only thing this member is allowed to open.
+    egress_rules.push({
+      "to": peer_rules.to_json(),
+      "ports": [{ "protocol": "TCP", "port": settings.runtime_port.to_json() }],
+    })
+  }
   let network_policy : Json = {
     "apiVersion": "networking.k8s.io/v1",
     "kind": "NetworkPolicy",
@@ -352,14 +435,14 @@ pub fn render_runtime(
       "policyTypes": ["Ingress", "Egress"],
       "ingress": [
         {
-          "from": peers.to_json(),
+          "from": policy_peers.to_json(),
           "ports": [
             { "protocol": "TCP", "port": settings.runtime_port.to_json() },
           ],
         },
       ],
-      "egress": [],
+      "egress": egress_rules.to_json(),
     },
   }
-  { name, pod, claim_template, network_policy, }
+  { name, pod, claim_template, network_policy }
 }

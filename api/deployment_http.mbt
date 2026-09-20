@@ -134,6 +134,18 @@ fn management_node(
       for accelerator in healthy => accelerator.device_id
     ],
     allowed_data_classes: data_classes(heartbeat.inventory.labels),
+    cx7_peer: label_values(
+      heartbeat.inventory.labels,
+      @contracts.cx7_peer_label,
+    )
+    .get(0)
+    .unwrap_or(""),
+    cx7_address: label_values(
+      heartbeat.inventory.labels,
+      @contracts.cx7_address_label,
+    )
+    .get(0)
+    .unwrap_or(""),
   }
 }
 
@@ -158,7 +170,7 @@ async fn ApiService::deployment_planning_context(
         match self.exclusive_lease_store {
           Some(leases) if leases.node_blocks_managed_placement(
               heartbeat.node_id,
-            ) => { ..node, state: Cordoned, }
+            ) => { ..node, state: Cordoned }
           _ => node
         }
       }

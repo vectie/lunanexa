@@ -12,33 +12,32 @@ fn test_database_url() -> String? {
   match url {
     None => None
     Some(value) => {
-      let name = match value.split("/").last() {
-        Some(segment) => {
-          match segment.split("?") {
-            Some(parts) => match parts.get(0) {
-              Some(head) => head
-              None => segment
-            }
-            None => segment
-          }
-        }
-        None => ""
+      // Database name: the last path segment, before any query string.
+      let mut name = ""
+      for segment in value.split("/") {
+        name = segment.to_owned()
       }
-      if !name.has_suffix("_test") {
-        fail(
-          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{name}",
+      let mut base = ""
+      let mut first = true
+      for part in name.split("?") {
+        if first {
+          base = part.to_owned()
+          first = false
+        }
+      }
+      if !base.has_suffix("_test") {
+        abort(
+          "LUNANEXA_TEST_DATABASE_URL must name a *_test database; refusing to run against \{base}",
         )
       }
       Some(value)
     }
   }
 }
+
 ///|
 async test "PostgreSQL workspace user registration survives restart" {
-  guard test_database_url() is Some(url) &&
-    url.trim() != "" else {
-    return
-  }
+  guard test_database_url() is Some(url) && url.trim() != "" else { return }
   let database = @database.PostgresDatabase::open(url)
   defer database.close()
   let directory = @directory.FileWorkspaceDirectory::open_postgres(

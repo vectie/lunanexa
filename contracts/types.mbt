@@ -12,10 +12,10 @@ pub let model_store_scheme : String = "modelstore://"
 pub let model_store_manifest_name : String = "lunanexa-source-manifest.json"
 
 ///|
-pub let source_manifest_schema_version : String =
-  "lunanexa.modelsource.verified.v1"
+pub let source_manifest_schema_version : String = "lunanexa.modelsource.verified.v1"
 
-///| The only multi-node geometry LunaNexa admits: exactly two nodes joined by a
+///|
+/// The only multi-node geometry LunaNexa admits: exactly two nodes joined by a
 /// verified CX7 link. It is a *pair*, not a node count, so there is no profile
 /// that would admit three or more, and "any two nodes" cannot be expressed.
 pub let cx7_pair_topology_profile : String = "cx7-pair-v1"
@@ -23,11 +23,63 @@ pub let cx7_pair_topology_profile : String = "cx7-pair-v1"
 ///|
 pub let cx7_pair_member_count : Int = 2
 
-///| The inventory label through which a node names its CX7 peer. A pair is
+///|
+/// The inventory label through which a node names its CX7 peer. A pair is
 /// mutual by construction: a one-way claim is not a pair, and a peer that is
 /// absent or unschedulable silently takes the pair out of service rather than
 /// placing half of a tensor-parallel group.
 pub let cx7_peer_label : String = "lunanexa.io/cx7-peer"
+
+///|
+/// The address a node is reachable at on the private fabric, which is what a
+/// peer needs for rank coordination. Declared by the operator alongside the
+/// peer, because which interface carries the link is a host fact the platform
+/// cannot infer.
+pub let cx7_address_label : String = "lunanexa.io/cx7-address"
+
+///|
+/// Whether a multi-node request names a geometry this platform admits. The
+/// one admitted profile is the CX7 pair, and it must also be listed as
+/// validated by policy.
+pub fn cx7_pair_profile_valid(
+  profile : String?,
+  validated_profiles : Array[String],
+) -> Bool {
+  match profile {
+    Some(name) =>
+      name == cx7_pair_topology_profile &&
+      validated_profiles.any(value => value == name)
+    None => false
+  }
+}
+
+///|
+/// The pair among `names`, where each entry is a node id and the peer it
+/// names. Returns exactly two ids ordered with the head first, or an empty
+/// array when no two schedulable nodes name each other.
+///
+/// Deterministic: the lexicographically first admissible pair wins, so the same
+/// inventory always yields the same answer. This is the single implementation
+/// of the rule -- placement and planning both call it, so neither can drift
+/// into admitting an unlinked pair or a third member.
+pub fn cx7_pair_members(names : Array[(String, String)]) -> Array[String] {
+  let ordered = names.copy()
+  ordered.sort_by((left, right) => left.0.compare(right.0))
+  for node in ordered {
+    if node.1 == "" {
+      continue
+    }
+    for peer in ordered {
+      if peer.0 == node.1 && peer.1 == node.0 {
+        if node.0.compare(peer.0) < 0 {
+          return [node.0, peer.0]
+        }
+        return [peer.0, node.0]
+      }
+    }
+  }
+  []
+}
 
 ///|
 pub(all) enum Capability {

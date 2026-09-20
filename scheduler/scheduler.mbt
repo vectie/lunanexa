@@ -96,7 +96,8 @@ pub(all) suberror Cx7PairError {
   NoValidatedCx7Pair
 } derive(Debug, Eq)
 
-///| Select the pair a multi-node request runs on.
+///|
+/// Select the pair a multi-node request runs on.
 ///
 /// The rule is mutual naming, not proximity: a node is only half of a pair if
 /// it names a peer that names it back, and both halves must have passed every
@@ -109,38 +110,21 @@ pub fn validated_cx7_pair(
   requirements : PlacementRequirements,
   policy : ScorePolicy,
 ) -> Array[String] raise Cx7PairError {
-  let profile = match requirements.topology_profile {
-    Some(value) => value
-    None => raise PairTopologyNotValidated("")
+  if !@contracts.cx7_pair_profile_valid(
+      requirements.topology_profile,
+      policy.validated_topology_profiles,
+    ) {
+    raise PairTopologyNotValidated(requirements.topology_profile.unwrap_or(""))
   }
-  if profile != @contracts.cx7_pair_topology_profile ||
-    !contains_string(policy.validated_topology_profiles, profile) {
-    raise PairTopologyNotValidated(profile)
+  let names : Array[(String, String)] = []
+  for node in candidates {
+    names.push((node.node_id, node.cx7_peer))
   }
-  // Deterministic: iterate the candidates in node order and take the first
-  // admissible pair, so the same inventory always yields the same answer.
-  let ordered = candidates.copy()
-  ordered.sort_by_key(item => item.node_id)
-  let mut selected : Array[String] = []
-  for node in ordered {
-    if selected.length() > 0 || node.cx7_peer == "" {
-      continue
-    }
-    for peer in ordered {
-      if peer.node_id == node.cx7_peer && peer.cx7_peer == node.node_id {
-        if node.node_id.compare(peer.node_id) < 0 {
-          selected = [node.node_id, peer.node_id]
-        } else {
-          selected = [peer.node_id, node.node_id]
-        }
-        break
-      }
-    }
-  }
-  if selected.length() != @contracts.cx7_pair_member_count {
+  let pair = @contracts.cx7_pair_members(names)
+  if pair.length() != @contracts.cx7_pair_member_count {
     raise NoValidatedCx7Pair
   }
-  selected
+  pair
 }
 
 ///|
@@ -231,7 +215,7 @@ pub fn place(
       candidates.push(score_node(node, requirements, policy))
       eligible.push(node)
     } else {
-      rejected.push({ node_id: node.node_id, reasons, })
+      rejected.push({ node_id: node.node_id, reasons })
     }
   }
   candidates.sort_by((left, right) => {
@@ -247,8 +231,8 @@ pub fn place(
     // A multi-node request never falls back to a single node: it is the pair or
     // nothing. The pair is chosen from the nodes that passed every check, and
     // the head (the lexicographically first member) is the selected node.
-    let pair = validated_cx7_pair(eligible, requirements, policy) catch {
-      _ => {
+    let pair = try validated_cx7_pair(eligible, requirements, policy) catch {
+      _ =>
         return {
           workload_id: requirements.workload_id,
           policy_version: policy.version,
@@ -257,7 +241,6 @@ pub fn place(
           candidates,
           rejected,
         }
-      }
     } noraise {
       value => value
     }

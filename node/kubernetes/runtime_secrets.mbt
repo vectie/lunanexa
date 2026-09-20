@@ -86,6 +86,29 @@ fn runtime_environment(
     },
   ]
   let image = assignment.runtime.name + "@" + assignment.runtime.image_digest
+  // A member of a pair is told where it sits and where its one peer is, on the
+  // address this node declared for the private fabric. Rank 0 is the head, so
+  // both members take their rendezvous point from the head's address.
+  if assignment.group is Some(group) {
+    let self_address = settings.fabric_address.unwrap_or("")
+    let head_address = if group.rank == 0 {
+      self_address
+    } else {
+      group.peer_endpoint
+    }
+    let member_environment : Array[(String, String)] = [
+      ("LUNANEXA_GROUP_ID", group.group_id),
+      ("LUNANEXA_RANK", group.rank.to_string()),
+      ("LUNANEXA_WORLD_SIZE", group.world_size.to_string()),
+      ("LUNANEXA_PEER_ENDPOINT", group.peer_endpoint),
+      ("LUNANEXA_SELF_ENDPOINT", self_address),
+      ("LUNANEXA_HEAD_ENDPOINT", head_address),
+    ]
+    for name_and_value in member_environment {
+      let (name, value) = name_and_value
+      result.push({ "name": name.to_json(), "value": value.to_json() })
+    }
+  }
   for binding in bindings {
     if binding.image_ref != image {
       continue

@@ -90,6 +90,9 @@ pub(all) enum FindingCode {
   NoCompatibleNode
   InsufficientCapacity
   AutomaticPromotionDenied
+  GeometryNotDeclared
+  RuntimeCannotPair
+  NoCx7Pair
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) enum FindingSeverity {
@@ -106,6 +109,8 @@ pub(all) struct ManagementNode {
   runtime_names : Array[String]
   device_ids : Array[String]
   allowed_data_classes : Array[@contracts.DataClass]
+  cx7_peer : String
+  cx7_address : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelServiceIntent {
@@ -117,6 +122,7 @@ pub(all) struct ModelServiceIntent {
   data_class : @contracts.DataClass
   lease_duration_ms : Int64
   promote_when_ready : Bool
+  topology_profile : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct ModelServiceTemplate {
@@ -145,6 +151,7 @@ pub(all) struct PlannedReplica {
   replica_id : String
   node_id : String
   devices : Array[String]
+  group : @contracts.AssignmentGroup?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 
 pub(all) struct PlanningContext {

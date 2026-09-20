@@ -20,7 +20,14 @@ pub fn priority_capacity_limit_with_policy(Int, @contracts.Priority, Int, Int) -
 
 pub fn retry_allowed(String, Int, Int, Bool) -> Bool
 
+pub fn validated_cx7_pair(Array[NodeSnapshot], PlacementRequirements, ScorePolicy) -> Array[String] raise Cx7PairError
+
 // Errors
+pub(all) suberror Cx7PairError {
+  PairTopologyNotValidated(String)
+  NoValidatedCx7Pair
+} derive(Eq, @debug.Debug)
+
 pub(all) suberror SchedulerStateError {
   InvalidSchedulerState(String)
 } derive(Eq, @debug.Debug)
@@ -97,6 +104,7 @@ pub async fn FileScheduler::snapshot(Self) -> SchedulerSnapshot
 
 pub(all) struct NodeSnapshot {
   node_id : String
+  cx7_peer : String
   state : @contracts.NodeState
   architecture : String
   memory_free_mib : Int
@@ -114,6 +122,7 @@ pub(all) struct PlacementDecision {
   workload_id : String
   policy_version : String
   selected_node_id : String?
+  selected_pair : Array[String]
   candidates : Array[CandidateScore]
   rejected : Array[RejectedNode]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
