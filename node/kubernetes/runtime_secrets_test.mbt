@@ -142,8 +142,6 @@ test "existing runtime configuration without a secret field remains compatible" 
 ///|
 /// The fabric address is what makes a node eligible to host half of a CX7
 /// pair, and a node that is not part of one says so by leaving the key out.
-/// Both spellings an operator might write must keep working: an absent key and
-/// an explicit null.
 test "a node that declares no fabric address still reads its configuration" {
   let absent = runtime_settings().to_json()
   guard absent is Object(fields) else { fail("not a settings object") }
@@ -151,19 +149,31 @@ test "a node that declares no fabric address still reads its configuration" {
   let restored : @kubernetes.RuntimeSettings = @json.from_json(absent)
   assert_eq(restored.fabric_address, None)
 
+  let declared = runtime_settings().to_json()
+  guard declared is Object(fields) else { fail("not a settings object") }
+  fields["fabric_address"] = "10.0.22.1".to_json()
+  let from_address : @kubernetes.RuntimeSettings = @json.from_json(declared)
+  assert_eq(from_address.fabric_address, Some("10.0.22.1"))
+}
+
+///|
+/// An absent key and an explicit null are not the same thing to the decoder:
+/// a node configuration that spells the key must give it an address. Pinned
+/// because writing `null` for "this node is not in a pair" reads as the obvious
+/// spelling of the same intent, and it is refused rather than silently dropped.
+test "an explicit null fabric address is refused rather than ignored" {
   let nulled = runtime_settings().to_json()
   guard nulled is Object(fields) else { fail("not a settings object") }
   fields["fabric_address"] = Json::null()
-  let from_null : @kubernetes.RuntimeSettings = @json.from_json(nulled)
-  assert_eq(from_null.fabric_address, None)
-
-  let declared : @kubernetes.RuntimeSettings = @json.from_json(
-    {
-      ..runtime_settings().to_json(),
-      "fabric_address": "10.0.22.1",
-    },
-  )
-  assert_eq(declared.fabric_address, Some("10.0.22.1"))
+  let refused = try {
+    let _ : @kubernetes.RuntimeSettings = @json.from_json(nulled)
+    false
+  } catch {
+    _ => true
+  } noraise {
+    value => value
+  }
+  assert_true(refused)
 }
 
 ///|
