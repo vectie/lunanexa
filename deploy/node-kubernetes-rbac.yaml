@@ -1,11 +1,17 @@
-# Runtime-only namespace. Do not place customer workspaces or general secrets
-# here. hostPath permission is needed for the node-verified model cache; the
-# rendered serving Pod itself remains non-root/read-only with capabilities dropped.
-# Review namespace/ServiceAccount names for the deployment before applying.
+# What the node agent needs in order to start a runtime through the Kubernetes
+# API, and nothing more.
+#
+# The ServiceAccount is deliberately not created here: it is `lunanexa-node`,
+# the same one deploy/prerequisites.yaml creates and the same one the agent
+# pods run as. One identity per plane, so a runtime can never be started by
+# anything that is not the agent that owns that node.
+#
+# deploy/cluster/one-click.sh renders ${NAMESPACE} and ${RUNTIME_NAMESPACE}
+# from deploy/cluster/cluster.json. There is one runtime namespace.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: lunanexa-managed-runtime
+  name: ${RUNTIME_NAMESPACE}
   labels:
     app.kubernetes.io/managed-by: lunanexa
     pod-security.kubernetes.io/enforce: privileged
@@ -14,27 +20,20 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny
-  namespace: lunanexa-managed-runtime
+  namespace: ${RUNTIME_NAMESPACE}
 spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress: []
   egress: []
 ---
-# The node agent runs outside the runtime namespace. Only its projected token
-# is used by the Kubernetes adapter, never mounted into a serving container.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: lunanexa-managed-node
-  namespace: lunanexa
-automountServiceAccountToken: false
----
+# Only pods in the runtime namespace, and only these verbs. The agent's
+# projected token is never mounted into a serving container.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: lunanexa-managed-node
-  namespace: lunanexa-managed-runtime
+  name: lunanexa-node-runtime
+  namespace: ${RUNTIME_NAMESPACE}
 rules:
   - apiGroups: [""]
     resources: [pods]
@@ -49,13 +48,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: lunanexa-managed-node
-  namespace: lunanexa-managed-runtime
+  name: lunanexa-node-runtime
+  namespace: ${RUNTIME_NAMESPACE}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: lunanexa-managed-node
+  name: lunanexa-node-runtime
 subjects:
   - kind: ServiceAccount
-    name: lunanexa-managed-node
-    namespace: lunanexa
+    name: lunanexa-node
+    namespace: ${NAMESPACE}

@@ -1031,7 +1031,7 @@ fn quick_deployment_intent(
     data_class: template.data_policy.classification,
     lease_duration_ms: 86400000L,
     promote_when_ready: false,
-    topology_profile: None,
+    topology_profile: state.quick_topology.topology_profile(),
   })
 }
 
@@ -1356,6 +1356,7 @@ async fn load_console(
     .get(0)
     .map(catalog_template_key)
     .unwrap_or(""),
+    quick_topology: SingleMachine,
   }
 }
 
@@ -2399,6 +2400,7 @@ fn merge_loaded_console(
     } else {
       current.quick_template
     },
+    quick_topology: current.quick_topology,
     portal_node_id: current.portal_node_id,
     // Deferred, page-scoped reads own these fields. A core reload must not
     // erase a group that was already merged.
@@ -5782,6 +5784,17 @@ fn update_live(
         { ..model, console: { ..model.console, quick_template: value } },
         @rabbita.none,
       )
+    Console(QuickTopologyChanged(value)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            quick_topology: @ui.parse_quick_topology(value),
+          },
+        },
+        @rabbita.none,
+      )
     Console(PortalNodeChanged(value)) =>
       (
         { ..model, console: { ..model.console, portal_node_id: value } },
@@ -7267,6 +7280,7 @@ fn update(
       | Console(AlertsWindowChanged(_))
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
+      | Console(QuickTopologyChanged(_))
       | Console(PortalNodeChanged(_))
       | Console(ModelSourceQueryChanged(_))
       | Console(BeginModelAdoption(_))

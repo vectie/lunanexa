@@ -25,3 +25,6 @@
 # Licensed contract fonts are deployment inputs, never repository content.
 /assets/fonts/private/*
 !/assets/fonts/private/README.md
+
+# One-click cluster deployment reads its sudo passwords from here; never commit them.
+deploy/cluster/credentials.json

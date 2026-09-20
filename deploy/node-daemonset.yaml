@@ -1,3 +1,14 @@
+# Host-filesystem cluster layout -- NOT what this cluster runs.
+#
+# This DaemonSet reads its per-node credentials and inventory from hostPath
+# /etc/lunanexa, so it needs each compute host to be provisioned over ssh
+# before it is applied. The deployed cluster layout instead keeps the per-node
+# inventory and runtime configuration in ConfigMaps and renders one Deployment
+# per node; that is what deploy/cluster/one-click.sh produces, and it is the
+# single supported path for this cluster. See deploy/cluster/README.md.
+#
+# Kept because it is a valid alternative for a host-provisioned install, not
+# because anything applies it.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

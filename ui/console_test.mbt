@@ -303,6 +303,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     operation_body: "{}",
     quick_deployment_id: "",
     quick_template: "",
+    quick_topology: SingleMachine,
   }
 }
 
@@ -563,9 +564,66 @@ test "catalog route exposes governed one-click deployment controls" {
   assert_true(html.contains("Preflight and deploy"))
   assert_true(html.contains("quick-deployment-id"))
   assert_true(html.contains("quick-template"))
+  assert_true(html.contains("quick-topology"))
+  assert_true(html.contains(">One machine<"))
+  assert_true(html.contains(">CX7 pair (two machines)<"))
   assert_true(html.contains("One service · one assigned machine"))
+  assert_false(html.contains("One service · one validated CX7 pair"))
   assert_false(html.contains("quick-replicas"))
   assert_true(html.contains("Deploy model service"))
+}
+
+///|
+/// The rendered `Deploy model service` button tag, so a test can tell a control
+/// offered to this operator from one that is only drawn disabled.
+fn quick_deploy_button_tag(html : String) -> String {
+  let prefix = match html.find("Deploy model service") {
+    Some(offset) => html[:offset]
+    None => return ""
+  }
+  let mut tag = ""
+  for segment in prefix.split("<button") {
+    tag = segment.to_owned()
+  }
+  tag
+}
+
+///|
+test "one-click deployment offers only the two admitted topologies" {
+  let base = {
+    ..console_state(Catalog),
+    confirmation: None,
+    quick_deployment_id: "text-service",
+    quick_template: "text-small@v1",
+  }
+  let single = @ui.render({ ..base, quick_topology: SingleMachine, })
+  assert_true(single.contains("value=\"single-machine\" selected"))
+  assert_true(single.contains("<option value=\"cx7-pair\""))
+  assert_true(single.contains("One service · one assigned machine"))
+  assert_false(single.contains("One service · one validated CX7 pair"))
+  let pair = @ui.render({ ..base, quick_topology: Cx7Pair, })
+  assert_true(pair.contains("value=\"cx7-pair\" selected"))
+  assert_true(pair.contains("<option value=\"single-machine\""))
+  assert_true(pair.contains("One service · one validated CX7 pair"))
+  assert_false(pair.contains("One service · one assigned machine"))
+}
+
+///|
+test "one-click deployment is offered only to an authenticated operator" {
+  let base = {
+    ..console_state(Catalog),
+    confirmation: None,
+    quick_deployment_id: "text-service",
+    quick_template: "text-small@v1",
+  }
+  let authenticated = @ui.render({ ..base, operator_authenticated: true, })
+  let authenticated_tag = quick_deploy_button_tag(authenticated)
+  assert_true(authenticated_tag.contains("primary-button"))
+  assert_false(authenticated_tag.contains("disabled"))
+  let anonymous = @ui.render({ ..base, operator_authenticated: false, })
+  let anonymous_tag = quick_deploy_button_tag(anonymous)
+  assert_true(anonymous_tag.contains("primary-button"))
+  assert_true(anonymous_tag.contains("disabled"))
 }
 
 ///|

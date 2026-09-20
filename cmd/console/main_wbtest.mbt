@@ -103,6 +103,7 @@ test "console quick-deployment fuzz matches the public intent boundary" {
     fail("fixed-capacity intent should be valid")
   }
   assert_eq(intent.replicas, 1)
+  assert_eq(intent.topology_profile, None)
 }
 
 ///|
@@ -265,6 +266,7 @@ test "loaded controller state keeps the selected route and locale" {
     operation_body: "{\"tenant_ref\":\"team-a\"}",
     quick_deployment_id: "service-1",
     quick_template: "text-small@v1",
+    quick_topology: Cx7Pair,
     success_message: Some("配置已提交。"),
   }
   let loaded : @ui.ConsoleState = {
@@ -283,6 +285,7 @@ test "loaded controller state keeps the selected route and locale" {
   assert_eq(merged.operation_body, "{\"tenant_ref\":\"team-a\"}")
   assert_eq(merged.quick_deployment_id, "service-1")
   assert_eq(merged.quick_template, "text-small@v1")
+  assert_eq(merged.quick_topology, Cx7Pair)
   assert_eq(merged.success_message, Some("配置已提交。"))
   assert_eq(merged.overview.total_nodes, 2)
 }
@@ -870,6 +873,70 @@ test "demo mode exercises one-click preflight without controller mutation" {
     submitted.console.success_message,
     Some(
       "Demo preflight passed for demo-service. No controller operation was created.",
+    ),
+  )
+  assert_eq(
+    submitted.console.service_deployments,
+    model.console.service_deployments,
+  )
+}
+
+///|
+test "the topology picker submits the admitted CX7 pair for one replica" {
+  let model : AppModel = {
+    endpoint: "http://127.0.0.1:4173",
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    inference_credential: "",
+    inference_subject_ref: "",
+    commercial_organization: "",
+    demo_mode: true,
+    alerts_window: Today,
+    console: { ..@ui.demo_state(), route: Catalog },
+    console_read_groups: Map([]),
+    next_directive_generation: 1L,
+    contract_preview_generation: 0L,
+    model_import_poll_generation: 0L,
+    cluster_poll_generation: 0L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (named, _) = update(
+    model,
+    Console(QuickDeploymentIdChanged("demo-pair")),
+    emit,
+  )
+  let (single, _) = update(
+    named,
+    Console(QuickTopologyChanged("single-machine")),
+    emit,
+  )
+  assert_eq(single.console.quick_topology, SingleMachine)
+  guard quick_deployment_intent(single.console, 1000L) is Some(one_machine) else {
+    fail("one machine intent should be valid")
+  }
+  assert_eq(one_machine.topology_profile, None)
+  assert_eq(one_machine.replicas, 1)
+  let (paired, _) = update(
+    single,
+    Console(QuickTopologyChanged("cx7-pair")),
+    emit,
+  )
+  assert_eq(paired.console.quick_topology, Cx7Pair)
+  guard quick_deployment_intent(paired.console, 1000L) is Some(pair) else {
+    fail("a CX7 pair intent should be valid")
+  }
+  assert_eq(
+    pair.topology_profile,
+    Some(@contracts.cx7_pair_topology_profile),
+  )
+  assert_eq(pair.replicas, 1)
+  assert_true(pair.to_json().stringify().contains("\"cx7-pair-v1\""))
+  let (submitted, _) = update(paired, Console(SubmitQuickDeployment), emit)
+  assert_eq(
+    submitted.console.success_message,
+    Some(
+      "Demo preflight passed for demo-pair. No controller operation was created.",
     ),
   )
   assert_eq(

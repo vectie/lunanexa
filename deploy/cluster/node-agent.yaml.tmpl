@@ -1,0 +1,251 @@
+# The single node-agent shape for the cluster layout. deploy/cluster/one-click.sh
+# renders one of these per node from deploy/cluster/cluster.json and applies it.
+#
+# This file is the source of truth for what a compute node's agent runs with.
+# The OCI/podman trio (LUNANEXA_CONTAINER_ENGINE, LUNANEXA_RUNTIME_NETWORK,
+# LUNANEXA_CONTAINER_ENGINE_ENDPOINT) is deliberately absent: a runtime is
+# started by the Kubernetes API, so no agent needs a container engine on the
+# host. deploy/lunanexa-node.env.example keeps those variables for the
+# host-systemd layout, which this cluster does not use.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-node-agent-${NODE_ID}
+  namespace: ${NAMESPACE}
+  labels:
+    app: lunanexa-node-agent
+    app.kubernetes.io/part-of: lunanexa
+    lunanexa.io/plane: node-agent
+    lunanexa.io/node: ${NODE_ID}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lunanexa-node-agent
+      lunanexa.io/node: ${NODE_ID}
+  template:
+    metadata:
+      labels:
+        app: lunanexa-node-agent
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: node-agent
+        lunanexa.io/node: ${NODE_ID}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: ${NODE_ID}
+      serviceAccountName: lunanexa-node
+      restartPolicy: Always
+      tolerations:
+        - effect: NoSchedule
+          key: lunanexa.io/role
+          operator: Equal
+          value: gpu
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: node-agent
+          image: ${NODE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: "1"
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            # The agent measures the GPUs on the node it owns, which needs the
+            # device nodes; that is why this one container is privileged while
+            # the proxy below drops every capability.
+            privileged: true
+            readOnlyRootFilesystem: true
+          env:
+            - name: LUNANEXA_EXTERNAL_RUNTIME_ATTESTATIONS_PATH
+              value: /var/lib/lunanexa/runtime-attestations
+            - name: LUNANEXA_RUNTIME_ATTESTATION_SECRET_PATH
+              value: /etc/lunanexa/runtime-attestation-key
+            - name: LUNANEXA_ENDPOINT
+              value: http://127.0.0.1:18080
+            - name: LUNANEXA_ALLOW_HTTP_LOOPBACK
+              value: "1"
+            - name: LUNANEXA_NODE_ID
+              value: ${NODE_ID}
+            - name: LUNANEXA_ADMIN_SETTINGS_PATH
+              value: /etc/lunanexa/admin-policy/admin-settings.json
+            - name: LUNANEXA_NODE_INVENTORY_PATH
+              value: /etc/lunanexa/inventory/inventory.json
+            - name: LUNANEXA_NODE_STATE_PATH
+              value: /var/lib/lunanexa/node-state.json
+            - name: LUNANEXA_NODE_CERTIFICATE_PATH
+              value: /var/lib/lunanexa/node-certificate.json
+            - name: LUNANEXA_LEASE_STATE_PATH
+              value: /var/lib/lunanexa/exclusive-lease-agent.json
+            - name: LUNANEXA_EXCLUSIVE_LEASES_ENABLED
+              value: "0"
+            - name: LUNANEXA_MODEL_CACHE_PATH
+              value: ${MODEL_CACHE_ROOT}
+            - name: LUNANEXA_ARTIFACT_ENDPOINT
+              value: http://127.0.0.1:18080/v1/artifacts
+            - name: LUNANEXA_ARTIFACT_MAX_SIZE_BYTES
+              value: "1099511627776"
+            - name: LUNANEXA_COSIGN_BINARY
+              value: /usr/bin/cosign
+            - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH
+              value: /etc/lunanexa/trust/cosign.pub
+            - name: LUNANEXA_SIGSTORE_TRUSTED_ROOT_PATH
+              value: /etc/lunanexa/trust/sigstore-trusted-root.json
+            - name: LUNANEXA_NODE_PUBLIC_KEY_REF
+              value: host-ref:${NODE_ID}
+            - name: LUNANEXA_NVIDIA_SMI_BINARY
+              value: /usr/bin/nvidia-smi
+            - name: LUNANEXA_NODE_TOKEN_PATH
+              value: /etc/lunanexa/credentials/node-token
+            - name: LUNANEXA_ARTIFACT_CREDENTIAL_PATH
+              value: /etc/lunanexa/credentials/node-token
+            - name: LUNANEXA_ASSIGNMENT_SIGNING_SECRET_PATH
+              value: /etc/lunanexa/control-verification/assignment-verification-key
+            - name: LUNANEXA_BOOTSTRAP_TOKEN_ID_PATH
+              value: /etc/lunanexa/credentials/bootstrap-token-id
+            - name: LUNANEXA_BOOTSTRAP_TOKEN_PATH
+              value: /etc/lunanexa/credentials/bootstrap-token
+            - name: LUNANEXA_RUNTIME_BACKEND
+              value: kubernetes
+            - name: LUNANEXA_KUBERNETES_RUNTIME_CONFIG_PATH
+              value: ${RUNTIME_CONFIG_PATH}
+            - name: LUNANEXA_KUBERNETES_RUNTIME_STATE_PATH
+              value: ${RUNTIME_STATE_PATH}
+            - name: LUNANEXA_KUBERNETES_ORIGIN
+              value: https://kubernetes.default.svc
+            - name: LUNANEXA_KUBERNETES_TOKEN_PATH
+              value: /var/run/secrets/lunanexa-kubernetes/token
+            - name: LUNANEXA_KUBERNETES_CA_PATH
+              value: /var/run/secrets/lunanexa-kubernetes/ca.crt
+          volumeMounts:
+            - mountPath: /etc/lunanexa/runtime-attestation-key
+              name: runtime-attestation-key
+              readOnly: true
+              subPath: runtime-attestation-key
+            - mountPath: /var/lib/lunanexa
+              name: state
+            - mountPath: /etc/lunanexa/credentials
+              name: credentials
+              readOnly: true
+            - mountPath: /etc/lunanexa/inventory
+              name: inventory
+              readOnly: true
+            - mountPath: ${RUNTIME_CONFIG_PATH}
+              name: runtime-config
+              readOnly: true
+              subPath: kubernetes-runtime.json
+            - mountPath: /etc/lunanexa/control-verification
+              name: assignment-verification
+              readOnly: true
+            - mountPath: /etc/lunanexa/admin-policy
+              name: admin-settings
+              readOnly: true
+            - mountPath: /etc/lunanexa/trust
+              name: cosign-trust
+              readOnly: true
+            - mountPath: /etc/ssl/certs/ca-certificates.crt
+              name: registry-ca-bundle
+              readOnly: true
+              subPath: ca-certificates.crt
+            - mountPath: /var/run/secrets/lunanexa-kubernetes
+              name: kubernetes-api
+              readOnly: true
+            - mountPath: /dev/nvidiactl
+              name: nv-dev-ctl
+            - mountPath: /dev/nvidia0
+              name: nv-dev-0
+            - mountPath: /dev/nvidia-uvm
+              name: nv-dev-uvm
+        - name: control-loopback-proxy
+          image: ${NODE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: [/usr/local/bin/lunanexa-loopback-proxy]
+          args: ["127.0.0.1", "18080", "lunanexa-control.${NAMESPACE}.svc.cluster.local", "8080"]
+          resources:
+            limits:
+              cpu: 250m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: runtime-attestation-key
+          secret:
+            defaultMode: 292
+            items:
+              - key: runtime-attestation-key
+                mode: 292
+                path: runtime-attestation-key
+            secretName: lunanexa-runtime-attestation-r64
+        - name: state
+          hostPath:
+            path: /var/lib/lunanexa/node-agent
+            type: DirectoryOrCreate
+        - name: credentials
+          secret:
+            defaultMode: 256
+            secretName: ${SECRET_NAME}
+        - name: inventory
+          configMap:
+            defaultMode: 420
+            name: ${INVENTORY_CM}
+        - name: runtime-config
+          configMap:
+            defaultMode: 420
+            name: ${RUNTIME_CM}
+        - name: assignment-verification
+          secret:
+            defaultMode: 256
+            items:
+              - key: assignment-signing-secret
+                path: assignment-verification-key
+            secretName: lunanexa-control-credentials
+        - name: admin-settings
+          configMap:
+            defaultMode: 420
+            name: lunanexa-admin-settings
+        - name: cosign-trust
+          secret:
+            defaultMode: 256
+            secretName: lunanexa-cosign-trust
+        - name: registry-ca-bundle
+          secret:
+            defaultMode: 292
+            secretName: lunanexa-registry-ca-bundle
+        - name: kubernetes-api
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: https://kubernetes.default.svc
+                  expirationSeconds: 3600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        - name: nv-dev-ctl
+          hostPath:
+            path: /dev/nvidiactl
+        - name: nv-dev-0
+          hostPath:
+            path: /dev/nvidia0
+        - name: nv-dev-uvm
+          hostPath:
+            path: /dev/nvidia-uvm
