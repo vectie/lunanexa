@@ -1172,7 +1172,43 @@ checkpoint 大量存放在隐藏的 staging 目录里（`.spark-picture-20260916
 `Type: tree`、`Sha256: ""`。修法：per-file 的 revision 只是说明性字段（真正决定下载 URL 的是
 tree 解析出来的那个 revision），空值放行，非空值仍必须合法。这条也补了单测。
 
-### 14.14 还没做的
+### 14.14 节点 agent 上线（2026-09-20）
+
+**构建在哪里**：不在管理节点，在 **spark .176** 上——`~/moon`（aarch64 MoonBit 工具链）
++ `~/src` + `~/pkg-node-image.sh`（把 `cmd/node` 的二进制加上 glibc/nvidia-smi/loopback
+proxy 打成一个 OCI tar）。第一次构建失败在 `libpq headers are required`：spark 上没装 libpq。
+家目录里有那两个 .deb，`dpkg-deb -x` 解到 `~/libpq-root` 再指 `C_INCLUDE_PATH`/`LIBRARY_PATH`
+即可，**不需要 root、不改主机包状态**。
+
+**产物**：`lunanexa-node:20260918-arm64-r4`，manifest `sha256:e8bab14b…`，config `sha256:7a8ad98c…`，
+四台 spark 的 `imageID` 全部是 `7a8ad98c…`，即确实跑在 r4 上。
+
+**踩到的三个坑**（都写在这里以免下次重踩）：
+
+1. **tag 必须指向 manifest，不能指向 index。** `ctr images import --all-platforms`（在 x86 上
+   不这样就报 "image might be filtered out"）会让 tag 落在 **OCI index** 上，CRI 于是既不认本地镜像、
+   也不报错，表现是 kubelet 转去 `docker.io` 拉、`403`。正确做法是在 **arm64 节点上**
+   plain `import`（默认平台过滤就会解析到 arm64 manifest），再
+   `ctr images tag --force lunanexa-node:... docker.io/library/lunanexa-node:...`
+   让两个名字都指向 manifest——和能用的 r3 记录形态一致。
+
+2. **registry 路线被平台自己的 NetworkPolicy 挡住**，不该走。
+   `lunanexa-registry-private` 的 ingress 只放行 `lunanexa` 命名空间的 `app=lunanexa-control`
+   和带 `lunanexa.io/registry-client=true` 的 staging 命名空间；**节点 kubelet 不在白名单**。
+   再加上 kubelet 在**节点**上解析 `.svc.cluster.local`（不走 CoreDNS，要 /etc/hosts），
+   以及 spark→175 实测只有 6443 可达（15000 被拒），结论是：**spark 上的镜像只能本地导入**，
+   这也正是现有每个 spark 镜像的来路。registry 仍然有用——离线导入流程和控制面用它。
+
+3. **从 175 push 进 registry** 需要 `ctr images push --hosts-dir <dir>`：这个参数是
+   **push 子命令**的（当全局参数会报 `flag provided but not defined`），`<dir>/<host>/hosts.toml`
+   里 `ca` 指向 175 上那张 pinned leaf（`/etc/rancher/k3s/lunanexa-registry-pinned-leaf.crt`）。
+   CA 本体在 `~/moon-public/trust/registry-20260830/registry-ca.crt`。
+
+**副作用记录**：为了让 .179 试 registry 拉取，我改过它的 `registries.yaml` 和 `/etc/hosts`
+并重启过一次 k3s-agent（该节点当时没有业务负载）。**其余三台没有做这些改动**，只是本地导入
++ 换镜像，因此没有重启过 k3s-agent，.176/.177 上的 minimaxh3 推理 pod 全程未受影响。
+
+### 14.15 还没做的
 
 - **ARM64 节点镜像没有重建/滚动**。节点侧代码已写、已测，但线上 4 台 spark 跑的还是
   `lunanexa-node:20260918-arm64-r3`，所以**现在没有任何 spark 真正用 revision 拉过模型**；
