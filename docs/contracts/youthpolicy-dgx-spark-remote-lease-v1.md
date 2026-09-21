@@ -10,8 +10,8 @@ rewrite, summarize, translate, or extend its clauses.
 - Original filename: `NVIDIA DGX Spark算力设备远程租赁合同（修订版）.docx`
 - Retained path: `assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.docx`
 - Internal marker copy: `assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx`
-- Internal marker-copy SHA-256: `d4445ad5566d5dc1d3d24c9ecd77090e03d1eb8fa7d25c575b012b4d2e6f573a`
-- SHA-256: `9edba327848cd84a6b9e64bb7d0d7896c844468c64749ec4bb96b60c7f4c2d48`
+- Internal marker-copy SHA-256: `f7c3365e6e6fe253b7a5bc3950d012e7ed38eee76150516169c15655608e3a03`
+- SHA-256: `23741b8be6a335036f9994f9a700f8f174fe39ec19d7e4915b582cc7f598fa92`
 - Size: 419136 bytes
 - Source package: 14 OOXML parts, no active content, no drawings, no fields,
   no content controls, no footnotes, and no endnotes.
