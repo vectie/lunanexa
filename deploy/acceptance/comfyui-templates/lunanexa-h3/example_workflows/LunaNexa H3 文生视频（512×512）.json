@@ -1,0 +1,435 @@
+{
+  "id": null,
+  "revision": 0,
+  "last_node_id": 4,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MarkdownNote",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        1180,
+        230
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "LunaNexa H3 文生视频（512×512）",
+      "properties": {},
+      "widgets_values": [
+        "## LunaNexa H3 文生视频（512×512）\n\n跑在 LunaNexa 的**共享 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **路径：** FL2VA（首/末帧 + 文本）→ `http://192.168.2.175:4174/h3/v1`，模型 `/models/MiniMax-H3/FL2VA`\n- **规格：** 512×512、25 帧（约 1.0 秒）、24 fps、8 步、不生成声音\n- **时长怎么调：** 帧数必须落在 H3 的 17 帧栅格上 —— 5 秒是 **124** 帧，20 秒是 **481** 帧，见另外两个模板\n- **质量/耗时主开关：** 「扩散采样参数」节点里的 `num_inference_steps`（当前 8），耗时大致随步数线性增长\n- **`max_wait_seconds` = 900**（15 分钟）：卡住的任务会尽早失败，不会一直挂着\n\n想给它一个起始画面，用「图生视频（首帧）」—— 那条路的图就是成片的第 0 帧。\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
+      ],
+      "color": "#432",
+      "bgcolor": "#000"
+    },
+    {
+      "id": 4,
+      "type": "VLLMOmniDiffusionSampling",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        300,
+        250
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "n",
+          "name": "n",
+          "type": "INT",
+          "widget": {
+            "name": "n"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "num_inference_steps",
+          "name": "num_inference_steps",
+          "type": "INT",
+          "widget": {
+            "name": "num_inference_steps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "guidance_scale",
+          "name": "guidance_scale",
+          "type": "FLOAT",
+          "widget": {
+            "name": "guidance_scale"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "true_cfg_scale",
+          "name": "true_cfg_scale",
+          "type": "FLOAT",
+          "widget": {
+            "name": "true_cfg_scale"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "vae_use_slicing",
+          "name": "vae_use_slicing",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "vae_use_slicing"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "vae_use_tiling",
+          "name": "vae_use_tiling",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "vae_use_tiling"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "diffusion sampling params",
+          "name": "diffusion sampling params",
+          "type": "SAMPLING_PARAMS",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "title": "扩散采样参数",
+      "properties": {
+        "Node name for S&R": "VLLMOmniDiffusionSampling"
+      },
+      "widgets_values": [
+        1,
+        8,
+        1.0,
+        1.0,
+        false,
+        false,
+        -1,
+        "randomize"
+      ],
+      "widgets_values_named": {
+        "n": 1,
+        "num_inference_steps": 8,
+        "guidance_scale": 1.0,
+        "true_cfg_scale": 1.0,
+        "vae_use_slicing": false,
+        "vae_use_tiling": false,
+        "seed": -1,
+        "control_after_generate": "randomize"
+      }
+    },
+    {
+      "id": 2,
+      "type": "VLLMOmniGenerateVideo",
+      "pos": [
+        380,
+        300
+      ],
+      "size": [
+        440,
+        580
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "sampling_params",
+          "name": "sampling_params",
+          "shape": 7,
+          "type": "SAMPLING_PARAMS",
+          "link": 2
+        },
+        {
+          "localized_name": "lora",
+          "name": "lora",
+          "shape": 7,
+          "type": "REMOTE_LORA",
+          "link": null
+        },
+        {
+          "localized_name": "model_params",
+          "name": "model_params",
+          "shape": 7,
+          "type": "VIDEO_PARAMS",
+          "link": null
+        },
+        {
+          "localized_name": "url",
+          "name": "url",
+          "type": "STRING",
+          "widget": {
+            "name": "url"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "STRING",
+          "widget": {
+            "name": "model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "negative_prompt",
+          "name": "negative_prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "negative_prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fps",
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "num_frames",
+          "name": "num_frames",
+          "type": "INT",
+          "widget": {
+            "name": "num_frames"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "generate_sound",
+          "name": "generate_sound",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "generate_sound"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_wait_seconds",
+          "name": "max_wait_seconds",
+          "shape": 7,
+          "type": "INT",
+          "widget": {
+            "name": "max_wait_seconds"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "video",
+          "name": "video",
+          "type": "VIDEO",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "生成视频",
+      "properties": {
+        "Node name for S&R": "VLLMOmniGenerateVideo"
+      },
+      "widgets_values": [
+        "http://192.168.2.175:4174/h3/v1",
+        "/models/MiniMax-H3/FL2VA",
+        "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
+        "",
+        512,
+        512,
+        24,
+        25,
+        false,
+        900
+      ],
+      "widgets_values_named": {
+        "url": "http://192.168.2.175:4174/h3/v1",
+        "model": "/models/MiniMax-H3/FL2VA",
+        "prompt": "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
+        "negative_prompt": "",
+        "width": 512,
+        "height": 512,
+        "fps": 24,
+        "num_frames": 25,
+        "generate_sound": false,
+        "max_wait_seconds": 900
+      }
+    },
+    {
+      "id": 3,
+      "type": "SaveVideo",
+      "pos": [
+        860,
+        300
+      ],
+      "size": [
+        380,
+        400
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "video",
+          "name": "video",
+          "type": "VIDEO",
+          "link": 1
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "format",
+          "name": "format",
+          "type": "COMFY_DYNAMICCOMBO_V3",
+          "widget": {
+            "name": "format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "format.codec",
+          "name": "format.codec",
+          "type": "COMFY_DYNAMICCOMBO_V3",
+          "widget": {
+            "name": "format.codec"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "codec",
+          "name": "codec",
+          "shape": 7,
+          "type": "COMFY_DYNAMICCOMBO_V3",
+          "widget": {
+            "name": "codec"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "video",
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "title": "保存视频",
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/LunaNexa",
+        "auto",
+        "auto",
+        "auto"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "video/LunaNexa",
+        "format": "auto",
+        "format.codec": "auto",
+        "codec": "auto"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      3,
+      0,
+      "VIDEO"
+    ],
+    [
+      2,
+      4,
+      0,
+      2,
+      1,
+      "SAMPLING_PARAMS"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}
