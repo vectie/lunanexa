@@ -1711,6 +1711,74 @@ assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json               
 需要你定：**由你出新源 DOCX**，还是**要我按上述流程用现有源文件只改价格单元格生成 v2**
 （我能在 `word/document.xml` 里精确替换那几个价格，但那等于平台改写了合同，与上面那条规矩冲突）。
 
+## 11. 统一登录路径：用户名+密码 → access token（前提已验证）
+
+### 11.1 你定的方向
+
+「我们暂时没有 tls，路径应该都统一到（用户名-密码）到 access token 到登录。」
+
+也就是说：不再走 OIDC 跳转那一套（它在公网明文下还被前端主动隐藏），
+而是**一个入口：输入用户名和密码 → 换到 access token → 已登录**，控制台与企业门户都走它。
+
+### 11.2 前提已验证并打开：Keycloak 直连授权（Resource Owner Password）
+
+先在 Keycloak 上把两个客户端打开直连授权（`directAccessGrantsEnabled`，
+改动经 admin API，各返回 204）：
+
+```
+lunanexa-operator    : public=False directAccessGrants=False → True   standardFlow=True secret=yes
+lunanexa-enterprise  : public=False directAccessGrants=False → True   standardFlow=True secret=yes
+```
+
+然后用真实用户名密码**实测直连授权**（两个 audience 各一次，凭各自的 client secret）：
+
+```
+lunanexa-operator:    OK  azp=lunanexa-operator    user=recon-operator@lunanexa.local
+lunanexa-enterprise:  OK  azp=lunanexa-enterprise  user=recon-operator@lunanexa.local
+```
+
+返回体同时带 `access_token` 与 `id_token`（`expires_in=300`）。
+**结论：用户名+密码 → access token 这条路在本部署上成立，且两个受众都成立。**
+
+### 11.3 要落成的形态（设计，尚未实现）
+
+关键点是：**浏览器不该自己去拿 Keycloak 的 token**，否则等于把 client secret 放进前端。
+统一路径应当由身份网关承接下来：
+
+```
+浏览器  ──POST /auth/password{username,password,audience}──▶  身份网关
+                                                              ├─ 用对应 client 的 secret 向 Keycloak 做直连授权
+                                                              ├─ 校验 id_token / 取到 subject
+                                                              ├─ 走**与回调完全相同**的发会话路径
+                                                              │  （issue_controller_session + session store + cookie）
+                                                              └─ 返回与 /auth/session 相同的 JSON
+浏览器  ◀── {session_token, csrf_token, expires_unix_ms} ────
+```
+
+好处是：**会话仍是同一种 `lnxs_` 会话**，下游（控制台、门户、`/v1/` 鉴权）一行都不用改；
+变的只是"怎么拿到它"。
+
+要改的地方：
+
+| 位置 | 改动 |
+|---|---|
+| 身份网关 | 新增 `POST /auth/password`：直连授权 + 复用现有发会话逻辑（新代码 + 测试） |
+| 控制台 4174 | 把登录门换成"用户名+密码"表单，提交后存下返回的 token（替换现在那套 operator/audit 令牌框） |
+| 企业门户 5002 | 同样换成"用户名+密码"表单（替换现在的 scoped token + subject 框） |
+| 镜像/打包 | 网关要重建重滚（走 SOP §5.1）；两个前端要重建 bundle |
+
+### 11.4 必须说清的安全事实
+
+按你的决定**暂时不上 TLS**，那么**用户名和密码会以明文经过网络**。
+这在安全上不弱于现在这套（现在公网明文下那条 OIDC 跳转也一样暴露），但它意味着：
+
+- 这套路径**只应作为过渡**，一旦上 TLS 就应把直连授权关掉（`directAccessGrantsEnabled=False`），
+  回到 authorization-code + PKCE；
+- 网关侧应当**只对 session 做内存持有**（沿用现在的"凭据不进 URL/存储"约定），
+  并给直连授权加限速/失败计数，避免被当作密码爆破入口。
+
+这两条我会在实现时一并做，**但"明文凭据"这件事本身是你已经拍板的取舍**，我按你的决定执行。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
