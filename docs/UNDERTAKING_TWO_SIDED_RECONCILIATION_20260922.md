@@ -711,11 +711,12 @@ priv struct GatewayBrowserSession {
    `keycloak/lunanexa-platform-idp` `1/1 Running`，admin API 可查；
    `lunanexa-operator` → 5003，`lunanexa-enterprise` → 5005 **与 5002**（本次追加，
    与网关配置一致）。
-9. **让企业侧拿到租户主体**（这是现在的主线）。链路已推进到"网关换发会话 cookie"，
-   卡在 `/auth/session` → `lnxs_` 的交换，**根因已确认：控制面 Pod 缺少身份 relay 旁车容器**
-   （Pod 有 `lunanexa.io/browser-identity-sidecar=enabled` 标签、服务也选中它，
-   但 8081 无人监听，实测 `relay8081=000`）。补齐该旁车后企业侧才会有真实租户主体，
-   订单才可能创建。这是目前最高优先级的一处。
+9. **修掉那个 JSON 契约不匹配**（现在的主线，也是唯一挡住"登进去"的东西）。
+   `/auth/session` 已经返回真实 `lnxs_` 会话，但两侧前端都因为
+   `expires_unix_ms : Int64` + `derive(FromJson)` 解不了 JSON 数字而回落登录门
+   （§2.7，已用仓库外的临时 MoonBit 包在 `--target js` 上复现出确切报错）。
+   两处同构：`cmd/enterprise/main.mbt:9-13`、`cmd/console/main.mbt:202-206`。
+   建议按仓库既有先例改成字符串解析，并顺手把 `catch` 里的原因记下来（现在被静默丢弃）。
 10. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
 11. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
 12. **收敛前端的令牌注入**（§2.5 发现 4）。`operator-4173-proxy` 的 ConfigMap 里明文写着
@@ -776,8 +777,12 @@ priv struct GatewayBrowserSession {
   先以冒烟 Pod 验证镜像/参数（`/health` 200），再打进 Deployment —— 控制面 `4/4 Running`，
   `relay8081` 000→200，**`/auth/session` 401/503→200 并返回真实的 `lnxs_` 租户会话**。
   断言密钥两侧同源，不是原因。
-- **新定位**：拿到会话后门户仍停在登录门，因为页面发完 `/auth/session` 后不再跟进任何
-  `/v1/` 请求（`performance` 只有那一条），未走到 `BootstrapReady → organization_bootstrap_command`。
+- **新定位并确证**：拿到会话后两侧仍停在登录门，根因是一个 **JSON 契约不匹配** ——
+  `expires_unix_ms : Int64` 配 `derive(FromJson)` 在 **JS 后端**解不了 JSON **数字**
+  （要求字符串形式）。用仓库外临时 MoonBit 包在 `--target js` 上复现出确切报错
+  （`Int64::from_json: expected number in string representation`），数字形式必失败、
+  字符串形式可解。企业侧 `cmd/enterprise/main.mbt:9-13` 与控制台
+  `cmd/console/main.mbt:202-206` 两处同构，且异常都被 `catch { _ => … }` 静默吞掉。
 
 ## 8. 未验证
 
