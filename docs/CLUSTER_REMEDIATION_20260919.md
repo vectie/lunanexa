@@ -1741,34 +1741,50 @@ pod 日志和 pod 内文件——那是**排障用的观测通道，不是 UI �
 这个仓库已经在用这个机制（例：`comfyui-acceptance` 的容器是
 `resources.limits.memory: 4Gi`），最外层再靠 OOM kill 兜底。
 
-### 17.4 验证状态：门禁跑不了，这是环境级阻塞
+### 17.4 验证状态：门禁曾经跑不了，现已解决
 
-**`moon check` / `moon test` 在本机无法运行**，与本次改动无关：
+**结论先说**：工具链换成 `moon 0.1.20260920` 之后，门禁能跑了，而且**它当场抓出了我代码里的
+两个真错误** —— 所以这一段值得留着，但不再是阻塞。
+
+**当时的阻塞**：`moon check --target native` 在 HEAD 上报 **749 个错误**，与本次改动无关。
+仓库用的是更新版 moon 的语法：`errdefer` 在 `node/kubernetes/termination.mbt:38` 等
+**31 个文件、154 处**使用，而当时装的 `moon 0.1.20260807` 把它当保留字。
+
+**怎么解决的**：`moon upgrade` 死活要交互式 TTY，于是按运维指示手动装官方脚本
+（`https://cli.moonbitlang.cn/install/unix.sh`）。
+**装之前发现了必须注意的一件事：旧版本 `0.1.20260807` 的安装包在官方源上已经是 404** ——
+也就是说**回退不能靠重新下载**。所以先做了本地备份，并验证备份能跑：
 
 ```
-$ moon version
-moon 0.1.20260807 (4da23f8 2026-08-07)
-$ moon check --target native
-Failed with 364 warnings, 749 errors
+cp -a ~/.moon ~/.moon.backup-0.1.20260807
+~/.moon.backup-0.1.20260807/bin/moon version   → moon 0.1.20260807   （验证可用）
 ```
 
-原因：仓库用的是**更新版 moon 的语法**。最直接的一例是 `errdefer`，
-`node/kubernetes/termination.mbt:38` 在用，而本机工具链把它当保留字
-（`Warning: The word errdefer is reserved for possible future use`）。`errdefer` 在 HEAD
-里被**14 处以上、多个包**使用（`account/store.mbt` 一处文件就有 14 次），749 个错误
-集中在 `account/store.mbt`（205）、`notifications/store/store.mbt`（126）、
-`nodelease/credential/store/store.mbt`（88）等生成风格的文件里。
+回退方式：`rm -rf ~/.moon && mv ~/.moon.backup-0.1.20260807 ~/.moon`。
+安装脚本没有改动 `~/.zshrc`（前后都是 143 行），也没有下载失败。
 
-试过修：`moon upgrade -f` 需要交互式 TTY（`Error: IO error: not a terminal`），
-用 `script` 造伪终端也不行（`tcgetattr/ioctl: Operation not supported on socket`）。
-**所以这不是我能绕过去的，也不该悄悄绕过去。**
+**换成新工具链后门禁的实测结果**：
 
-**能验证的到哪一步**：`moon fmt --check` 对本次改动的全部 9 个文件**解析通过、
-0 parse errors**（它退出非零只是因为格式化风格差异，而且差异出现在我根本没碰的文件上——
-本机 fmt 会删掉单行记录字面量的尾逗号，与仓库风格不符，所以**没有**运行 `moon fmt`，
-否则会重排 200 行以上无关代码）。**类型检查完全没有验证过。**
+| 命令 | 结果 |
+|---|---|
+| `moon check --target native` | 2735 warnings, **0 errors**（改前 749 errors） |
+| `moon test --target native -p node` | **245 passed, 0 failed** |
+| `moon test --target native`（全量） | **908 passed, 0 failed** |
 
-**试过、并且确认走不通的绕法**（记下来，免得下次再花一遍时间）：
+**新工具链抓出的、属于我代码的 2 个真错误**（这就是门禁的价值，不是形式）：
+
+```
+node/host_resources.mbt:65  Expr Type Mismatch  has type: StringView  wanted: String
+node/host_resources.mbt:69  同上
+```
+
+`name + " units"` 里的 `name` 来自 `.trim()`，在这个版本是 `StringView`。已修。第二遍
+`--output-json` 逐条归因后，**我新增代码里只剩 2 个 code 20 警告**（`to_string` 已废弃，
+仓库惯例是 `.to_owned()`），也一并改掉了：诊断总数 2737 → 2735。
+
+**类型检查现在有了，不再是"未验证"。** 剩下的未验证项在 17.5。
+
+**试过、确认走不通的绕法**（记下来，免得下次再花一遍时间）：
 
 1. **`errdefer` → `defer` 机械替换**：749 → 37 个错误。但那 37 个**正是替换自己造出来的**——
    新工具链的 `errdefer` **允许**清理调用自身会报错或本身是 async，旧工具链的 `defer`
@@ -1779,14 +1795,13 @@ Failed with 364 warnings, 749 errors
    版本，`moon test` 的结果也不能信——错误展开路径的清理全被拿掉了。
 3. **`moon upgrade`**：`-f`、`-q`、`--dev` 都要交互式 TTY（`Error: IO error: not a terminal`），
    用 `script(1)` 造伪终端也不行（`tcgetattr/ioctl: Operation not supported on socket`）。
-   这是工具链自身的限制。
-4. **手动安装官方脚本**（可行但属于环境变更，没有擅自做）：
-   `https://cli.moonbitlang.cn/install/unix.sh` 探到 200。装之前备份 `~/.moon/bin` 即可回退。
-5. **更稳的做法**：在平时构建本仓库的那个环境里跑门禁。镜像
-   `lunanexa-node:20260918-arm64-r3` 是能构建出来的，说明那边有支持 `errdefer` 的 moon。
-   门禁本来就该在那儿跑，不该由这台 Mac 承担。
+4. **手动安装官方脚本**：这条可行，已采用（见上）。
 
-工具链修好之后，按 AGENTS.md 的门禁跑这四条即可：
+**另一条仍然值得记的建议**：门禁更该在平时构建本仓库的那个环境里跑（镜像
+`lunanexa-node:20260918-arm64-r3` 就是那边构建出来的）。本机现在也能跑了，但那台才是
+权威环境。
+
+门禁的四条命令：
 `moon info && moon fmt && moon check --target native --deny-warn && moon test --target native --deny-warn`。
 注意 `moon info` 还需要重生成 `node/pkg.generated.mbti` 和 `ui/pkg.generated.mbti`
 （`NodeRow` 多了三个字段、`HostUtilization` 是新类型）。
