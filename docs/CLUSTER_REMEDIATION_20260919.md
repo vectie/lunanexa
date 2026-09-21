@@ -1509,6 +1509,11 @@ deadline` 退出（本轮 `fl2va` 就是这么报的，而它其实起得好好�
   没有入库。
 - 写这些脚本时踩到的另一类坑，记下免得重犯：**`sudo -S` 从 stdin 读密码**，所以
   `s kubectl create ... | s kubectl apply -f -` 永远失败（`error: no objects passed to
-  apply`），必须把清单落临时文件再 `apply -f <file>`。还有 **`/tmp/luna_ssh.exp` 有 30 秒
-  硬超时**：任何超过约 25 秒的远端命令都必须 `setsid nohup … &` 再另起读日志，否则会被
-  掐在半路（本轮两次中招）。
+  apply`），必须把清单落临时文件再 `apply -f <file>`。
+- 还有一个更阴的：本地那个 expect 包装脚本 `/tmp/luna_ssh.exp` 里写的是
+  **`set timeout 30`**。它不是远端的命令超时，但效果一样——30 秒一到 expect 就往下走、
+  脚本退出，ssh 被连带拆掉，命令死在半路。本轮因此两次把 `kubectl rollout status`
+  和轮询循环掐断，报出来却像是远端失败。已改成 **`set timeout -1`**，并加了
+  `ServerAliveInterval=30`。实测：45 秒和 100 秒的远端命令现在都能跑完。
+  真正常驻/无人值守的活仍然该用 `setsid nohup … &`，那不是为了绕超时，而是为了不占着
+  终端等。
