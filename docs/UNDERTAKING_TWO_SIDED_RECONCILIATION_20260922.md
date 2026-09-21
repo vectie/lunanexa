@@ -909,6 +909,77 @@ leases        : 16 items   keys=[version, lease_id, tenant_ref, subject_ref, acc
 （最后一个值得特别看一眼：`max_session_duration_ms` 是**字符串**而 `max_active_sessions` 是**裸数字**，
 同一个对象里两种形态并存 —— 如果 struct 把前者声明成 `Int` 或把后者声明成 `Int64`，就会在这里炸。）
 
+### 2.13 找到了：控制面把一个 Option 序列化成了数组，控制台按标量解，于是整块回落
+
+§2.12 说"失败点还没抓到，但范围很小"。抓到了，而且是一条完整的因果链。
+
+**先说顺手修掉的一个既有缺陷**：`cmd/console` 的测试**在 HEAD 上根本编译不过** ——
+`cmd/console/main_wbtest.mbt:1296` 的测试辅助 `node_row_heartbeat` 把
+`declared_memory_mib` 写成了**位置参数**，而它的 7 个调用点全都按**标签参数**传
+（`declared_memory_mib=65536`），报
+`This function has no parameter with label declared_memory_mib~`。
+改成 `declared_memory_mib~ : Int` 后 **`moon test cmd/console --target js` → 61/61 通过**。
+（这类"改了签名没改调用点"的漂移，正好发生在之前那轮内存指标改动里。）
+
+**然后在能编译的包里做了离线解码**（用 §2.7 的手法，把线上真实 payload 喂给声明类型）：
+
+```
+workspace user        -> OK
+workspace access grant-> OK
+workspace lease       -> OK
+access package        -> FAILED: JsonDecodeError((/grant_id, String::from_json: expected string))
+```
+
+**就是它。** 再看线上 `/v1/onboarding/access-packages` 的真实元素：
+
+```
+package_id            = "access-account-3b407b45…"
+account_id            = "account-3b407b45…"
+display_name          = "WebIDE Operator"
+grant_id              = ["grant-3b407b45…"]        ← 是数组
+lease_id              = ["lease-3b407b45…"]        ← 是数组
+lease_state           = ["Active"]                 ← 是数组
+expires_unix_ms       = ["1792552691962"]          ← 是数组
+approved_model_aliases= ["tiny-bf16", "incoai-glm-5.3-flash-dflash2", …]
+account_ready         = true                        ← 其余是标量
+state                 = "Ready"
+```
+
+而控制台的 `@ui.AccessPackageView`（`ui/pkg.generated.mbti:159-176`）把这些声明成**标量**：
+`grant_id : String?`、`lease_id : String?`、`lease_state : WorkspaceLeaseState?`、`expires_unix_ms : Int64?`。
+
+**生产侧为什么发数组？** 在 `api/access_onboarding_http.mbt:329-345`，这几个字段是直接塞进
+JSON 映射字面量的**裸 `Option` 值**：
+
+```moonbit
+"grant_id": grant.map(value => value.grant_id),          // Option[String]
+"lease_id": lease.map(value => value.lease_id),          // Option[String]
+"lease_state": lease_state,                              // Option[LeaseState]
+"expires_unix_ms": lease.map(value => value.expires_unix_ms),   // Option[Int64]
+"approved_model_aliases": aliases.to_json(),             // 只有这一行显式转了 Json
+```
+
+**而 MoonBit 的 `ToJson for Option` 就是把 `Some(x)` 输出成单元素数组、`None` 输出成 `null`** —— 离线实测：
+
+```
+Some       -> ["grant-1"]
+None       -> null
+Some Int64 -> ["1792552691962"]
+```
+
+于是形状对不上，`/grant_id` 处抛错；因为 `load_console_access_reads` 里只有 trial_summary 带 catch，
+**整个函数抛出 → 调用方回落默认空态 → 三个症状同时出现**：
+`0 users · 0 grants`、`Trial statistics unavailable`、dev-fallback 提示。
+
+**所以这条链完全闭合了**：数据一直都在（12 用户 / 16 授权 / 2 个访问包），
+坏在**生产侧多包了一层数组** + **消费侧静默吞掉解码错误**，两者叠加才伪装成"管理侧什么都没有"。
+
+**修法（明确，未做）**：把那 4 个字段改成"有值就发标量、没值就发 null"，
+例如 `match grant { Some(v) => v.grant_id.to_json(), None => Json::Null }` ——
+消费侧的 `parse_console_json` 本来就会在解码前摘掉 `Null`，
+所以 `String?`/`Int64?` 正好接得住。改完要重建并重滚控制面镜像（走 SOP §5）。
+另外建议这段生产代码也按 §2.7 的教训，别再把 Option 直接丢进 JSON 字面量。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |

@@ -1295,7 +1295,7 @@ fn node_row_sample(
 /// which is how a unified-memory descriptor is rendered today.
 fn node_row_heartbeat(
   node_id : String,
-  declared_memory_mib : Int,
+  declared_memory_mib~ : Int,
 ) -> @contracts.NodeHeartbeat {
   {
     node_id,
