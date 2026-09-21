@@ -978,9 +978,11 @@ async fn main {
         // cannot reach its control plane indistinguishable from one whose
         // local state is broken, and there is nothing on the host to correlate
         // against: this line is the only evidence an operator has.
+        // The Show form carries the operation and the errno, which is what an
+        // operator needs; the Repr form only names the error type.
         error =>
           println(
-            "LunaNexa node reconciliation failed; retrying: \{Repr(error)}",
+            "LunaNexa node reconciliation failed; retrying: \{error.to_string()}",
           )
       }
       @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)
