@@ -1947,13 +1947,25 @@ minimaxh3-fl2va / ref2va / operator-proxy / comfyui / 4 × node-agent   全部 R
 **规矩定下来（写进本节，也希望以后照做）**：
 **先用「删掉本地副本再拉回来」证明 registry 真的有它，再改引用。**
 
-### 19.4 仍未做
+### 19.4 warnings 清理已重新落地（2026-09-22 凌晨）
 
-- **arm64 工具链已更新到 20260920，但 warnings 清理（`1f9af00`）还没重新落地。**
-  现在两台构建机都是 20260920，`moon check --target native --deny-warn` 在这个版本上
-  报 2735 warnings（在旧的 20260824 上是 0）。要不要重新落地由运维定：
-  `git revert 6c54f12` 即可，前提是 arm64 那边也保持 20260920。
-- `scripts/deploy/build-control-image.py` 的 `--base-image` 默认值这个坑，可以加一个显式检查
-  （base 与 image 同名时先确认 base 存在并给出清晰报错），本轮没改。
-- 控制台的浏览器渲染**没有被直接观察过** —— 数据在流、新 bundle 在服务，但"格子显示 25% CPU"
-  这一句我没有亲眼看到（需要真浏览器会话）。
+`1f9af00` 当初被回退，唯一原因是 spark 那边的工具链还是 `0.1.20260824`，而它没有
+`Bytes.exact_view`（那是新版本才有的方法）。**两台构建机现在都是 `0.1.20260920`**，
+所以 `git revert 6c54f12` 已重新落地（`f2fbc0b`），并在三处都实测通过：
+
+| 环境 | 工具链 | 结果 |
+| --- | --- | --- |
+| 开发机 | `0.1.20260920` | `moon check --target native --deny-warn` **exit 0**；`moon test --target native` **908 passed / 0 failed** |
+| 管理节点（x86_64，构建控制面） | `0.1.20260920` | `--deny-warn` **exit 0**；`moon build --target native --release cmd/control cmd/loopback-proxy` **exit 0** |
+| `.176`（aarch64，构建节点 agent） | `0.1.20260920` | `BUILD-OK`（`node.exe` 3,150,880 B） |
+
+**这三条要一起成立**才算数：清理本身只对 20260920 有效，而 20260920 又必须同时装在三处，
+否则就会出现"在 A 上干净、在 B 上编译不过"（这正是当初回退的原因）。
+
+### 19.5 仍未做
+
+- **控制台的浏览器渲染没有被直接观察过。** 数据在流（`host_cpu_utilization_per_mille` 等 8 个指标）、
+  新 bundle 在服务（`console.js` 的 sha256 与构建产物一致）、代理路径也验证过，
+  但"格子上真的显示出 CPU 百分比"这一句需要一次真浏览器会话才算数，**不写成已确认**。
+- `scripts/deploy/build-control-image.py` 的 `--base-image` 默认等于 `--image` 这个坑，
+  可以加一个显式检查（同名时先确认 base 存在并给出清晰报错）。本轮没改，已写进 SOP 陷阱清单。
