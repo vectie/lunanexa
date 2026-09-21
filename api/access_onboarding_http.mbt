@@ -335,10 +335,26 @@ async fn ApiService::access_package_view_for_membership(
     "tenant_ref": membership.tenant_ref,
     "user_id": user.map(value => value.user_id).unwrap_or(""),
     "membership_id": membership.membership_id,
-    "grant_id": grant.map(value => value.grant_id),
-    "lease_id": lease.map(value => value.lease_id),
-    "lease_state": lease_state,
-    "expires_unix_ms": lease.map(value => value.expires_unix_ms),
+    // These four are optional. They must be a scalar or null, never a bare
+    // Option: `ToJson for Option` renders Some(x) as the one-element array [x],
+    // and the console decodes them as String?/Int64?, so an array throws and
+    // takes the whole access-read block down with it.
+    "grant_id": match grant {
+      Some(value) => value.grant_id.to_json()
+      None => Json::null()
+    },
+    "lease_id": match lease {
+      Some(value) => value.lease_id.to_json()
+      None => Json::null()
+    },
+    "lease_state": match lease_state {
+      Some(value) => value.to_json()
+      None => Json::null()
+    },
+    "expires_unix_ms": match lease {
+      Some(value) => value.expires_unix_ms.to_json()
+      None => Json::null()
+    },
     "approved_model_aliases": aliases.to_json(),
     "account_ready": account_active,
     "membership_ready": membership_ready,

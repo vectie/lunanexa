@@ -301,6 +301,18 @@ async test "one access package intent is resumable and enables only after contra
   assert_eq(listed.status, 200)
   assert_true(listed.body.contains("Friendly Developer"))
   assert_true(listed.body.contains("\"ready\":true"))
+  // The optional fields must serialise as a scalar or null. A bare Option value
+  // renders Some(x) as the one-element array [x], which the console cannot
+  // decode as String?/Int64? -- and because only one decode in its access-read
+  // block is guarded, that single throw blanked the whole view.
+  assert_false(listed.body.contains("\"grant_id\":["))
+  assert_false(listed.body.contains("\"lease_id\":["))
+  assert_false(listed.body.contains("\"lease_state\":["))
+  assert_false(listed.body.contains("\"expires_unix_ms\":["))
+  assert_true(
+    listed.body.contains("\"grant_id\":\"") ||
+    listed.body.contains("\"grant_id\":null"),
+  )
   let audit = service.handle(Get, "/v1/audit", headers, "")
   assert_true(audit.body.contains("access-package.prepared"))
   assert_true(audit.body.contains("access-package.enabled"))
