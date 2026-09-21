@@ -980,6 +980,54 @@ Some Int64 -> ["1792552691962"]
 所以 `String?`/`Int64?` 正好接得住。改完要重建并重滚控制面镜像（走 SOP §5）。
 另外建议这段生产代码也按 §2.7 的教训，别再把 Option 直接丢进 JSON 字面量。
 
+### 2.14 为什么生产侧会写成裸 Option：`Json` 的构造器在这个版本是只读的
+
+准备动手修 §2.13 那个生产侧 bug 时，先撞上一个语法事实，值得记下来 ——
+**它解释了作者当初为什么只能写裸 `Option`。**
+
+想写"有值发标量、没值发 null"，自然写法是构造一个 `Json` 空值，结果三个写法全部编译失败：
+
+```
+let a : Json = Json::Null              → Error 4036: Cannot create values of the read-only type: Null.
+let m : Map[String, Json] = Map([("k", Json::Null), …])
+                                       → Error 4036: Cannot create values of the read-only type: Null.
+Json::Object(m)                        → Error 4036: Cannot create values of the read-only type: Object.
+```
+
+`Json` 这个枚举定义在 **`moonbitlang/core/builtin`**（`builtin/json.mbt:26`，也就是在前导库里，
+所以仓库里到处直接写 `Json`），而它的**构造器在当前版本是只读的**：
+**不能显式 `Json::Null` / `Json::Object` 去造值**，只能通过 `.to_json()` 或 `@json.parse` 得到。
+
+**这就串起来了**：
+
+- 作者不能写 `Json::Null`，于是把裸 `Option` 直接放进 JSON 字面量，指望它自然变成"有值/null"；
+- 但 `ToJson for Option` 给的是 **`Some(x) → [x]`**（§2.13 已实测），不是标量；
+- 而消费侧又**只对 trial_summary 一个字段做了 catch**，解码一抛整块就回落成空态；
+- 三层叠加，才让"12 个用户 / 16 条授权"显示成 `0 users · 0 grants`。
+
+**所以修法要绕开"构造 Json 空值"这条路。** 可行且干净的做法是：
+**用 `Map[String, Json]` 动态装配、最后 `.to_json()` 成对象** ——
+缺的字段干脆**不放进去**（消费侧的 `String?` / `Int64?` 本来就能接受"字段不存在"），
+`Some` 的字段放 `v.to_json()` 标量。这样既不需要造 null，也不需要改契约。
+
+```moonbit
+let mut package : Map[String, Json] = Map([])
+package["package_id"] = "access-\{account.account_id}".to_json()
+… 其余标量字段照旧 …
+match grant { Some(v) => package["grant_id"] = v.grant_id.to_json(), None => () }
+match lease {
+  Some(v) => {
+    package["lease_id"] = v.lease_id.to_json()
+    package["expires_unix_ms"] = v.expires_unix_ms.to_json()
+  }
+  None => ()
+}
+… 最后 package.to_json() …
+```
+
+**这一条我还没动手**：它是约 40 行字面量的结构改动，改完还要按 SOP §5 重建并重滚控制面镜像，
+属于下一轮的一整块工作。先把"为什么会长成这样"和"应该怎么改"记全。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
