@@ -1350,22 +1350,43 @@ Back  Continue
 
 点 `Refresh availability` 无效（仍是同一句）。页面底部另有 `Back` 与 `Integration contract`。
 
-**卡点抓到了确切那一条请求**（该步骤轮询 `machine-offerings`）：
+**卡点抓到了确切那一条请求**（该步骤轮询 `machine-offerings`）。
+
+⚠️ **这里我一开始测错了，下面是更正后的结论。** 我第一次是用页面里一个**裸 fetch** 去问的，
+得到：
 
 ```
 GET /v1/portal/self/machine-offerings -> 403
-{"error":{"code":"MachineOrderAccessDenied",
-          "message":"machine purchasing role is required","retryable":false}}
+{"error":{"code":"MachineOrderAccessDenied","message":"machine purchasing role is required"}}
 ```
 
-**所以不是"没有容量"，是"这个账户没有购机角色"。** 两条结论：
+我据此写了"不是没容量，是没购机角色"。**这个结论是错的**，因为我漏了一件事：
+前门 nginx 会给**没有 Authorization 的请求**注入操作员令牌（那正是 §2.9 改的 map 的
+"没带才回落"分支）。所以裸 fetch 是以**操作员身份**问的，403 说的是操作员没有企业成员资格，
+**不是**这个试用账户没有角色。
 
-1. **真实卡点**：受限试用组织**不带 machine purchasing 角色**，因此无法创建机器类订单 →
-   没有订单就拉不起承诺函（管理侧那句 `A packet is created from an approved order` 依然成立）。
-2. **反馈缺陷（新的一条）**：UI 把这个 **403 权限错误**渲染成
-   `No capacity available`。用户会以为"平台没机器了"，而实际是"你没权限"。
-   这与 §4 里那条"错误过于不透明"是同一类，但更严重 —— 它**把原因指错了方向**，
-   运维和客户都会照错的方向去查。建议容量页区分"无可用容量"与"无购机权限"。
+**用门户自己的会话令牌重测（也就是应用真正在做的事）：**
+
+```
+GET /v1/portal/self/machine-offerings -> 200  len=2  ::  []
+GET /v1/portal/self/organizations     -> 200  ::  …trial-org-b131b8c5… state=Active…
+```
+
+**200，而且就是一个空数组 `[]`。** 所以：
+
+1. **真实卡点：机器供给目录是空的** —— 没有任何 active offering。
+   UI 那句 `No capacity available` 是**如实**的，不是把权限错误说成没容量。
+2. 之前那条"UI 把 403 渲染成没容量"的**反馈缺陷不成立**，我在报告里撤回它。
+   （§4 里"错误不透明"那几条仍然成立，但这一条不是。）
+
+**方法论教训（记下来，因为这次害我写错一轮）**：在这套前端上，
+**裸 `fetch` 与"应用自己发出的请求"不等价** —— 裸 fetch 会被注入操作员令牌。
+要判断应用的真实状态，必须复刻它自己的凭据（从 `/auth/session` 取会话令牌再带上），
+或者干脆看 UI。**不要用裸 fetch 的返回码去推断会话态的问题。**
+
+**因此这一步的下一步不是"授权"，而是"上架供给"**：管理侧需要真正发布机器供给
+（active offering），企业侧容量页才可能从 `[]` 变成可选的机器。
+这也解释了为什么两条机器类服务都是同一句话 —— 目录为空，与服务类型无关。
 
 ### 9.3 旁路观察：Shared MaaS 走的是另一条路
 
