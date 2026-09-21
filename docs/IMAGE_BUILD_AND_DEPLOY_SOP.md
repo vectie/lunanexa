@@ -277,9 +277,14 @@ sh scripts/deploy/stage-moonbit-linux-amd64.sh
 # ③ 构建（产物路径见上）
 moon build cmd/identity-gateway --target native --release
 
-# ④ 覆盖进镜像：export 现有网关镜像 → 追加一层（替换 /usr/local/bin/lunanexa-identity-gateway）
-#    → 重组 OCI → ctr images import → 打目标 tag → push 到 registry
-#    （手法照抄 build-control-image.py，只换二进制名与目标路径）
+# ④ 覆盖进镜像：用仓库里的 deploy/cluster/build-identity-gateway-image.py
+LUNANEXA_SUDO_PASSWORD=... python3 deploy/cluster/build-identity-gateway-image.py \
+  --image lunanexa/identity-gateway:<tag> \
+  --base-image "<Deployment 里现在用的那个 ref>" \
+  --binary ~/luna-src-next/_build/native/release/build/cmd/identity-gateway/identity-gateway.exe \
+  --work ~/gw-build/image
+#    期望 GATEWAY-IMAGE-OK <tag> <archive>
+#    （它是从 build-control-image.py 派生的，差异与坑都写在脚本头和下面）
 
 # ⑤ 证明它真的在 registry 里：把本地那份删掉，再从 registry 拉回来
 S k3s ctr -n k8s.io images rm  "$REF"
@@ -289,6 +294,31 @@ S k3s ctr -n k8s.io images pull \
 
 # ⑥ 只有 ⑤ 过了才改 Deployment 的镜像引用，然后收敛
 S kubectl -n lunanexa rollout status deploy/lunanexa-identity-gateway --timeout=180s
+```
+
+**实测踩过的三个坑（都是这一步的，别再重踩）**：
+
+1. **`MOON_HOME` 指错会伪装成依赖问题。** 把 `MOON_HOME` 指向
+   `~/moon-public/toolchains/moon-linux-amd64` 时，`moon build` 报
+   `Failed to resolve registry dependency \`vectie/moonleaf\` … no version satisfies requirement \`0.1.15\``，
+   看起来像源码问题，其实是那个工具链目录自带的 registry 索引太旧。
+   正解：`MOON_HOME` 留在带 registry 的 `~/.moon`（它里面就有 `vectie/moonleaf/0.1.15`），
+   再把暂存工具链借给它：
+   `ln -sfn <toolchain>/bin ~/.moon/bin && ln -sfn <toolchain>/lib ~/.moon/lib`。
+2. **层级清单要用 `isfile()` 取，不要用"去掉斜杠后缀"过滤。**
+   某些归档里的目录项名字**不带**结尾斜杠，于是会被当成"非二进制文件"，
+   让 `is_binary_layer` 永远返回 False，报
+   `could not find a binary layer … is it a LunaNexa identity-gateway image?`。
+3. **找不到可替换层时就追加，不要失败。** 层是 last-wins 叠加的，
+   新二进制放在最后一层即可遮住旧的；"删掉旧层"只是体积优化，
+   而且依赖 base 的层布局（本次 base 只有 1 层且混着目录项）。
+
+**验证镜像里确实是新二进制**（不要只看 `GATEWAY-IMAGE-OK`）：
+
+```sh
+sha256sum <built>/identity-gateway.exe            # 与镜像里那层比对
+# 本次实测：built=1a82244e…，新镜像最后一层里的 /usr/local/bin/lunanexa-identity-gateway
+# 同为 1a82244e…，而它下面那层是旧的 2064624 字节版本
 ```
 
 **回滚**：`S kubectl -n lunanexa rollout undo deploy/lunanexa-identity-gateway`。
