@@ -159,9 +159,15 @@ registry 里因此有 19 个模型 id。它**不做** license 接受、verificat
 2. **批准硬性要求一条通过的评测**（`Evaluated` 状态 + `evaluations[...].passed`），
    而这一批模型没有任何基准数据，整条链就停在这里。
 
-第 2 条按你的要求"评测暂时搁置"处理，但**不是悄悄放松**：新增部署级开关
-`LUNANEXA_REQUIRE_MODEL_EVALUATION`（默认 **1**，仍然要求评测），本集群显式设为 0，
-记录在 `deploy/management-foundation/controller-patch.yaml` 里；开关关掉时：
+第 2 条一度按"评测暂时搁置"处理，**现已按要求恢复硬要求**：部署级开关
+`LUNANEXA_REQUIRE_MODEL_EVALUATION` 保持二进制默认值 **1**，
+`deploy/management-foundation/controller-patch.yaml` 里那行显式覆盖已经删除。
+因此准入链在批准处重新被拦住：没有 `Evaluated` 状态和 `evaluations[...].passed` 的模型，
+只能走到 `Verified`，批不了、也提升不了 alias。此前在开关为 0 时写下的那些提升回执，
+其 `evaluation_id` 是**空字符串**——"没有评测背书"这件事留在审计记录里，不会被默认值掩盖，
+所以历史与现状是可区分的。
+
+开关曾关掉时（历史行为，仅作记录）：
 
 - 批准只允许从 `Verified`（真做过校验）进入，`Candidate` 仍然批不了；
 - 这样产生的每一次 alias 提升，回执里的 `evaluation_id` 是**空字符串**——"没有评测背书"

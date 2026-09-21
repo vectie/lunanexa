@@ -18,7 +18,7 @@ TREE="$STORE/comfyui"
 IMPORT=ms-ce32a7f5bad27910e098526e
 # The adapter downloads into .imports/<id>.partial and moves it into place when
 # the revision verifies, so both locations have to be looked at.
-SOURCE="$STORE/.imports/$IMPORT.partial"
+SOURCE="$STORE/models/modelscope/$IMPORT"
 
 echo "=== where the download is landing"
 s ls -la "$STORE/modelscope" 2>/dev/null | tail -5 || true
