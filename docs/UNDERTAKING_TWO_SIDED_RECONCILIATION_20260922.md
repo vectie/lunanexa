@@ -522,6 +522,76 @@ GET /auth/session -> 200
 `BootstrapReady` 之后应当带着 token 去调 `/v1/`；现在它没有走到那一步。
 这属于**前端启动流程**的问题，与已经修好的身份链路分开，是下一步要单独查的。
 
+### 2.7 最后一跳的真正原因：一个 JSON 契约不匹配（两侧同病，已确证）
+
+身份链路修好后，`/auth/session` 已经返回 200 与真实 `lnxs_` 会话，但门户**仍停在登录门**。
+实测该页加载时确实请求了 `/auth/session`（拿到 200），**之后再无任何 `/v1/` 请求**，
+且控制台里没有任何报错。用页面上下文复刻应用自己那次 fetch（同参数、同 credentials）也返回
+`ok=true status=200`，所以问题不在网络。
+
+**根因（可复现，已确证）：JS 后端上 `Int64::from_json` 要求数字以"字符串形式"出现，
+而网关发的是 JSON 数字。** 用一个仓库外的临时 MoonBit 包（`/tmp/jt`，`--target js`）复现：
+
+```moonbit
+priv struct Bootstrap {
+  session_token : String
+  csrf_token : String
+  expires_unix_ms : Int64
+} derive(FromJson)
+
+// 网关今天发的形式：数字
+test "number form" {
+  let body = "{\"session_token\":\"lnxs_x\",\"csrf_token\":\"c\",\"expires_unix_ms\":1790037781541}"
+  ...
+}
+```
+
+```
+number form -> FAILED: JsonDecodeError((/expires_unix_ms,
+              Int64::from_json: expected number in string representation))
+string form -> decoded expires=1790037781541
+```
+
+即：**数字形式必然失败，字符串形式才能解出。**
+
+**两个产品都踩了同一个坑**，两处声明完全同构、都是 `derive(FromJson)`：
+
+```moonbit
+// cmd/enterprise/main.mbt:9-13
+priv struct GatewayBrowserBootstrap {
+  session_token : String
+  csrf_token : String
+  expires_unix_ms : Int64     // ← 解不了 JSON 数字
+} derive(FromJson)
+
+// cmd/console/main.mbt:202-206
+priv struct GatewayBrowserSession {
+  session_token : String
+  csrf_token : String
+  expires_unix_ms : Int64     // ← 同一处坑
+} derive(FromJson)
+```
+
+于是两侧的启动流程都会走成"拿不到会话"：
+
+- 企业侧 `cmd/enterprise/main.mbt:2324-2360`：`@json.from_json` 抛错 → 被
+  `catch { _ => BootstrapUnavailable(generation) }` 吞掉 → 回登录门。
+- 控制台 `cmd/console/main.mbt:3213-3221`：同一句解析 → `GatewaySessionUnavailable`
+  → 回登录门。
+
+**这就是"登录成功却进不去"的真正原因**，而且它同时解释了为什么之前两侧都像"没有会话"。
+
+**这也是一个可诊断性缺陷**：异常被 `catch { _ => … }` 丢弃，界面上只表现为"回到登录门"，
+既没有错误码也没有日志，导致这条链路此前一直被误判为网络/端口/密钥问题。
+
+**修法（三选一，建议第 1 条）**：
+1. 解析侧改成先取字符串再 `@string.parse_int64` —— 仓库里已有同款先例
+   （`ui/beginner_operations.mbt:28` 的 `expires_unix_ms : String`，
+   `cmd/console/main.mbt:4131` 也是 `@string.parse_int64(draft.expires_unix_ms)`）；
+2. 生产侧（网关/控制面）改为发送字符串；
+3. 抽一个共享解码器，两侧复用，避免第三处再踩。
+另外无论选哪条，都建议把 `catch` 里的原因**至少记一条日志或带进 UI**，不要再静默。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
