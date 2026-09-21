@@ -1532,8 +1532,21 @@ Portal(SelfService(RequestQuote)) => {
 要支持"选择时间、租期"里更长的时间窗，**供给得重新上架、把上限放大**。
 （同 id 更新会 409，要用新 id。）
 
-**至此"选择时间、租期"这一格的现状**：页面能走到、能选机器和区域、
-但受 `Review price` 静默无反应 + 租期上限 24h 两项限制。
+**租期上限这一条已经解决。** 用新 id 发了 `offer-dgx-spark-03`
+（`minimum_duration_seconds=3600`、`maximum_duration_seconds=2592000`，
+`billing_quantum_seconds=3600`），门户端确认：
+
+```
+offer-dgx-spark-01  avail=0  min=60    max=86400     (24h)
+offer-dgx-spark-02  avail=4  min=60    max=86400     (24h)
+offer-dgx-spark-03  avail=4  min=3600  max=2592000   (1h–30天)  ✅
+```
+
+所以"选择时间、租期"现在**有可选的机器、有 1 小时到 30 天的窗口**，
+只差 `Review price` 那一跳。
+
+**至此"选择时间、租期"这一格的现状**：页面能走到、能选机器/区域/时长，
+但**受 `Review price` 静默无反应这一条挡住**（代码位置见上）。
 
 ## 8. 未验证
 
