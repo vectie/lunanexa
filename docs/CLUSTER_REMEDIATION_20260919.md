@@ -1713,16 +1713,33 @@ pod 日志和 pod 内文件——那是**排障用的观测通道，不是 UI �
 5. `--inspect-host-resources` 现在也打印 `HostUtilization`，运维可以直接在节点上看到
    真实内存与 CPU。
 
-### 17.3 我**没有**改的，以及为什么
+### 17.3 声明式内存准入：已决定**不改**（2026-09-21 记录）
 
-**`deploy/cluster/render.py:92` 那行 `memory_free_mib = memoryTotalMib` 仍然存在**，
-而且调度准入还在用它：`api/server.mbt:1635-1638` 把它求和进 `NodeSnapshot`，
-`scheduler/scheduler.mbt:147` 用它做准入、`:183` 用它算余量。
+`deploy/cluster/render.py:92` 的 `"memory_free_mib": node.get("memoryTotalMib", 124608)`
+（可用 = 总数）**保留原样**，调度准入继续按声明值判断
+（`api/server.mbt:1635-1638` → `scheduler.mbt:147` 准入、`:183` 排序、`:434` 容量预测）。
 
-为什么不动：把它改成节点实测值，等于把**准入逻辑的数据源**从"运维声明"换成"实时遥测"，
-这是设计决策，不是 bug 修复；而如果只是把那行删掉/置零，调度会认为没有可用内存而**拒绝
-所有部署**。正确的做法需要一个运维选定的声明值（比如"每节点预留多少给实例"），那个值只能
-由人来定。**这是一处需要你决定的事，我把它标出来而不是替你改。**
+**这是一个决定，不是遗留缺陷。** 理由：
+
+- **底层不是虚拟机。** 计算节点是 k3s 之上直接跑容器的裸机：`runtimeClassName: nvidia`
+  是 NVIDIA 容器运行时（注入 GPU 设备），不是 VM runtime class；代码里没有
+  kata / firecracker / libvirt / qemu（`grep` 命中的 QEMU 属于 Mac 上的 Colima 开发虚拟机和
+  构建流程，与产品运行时无关）。代码自己的注释也是这个模型：
+  `node/host_resources.mbt:99-100`「Callers running in **containers** must not interpret this
+  host measurement as their container's allocatable resource limit」。
+- **没有硬边界，就没有需要准入去守的东西。** 内存是一整个共享宿主池，真正兜底的是内核/cgroup
+  的 OOM kill。所以"准入里预留多少"是**密度策略**，不是隔离保证。
+- 这台集群四台机器、跑什么模型都由运维自己定，不依赖平台做超卖保护。
+
+**顺便记下现状的准确后果**（以免将来被误当成新 bug）：因为 `free == total == 124608`，
+而需求上限被 `contracts/validation.mbt:98` 限制在 `1048576` 以内，
+`scheduler.mbt:147` 那个判断**几乎永不成立**——**今天的内存准入实际上是失效的**，
+等于"不看内存、一律放行"。（`deployment/planner.mbt:249` 用同一个假数字的
+`accelerator_memory_mib` 检查也一样。）
+
+**如果哪天密度真的重要了，该动的杠杆不是调度器预留，而是服务容器的 cgroup 限制。**
+这个仓库已经在用这个机制（例：`comfyui-acceptance` 的容器是
+`resources.limits.memory: 4Gi`），最外层再靠 OOM kill 兜底。
 
 ### 17.4 验证状态：门禁跑不了，这是环境级阻塞
 
@@ -1761,6 +1778,8 @@ Failed with 364 warnings, 749 errors
 - `node/pkg.generated.mbti`、`ui/pkg.generated.mbti` 未重生成（同上，需要可用的工具链）。
 - `docs/DEPLOYMENT.md:1348-1351` 说"实时利用率与已用/总内存来自固定的 nvidia-smi 查询"，
   已经过时（节点侧改了），未更新。
-- 17.3 那个调度准入的数据源问题。
+- 17.3 那个声明式内存准入**已决定不改**（底层不是虚拟机、无硬边界，见 17.3），
+  不再列为待办。
 - `accelerator_healthy_count` 在无传感器时仍来自**声明的** accelerator 列表，
-  即"声明有几张卡"而不是"实测几张卡健康"。这一轮没动，但它和内存是同一类问题，记在这。
+  即"声明有几张卡"而不是"实测几张卡健康"。这一轮没动。**同属 17.3 那类决定**
+  （无传感器时连传感器都没有，没有可测的"健康"），需要时一并裁掉。
