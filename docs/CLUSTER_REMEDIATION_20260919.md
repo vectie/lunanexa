@@ -1816,3 +1816,80 @@ node/host_resources.mbt:69  同上
 - `accelerator_healthy_count` 在无传感器时仍来自**声明的** accelerator 列表，
   即"声明有几张卡"而不是"实测几张卡健康"。这一轮没动。**同属 17.3 那类决定**
   （无传感器时连传感器都没有，没有可测的"健康"），需要时一并裁掉。
+
+---
+
+## 18. ComfyUI H3 模板：补齐图节点、统一中文命名、入仓（2026-09-21 深夜）
+
+### 18.1 问题
+
+用户报"图生视频的模板没有图节点"。核实后发现比报告的更彻底：
+
+```
+全部 5 个模板    image nodes: NONE
+Reference to Video    gen.input[image] -> link=None
+```
+
+`Reference to Video` 指向的是 **Ref2VA**（`/h3r/v1`）—— 这个路径的语义就是"参考图 + 文本"，
+却没有任何图节点，等于拿它做纯文本生成。更糟的是模板自己的说明最后一句写着：
+
+> *Wire a `LoadImage` node into the `image` input to supply the reference frame.*
+
+**它把接图这件事留给了运维。** 而根因是模板只存在于数据节点上、没有入仓，
+所以"少了一个节点"这件事没有任何可 diff 的副本能暴露出来。
+
+### 18.2 改动
+
+1. **补图节点。** 给 Ref2VA 模板接上 `LoadImage`（标题「参考图」）→ `生成视频.image`，
+   结构照上游 `vLLM-Omni Video Generation.json`（`LoadImage.IMAGE` → 输入槽 0）。
+2. **新增首帧模板。** FL2VA 也接受图（作为成片的**第 0 帧**），做了一个
+   `LunaNexa H3 图生视频（首帧 512×512）`。两条路的差别写在模板说明里：
+   **首帧**（FL2VA）的图是第 0 帧、视频从它继续；**参考图**（Ref2VA）的图只是内容/风格
+   参考，不保证从这一帧开始。
+3. **命名统一为中文**，一个模式：能力 + 括号里的规格。
+   ```
+   LunaNexa H3 文生视频（512×512）
+   LunaNexa H3 文生视频（5 秒 16:9）
+   LunaNexa H3 文生视频（20 秒 16:9）
+   LunaNexa H3 图生视频（首帧 512×512）
+   LunaNexa H3 图生视频（参考图 512×512）
+   LunaNexa H3 自检（384×256）
+   ```
+   画布内的节点标题一并中文化（「生成视频」「扩散采样参数」「保存视频」「参考图」「首帧图」），
+   说明文字全部重写成中文。
+4. **顺手改掉两处已经过期的说明**：
+   - 旧说明称 HTTP 的 `progress` 字段"在作业完成前一直是 0"。**自从 16 节的进度补丁装上之后
+     这是错的** —— 现在它会随去噪步数上升，封顶 80。新说明写的就是这个。
+   - 那句"自己去接 LoadImage"（18.1）。
+
+### 18.3 入仓与发布
+
+模板现在以仓库为准：`deploy/acceptance/comfyui-templates/lunanexa-h3/`。
+`deploy/acceptance/install-comfyui-templates.sh` 做单向同步（**prune 掉仓库里没有的文件**，
+否则改名后旧文件会在模板浏览器里变成同一预设的第二份），同步前打时间戳备份。
+
+**这个脚本不需要 sudo**，与其他 acceptance 脚本不同：目标目录本来就属于运行 uid，
+唯一的网络调用是 loopback 上的 ComfyUI；用 `sudo -S` 反而会和 heredoc 抢 stdin
+（这个坑本轮踩过）。
+
+### 18.4 验证
+
+- 发布后逐个断言：JSON 可解析、两个图生视频模板的 `image` 输入确实指向 `LoadImage.IMAGE`、
+  三个文生视频 + 自检模板**没有**图节点
+- `GET /api/workflow_templates` 返回的集合与仓库文件**逐一相等**
+- 端到端取正文：6 个模板全部 `200` + 可解析，中文名（含全角括号与 `×`）经 URL 编码后正常
+- 顺带确认 `LoadImage` 在这个 ComfyUI 里**真的注册了**（`outputs ['IMAGE','MASK']`，
+  必填 `image`）—— 否则模板会引用一个不存在的节点
+
+### 18.5 写脚本时踩到的两个坑（都记下来）
+
+1. **`ls | xargs -n1 basename` 会按空白拆词。** 中文名里带空格和括号，
+   于是文件名在进入循环之前就碎成了 `16:9）.json` 这样的片段。
+   改用 shell glob（`for f in dir/*.json; do basename "$f"; done`）—— glob 的每个词本来就是完整文件名。
+2. 同类的：`for name in $want` 也会拆词，必须 `while IFS= read -r name; do … done <<< "$want"`。
+
+### 18.6 顺带发现、**没有**改的
+
+数据节点上那份还是旧的英文名的镜像目录 `/data/models/comfyui-templates/...` 已由脚本 prune 干净。
+但 **ComfyUI 镜像里自带的 `ComfyUI-vLLM-Omni/example_workflows/`（上游示例）里也没有图节点**，
+那 5 个上游模板属于镜像内容、不在我们仓库里，本轮没动。
