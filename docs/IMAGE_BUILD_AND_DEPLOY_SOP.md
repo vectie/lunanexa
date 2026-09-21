@@ -309,7 +309,13 @@ S kubectl -n lunanexa rollout status deploy/lunanexa-identity-gateway --timeout=
    某些归档里的目录项名字**不带**结尾斜杠，于是会被当成"非二进制文件"，
    让 `is_binary_layer` 永远返回 False，报
    `could not find a binary layer … is it a LunaNexa identity-gateway image?`。
-3. **找不到可替换层时就追加，不要失败。** 层是 last-wins 叠加的，
+3. **manifest 的 `mediaType` 必须一并改成 OCI。** 如果 base 是 Docker schema2 清单
+   （`application/vnd.docker.distribution.manifest.v2+json`），而你把层和 index 条目改成 OCI 了，
+   注册表会以 **400 `manifest invalid`** 拒收：
+   `if present, mediaType in manifest should be 'application/vnd.oci.image.manifest.v1+json'
+   not 'application/vnd.docker.distribution.manifest.v2+json'`。
+   **而 `ctr images push` 会照样打印 complete** —— 这是"铁律"必须执行的原因。
+4. **找不到可替换层时就追加，不要失败。** 层是 last-wins 叠加的，
    新二进制放在最后一层即可遮住旧的；"删掉旧层"只是体积优化，
    而且依赖 base 的层布局（本次 base 只有 1 层且混着目录项）。
 
