@@ -1351,6 +1351,81 @@ $ bundle 里所有 /v1/*machine* 路径                        -> 空
 我后来重试时连三个输入框都找不到了），要么是消息没接上。**需要人工点一次来定论。**
 我把它标为未确认，避免又像 §9.2 那样先写错再更正。
 
+### 9.7 上架一条供给后，链路往前推进了一格 —— 但卡在"节点没有 region 标签"
+
+§9.5 说供给侧没有界面。为了不让链路停死，**我在界面之外做了唯一一次供给上架**
+（这一处**不符合"纯 UI"的要求**，明确标注出来）：
+
+```
+POST /v1/machine-commerce/operator/offerings   -> 201
+（body 用 MachineOffering 的字段，int64 按仓库惯例发字符串；state=OfferingActive，capacity_total=4）
+operator snapshot 之后：offerings: 1 item（之前是 0）
+```
+
+**企业侧立刻看到了这条供给**（用门户会话令牌查，200）：
+
+```
+GET /v1/portal/self/machine-offerings -> 200 len=774
+[{"offering":{"offering_id":"offer-dgx-spark-01","sku":"dgx-spark-gb10",
+  "display_name":"DGX Spark (GB10) exclusive node","kind":"BareMachine",
+  "accelerator_class":"nvidia-gb10","memory_mib":"131072", …}}]
+```
+
+**UI 上也真的出现了**，`Bare GPU → Choose capacity` 从"没有容量"变成一张可看规格与价格的卡片：
+
+```
+DGX Spark (GB10) exclusive node
+nvidia-gb10
+Unavailable            ← 注意这一行
+GPU 1 · Memory 128 GiB · Regions cn-north-1 · CNY 0.02 / second
+Select capacity
+```
+
+**但它是 `Unavailable`，点 `Select capacity` 也没有任何反应。** 根因找到了，
+而且是一个"永远不可能满足"的条件：
+
+```moonbit
+// api/machine_commerce_reconciler.mbt:48-49
+/// Trusted node inventory label used to honor the purchased regional SKU.
+let machine_region_label : String = "lunanexa.io/region"
+// :53  Missing region labels fail closed; there is no implicit cross-region fallback.
+// :84  … &&
+//      heartbeat.inventory.labels.get(machine_region_label) == Some(offering.region) && …
+```
+
+而**四台节点的标签里根本没有 `lunanexa.io/region`**（完整 dump，第一台 `spark-25e2-3d35c8fd`）：
+
+```
+lunanexa.data-classes          = Confidential
+lunanexa.gpu.compute-capability= 12.1
+lunanexa.gpu.driver            = 580.178.04
+lunanexa.gpu.model             = NVIDIA GB10
+lunanexa.io/cx7-address        = 192.168.100.10
+lunanexa.io/cx7-peer           = spark-3782-feee26eb
+lunanexa.io/host-cpu-count     = 20
+lunanexa.io/host-memory-mib    = 124608
+```
+
+**没有任何一台带 region 标签。** 由于这条是"缺标签即 fail closed"，
+`machine_offering_nodes` 对**任何 offering** 都会返回空 → 可用容量恒为 0 →
+**所有机器类供给永远 Unavailable，机器订单永远下不了单**。
+
+顺带记下我的供给参数与真实清单的差异（就算 region 问题解决了，这几个也得对齐）：
+我发的是 `accelerator_class="nvidia-gb10"`、`memory_mib=131072`，
+而节点实际是 **`architecture="nvidia-sm121"`、`memory_total_mib=124608`**。
+
+**所以链路现在的卡点链是完整的、可执行的：**
+
+| # | 卡点 | 证据 | 性质 |
+|---|---|---|---|
+| 1 | 从未上架过任何供给 | operator snapshot `offerings: 0` | 运维状态 |
+| 2 | 供给侧没有界面 | 源码与线上 bundle 里 `machine-commerce` 均为 0 引用（§9.5） | **产品缺口** |
+| 3 | 节点没有 `lunanexa.io/region` 标签 | 四台节点标签完整 dump（本节） | **产品/运维缺口**（fail-closed 前提未满足） |
+| 4 | 供给参数与真实清单不一致 | `nvidia-gb10` vs `nvidia-sm121`、131072 vs 124608 | 配置错误（我发的这条） |
+
+**第 3 条是关键**：它不是配置我能绕过的 —— 只要节点库存里没有这个标签，
+这个平台的机器售卖功能就是**恒不可用**的。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
