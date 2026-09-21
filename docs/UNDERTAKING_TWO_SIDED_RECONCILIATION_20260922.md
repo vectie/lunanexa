@@ -15,7 +15,7 @@
 | 目标步骤 | 现状 |
 |---|---|
 | 企业侧注册企业 | **通** —— 组织从已登录身份自动派生（首次 OIDC 登录建的受限试用组织），无需填表（§9.1） |
-| 选择时间、租期 | **部分** —— 页面可达、**机器可选**（`Available`）、区域可选、时长 1 小时 ~ 30 天可选；卡在 `Review price`（§9.8、§9.9） |
+| 选择时间、租期 | **部分** —— 页面可达、**机器可选**（`Available`）、区域可选、时长 1 小时 ~ 30 天可选；卡在 `Review price`（§9.8、§9.9）。价目见 §10 |
 | 拉起承诺函 | **未达** —— 承诺函由"已批准订单"生成，还没有订单 |
 | 管理侧确认、执行 | **未达** —— 管理侧 `Agreements 0`、`Leases 0`、契约任务箱 0（§3 表） |
 | 线下流程 / 上传登记 / 开通权限 | **未达** —— 对应页面在（Offline commerce、Contract documents），无数据可操作 |
@@ -1284,7 +1284,7 @@ final url: http://106.39.18.146:5002/enterprise/          ← 不再带 ?demo=1
 | 目标步骤 | 本次实测状态 | 缺什么 |
 |---|---|---|
 | 企业侧注册企业 | **未达** | OIDC（第 1-3 跳）；`Organization setup` 无成员关系 |
-| 选择时间、租期 | **未达** | 向导存在（6 步），但需先有身份；租期价格表在承诺函附件一中（日 85 / 周 520 / 月 1900 / 季 5100 / 年 15800，招商：首单周 349、首单月 8 折 1520、季租及以上 7.5 折） |
+| 选择时间、租期 | **未达** | 向导存在（6 步），但需先有身份；价格见 §10（此处原文写错了归属，已更正） |
 | 拉起承诺函 | **未达（堵在订单）** | 模板清单加载不到（`Contract template unavailable`）；且**没有合格订单**，`Prepare document` 不可用 |
 | 管理侧确认 | **未达（无物可确认）** | 管理侧 `Agreements 0`、`Leases 0`、`Task inbox 0` |
 | 进入线下流程（默认通过） | **未达** | Offline commerce 的状态图在，`No order selected` |
@@ -1623,6 +1623,93 @@ state.duration_hours <= offering.maximum_duration_hours && …
 **那条分支在界面上不给任何反馈** —— 不提示哪个字段不合格、不显示错误，
 用户看到的就是"点了没反应"。这与 §4 里"错误不透明"是同一类，只是这里连错误都没有。
 建议：无效时至少高亮不合格字段并给出原因（例如"时长超出该供给允许的 24 小时"）。
+
+## 10. 价目：承诺函与租赁合同两张表不一致，且产品侧已按承诺函执行
+
+**这一节纠正了本报告早先的一处错误归属**：我曾把"日 85 / 周 520 / 月 1900 / 季 5100 / 年 15800"
+写成"承诺函附件一"的价目。实际上那是**租赁合同**的附件一，而**承诺函里有它自己的一套**。
+
+### 10.1 两份文件的价目（原文抽出）
+
+**设备使用承诺函 · 附件2** —— `assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json`
+标题「单台设备租金标准 / 折算日租金」：
+
+| 租期 | 最短 | 单台租金标准 | 折算日租金 |
+|---|---|---|---|
+| 日租 | 1天 | 49元/天 | 49元/天 |
+| 周租 | 7天 | 322元/周 | 46元/天 |
+| 月租 | 30天 | 1290元/月 | 43元/天 |
+| 季租 | 90天 | 3600元/季 | 40元/天 |
+| 年租 | 365天 | 13870元/年 | 38元/天 |
+
+正文复述同一单价：「租金按实际使用天数，**以49元/天的标准**据实结算。」
+
+**租赁合同 · 附件一** —— `assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json`
+标题「租期档位与价格表（单台，含税）」：
+
+| 租期 | 最短 | 单台租金标准 | 折合日租金 | 适用场景 |
+|---|---|---|---|---|
+| 日租 | 1天 | 85元/天 | 85元 | 临时模型验证、短期项目测试 |
+| 周租 | 7天 | 520元/周 | 74.3元 | 小型开发任务、周度迭代训练 |
+| 月租 | 30天 | 1900元/月 | 63.3元 | 月度研发项目、持续推理部署 |
+| 季租 | 90天 | 5100元/季 | 56.7元 | 季度级AI项目、长期模型微调 |
+| 年租 | 365天 | 15800元/年 | 43.3元 | 全年常态化AI业务、固定研发需求 |
+
+差额（承诺函 − 租赁合同）：日 −36 / 周 −198 / 月 −610 / 季 −1500 / 年 −1930，
+承诺函约为租赁合同的 **58%**。两份文件**各自内部自洽**（租赁合同的退租核算表同样硬编码
+85元/天、1900元/月），所以这是**两份合同文件之间的对不上**。
+
+### 10.2 产品侧（报价）**已经**按承诺函的价目执行
+
+`commercial/offline/undertaking.mbt:4`：
+
+```moonbit
+pub fn undertaking_tariff(unit : String) -> Int64? {
+  match unit {
+    "day" => Some(4900L)      // 49.00 元
+    "week" => Some(32200L)    // 322.00
+    "month" => Some(129000L)  // 1290.00
+    "quarter" => Some(360000L)// 3600.00
+    "year" => Some(1387000L)  // 13870.00
+    _ => None
+  }
+}
+```
+
+界面措辞也是这个：「承诺函固定价目（元/台）」「Quote undertaking tariff / 按承诺函价目报价」。
+**所以"报价"这条路用的就是承诺函的价格，没有用到 85/520/…。**
+
+### 10.3 真正还留着老价格的地方：**租赁合同文档本身**
+
+```
+assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.docx          85×19 520×3 1900×2 5100×2 15800×1
+assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx 同上
+assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json                  85元/天×8 …
+```
+
+其余位置（`docs/`、`ui/`、`cmd/`、`contractdoc/`）**没有**这些老价格 —— 我全仓扫过。
+
+**但这里有一条仓库自订的规矩**（`docs/contracts/youthpolicy-dgx-spark-remote-lease-v1.md`）：
+
+> The retained DOCX is the design and legal-text authority. LunaNexa must **never**
+> rewrite, summarize, translate, or extend its clauses.
+> A different digest is a new template version and requires a fresh slot and visual audit.
+
+**所以"把合同价格改成承诺函的价目"不是改个常量，而是重新签发这份合同文档** ——
+属于法务动作，不由平台自行改写。可行的机械流程是（承诺函模板那份 README 里就是这个管线）：
+
+```
+① 拿到一份仅把附件一价格单元格改为 49/322/1290/3600/13870 的新源 DOCX（由你/法务出）
+② 按 build-*-template.mbtx 的手法生成新的 fillable（只动 word/document.xml 的对应单元格）
+③ moon run cmd/contract-preview-scene --target native -- \
+     <新 fillable.docx> assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json <template_id>
+④ 更新 contractdoc/youthpolicy.mbt 里 pin 的两个摘要（fillable_sha256 与新模板版本）
+⑤ 跑契约测试 + 一次视觉审计
+```
+
+**这一步我没有动**：它要改的是"法律文本权威"，而且必须换新的摘要与模板版本号。
+需要你定：**由你出新源 DOCX**，还是**要我按上述流程用现有源文件只改价格单元格生成 v2**
+（我能在 `word/document.xml` 里精确替换那几个价格，但那等于平台改写了合同，与上面那条规矩冲突）。
 
 ## 8. 未验证
 
