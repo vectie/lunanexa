@@ -19,15 +19,22 @@ Why it is a substitution and not a shipped file
 api_server.py is 3,500 lines. Shipping a copy would add ~144 KB of upstream code
 to the repository and bury a 20-line change inside it. The two anchors are
 asserted to be unique, the result is byte-compiled before it is written, and
-re-running on an already patched file is a no-op.
+re-running is safe: an already patched file only gets its cap normalised.
 
 usage: patch-api-server-progress.py [path-to-api_server.py]
 """
 
+import re
 import sys
 from pathlib import Path
 
 DEFAULT = "/usr/local/lib/python3.12/dist-packages/vllm_omni/entrypoints/openai/api_server.py"
+
+# The bar must not sit at 100 while real work remains. Denoising is only the
+# first ~5 minutes of a ~7.5 minute 20-second render; the VAE decode and MP4
+# encode that follow have no step granularity to report, so the bar stops here
+# and 100 stays reserved for "the clip exists".
+CAP = 80
 
 HELPER = '''
 _LIVE_PROGRESS_FILE = Path(os.environ.get("LUNANEXA_PROGRESS_FILE", "/tmp/vllm_progress.json"))
@@ -42,8 +49,10 @@ def _live_video_progress(job: Any) -> int | None:
     enabled the file has to be keyed by request id. A file older than the job is
     ignored, so a finished run's last value cannot be pinned onto a later one.
 
-    Capped at 99 on purpose: the service has no granularity for the VAE decode and
-    MP4 encode that follow denoising, so 100 stays reserved for "the clip exists".
+    The result is capped below 100 on purpose. Denoising is only the first part
+    of the wall clock -- a 20 s clip spends about 5 min denoising and another
+    2.5 min in VAE decode and MP4 encode, and the service reports nothing for
+    those. Capping leaves the bar visibly unfinished until the clip exists.
     """
     try:
         info = json.loads(_LIVE_PROGRESS_FILE.read_text())
@@ -58,7 +67,7 @@ def _live_video_progress(job: Any) -> int | None:
     created = getattr(job, "created_at", None)
     if isinstance(updated, (int, float)) and isinstance(created, int) and updated < created:
         return None
-    return max(0, min(99, round(100 * done / total)))
+    return max(0, min(__LUNANEXA_PROGRESS_CAP__, round(100 * done / total)))
 
 
 '''
@@ -81,27 +90,46 @@ NEW_BODY = '''    job = await VIDEO_STORE.get(video_id)
             job = job.model_copy(update={"progress": live})
     if job.status == VideoGenerationStatus.FAILED:'''
 
-ALREADY = ('_live_video_progress', 'job.model_copy(update={"progress": live})')
+ALREADY = "_live_video_progress"
+CAP_RE = re.compile(r"min\(\d+, round\(100 \* done / total\)\)")
+
+
+def _render_cap(src: str) -> str:
+    """Pin the cap wherever the return line already is, or fill the placeholder."""
+    src = src.replace("__LUNANEXA_PROGRESS_CAP__", str(CAP))
+    return CAP_RE.sub(f"min({CAP}, round(100 * done / total))", src)
+
+
+def _write(path: Path, text: str) -> None:
+    compile(text, str(path), "exec")
+    path.write_text(text)
 
 
 def main() -> int:
     path = Path(sys.argv[1] if len(sys.argv) > 1 else DEFAULT)
     src = path.read_text()
-    if all(marker in src for marker in ALREADY):
-        print(f"{path}: already patched")
+
+    if ALREADY in src:
+        out = _render_cap(src)
+        if out == src:
+            print(f"{path}: already patched (cap {CAP})")
+            return 0
+        _write(path, out)
+        print(f"{path}: cap normalised to {CAP}")
         return 0
-    for name, anchor, want in (
-        ("retrieve_video decorator", ANCHOR_DECORATOR, 1),
-        ("retrieve_video body", OLD_BODY, 1),
-    ):
+
+    for name, anchor in (("retrieve_video decorator", ANCHOR_DECORATOR), ("retrieve_video body", OLD_BODY)):
         found = src.count(anchor)
-        if found != want:
-            raise SystemExit(f"{path}: {name} anchor matched {found} times, expected {want}")
+        if found != 1:
+            raise SystemExit(f"{path}: {name} anchor matched {found} times, expected 1")
+
     out = src.replace(ANCHOR_DECORATOR, HELPER + ANCHOR_DECORATOR, 1)
     out = out.replace(OLD_BODY, NEW_BODY, 1)
-    compile(out, str(path), "exec")
-    path.write_text(out)
-    print(f"{path}: patched")
+    out = _render_cap(out)
+    if not CAP_RE.search(out):
+        raise SystemExit(f"{path}: cap line is missing after patching")
+    _write(path, out)
+    print(f"{path}: patched (cap {CAP})")
     return 0
 
 

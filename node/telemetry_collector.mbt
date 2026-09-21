@@ -11,9 +11,10 @@ pub(all) struct AcceleratorSensorSnapshot {
   memory_used_mib : Double
   memory_total_mib : Double
   /// False when the driver reports unified-memory values as `N/A` (for
-  /// example NVIDIA GB10); callers must source memory from host inventory
-  /// instead of this snapshot while still using its utilization,
-  /// temperature and power readings.
+  /// example NVIDIA GB10). Callers must then publish **no** accelerator memory
+  /// at all and report the measured host memory instead: the declared inventory
+  /// is a capacity claim, not a measurement, and its free value is literally a
+  /// copy of its total. Utilization, temperature and power stay valid.
   memory_measured : Bool
   utilization_per_mille : Double
   maximum_temperature_celsius : Double

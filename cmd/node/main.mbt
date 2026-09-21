@@ -638,6 +638,50 @@ async fn reconcile_once(
   } noraise {
     sensor => sensors = Some(sensor)
   }
+  // Measured host load. This is published whether or not a driver sensor exists,
+  // and it is never derived from the declared inventory. On a unified-memory node
+  // it is the only honest memory figure there is: NVML reports nothing for those
+  // accelerators, and the declared "free" value is a copy of the declared total.
+  let mut host_utilization : @node_agent.HostUtilization? = None
+  try
+    @node_agent.collect_linux_host_utilization()
+  catch {
+    _ => ()
+  } noraise {
+    measured => host_utilization = Some(measured)
+  }
+  if host_utilization is Some(measured) {
+    samples.push({
+      node_id,
+      deployment_id: "",
+      metric: "host_memory_total_mib",
+      value: measured.memory_total_mib.to_double(),
+      timestamp_unix_ms,
+    })
+    samples.push({
+      node_id,
+      deployment_id: "",
+      metric: "host_cpu_utilization_per_mille",
+      value: measured.cpu_utilization_per_mille.to_double(),
+      timestamp_unix_ms,
+    })
+    if measured.memory_available_mib is Some(available_mib) {
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "host_memory_available_mib",
+        value: available_mib.to_double(),
+        timestamp_unix_ms,
+      })
+      samples.push({
+        node_id,
+        deployment_id: "",
+        metric: "host_memory_used_mib",
+        value: (measured.memory_total_mib - available_mib).to_double(),
+        timestamp_unix_ms,
+      })
+    }
+  }
   match sensors {
     Some(sensor) => {
       if sensor.memory_measured {
@@ -660,30 +704,6 @@ async fn reconcile_once(
           deployment_id: "",
           metric: "accelerator_memory_free_mib",
           value: sensor.memory_total_mib - sensor.memory_used_mib,
-          timestamp_unix_ms,
-        })
-      } else {
-        // Unified-memory accelerators (for example NVIDIA GB10) report no
-        // memory counters over NVML; fall back to the truthfully measured
-        // host inventory values while keeping driver sensor readings below.
-        let mut total_memory = 0.0
-        let mut free_memory = 0.0
-        for accelerator in inventory.accelerators {
-          total_memory += accelerator.memory_total_mib.to_double()
-          free_memory += accelerator.memory_free_mib.to_double()
-        }
-        samples.push({
-          node_id,
-          deployment_id: "",
-          metric: "accelerator_memory_total_mib",
-          value: total_memory,
-          timestamp_unix_ms,
-        })
-        samples.push({
-          node_id,
-          deployment_id: "",
-          metric: "accelerator_memory_free_mib",
-          value: free_memory,
           timestamp_unix_ms,
         })
       }
@@ -717,32 +737,18 @@ async fn reconcile_once(
       })
     }
     None => {
-      // Inventory values remain a conservative fallback when the host sensor
-      // executable is unavailable. Utilization is never accepted from labels.
-      let mut total_memory = 0
-      let mut free_memory = 0
+      // The sensor executable is unavailable, so nothing about accelerator
+      // memory is measured. Publishing the declared inventory here would put a
+      // fabricated number on the console, so only the declared accelerator
+      // *count* is reported, and it is labelled as what it is: a count from the
+      // signed inventory, not a measurement. Measured host memory and CPU are
+      // published above and remain valid without any driver sensor.
       let mut healthy_accelerators = 0
       for accelerator in inventory.accelerators {
-        total_memory += accelerator.memory_total_mib
-        free_memory += accelerator.memory_free_mib
         if accelerator.healthy {
           healthy_accelerators += 1
         }
       }
-      samples.push({
-        node_id,
-        deployment_id: "",
-        metric: "accelerator_memory_total_mib",
-        value: total_memory.to_double(),
-        timestamp_unix_ms,
-      })
-      samples.push({
-        node_id,
-        deployment_id: "",
-        metric: "accelerator_memory_free_mib",
-        value: free_memory.to_double(),
-        timestamp_unix_ms,
-      })
       samples.push({
         node_id,
         deployment_id: "",
@@ -774,6 +780,9 @@ async fn main {
   if @env.args().length() == 2 && @env.args()[1] == "--inspect-host-resources" {
     println(
       ToJson::to_json(@node_agent.collect_linux_host_resources()).stringify(),
+    )
+    println(
+      ToJson::to_json(@node_agent.collect_linux_host_utilization()).stringify(),
     )
     return
   }

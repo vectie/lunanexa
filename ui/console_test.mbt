@@ -19,7 +19,10 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         total_memory_mib: 122880,
         free_memory_mib: 80000,
         used_memory_mib: 42880,
+        memory_measured: true,
         utilization_per_mille: 420,
+        cpu_per_mille: 250,
+        cpu_measured: true,
         temperature_celsius: 47,
         power_watts: 78,
         workloads: 1,
@@ -513,10 +516,47 @@ test "node management exposes expandable telemetry and exclusive lease evidence"
   assert_true(html.contains("Resource telemetry"))
   assert_true(html.contains("GPU utilization"))
   assert_true(html.contains("42%"))
+  assert_true(html.contains("CPU utilization"))
+  assert_true(html.contains("25%"))
+  assert_true(html.contains("free (measured)"))
   assert_true(html.contains("org-1 · user-1"))
   assert_true(html.contains("One lease · one machine"))
   assert_true(html.contains("Last heartbeat · Just now"))
   assert_true(html.contains("<progress"))
+}
+
+///|
+test "node telemetry says not reported instead of printing an unmeasured zero" {
+  let state = console_state(Nodes)
+  let unmeasured = {
+    ..state.nodes[0],
+    free_memory_mib: 122880,
+    used_memory_mib: 0,
+    memory_measured: false,
+    cpu_per_mille: 0,
+    cpu_measured: false,
+  }
+  let html = @ui.render({
+    ..state,
+    nodes: [unmeasured],
+    confirmation: None,
+  })
+  assert_true(html.contains("Not reported"))
+  assert_true(html.contains("no memory sample reported"))
+  assert_true(html.contains("no memory measurement reported"))
+  assert_false(html.contains("free (measured)"))
+  assert_false(html.contains("122880 MiB"))
+  assert_false(html.contains("MiB total"))
+  assert_true(html.contains("GPU utilization"))
+  assert_true(html.contains("42%"))
+  let chinese = @ui.render({
+    ..state,
+    locale: ChineseSimplified,
+    nodes: [unmeasured],
+    confirmation: None,
+  })
+  assert_true(chinese.contains("未上报"))
+  assert_true(chinese.contains("CPU 利用率"))
 }
 
 ///|

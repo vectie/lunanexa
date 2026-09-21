@@ -765,15 +765,6 @@ fn architecture(heartbeat : @contracts.NodeHeartbeat) -> String {
 }
 
 ///|
-fn free_memory(heartbeat : @contracts.NodeHeartbeat) -> Int {
-  let mut total = 0
-  for device in heartbeat.inventory.accelerators {
-    total += device.memory_free_mib
-  }
-  total
-}
-
-///|
 fn total_memory(heartbeat : @contracts.NodeHeartbeat) -> Int {
   let mut total = 0
   for device in heartbeat.inventory.accelerators {
@@ -783,22 +774,34 @@ fn total_memory(heartbeat : @contracts.NodeHeartbeat) -> Int {
 }
 
 ///|
-fn latest_node_metric(
+/// The newest value the node reported for one metric, or `None` when it never
+/// reported it at all. A measured zero is a real reading for a rate such as CPU
+/// busy share, so presence stays distinct from the value.
+fn latest_node_metric_value(
   samples : Array[@contracts.TelemetrySample],
   node_id : String,
   metric : String,
-) -> Int {
+) -> Int? {
   let mut latest_timestamp = 0L
-  let mut value = 0
+  let mut value : Int? = None
   for sample in samples {
     if sample.node_id == node_id &&
       sample.metric == metric &&
       sample.timestamp_unix_ms >= latest_timestamp {
       latest_timestamp = sample.timestamp_unix_ms
-      value = sample.value.to_int()
+      value = Some(sample.value.to_int())
     }
   }
   value
+}
+
+///|
+fn latest_node_metric(
+  samples : Array[@contracts.TelemetrySample],
+  node_id : String,
+  metric : String,
+) -> Int {
+  latest_node_metric_value(samples, node_id, metric).unwrap_or(0)
 }
 
 ///|
@@ -855,15 +858,54 @@ fn build_node_rows(
   let now = current_unix_ms()
   [
     for heartbeat in heartbeats => {
-      let reported_total = latest_node_metric(
+      // Memory is read as a pair: a total and a used figure from different
+      // pools would make the derived free and percentage meaningless, so the
+      // earlier source is used whole or not at all.
+      let host_total = latest_node_metric_value(
+        telemetry.samples,
+        heartbeat.node_id,
+        "host_memory_total_mib",
+      )
+      let host_used = latest_node_metric_value(
+        telemetry.samples,
+        heartbeat.node_id,
+        "host_memory_used_mib",
+      )
+      let accelerator_total = latest_node_metric_value(
         telemetry.samples,
         heartbeat.node_id,
         "accelerator_memory_total_mib",
       )
-      let reported_used = latest_node_metric(
+      let accelerator_used = latest_node_metric_value(
         telemetry.samples,
         heartbeat.node_id,
         "accelerator_memory_used_mib",
+      )
+      // Measured memory wins over the declared inventory, and host memory wins
+      // over accelerator telemetry: on a unified-memory node the accelerator
+      // reports no memory of its own and the host figure is the whole pool. A
+      // node that measured neither keeps the declared capacity as its total and
+      // is flagged unmeasured, so the console can say so instead of printing 0.
+      let host_measured = host_total is Some(_) && host_used is Some(_)
+      let accelerator_measured = accelerator_total is Some(_) &&
+        accelerator_used is Some(_)
+      let memory_measured = host_measured || accelerator_measured
+      let measured_total = if host_measured {
+        host_total
+      } else {
+        accelerator_total
+      }
+      let measured_used = if host_measured {
+        host_used
+      } else {
+        accelerator_used
+      }
+      let total_memory_mib = measured_total.unwrap_or(total_memory(heartbeat))
+      let used_memory_mib = measured_used.unwrap_or(0)
+      let cpu = latest_node_metric_value(
+        telemetry.samples,
+        heartbeat.node_id,
+        "host_cpu_utilization_per_mille",
       )
       let assignments = heartbeat.running_deployments.join(", ")
       {
@@ -874,22 +916,17 @@ fn build_node_rows(
           heartbeat.state
         },
         architecture: architecture(heartbeat),
-        total_memory_mib: if reported_total > 0 {
-          reported_total
-        } else {
-          total_memory(heartbeat)
-        },
-        free_memory_mib: free_memory(heartbeat),
-        used_memory_mib: if reported_used > 0 {
-          reported_used
-        } else {
-          (total_memory(heartbeat) - free_memory(heartbeat)).max(0)
-        },
+        total_memory_mib,
+        free_memory_mib: (total_memory_mib - used_memory_mib).max(0),
+        used_memory_mib,
+        memory_measured,
         utilization_per_mille: latest_node_metric(
           telemetry.samples,
           heartbeat.node_id,
           "accelerator_utilization_per_mille",
         ),
+        cpu_per_mille: cpu.unwrap_or(0),
+        cpu_measured: cpu is Some(_),
         temperature_celsius: latest_node_metric(
           telemetry.samples,
           heartbeat.node_id,

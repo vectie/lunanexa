@@ -16,7 +16,14 @@ pub(all) struct NodeRow {
   total_memory_mib : Int
   free_memory_mib : Int
   used_memory_mib : Int
+  /// Whether the memory figures came from a measurement. False means the total
+  /// falls back to the declared inventory and must not be presented as memory.
+  memory_measured : Bool
   utilization_per_mille : Int
+  cpu_per_mille : Int
+  /// False when the node reported no host CPU sample, so an absent rate is not
+  /// rendered as an idle 0%.
+  cpu_measured : Bool
   temperature_celsius : Int
   power_watts : Int
   workloads : Int
@@ -1961,7 +1968,10 @@ pub fn demo_state() -> ConsoleState {
       total_memory_mib: 122880,
       free_memory_mib: 81920,
       used_memory_mib: 40960,
+      memory_measured: true,
       utilization_per_mille: 420,
+      cpu_per_mille: 340,
+      cpu_measured: true,
       temperature_celsius: 46,
       power_watts: 76,
       workloads: 1,
@@ -1976,7 +1986,10 @@ pub fn demo_state() -> ConsoleState {
       total_memory_mib: 122880,
       free_memory_mib: 79872,
       used_memory_mib: 43008,
+      memory_measured: true,
       utilization_per_mille: 610,
+      cpu_per_mille: 520,
+      cpu_measured: true,
       temperature_celsius: 51,
       power_watts: 89,
       workloads: 1,
@@ -1991,7 +2004,10 @@ pub fn demo_state() -> ConsoleState {
       total_memory_mib: 122880,
       free_memory_mib: 80896,
       used_memory_mib: 41984,
+      memory_measured: true,
       utilization_per_mille: 80,
+      cpu_per_mille: 90,
+      cpu_measured: true,
       temperature_celsius: 38,
       power_watts: 42,
       workloads: 0,
@@ -2006,7 +2022,10 @@ pub fn demo_state() -> ConsoleState {
       total_memory_mib: 122880,
       free_memory_mib: 79872,
       used_memory_mib: 43008,
+      memory_measured: true,
       utilization_per_mille: 30,
+      cpu_per_mille: 40,
+      cpu_measured: true,
       temperature_celsius: 36,
       power_watts: 39,
       workloads: 0,
@@ -5491,6 +5510,7 @@ fn node_item(
     min=0,
     max=100,
   )
+  let cpu_percent = (node.cpu_per_mille / 10).clamp(min=0, max=100)
   let memory_percent = if node.total_memory_mib > 0 {
     (node.used_memory_mib * 100 / node.total_memory_mib).clamp(min=0, max=100)
   } else {
@@ -5510,9 +5530,23 @@ fn node_item(
         node_state_badge(locale, node.state),
       ]),
       @html.div(class="node-summary-cell node-memory-summary", [
-        @html.span(localized(locale, "GPU memory", "GPU 内存")),
-        @html.strong("\{node.free_memory_mib} MiB"),
-        @html.small(localized(locale, "free", "可用")),
+        @html.span(localized(locale, "Memory", "内存")),
+        if node.memory_measured {
+          @html.strong("\{node.free_memory_mib} MiB")
+        } else {
+          @html.strong(localized(locale, "Not reported", "未上报"))
+        },
+        if node.memory_measured {
+          @html.small(
+            localized(locale, "free (measured)", "可用（实测）"),
+          )
+        } else {
+          @html.small(
+            localized(
+              locale, "no memory sample reported", "未上报内存采样",
+            ),
+          )
+        },
       ]),
       @html.div(class="node-summary-cell", [
         @html.span(localized(locale, "GPU utilization", "GPU 利用率")),
@@ -5557,15 +5591,44 @@ fn node_item(
         ]),
         @html.div(class="node-metric", [
           @html.span(localized(locale, "Memory used", "已用内存")),
-          @html.strong("\{node.used_memory_mib} MiB"),
-          @html.progress(value=memory_percent, max=100, "\{memory_percent}%"),
-          @html.small(
-            localized(
-              locale,
-              "\{node.total_memory_mib} MiB total",
-              "总计 \{node.total_memory_mib} MiB",
-            ),
-          ),
+          if node.memory_measured {
+            @html.strong("\{node.used_memory_mib} MiB")
+          } else {
+            @html.strong(localized(locale, "Not reported", "未上报"))
+          },
+          if node.memory_measured {
+            @html.progress(value=memory_percent, max=100, "\{memory_percent}%")
+          } else {
+            @html.nothing
+          },
+          if node.memory_measured {
+            @html.small(
+              localized(
+                locale,
+                "\{node.total_memory_mib} MiB total",
+                "总计 \{node.total_memory_mib} MiB",
+              ),
+            )
+          } else {
+            @html.small(
+              localized(
+                locale, "no memory measurement reported", "未上报内存实测数据",
+              ),
+            )
+          },
+        ]),
+        @html.div(class="node-metric", [
+          @html.span(localized(locale, "CPU utilization", "CPU 利用率")),
+          if node.cpu_measured {
+            @html.strong("\{cpu_percent}%")
+          } else {
+            @html.strong(localized(locale, "Not reported", "未上报"))
+          },
+          if node.cpu_measured {
+            @html.progress(value=cpu_percent, max=100, "\{cpu_percent}%")
+          } else {
+            @html.nothing
+          },
         ]),
         @html.div(class="node-metric", [
           @html.span(localized(locale, "Temperature", "温度")),
