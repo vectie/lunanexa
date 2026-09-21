@@ -62,11 +62,15 @@ pub fn parse_linux_memory_mib(meminfo : String) -> (Int64, Int64?) raise {
         guard fields.length() == 2 &&
           fields[1] == "kB" &&
           fields[0].all(c => c >= '0' && c <= '9') else {
-          raise TelemetryCollectorError::MalformedSample(name + " units")
+          raise TelemetryCollectorError::MalformedSample(
+            name.to_owned() + " units",
+          )
         }
         let kib = @string.parse_int64(fields[0])
         guard kib >= 1024L else {
-          raise TelemetryCollectorError::MalformedSample(name + " value")
+          raise TelemetryCollectorError::MalformedSample(
+            name.to_owned() + " value",
+          )
         }
         if name == "MemTotal" {
           guard total is None else {
