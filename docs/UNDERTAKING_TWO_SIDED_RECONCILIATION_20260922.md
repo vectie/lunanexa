@@ -1479,6 +1479,62 @@ Bare GPU → Choose capacity
 我是靠**按索引**才点中第二张的。这在真实使用里意味着用户无法从标签区分两张卡 ——
 和 §4 缺陷 #2 是同一类问题，这里又复现了一次。
 
+### 9.9 走到 Configure order，卡在"Review price"静默无反应（找到了代码原因）
+
+§9.8 越过容量页之后，`Configure order` 表单出现，字段是：
+
+```
+Project              （预填 trial-project-b131b8c579a5901fe5ea97fe）
+Linux username       （必填：小写字母开头，a–z 0–9 _ - ，保留名会被拒）
+Region               （Select a region → cn-north-1）
+Rental period        （24 hours / 7 days / 30 days，旁注 "0–24 hours allowed"）
+Managed model        None — you manage this workspace
+Review price / Back
+```
+
+**踩到的第一个坑：这些控件是用 `id` 而不是 `name` 定位的**
+（`document.querySelector('input[name=self-service-unix-username]')` 取不到，
+`getElementById('self-service-unix-username')` 才行；DOM 里 `name` 是 null）。
+我前面空跑了两轮就是因为这个 —— 记下来，这个 SPA 的字段既有 `name` 的也有 `id` 的，两种都要试。
+
+**填好之后（三个值都确认写入 DOM）：Project / Linux username=reconuser / Region=cn-north-1 /
+Rental period=24，按钮 `Review price` 是 enabled**，点下去：
+
+```
+click: clicked
+--- /v1/ 流量 ---
+（空）
+--- 页面 ---
+仍停在 Configure order
+```
+
+**又是"点了没有任何请求、也没有任何反馈"。** 这回代码上找到了确切原因 ——
+`cmd/enterprise/main.mbt:3644-3648`：
+
+```moonbit
+Portal(SelfService(RequestQuote)) => {
+  if !@enterprise_ui.self_service_configuration_valid(model.portal.self_service) {
+    return (model, @rabbita.none)      // ← 静默返回：不请求、不报错、不改状态
+  }
+  …(next, machine_quote_command(next, emit))
+}
+```
+
+**即"配置校验不通过"这条分支是静默 no-op**，用户看到的只有"点了没反应"。
+（同一函数也用于按钮的 `disabled`，所以正常情况按钮会是灰的；
+我这次看到的是 enabled 却无反应，说明**壳里的模型状态与按钮渲染所依据的状态不一致**，
+或者我的合成事件只改了 DOM 没进模型 —— 这两者需要一次真人点击来分辨，
+我**不当结论**写，只记事实与代码位置。）
+
+**第二个可操作的发现：租期被我的供给参数限住了。**
+表单旁注 `0–24 hours allowed`，而 7 days / 30 days 选了也会被这条挡住 ——
+因为我发的 offering 里 `maximum_duration_seconds=86400`（24h）。
+要支持"选择时间、租期"里更长的时间窗，**供给得重新上架、把上限放大**。
+（同 id 更新会 409，要用新 id。）
+
+**至此"选择时间、租期"这一格的现状**：页面能走到、能选机器和区域、
+但受 `Review price` 静默无反应 + 租期上限 24h 两项限制。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
