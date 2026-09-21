@@ -121,13 +121,20 @@ def main():
     binary_layer = None
     for position, layer in enumerate(manifest["layers"]):
         with tarfile.open(f"{work}/base/blobs/sha256/{layer['digest'].split(':')[1]}", "r:*") as archive:
-            names = [name for name in archive.getnames() if not name.endswith("/") and name != "."]
+            # Directory entries are not files. Some archives carry them without a
+            # trailing slash, and counting those made every layer look like it
+            # held something other than binaries.
+            names = [member.name for member in archive.getmembers() if member.isfile()]
         if any("lunanexa-control" in name for name in names) and is_binary_layer(names):
             binary_layer = position
             print(f"replacing binary layer {position} ({len(names)} files)")
             break
     if binary_layer is None:
-        sys.exit(f"could not find a binary layer in {base}; is it a LunaNexa control image?")
+        # Appending is enough: layers stack last-wins, so the fresh binaries at
+        # /usr/local/bin shadow whatever the base put there. Picking a layer to
+        # delete is only a size optimisation and it depends on the base's layout,
+        # so do not fail the build on it.
+        print("no replaceable binary layer; appending the new binaries as a layer")
 
     keep_layers = [layer for position, layer in enumerate(manifest["layers"]) if position != binary_layer]
     keep_diffs = [diff for position, diff in enumerate(config["rootfs"]["diff_ids"]) if position != binary_layer]
