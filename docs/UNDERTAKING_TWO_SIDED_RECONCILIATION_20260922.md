@@ -867,6 +867,48 @@ decoded registered=1 active=1
 另外建议：这段代码应像 §2.7 那样**至少把异常记下来**，
 否则一个解码 bug 会同时伪装成"没人"、"没授权"、"统计不可用"三件事。
 
+### 2.12 收窄：workspace 里其实有 12 个用户、16 条授权，所以那两个 0 一定是显示层
+
+继续收窄 §2.11 那条。把 `/v1/workspace` 拉下来看结构：
+
+```
+top keys: ['schema_version', 'users', 'access_grants', 'leases']
+users         : 12 items   keys=[version, user_id, subject_ref, display_name, email, state, created_unix_ms, identity_receipt]
+access_grants : 16 items   keys=[version, grant_id, user_id, tenant_ref, access, starts_unix_ms, expires_unix_ms, state, policy_receipt]
+leases        : 16 items   keys=[version, lease_id, tenant_ref, subject_ref, access, limits, starts_unix_ms, expires_unix_ms, state, policy_receipt]
+```
+
+**workspace 里有 12 个用户、16 条授权。** 所以控制台的 `0 users · 0 grants`
+**不可能是"数据本来就是空的"** —— 一定是显示层（解码失败后回落默认空态）造成的。
+这一条现在可以确定地写下来了。
+
+**同时把几个常见嫌疑逐一排除：**
+
+| 嫌疑 | 结论 | 依据 |
+|---|---|---|
+| `null` 字段（Option 解码陷阱） | **排除** | 两个大 payload 里 `null` 计数都是 0；且 `parse_console_json` 本身就在解码前把 `Null` 摘掉（`cmd/console/main.mbt:1196-1208`） |
+| int64 收到裸数字 | **排除** | payload 里所有 `*_unix_ms` 都是**字符串**（`"1788015701000"`），与 §2.7 证明的惯例一致 |
+| 配额字段（`max_*`）收到裸数字 | **排除** | 声明是 `Int`（`workspace/types.mbt:152-156,177`），裸数字可解 |
+| 枚举变体不认识 | **排除** | payload 里出现的 `UserActive` / `GrantExpired` / `Developer` / `TextGenerate` 等，在 `workspace/types.mbt` 里全部存在 |
+
+**所以失败点还没抓到，但范围已经很小了。** 下一步：把 `users[0]` / `access_grants[0]` / `leases[0]`
+这三个元素（各约 300–570 字节，见下）分别喂给它们声明的类型
+（`@workspace.WorkspaceUser` / `WorkspaceAccessGrant` / `WorkspaceLease`），
+用 §2.7 那套离线复现手法定位是哪一个、哪个字段。
+
+```json
+// users[0]
+{"version":"lunanexa.workspace.v1","user_id":"smoke-moongate","subject_ref":"static-inference-subject",
+ "display_name":"MoonGate Smoke User","email":"smoke-moongate@example.invalid","state":"UserActive",
+ "created_unix_ms":"1788015701000","identity_receipt":"smoke-authorized-by-owner-202…"}
+
+// leases[0] 的 limits 里同时有字符串和裸数字：
+{"limits":{"max_active_sessions":1,"max_session_duration_ms":"300000","capabilities":[…]}}
+```
+
+（最后一个值得特别看一眼：`max_session_duration_ms` 是**字符串**而 `max_active_sessions` 是**裸数字**，
+同一个对象里两种形态并存 —— 如果 struct 把前者声明成 `Int` 或把后者声明成 `Int64`，就会在这里炸。）
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
