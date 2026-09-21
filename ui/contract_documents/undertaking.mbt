@@ -1,4 +1,25 @@
 ///|
+/// Which rental routes a customer may pick between.
+///
+/// The undertaking path is live; the traditional bilateral rental contract is
+/// not offered yet and stays visible but disabled, so the choice itself is
+/// discoverable. Flip this to true to re-enable the contract route.
+pub let traditional_contract_route_available : Bool = false
+
+///|
+/// The disabled contract route is still shown once, with its reason, so the menu
+/// does not silently lose an option the customer was told about.
+fn contract_route_unavailable_copy(
+  locale : @i18n.Locale,
+) -> String {
+  copy(
+    locale,
+    "Traditional rental contract · bilateral execution (temporarily unavailable)",
+    "传统租赁合同 · 双方签署（暂未开放）",
+  )
+}
+
+///|
 /// Resolve by the packet's immutable template identity, never by menu order.
 pub fn ContractDocumentsState::current_manifest(
   self : ContractDocumentsState,
@@ -40,6 +61,48 @@ fn undertaking_creation(
       packet.order_ref == item.0 && packet.template_id == template_id
     })
   })
+  // Both routes are always listed: the undertaking from whatever manifests are
+  // loaded, and the traditional contract as a disabled entry while it is offline.
+  let route_options : Array[@html.Html] = [
+    @html.option(
+      value="",
+      selected=template_id == "",
+      copy(state.locale, "Choose a document", "请选择办理方式"),
+    ),
+  ]
+  for manifest in state.available_manifests {
+    if @contractdoc.is_undertaking_template(manifest.template_id) ||
+      traditional_contract_route_available {
+      route_options.push(
+        @html.option(
+          value=manifest.template_id,
+          selected=template_id == manifest.template_id,
+          if @contractdoc.is_undertaking_template(manifest.template_id) {
+            copy(
+              state.locale,
+              "Equipment undertaking · Party A approval",
+              "设备使用承诺函 · 甲方审批",
+            )
+          } else {
+            copy(
+              state.locale,
+              "Traditional rental contract · bilateral execution",
+              "传统租赁合同 · 双方签署",
+            )
+          },
+        ),
+      )
+    }
+  }
+  if !traditional_contract_route_available {
+    route_options.push(
+      @html.option(
+        value="traditional-rental-contract-unavailable",
+        disabled=true,
+        contract_route_unavailable_copy(state.locale),
+      ),
+    )
+  }
   @html.section(class="contract-workspace", [
     @html.div(class="contract-form-panel", [
       @html.h2(
@@ -52,8 +115,8 @@ fn undertaking_creation(
       @html.p(
         copy(
           state.locale,
-          "Traditional bilateral contract or a tenant-signed undertaking reviewed by Party A. Both retain payment, capacity and access checks.",
-          "可选传统双方合同，或使用方签章、甲方审批的承诺函。两种方式均保留付款、资源与权限检查。",
+          "Traditional bilateral contract or a tenant-signed undertaking reviewed by Party A. Both retain payment, capacity and access checks. The traditional contract route is temporarily unavailable.",
+          "可选传统双方合同，或使用方签章、甲方审批的承诺函。两种方式均保留付款、资源与权限检查。传统合同方式暂未开放。",
         ),
       ),
       @html.div(class="contract-field-grid", [
@@ -65,32 +128,7 @@ fn undertaking_creation(
           @html.select(
             id="rental-document-template",
             on_change=text_command(emit, value => SelectCreationTemplate(value)),
-            [
-              @html.option(
-                value="",
-                selected=template_id == "",
-                copy(state.locale, "Choose a document", "请选择办理方式"),
-              ),
-              ..state.available_manifests.map(manifest => {
-                @html.option(
-                  value=manifest.template_id,
-                  selected=template_id == manifest.template_id,
-                  if @contractdoc.is_undertaking_template(manifest.template_id) {
-                    copy(
-                      state.locale,
-                      "Equipment undertaking · Party A approval",
-                      "设备使用承诺函 · 甲方审批",
-                    )
-                  } else {
-                    copy(
-                      state.locale,
-                      "Traditional rental contract · bilateral execution",
-                      "传统租赁合同 · 双方签署",
-                    )
-                  },
-                )
-              }),
-            ],
+            route_options,
           ),
         ]),
         @html.div(class="contract-field", [
