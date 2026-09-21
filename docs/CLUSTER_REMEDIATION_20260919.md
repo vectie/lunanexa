@@ -1768,6 +1768,24 @@ Failed with 364 warnings, 749 errors
 本机 fmt 会删掉单行记录字面量的尾逗号，与仓库风格不符，所以**没有**运行 `moon fmt`，
 否则会重排 200 行以上无关代码）。**类型检查完全没有验证过。**
 
+**试过、并且确认走不通的绕法**（记下来，免得下次再花一遍时间）：
+
+1. **`errdefer` → `defer` 机械替换**：749 → 37 个错误。但那 37 个**正是替换自己造出来的**——
+   新工具链的 `errdefer` **允许**清理调用自身会报错或本身是 async，旧工具链的 `defer`
+   **禁止**（`calling function with error is not allowed inside 'defer'` /
+   `cannot call async function in 'defer'`）。两边的 `defer` 语义不对等，所以没有等价写法。
+2. **把清理语句整段删掉**（只为过类型）：用花括号配平删除 `errdefer { ... }` 会**删坏文件**
+   （花括号出现在字符串里就会配错），实测单文件从 0 变成 63 个错误。而且就算改出一个能编译的
+   版本，`moon test` 的结果也不能信——错误展开路径的清理全被拿掉了。
+3. **`moon upgrade`**：`-f`、`-q`、`--dev` 都要交互式 TTY（`Error: IO error: not a terminal`），
+   用 `script(1)` 造伪终端也不行（`tcgetattr/ioctl: Operation not supported on socket`）。
+   这是工具链自身的限制。
+4. **手动安装官方脚本**（可行但属于环境变更，没有擅自做）：
+   `https://cli.moonbitlang.cn/install/unix.sh` 探到 200。装之前备份 `~/.moon/bin` 即可回退。
+5. **更稳的做法**：在平时构建本仓库的那个环境里跑门禁。镜像
+   `lunanexa-node:20260918-arm64-r3` 是能构建出来的，说明那边有支持 `errdefer` 的 moon。
+   门禁本来就该在那儿跑，不该由这台 Mac 承担。
+
 工具链修好之后，按 AGENTS.md 的门禁跑这四条即可：
 `moon info && moon fmt && moon check --target native --deny-warn && moon test --target native --deny-warn`。
 注意 `moon info` 还需要重生成 `node/pkg.generated.mbti` 和 `ui/pkg.generated.mbti`
