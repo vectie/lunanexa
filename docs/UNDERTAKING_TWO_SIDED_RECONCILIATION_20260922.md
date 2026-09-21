@@ -814,6 +814,59 @@ GET /v1/accounts/trial-summary -> 200
 **账户层面对上了，管理侧的显示层没反映出来**；其中"试用统计不可用"是明确的解码缺陷，
 "0 users · 0 grants" 则可能只是把不同的授权域并在同一屏展示。
 
+### 2.11 更正：不是"不同的授权域"，是整块访问读取解码失败被吞掉
+
+§2.10 我猜"`0 users · 0 grants` 可能只是把不同授权域并排展示"。**这个猜测是错的**，
+继续查下去把它排除了，结论更简单也更严重。
+
+**先把每一条输入都单独验一遍**（都是从控制台页面里发、经由前门）：
+
+```
+/v1/workspace                    -> 200  len=19181
+/v1/onboarding/access-packages   -> 200  len=2575
+/v1/exclusive-node-leases        -> 200  len=2      ([])
+/v1/accounts                     -> 200  len=803
+/v1/accounts/trial-summary       -> 200  len=117
+```
+
+**五条全是 200，而且内容都不空**（workspace 有 19 KB）。所以数据都在，不存在"域不同所以是 0"
+——如果真是"没有 workspace 用户"，那个 payload 不会这么大。
+
+**再看那段代码的结构，就说得通了**（`cmd/console/main.mbt:1708-1745`）：
+
+```moonbit
+let workspace  = @json.from_json(…)   // /v1/workspace        ← 无 catch
+let accounts   = @json.from_json(…)   // /v1/accounts         ← 无 catch
+let trial_summary = Some(@json.from_json(…)) catch { _ => None }   // 唯一带 catch
+let access_packages = @json.from_json(…)   // ← 无 catch
+let exclusive_leases = @json.from_json(…)  // ← 无 catch
+```
+
+**这个函数里只有 trial_summary 一句带 catch。** 所以只要**前面任意一条**（workspace / accounts /
+access-packages / exclusive-leases）解码抛异常，整个函数就抛出，调用方回落到默认空状态，
+于是**三个症状同时出现**：`0 users · 0 grants`、`Trial statistics unavailable`、
+以及那句 `This console is using the localhost development-token fallback`。
+
+**也就是说：这两个"0"和"不可用"是同一个被吞掉的解码异常的三种表现，
+而不是三个独立问题。** 数据是齐的，坏在控制台的解码层。
+
+顺带把 §2.10 的另一半也钉住了：`@ui.TrialSummary` 只有 4 个 `Int` 字段，
+我用离线复现（`/tmp/jt`，`--target js`）把它喂给那个真实 payload：
+
+```
+decoded registered=1 active=1
+```
+
+**它解码是好的。** 所以"试用统计不可用"不是这个结构体的问题，
+而是**同函数里更靠前的那次解码先抛了** —— 与上面的推断一致。
+
+**下一步（未做）**：把这四个 payload 分别喂给它们声明的类型
+（`@workspace.WorkspaceDirectorySnapshot`、`Array[@ui.AccountView]`、
+`Array[@ui.AccessPackageView]`、`Array[@nodelease.ExclusiveNodeLease]`），
+用同样的离线手法定位是哪一条、以及是哪个字段不匹配。
+另外建议：这段代码应像 §2.7 那样**至少把异常记下来**，
+否则一个解码 bug 会同时伪装成"没人"、"没授权"、"统计不可用"三件事。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
