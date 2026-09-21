@@ -759,6 +759,61 @@ Trial statistics unavailable. Refresh after checking controller support.
 它不再破坏会话鉴权了，但"这个令牌该不该存在于前端 ConfigMap 里"这个问题**依然没解决**，
 仍列在 §5 第 12 条。
 
+### 2.10 追那条"0 users"：账目层面其实是通的，坏的是显示
+
+上一节说"管理侧报 0 用户"，我去把它查实了。结论比预期细，而且**不能一口咬定是数据断链**。
+
+**账目层面：通。** 用前门（nginx 会为无凭据的调用注入操作员令牌）直接问控制面：
+
+```
+GET /v1/accounts -> 200
+[{"account_id":"account-3b407b45…","display_name":"WebIDE Operator","roles":["EnterpriseUser"],"state":"Active",…},
+ {"account_id":"account-b131b8c579a5901fe5ea97fe","subject_ref":"subject-b131b8c579a5901fe5ea97fe",
+  "identity_issuer":"https://106.39.18.146:5006/realms/lunanexa",
+  "display_name":"Recon Operator","roles":["EnterpriseUser"],"state":"Active",…}]
+
+GET /v1/accounts/trial-summary -> 200
+{"registered_trials":1,"active_trials":1,"expired_trials":0,"converted_trials":0,"generated_unix_ms":"1790009882396"}
+```
+
+第二条 `subject_ref` 正是企业侧会话条上那个 `subject-b131b8c5…`。
+**也就是说：企业侧那次真实 OIDC 首次登录确实在控制面建了账户，`/v1/accounts` 读得到，
+试用统计也把它算成 `registered_trials:1, active_trials:1`。这一层是对得上的。**
+
+**那控制台为什么显示 0？** 读代码后要分成两件事，不能混为一谈：
+
+1. **`0 users · 0 grants` 很可能不是缺陷。** `cmd/console/main.mbt:1708-1745`
+   的 `load_console_access_reads` 里，`users` 取自 **workspace 目录**
+   （`workspace.users`），`grants` 取自 `access_packages` / `exclusive_node_leases`。
+   这些是与"账户"**不同的授权域**：企业侧拿到的是账户 + 受限试用，
+   并没有 workspace 用户或访问授权。所以这两个 0 可能是正确的，
+   只是页面把"账户"和"工作区用户/授权"并排放在同一屏、都叫 users，读起来像是在自相矛盾。
+   **这一点需要再确认一次才算数**（要核对 workspace 目录里确实没有该主体）。
+2. **`Trial statistics unavailable` 是真缺陷。** 同一段代码里，
+   `trial_summary` 那句是**唯一带 catch 的**：
+
+   ```moonbit
+   let trial_summary : @ui.TrialSummary? = Some(@json.from_json(parse_console_json(
+       request("GET", endpoint, "/v1/accounts/trial-summary", token)))) catch {
+     // Supplemental statistics are unavailable, never zero, on older controllers.
+     _ => None
+   }
+   ```
+
+   而这个接口**返回 200 且内容正常**（见上）。按它自己的语义，出现
+   "unavailable" 只可能是**解码抛了异常被吞掉**。也就是：
+   **接口有数据、页面说没有** —— 又是"静默吞异常"这一类，
+   与 §2.7 那个 JSON 契约问题同源（都是解码失败被 `catch` 掩盖成空态）。
+
+   注意这个 payload 的形状很可疑：计数是**裸数字**（`1`、`0`），
+   而 `generated_unix_ms` 是**字符串**。两侧类型若有一边写成 `Int64`，
+   在 JS 后端就会因为"数字/字符串"不匹配而抛错（§2.7 已证明这条机制）。
+   下一步就是比对 `@ui.TrialSummary` 的字段类型与这个 payload。
+
+**所以这一条要修正上一节的措辞**：不是"两侧数据没对上"，而是
+**账户层面对上了，管理侧的显示层没反映出来**；其中"试用统计不可用"是明确的解码缺陷，
+"0 users · 0 grants" 则可能只是把不同的授权域并在同一屏展示。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
