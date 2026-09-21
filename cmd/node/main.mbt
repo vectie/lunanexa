@@ -55,6 +55,17 @@ fn endpoint(base : String, path : String) -> String {
 }
 
 ///|
+/// A control-plane answer that is not a success is a fact an operator can
+/// read: endpoint and status. These were swallowed by callers that only
+/// checked the status, which made a node being refused look the same as one
+/// that had simply gone quiet.
+fn log_bad_response(verb : String, path : String, code : Int) -> Unit {
+  if code < 200 || code >= 300 {
+    println("node agent: \{verb} \{path} -> HTTP \{code}")
+  }
+}
+
+///|
 /// Node-enforced policy is distributed by the administrator as the same
 /// validated document used by the management node. It is never supplied by a
 /// lease holder or workload request.
@@ -264,6 +275,7 @@ async fn flush_lease_observation(
       observation.to_json(),
       headers=node_headers(node_id, token),
     )
+    log_bad_response("POST", "/v1/nodes/\{node_id}/exclusive-lease:observe", response.code)
     if response.code >= 200 && response.code < 300 {
       lease_guard.acknowledge_observation(observation.receipt)
       (true, true)
@@ -292,6 +304,7 @@ async fn reconcile_exclusive_lease(
       endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease"),
       headers=node_headers(node_id, token),
     )
+    log_bad_response("GET", "/v1/nodes/\{node_id}/exclusive-lease", response.code)
     if response.code == 200 {
       let lease : @nodelease.ExclusiveNodeLease = @json.from_json(
         @json.parse(body.text()),
@@ -397,6 +410,7 @@ async fn ensure_certificate(
       endpoint(base, "/v1/enrollment"),
       body,
     )
+    log_bad_response("POST", "/v1/enrollment", response.code)
     if response.code != 201 {
       raise Failure::Failure("node enrollment was rejected")
     }
@@ -423,6 +437,7 @@ async fn ensure_certificate(
       body,
       headers=node_headers(node_id, node_token),
     )
+    log_bad_response("POST", "/v1/enrollment/rotate", response.code)
     if response.code != 200 {
       raise Failure::Failure("node certificate rotation was rejected")
     }
@@ -476,6 +491,7 @@ async fn send_heartbeat(
     heartbeat.to_json(),
     headers=node_headers(node_id, token),
   )
+  log_bad_response("PUT", "/v1/nodes/heartbeat", response.code)
   if response.code != 202 {
     raise Failure::Failure("heartbeat was rejected")
   }
@@ -538,6 +554,7 @@ async fn reconcile_once(
     endpoint(base, "/v1/nodes/\{node_id}/directive"),
     headers~,
   )
+  log_bad_response("GET", "/v1/nodes/\{node_id}/directive", directive_response.code)
   if directive_response.code == 200 {
     let directive : @contracts.NodeDirective = @json.from_json(
       @json.parse(directive_body.text()),
@@ -552,6 +569,7 @@ async fn reconcile_once(
     endpoint(base, "/v1/nodes/\{node_id}/assignments"),
     headers~,
   )
+  log_bad_response("GET", "/v1/nodes/\{node_id}/assignments", assignment_response.code)
   if assignment_response.code < 200 || assignment_response.code >= 300 {
     raise Failure::Failure(
       "assignment fetch failed with status \{assignment_response.code}",
@@ -741,6 +759,7 @@ async fn reconcile_once(
         sample.to_json(),
         headers~,
       )
+      log_bad_response("PUT", "/v1/telemetry", response.code)
       if response.code != 202 {
         raise Failure::Failure("telemetry sample was rejected")
       }
