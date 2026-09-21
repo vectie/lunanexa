@@ -15,18 +15,6 @@ pub(all) struct ContractArchiveObject {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractArchiveObject with Debug::{to_repr}
-
-///|
-pub extend ContractArchiveObject with Eq::{not_equal, equal}
-
-///|
-pub extend ContractArchiveObject with ToJson::{to_json}
-
-///|
-pub extend ContractArchiveObject with FromJson::{from_json}
-
-///|
 pub fn contract_archive_artifact_id(
   packet_id : String,
   revision : Int64,

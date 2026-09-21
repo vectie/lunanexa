@@ -67,7 +67,7 @@ async test "v1 contract snapshots migrate ownership and provenance" {
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let migrated = store.packet("packet-v1").unwrap()
   assert_eq(migrated.value("lessee.name"), Some("测试单位"))
   assert_eq(migrated.assignments.length(), 1)
@@ -92,7 +92,7 @@ async test "contract packets persist drafts and audit no raw values" {
     [ReservationApplication],
     1000L,
   )
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   ignore(store.create_packet(packet, "subject-1"))
   let updated = store.update_information(
     manifest,
@@ -108,7 +108,7 @@ async test "contract packets persist drafts and audit no raw values" {
     2000L,
   )
   assert_eq(updated.revision, 2L)
-  let reopened = @store.ContractDocumentStore::open(path)
+  let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.packet(packet.packet_id), Some(updated))
   let snapshot = reopened.snapshot()
   assert_eq(snapshot.events.length(), 2)
@@ -140,7 +140,7 @@ async test "governance projections gate access and survive restart" {
     state: Effective,
     values: [{ field_id: "lease.end_date", value: "2026-12-31", }],
   }
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   ignore(store.create_packet(packet, packet.subject_ref))
   ignore(
     store.create_packet(
@@ -249,7 +249,7 @@ async test "governance projections gate access and survive restart" {
     5000L,
   )
   assert_true(number.number.has_prefix("LN-"))
-  let reopened = @store.ContractDocumentStore::open(path)
+  let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.amendments_for_packet(packet.packet_id).length(), 1)
   assert_eq(reopened.snapshot().numbers.length(), 1)
   ignore(
@@ -308,7 +308,7 @@ async test "confirmed generation request and exact paired artifacts survive rest
       { field_id: field.field_id, value, }
     }
   ]
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let master = {
     ..@contractdoc.new_packet(
       manifest,
@@ -382,7 +382,7 @@ async test "confirmed generation request and exact paired artifacts survive rest
   )
   assert_eq(generated.state, Generated)
   assert_eq(generated.artifacts.length(), 2)
-  let reopened = @store.ContractDocumentStore::open(path)
+  let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.packet(initial.packet_id), Some(generated))
   assert_eq(reopened.snapshot().events.length(), 6)
   @fs.remove(path)
@@ -469,7 +469,7 @@ async test "v2 contract snapshots load with empty lifecycle extensions" {
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let migrated = store.packet("packet-v2").unwrap()
   assert_eq(migrated.value("lessee.name"), Some("测试单位"))
   assert_eq(migrated.assignments.length(), 1)
@@ -489,7 +489,7 @@ async test "v2 contract snapshots load with empty lifecycle extensions" {
 async test "effective-stage forms require an effective preceding packet" {
   let path = "contractdoc-gating-wbtest-\{@async.now()}.json"
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let master = @contractdoc.new_packet(
     manifest,
     "packet-master",
@@ -580,7 +580,7 @@ async test "effective-stage forms require an effective preceding packet" {
 async test "early termination closure requires an effective settlement packet" {
   let path = "contractdoc-closure-wbtest-\{@async.now()}.json"
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let effective = {
     ..@contractdoc.new_packet(
       manifest,
@@ -714,7 +714,7 @@ async test "early termination closure requires an effective settlement packet" {
 async test "supersession validates the successor and records the event" {
   let path = "contractdoc-supersede-wbtest-\{@async.now()}.json"
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let draft = @contractdoc.new_packet(
     manifest,
     "packet-old",
@@ -786,7 +786,7 @@ async test "supersession validates the successor and records the event" {
   assert_true(
     store.snapshot().events.any(event => event.kind == PacketSupersededEvent),
   )
-  let reopened = @store.ContractDocumentStore::open(path)
+  let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.packet("packet-old"), Some(superseded))
   @fs.remove(path)
 }
@@ -813,7 +813,7 @@ async test "generation failure and execution registration append audit events" {
     values_sha256: Some(digest),
     revision: 3L,
   }
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   ignore(store.create_packet(requested, "subject-1"))
   let failed = store.fail_generation(
     "packet-worker", 3L, "renderer crashed", "contract-renderer", 4000L,
@@ -873,7 +873,7 @@ async test "generation failure and execution registration append audit events" {
   let events = store.snapshot().events
   assert_true(events.any(event => event.kind == GenerationFailedEvent))
   assert_true(events.any(event => event.kind == ExecutionRegisteredEvent))
-  let reopened = @store.ContractDocumentStore::open(path)
+  let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.packet("packet-worker"), Some(effective))
   @fs.remove(path)
 }
@@ -917,7 +917,7 @@ async test "v3 contract snapshots load with empty approval records" {
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   assert_eq(store.packet("packet-v3"), Some(packet))
   assert_eq(store.list_approvals(None), [])
   assert_eq(
@@ -989,7 +989,7 @@ async test "v4 contract snapshots migrate approvals into v5" {
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   assert_eq(store.get_approval("approval-v4"), Some(approval))
   assert_eq(
     store.snapshot().schema_version,
@@ -1138,7 +1138,7 @@ async test "v5 governance snapshots migrate attribution and review evidence" {
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let migrated = store.snapshot()
   assert_eq(migrated.schema_version, @contractdoc.snapshot_schema_version)
   assert_eq(migrated.approvals[0].payload.amount_minor_units, None)
@@ -1153,7 +1153,7 @@ async test "v5 governance snapshots migrate attribution and review evidence" {
 async test "contract approvals persist, decide once, and survive a reload" {
   let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-approvals-")
   let path = "\{directory}/approvals.json"
-  let store = @store.ContractDocumentStore::open(path)
+  let store = ContractDocumentStore::open(path)
   let approval_packet : @contractdoc.ContractPacket = {
     ..@contractdoc.new_packet(
       @contractdoc.youthpolicy_remote_lease_manifest(),
@@ -1268,7 +1268,7 @@ async test "contract approvals persist, decide once, and survive a reload" {
   assert_eq(withdrawn.status, Rejected)
   assert_eq(withdrawn.decision_reason, Some("withdrawn by initiator"))
   // Approvals survive a store reload through the snapshot.
-  let reopened = @store.ContractDocumentStore::open(path)
+  let reopened = ContractDocumentStore::open(path)
   assert_eq(reopened.get_approval("approval-1"), Some(decided))
   assert_eq(reopened.get_approval("approval-2"), Some(withdrawn))
   assert_eq(reopened.list_approvals(Some(Pending)), [])
@@ -1279,7 +1279,7 @@ async test "contract approvals persist, decide once, and survive a reload" {
 ///|
 async test "a renewal may become effective after its predecessor already closed" {
   let directory = @fs.tmpdir(prefix="lunanexa-contractdoc-closed-predecessor-")
-  let store = @store.ContractDocumentStore::open("\{directory}/contracts.json")
+  let store = ContractDocumentStore::open("\{directory}/contracts.json")
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let source : @contractdoc.ContractPacket = {
     ..@contractdoc.new_packet(

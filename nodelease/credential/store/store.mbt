@@ -25,8 +25,8 @@ pub fn issuer_readiness_signature(
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).exact_view(),
-      @utf8.encode(issuer_readiness_material(evidence)).exact_view(),
+      @utf8.encode(secret).view(),
+      @utf8.encode(issuer_readiness_material(evidence)).view(),
     ),
   )
 }
@@ -372,7 +372,7 @@ fn CredentialHandoffStore::handoff_ref(
   now_unix_ms : Int64,
 ) -> String {
   let payload = "lunanexa.credential-handoff.v1|\{intent.request_id}|\{lease.intent.lease_id}|\{lease.intent.subject_ref}|\{lease.intent.node_id}|\{lease.generation}|\{now_unix_ms}"
-  "lnxh_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(self.issuer_secret).exact_view(), @utf8.encode(payload).exact_view()))}"
+  "lnxh_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(self.issuer_secret).view(), @utf8.encode(payload).view()))}"
 }
 
 ///|
@@ -673,7 +673,7 @@ fn CredentialHandoffStore::redemption(
 ) -> @credential.CredentialHandoffRedemption raise @credential.CredentialHandoffError {
   let redeemed_unix_ms = record.redeemed_unix_ms.unwrap()
   let payload = "lunanexa.credential-redemption.v1|\{record.handoff_ref}|\{record.lease_id}|\{record.subject_ref}|\{record.generation}|\{redeemed_unix_ms}"
-  let receipt = "lnxr_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(self.issuer_secret).exact_view(), @utf8.encode(payload).exact_view()))}"
+  let receipt = "lnxr_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(self.issuer_secret).view(), @utf8.encode(payload).view()))}"
   {
     version: @credential.contract_version,
     handoff_ref: record.handoff_ref,

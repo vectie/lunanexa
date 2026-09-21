@@ -124,9 +124,6 @@ pub fn view(ConsoleState) -> @html.Html
 pub(all) suberror WorkflowError {
   InvalidSequence(OperatorCommand)
 } derive(Eq, @debug.Debug)
-pub fn WorkflowError::equal(Self, Self) -> Bool
-pub fn WorkflowError::not_equal(Self, Self) -> Bool
-pub fn WorkflowError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AccessGrantRow {
@@ -137,11 +134,6 @@ pub(all) struct AccessGrantRow {
   expires_at : String
   state : @workspace.WorkspaceAccessGrantState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessGrantRow::equal(Self, Self) -> Bool
-pub fn AccessGrantRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessGrantRow::not_equal(Self, Self) -> Bool
-pub fn AccessGrantRow::to_json(Self) -> Json
-pub fn AccessGrantRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccessPackageDraft {
   identity_issuer : String
@@ -153,8 +145,6 @@ pub(all) struct AccessPackageDraft {
   lifetime_days : Int
   identity_verified : Bool
 } derive(Eq)
-pub fn AccessPackageDraft::equal(Self, Self) -> Bool
-pub fn AccessPackageDraft::not_equal(Self, Self) -> Bool
 
 pub(all) struct AccessPackageView {
   package_id : String
@@ -181,11 +171,6 @@ pub(all) struct AccessPackageView {
   can_enable : Bool
   state : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessPackageView::equal(Self, Self) -> Bool
-pub fn AccessPackageView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessPackageView::not_equal(Self, Self) -> Bool
-pub fn AccessPackageView::to_json(Self) -> Json
-pub fn AccessPackageView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccountInviteDraft {
   account_id : String
@@ -197,8 +182,6 @@ pub(all) struct AccountInviteDraft {
   identity_receipt : String
   roles : Array[UiAccountRole]
 } derive(Eq)
-pub fn AccountInviteDraft::equal(Self, Self) -> Bool
-pub fn AccountInviteDraft::not_equal(Self, Self) -> Bool
 
 pub(all) struct AccountView {
   account_id : String
@@ -212,11 +195,6 @@ pub(all) struct AccountView {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccountView::equal(Self, Self) -> Bool
-pub fn AccountView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccountView::not_equal(Self, Self) -> Bool
-pub fn AccountView::to_json(Self) -> Json
-pub fn AccountView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AgreementRow {
   agreement_id : String
@@ -226,11 +204,6 @@ pub(all) struct AgreementRow {
   state : String
   evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AgreementRow::equal(Self, Self) -> Bool
-pub fn AgreementRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AgreementRow::not_equal(Self, Self) -> Bool
-pub fn AgreementRow::to_json(Self) -> Json
-pub fn AgreementRow::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AlertsWindow {
   Today
@@ -238,13 +211,8 @@ pub(all) enum AlertsWindow {
   Last30Days
   AllAlerts
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AlertsWindow::equal(Self, Self) -> Bool
-pub fn AlertsWindow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn AlertsWindow::label(Self, @i18n.Locale) -> String
-pub fn AlertsWindow::not_equal(Self, Self) -> Bool
 pub fn AlertsWindow::storage_value(Self) -> String
-pub fn AlertsWindow::to_json(Self) -> Json
-pub fn AlertsWindow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AnnouncementDraft {
   announcement_id : String
@@ -253,9 +221,6 @@ pub(all) struct AnnouncementDraft {
   body : String
   expires_unix_ms : String
 } derive(Eq, @debug.Debug)
-pub fn AnnouncementDraft::equal(Self, Self) -> Bool
-pub fn AnnouncementDraft::not_equal(Self, Self) -> Bool
-pub fn AnnouncementDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuditRow {
   actor : String
@@ -264,11 +229,6 @@ pub(all) struct AuditRow {
   result : String
   receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AuditRow::equal(Self, Self) -> Bool
-pub fn AuditRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AuditRow::not_equal(Self, Self) -> Bool
-pub fn AuditRow::to_json(Self) -> Json
-pub fn AuditRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct BrowserSessionView {
   session_id : String
@@ -278,11 +238,6 @@ pub(all) struct BrowserSessionView {
   last_used_unix_ms : Int64
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BrowserSessionView::equal(Self, Self) -> Bool
-pub fn BrowserSessionView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BrowserSessionView::not_equal(Self, Self) -> Bool
-pub fn BrowserSessionView::to_json(Self) -> Json
-pub fn BrowserSessionView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ComputeLeaseRow {
   lease_id : String
@@ -293,11 +248,6 @@ pub(all) struct ComputeLeaseRow {
   expires_at : String
   state : @workspace.WorkspaceLeaseState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ComputeLeaseRow::equal(Self, Self) -> Bool
-pub fn ComputeLeaseRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ComputeLeaseRow::not_equal(Self, Self) -> Bool
-pub fn ComputeLeaseRow::to_json(Self) -> Json
-pub fn ComputeLeaseRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Confirmation {
   action : DestructiveAction
@@ -305,11 +255,6 @@ pub(all) struct Confirmation {
   receipt : String
   confirmed : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Confirmation::equal(Self, Self) -> Bool
-pub fn Confirmation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Confirmation::not_equal(Self, Self) -> Bool
-pub fn Confirmation::to_json(Self) -> Json
-pub fn Confirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ConsoleMessage {
   LocaleChanged(@i18n.Locale)
@@ -425,8 +370,6 @@ pub(all) enum ConsoleMessage {
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
   ContractDocuments(@contract_documents.ContractDocumentsMessage)
 } derive(Eq)
-pub fn ConsoleMessage::equal(Self, Self) -> Bool
-pub fn ConsoleMessage::not_equal(Self, Self) -> Bool
 
 pub(all) struct ConsoleState {
   locale : @i18n.Locale
@@ -489,8 +432,6 @@ pub(all) struct ConsoleState {
   quick_template : String
   quick_topology : QuickTopology
 } derive(Eq)
-pub fn ConsoleState::equal(Self, Self) -> Bool
-pub fn ConsoleState::not_equal(Self, Self) -> Bool
 
 pub(all) struct CostCenterRow {
   cost_center_id : String
@@ -501,11 +442,6 @@ pub(all) struct CostCenterRow {
   provisional_spend : String
   budget_posture : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CostCenterRow::equal(Self, Self) -> Bool
-pub fn CostCenterRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CostCenterRow::not_equal(Self, Self) -> Bool
-pub fn CostCenterRow::to_json(Self) -> Json
-pub fn CostCenterRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeploymentRow {
   assignment_id : String
@@ -514,11 +450,6 @@ pub(all) struct DeploymentRow {
   observed : @contracts.DeploymentState
   placement_reason : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DeploymentRow::equal(Self, Self) -> Bool
-pub fn DeploymentRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DeploymentRow::not_equal(Self, Self) -> Bool
-pub fn DeploymentRow::to_json(Self) -> Json
-pub fn DeploymentRow::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DestructiveAction {
   CordonNode(String)
@@ -538,11 +469,6 @@ pub(all) enum DestructiveAction {
   RevokeAccount(String)
   SetAccountRoles(String, Array[UiAccountRole])
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DestructiveAction::equal(Self, Self) -> Bool
-pub fn DestructiveAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DestructiveAction::not_equal(Self, Self) -> Bool
-pub fn DestructiveAction::to_json(Self) -> Json
-pub fn DestructiveAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EnterpriseLeaseRequestRow {
   request_id : String
@@ -555,11 +481,6 @@ pub(all) struct EnterpriseLeaseRequestRow {
   generation : Int64
   assigned_node_id : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EnterpriseLeaseRequestRow::equal(Self, Self) -> Bool
-pub fn EnterpriseLeaseRequestRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EnterpriseLeaseRequestRow::not_equal(Self, Self) -> Bool
-pub fn EnterpriseLeaseRequestRow::to_json(Self) -> Json
-pub fn EnterpriseLeaseRequestRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExclusiveNodeLeaseRow {
   lease_id : String
@@ -570,11 +491,6 @@ pub(all) struct ExclusiveNodeLeaseRow {
   state : String
   generation : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExclusiveNodeLeaseRow::equal(Self, Self) -> Bool
-pub fn ExclusiveNodeLeaseRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExclusiveNodeLeaseRow::not_equal(Self, Self) -> Bool
-pub fn ExclusiveNodeLeaseRow::to_json(Self) -> Json
-pub fn ExclusiveNodeLeaseRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelAdoptionDraft {
   import_id : String
@@ -584,18 +500,12 @@ pub(all) struct ModelAdoptionDraft {
   compatible_architectures : String
   minimum_memory_mib : String
 } derive(Eq, @debug.Debug)
-pub fn ModelAdoptionDraft::equal(Self, Self) -> Bool
-pub fn ModelAdoptionDraft::not_equal(Self, Self) -> Bool
-pub fn ModelAdoptionDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelAliasDraft {
   model_id : String
   version : String
   alias_name : String
 } derive(Eq, @debug.Debug)
-pub fn ModelAliasDraft::equal(Self, Self) -> Bool
-pub fn ModelAliasDraft::not_equal(Self, Self) -> Bool
-pub fn ModelAliasDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelImportRow {
   import_id : String
@@ -616,11 +526,6 @@ pub(all) struct ModelImportRow {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelImportRow::equal(Self, Self) -> Bool
-pub fn ModelImportRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelImportRow::not_equal(Self, Self) -> Bool
-pub fn ModelImportRow::to_json(Self) -> Json
-pub fn ModelImportRow::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ModelImportState {
   Queued
@@ -630,11 +535,6 @@ pub(all) enum ModelImportState {
   Failed
   Cancelled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelImportState::equal(Self, Self) -> Bool
-pub fn ModelImportState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelImportState::not_equal(Self, Self) -> Bool
-pub fn ModelImportState::to_json(Self) -> Json
-pub fn ModelImportState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelLicenseDraft {
   model_id : String
@@ -642,18 +542,10 @@ pub(all) struct ModelLicenseDraft {
   license_id : String
   evidence_ref : String
 } derive(Eq, @debug.Debug)
-pub fn ModelLicenseDraft::equal(Self, Self) -> Bool
-pub fn ModelLicenseDraft::not_equal(Self, Self) -> Bool
-pub fn ModelLicenseDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelLocalDirectoryListing {
   directories : Array[ModelLocalDirectoryRow]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelLocalDirectoryListing::equal(Self, Self) -> Bool
-pub fn ModelLocalDirectoryListing::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelLocalDirectoryListing::not_equal(Self, Self) -> Bool
-pub fn ModelLocalDirectoryListing::to_json(Self) -> Json
-pub fn ModelLocalDirectoryListing::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelLocalDirectoryRow {
   directory : String
@@ -661,22 +553,12 @@ pub(all) struct ModelLocalDirectoryRow {
   bytes : Int64
   registered : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelLocalDirectoryRow::equal(Self, Self) -> Bool
-pub fn ModelLocalDirectoryRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelLocalDirectoryRow::not_equal(Self, Self) -> Bool
-pub fn ModelLocalDirectoryRow::to_json(Self) -> Json
-pub fn ModelLocalDirectoryRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelLocalRegistrationDraft {
   directory : String
   repository : String
   revision : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelLocalRegistrationDraft::equal(Self, Self) -> Bool
-pub fn ModelLocalRegistrationDraft::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelLocalRegistrationDraft::not_equal(Self, Self) -> Bool
-pub fn ModelLocalRegistrationDraft::to_json(Self) -> Json
-pub fn ModelLocalRegistrationDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelRow {
   model_id : String
@@ -690,11 +572,6 @@ pub(all) struct ModelRow {
   artifact_uri : String
   artifact_digest : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelRow::equal(Self, Self) -> Bool
-pub fn ModelRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelRow::not_equal(Self, Self) -> Bool
-pub fn ModelRow::to_json(Self) -> Json
-pub fn ModelRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelSourceCatalogPage {
   models : Array[ModelSourceCatalogRow]
@@ -702,11 +579,6 @@ pub(all) struct ModelSourceCatalogPage {
   page_number : Int
   page_size : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelSourceCatalogPage::equal(Self, Self) -> Bool
-pub fn ModelSourceCatalogPage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelSourceCatalogPage::not_equal(Self, Self) -> Bool
-pub fn ModelSourceCatalogPage::to_json(Self) -> Json
-pub fn ModelSourceCatalogPage::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelSourceCatalogRow {
   id : String
@@ -724,11 +596,6 @@ pub(all) struct ModelSourceCatalogRow {
   private : Bool
   gated : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelSourceCatalogRow::equal(Self, Self) -> Bool
-pub fn ModelSourceCatalogRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelSourceCatalogRow::not_equal(Self, Self) -> Bool
-pub fn ModelSourceCatalogRow::to_json(Self) -> Json
-pub fn ModelSourceCatalogRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NodeRow {
   node_id : String
@@ -737,10 +604,7 @@ pub(all) struct NodeRow {
   total_memory_mib : Int
   free_memory_mib : Int
   used_memory_mib : Int
-  memory_measured : Bool
   utilization_per_mille : Int
-  cpu_per_mille : Int
-  cpu_measured : Bool
   temperature_celsius : Int
   power_watts : Int
   workloads : Int
@@ -748,11 +612,6 @@ pub(all) struct NodeRow {
   active_assignment : String
   last_seen : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NodeRow::equal(Self, Self) -> Bool
-pub fn NodeRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeRow::not_equal(Self, Self) -> Bool
-pub fn NodeRow::to_json(Self) -> Json
-pub fn NodeRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDeliveryRow {
   delivery_id : String
@@ -763,11 +622,6 @@ pub(all) struct NotificationDeliveryRow {
   updated_unix_ms : Int64
   last_error_code : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NotificationDeliveryRow::equal(Self, Self) -> Bool
-pub fn NotificationDeliveryRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NotificationDeliveryRow::not_equal(Self, Self) -> Bool
-pub fn NotificationDeliveryRow::to_json(Self) -> Json
-pub fn NotificationDeliveryRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationRow {
   notification_id : String
@@ -781,11 +635,6 @@ pub(all) struct NotificationRow {
   assigned_to : String
   silenced_until_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NotificationRow::equal(Self, Self) -> Bool
-pub fn NotificationRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NotificationRow::not_equal(Self, Self) -> Bool
-pub fn NotificationRow::to_json(Self) -> Json
-pub fn NotificationRow::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OperatorCommand {
   EnrollNode
@@ -801,11 +650,6 @@ pub(all) enum OperatorCommand {
   ObserveReroute
   RollbackModel
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OperatorCommand::equal(Self, Self) -> Bool
-pub fn OperatorCommand::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OperatorCommand::not_equal(Self, Self) -> Bool
-pub fn OperatorCommand::to_json(Self) -> Json
-pub fn OperatorCommand::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OperatorRoute {
   Overview
@@ -827,11 +671,6 @@ pub(all) enum OperatorRoute {
   Audit
   Blank
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OperatorRoute::equal(Self, Self) -> Bool
-pub fn OperatorRoute::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OperatorRoute::not_equal(Self, Self) -> Bool
-pub fn OperatorRoute::to_json(Self) -> Json
-pub fn OperatorRoute::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OperatorWorkflow {
   node_state : @contracts.NodeState
@@ -842,12 +681,7 @@ pub(all) struct OperatorWorkflow {
   receipts : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn OperatorWorkflow::apply(Self, OperatorCommand) -> Self raise WorkflowError
-pub fn OperatorWorkflow::equal(Self, Self) -> Bool
-pub fn OperatorWorkflow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn OperatorWorkflow::initial() -> Self
-pub fn OperatorWorkflow::not_equal(Self, Self) -> Bool
-pub fn OperatorWorkflow::to_json(Self) -> Json
-pub fn OperatorWorkflow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OverviewMetrics {
   active_nodes : Int
@@ -857,11 +691,6 @@ pub(all) struct OverviewMetrics {
   alerts : Int
   recent_changes : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OverviewMetrics::equal(Self, Self) -> Bool
-pub fn OverviewMetrics::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OverviewMetrics::not_equal(Self, Self) -> Bool
-pub fn OverviewMetrics::to_json(Self) -> Json
-pub fn OverviewMetrics::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PolicySummary {
   quota_count : Int
@@ -869,11 +698,6 @@ pub(all) struct PolicySummary {
   default_retention : @contracts.RetentionPolicy
   allowed_runtimes : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PolicySummary::equal(Self, Self) -> Bool
-pub fn PolicySummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PolicySummary::not_equal(Self, Self) -> Bool
-pub fn PolicySummary::to_json(Self) -> Json
-pub fn PolicySummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProductionReadinessState {
   ready : Bool
@@ -881,11 +705,6 @@ pub(all) struct ProductionReadinessState {
   blocker_codes : Array[String]
   error : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProductionReadinessState::equal(Self, Self) -> Bool
-pub fn ProductionReadinessState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProductionReadinessState::not_equal(Self, Self) -> Bool
-pub fn ProductionReadinessState::to_json(Self) -> Json
-pub fn ProductionReadinessState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct QualifiedServiceRow {
   provider : String
@@ -895,21 +714,13 @@ pub(all) struct QualifiedServiceRow {
   evidence_policy : String
   production_ready : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn QualifiedServiceRow::equal(Self, Self) -> Bool
-pub fn QualifiedServiceRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn QualifiedServiceRow::not_equal(Self, Self) -> Bool
-pub fn QualifiedServiceRow::to_json(Self) -> Json
-pub fn QualifiedServiceRow::to_repr(Self) -> @debug.Repr
 
 pub(all) enum QuickTopology {
   SingleMachine
   Cx7Pair
 } derive(Eq, @debug.Debug)
-pub fn QuickTopology::equal(Self, Self) -> Bool
 pub fn QuickTopology::label(Self, @i18n.Locale) -> String
-pub fn QuickTopology::not_equal(Self, Self) -> Bool
 pub fn QuickTopology::storage_value(Self) -> String
-pub fn QuickTopology::to_repr(Self) -> @debug.Repr
 pub fn QuickTopology::topology_profile(Self) -> String?
 
 pub(all) struct RequestDetail {
@@ -919,11 +730,6 @@ pub(all) struct RequestDetail {
   result : String
   receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RequestDetail::equal(Self, Self) -> Bool
-pub fn RequestDetail::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RequestDetail::not_equal(Self, Self) -> Bool
-pub fn RequestDetail::to_json(Self) -> Json
-pub fn RequestDetail::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RequestMetrics {
   count : Int
@@ -931,11 +737,6 @@ pub(all) struct RequestMetrics {
   throughput_per_second : Int
   errors : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RequestMetrics::equal(Self, Self) -> Bool
-pub fn RequestMetrics::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RequestMetrics::not_equal(Self, Self) -> Bool
-pub fn RequestMetrics::to_json(Self) -> Json
-pub fn RequestMetrics::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeProfileDraft {
   name : String
@@ -946,9 +747,6 @@ pub(all) struct RuntimeProfileDraft {
   supports_batching : Bool
   supports_multi_node : Bool
 } derive(Eq, @debug.Debug)
-pub fn RuntimeProfileDraft::equal(Self, Self) -> Bool
-pub fn RuntimeProfileDraft::not_equal(Self, Self) -> Bool
-pub fn RuntimeProfileDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct StreamEventView {
   sequence : Int
@@ -956,8 +754,6 @@ pub(all) struct StreamEventView {
   text : String
   receipt : String
 } derive(Eq)
-pub fn StreamEventView::equal(Self, Self) -> Bool
-pub fn StreamEventView::not_equal(Self, Self) -> Bool
 
 pub(all) struct TemplateDraft {
   template_id : String
@@ -997,9 +793,6 @@ pub(all) struct TemplateDraft {
   automatic_rollback : Bool
   readiness_timeout_ms : String
 } derive(Eq, @debug.Debug)
-pub fn TemplateDraft::equal(Self, Self) -> Bool
-pub fn TemplateDraft::not_equal(Self, Self) -> Bool
-pub fn TemplateDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) enum TemplateField {
   TemplateId
@@ -1029,9 +822,6 @@ pub(all) enum TemplateField {
   TemplateCanaryReplicas
   TemplateReadinessTimeoutMs
 } derive(Eq, @debug.Debug)
-pub fn TemplateField::equal(Self, Self) -> Bool
-pub fn TemplateField::not_equal(Self, Self) -> Bool
-pub fn TemplateField::to_repr(Self) -> @debug.Repr
 
 pub(all) enum TemplateFlag {
   RuntimeMultiNode
@@ -1041,9 +831,6 @@ pub(all) enum TemplateFlag {
   AutomaticPromotion
   AutomaticRollback
 } derive(Eq, @debug.Debug)
-pub fn TemplateFlag::equal(Self, Self) -> Bool
-pub fn TemplateFlag::not_equal(Self, Self) -> Bool
-pub fn TemplateFlag::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TrialSummary {
   registered_trials : Int
@@ -1051,22 +838,12 @@ pub(all) struct TrialSummary {
   expired_trials : Int
   converted_trials : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TrialSummary::equal(Self, Self) -> Bool
-pub fn TrialSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TrialSummary::not_equal(Self, Self) -> Bool
-pub fn TrialSummary::to_json(Self) -> Json
-pub fn TrialSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum UiAccountRole {
   PlatformOperator
   AuditReader
   EnterpriseUser
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn UiAccountRole::equal(Self, Self) -> Bool
-pub fn UiAccountRole::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn UiAccountRole::not_equal(Self, Self) -> Bool
-pub fn UiAccountRole::to_json(Self) -> Json
-pub fn UiAccountRole::to_repr(Self) -> @debug.Repr
 
 pub(all) enum UiAccountState {
   Invited
@@ -1074,11 +851,6 @@ pub(all) enum UiAccountState {
   Suspended
   Revoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn UiAccountState::equal(Self, Self) -> Bool
-pub fn UiAccountState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn UiAccountState::not_equal(Self, Self) -> Bool
-pub fn UiAccountState::to_json(Self) -> Json
-pub fn UiAccountState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct UserAccessRow {
   user_id : String
@@ -1088,11 +860,6 @@ pub(all) struct UserAccessRow {
   last_active : String
   grant_count : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn UserAccessRow::equal(Self, Self) -> Bool
-pub fn UserAccessRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn UserAccessRow::not_equal(Self, Self) -> Bool
-pub fn UserAccessRow::to_json(Self) -> Json
-pub fn UserAccessRow::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

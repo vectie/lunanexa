@@ -21,28 +21,18 @@ pub(all) suberror JobError {
   InvalidTransition
   CapacityExceeded
 } derive(Eq, @debug.Debug)
-pub fn JobError::equal(Self, Self) -> Bool
-pub fn JobError::not_equal(Self, Self) -> Bool
-pub fn JobError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AcceptedTermination {
   node_id : String
   evidence : @contracts.RuntimeTermination
 } derive(Eq, ToJson, @json.FromJson)
-pub fn AcceptedTermination::equal(Self, Self) -> Bool
-pub fn AcceptedTermination::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AcceptedTermination::not_equal(Self, Self) -> Bool
 pub fn AcceptedTermination::reference(Self) -> String
-pub fn AcceptedTermination::to_json(Self) -> Json
 
 pub(all) enum Authority {
   DedicatedOrder(String)
   PrivateWorkspace(String)
 } derive(Eq, @debug.Debug)
-pub fn Authority::equal(Self, Self) -> Bool
-pub fn Authority::not_equal(Self, Self) -> Bool
-pub fn Authority::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExecutionContext {
   deployment_id : String
@@ -50,11 +40,6 @@ pub(all) struct ExecutionContext {
   node_id : String
   instance_id : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExecutionContext::equal(Self, Self) -> Bool
-pub fn ExecutionContext::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExecutionContext::not_equal(Self, Self) -> Bool
-pub fn ExecutionContext::to_json(Self) -> Json
-pub fn ExecutionContext::to_repr(Self) -> @debug.Repr
 
 pub struct JobStore {
   mut jobs : Map[String, StoredJob]
@@ -87,10 +72,6 @@ pub(all) struct Owner {
   project_id : String
   authority : Authority
 } derive(Eq)
-pub fn Owner::equal(Self, Self) -> Bool
-pub fn Owner::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Owner::not_equal(Self, Self) -> Bool
-pub fn Owner::to_json(Self) -> Json
 pub impl ToJson for Owner
 pub impl @json.FromJson for Owner
 
@@ -99,10 +80,6 @@ pub(all) struct Snapshot {
   jobs : Array[StoredJob]
   terminations : Array[AcceptedTermination]?
 } derive(Eq, ToJson, @json.FromJson)
-pub fn Snapshot::equal(Self, Self) -> Bool
-pub fn Snapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Snapshot::not_equal(Self, Self) -> Bool
-pub fn Snapshot::to_json(Self) -> Json
 
 pub(all) enum State {
   Intent
@@ -116,11 +93,6 @@ pub(all) enum State {
   Cancelled
   Expired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn State::equal(Self, Self) -> Bool
-pub fn State::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn State::not_equal(Self, Self) -> Bool
-pub fn State::to_json(Self) -> Json
-pub fn State::to_repr(Self) -> @debug.Repr
 
 pub(all) struct StoredJob {
   job_id : String
@@ -144,11 +116,7 @@ pub(all) struct StoredJob {
   termination_evidence_ref : String?
   termination_observed_unix_ms : Int64?
 } derive(Eq, ToJson, @json.FromJson)
-pub fn StoredJob::equal(Self, Self) -> Bool
-pub fn StoredJob::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn StoredJob::not_equal(Self, Self) -> Bool
 pub fn StoredJob::public_view(Self, Int64) -> Json
-pub fn StoredJob::to_json(Self) -> Json
 
 // Type aliases
 

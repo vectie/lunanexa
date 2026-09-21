@@ -19,9 +19,6 @@ pub(all) suberror AccessOnboardingError {
   InvalidTransition(String)
   InvalidSnapshot(String)
 } derive(Eq, @debug.Debug)
-pub fn AccessOnboardingError::equal(Self, Self) -> Bool
-pub fn AccessOnboardingError::not_equal(Self, Self) -> Bool
-pub fn AccessOnboardingError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AccessOnboardingIntent {
@@ -43,11 +40,6 @@ pub(all) struct AccessOnboardingIntent {
   identity_receipt : String
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessOnboardingIntent::equal(Self, Self) -> Bool
-pub fn AccessOnboardingIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessOnboardingIntent::not_equal(Self, Self) -> Bool
-pub fn AccessOnboardingIntent::to_json(Self) -> Json
-pub fn AccessOnboardingIntent::to_repr(Self) -> @debug.Repr
 
 type AccessOnboardingPersistence
 
@@ -61,21 +53,11 @@ pub(all) struct AccessOnboardingRecord {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessOnboardingRecord::equal(Self, Self) -> Bool
-pub fn AccessOnboardingRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessOnboardingRecord::not_equal(Self, Self) -> Bool
-pub fn AccessOnboardingRecord::to_json(Self) -> Json
-pub fn AccessOnboardingRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccessOnboardingSnapshot {
   schema_version : String
   operations : Array[AccessOnboardingRecord]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessOnboardingSnapshot::equal(Self, Self) -> Bool
-pub fn AccessOnboardingSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessOnboardingSnapshot::not_equal(Self, Self) -> Bool
-pub fn AccessOnboardingSnapshot::to_json(Self) -> Json
-pub fn AccessOnboardingSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AccessOnboardingStatus {
   Running
@@ -84,11 +66,6 @@ pub(all) enum AccessOnboardingStatus {
   Completed
   Conflicted
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessOnboardingStatus::equal(Self, Self) -> Bool
-pub fn AccessOnboardingStatus::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessOnboardingStatus::not_equal(Self, Self) -> Bool
-pub fn AccessOnboardingStatus::to_json(Self) -> Json
-pub fn AccessOnboardingStatus::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AccessOnboardingStep {
   IntentRecorded
@@ -100,11 +77,6 @@ pub(all) enum AccessOnboardingStep {
   Prepared
   Enabled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AccessOnboardingStep::equal(Self, Self) -> Bool
-pub fn AccessOnboardingStep::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AccessOnboardingStep::not_equal(Self, Self) -> Bool
-pub fn AccessOnboardingStep::to_json(Self) -> Json
-pub fn AccessOnboardingStep::to_repr(Self) -> @debug.Repr
 
 pub struct AccessOnboardingStore {
   persistence : AccessOnboardingPersistence

@@ -25,18 +25,12 @@ pub(all) suberror LifecycleError {
   OwnershipConflict
   LeaseExpired
 } derive(Eq, @debug.Debug)
-pub fn LifecycleError::equal(Self, Self) -> Bool
-pub fn LifecycleError::not_equal(Self, Self) -> Bool
-pub fn LifecycleError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror ObservationError {
   InvalidIdentity
   IdentityMismatch
   InvalidObservation
 } derive(Eq, @debug.Debug)
-pub fn ObservationError::equal(Self, Self) -> Bool
-pub fn ObservationError::not_equal(Self, Self) -> Bool
-pub fn ObservationError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AuxiliaryIdentity {
@@ -45,27 +39,13 @@ pub(all) struct AuxiliaryIdentity {
   name : String
   uid : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AuxiliaryIdentity::equal(Self, Self) -> Bool
-pub fn AuxiliaryIdentity::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AuxiliaryIdentity::not_equal(Self, Self) -> Bool
-pub fn AuxiliaryIdentity::to_json(Self) -> Json
-pub fn AuxiliaryIdentity::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AuxiliaryKind {
   NetworkPolicy
   ClaimTemplate
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AuxiliaryKind::equal(Self, Self) -> Bool
-pub fn AuxiliaryKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AuxiliaryKind::not_equal(Self, Self) -> Bool
-pub fn AuxiliaryKind::to_json(Self) -> Json
-pub fn AuxiliaryKind::to_repr(Self) -> @debug.Repr
 
 type ObservedContainer derive(Eq, ToJson, @json.FromJson)
-pub fn ObservedContainer::equal(Self, Self) -> Bool
-pub fn ObservedContainer::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ObservedContainer::not_equal(Self, Self) -> Bool
-pub fn ObservedContainer::to_json(Self) -> Json
 
 pub(all) struct PodIdentity {
   namespace_name : String
@@ -79,9 +59,6 @@ pub(all) struct PodIdentity {
   image_digest : String
   container_name : String
 } derive(Eq, @debug.Debug)
-pub fn PodIdentity::equal(Self, Self) -> Bool
-pub fn PodIdentity::not_equal(Self, Self) -> Bool
-pub fn PodIdentity::to_repr(Self) -> @debug.Repr
 
 pub struct PodManager {
   transport : async (String, String, Json?) -> (Int, Json)
@@ -95,12 +72,8 @@ pub async fn PodManager::remove_auxiliary(Self, AuxiliaryIdentity) -> @contracts
 pub async fn PodManager::stop(Self, PodIdentity) -> @contracts.DeploymentState
 
 type ResourceRecord derive(ToJson, @json.FromJson)
-pub fn ResourceRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ResourceRecord::to_json(Self) -> Json
 
 type RuntimeJournal derive(ToJson, @json.FromJson)
-pub fn RuntimeJournal::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeJournal::to_json(Self) -> Json
 
 pub(all) struct RuntimeObservation {
   assignment_id : String
@@ -109,13 +82,8 @@ pub(all) struct RuntimeObservation {
   address : String
   endpoint : @contracts.RuntimeEndpoint?
 } derive(Eq, @debug.Debug)
-pub fn RuntimeObservation::equal(Self, Self) -> Bool
-pub fn RuntimeObservation::not_equal(Self, Self) -> Bool
-pub fn RuntimeObservation::to_repr(Self) -> @debug.Repr
 
 type RuntimeRecord derive(ToJson, @json.FromJson)
-pub fn RuntimeRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeRecord::to_json(Self) -> Json
 
 pub(all) struct RuntimeResources {
   name : String
@@ -123,9 +91,6 @@ pub(all) struct RuntimeResources {
   claim_template : Json?
   network_policy : Json
 } derive(Eq, @debug.Debug)
-pub fn RuntimeResources::equal(Self, Self) -> Bool
-pub fn RuntimeResources::not_equal(Self, Self) -> Bool
-pub fn RuntimeResources::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeSecretBinding {
   image_ref : String
@@ -133,11 +98,6 @@ pub(all) struct RuntimeSecretBinding {
   secret_name : String
   secret_key : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeSecretBinding::equal(Self, Self) -> Bool
-pub fn RuntimeSecretBinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeSecretBinding::not_equal(Self, Self) -> Bool
-pub fn RuntimeSecretBinding::to_json(Self) -> Json
-pub fn RuntimeSecretBinding::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeSettings {
   namespace_name : String
@@ -154,11 +114,6 @@ pub(all) struct RuntimeSettings {
   runtime_secrets : Array[RuntimeSecretBinding]?
   fabric_address : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeSettings::equal(Self, Self) -> Bool
-pub fn RuntimeSettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeSettings::not_equal(Self, Self) -> Bool
-pub fn RuntimeSettings::to_json(Self) -> Json
-pub fn RuntimeSettings::to_repr(Self) -> @debug.Repr
 
 pub struct RuntimeSupervisor {
   journal : RuntimeJournal

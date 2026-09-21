@@ -2,6 +2,7 @@ import {
   "vectie/lunanexa/contracts",
   "moonbitlang/async",
   "moonbitlang/async/http",
+  "moonbitlang/async/io",
   "moonbitlang/core/json",
   "moonbitlang/core/string",
 }

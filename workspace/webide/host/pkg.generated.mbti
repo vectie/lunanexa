@@ -21,9 +21,6 @@ pub(all) suberror HostError {
   ControllerRejected
   WorkspaceUnavailable
 } derive(Eq, @debug.Debug)
-pub fn HostError::equal(Self, Self) -> Bool
-pub fn HostError::not_equal(Self, Self) -> Bool
-pub fn HostError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct HostConfig {
@@ -45,11 +42,8 @@ pub(all) struct HostConfig {
   kubernetes_ca_file : String
   kubernetes_token_file : String
 } derive(@json.FromJson)
-pub fn HostConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type ModelProxyConfig derive(ToJson, @json.FromJson)
-pub fn ModelProxyConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelProxyConfig::to_json(Self) -> Json
 
 pub struct WorkspaceHost {
   config : HostConfig

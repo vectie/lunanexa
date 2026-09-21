@@ -36,9 +36,6 @@ pub(all) suberror CommercialError {
   SeparationOfDuties(String)
   AdmissionDenied(String)
 } derive(Eq, @debug.Debug)
-pub fn CommercialError::equal(Self, Self) -> Bool
-pub fn CommercialError::not_equal(Self, Self) -> Bool
-pub fn CommercialError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AdmissionDecision {
@@ -46,22 +43,12 @@ pub(all) struct AdmissionDecision {
   reasons : Array[String]
   matching_commitment_id : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AdmissionDecision::equal(Self, Self) -> Bool
-pub fn AdmissionDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AdmissionDecision::not_equal(Self, Self) -> Bool
-pub fn AdmissionDecision::to_json(Self) -> Json
-pub fn AdmissionDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AdmissionDecisionKind {
   Allowed
   ApprovalRequired
   Blocked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AdmissionDecisionKind::equal(Self, Self) -> Bool
-pub fn AdmissionDecisionKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AdmissionDecisionKind::not_equal(Self, Self) -> Bool
-pub fn AdmissionDecisionKind::to_json(Self) -> Json
-pub fn AdmissionDecisionKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AdmissionRequest {
   organization_id : String
@@ -73,11 +60,6 @@ pub(all) struct AdmissionRequest {
   required_agreement_types : Array[String]
   now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AdmissionRequest::equal(Self, Self) -> Bool
-pub fn AdmissionRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AdmissionRequest::not_equal(Self, Self) -> Bool
-pub fn AdmissionRequest::to_json(Self) -> Json
-pub fn AdmissionRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Agreement {
   agreement_id : String
@@ -94,11 +76,6 @@ pub(all) struct Agreement {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Agreement::equal(Self, Self) -> Bool
-pub fn Agreement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Agreement::not_equal(Self, Self) -> Bool
-pub fn Agreement::to_json(Self) -> Json
-pub fn Agreement::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AgreementState {
   DraftAgreement
@@ -113,11 +90,6 @@ pub(all) enum AgreementState {
   Voided
   SupersededAgreement
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AgreementState::equal(Self, Self) -> Bool
-pub fn AgreementState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AgreementState::not_equal(Self, Self) -> Bool
-pub fn AgreementState::to_json(Self) -> Json
-pub fn AgreementState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AgreementTemplate {
   template_id : String
@@ -130,33 +102,18 @@ pub(all) struct AgreementTemplate {
   state : AgreementTemplateState
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AgreementTemplate::equal(Self, Self) -> Bool
-pub fn AgreementTemplate::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AgreementTemplate::not_equal(Self, Self) -> Bool
-pub fn AgreementTemplate::to_json(Self) -> Json
-pub fn AgreementTemplate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AgreementTemplateState {
   DraftTemplate
   ReadyTemplate
   SupersededTemplate
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AgreementTemplateState::equal(Self, Self) -> Bool
-pub fn AgreementTemplateState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AgreementTemplateState::not_equal(Self, Self) -> Bool
-pub fn AgreementTemplateState::to_json(Self) -> Json
-pub fn AgreementTemplateState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct BillingContact {
   display_name : String
   email : String
   phone : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BillingContact::equal(Self, Self) -> Bool
-pub fn BillingContact::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BillingContact::not_equal(Self, Self) -> Bool
-pub fn BillingContact::to_json(Self) -> Json
-pub fn BillingContact::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Budget {
   budget_id : String
@@ -170,22 +127,12 @@ pub(all) struct Budget {
   effective_from_unix_ms : Int64
   effective_until_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Budget::equal(Self, Self) -> Bool
-pub fn Budget::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Budget::not_equal(Self, Self) -> Bool
-pub fn Budget::to_json(Self) -> Json
-pub fn Budget::to_repr(Self) -> @debug.Repr
 
 pub(all) enum BudgetAction {
   Notify
   RequireApproval
   BlockNewWork
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BudgetAction::equal(Self, Self) -> Bool
-pub fn BudgetAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BudgetAction::not_equal(Self, Self) -> Bool
-pub fn BudgetAction::to_json(Self) -> Json
-pub fn BudgetAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CapacityCommitment {
   commitment_id : String
@@ -200,11 +147,6 @@ pub(all) struct CapacityCommitment {
   approved_by : String?
   state : CommitmentState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CapacityCommitment::equal(Self, Self) -> Bool
-pub fn CapacityCommitment::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CapacityCommitment::not_equal(Self, Self) -> Bool
-pub fn CapacityCommitment::to_json(Self) -> Json
-pub fn CapacityCommitment::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClickwrapAcceptance {
   acceptance_id : String
@@ -219,22 +161,12 @@ pub(all) struct ClickwrapAcceptance {
   network_context_hash : String
   accepted_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClickwrapAcceptance::equal(Self, Self) -> Bool
-pub fn ClickwrapAcceptance::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClickwrapAcceptance::not_equal(Self, Self) -> Bool
-pub fn ClickwrapAcceptance::to_json(Self) -> Json
-pub fn ClickwrapAcceptance::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CommercialDurableSnapshot {
   schema_version : String
   commercial : CommercialSnapshot
   signature_callbacks : Array[SignatureCallback]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CommercialDurableSnapshot::equal(Self, Self) -> Bool
-pub fn CommercialDurableSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CommercialDurableSnapshot::not_equal(Self, Self) -> Bool
-pub fn CommercialDurableSnapshot::to_json(Self) -> Json
-pub fn CommercialDurableSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CommercialExport {
   schema_version : String
@@ -245,11 +177,6 @@ pub(all) struct CommercialExport {
   content_sha256 : String
   row_count : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CommercialExport::equal(Self, Self) -> Bool
-pub fn CommercialExport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CommercialExport::not_equal(Self, Self) -> Bool
-pub fn CommercialExport::to_json(Self) -> Json
-pub fn CommercialExport::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CommercialPermission {
   ManageOrganization
@@ -263,11 +190,6 @@ pub(all) enum CommercialPermission {
   AdministerLease
   OperatePlatform
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CommercialPermission::equal(Self, Self) -> Bool
-pub fn CommercialPermission::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CommercialPermission::not_equal(Self, Self) -> Bool
-pub fn CommercialPermission::to_json(Self) -> Json
-pub fn CommercialPermission::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CommercialSnapshot {
   schema_version : String
@@ -286,11 +208,6 @@ pub(all) struct CommercialSnapshot {
   agreements : Array[Agreement]
   role_grants : Array[RoleGrant]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CommercialSnapshot::equal(Self, Self) -> Bool
-pub fn CommercialSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CommercialSnapshot::not_equal(Self, Self) -> Bool
-pub fn CommercialSnapshot::to_json(Self) -> Json
-pub fn CommercialSnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct CommercialStore {
   mut organizations : Map[String, Organization]
@@ -358,11 +275,6 @@ pub(all) struct CommercialSummary {
   executed_agreement_count : Int
   provisional_total : FixedMoney
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CommercialSummary::equal(Self, Self) -> Bool
-pub fn CommercialSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CommercialSummary::not_equal(Self, Self) -> Bool
-pub fn CommercialSummary::to_json(Self) -> Json
-pub fn CommercialSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CommitmentState {
   Proposed
@@ -372,11 +284,6 @@ pub(all) enum CommitmentState {
   Expired
   CancelledCommitment
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CommitmentState::equal(Self, Self) -> Bool
-pub fn CommitmentState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CommitmentState::not_equal(Self, Self) -> Bool
-pub fn CommitmentState::to_json(Self) -> Json
-pub fn CommitmentState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CostCenter {
   cost_center_id : String
@@ -385,11 +292,6 @@ pub(all) struct CostCenter {
   display_name : String
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CostCenter::equal(Self, Self) -> Bool
-pub fn CostCenter::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CostCenter::not_equal(Self, Self) -> Bool
-pub fn CostCenter::to_json(Self) -> Json
-pub fn CostCenter::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EntitlementConsumption {
   consumption_id : String
@@ -399,11 +301,6 @@ pub(all) struct EntitlementConsumption {
   quantity : Int64
   consumed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EntitlementConsumption::equal(Self, Self) -> Bool
-pub fn EntitlementConsumption::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EntitlementConsumption::not_equal(Self, Self) -> Bool
-pub fn EntitlementConsumption::to_json(Self) -> Json
-pub fn EntitlementConsumption::to_repr(Self) -> @debug.Repr
 
 pub(all) struct FinalizedPeriod {
   period_id : String
@@ -416,11 +313,6 @@ pub(all) struct FinalizedPeriod {
   finalized_unix_ms : Int64
   finalized_by : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn FinalizedPeriod::equal(Self, Self) -> Bool
-pub fn FinalizedPeriod::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn FinalizedPeriod::not_equal(Self, Self) -> Bool
-pub fn FinalizedPeriod::to_json(Self) -> Json
-pub fn FinalizedPeriod::to_repr(Self) -> @debug.Repr
 
 pub(all) struct FixedMoney {
   minor_units : Int64
@@ -428,22 +320,12 @@ pub(all) struct FixedMoney {
   scale : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn FixedMoney::add(Self, Self) -> Self raise CommercialError
-pub fn FixedMoney::equal(Self, Self) -> Bool
-pub fn FixedMoney::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn FixedMoney::negate(Self) -> Self raise CommercialError
-pub fn FixedMoney::not_equal(Self, Self) -> Bool
-pub fn FixedMoney::to_json(Self) -> Json
-pub fn FixedMoney::to_repr(Self) -> @debug.Repr
 
 pub(all) enum IdempotencyResult {
   Created
   Replayed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn IdempotencyResult::equal(Self, Self) -> Bool
-pub fn IdempotencyResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn IdempotencyResult::not_equal(Self, Self) -> Bool
-pub fn IdempotencyResult::to_json(Self) -> Json
-pub fn IdempotencyResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LedgerEntry {
   entry_id : String
@@ -467,11 +349,6 @@ pub(all) struct LedgerEntry {
   recorded_unix_ms : Int64
   reason : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LedgerEntry::equal(Self, Self) -> Bool
-pub fn LedgerEntry::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LedgerEntry::not_equal(Self, Self) -> Bool
-pub fn LedgerEntry::to_json(Self) -> Json
-pub fn LedgerEntry::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LedgerEntryKind {
   Charge
@@ -479,11 +356,6 @@ pub(all) enum LedgerEntryKind {
   Credit
   Debit
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LedgerEntryKind::equal(Self, Self) -> Bool
-pub fn LedgerEntryKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LedgerEntryKind::not_equal(Self, Self) -> Bool
-pub fn LedgerEntryKind::to_json(Self) -> Json
-pub fn LedgerEntryKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Organization {
   organization_id : String
@@ -493,11 +365,6 @@ pub(all) struct Organization {
   legal_profile : OrganizationLegalProfile?
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Organization::equal(Self, Self) -> Bool
-pub fn Organization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Organization::not_equal(Self, Self) -> Bool
-pub fn Organization::to_json(Self) -> Json
-pub fn Organization::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OrganizationLegalProfile {
   subject_kind : OrganizationSubjectKind
@@ -508,11 +375,6 @@ pub(all) struct OrganizationLegalProfile {
   registered_address : String
   billing_contact : BillingContact
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OrganizationLegalProfile::equal(Self, Self) -> Bool
-pub fn OrganizationLegalProfile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OrganizationLegalProfile::not_equal(Self, Self) -> Bool
-pub fn OrganizationLegalProfile::to_json(Self) -> Json
-pub fn OrganizationLegalProfile::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OrganizationRole {
   OrganizationOwner
@@ -525,11 +387,6 @@ pub(all) enum OrganizationRole {
   Auditor
   PlatformOperator
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OrganizationRole::equal(Self, Self) -> Bool
-pub fn OrganizationRole::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OrganizationRole::not_equal(Self, Self) -> Bool
-pub fn OrganizationRole::to_json(Self) -> Json
-pub fn OrganizationRole::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OrganizationState {
   Draft
@@ -539,21 +396,11 @@ pub(all) enum OrganizationState {
   Suspended
   Closed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OrganizationState::equal(Self, Self) -> Bool
-pub fn OrganizationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OrganizationState::not_equal(Self, Self) -> Bool
-pub fn OrganizationState::to_json(Self) -> Json
-pub fn OrganizationState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OrganizationSubjectKind {
   Individual
   Company
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OrganizationSubjectKind::equal(Self, Self) -> Bool
-pub fn OrganizationSubjectKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OrganizationSubjectKind::not_equal(Self, Self) -> Bool
-pub fn OrganizationSubjectKind::to_json(Self) -> Json
-pub fn OrganizationSubjectKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Project {
   project_id : String
@@ -562,11 +409,6 @@ pub(all) struct Project {
   display_name : String
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Project::equal(Self, Self) -> Bool
-pub fn Project::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Project::not_equal(Self, Self) -> Bool
-pub fn Project::to_json(Self) -> Json
-pub fn Project::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Quota {
   quota_id : String
@@ -577,11 +419,6 @@ pub(all) struct Quota {
   period_started_unix_ms : Int64
   period_ended_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Quota::equal(Self, Self) -> Bool
-pub fn Quota::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Quota::not_equal(Self, Self) -> Bool
-pub fn Quota::to_json(Self) -> Json
-pub fn Quota::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RateCard {
   rate_card_id : String
@@ -592,11 +429,6 @@ pub(all) struct RateCard {
   effective_from_unix_ms : Int64
   effective_until_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RateCard::equal(Self, Self) -> Bool
-pub fn RateCard::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RateCard::not_equal(Self, Self) -> Bool
-pub fn RateCard::to_json(Self) -> Json
-pub fn RateCard::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RoleGrant {
   grant_id : String
@@ -607,11 +439,6 @@ pub(all) struct RoleGrant {
   granted_unix_ms : Int64
   expires_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RoleGrant::equal(Self, Self) -> Bool
-pub fn RoleGrant::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RoleGrant::not_equal(Self, Self) -> Bool
-pub fn RoleGrant::to_json(Self) -> Json
-pub fn RoleGrant::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignatureCallback {
   callback_id : String
@@ -627,11 +454,6 @@ pub(all) struct SignatureCallback {
   verified : Bool
   received_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SignatureCallback::equal(Self, Self) -> Bool
-pub fn SignatureCallback::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SignatureCallback::not_equal(Self, Self) -> Bool
-pub fn SignatureCallback::to_json(Self) -> Json
-pub fn SignatureCallback::to_repr(Self) -> @debug.Repr
 
 pub(all) struct UsageObservation {
   event_id : String
@@ -648,11 +470,6 @@ pub(all) struct UsageObservation {
   ended_unix_ms : Int64
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn UsageObservation::equal(Self, Self) -> Bool
-pub fn UsageObservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn UsageObservation::not_equal(Self, Self) -> Bool
-pub fn UsageObservation::to_json(Self) -> Json
-pub fn UsageObservation::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

@@ -20,9 +20,6 @@ pub(all) struct HostConfig {
 } derive(FromJson)
 
 ///|
-pub extend HostConfig with FromJson::{from_json}
-
-///|
 /// Never derive a printable instance: API secrets must not reach diagnostics.
 struct ModelProxyConfig {
   client_id : String
@@ -36,12 +33,6 @@ struct ModelProxyConfig {
   controller_origin : String
   model_gateway_origin : String
 } derive(FromJson, ToJson)
-
-///|
-pub extend ModelProxyConfig with FromJson::{from_json}
-
-///|
-pub extend ModelProxyConfig with ToJson::{to_json}
 
 ///|
 fn ModelProxyConfig::grant(self : ModelProxyConfig) -> @webide.Grant {
@@ -73,12 +64,6 @@ pub(all) suberror HostError {
   ControllerRejected
   WorkspaceUnavailable
 } derive(Debug, Eq)
-
-///|
-pub extend HostError with Debug::{to_repr}
-
-///|
-pub extend HostError with Eq::{not_equal, equal}
 
 ///|
 fn dns_label(value : String) -> Bool {

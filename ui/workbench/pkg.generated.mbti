@@ -36,18 +36,12 @@ pub(all) struct DraftFile {
   language : String
   content : String
 } derive(Eq, @debug.Debug)
-pub fn DraftFile::equal(Self, Self) -> Bool
-pub fn DraftFile::not_equal(Self, Self) -> Bool
-pub fn DraftFile::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IntegrationSummary {
   provider : @workspace.IntegrationProvider
   state : @workspace.ConnectionState
   description : String
 } derive(Eq, @debug.Debug)
-pub fn IntegrationSummary::equal(Self, Self) -> Bool
-pub fn IntegrationSummary::not_equal(Self, Self) -> Bool
-pub fn IntegrationSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct UsageSummary {
   requests_used : Int
@@ -56,9 +50,6 @@ pub(all) struct UsageSummary {
   output_units : Int
   accelerator_ms : Int64
 } derive(Eq, @debug.Debug)
-pub fn UsageSummary::equal(Self, Self) -> Bool
-pub fn UsageSummary::not_equal(Self, Self) -> Bool
-pub fn UsageSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum WorkbenchMessage {
   LocaleChanged(@i18n.Locale)
@@ -73,8 +64,6 @@ pub(all) enum WorkbenchMessage {
   ExportDrafts
   CopyDiagnostic(String)
 } derive(Eq)
-pub fn WorkbenchMessage::equal(Self, Self) -> Bool
-pub fn WorkbenchMessage::not_equal(Self, Self) -> Bool
 
 pub(all) struct WorkbenchState {
   locale : @i18n.Locale
@@ -95,8 +84,6 @@ pub(all) struct WorkbenchState {
   success_message : String?
   error_message : String?
 } derive(Eq)
-pub fn WorkbenchState::equal(Self, Self) -> Bool
-pub fn WorkbenchState::not_equal(Self, Self) -> Bool
 pub fn WorkbenchState::update(Self, WorkbenchMessage) -> Self
 
 // Type aliases

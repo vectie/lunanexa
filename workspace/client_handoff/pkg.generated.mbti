@@ -31,9 +31,6 @@ pub(all) suberror ClientHandoffError {
   Revoked
   QuotaExceeded
 } derive(Eq, @debug.Debug)
-pub fn ClientHandoffError::equal(Self, Self) -> Bool
-pub fn ClientHandoffError::not_equal(Self, Self) -> Bool
-pub fn ClientHandoffError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ClientAuthorization {
@@ -43,11 +40,6 @@ pub(all) struct ClientAuthorization {
   organization_id : String
   project_id : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientAuthorization::equal(Self, Self) -> Bool
-pub fn ClientAuthorization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientAuthorization::not_equal(Self, Self) -> Bool
-pub fn ClientAuthorization::to_json(Self) -> Json
-pub fn ClientAuthorization::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientCredential {
   key_id : String
@@ -65,11 +57,6 @@ pub(all) struct ClientCredential {
   consumed_requests : Int64
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientCredential::equal(Self, Self) -> Bool
-pub fn ClientCredential::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientCredential::not_equal(Self, Self) -> Bool
-pub fn ClientCredential::to_json(Self) -> Json
-pub fn ClientCredential::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientHandoffIssueIntent {
   request_id : String
@@ -84,11 +71,6 @@ pub(all) struct ClientHandoffIssueIntent {
   credential_expires_unix_ms : Int64
   maximum_requests : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientHandoffIssueIntent::equal(Self, Self) -> Bool
-pub fn ClientHandoffIssueIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientHandoffIssueIntent::not_equal(Self, Self) -> Bool
-pub fn ClientHandoffIssueIntent::to_json(Self) -> Json
-pub fn ClientHandoffIssueIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientHandoffRecord {
   version : String
@@ -110,11 +92,6 @@ pub(all) struct ClientHandoffRecord {
   redeemed_unix_ms : Int64?
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientHandoffRecord::equal(Self, Self) -> Bool
-pub fn ClientHandoffRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientHandoffRecord::not_equal(Self, Self) -> Bool
-pub fn ClientHandoffRecord::to_json(Self) -> Json
-pub fn ClientHandoffRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientHandoffRedemption {
   handoff_id : String
@@ -130,22 +107,12 @@ pub(all) struct ClientHandoffRedemption {
   maximum_requests : Int64
   one_time : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientHandoffRedemption::equal(Self, Self) -> Bool
-pub fn ClientHandoffRedemption::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientHandoffRedemption::not_equal(Self, Self) -> Bool
-pub fn ClientHandoffRedemption::to_json(Self) -> Json
-pub fn ClientHandoffRedemption::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientHandoffSnapshot {
   schema_version : String
   handoffs : Array[ClientHandoffRecord]
   credentials : Array[ClientCredential]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientHandoffSnapshot::equal(Self, Self) -> Bool
-pub fn ClientHandoffSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientHandoffSnapshot::not_equal(Self, Self) -> Bool
-pub fn ClientHandoffSnapshot::to_json(Self) -> Json
-pub fn ClientHandoffSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientHandoffView {
   handoff_id : String
@@ -162,11 +129,6 @@ pub(all) struct ClientHandoffView {
   redeemed_unix_ms : Int64?
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientHandoffView::equal(Self, Self) -> Bool
-pub fn ClientHandoffView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientHandoffView::not_equal(Self, Self) -> Bool
-pub fn ClientHandoffView::to_json(Self) -> Json
-pub fn ClientHandoffView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ClientLaunchConfig {
   client_id : String
@@ -176,11 +138,6 @@ pub(all) struct ClientLaunchConfig {
   handoff_lifetime_ms : Int64
   maximum_requests : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ClientLaunchConfig::equal(Self, Self) -> Bool
-pub fn ClientLaunchConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ClientLaunchConfig::not_equal(Self, Self) -> Bool
-pub fn ClientLaunchConfig::to_json(Self) -> Json
-pub fn ClientLaunchConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IssuedClientHandoff {
   handoff_id : String
@@ -191,11 +148,6 @@ pub(all) struct IssuedClientHandoff {
   redemption_path : String
   one_time : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn IssuedClientHandoff::equal(Self, Self) -> Bool
-pub fn IssuedClientHandoff::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn IssuedClientHandoff::not_equal(Self, Self) -> Bool
-pub fn IssuedClientHandoff::to_json(Self) -> Json
-pub fn IssuedClientHandoff::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

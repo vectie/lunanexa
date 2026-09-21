@@ -9,18 +9,6 @@ pub(all) struct OverviewMetrics {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OverviewMetrics with Debug::{to_repr}
-
-///|
-pub extend OverviewMetrics with Eq::{not_equal, equal}
-
-///|
-pub extend OverviewMetrics with ToJson::{to_json}
-
-///|
-pub extend OverviewMetrics with FromJson::{from_json}
-
-///|
 pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
@@ -45,18 +33,6 @@ pub(all) struct NodeRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend NodeRow with Debug::{to_repr}
-
-///|
-pub extend NodeRow with Eq::{not_equal, equal}
-
-///|
-pub extend NodeRow with ToJson::{to_json}
-
-///|
-pub extend NodeRow with FromJson::{from_json}
-
-///|
 pub(all) struct ModelRow {
   model_id : String
   version : String
@@ -71,18 +47,6 @@ pub(all) struct ModelRow {
   artifact_uri : String
   artifact_digest : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ModelRow with Debug::{to_repr}
-
-///|
-pub extend ModelRow with Eq::{not_equal, equal}
-
-///|
-pub extend ModelRow with ToJson::{to_json}
-
-///|
-pub extend ModelRow with FromJson::{from_json}
 
 ///|
 pub(all) struct ModelSourceCatalogRow {
@@ -103,36 +67,12 @@ pub(all) struct ModelSourceCatalogRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ModelSourceCatalogRow with Debug::{to_repr}
-
-///|
-pub extend ModelSourceCatalogRow with Eq::{not_equal, equal}
-
-///|
-pub extend ModelSourceCatalogRow with ToJson::{to_json}
-
-///|
-pub extend ModelSourceCatalogRow with FromJson::{from_json}
-
-///|
 pub(all) struct ModelSourceCatalogPage {
   models : Array[ModelSourceCatalogRow]
   total_count : Int64
   page_number : Int
   page_size : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ModelSourceCatalogPage with Debug::{to_repr}
-
-///|
-pub extend ModelSourceCatalogPage with Eq::{not_equal, equal}
-
-///|
-pub extend ModelSourceCatalogPage with ToJson::{to_json}
-
-///|
-pub extend ModelSourceCatalogPage with FromJson::{from_json}
 
 ///|
 pub(all) enum ModelImportState {
@@ -143,18 +83,6 @@ pub(all) enum ModelImportState {
   Failed
   Cancelled
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ModelImportState with Debug::{to_repr}
-
-///|
-pub extend ModelImportState with Eq::{not_equal, equal}
-
-///|
-pub extend ModelImportState with ToJson::{to_json}
-
-///|
-pub extend ModelImportState with FromJson::{from_json}
 
 ///|
 pub(all) struct ModelImportRow {
@@ -178,18 +106,6 @@ pub(all) struct ModelImportRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ModelImportRow with Debug::{to_repr}
-
-///|
-pub extend ModelImportRow with Eq::{not_equal, equal}
-
-///|
-pub extend ModelImportRow with ToJson::{to_json}
-
-///|
-pub extend ModelImportRow with FromJson::{from_json}
-
-///|
 /// A directory an operator already populated inside the managed model store.
 pub(all) struct ModelLocalDirectoryRow {
   directory : String
@@ -199,33 +115,9 @@ pub(all) struct ModelLocalDirectoryRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ModelLocalDirectoryRow with Debug::{to_repr}
-
-///|
-pub extend ModelLocalDirectoryRow with Eq::{not_equal, equal}
-
-///|
-pub extend ModelLocalDirectoryRow with ToJson::{to_json}
-
-///|
-pub extend ModelLocalDirectoryRow with FromJson::{from_json}
-
-///|
 pub(all) struct ModelLocalDirectoryListing {
   directories : Array[ModelLocalDirectoryRow]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ModelLocalDirectoryListing with Debug::{to_repr}
-
-///|
-pub extend ModelLocalDirectoryListing with Eq::{not_equal, equal}
-
-///|
-pub extend ModelLocalDirectoryListing with ToJson::{to_json}
-
-///|
-pub extend ModelLocalDirectoryListing with FromJson::{from_json}
 
 ///|
 /// Operator intent to bring one local directory into the model plane under a
@@ -235,18 +127,6 @@ pub(all) struct ModelLocalRegistrationDraft {
   repository : String
   revision : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ModelLocalRegistrationDraft with Debug::{to_repr}
-
-///|
-pub extend ModelLocalRegistrationDraft with Eq::{not_equal, equal}
-
-///|
-pub extend ModelLocalRegistrationDraft with ToJson::{to_json}
-
-///|
-pub extend ModelLocalRegistrationDraft with FromJson::{from_json}
 
 ///|
 /// Operator-supplied registry identity for one checksum-verified import.
@@ -262,12 +142,6 @@ pub(all) struct ModelAdoptionDraft {
 } derive(Debug, Eq)
 
 ///|
-pub extend ModelAdoptionDraft with Debug::{to_repr}
-
-///|
-pub extend ModelAdoptionDraft with Eq::{not_equal, equal}
-
-///|
 /// Operator acceptance of one candidate's declared upstream licence. Both the
 /// record identity and the citation are operator text; the control plane
 /// verifies the digest separately and accepts no inferred evidence here.
@@ -279,24 +153,12 @@ pub(all) struct ModelLicenseDraft {
 } derive(Debug, Eq)
 
 ///|
-pub extend ModelLicenseDraft with Debug::{to_repr}
-
-///|
-pub extend ModelLicenseDraft with Eq::{not_equal, equal}
-
-///|
 /// Operator promotion of one approved model version onto a serving alias.
 pub(all) struct ModelAliasDraft {
   model_id : String
   version : String
   alias_name : String
 } derive(Debug, Eq)
-
-///|
-pub extend ModelAliasDraft with Debug::{to_repr}
-
-///|
-pub extend ModelAliasDraft with Eq::{not_equal, equal}
 
 ///|
 /// One runtime profile an operator registers with the control plane. The
@@ -310,12 +172,6 @@ pub(all) struct RuntimeProfileDraft {
   supports_batching : Bool
   supports_multi_node : Bool
 } derive(Debug, Eq)
-
-///|
-pub extend RuntimeProfileDraft with Debug::{to_repr}
-
-///|
-pub extend RuntimeProfileDraft with Eq::{not_equal, equal}
 
 ///|
 pub fn empty_model_license_draft() -> ModelLicenseDraft {
@@ -529,12 +385,6 @@ pub(all) struct TemplateDraft {
 } derive(Debug, Eq)
 
 ///|
-pub extend TemplateDraft with Debug::{to_repr}
-
-///|
-pub extend TemplateDraft with Eq::{not_equal, equal}
-
-///|
 /// Every text control of the template form, addressed by name so one message
 /// covers twenty-five fields instead of twenty-five messages.
 pub(all) enum TemplateField {
@@ -567,12 +417,6 @@ pub(all) enum TemplateField {
 } derive(Debug, Eq)
 
 ///|
-pub extend TemplateField with Debug::{to_repr}
-
-///|
-pub extend TemplateField with Eq::{not_equal, equal}
-
-///|
 /// The switches a template carries. Multi-node support is what an admitted CX7
 /// pair needs; the two capture switches only mean anything inside an evaluation
 /// capture.
@@ -590,12 +434,6 @@ pub(all) enum TemplateFlag {
   AutomaticPromotion
   AutomaticRollback
 } derive(Debug, Eq)
-
-///|
-pub extend TemplateFlag with Debug::{to_repr}
-
-///|
-pub extend TemplateFlag with Eq::{not_equal, equal}
 
 ///|
 /// The defaults are the ones this deployment admits: one accelerator of the
@@ -1371,36 +1209,12 @@ pub(all) struct DeploymentRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DeploymentRow with Debug::{to_repr}
-
-///|
-pub extend DeploymentRow with Eq::{not_equal, equal}
-
-///|
-pub extend DeploymentRow with ToJson::{to_json}
-
-///|
-pub extend DeploymentRow with FromJson::{from_json}
-
-///|
 pub(all) struct RequestMetrics {
   count : Int
   p95_ms : Int
   throughput_per_second : Int
   errors : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RequestMetrics with Debug::{to_repr}
-
-///|
-pub extend RequestMetrics with Eq::{not_equal, equal}
-
-///|
-pub extend RequestMetrics with ToJson::{to_json}
-
-///|
-pub extend RequestMetrics with FromJson::{from_json}
 
 ///|
 pub(all) struct RequestDetail {
@@ -1412,27 +1226,12 @@ pub(all) struct RequestDetail {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RequestDetail with Debug::{to_repr}
-
-///|
-pub extend RequestDetail with Eq::{not_equal, equal}
-
-///|
-pub extend RequestDetail with ToJson::{to_json}
-
-///|
-pub extend RequestDetail with FromJson::{from_json}
-
-///|
 pub(all) struct StreamEventView {
   sequence : Int
   kind : String
   text : String
   receipt : String
 } derive(Eq)
-
-///|
-pub extend StreamEventView with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct PolicySummary {
@@ -1443,18 +1242,6 @@ pub(all) struct PolicySummary {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend PolicySummary with Debug::{to_repr}
-
-///|
-pub extend PolicySummary with Eq::{not_equal, equal}
-
-///|
-pub extend PolicySummary with ToJson::{to_json}
-
-///|
-pub extend PolicySummary with FromJson::{from_json}
-
-///|
 pub(all) struct AuditRow {
   actor : String
   decision : String
@@ -1462,18 +1249,6 @@ pub(all) struct AuditRow {
   result : String
   receipt : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AuditRow with Debug::{to_repr}
-
-///|
-pub extend AuditRow with Eq::{not_equal, equal}
-
-///|
-pub extend AuditRow with ToJson::{to_json}
-
-///|
-pub extend AuditRow with FromJson::{from_json}
 
 ///|
 pub(all) struct NotificationRow {
@@ -1490,18 +1265,6 @@ pub(all) struct NotificationRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend NotificationRow with Debug::{to_repr}
-
-///|
-pub extend NotificationRow with Eq::{not_equal, equal}
-
-///|
-pub extend NotificationRow with ToJson::{to_json}
-
-///|
-pub extend NotificationRow with FromJson::{from_json}
-
-///|
 pub(all) struct NotificationDeliveryRow {
   delivery_id : String
   notification_id : String
@@ -1511,18 +1274,6 @@ pub(all) struct NotificationDeliveryRow {
   updated_unix_ms : Int64
   last_error_code : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend NotificationDeliveryRow with Debug::{to_repr}
-
-///|
-pub extend NotificationDeliveryRow with Eq::{not_equal, equal}
-
-///|
-pub extend NotificationDeliveryRow with ToJson::{to_json}
-
-///|
-pub extend NotificationDeliveryRow with FromJson::{from_json}
 
 ///|
 pub(all) struct UserAccessRow {
@@ -1535,18 +1286,6 @@ pub(all) struct UserAccessRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend UserAccessRow with Debug::{to_repr}
-
-///|
-pub extend UserAccessRow with Eq::{not_equal, equal}
-
-///|
-pub extend UserAccessRow with ToJson::{to_json}
-
-///|
-pub extend UserAccessRow with FromJson::{from_json}
-
-///|
 /// Portable browser projection of the account contract. These DTOs mirror the
 /// public JSON vocabulary without importing the native durable account store.
 pub(all) enum UiAccountRole {
@@ -1556,36 +1295,12 @@ pub(all) enum UiAccountRole {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend UiAccountRole with Debug::{to_repr}
-
-///|
-pub extend UiAccountRole with Eq::{not_equal, equal}
-
-///|
-pub extend UiAccountRole with ToJson::{to_json}
-
-///|
-pub extend UiAccountRole with FromJson::{from_json}
-
-///|
 pub(all) enum UiAccountState {
   Invited
   Active
   Suspended
   Revoked
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend UiAccountState with Debug::{to_repr}
-
-///|
-pub extend UiAccountState with Eq::{not_equal, equal}
-
-///|
-pub extend UiAccountState with ToJson::{to_json}
-
-///|
-pub extend UiAccountState with FromJson::{from_json}
 
 ///|
 pub(all) struct AccountView {
@@ -1602,18 +1317,6 @@ pub(all) struct AccountView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend AccountView with Debug::{to_repr}
-
-///|
-pub extend AccountView with Eq::{not_equal, equal}
-
-///|
-pub extend AccountView with ToJson::{to_json}
-
-///|
-pub extend AccountView with FromJson::{from_json}
-
-///|
 pub(all) struct BrowserSessionView {
   session_id : String
   account_id : String
@@ -1622,18 +1325,6 @@ pub(all) struct BrowserSessionView {
   last_used_unix_ms : Int64
   revoked_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend BrowserSessionView with Debug::{to_repr}
-
-///|
-pub extend BrowserSessionView with Eq::{not_equal, equal}
-
-///|
-pub extend BrowserSessionView with ToJson::{to_json}
-
-///|
-pub extend BrowserSessionView with FromJson::{from_json}
 
 ///|
 /// UI-owned draft for creating the LunaNexa mapping for an externally
@@ -1651,9 +1342,6 @@ pub(all) struct AccountInviteDraft {
 } derive(Eq)
 
 ///|
-pub extend AccountInviteDraft with Eq::{not_equal, equal}
-
-///|
 pub(all) struct AccessPackageDraft {
   identity_issuer : String
   identity_subject : String
@@ -1664,9 +1352,6 @@ pub(all) struct AccessPackageDraft {
   lifetime_days : Int
   identity_verified : Bool
 } derive(Eq)
-
-///|
-pub extend AccessPackageDraft with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct AccessPackageView {
@@ -1696,18 +1381,6 @@ pub(all) struct AccessPackageView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend AccessPackageView with Debug::{to_repr}
-
-///|
-pub extend AccessPackageView with Eq::{not_equal, equal}
-
-///|
-pub extend AccessPackageView with ToJson::{to_json}
-
-///|
-pub extend AccessPackageView with FromJson::{from_json}
-
-///|
 pub(all) struct AccessGrantRow {
   grant_id : String
   user_id : String
@@ -1716,18 +1389,6 @@ pub(all) struct AccessGrantRow {
   expires_at : String
   state : @workspace.WorkspaceAccessGrantState
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AccessGrantRow with Debug::{to_repr}
-
-///|
-pub extend AccessGrantRow with Eq::{not_equal, equal}
-
-///|
-pub extend AccessGrantRow with ToJson::{to_json}
-
-///|
-pub extend AccessGrantRow with FromJson::{from_json}
 
 ///|
 pub(all) struct ComputeLeaseRow {
@@ -1741,18 +1402,6 @@ pub(all) struct ComputeLeaseRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ComputeLeaseRow with Debug::{to_repr}
-
-///|
-pub extend ComputeLeaseRow with Eq::{not_equal, equal}
-
-///|
-pub extend ComputeLeaseRow with ToJson::{to_json}
-
-///|
-pub extend ComputeLeaseRow with FromJson::{from_json}
-
-///|
 pub(all) struct ExclusiveNodeLeaseRow {
   lease_id : String
   node_id : String
@@ -1762,18 +1411,6 @@ pub(all) struct ExclusiveNodeLeaseRow {
   state : String
   generation : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ExclusiveNodeLeaseRow with Debug::{to_repr}
-
-///|
-pub extend ExclusiveNodeLeaseRow with Eq::{not_equal, equal}
-
-///|
-pub extend ExclusiveNodeLeaseRow with ToJson::{to_json}
-
-///|
-pub extend ExclusiveNodeLeaseRow with FromJson::{from_json}
 
 ///|
 pub(all) struct CostCenterRow {
@@ -1787,18 +1424,6 @@ pub(all) struct CostCenterRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CostCenterRow with Debug::{to_repr}
-
-///|
-pub extend CostCenterRow with Eq::{not_equal, equal}
-
-///|
-pub extend CostCenterRow with ToJson::{to_json}
-
-///|
-pub extend CostCenterRow with FromJson::{from_json}
-
-///|
 pub(all) struct AgreementRow {
   agreement_id : String
   agreement_type : String
@@ -1807,18 +1432,6 @@ pub(all) struct AgreementRow {
   state : String
   evidence_receipt : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AgreementRow with Debug::{to_repr}
-
-///|
-pub extend AgreementRow with Eq::{not_equal, equal}
-
-///|
-pub extend AgreementRow with ToJson::{to_json}
-
-///|
-pub extend AgreementRow with FromJson::{from_json}
 
 ///|
 pub(all) struct EnterpriseLeaseRequestRow {
@@ -1834,18 +1447,6 @@ pub(all) struct EnterpriseLeaseRequestRow {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend EnterpriseLeaseRequestRow with Debug::{to_repr}
-
-///|
-pub extend EnterpriseLeaseRequestRow with Eq::{not_equal, equal}
-
-///|
-pub extend EnterpriseLeaseRequestRow with ToJson::{to_json}
-
-///|
-pub extend EnterpriseLeaseRequestRow with FromJson::{from_json}
-
-///|
 pub(all) struct QualifiedServiceRow {
   provider : String
   capability : String
@@ -1854,18 +1455,6 @@ pub(all) struct QualifiedServiceRow {
   evidence_policy : String
   production_ready : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend QualifiedServiceRow with Debug::{to_repr}
-
-///|
-pub extend QualifiedServiceRow with Eq::{not_equal, equal}
-
-///|
-pub extend QualifiedServiceRow with ToJson::{to_json}
-
-///|
-pub extend QualifiedServiceRow with FromJson::{from_json}
 
 ///|
 pub(all) enum DestructiveAction {
@@ -1888,36 +1477,12 @@ pub(all) enum DestructiveAction {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DestructiveAction with Debug::{to_repr}
-
-///|
-pub extend DestructiveAction with Eq::{not_equal, equal}
-
-///|
-pub extend DestructiveAction with ToJson::{to_json}
-
-///|
-pub extend DestructiveAction with FromJson::{from_json}
-
-///|
 pub(all) struct Confirmation {
   action : DestructiveAction
   scope : String
   receipt : String
   confirmed : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend Confirmation with Debug::{to_repr}
-
-///|
-pub extend Confirmation with Eq::{not_equal, equal}
-
-///|
-pub extend Confirmation with ToJson::{to_json}
-
-///|
-pub extend Confirmation with FromJson::{from_json}
 
 ///|
 /// Authoritative production-acceptance projection from `/v1/readiness`.
@@ -1929,18 +1494,6 @@ pub(all) struct ProductionReadinessState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ProductionReadinessState with Debug::{to_repr}
-
-///|
-pub extend ProductionReadinessState with Eq::{not_equal, equal}
-
-///|
-pub extend ProductionReadinessState with ToJson::{to_json}
-
-///|
-pub extend ProductionReadinessState with FromJson::{from_json}
-
-///|
 /// Time window applied to the operator alert list. It narrows the
 /// notifications already held in the typed state; it never triggers a
 /// controller read.
@@ -1950,18 +1503,6 @@ pub(all) enum AlertsWindow {
   Last30Days
   AllAlerts
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AlertsWindow with Debug::{to_repr}
-
-///|
-pub extend AlertsWindow with Eq::{not_equal, equal}
-
-///|
-pub extend AlertsWindow with ToJson::{to_json}
-
-///|
-pub extend AlertsWindow with FromJson::{from_json}
 
 ///|
 /// Stable storage value for the alert window picker, so the control survives
@@ -2062,9 +1603,6 @@ pub(all) struct ConsoleState {
   quick_template : String
   quick_topology : QuickTopology
 } derive(Eq)
-
-///|
-pub extend ConsoleState with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum ConsoleMessage {
@@ -2183,9 +1721,6 @@ pub(all) enum ConsoleMessage {
   OfflineCommerce(@offline_commerce.OfflineCommerceMessage)
   ContractDocuments(@contract_documents.ContractDocumentsMessage)
 } derive(Eq)
-
-///|
-pub extend ConsoleMessage with Eq::{not_equal, equal}
 
 ///|
 pub fn confirmation_receipt(
@@ -7729,12 +7264,6 @@ pub(all) enum QuickTopology {
   SingleMachine
   Cx7Pair
 } derive(Debug, Eq)
-
-///|
-pub extend QuickTopology with Debug::{to_repr}
-
-///|
-pub extend QuickTopology with Eq::{not_equal, equal}
 
 ///|
 /// Stable storage value for the topology picker, so the control survives locale

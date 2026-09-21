@@ -6,12 +6,6 @@ pub(all) suberror RuntimeError {
 } derive(Debug, Eq)
 
 ///|
-pub extend RuntimeError with Debug::{to_repr}
-
-///|
-pub extend RuntimeError with Eq::{not_equal, equal}
-
-///|
 /// All hooks are server-owned. resolve must bind an immutable deployment ID;
 /// authorized must recheck the account, order, model and deployment authority;
 /// settle must return an idempotent durable usage receipt keyed by job_id.

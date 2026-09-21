@@ -93,18 +93,6 @@ pub(all) enum Capability {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend Capability with Debug::{to_repr}
-
-///|
-pub extend Capability with Eq::{not_equal, equal}
-
-///|
-pub extend Capability with ToJson::{to_json}
-
-///|
-pub extend Capability with FromJson::{from_json}
-
-///|
 pub(all) enum DataClass {
   Public
   Internal
@@ -113,35 +101,11 @@ pub(all) enum DataClass {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DataClass with Debug::{to_repr}
-
-///|
-pub extend DataClass with Eq::{not_equal, equal}
-
-///|
-pub extend DataClass with ToJson::{to_json}
-
-///|
-pub extend DataClass with FromJson::{from_json}
-
-///|
 pub(all) enum RetentionPolicy {
   Ephemeral
   RetainUntil(Int64)
   EvaluationCapture(consent_receipt~ : String)
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RetentionPolicy with Debug::{to_repr}
-
-///|
-pub extend RetentionPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend RetentionPolicy with ToJson::{to_json}
-
-///|
-pub extend RetentionPolicy with FromJson::{from_json}
 
 ///|
 pub(all) enum Priority {
@@ -152,35 +116,11 @@ pub(all) enum Priority {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend Priority with Debug::{to_repr}
-
-///|
-pub extend Priority with Eq::{not_equal, equal}
-
-///|
-pub extend Priority with ToJson::{to_json}
-
-///|
-pub extend Priority with FromJson::{from_json}
-
-///|
 pub(all) enum LatencyClass {
   Batch
   Standard
   Realtime
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LatencyClass with Debug::{to_repr}
-
-///|
-pub extend LatencyClass with Eq::{not_equal, equal}
-
-///|
-pub extend LatencyClass with ToJson::{to_json}
-
-///|
-pub extend LatencyClass with FromJson::{from_json}
 
 ///|
 pub(all) struct ResourceCeiling {
@@ -194,36 +134,12 @@ pub(all) struct ResourceCeiling {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ResourceCeiling with Debug::{to_repr}
-
-///|
-pub extend ResourceCeiling with Eq::{not_equal, equal}
-
-///|
-pub extend ResourceCeiling with ToJson::{to_json}
-
-///|
-pub extend ResourceCeiling with FromJson::{from_json}
-
-///|
 pub(all) struct DataPolicy {
   classification : DataClass
   retention : RetentionPolicy
   allow_cache : Bool
   allow_training_reuse : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend DataPolicy with Debug::{to_repr}
-
-///|
-pub extend DataPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend DataPolicy with ToJson::{to_json}
-
-///|
-pub extend DataPolicy with FromJson::{from_json}
 
 ///|
 pub(all) struct WorkloadEnvelope {
@@ -246,18 +162,6 @@ pub(all) struct WorkloadEnvelope {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend WorkloadEnvelope with Debug::{to_repr}
-
-///|
-pub extend WorkloadEnvelope with Eq::{not_equal, equal}
-
-///|
-pub extend WorkloadEnvelope with ToJson::{to_json}
-
-///|
-pub extend WorkloadEnvelope with FromJson::{from_json}
-
-///|
 pub(all) enum WorkloadState {
   Submitted
   Admitted
@@ -269,18 +173,6 @@ pub(all) enum WorkloadState {
   Cancelled
   Rejected
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend WorkloadState with Debug::{to_repr}
-
-///|
-pub extend WorkloadState with Eq::{not_equal, equal}
-
-///|
-pub extend WorkloadState with ToJson::{to_json}
-
-///|
-pub extend WorkloadState with FromJson::{from_json}
 
 ///|
 pub(all) enum ErrorCode {
@@ -296,36 +188,12 @@ pub(all) enum ErrorCode {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ErrorCode with Debug::{to_repr}
-
-///|
-pub extend ErrorCode with Eq::{not_equal, equal}
-
-///|
-pub extend ErrorCode with ToJson::{to_json}
-
-///|
-pub extend ErrorCode with FromJson::{from_json}
-
-///|
 pub(all) struct PublicError {
   code : ErrorCode
   message : String
   retryable : Bool
   correlation_receipt : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend PublicError with Debug::{to_repr}
-
-///|
-pub extend PublicError with Eq::{not_equal, equal}
-
-///|
-pub extend PublicError with ToJson::{to_json}
-
-///|
-pub extend PublicError with FromJson::{from_json}
 
 ///|
 pub(all) struct Usage {
@@ -336,36 +204,12 @@ pub(all) struct Usage {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend Usage with Debug::{to_repr}
-
-///|
-pub extend Usage with Eq::{not_equal, equal}
-
-///|
-pub extend Usage with ToJson::{to_json}
-
-///|
-pub extend Usage with FromJson::{from_json}
-
-///|
 pub(all) struct Timing {
   accepted_unix_ms : Int64
   started_unix_ms : Int64
   first_output_unix_ms : Int64
   completed_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend Timing with Debug::{to_repr}
-
-///|
-pub extend Timing with Eq::{not_equal, equal}
-
-///|
-pub extend Timing with ToJson::{to_json}
-
-///|
-pub extend Timing with FromJson::{from_json}
 
 ///|
 pub(all) struct WorkloadResponse {
@@ -386,36 +230,12 @@ pub(all) struct WorkloadResponse {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend WorkloadResponse with Debug::{to_repr}
-
-///|
-pub extend WorkloadResponse with Eq::{not_equal, equal}
-
-///|
-pub extend WorkloadResponse with ToJson::{to_json}
-
-///|
-pub extend WorkloadResponse with FromJson::{from_json}
-
-///|
 pub(all) enum StreamEventKind {
   Chunk
   Completed
   Failed
   Cancelled
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend StreamEventKind with Debug::{to_repr}
-
-///|
-pub extend StreamEventKind with Eq::{not_equal, equal}
-
-///|
-pub extend StreamEventKind with ToJson::{to_json}
-
-///|
-pub extend StreamEventKind with FromJson::{from_json}
 
 ///|
 pub(all) struct WorkloadStreamEvent {
@@ -427,18 +247,6 @@ pub(all) struct WorkloadStreamEvent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend WorkloadStreamEvent with Debug::{to_repr}
-
-///|
-pub extend WorkloadStreamEvent with Eq::{not_equal, equal}
-
-///|
-pub extend WorkloadStreamEvent with ToJson::{to_json}
-
-///|
-pub extend WorkloadStreamEvent with FromJson::{from_json}
-
-///|
 pub(all) enum ModelState {
   Candidate
   Verified
@@ -447,18 +255,6 @@ pub(all) enum ModelState {
   Deprecated
   Revoked
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ModelState with Debug::{to_repr}
-
-///|
-pub extend ModelState with Eq::{not_equal, equal}
-
-///|
-pub extend ModelState with ToJson::{to_json}
-
-///|
-pub extend ModelState with FromJson::{from_json}
 
 ///|
 pub(all) enum DeploymentState {
@@ -473,18 +269,6 @@ pub(all) enum DeploymentState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DeploymentState with Debug::{to_repr}
-
-///|
-pub extend DeploymentState with Eq::{not_equal, equal}
-
-///|
-pub extend DeploymentState with ToJson::{to_json}
-
-///|
-pub extend DeploymentState with FromJson::{from_json}
-
-///|
 pub(all) enum NodeState {
   Enrolling
   Active
@@ -495,36 +279,12 @@ pub(all) enum NodeState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend NodeState with Debug::{to_repr}
-
-///|
-pub extend NodeState with Eq::{not_equal, equal}
-
-///|
-pub extend NodeState with ToJson::{to_json}
-
-///|
-pub extend NodeState with FromJson::{from_json}
-
-///|
 pub(all) struct ArtifactRef {
   digest : String
   uri : String
   size_bytes : Int64
   signature_ref : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ArtifactRef with Debug::{to_repr}
-
-///|
-pub extend ArtifactRef with Eq::{not_equal, equal}
-
-///|
-pub extend ArtifactRef with ToJson::{to_json}
-
-///|
-pub extend ArtifactRef with FromJson::{from_json}
 
 ///|
 pub(all) struct RuntimeSpec {
@@ -536,18 +296,6 @@ pub(all) struct RuntimeSpec {
   supports_batching : Bool
   supports_multi_node : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RuntimeSpec with Debug::{to_repr}
-
-///|
-pub extend RuntimeSpec with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeSpec with ToJson::{to_json}
-
-///|
-pub extend RuntimeSpec with FromJson::{from_json}
 
 ///|
 pub(all) struct ModelRecord {
@@ -562,36 +310,12 @@ pub(all) struct ModelRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ModelRecord with Debug::{to_repr}
-
-///|
-pub extend ModelRecord with Eq::{not_equal, equal}
-
-///|
-pub extend ModelRecord with ToJson::{to_json}
-
-///|
-pub extend ModelRecord with FromJson::{from_json}
-
-///|
 pub(all) struct ResourceLimits {
   accelerator_count : Int
   accelerator_memory_mib : Int
   cpu_millis : Int
   memory_mib : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ResourceLimits with Debug::{to_repr}
-
-///|
-pub extend ResourceLimits with Eq::{not_equal, equal}
-
-///|
-pub extend ResourceLimits with ToJson::{to_json}
-
-///|
-pub extend ResourceLimits with FromJson::{from_json}
 
 ///|
 pub(all) struct NetworkPolicy {
@@ -601,36 +325,12 @@ pub(all) struct NetworkPolicy {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend NetworkPolicy with Debug::{to_repr}
-
-///|
-pub extend NetworkPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend NetworkPolicy with ToJson::{to_json}
-
-///|
-pub extend NetworkPolicy with FromJson::{from_json}
-
-///|
 pub(all) struct HealthPolicy {
   readiness_path : String
   interval_ms : Int
   failure_threshold : Int
   termination_grace_ms : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend HealthPolicy with Debug::{to_repr}
-
-///|
-pub extend HealthPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend HealthPolicy with ToJson::{to_json}
-
-///|
-pub extend HealthPolicy with FromJson::{from_json}
 
 ///|
 /// One member of a paired placement. The four values are all-or-nothing: a
@@ -646,18 +346,6 @@ pub(all) struct AssignmentGroup {
   /// The peer's address on the private fabric, for rank coordination.
   peer_endpoint : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AssignmentGroup with Debug::{to_repr}
-
-///|
-pub extend AssignmentGroup with Eq::{not_equal, equal}
-
-///|
-pub extend AssignmentGroup with ToJson::{to_json}
-
-///|
-pub extend AssignmentGroup with FromJson::{from_json}
 
 ///|
 pub(all) struct DesiredAssignment {
@@ -682,18 +370,6 @@ pub(all) struct DesiredAssignment {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DesiredAssignment with Debug::{to_repr}
-
-///|
-pub extend DesiredAssignment with Eq::{not_equal, equal}
-
-///|
-pub extend DesiredAssignment with ToJson::{to_json}
-
-///|
-pub extend DesiredAssignment with FromJson::{from_json}
-
-///|
 pub(all) struct AcceleratorInventory {
   device_id : String
   architecture : String
@@ -701,18 +377,6 @@ pub(all) struct AcceleratorInventory {
   memory_free_mib : Int
   healthy : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AcceleratorInventory with Debug::{to_repr}
-
-///|
-pub extend AcceleratorInventory with Eq::{not_equal, equal}
-
-///|
-pub extend AcceleratorInventory with ToJson::{to_json}
-
-///|
-pub extend AcceleratorInventory with FromJson::{from_json}
 
 ///|
 pub(all) struct NodeInventory {
@@ -724,18 +388,6 @@ pub(all) struct NodeInventory {
   labels : Map[String, String]
   taints : Array[String]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend NodeInventory with Debug::{to_repr}
-
-///|
-pub extend NodeInventory with Eq::{not_equal, equal}
-
-///|
-pub extend NodeInventory with ToJson::{to_json}
-
-///|
-pub extend NodeInventory with FromJson::{from_json}
 
 ///|
 pub(all) struct NodeHeartbeat {
@@ -751,15 +403,6 @@ pub(all) struct NodeHeartbeat {
 } derive(Debug, Eq, FromJson)
 
 ///|
-pub extend NodeHeartbeat with Debug::{to_repr}
-
-///|
-pub extend NodeHeartbeat with Eq::{not_equal, equal}
-
-///|
-pub extend NodeHeartbeat with FromJson::{from_json}
-
-///|
 pub(all) struct NodeDirective {
   node_id : String
   desired_state : NodeState
@@ -767,18 +410,6 @@ pub(all) struct NodeDirective {
   issued_unix_ms : Int64
   receipt : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend NodeDirective with Debug::{to_repr}
-
-///|
-pub extend NodeDirective with Eq::{not_equal, equal}
-
-///|
-pub extend NodeDirective with ToJson::{to_json}
-
-///|
-pub extend NodeDirective with FromJson::{from_json}
 
 ///|
 pub(all) struct TelemetrySample {
@@ -790,34 +421,10 @@ pub(all) struct TelemetrySample {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend TelemetrySample with Debug::{to_repr}
-
-///|
-pub extend TelemetrySample with Eq::{not_equal, equal}
-
-///|
-pub extend TelemetrySample with ToJson::{to_json}
-
-///|
-pub extend TelemetrySample with FromJson::{from_json}
-
-///|
 pub(all) struct RegistryLicenseSummary {
   license_id : String
   status : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RegistryLicenseSummary with Debug::{to_repr}
-
-///|
-pub extend RegistryLicenseSummary with Eq::{not_equal, equal}
-
-///|
-pub extend RegistryLicenseSummary with ToJson::{to_json}
-
-///|
-pub extend RegistryLicenseSummary with FromJson::{from_json}
 
 ///|
 pub(all) struct RegistryEvaluationSummary {
@@ -827,35 +434,11 @@ pub(all) struct RegistryEvaluationSummary {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RegistryEvaluationSummary with Debug::{to_repr}
-
-///|
-pub extend RegistryEvaluationSummary with Eq::{not_equal, equal}
-
-///|
-pub extend RegistryEvaluationSummary with ToJson::{to_json}
-
-///|
-pub extend RegistryEvaluationSummary with FromJson::{from_json}
-
-///|
 pub(all) struct RegistryAliasSummary {
   name : String
   model_id : String
   version : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RegistryAliasSummary with Debug::{to_repr}
-
-///|
-pub extend RegistryAliasSummary with Eq::{not_equal, equal}
-
-///|
-pub extend RegistryAliasSummary with ToJson::{to_json}
-
-///|
-pub extend RegistryAliasSummary with FromJson::{from_json}
 
 ///|
 pub(all) struct RegistryReadContract {
@@ -867,36 +450,12 @@ pub(all) struct RegistryReadContract {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RegistryReadContract with Debug::{to_repr}
-
-///|
-pub extend RegistryReadContract with Eq::{not_equal, equal}
-
-///|
-pub extend RegistryReadContract with ToJson::{to_json}
-
-///|
-pub extend RegistryReadContract with FromJson::{from_json}
-
-///|
 pub(all) struct SchedulerReadContract {
   quotas : Array[Json]
   active : Array[Json]
   queued_count : Int?
   running_count : Int?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend SchedulerReadContract with Debug::{to_repr}
-
-///|
-pub extend SchedulerReadContract with Eq::{not_equal, equal}
-
-///|
-pub extend SchedulerReadContract with ToJson::{to_json}
-
-///|
-pub extend SchedulerReadContract with FromJson::{from_json}
 
 ///|
 pub(all) struct BenchmarkReadSummary {
@@ -908,33 +467,9 @@ pub(all) struct BenchmarkReadSummary {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend BenchmarkReadSummary with Debug::{to_repr}
-
-///|
-pub extend BenchmarkReadSummary with Eq::{not_equal, equal}
-
-///|
-pub extend BenchmarkReadSummary with ToJson::{to_json}
-
-///|
-pub extend BenchmarkReadSummary with FromJson::{from_json}
-
-///|
 pub(all) struct TelemetryReadContract {
   benchmark_summaries : Array[BenchmarkReadSummary]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend TelemetryReadContract with Debug::{to_repr}
-
-///|
-pub extend TelemetryReadContract with Eq::{not_equal, equal}
-
-///|
-pub extend TelemetryReadContract with ToJson::{to_json}
-
-///|
-pub extend TelemetryReadContract with FromJson::{from_json}
 
 ///|
 pub(all) struct AuditEvent {
@@ -954,33 +489,9 @@ pub(all) struct AuditEvent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend AuditEvent with Debug::{to_repr}
-
-///|
-pub extend AuditEvent with Eq::{not_equal, equal}
-
-///|
-pub extend AuditEvent with ToJson::{to_json}
-
-///|
-pub extend AuditEvent with FromJson::{from_json}
-
-///|
 pub(all) struct HealthResponse {
   product : String
   component : String
   version : String
   status : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend HealthResponse with Debug::{to_repr}
-
-///|
-pub extend HealthResponse with Eq::{not_equal, equal}
-
-///|
-pub extend HealthResponse with ToJson::{to_json}
-
-///|
-pub extend HealthResponse with FromJson::{from_json}

@@ -1,9 +1,5 @@
 ///|
 /// Keep the original v1 wire representation when discovery is not advertised.
-
-///|
-pub extend NodeHeartbeat with ToJson::{to_json}
-
 pub impl ToJson for NodeHeartbeat with fn to_json(self) {
   let value : Json = {
     "node_id": self.node_id,
@@ -37,36 +33,12 @@ pub(all) struct RuntimeEndpoint {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RuntimeEndpoint with Debug::{to_repr}
-
-///|
-pub extend RuntimeEndpoint with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeEndpoint with ToJson::{to_json}
-
-///|
-pub extend RuntimeEndpoint with FromJson::{from_json}
-
-///|
 /// Administrator-owned per-node private IPv4 route boundary.
 pub(all) struct RuntimeRoutePolicy {
   network : String
   prefix_length : Int
   port : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RuntimeRoutePolicy with Debug::{to_repr}
-
-///|
-pub extend RuntimeRoutePolicy with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeRoutePolicy with ToJson::{to_json}
-
-///|
-pub extend RuntimeRoutePolicy with FromJson::{from_json}
 
 ///|
 fn private_ipv4_number(value : String) -> Int64? {

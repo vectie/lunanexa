@@ -4,6 +4,7 @@ import {
   "vectie/lunanexa/nodelease",
   "moonbitlang/async",
   "moonbitlang/async/fs",
+  "moonbitlang/async/io",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/json",
   "moonbitlang/x/crypto",

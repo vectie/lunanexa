@@ -30,17 +30,11 @@ struct LegacyContractPacketV1 {
 } derive(FromJson)
 
 ///|
-pub extend LegacyContractPacketV1 with FromJson::{from_json}
-
-///|
 struct LegacyContractDocumentSnapshotV1 {
   schema_version : String
   packets : Array[LegacyContractPacketV1]
   events : Array[@contractdoc.ContractPacketEvent]
 } derive(FromJson)
-
-///|
-pub extend LegacyContractDocumentSnapshotV1 with FromJson::{from_json}
 
 ///|
 /// The v2 packet shape is retained only for deterministic on-open migration.
@@ -71,17 +65,11 @@ struct LegacyContractPacketV2 {
 } derive(FromJson)
 
 ///|
-pub extend LegacyContractPacketV2 with FromJson::{from_json}
-
-///|
 struct LegacyContractDocumentSnapshotV2 {
   schema_version : String
   packets : Array[LegacyContractPacketV2]
   events : Array[@contractdoc.ContractPacketEvent]
 } derive(FromJson)
-
-///|
-pub extend LegacyContractDocumentSnapshotV2 with FromJson::{from_json}
 
 ///|
 /// The v3 snapshot shape is retained only for deterministic on-open migration
@@ -94,9 +82,6 @@ struct LegacyContractDocumentSnapshotV3 {
 } derive(FromJson)
 
 ///|
-pub extend LegacyContractDocumentSnapshotV3 with FromJson::{from_json}
-
-///|
 /// v4 added durable approvals; v5 adds governance projections.
 struct LegacyContractDocumentSnapshotV4 {
   schema_version : String
@@ -104,9 +89,6 @@ struct LegacyContractDocumentSnapshotV4 {
   events : Array[@contractdoc.ContractPacketEvent]
   approvals : Array[@contractdoc.ContractApproval]
 } derive(FromJson)
-
-///|
-pub extend LegacyContractDocumentSnapshotV4 with FromJson::{from_json}
 
 ///|
 pub struct ContractDocumentStore {

@@ -10,9 +10,6 @@ pub(all) struct MachineAccessState {
 } derive(Eq)
 
 ///|
-pub extend MachineAccessState with Eq::{not_equal, equal}
-
-///|
 pub(all) enum MachineAccessMessage {
   CopyAccessDetail(String)
   RedeemCredential(String, Int64)
@@ -21,9 +18,6 @@ pub(all) enum MachineAccessMessage {
   CancelTermination
   ConfirmTermination(String, Int64, String)
 } derive(Eq)
-
-///|
-pub extend MachineAccessMessage with Eq::{not_equal, equal}
 
 ///|
 pub fn default_state(locale : @i18n.Locale) -> MachineAccessState {

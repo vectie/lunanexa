@@ -7,12 +7,6 @@ pub(all) enum Locale {
 } derive(Debug, Eq)
 
 ///|
-pub extend Locale with Debug::{to_repr}
-
-///|
-pub extend Locale with Eq::{not_equal, equal}
-
-///|
 pub fn default_locale() -> Locale {
   English
 }

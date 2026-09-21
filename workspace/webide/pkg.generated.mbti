@@ -21,9 +21,6 @@ pub(all) suberror BridgeError {
   UpstreamUnavailable
   AuthorityUnavailable
 } derive(Eq, @debug.Debug)
-pub fn BridgeError::equal(Self, Self) -> Bool
-pub fn BridgeError::not_equal(Self, Self) -> Bool
-pub fn BridgeError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 type AuthorizationFlight
@@ -55,9 +52,6 @@ pub(all) struct BridgeConfig {
   request_timeout_ms : Int
   authorization_interval_ms : Int
 } derive(Eq, @debug.Debug)
-pub fn BridgeConfig::equal(Self, Self) -> Bool
-pub fn BridgeConfig::not_equal(Self, Self) -> Bool
-pub fn BridgeConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Grant {
   client_id : String

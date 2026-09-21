@@ -12,12 +12,6 @@ pub(all) struct BridgeConfig {
 } derive(Debug, Eq)
 
 ///|
-pub extend BridgeConfig with Debug::{to_repr}
-
-///|
-pub extend BridgeConfig with Eq::{not_equal, equal}
-
-///|
 /// A secret-bearing result from the configured controller, never from a browser.
 /// Intentionally has no Debug/ToJson derivation.
 pub(all) struct Grant {
@@ -48,12 +42,6 @@ pub(all) suberror BridgeError {
   UpstreamUnavailable
   AuthorityUnavailable
 } derive(Debug, Eq)
-
-///|
-pub extend BridgeError with Debug::{to_repr}
-
-///|
-pub extend BridgeError with Eq::{not_equal, equal}
 
 ///|
 struct Session {

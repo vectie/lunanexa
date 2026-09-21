@@ -35,8 +35,8 @@ fn hmac_text(value : String, secret : String) -> String {
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).exact_view(),
-      @utf8.encode(value).exact_view(),
+      @utf8.encode(secret).view(),
+      @utf8.encode(value).view(),
     ),
   )
 }

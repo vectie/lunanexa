@@ -1471,7 +1471,7 @@ test "model source search stays disabled until operator authentication succeeds"
 
 ///|
 test "model import recovery and adoption preserve every safety gate" {
-  let failed : @ui.ModelImportRow = {
+  let failed : ModelImportRow = {
     import_id: "ms-failed-1",
     source: "modelscope",
     model_id: "OpenBMB/MiniCPM5-1B",
@@ -1490,7 +1490,7 @@ test "model import recovery and adoption preserve every safety gate" {
     created_unix_ms: 1000L,
     updated_unix_ms: 1100L,
   }
-  let candidate : @ui.ModelSourceCatalogRow = {
+  let candidate : ModelSourceCatalogRow = {
     id: failed.model_id,
     display_name: "MiniCPM5-1B",
     description: "small model",

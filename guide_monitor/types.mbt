@@ -10,12 +10,6 @@ pub(all) suberror GuideMonitorError {
 } derive(Debug, Eq)
 
 ///|
-pub extend GuideMonitorError with Debug::{to_repr}
-
-///|
-pub extend GuideMonitorError with Eq::{not_equal, equal}
-
-///|
 pub(all) struct GuideMonitorPolicy {
   target_ref : String
   probe_interval_ms : Int64
@@ -23,18 +17,6 @@ pub(all) struct GuideMonitorPolicy {
   future_skew_ms : Int64
   knowledge_max_age_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend GuideMonitorPolicy with Debug::{to_repr}
-
-///|
-pub extend GuideMonitorPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend GuideMonitorPolicy with ToJson::{to_json}
-
-///|
-pub extend GuideMonitorPolicy with FromJson::{from_json}
 
 ///|
 pub(all) struct GuideProbePlan {
@@ -45,18 +27,6 @@ pub(all) struct GuideProbePlan {
   health_path : String
   diagnostics_path : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend GuideProbePlan with Debug::{to_repr}
-
-///|
-pub extend GuideProbePlan with Eq::{not_equal, equal}
-
-///|
-pub extend GuideProbePlan with ToJson::{to_json}
-
-///|
-pub extend GuideProbePlan with FromJson::{from_json}
 
 ///|
 pub(all) struct GuideHealthObservation {
@@ -76,18 +46,6 @@ pub(all) struct GuideHealthObservation {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend GuideHealthObservation with Debug::{to_repr}
-
-///|
-pub extend GuideHealthObservation with Eq::{not_equal, equal}
-
-///|
-pub extend GuideHealthObservation with ToJson::{to_json}
-
-///|
-pub extend GuideHealthObservation with FromJson::{from_json}
-
-///|
 pub(all) struct GuideMonitorResult {
   observation_id : String
   adapter_alert_active : Bool
@@ -95,15 +53,3 @@ pub(all) struct GuideMonitorResult {
   adapter_record : @notifications.NotificationRecord?
   knowledge_record : @notifications.NotificationRecord?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend GuideMonitorResult with Debug::{to_repr}
-
-///|
-pub extend GuideMonitorResult with Eq::{not_equal, equal}
-
-///|
-pub extend GuideMonitorResult with ToJson::{to_json}
-
-///|
-pub extend GuideMonitorResult with FromJson::{from_json}

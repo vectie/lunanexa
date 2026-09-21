@@ -14,28 +14,10 @@ pub(all) suberror IntegrationError {
 } derive(Debug, Eq)
 
 ///|
-pub extend IntegrationError with Debug::{to_repr}
-
-///|
-pub extend IntegrationError with Eq::{not_equal, equal}
-
-///|
 pub(all) enum ReconciliationResult {
   Applied
   Replayed
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ReconciliationResult with Debug::{to_repr}
-
-///|
-pub extend ReconciliationResult with Eq::{not_equal, equal}
-
-///|
-pub extend ReconciliationResult with ToJson::{to_json}
-
-///|
-pub extend ReconciliationResult with FromJson::{from_json}
 
 ///|
 pub(all) enum ExternalRecordKind {
@@ -47,18 +29,6 @@ pub(all) enum ExternalRecordKind {
   TaxInvoice
   QualifiedSignature
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ExternalRecordKind with Debug::{to_repr}
-
-///|
-pub extend ExternalRecordKind with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalRecordKind with ToJson::{to_json}
-
-///|
-pub extend ExternalRecordKind with FromJson::{from_json}
 
 ///|
 pub(all) enum ExternalRecordState {
@@ -74,18 +44,6 @@ pub(all) enum ExternalRecordState {
   Credited
   Refunded
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ExternalRecordState with Debug::{to_repr}
-
-///|
-pub extend ExternalRecordState with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalRecordState with ToJson::{to_json}
-
-///|
-pub extend ExternalRecordState with FromJson::{from_json}
 
 ///|
 pub(all) struct ExternalRecord {
@@ -106,18 +64,6 @@ pub(all) struct ExternalRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ExternalRecord with Debug::{to_repr}
-
-///|
-pub extend ExternalRecord with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalRecord with ToJson::{to_json}
-
-///|
-pub extend ExternalRecord with FromJson::{from_json}
-
-///|
 pub(all) struct ExternalCallback {
   callback_id : String
   record_id : String
@@ -134,18 +80,6 @@ pub(all) struct ExternalCallback {
   received_unix_ms : Int64
   signature_verified : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ExternalCallback with Debug::{to_repr}
-
-///|
-pub extend ExternalCallback with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalCallback with ToJson::{to_json}
-
-///|
-pub extend ExternalCallback with FromJson::{from_json}
 
 ///|
 pub(all) struct ExternalRecordView {
@@ -167,18 +101,6 @@ pub(all) struct ExternalRecordView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ExternalRecordView with Debug::{to_repr}
-
-///|
-pub extend ExternalRecordView with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalRecordView with ToJson::{to_json}
-
-///|
-pub extend ExternalRecordView with FromJson::{from_json}
-
-///|
 /// Minimal machine-only intent claimed by the configured provider adapter.
 /// Tenant and human identity are deliberately absent.
 pub(all) struct ExternalProviderIntent {
@@ -195,18 +117,6 @@ pub(all) struct ExternalProviderIntent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ExternalProviderIntent with Debug::{to_repr}
-
-///|
-pub extend ExternalProviderIntent with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalProviderIntent with ToJson::{to_json}
-
-///|
-pub extend ExternalProviderIntent with FromJson::{from_json}
-
-///|
 /// Adapter acknowledgement of a browser action. It cannot settle payment or
 /// execute a signature; only the independently signed provider callback can.
 pub(all) struct ExternalDispatchReceipt {
@@ -220,36 +130,12 @@ pub(all) struct ExternalDispatchReceipt {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ExternalDispatchReceipt with Debug::{to_repr}
-
-///|
-pub extend ExternalDispatchReceipt with Eq::{not_equal, equal}
-
-///|
-pub extend ExternalDispatchReceipt with ToJson::{to_json}
-
-///|
-pub extend ExternalDispatchReceipt with FromJson::{from_json}
-
-///|
 pub(all) struct IntegrationSnapshot {
   schema_version : String
   organization_id : String
   records : Array[ExternalRecordView]
   reconciliation_exception_count : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend IntegrationSnapshot with Debug::{to_repr}
-
-///|
-pub extend IntegrationSnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend IntegrationSnapshot with ToJson::{to_json}
-
-///|
-pub extend IntegrationSnapshot with FromJson::{from_json}
 
 ///|
 pub(all) struct IntegrationDurableSnapshot {
@@ -261,15 +147,3 @@ pub(all) struct IntegrationDurableSnapshot {
   dispatch_receipt_history : Array[ExternalDispatchReceipt]?
   reconciliation_exception_counts : Map[String, Int]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend IntegrationDurableSnapshot with Debug::{to_repr}
-
-///|
-pub extend IntegrationDurableSnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend IntegrationDurableSnapshot with ToJson::{to_json}
-
-///|
-pub extend IntegrationDurableSnapshot with FromJson::{from_json}

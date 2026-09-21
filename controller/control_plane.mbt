@@ -12,23 +12,11 @@ pub(all) suberror AuthenticationError {
 } derive(Debug, Eq)
 
 ///|
-pub extend AuthenticationError with Debug::{to_repr}
-
-///|
-pub extend AuthenticationError with Eq::{not_equal, equal}
-
-///|
 pub(all) struct OperatorIdentity {
   subject : String
   roles : Array[String]
   authenticated : Bool
 } derive(Debug, Eq)
-
-///|
-pub extend OperatorIdentity with Debug::{to_repr}
-
-///|
-pub extend OperatorIdentity with Eq::{not_equal, equal}
 
 ///|
 pub fn authenticate_local_operator(

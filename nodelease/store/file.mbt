@@ -9,12 +9,6 @@ pub(all) suberror ExclusiveLeaseStoreError {
 } derive(Debug, Eq)
 
 ///|
-pub extend ExclusiveLeaseStoreError with Debug::{to_repr}
-
-///|
-pub extend ExclusiveLeaseStoreError with Eq::{not_equal, equal}
-
-///|
 enum ExclusiveLeasePersistence {
   LeaseFile(String)
   LeasePostgres(@database.PostgresDatabase)
@@ -41,8 +35,8 @@ fn authority_receipt(
   let signature = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(signing_secret).exact_view(),
-      @utf8.encode(canonical_lease(lease)).exact_view(),
+      @utf8.encode(signing_secret).view(),
+      @utf8.encode(canonical_lease(lease)).view(),
     ),
   )
   "exclusive-lease:\{lease.intent.lease_id}:\{signature}"

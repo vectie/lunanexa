@@ -26,7 +26,7 @@ async test "MoonLeaf previews the embedded Chinese contract with role-scoped dra
     )
     .binary()
     .to_fixedarray()
-  let preview = @preview.render(
+  let preview = render(
     template,
     manifest,
     packet,
@@ -142,7 +142,7 @@ async test "generated demo scene materializes only the authorized role draft" {
     )
     .binary()
     .to_fixedarray()
-  let scene = @preview.template(source, manifest)
+  let scene = template(source, manifest)
   let packet = @contractdoc.new_packet(
     manifest,
     "packet-demo-preview",
@@ -201,7 +201,7 @@ async test "every contract tab materializes only its associated MoonLeaf pages" 
     )
     .binary()
     .to_fixedarray()
-  let scene = @preview.template(source, manifest)
+  let scene = template(source, manifest)
   let forms = manifest.forms.map(definition => definition.form)
   let packet = @contractdoc.new_packet(
     manifest,
@@ -251,7 +251,7 @@ async test "read-only packets preview their recorded values and ignore draft cha
     )
     .binary()
     .to_fixedarray()
-  let scene = @preview.template(source, manifest)
+  let scene = template(source, manifest)
   let draft = @contractdoc.new_packet(
     manifest,
     "packet-effective-preview",

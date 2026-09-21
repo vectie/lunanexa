@@ -118,8 +118,8 @@ fn handoff_intent(
 }
 
 ///|
-async fn test_store(path : String) -> @store.ClientHandoffStore {
-  @store.ClientHandoffStore::open(
+async fn test_store(path : String) -> ClientHandoffStore {
+  ClientHandoffStore::open(
     path, "client-handoff-test-secret-with-at-least-thirty-two-bytes",
   )
 }

@@ -18,9 +18,6 @@ pub(all) suberror PgError {
   Timeout
   Closed
 } derive(Eq, @debug.Debug)
-pub fn PgError::equal(Self, Self) -> Bool
-pub fn PgError::not_equal(Self, Self) -> Bool
-pub fn PgError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub struct PgConnection {

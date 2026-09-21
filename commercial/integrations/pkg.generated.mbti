@@ -22,9 +22,6 @@ pub(all) suberror IntegrationError {
   EvidenceMismatch(String)
   UnverifiedCallback
 } derive(Eq, @debug.Debug)
-pub fn IntegrationError::equal(Self, Self) -> Bool
-pub fn IntegrationError::not_equal(Self, Self) -> Bool
-pub fn IntegrationError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ExternalCallback {
@@ -43,11 +40,6 @@ pub(all) struct ExternalCallback {
   received_unix_ms : Int64
   signature_verified : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalCallback::equal(Self, Self) -> Bool
-pub fn ExternalCallback::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalCallback::not_equal(Self, Self) -> Bool
-pub fn ExternalCallback::to_json(Self) -> Json
-pub fn ExternalCallback::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExternalDispatchReceipt {
   record_id : String
@@ -58,11 +50,6 @@ pub(all) struct ExternalDispatchReceipt {
   action_expires_unix_ms : Int64
   accepted_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalDispatchReceipt::equal(Self, Self) -> Bool
-pub fn ExternalDispatchReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalDispatchReceipt::not_equal(Self, Self) -> Bool
-pub fn ExternalDispatchReceipt::to_json(Self) -> Json
-pub fn ExternalDispatchReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExternalProviderIntent {
   record_id : String
@@ -76,11 +63,6 @@ pub(all) struct ExternalProviderIntent {
   expected_document_hash : String?
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalProviderIntent::equal(Self, Self) -> Bool
-pub fn ExternalProviderIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalProviderIntent::not_equal(Self, Self) -> Bool
-pub fn ExternalProviderIntent::to_json(Self) -> Json
-pub fn ExternalProviderIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExternalRecord {
   record_id : String
@@ -98,11 +80,6 @@ pub(all) struct ExternalRecord {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalRecord::equal(Self, Self) -> Bool
-pub fn ExternalRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalRecord::not_equal(Self, Self) -> Bool
-pub fn ExternalRecord::to_json(Self) -> Json
-pub fn ExternalRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ExternalRecordKind {
   IdentityVerification
@@ -111,11 +88,6 @@ pub(all) enum ExternalRecordKind {
   TaxInvoice
   QualifiedSignature
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalRecordKind::equal(Self, Self) -> Bool
-pub fn ExternalRecordKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalRecordKind::not_equal(Self, Self) -> Bool
-pub fn ExternalRecordKind::to_json(Self) -> Json
-pub fn ExternalRecordKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ExternalRecordState {
   Pending
@@ -130,11 +102,6 @@ pub(all) enum ExternalRecordState {
   Credited
   Refunded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalRecordState::equal(Self, Self) -> Bool
-pub fn ExternalRecordState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalRecordState::not_equal(Self, Self) -> Bool
-pub fn ExternalRecordState::to_json(Self) -> Json
-pub fn ExternalRecordState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExternalRecordView {
   record_id : String
@@ -153,11 +120,6 @@ pub(all) struct ExternalRecordView {
   action_expires_unix_ms : Int64?
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ExternalRecordView::equal(Self, Self) -> Bool
-pub fn ExternalRecordView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ExternalRecordView::not_equal(Self, Self) -> Bool
-pub fn ExternalRecordView::to_json(Self) -> Json
-pub fn ExternalRecordView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IntegrationDurableSnapshot {
   schema_version : String
@@ -167,11 +129,6 @@ pub(all) struct IntegrationDurableSnapshot {
   dispatch_receipt_history : Array[ExternalDispatchReceipt]?
   reconciliation_exception_counts : Map[String, Int]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn IntegrationDurableSnapshot::equal(Self, Self) -> Bool
-pub fn IntegrationDurableSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn IntegrationDurableSnapshot::not_equal(Self, Self) -> Bool
-pub fn IntegrationDurableSnapshot::to_json(Self) -> Json
-pub fn IntegrationDurableSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IntegrationSnapshot {
   schema_version : String
@@ -179,11 +136,6 @@ pub(all) struct IntegrationSnapshot {
   records : Array[ExternalRecordView]
   reconciliation_exception_count : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn IntegrationSnapshot::equal(Self, Self) -> Bool
-pub fn IntegrationSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn IntegrationSnapshot::not_equal(Self, Self) -> Bool
-pub fn IntegrationSnapshot::to_json(Self) -> Json
-pub fn IntegrationSnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct IntegrationStore {
   mut records : Map[String, ExternalRecord]
@@ -210,11 +162,6 @@ pub(all) enum ReconciliationResult {
   Applied
   Replayed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ReconciliationResult::equal(Self, Self) -> Bool
-pub fn ReconciliationResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ReconciliationResult::not_equal(Self, Self) -> Bool
-pub fn ReconciliationResult::to_json(Self) -> Json
-pub fn ReconciliationResult::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

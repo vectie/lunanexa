@@ -51,9 +51,6 @@ pub(all) suberror WorkspaceContractError {
   LeaseUnavailable(WorkspaceLeaseState)
   TransitionDenied(String)
 } derive(Eq, @debug.Debug)
-pub fn WorkspaceContractError::equal(Self, Self) -> Bool
-pub fn WorkspaceContractError::not_equal(Self, Self) -> Bool
-pub fn WorkspaceContractError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror WorkspaceDirectoryError {
   DuplicateRecord(String)
@@ -64,9 +61,6 @@ pub(all) suberror WorkspaceDirectoryError {
   ConcurrentRequestLimitExceeded(String)
   HourlyRequestLimitExceeded(String)
 } derive(Eq, @debug.Debug)
-pub fn WorkspaceDirectoryError::equal(Self, Self) -> Bool
-pub fn WorkspaceDirectoryError::not_equal(Self, Self) -> Bool
-pub fn WorkspaceDirectoryError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct CapabilityLimit {
@@ -76,11 +70,6 @@ pub(all) struct CapabilityLimit {
   max_input_units_per_request : Int
   max_output_units_per_request : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CapabilityLimit::equal(Self, Self) -> Bool
-pub fn CapabilityLimit::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CapabilityLimit::not_equal(Self, Self) -> Bool
-pub fn CapabilityLimit::to_json(Self) -> Json
-pub fn CapabilityLimit::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ConnectionState {
   Pending
@@ -90,21 +79,11 @@ pub(all) enum ConnectionState {
   Failed
   Revoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ConnectionState::equal(Self, Self) -> Bool
-pub fn ConnectionState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ConnectionState::not_equal(Self, Self) -> Bool
-pub fn ConnectionState::to_json(Self) -> Json
-pub fn ConnectionState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EditorConnectionKind {
   WebIde
   VSCode
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EditorConnectionKind::equal(Self, Self) -> Bool
-pub fn EditorConnectionKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EditorConnectionKind::not_equal(Self, Self) -> Bool
-pub fn EditorConnectionKind::to_json(Self) -> Json
-pub fn EditorConnectionKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum IntegrationProvider {
   CodeBuddy
@@ -113,22 +92,12 @@ pub(all) enum IntegrationProvider {
   Qoder
   Generic
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn IntegrationProvider::equal(Self, Self) -> Bool
-pub fn IntegrationProvider::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn IntegrationProvider::not_equal(Self, Self) -> Bool
-pub fn IntegrationProvider::to_json(Self) -> Json
-pub fn IntegrationProvider::to_repr(Self) -> @debug.Repr
 
 pub(all) enum WorkspaceAccess {
   Administrator
   Developer
   Observer
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceAccess::equal(Self, Self) -> Bool
-pub fn WorkspaceAccess::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceAccess::not_equal(Self, Self) -> Bool
-pub fn WorkspaceAccess::to_json(Self) -> Json
-pub fn WorkspaceAccess::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceAccessGrant {
   version : String
@@ -141,11 +110,6 @@ pub(all) struct WorkspaceAccessGrant {
   state : WorkspaceAccessGrantState
   policy_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceAccessGrant::equal(Self, Self) -> Bool
-pub fn WorkspaceAccessGrant::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceAccessGrant::not_equal(Self, Self) -> Bool
-pub fn WorkspaceAccessGrant::to_json(Self) -> Json
-pub fn WorkspaceAccessGrant::to_repr(Self) -> @debug.Repr
 pub fn WorkspaceAccessGrant::transition(Self, WorkspaceAccessGrantState, Int64) -> Self raise WorkspaceContractError
 
 pub(all) enum WorkspaceAccessGrantState {
@@ -153,11 +117,6 @@ pub(all) enum WorkspaceAccessGrantState {
   GrantExpired
   GrantRevoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceAccessGrantState::equal(Self, Self) -> Bool
-pub fn WorkspaceAccessGrantState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceAccessGrantState::not_equal(Self, Self) -> Bool
-pub fn WorkspaceAccessGrantState::to_json(Self) -> Json
-pub fn WorkspaceAccessGrantState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceAuthorization {
   subject_ref : String
@@ -165,11 +124,6 @@ pub(all) struct WorkspaceAuthorization {
   access_grant : WorkspaceAccessGrant
   lease : WorkspaceLease
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceAuthorization::equal(Self, Self) -> Bool
-pub fn WorkspaceAuthorization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceAuthorization::not_equal(Self, Self) -> Bool
-pub fn WorkspaceAuthorization::to_json(Self) -> Json
-pub fn WorkspaceAuthorization::to_repr(Self) -> @debug.Repr
 
 pub(all) enum WorkspaceCapability {
   TextGenerate
@@ -178,11 +132,6 @@ pub(all) enum WorkspaceCapability {
   VideoGenerate
   AudioGenerate
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceCapability::equal(Self, Self) -> Bool
-pub fn WorkspaceCapability::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceCapability::not_equal(Self, Self) -> Bool
-pub fn WorkspaceCapability::to_json(Self) -> Json
-pub fn WorkspaceCapability::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceDirectorySnapshot {
   schema_version : String
@@ -190,11 +139,6 @@ pub(all) struct WorkspaceDirectorySnapshot {
   access_grants : Array[WorkspaceAccessGrant]
   leases : Array[WorkspaceLease]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceDirectorySnapshot::equal(Self, Self) -> Bool
-pub fn WorkspaceDirectorySnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceDirectorySnapshot::not_equal(Self, Self) -> Bool
-pub fn WorkspaceDirectorySnapshot::to_json(Self) -> Json
-pub fn WorkspaceDirectorySnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceLease {
   version : String
@@ -208,11 +152,6 @@ pub(all) struct WorkspaceLease {
   state : WorkspaceLeaseState
   policy_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceLease::equal(Self, Self) -> Bool
-pub fn WorkspaceLease::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceLease::not_equal(Self, Self) -> Bool
-pub fn WorkspaceLease::to_json(Self) -> Json
-pub fn WorkspaceLease::to_repr(Self) -> @debug.Repr
 pub fn WorkspaceLease::transition(Self, WorkspaceLeaseState, Int64) -> Self raise WorkspaceContractError
 
 pub(all) enum WorkspaceLeaseState {
@@ -222,22 +161,12 @@ pub(all) enum WorkspaceLeaseState {
   Expired
   Revoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceLeaseState::equal(Self, Self) -> Bool
-pub fn WorkspaceLeaseState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceLeaseState::not_equal(Self, Self) -> Bool
-pub fn WorkspaceLeaseState::to_json(Self) -> Json
-pub fn WorkspaceLeaseState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceLimits {
   max_active_sessions : Int
   max_session_duration_ms : Int64
   capabilities : Array[CapabilityLimit]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceLimits::equal(Self, Self) -> Bool
-pub fn WorkspaceLimits::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceLimits::not_equal(Self, Self) -> Bool
-pub fn WorkspaceLimits::to_json(Self) -> Json
-pub fn WorkspaceLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) enum WorkspaceReadiness {
   WorkspaceReady
@@ -245,11 +174,6 @@ pub(all) enum WorkspaceReadiness {
   AccessUnavailable
   LeaseUnavailable
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceReadiness::equal(Self, Self) -> Bool
-pub fn WorkspaceReadiness::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceReadiness::not_equal(Self, Self) -> Bool
-pub fn WorkspaceReadiness::to_json(Self) -> Json
-pub fn WorkspaceReadiness::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceSelfContract {
   version : String
@@ -261,11 +185,6 @@ pub(all) struct WorkspaceSelfContract {
   authorized : Bool
   readiness : WorkspaceReadiness
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceSelfContract::equal(Self, Self) -> Bool
-pub fn WorkspaceSelfContract::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceSelfContract::not_equal(Self, Self) -> Bool
-pub fn WorkspaceSelfContract::to_json(Self) -> Json
-pub fn WorkspaceSelfContract::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkspaceSession {
   version : String
@@ -279,11 +198,6 @@ pub(all) struct WorkspaceSession {
   expires_unix_ms : Int64
   correlation_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceSession::equal(Self, Self) -> Bool
-pub fn WorkspaceSession::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceSession::not_equal(Self, Self) -> Bool
-pub fn WorkspaceSession::to_json(Self) -> Json
-pub fn WorkspaceSession::to_repr(Self) -> @debug.Repr
 pub fn WorkspaceSession::transition(Self, ConnectionState, Int64) -> Self raise WorkspaceContractError
 
 pub(all) struct WorkspaceUser {
@@ -297,11 +211,6 @@ pub(all) struct WorkspaceUser {
   last_active_unix_ms : Int64?
   identity_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceUser::equal(Self, Self) -> Bool
-pub fn WorkspaceUser::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceUser::not_equal(Self, Self) -> Bool
-pub fn WorkspaceUser::to_json(Self) -> Json
-pub fn WorkspaceUser::to_repr(Self) -> @debug.Repr
 pub fn WorkspaceUser::transition(Self, WorkspaceUserState, Int64) -> Self raise WorkspaceContractError
 
 pub(all) enum WorkspaceUserState {
@@ -310,11 +219,6 @@ pub(all) enum WorkspaceUserState {
   UserSuspended
   UserRevoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkspaceUserState::equal(Self, Self) -> Bool
-pub fn WorkspaceUserState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkspaceUserState::not_equal(Self, Self) -> Bool
-pub fn WorkspaceUserState::to_json(Self) -> Json
-pub fn WorkspaceUserState::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

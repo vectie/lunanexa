@@ -56,9 +56,6 @@ pub(all) suberror ContractError {
   InvalidResourceCeiling(String)
   PayloadTooLarge
 } derive(Eq, @debug.Debug)
-pub fn ContractError::equal(Self, Self) -> Bool
-pub fn ContractError::not_equal(Self, Self) -> Bool
-pub fn ContractError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AcceleratorInventory {
@@ -68,11 +65,6 @@ pub(all) struct AcceleratorInventory {
   memory_free_mib : Int
   healthy : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AcceleratorInventory::equal(Self, Self) -> Bool
-pub fn AcceleratorInventory::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AcceleratorInventory::not_equal(Self, Self) -> Bool
-pub fn AcceleratorInventory::to_json(Self) -> Json
-pub fn AcceleratorInventory::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ArtifactRef {
   digest : String
@@ -80,11 +72,6 @@ pub(all) struct ArtifactRef {
   size_bytes : Int64
   signature_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ArtifactRef::equal(Self, Self) -> Bool
-pub fn ArtifactRef::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ArtifactRef::not_equal(Self, Self) -> Bool
-pub fn ArtifactRef::to_json(Self) -> Json
-pub fn ArtifactRef::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssignmentGroup {
   group_id : String
@@ -92,11 +79,6 @@ pub(all) struct AssignmentGroup {
   world_size : Int
   peer_endpoint : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AssignmentGroup::equal(Self, Self) -> Bool
-pub fn AssignmentGroup::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AssignmentGroup::not_equal(Self, Self) -> Bool
-pub fn AssignmentGroup::to_json(Self) -> Json
-pub fn AssignmentGroup::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuditEvent {
   sequence : Int64
@@ -113,11 +95,6 @@ pub(all) struct AuditEvent {
   previous_hash : String
   event_hash : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AuditEvent::equal(Self, Self) -> Bool
-pub fn AuditEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AuditEvent::not_equal(Self, Self) -> Bool
-pub fn AuditEvent::to_json(Self) -> Json
-pub fn AuditEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct BenchmarkReadSummary {
   run_id : String
@@ -126,11 +103,6 @@ pub(all) struct BenchmarkReadSummary {
   throughput_units_per_second : Int
   failure_per_mille : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BenchmarkReadSummary::equal(Self, Self) -> Bool
-pub fn BenchmarkReadSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BenchmarkReadSummary::not_equal(Self, Self) -> Bool
-pub fn BenchmarkReadSummary::to_json(Self) -> Json
-pub fn BenchmarkReadSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Capability {
   TextGenerate
@@ -141,11 +113,6 @@ pub(all) enum Capability {
   ModelEvaluate
   ModelTrain
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Capability::equal(Self, Self) -> Bool
-pub fn Capability::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Capability::not_equal(Self, Self) -> Bool
-pub fn Capability::to_json(Self) -> Json
-pub fn Capability::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DataClass {
   Public
@@ -153,11 +120,6 @@ pub(all) enum DataClass {
   Confidential
   Restricted
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DataClass::equal(Self, Self) -> Bool
-pub fn DataClass::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DataClass::not_equal(Self, Self) -> Bool
-pub fn DataClass::to_json(Self) -> Json
-pub fn DataClass::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DataPolicy {
   classification : DataClass
@@ -165,11 +127,6 @@ pub(all) struct DataPolicy {
   allow_cache : Bool
   allow_training_reuse : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DataPolicy::equal(Self, Self) -> Bool
-pub fn DataPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DataPolicy::not_equal(Self, Self) -> Bool
-pub fn DataPolicy::to_json(Self) -> Json
-pub fn DataPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeploymentState {
   Pending
@@ -181,11 +138,6 @@ pub(all) enum DeploymentState {
   Degraded
   Failed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DeploymentState::equal(Self, Self) -> Bool
-pub fn DeploymentState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DeploymentState::not_equal(Self, Self) -> Bool
-pub fn DeploymentState::to_json(Self) -> Json
-pub fn DeploymentState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DesiredAssignment {
   assignment_id : String
@@ -204,11 +156,6 @@ pub(all) struct DesiredAssignment {
   group : AssignmentGroup?
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DesiredAssignment::equal(Self, Self) -> Bool
-pub fn DesiredAssignment::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DesiredAssignment::not_equal(Self, Self) -> Bool
-pub fn DesiredAssignment::to_json(Self) -> Json
-pub fn DesiredAssignment::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ErrorCode {
   InvalidRequest
@@ -221,11 +168,6 @@ pub(all) enum ErrorCode {
   CancelledByCaller
   Internal
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ErrorCode::equal(Self, Self) -> Bool
-pub fn ErrorCode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ErrorCode::not_equal(Self, Self) -> Bool
-pub fn ErrorCode::to_json(Self) -> Json
-pub fn ErrorCode::to_repr(Self) -> @debug.Repr
 
 pub(all) struct HealthPolicy {
   readiness_path : String
@@ -233,11 +175,6 @@ pub(all) struct HealthPolicy {
   failure_threshold : Int
   termination_grace_ms : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn HealthPolicy::equal(Self, Self) -> Bool
-pub fn HealthPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn HealthPolicy::not_equal(Self, Self) -> Bool
-pub fn HealthPolicy::to_json(Self) -> Json
-pub fn HealthPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct HealthResponse {
   product : String
@@ -245,22 +182,12 @@ pub(all) struct HealthResponse {
   version : String
   status : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn HealthResponse::equal(Self, Self) -> Bool
-pub fn HealthResponse::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn HealthResponse::not_equal(Self, Self) -> Bool
-pub fn HealthResponse::to_json(Self) -> Json
-pub fn HealthResponse::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LatencyClass {
   Batch
   Standard
   Realtime
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LatencyClass::equal(Self, Self) -> Bool
-pub fn LatencyClass::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LatencyClass::not_equal(Self, Self) -> Bool
-pub fn LatencyClass::to_json(Self) -> Json
-pub fn LatencyClass::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelRecord {
   model_id : String
@@ -272,11 +199,6 @@ pub(all) struct ModelRecord {
   minimum_memory_mib : Int
   state : ModelState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelRecord::equal(Self, Self) -> Bool
-pub fn ModelRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelRecord::not_equal(Self, Self) -> Bool
-pub fn ModelRecord::to_json(Self) -> Json
-pub fn ModelRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ModelState {
   Candidate
@@ -286,22 +208,12 @@ pub(all) enum ModelState {
   Deprecated
   Revoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelState::equal(Self, Self) -> Bool
-pub fn ModelState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelState::not_equal(Self, Self) -> Bool
-pub fn ModelState::to_json(Self) -> Json
-pub fn ModelState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NetworkPolicy {
   allow_controller : Bool
   allow_artifact_store : Bool
   allowed_egress : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NetworkPolicy::equal(Self, Self) -> Bool
-pub fn NetworkPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NetworkPolicy::not_equal(Self, Self) -> Bool
-pub fn NetworkPolicy::to_json(Self) -> Json
-pub fn NetworkPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NodeDirective {
   node_id : String
@@ -310,11 +222,6 @@ pub(all) struct NodeDirective {
   issued_unix_ms : Int64
   receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NodeDirective::equal(Self, Self) -> Bool
-pub fn NodeDirective::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeDirective::not_equal(Self, Self) -> Bool
-pub fn NodeDirective::to_json(Self) -> Json
-pub fn NodeDirective::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NodeHeartbeat {
   node_id : String
@@ -327,11 +234,6 @@ pub(all) struct NodeHeartbeat {
   timestamp_unix_ms : Int64
   signature : String
 } derive(Eq, @debug.Debug, @json.FromJson)
-pub fn NodeHeartbeat::equal(Self, Self) -> Bool
-pub fn NodeHeartbeat::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeHeartbeat::not_equal(Self, Self) -> Bool
-pub fn NodeHeartbeat::to_json(Self) -> Json
-pub fn NodeHeartbeat::to_repr(Self) -> @debug.Repr
 pub impl ToJson for NodeHeartbeat
 
 pub(all) struct NodeInventory {
@@ -343,11 +245,6 @@ pub(all) struct NodeInventory {
   labels : Map[String, String]
   taints : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NodeInventory::equal(Self, Self) -> Bool
-pub fn NodeInventory::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeInventory::not_equal(Self, Self) -> Bool
-pub fn NodeInventory::to_json(Self) -> Json
-pub fn NodeInventory::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NodeState {
   Enrolling
@@ -357,11 +254,6 @@ pub(all) enum NodeState {
   Unreachable
   Retired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NodeState::equal(Self, Self) -> Bool
-pub fn NodeState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeState::not_equal(Self, Self) -> Bool
-pub fn NodeState::to_json(Self) -> Json
-pub fn NodeState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Priority {
   Background
@@ -369,11 +261,6 @@ pub(all) enum Priority {
   Interactive
   Critical
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Priority::equal(Self, Self) -> Bool
-pub fn Priority::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Priority::not_equal(Self, Self) -> Bool
-pub fn Priority::to_json(Self) -> Json
-pub fn Priority::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PublicError {
   code : ErrorCode
@@ -381,43 +268,23 @@ pub(all) struct PublicError {
   retryable : Bool
   correlation_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PublicError::equal(Self, Self) -> Bool
-pub fn PublicError::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PublicError::not_equal(Self, Self) -> Bool
-pub fn PublicError::to_json(Self) -> Json
-pub fn PublicError::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RegistryAliasSummary {
   name : String
   model_id : String
   version : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RegistryAliasSummary::equal(Self, Self) -> Bool
-pub fn RegistryAliasSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RegistryAliasSummary::not_equal(Self, Self) -> Bool
-pub fn RegistryAliasSummary::to_json(Self) -> Json
-pub fn RegistryAliasSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RegistryEvaluationSummary {
   model_id : String
   model_version : String
   passed : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RegistryEvaluationSummary::equal(Self, Self) -> Bool
-pub fn RegistryEvaluationSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RegistryEvaluationSummary::not_equal(Self, Self) -> Bool
-pub fn RegistryEvaluationSummary::to_json(Self) -> Json
-pub fn RegistryEvaluationSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RegistryLicenseSummary {
   license_id : String
   status : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RegistryLicenseSummary::equal(Self, Self) -> Bool
-pub fn RegistryLicenseSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RegistryLicenseSummary::not_equal(Self, Self) -> Bool
-pub fn RegistryLicenseSummary::to_json(Self) -> Json
-pub fn RegistryLicenseSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RegistryReadContract {
   models : Array[ModelRecord]
@@ -426,11 +293,6 @@ pub(all) struct RegistryReadContract {
   aliases : Array[RegistryAliasSummary]
   runtimes : Array[RuntimeSpec]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RegistryReadContract::equal(Self, Self) -> Bool
-pub fn RegistryReadContract::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RegistryReadContract::not_equal(Self, Self) -> Bool
-pub fn RegistryReadContract::to_json(Self) -> Json
-pub fn RegistryReadContract::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ResourceCeiling {
   max_input_units : Int
@@ -438,11 +300,6 @@ pub(all) struct ResourceCeiling {
   max_runtime_ms : Int64
   max_accelerator_memory_mib : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ResourceCeiling::equal(Self, Self) -> Bool
-pub fn ResourceCeiling::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ResourceCeiling::not_equal(Self, Self) -> Bool
-pub fn ResourceCeiling::to_json(Self) -> Json
-pub fn ResourceCeiling::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ResourceLimits {
   accelerator_count : Int
@@ -450,22 +307,12 @@ pub(all) struct ResourceLimits {
   cpu_millis : Int
   memory_mib : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ResourceLimits::equal(Self, Self) -> Bool
-pub fn ResourceLimits::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ResourceLimits::not_equal(Self, Self) -> Bool
-pub fn ResourceLimits::to_json(Self) -> Json
-pub fn ResourceLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RetentionPolicy {
   Ephemeral
   RetainUntil(Int64)
   EvaluationCapture(consent_receipt~ : String)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RetentionPolicy::equal(Self, Self) -> Bool
-pub fn RetentionPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RetentionPolicy::not_equal(Self, Self) -> Bool
-pub fn RetentionPolicy::to_json(Self) -> Json
-pub fn RetentionPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeEndpoint {
   assignment_id : String
@@ -479,12 +326,7 @@ pub(all) struct RuntimeEndpoint {
   image_digest : String
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeEndpoint::equal(Self, Self) -> Bool
-pub fn RuntimeEndpoint::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn RuntimeEndpoint::matches(Self, DesiredAssignment, Int64) -> Bool
-pub fn RuntimeEndpoint::not_equal(Self, Self) -> Bool
-pub fn RuntimeEndpoint::to_json(Self) -> Json
-pub fn RuntimeEndpoint::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeRoutePolicy {
   network : String
@@ -492,11 +334,6 @@ pub(all) struct RuntimeRoutePolicy {
   port : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn RuntimeRoutePolicy::allows(Self, RuntimeEndpoint) -> Bool
-pub fn RuntimeRoutePolicy::equal(Self, Self) -> Bool
-pub fn RuntimeRoutePolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeRoutePolicy::not_equal(Self, Self) -> Bool
-pub fn RuntimeRoutePolicy::to_json(Self) -> Json
-pub fn RuntimeRoutePolicy::to_repr(Self) -> @debug.Repr
 pub fn RuntimeRoutePolicy::valid(Self) -> Bool
 
 pub(all) struct RuntimeSpec {
@@ -508,11 +345,6 @@ pub(all) struct RuntimeSpec {
   supports_batching : Bool
   supports_multi_node : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeSpec::equal(Self, Self) -> Bool
-pub fn RuntimeSpec::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeSpec::not_equal(Self, Self) -> Bool
-pub fn RuntimeSpec::to_json(Self) -> Json
-pub fn RuntimeSpec::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeTermination {
   original_assignment : DesiredAssignment?
@@ -525,11 +357,6 @@ pub(all) struct RuntimeTermination {
   image_digest : String
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeTermination::equal(Self, Self) -> Bool
-pub fn RuntimeTermination::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeTermination::not_equal(Self, Self) -> Bool
-pub fn RuntimeTermination::to_json(Self) -> Json
-pub fn RuntimeTermination::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RuntimeTerminationReport {
   node_id : String
@@ -537,11 +364,6 @@ pub(all) struct RuntimeTerminationReport {
   records : Array[RuntimeTermination]
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeTerminationReport::equal(Self, Self) -> Bool
-pub fn RuntimeTerminationReport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeTerminationReport::not_equal(Self, Self) -> Bool
-pub fn RuntimeTerminationReport::to_json(Self) -> Json
-pub fn RuntimeTerminationReport::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SchedulerReadContract {
   quotas : Array[Json]
@@ -549,11 +371,6 @@ pub(all) struct SchedulerReadContract {
   queued_count : Int?
   running_count : Int?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SchedulerReadContract::equal(Self, Self) -> Bool
-pub fn SchedulerReadContract::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SchedulerReadContract::not_equal(Self, Self) -> Bool
-pub fn SchedulerReadContract::to_json(Self) -> Json
-pub fn SchedulerReadContract::to_repr(Self) -> @debug.Repr
 
 pub(all) enum StreamEventKind {
   Chunk
@@ -561,20 +378,10 @@ pub(all) enum StreamEventKind {
   Failed
   Cancelled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn StreamEventKind::equal(Self, Self) -> Bool
-pub fn StreamEventKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn StreamEventKind::not_equal(Self, Self) -> Bool
-pub fn StreamEventKind::to_json(Self) -> Json
-pub fn StreamEventKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TelemetryReadContract {
   benchmark_summaries : Array[BenchmarkReadSummary]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TelemetryReadContract::equal(Self, Self) -> Bool
-pub fn TelemetryReadContract::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TelemetryReadContract::not_equal(Self, Self) -> Bool
-pub fn TelemetryReadContract::to_json(Self) -> Json
-pub fn TelemetryReadContract::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TelemetrySample {
   node_id : String
@@ -583,11 +390,6 @@ pub(all) struct TelemetrySample {
   value : Double
   timestamp_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TelemetrySample::equal(Self, Self) -> Bool
-pub fn TelemetrySample::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TelemetrySample::not_equal(Self, Self) -> Bool
-pub fn TelemetrySample::to_json(Self) -> Json
-pub fn TelemetrySample::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Timing {
   accepted_unix_ms : Int64
@@ -595,11 +397,6 @@ pub(all) struct Timing {
   first_output_unix_ms : Int64
   completed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Timing::equal(Self, Self) -> Bool
-pub fn Timing::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Timing::not_equal(Self, Self) -> Bool
-pub fn Timing::to_json(Self) -> Json
-pub fn Timing::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Usage {
   input_units : Int
@@ -607,11 +404,6 @@ pub(all) struct Usage {
   accelerator_ms : Int64
   queue_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Usage::equal(Self, Self) -> Bool
-pub fn Usage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Usage::not_equal(Self, Self) -> Bool
-pub fn Usage::to_json(Self) -> Json
-pub fn Usage::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkloadEnvelope {
   version : String
@@ -631,11 +423,6 @@ pub(all) struct WorkloadEnvelope {
   output_format : String
   trace_token : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkloadEnvelope::equal(Self, Self) -> Bool
-pub fn WorkloadEnvelope::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkloadEnvelope::not_equal(Self, Self) -> Bool
-pub fn WorkloadEnvelope::to_json(Self) -> Json
-pub fn WorkloadEnvelope::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkloadResponse {
   version : String
@@ -651,11 +438,6 @@ pub(all) struct WorkloadResponse {
   retryable : Bool
   audit_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkloadResponse::equal(Self, Self) -> Bool
-pub fn WorkloadResponse::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkloadResponse::not_equal(Self, Self) -> Bool
-pub fn WorkloadResponse::to_json(Self) -> Json
-pub fn WorkloadResponse::to_repr(Self) -> @debug.Repr
 
 pub(all) enum WorkloadState {
   Submitted
@@ -668,11 +450,6 @@ pub(all) enum WorkloadState {
   Cancelled
   Rejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkloadState::equal(Self, Self) -> Bool
-pub fn WorkloadState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkloadState::not_equal(Self, Self) -> Bool
-pub fn WorkloadState::to_json(Self) -> Json
-pub fn WorkloadState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkloadStreamEvent {
   workload_id : String
@@ -681,11 +458,6 @@ pub(all) struct WorkloadStreamEvent {
   output : Json?
   response : WorkloadResponse?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn WorkloadStreamEvent::equal(Self, Self) -> Bool
-pub fn WorkloadStreamEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn WorkloadStreamEvent::not_equal(Self, Self) -> Bool
-pub fn WorkloadStreamEvent::to_json(Self) -> Json
-pub fn WorkloadStreamEvent::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

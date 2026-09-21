@@ -39,7 +39,7 @@ fn test_database_url() -> String? {
 async test "undertaking PostgreSQL reopen and failed write preserve packet audit and idempotency" {
   guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
-  let store = @store.ContractDocumentStore::open_postgres(database)
+  let store = ContractDocumentStore::open_postgres(database)
   let manifest = @contractdoc.undertaking_manifest()
   let packet = @contractdoc.new_packet(
     manifest,
@@ -68,7 +68,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
     2000L,
   )
   let before = store.snapshot()
-  let reopened = @store.ContractDocumentStore::open_postgres(database)
+  let reopened = ContractDocumentStore::open_postgres(database)
   assert_eq(reopened.snapshot(), before)
   assert_eq(reopened.packet(packet.packet_id), Some(updated))
   assert_false(
@@ -97,7 +97,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
   }
   let successor = @database.PostgresDatabase::open(url)
   defer successor.close()
-  let recovered = @store.ContractDocumentStore::open_postgres(successor)
+  let recovered = ContractDocumentStore::open_postgres(successor)
   assert_eq(recovered.snapshot(), before)
   assert_eq(recovered.create_packet(updated, packet.subject_ref), updated)
   try recovered.create_packet(packet, packet.subject_ref) catch {
@@ -119,7 +119,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
   )
   assert_eq(retry.revision, updated.revision + 1L)
   assert_eq(
-    @store.ContractDocumentStore::open_postgres(successor).packet(packet.packet_id),
+    ContractDocumentStore::open_postgres(successor).packet(packet.packet_id),
     Some(retry),
   )
 }

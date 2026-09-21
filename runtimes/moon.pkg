@@ -3,6 +3,7 @@ import {
   "vectie/lunanexa/node",
   "moonbitlang/async",
   "moonbitlang/async/http",
+  "moonbitlang/async/io",
   "moonbitlang/async/socket",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/json",

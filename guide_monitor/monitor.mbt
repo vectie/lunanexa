@@ -73,10 +73,10 @@ pub fn observation_signature(
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(signing_secret).exact_view(),
+      @utf8.encode(signing_secret).view(),
       @utf8.encode(
         "lunanexa.guide-monitor.mac.v1|\{canonical_observation(observation)}",
-      ).exact_view(),
+      ).view(),
     ),
   )
 }

@@ -22,9 +22,6 @@ pub(all) suberror RegistryError {
   NoRollbackTarget(String)
   InvalidMetadata(String)
 } derive(Eq, @debug.Debug)
-pub fn RegistryError::equal(Self, Self) -> Bool
-pub fn RegistryError::not_equal(Self, Self) -> Bool
-pub fn RegistryError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror SignatureVerificationError {
   InvalidVerifierConfiguration
@@ -32,9 +29,6 @@ pub(all) suberror SignatureVerificationError {
   SubjectDigestMismatch
   SignatureVerificationFailed
 } derive(Eq, @debug.Debug)
-pub fn SignatureVerificationError::equal(Self, Self) -> Bool
-pub fn SignatureVerificationError::not_equal(Self, Self) -> Bool
-pub fn SignatureVerificationError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror StorageError {
   DigestNotPinned(String)
@@ -44,9 +38,6 @@ pub(all) suberror StorageError {
   DigestMismatch
   ArtifactFetchFailed
 } derive(Eq, @debug.Debug)
-pub fn StorageError::equal(Self, Self) -> Bool
-pub fn StorageError::not_equal(Self, Self) -> Bool
-pub fn StorageError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct Alias {
@@ -55,21 +46,11 @@ pub(all) struct Alias {
   version : String
   generation : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn Alias::equal(Self, Self) -> Bool
-pub fn Alias::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn Alias::not_equal(Self, Self) -> Bool
-pub fn Alias::to_json(Self) -> Json
-pub fn Alias::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AliasHistory {
   name : String
   values : Array[Alias]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AliasHistory::equal(Self, Self) -> Bool
-pub fn AliasHistory::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AliasHistory::not_equal(Self, Self) -> Bool
-pub fn AliasHistory::to_json(Self) -> Json
-pub fn AliasHistory::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ArtifactVerification {
   digest : String
@@ -78,11 +59,6 @@ pub(all) struct ArtifactVerification {
   verified_unix_ms : Int64
   verifier : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ArtifactVerification::equal(Self, Self) -> Bool
-pub fn ArtifactVerification::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ArtifactVerification::not_equal(Self, Self) -> Bool
-pub fn ArtifactVerification::to_json(Self) -> Json
-pub fn ArtifactVerification::to_repr(Self) -> @debug.Repr
 
 pub(all) struct BenchmarkProfile {
   profile_id : String
@@ -97,11 +73,6 @@ pub(all) struct BenchmarkProfile {
   throughput_per_second : Double
   peak_memory_mib : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BenchmarkProfile::equal(Self, Self) -> Bool
-pub fn BenchmarkProfile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BenchmarkProfile::not_equal(Self, Self) -> Bool
-pub fn BenchmarkProfile::to_json(Self) -> Json
-pub fn BenchmarkProfile::to_repr(Self) -> @debug.Repr
 
 pub struct CosignVerifier {
   binary : String
@@ -121,30 +92,23 @@ pub(all) struct EvaluationRecord {
   benchmark : BenchmarkProfile
   evidence_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EvaluationRecord::equal(Self, Self) -> Bool
-pub fn EvaluationRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EvaluationRecord::not_equal(Self, Self) -> Bool
-pub fn EvaluationRecord::to_json(Self) -> Json
-pub fn EvaluationRecord::to_repr(Self) -> @debug.Repr
 
 pub struct FileRegistry {
   persistence : RegistryPersistence
   mut registry : ModelRegistry
   mutex : @async.Mutex
-  require_evaluation : Bool
 }
 pub async fn FileRegistry::adopt_import(Self, @contracts.ModelRecord, LicenseRecord) -> Unit
 pub async fn FileRegistry::approve(Self, String, String, Int64) -> @contracts.ModelRecord
 pub async fn FileRegistry::deployment_allowed(Self, String, @contracts.RuntimeSpec) -> Bool
-pub async fn FileRegistry::open(String, require_evaluation? : Bool) -> Self
-pub async fn FileRegistry::open_postgres(@database.PostgresDatabase, require_evaluation? : Bool) -> Self
+pub async fn FileRegistry::open(String) -> Self
+pub async fn FileRegistry::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn FileRegistry::promote(Self, String, String, String, RolloutStage, String, Int64) -> PromotionReceipt
 pub async fn FileRegistry::record_evaluation(Self, EvaluationRecord) -> Unit
 pub async fn FileRegistry::record_license(Self, LicenseRecord) -> Unit
 pub async fn FileRegistry::record_verification(Self, ArtifactVerification) -> Unit
 pub async fn FileRegistry::register_model(Self, @contracts.ModelRecord) -> Unit
 pub async fn FileRegistry::register_runtime(Self, @contracts.RuntimeSpec) -> Unit
-pub fn FileRegistry::requires_evaluation(Self) -> Bool
 pub async fn FileRegistry::rollback(Self, String, String, Int64) -> PromotionReceipt
 pub async fn FileRegistry::scheduling_target(Self, String, @contracts.Capability) -> SchedulingTarget?
 pub async fn FileRegistry::snapshot(Self) -> RegistrySnapshot
@@ -157,11 +121,6 @@ pub(all) struct LicenseRecord {
   evidence_ref : String
   expires_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LicenseRecord::equal(Self, Self) -> Bool
-pub fn LicenseRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LicenseRecord::not_equal(Self, Self) -> Bool
-pub fn LicenseRecord::to_json(Self) -> Json
-pub fn LicenseRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LicenseStatus {
   Pending
@@ -169,11 +128,6 @@ pub(all) enum LicenseStatus {
   Expired
   Revoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LicenseStatus::equal(Self, Self) -> Bool
-pub fn LicenseStatus::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LicenseStatus::not_equal(Self, Self) -> Bool
-pub fn LicenseStatus::to_json(Self) -> Json
-pub fn LicenseStatus::to_repr(Self) -> @debug.Repr
 
 pub struct ModelRegistry {
   models : Map[String, @contracts.ModelRecord]
@@ -185,11 +139,11 @@ pub struct ModelRegistry {
   receipts : Array[PromotionReceipt]
   runtimes : Map[String, @contracts.RuntimeSpec]
 }
-pub fn ModelRegistry::approve(Self, String, String, Int64, require_evaluation? : Bool) -> @contracts.ModelRecord raise RegistryError
+pub fn ModelRegistry::approve(Self, String, String, Int64) -> @contracts.ModelRecord raise RegistryError
 pub fn ModelRegistry::deployment_allowed(Self, String, @contracts.RuntimeSpec) -> Bool
 pub fn ModelRegistry::model(Self, String, String) -> @contracts.ModelRecord?
 pub fn ModelRegistry::new() -> Self
-pub fn ModelRegistry::promote(Self, String, String, String, RolloutStage, String, Int64, require_evaluation? : Bool) -> PromotionReceipt raise RegistryError
+pub fn ModelRegistry::promote(Self, String, String, String, RolloutStage, String, Int64) -> PromotionReceipt raise RegistryError
 pub fn ModelRegistry::receipts(Self) -> Array[PromotionReceipt]
 pub fn ModelRegistry::record_evaluation(Self, EvaluationRecord) -> Unit raise RegistryError
 pub fn ModelRegistry::record_license(Self, LicenseRecord) -> Unit raise RegistryError
@@ -208,10 +162,7 @@ pub(all) struct OciRuntimeRegistry {
   credential_ref : String
   require_signature : Bool
 } derive(Eq, @debug.Debug)
-pub fn OciRuntimeRegistry::equal(Self, Self) -> Bool
-pub fn OciRuntimeRegistry::not_equal(Self, Self) -> Bool
 pub fn OciRuntimeRegistry::runtime_spec(Self, String, String, String, Array[String], Array[@contracts.Capability], supports_batching? : Bool, supports_multi_node? : Bool) -> @contracts.RuntimeSpec raise StorageError
-pub fn OciRuntimeRegistry::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PromotionReceipt {
   receipt_id : String
@@ -224,11 +175,6 @@ pub(all) struct PromotionReceipt {
   generation : Int64
   timestamp_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PromotionReceipt::equal(Self, Self) -> Bool
-pub fn PromotionReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PromotionReceipt::not_equal(Self, Self) -> Bool
-pub fn PromotionReceipt::to_json(Self) -> Json
-pub fn PromotionReceipt::to_repr(Self) -> @debug.Repr
 
 type RegistryPersistence
 
@@ -243,22 +189,12 @@ pub(all) struct RegistrySnapshot {
   alias_history : Array[AliasHistory]
   runtimes : Array[@contracts.RuntimeSpec]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RegistrySnapshot::equal(Self, Self) -> Bool
-pub fn RegistrySnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RegistrySnapshot::not_equal(Self, Self) -> Bool
-pub fn RegistrySnapshot::to_json(Self) -> Json
-pub fn RegistrySnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RolloutStage {
   Canary
   Stable
   RolledBack
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RolloutStage::equal(Self, Self) -> Bool
-pub fn RolloutStage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RolloutStage::not_equal(Self, Self) -> Bool
-pub fn RolloutStage::to_json(Self) -> Json
-pub fn RolloutStage::to_repr(Self) -> @debug.Repr
 
 pub(all) struct S3ArtifactStore {
   endpoint_ref : String
@@ -267,10 +203,7 @@ pub(all) struct S3ArtifactStore {
   require_tls : Bool
 } derive(Eq, @debug.Debug)
 pub fn S3ArtifactStore::artifact_ref(Self, String, String, Int64, String) -> @contracts.ArtifactRef raise StorageError
-pub fn S3ArtifactStore::equal(Self, Self) -> Bool
 pub fn S3ArtifactStore::new(String, String, String, require_tls? : Bool) -> Self raise StorageError
-pub fn S3ArtifactStore::not_equal(Self, Self) -> Bool
-pub fn S3ArtifactStore::to_repr(Self) -> @debug.Repr
 
 pub struct S3HttpVerifier {
   endpoint : String
@@ -284,11 +217,6 @@ pub(all) struct SchedulingTarget {
   model : @contracts.ModelRecord
   runtime : @contracts.RuntimeSpec
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SchedulingTarget::equal(Self, Self) -> Bool
-pub fn SchedulingTarget::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SchedulingTarget::not_equal(Self, Self) -> Bool
-pub fn SchedulingTarget::to_json(Self) -> Json
-pub fn SchedulingTarget::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignatureVerificationReceipt {
   subject : String
@@ -296,21 +224,11 @@ pub(all) struct SignatureVerificationReceipt {
   verifier : String
   verified : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SignatureVerificationReceipt::equal(Self, Self) -> Bool
-pub fn SignatureVerificationReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SignatureVerificationReceipt::not_equal(Self, Self) -> Bool
-pub fn SignatureVerificationReceipt::to_json(Self) -> Json
-pub fn SignatureVerificationReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct VerifiedArtifactDownload {
   digest : String
   size_bytes : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn VerifiedArtifactDownload::equal(Self, Self) -> Bool
-pub fn VerifiedArtifactDownload::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn VerifiedArtifactDownload::not_equal(Self, Self) -> Bool
-pub fn VerifiedArtifactDownload::to_json(Self) -> Json
-pub fn VerifiedArtifactDownload::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

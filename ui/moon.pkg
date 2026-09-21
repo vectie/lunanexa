@@ -8,6 +8,7 @@ import {
   "vectie/lunanexa/ui/i18n",
   "vectie/lunanexa/workspace",
   "moonbit-community/rabbita",
+  "moonbit-community/rabbita/cmd",
   "moonbit-community/rabbita/html",
   "moonbitlang/core/json",
   "moonbitlang/core/string",

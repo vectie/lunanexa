@@ -9,18 +9,6 @@ pub(all) enum ImportState {
 } derive(Debug, Eq, FromJson, ToJson)
 
 ///|
-pub extend ImportState with Debug::{to_repr}
-
-///|
-pub extend ImportState with Eq::{not_equal, equal}
-
-///|
-pub extend ImportState with FromJson::{from_json}
-
-///|
-pub extend ImportState with ToJson::{to_json}
-
-///|
 pub(all) struct CatalogModel {
   id : String
   display_name : String
@@ -39,30 +27,12 @@ pub(all) struct CatalogModel {
 } derive(Debug, Eq, ToJson)
 
 ///|
-pub extend CatalogModel with Debug::{to_repr}
-
-///|
-pub extend CatalogModel with Eq::{not_equal, equal}
-
-///|
-pub extend CatalogModel with ToJson::{to_json}
-
-///|
 pub(all) struct CatalogPage {
   models : Array[CatalogModel]
   total_count : Int64
   page_number : Int
   page_size : Int
 } derive(Debug, Eq, ToJson)
-
-///|
-pub extend CatalogPage with Debug::{to_repr}
-
-///|
-pub extend CatalogPage with Eq::{not_equal, equal}
-
-///|
-pub extend CatalogPage with ToJson::{to_json}
 
 ///|
 pub(all) struct ModelScopeFile {
@@ -72,18 +42,6 @@ pub(all) struct ModelScopeFile {
   size : Int64
   lfs : Bool
 } derive(Debug, Eq, FromJson, ToJson)
-
-///|
-pub extend ModelScopeFile with Debug::{to_repr}
-
-///|
-pub extend ModelScopeFile with Eq::{not_equal, equal}
-
-///|
-pub extend ModelScopeFile with FromJson::{from_json}
-
-///|
-pub extend ModelScopeFile with ToJson::{to_json}
 
 ///|
 pub(all) struct ImportOperation {
@@ -107,34 +65,10 @@ pub(all) struct ImportOperation {
 } derive(Debug, Eq, FromJson, ToJson)
 
 ///|
-pub extend ImportOperation with Debug::{to_repr}
-
-///|
-pub extend ImportOperation with Eq::{not_equal, equal}
-
-///|
-pub extend ImportOperation with FromJson::{from_json}
-
-///|
-pub extend ImportOperation with ToJson::{to_json}
-
-///|
 pub(all) struct ImportRequest {
   model_id : String
   revision : String
 } derive(Debug, Eq, FromJson, ToJson)
-
-///|
-pub extend ImportRequest with Debug::{to_repr}
-
-///|
-pub extend ImportRequest with Eq::{not_equal, equal}
-
-///|
-pub extend ImportRequest with FromJson::{from_json}
-
-///|
-pub extend ImportRequest with ToJson::{to_json}
 
 ///|
 pub(all) suberror ModelSourceError {
@@ -154,12 +88,6 @@ pub(all) suberror ModelSourceError {
   FileSizeMismatch
   FilesystemRejected
 } derive(Debug, Eq)
-
-///|
-pub extend ModelSourceError with Debug::{to_repr}
-
-///|
-pub extend ModelSourceError with Eq::{not_equal, equal}
 
 ///|
 pub fn valid_model_id(value : String) -> Bool {

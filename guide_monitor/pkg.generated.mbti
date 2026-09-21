@@ -36,9 +36,6 @@ pub(all) suberror GuideMonitorError {
   InvalidSignature
   StaleObservation
 } derive(Eq, @debug.Debug)
-pub fn GuideMonitorError::equal(Self, Self) -> Bool
-pub fn GuideMonitorError::not_equal(Self, Self) -> Bool
-pub fn GuideMonitorError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct GuideHealthObservation {
@@ -56,11 +53,6 @@ pub(all) struct GuideHealthObservation {
   knowledge_age_ms : Int64
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn GuideHealthObservation::equal(Self, Self) -> Bool
-pub fn GuideHealthObservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn GuideHealthObservation::not_equal(Self, Self) -> Bool
-pub fn GuideHealthObservation::to_json(Self) -> Json
-pub fn GuideHealthObservation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct GuideMonitorPolicy {
   target_ref : String
@@ -69,11 +61,6 @@ pub(all) struct GuideMonitorPolicy {
   future_skew_ms : Int64
   knowledge_max_age_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn GuideMonitorPolicy::equal(Self, Self) -> Bool
-pub fn GuideMonitorPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn GuideMonitorPolicy::not_equal(Self, Self) -> Bool
-pub fn GuideMonitorPolicy::to_json(Self) -> Json
-pub fn GuideMonitorPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct GuideMonitorResult {
   observation_id : String
@@ -82,11 +69,6 @@ pub(all) struct GuideMonitorResult {
   adapter_record : @notifications.NotificationRecord?
   knowledge_record : @notifications.NotificationRecord?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn GuideMonitorResult::equal(Self, Self) -> Bool
-pub fn GuideMonitorResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn GuideMonitorResult::not_equal(Self, Self) -> Bool
-pub fn GuideMonitorResult::to_json(Self) -> Json
-pub fn GuideMonitorResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct GuideProbePlan {
   version : String
@@ -96,11 +78,6 @@ pub(all) struct GuideProbePlan {
   health_path : String
   diagnostics_path : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn GuideProbePlan::equal(Self, Self) -> Bool
-pub fn GuideProbePlan::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn GuideProbePlan::not_equal(Self, Self) -> Bool
-pub fn GuideProbePlan::to_json(Self) -> Json
-pub fn GuideProbePlan::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
