@@ -12,14 +12,16 @@
    `{"error":{"code":"NotFound","message":"route was not found","retryable":false}}`。
    根因是一条三跳链（见 §2.2）：身份库镜像引用名缺失 → Keycloak CrashLoopBackOff →
    `/auth/oidc/*` 既没接到身份网关、也没落在运维实际访问的端口上（见 §2.2 第 3 跳）。
-   **本次已修好三跳中的绝大部分**：身份库 `1/1 Running`、Keycloak `1/1 Running`
-   （Bootstrap completed）、身份边缘全部 `Running`，而且
-   `5003/auth/oidc/start?audience=operator` 现在真的返回带 PKCE 的 302 落到 Keycloak 的登录表单。
-   还剩两个卡点：① 公网明文 HTTP 下控制台按设计拒绝管理员登录（一个部署策略开关，未替你按）；
-   ② 运维在用的 4174/5002 把 `location /auth/` **代理到了控制面**（路由指错对象，不是"没路由"），
-   且端口归属未收口 —— 而修这一条必须前端/网关/Keycloak **三处联动**，少一处会得到
-   `400 untrusted-browser-host`。
-   另有一个授权缺陷：前端 ConfigMap 明文内嵌操作员令牌并注入每个 `/v1/` 请求，
+   **本次已把这条链基本修通**：身份库 `1/1 Running`、Keycloak `1/1 Running`
+   （Bootstrap completed）、身份边缘全部 `Running`；
+   `5003/auth/oidc/start?audience=operator` 与 `5002/auth/oidc/start?audience=enterprise`
+   现在都返回带 PKCE 的 302 落到 Keycloak 的登录表单，而且**企业侧已在浏览器里真正完成
+   Keycloak 登录、回调换发了会话 cookie**（§2.6）。
+   还剩两处：① 公网明文 HTTP 下控制台按设计拒绝管理员登录（一个部署策略开关，未替你按）；
+   ② 最后一跳 `/auth/session`（cookie → `lnxs_` 租户会话）交换失败（401/503），
+   企业侧因此还没有真实租户主体（§2.6 末段）。
+   另外两个值得单列的问题：登录成功后前端 `location = /` 会**无条件把人送进 demo 门户**
+   （§4 缺陷 #7），以及前端 ConfigMap 明文内嵌操作员令牌并注入每个 `/v1/` 请求，
    4174/5002 因此无需任何会话即可调用操作员 API（§2.5 发现 4）。
 2. **管理侧可以进去，而且是实时数据**：控制台在 loopback 来源下提供「Local development token
    fallback」，填入部署自带的 operator/audit 令牌后控制台可用，显示 `4 of 4` 节点、`17` 个已批准模型。
@@ -393,6 +395,80 @@ ConfigMap 里**，并被 nginx 注入到每一个 `/v1/` 请求上。后果是�
 这也解释了为什么控制台/门户在"没登录"的情况下仍能读到真实集群数据。
 （本节只描述机制，不复述令牌值；建议改为由会话令牌驱动，并把该值收进 Secret。）
 
+### 2.6 本次实际改动与验证：企业侧 OIDC 登录已能走到回调
+
+**已改动三处（企业 audience 专用，操作员 5003 未受影响；改动前均已备份 configmap）：**
+
+1. 前端 5002 的 `location /auth/` 由控制面改指身份网关，并补上
+   `proxy_set_header Host $http_host`（不加这句网关只会看到上游名，必然 400）。
+2. 网关 configmap：`LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI` 由 5005 改为
+   `http://106.39.18.146:5002/auth/oidc/callback`（5005 本来就是 ComfyUI 的入口）。
+3. Keycloak `lunanexa-enterprise` 客户端：**追加**（不删除）5002 的回调 URI。
+
+**验证 —— 两个 audience 都给出正确的 PKCE 跳转：**
+
+```
+5002/auth/oidc/start?audience=enterprise -> 302
+  Location: …/protocol/openid-connect/auth?…&client_id=lunanexa-enterprise
+            &redirect_uri=http%3A%2F%2F106.39.18.146%3A5002%2Fauth%2Foidc%2Fcallback
+            &…&code_challenge=…&code_challenge_method=S256
+  Set-Cookie: lunanexa_http_enterprise_oidc=…
+5003/auth/oidc/start?audience=operator -> 302（回归通过，client_id=lunanexa-operator）
+```
+
+**验证 —— 真的在浏览器里完成了 OIDC 登录。** 用 CDP 抓的网络时序：
+
+```
+gate text: NX / LunaNexa enterprise access / Sign in or create a n…
+click sso: ok
+url now: http://106.39.18.146:5006/realms/lunanexa/protocol/openid-connect/auth?…client_id=lunanexa-enterprise…
+fill: submitted
+final url: http://106.39.18.146:5002/enterprise/?demo=1
+--- /auth/ responses ---
+   401 :5002/auth/session
+--- set-cookie seen ---
+   lunanexa_http_enterprise_oidc [HttpOnly,Path=/] status=302   ← start 发的 flow cookie
+   AUTH_SESSION_ID … / KC_RESTART …                             ← Keycloak 侧
+   lunanexa_http_enterprise_oidc [HttpOnly,Path=/] status=303   ← callback 换发的会话 cookie ✔
+```
+
+即：**Keycloak 认证成功、回调执行成功并换发了会话 cookie**。这比之前"点登录就 404"是实质跨越。
+
+**但会话没落到门户，原因有两个，一个是缺陷、一个是还没打通的最后一跳。**
+
+**缺陷：登录成功后立刻被塞进演示门户。** `final url` 是 `…/enterprise/?demo=1` ——
+因为前端 5002 的 `location = /` 是**无条件** `return 302 /enterprise/?demo=1;`。
+于是刚登录的用户（带着真实会话 cookie）也被导到 demo 页面，而 demo 模式**完全不联系控制面**
+（§4 已实测零请求），用户看到的是 `org-northstar / 1 / 1 / 2 / CNY 18,420` 那套假数据。
+**"登录后看不到自己的真实数据"这件事，根因就在这里**，而且代价极低：
+`location = /` 应当在存在有效会话时才跳真实门户。这一条本次只做定位，未改。
+
+**最后一跳：网关把会话 cookie 换成 `lnxs_` 租户会话时失败。** 页面上下文直接探测：
+
+```
+GET /auth/session  ->  401 {"error":"browser-session-required"}      （未登录时，正常）
+GET /auth/session  ->  503 application/json                          （登录后那次）
+GET /auth/session  ->  401 {"error":"browser-session-required"}      （随后又变回 401）
+```
+
+`503` 出现在回调刚完成之后，之后又退化为 `401` —— 像是"cookie 有效 → 与控制面交换失败 →
+网关清掉 cookie"。网关侧日志**没有任何错误输出**，所以只能从拓扑上排除：
+
+- relay 不是独立 Pod，而是控制面 Pod 里的 sidecar：`svc/lunanexa-identity-relay`
+  的 selector 是 `app=lunanexa-control,lunanexa.io/browser-identity-sidecar=enabled`，
+  控制面 Pod 上这个 label **在**；容器名是 **`runtime-loopback-proxy`**（不是 `browser-identity-*`），
+  它把 8081 转到控制面的 `127.0.0.1:8082` 身份监听器。
+- 一个可疑点：`kubectl get endpoints lunanexa-identity-relay` 显示 `<none>`，
+  而 EndpointSlice 里 `10.42.0.42` 是 `ready:true` —— 两个视图不一致（legacy Endpoints 陈旧）。
+- 控制面侧 `LUNANEXA_IDENTITY_LISTEN_ADDRESS = 127.0.0.1:8082`，
+  `LUNANEXA_IDENTITY_ASSERTION_SECRET` 来自 secret（网关同名变量也来自 secret）——
+  **两边这个断言密钥是否真的是同一个值，是下一步最该验证的一点**（不一致就会让每次
+  交换都失败，表现正是 503/401）。
+
+结论：**登录链路已经通到"网关换发会话 cookie"这一步，卡在"cookie → lnxs_ 租户会话"的交换。**
+这一步是网关/控制面的内部契约问题，值得单独一轮聚焦排查（先比对上述断言密钥与
+`/v1/auth/register` 的实际响应码）。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
@@ -450,6 +526,12 @@ ConfigMap 里**，并被 nginx 注入到每一个 `/v1/` 请求上。后果是�
 6. **会话范围标签语义不一致**：企业侧有 `Organization setup`（无成员关系）、
    `org-northstar · Tenant scoped`（演示）、管理侧另有 `Local fallback active`。
    同一个"已登录"在两侧含义不同，页面上没有统一解释。
+7. **登录成功会被立刻塞进演示门户（本次新发现，代价最低的缺陷）**：前端 5002 的
+   `location = /` 是**无条件** `return 302 /enterprise/?demo=1;`。所以一个刚完成 OIDC 登录、
+   带着真实会话 cookie 的用户，落地的第一个页面是 demo 页面；而 demo 模式不联系控制面
+   （见 #5 的零请求证据），于是用户看到的是 `org-northstar / 1 / 1 / 2 / CNY 18,420` 这套假数据。
+   **这就是"登录了却看不到自己的真实数据"的根因**，修法也很轻：
+   `location = /` 在存在有效会话时应当跳真实门户，而不是无条件跳 demo。
 
 ## 5. 卡点清单（按修复收益 / 代价排序）
 
@@ -476,36 +558,39 @@ ConfigMap 里**，并被 nginx 注入到每一个 `/v1/` 请求上。后果是�
    `http://106.39.18.146:5003` 并重建控制台 bundle —— 但那等于关掉"公网明文禁止管理员登录"
    这条安全默认（`docs/PUBLIC_HTTP_TRANSITION.md:180-190` 明确写了明文仍有中间人风险）。
    **这一条留给运维决定，我没有替你按。**
-4. **5005 没有 `/auth` location**（第 3 跳后半，企业侧）。网关的
-   `LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI` 指向 `http://106.39.18.146:5005/auth/oidc/callback`，
-   但 5005 的 nginx 对 `/auth/oidc/start` 返 404（`Server: nginx/1.27.5`）。
-   同时运维在用的是 5002，`5002/auth/oidc/start` 直接穿透到控制面报 404。
-   即企业侧要先把"哪个端口是门户入口"定下来，再给它 `/auth/oidc` + `/auth/session`。
-5. **realm `lunanexa` 里没有可用的操作员/企业身份**。原本只有
+4. ~~**5005 没有 `/auth` location**（第 3 跳后半，企业侧）。~~
+   **✅ 本次已修复企业侧并验证。** 做法见 §2.6：前端 5002 的 `/auth/` 改指身份网关、
+   网关的 enterprise redirect URI 改到 5002、Keycloak 客户端追加 5002 回调。
+   结果：`5002/auth/oidc/start?audience=enterprise` 返回正确的 PKCE 302，
+   并且**在浏览器里真的完成了 Keycloak 登录、回调换发了会话 cookie**；5003 操作员无回归。
+   **剩下的最后一跳**：`/auth/session` 把 cookie 换成 `lnxs_` 租户会话时失败
+   （先 503、后退化为 401 `browser-session-required`），网关日志无输出。
+   下一步应优先比对网关与控制面两边的**断言密钥是否同值**，
+   并抓 `/v1/auth/register` 的实际响应码（详见 §2.6 末段）。
+5. ~~**登录后看不到真实数据**~~ **✅ 根因已定位**：前端 5002 的 `location = /` 无条件
+   `302 /enterprise/?demo=1`，把刚登录的用户直接送进 demo（§4 缺陷 #7）。修法很轻，
+   本次只定位未改。
+6. **realm `lunanexa` 里没有可用的操作员/企业身份**。原本只有
    `smoke-identity-20260904-1832@example.invalid`（且已绑 TOTP）。本次为验证链路用 admin API
    建了测试用户 `recon-operator@lunanexa.local`（注意两个坑：realm 开了
    `registrationEmailAsUsername=true`，且新用户默认带 `CONFIGURE_TOTP`；口令策略要求
    大写+小写+数字+特殊字符，`length(12)`）。正式投用前应改为真实身份接入。
-6. ~~**把 `/auth/oidc/*` 接到 `lunanexa-identity-gateway:8081`，并让端口对齐**~~
-   **✅ 操作员侧本次已完成并验证**：`5003/auth/oidc/start?audience=operator` 现在返回带 PKCE 的
-   302 到 Keycloak，且 Keycloak 渲染出真正的登录表单；`5006` 的 discovery 也已应答。
-   网关的 redirect URI 配的是 5003（operator）/ 5005（enterprise），issuer 在 5006。
-   **仍未收口的是端口归属**：运维实际访问 4174 / 5002，这两个端口没有 `/auth` 路由
-   （直接穿透到控制面报 404）。要统一到一套，否则登录回来会落到别的 origin。
-7. ~~**Keycloak 确认 realm 与客户端**~~ **✅ 已确认**：
+7. ~~**把 `/auth/oidc/*` 接到身份网关并让端口对齐**~~ **✅ 操作员与企业两侧本次都已完成并验证**：
+   `5003/auth/oidc/start?audience=operator` 与 `5002/auth/oidc/start?audience=enterprise`
+   都返回带 PKCE 的 302 到 Keycloak，`5006` 的 discovery 也应答，
+   并且企业侧已在浏览器里真正完成登录并拿到会话 cookie（§2.6）。
+   **剩下的只是 4174（控制台）**：它仍没有 `/auth` 路由，而且公网明文下控制台本就不提供
+   SSO 入口 —— 与第 3 条同一个策略开关，一并决定即可。
+8. ~~**Keycloak 确认 realm 与客户端**~~ **✅ 已确认并调整**：
    `keycloakrealmimport/lunanexa-public-bootstrap-v1` 已 `Completed`，
    `keycloak/lunanexa-platform-idp` `1/1 Running`，admin API 可查；
-   `lunanexa-operator` / `lunanexa-enterprise` 两个 confidential client 的 redirect URI
-   分别是 5003 / 5005，与网关配置一致。
-8. **让企业侧拿到租户主体**。要么走 identity 边缘的 mTLS（`lunanexa-identity-*` 现已全部 Running，
-   具备条件了），要么接受"开发后备在结构上无法建立租户主体"这一事实并在 UI 上说清楚
-   （现在是 `Not connected` + 一个不透明的 `The action failed.`）。
-9. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
-10. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
-11. **把前端 nginx 的 `location /auth/` 从控制面改指身份网关，并做端口对齐**（§2.5 发现 1+2）。
-    注意这是**三处联动**：前端 `/auth/` → 网关、网关的 redirect URI → 该端口、
-    Keycloak client 的 redirect URI 同步登记；只改一处会得到 `400 untrusted-browser-host`。
-    同时要理顺 5000/5002/5005 的归属（现在 5005 指向 ComfyUI，而企业回调 URI 就配在 5005）。
+   `lunanexa-operator` → 5003，`lunanexa-enterprise` → 5005 **与 5002**（本次追加，
+   与网关配置一致）。
+9. **让企业侧拿到租户主体**（这是现在的主线）。链路已经推进到"网关换发会话 cookie"，
+   只剩 `/auth/session` → `lnxs_` 的交换（§2.6 末段）。这一步通了，企业侧才会有
+   真实租户主体，订单才可能创建。
+10. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
+11. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
 12. **收敛前端的令牌注入**（§2.5 发现 4）。`operator-4173-proxy` 的 ConfigMap 里明文写着
     操作员令牌，并被注入到每个 `/v1/` 请求；这意味着**任何能访问 4174/5002 的人都自动拥有
     操作员 API 权限，无需任何登录**。这条建议单独评估（属安全项，且与控制台"要不要登录"
@@ -552,6 +637,13 @@ ConfigMap 里**，并被 nginx 注入到每一个 `/v1/` 请求上。后果是�
   Host 是登记过的 5003/5005，所以必须三处联动；loopback 访问 5003 得到 400 就是这道闸。
 - **一个授权缺陷**：前端 ConfigMap 明文内嵌操作员令牌并注入每个 `/v1/` 请求，
   4174/5002 因此无需任何会话即可调用操作员 API（§2.5 发现 4）。
+- **本次打通到"真登录"这一级并验证**：改了前端 5002 的 `/auth/` 指向、网关的 enterprise
+  redirect URI、Keycloak 客户端的回调登记（三处联动），浏览器里完成 Keycloak 登录，
+  回调返回 303 并换发 `lunanexa_http_enterprise_oidc` 会话 cookie（CDP 抓的时序在 §2.6）。
+- **定位到最后一跳**：`/auth/session` 把 cookie 换成 `lnxs_` 时失败（先 503 后 401），
+  网关日志无输出；已排除 relay 缺失（它是控制面 Pod 里的 `runtime-loopback-proxy` sidecar），
+  下一步该比对两边断言密钥（§2.6 末段）。
+- **定位到"登录后看不到真实数据"的根因**：前端 `location = /` 无条件 `302 ?demo=1`（§4 缺陷 #7）。
 
 ## 8. 未验证
 
