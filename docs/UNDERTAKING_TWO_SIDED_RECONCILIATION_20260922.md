@@ -1548,6 +1548,49 @@ offer-dgx-spark-03  avail=4  min=3600  max=2592000   (1h–30天)  ✅
 **至此"选择时间、租期"这一格的现状**：页面能走到、能选机器/区域/时长，
 但**受 `Review price` 静默无反应这一条挡住**（代码位置见上）。
 
+#### 补充：用真实鼠标事件复测，并读完了"有效"的判定条件
+
+为了排除"合成 `.click()` 打不到应用"这种可能，我改用 CDP 的真实输入事件
+（`Input.dispatchMouseEvent` 的 mousePressed/mouseReleased + `Input.insertText`）重试：
+
+```
+Select capacity buttons: 3
+clicking last Select capacity: {"x":616.09,"y":1116.375,"disabled":false}
+hint: (none)              ← Configure order 表单没出现
+duration -> missing
+Review price: null
+--- /v1/ 流量 ---  (none)
+```
+
+**真实点击同样不产生任何请求。** 同时读到了 `self_service_configuration_valid`
+（`ui/enterprise/self_service.mbt:466-490`）的完整条件：
+
+```moonbit
+guard state.selected_product is Some(product) else { return false }
+guard selected_offering(state) is Some(offering) else { return false }
+offering.available &&
+offering.kind == product &&
+offering.regions.contains(state.region) &&
+state.project_id.trim() != "" && state.project_id.length() <= 160 &&
+state.duration_hours >= offering.minimum_duration_hours &&
+state.duration_hours <= offering.maximum_duration_hours && …
+```
+
+**所以最可能的触发条件是"`duration_hours` 落在所选 offering 的区间之外"**：
+若当时选中的是 24 小时上限的那条供给，而我把时长设成 720（30 天），
+这个判定就是 false，于是走到那条**静默 return**。这与观察到的一模一样。
+
+**但我不能据此下结论。** 因为同一个判定也决定按钮的 `disabled`，
+按理按钮该是灰的，而我看到的是 enabled —— 这中间的差异（壳状态与渲染状态不一致？
+还是我对这个 SPA 的自动化本身就不可靠？）我多次尝试都无法稳定复现完整流程
+（同一套动作重跑时，Configure order 表单有时出现、有时不出现），
+**所以这一条需要一次真人点击来定论。**
+
+**不过有一条与原因无关、可以直接写下的缺陷**：无论"配置无效"是用户的错还是自动化的错，
+**那条分支在界面上不给任何反馈** —— 不提示哪个字段不合格、不显示错误，
+用户看到的就是"点了没反应"。这与 §4 里"错误不透明"是同一类，只是这里连错误都没有。
+建议：无效时至少高亮不合格字段并给出原因（例如"时长超出该供给允许的 24 小时"）。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
