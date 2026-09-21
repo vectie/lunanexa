@@ -1304,6 +1304,53 @@ final url: http://106.39.18.146:5002/enterprise/          ← 不再带 ?demo=1
   字符串形式可解。企业侧 `cmd/enterprise/main.mbt:9-13` 与控制台
   `cmd/console/main.mbt:202-206` 两处同构，且异常都被 `catch { _ => … }` 静默吞掉。
 
+### 9.5 管理侧上架供给没有界面：纯 UI 的链路走不到起点
+
+接 §9.4 的下一步"上架一条机器供给"，去找管理侧的入口，结论很干脆：
+
+**供给侧的写接口存在，但控制台根本没有对应界面。**
+
+```
+api/machine_commerce_http.mbt:10    path == "/v1/machine-commerce/operator/offerings"
+api/machine_commerce_http.mbt:496   (Post, "/v1/machine-commerce/operator/offerings") => { … }
+```
+
+可是：
+
+```
+$ grep -c "machine-commerce" cmd/console/main.mbt          -> 0
+$ 线上 bundle 里（5,932,739 字节）
+  machine-commerce refs: 0
+  machine-offerings refs: 0
+$ bundle 里所有 /v1/*machine* 路径                        -> 空
+```
+
+也就是说**控制台里没有任何页面能发布/管理机器供给**（`Policies` 页只到
+"Register a runtime profile"，那是运行时而镜像，不是机器供给）。
+把 §9.2 的两条事实合起来，链路**从起点就走不通纯 UI**：
+
+1. 企业侧容量页读 `/v1/portal/self/machine-offerings` → **200 但 `[]`**（§9.2 更正后的事实）；
+2. 唯一能把它变成非空的动作（`POST /v1/machine-commerce/operator/offerings`）
+   **只有 API，没有界面**。
+
+所以"承诺函链路无法在纯 UI 下开始"不是权限问题、不是配置问题，
+而是**管理侧缺少一个供给侧界面**。这正属于本次任务要找的那类卡点，
+而且它解释了为什么两条机器类服务都停在同一句话。
+
+### 9.6 企业侧"创建订单草稿"按钮：观察到一次点击无任何反应（未干净复现）
+
+另外记一条**尚未确认**的观察，不要当成结论：在把
+`offline-project / offline-service / offline-sla` 三个字段都填上、按钮已从灰变亮的情况下，
+点 `Create draft order` **没有发出任何请求、也没有任何提示**（CDP 抓 `/v1/` 流量为空，
+页面仍停在 `No commercial orders yet`，也没有出现 "Unable to create the offline order" 那种失败文案）。
+
+代码上是通的：`ui/offline_commerce/offline_commerce.mbt:1221` 的按钮
+`on_click=command(emit, CreateOrder)`，`cmd/enterprise/main.mbt:4294` 也有
+`Portal(OfflineCommerce(CreateOrder))` 的分支去调 `offline_order_command`。
+所以"点了没反应"要么是我这边驱动的问题（这个 SPA 的字段/路由状态在多次命令之间不稳定，
+我后来重试时连三个输入框都找不到了），要么是消息没接上。**需要人工点一次来定论。**
+我把它标为未确认，避免又像 §9.2 那样先写错再更正。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
