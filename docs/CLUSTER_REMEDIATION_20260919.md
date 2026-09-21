@@ -1893,3 +1893,67 @@ Reference to Video    gen.input[image] -> link=None
 数据节点上那份还是旧的英文名的镜像目录 `/data/models/comfyui-templates/...` 已由脚本 prune 干净。
 但 **ComfyUI 镜像里自带的 `ComfyUI-vLLM-Omni/example_workflows/`（上游示例）里也没有图节点**，
 那 5 个上游模板属于镜像内容、不在我们仓库里，本轮没动。
+
+---
+
+## 19. 上线：host CPU 与真实内存指标（2026-09-21 深夜）
+
+17 节把代码写好了，18 节把模板修好了，这一节是**真的跑起来**。
+
+### 19.1 结果
+
+```
+minimaxh3-fl2va / ref2va / operator-proxy / comfyui / 4 × node-agent   全部 Running
+遥测里出现（实测值，不是声明值）：
+  host_cpu_utilization_per_mille = 1        ← 新增，节点空闲
+  host_memory_total_mib          = 124608
+  host_memory_available_mib      = 24492
+  host_memory_used_mib           = 100116    ← 约 100 GB，与 nvidia-smi 的记忆一致
+  accelerator_memory_*           ← 已不再发布（GB10 上 NVML 不测内存）
+控制台镜像 lunanexa-web:20260921（新 bundle），bundles 内含 CPU 利用率 单元格
+控制面镜像 lunanexa-control:20260918 原地重建（新白名单）
+```
+
+### 19.2 上线路上真正拦住人的东西
+
+1. **arm64 工具链的包里没有 `registry/`。** 官方安装包不含 registry，而离线解析依赖图必须要它；
+   真正被 `moon` 使用的是 `~/.moon` 下的 registry（私有模块 `vectie/moonleaf` 还要旁边的
+   `credentials.json`）。给 spark 的包必须把这两样打进去，否则报
+   `module was not found in the registry` / `no version satisfies requirement`。
+2. **`stage-and-build-node.sh` 找不到 loopback proxy** —— 它 `cp` 的是无扩展名的
+   `loopback-proxy`，而 native 构建产出 `loopback-proxy.exe`。已修（其他脚本早就做了两种拼写兼容）。
+3. **`ctr images import` 在 amd64 上导 arm64 镜像必须 `--all-platforms`。** 不加会被宿主平台
+   过滤掉，报的是 `ctr: image might be filtered out` —— 看起来像 tar 坏了，其实是平台过滤。
+4. **推送前必须先把镜像按目标名 tag。** `images push <registry-ref>` 要求本地存在那个名字，
+   只 tag `docker.io/library/...` 不够。
+5. **`build-control-image.py` 的 `--base-image` 默认等于 `--image`**，所以
+   `cluster.json images.control` **不能 bump 成新 tag** —— 它会拿自己当基准去 export，
+   报 `ctr: image "lunanexa-control:20260921": not found`。这个 tag 的设计就是**原地覆盖 +
+   `rollout restart`**。
+
+### 19.3 我造成的两次故障（如实记录）
+
+两次都是**同一个顺序错误**：先把 `cluster.json`/Deployment 指到新镜像，**才**去确认镜像真的存在
+或真的能拉到。
+
+| 故障 | 时长 | 影响 | 恢复 |
+|---|---|---|---|
+| 4 个 node agent `ImagePullBackOff`（r10 还没进 registry） | 约 4 分钟 | 节点遥测中断 | `set image` 回 r9 |
+| `lunanexa-control` `ErrImagePull`（镜像没打出来就滚动） | 约 3 分钟 | 控制面 API 中断（控制台读不到数据） | `rollout undo` |
+
+第二次回滚时还踩了一下：agent 的 Deployment 有**两个**容器
+（`node-agent` + `control-loopback-proxy`），只改第一个会让 pod 停在 `1/2`。
+
+**规矩定下来（写进本节，也希望以后照做）**：
+**先用「删掉本地副本再拉回来」证明 registry 真的有它，再改引用。**
+
+### 19.4 仍未做
+
+- **arm64 工具链已更新到 20260920，但 warnings 清理（`1f9af00`）还没重新落地。**
+  现在两台构建机都是 20260920，`moon check --target native --deny-warn` 在这个版本上
+  报 2735 warnings（在旧的 20260824 上是 0）。要不要重新落地由运维定：
+  `git revert 6c54f12` 即可，前提是 arm64 那边也保持 20260920。
+- `scripts/deploy/build-control-image.py` 的 `--base-image` 默认值这个坑，可以加一个显式检查
+  （base 与 image 同名时先确认 base 存在并给出清晰报错），本轮没改。
+- 控制台的浏览器渲染**没有被直接观察过** —— 数据在流、新 bundle 在服务，但"格子显示 25% CPU"
+  这一句我没有亲眼看到（需要真浏览器会话）。
