@@ -28,6 +28,11 @@ pub(all) struct ContractArchiveObject {
   verified : Bool
   active_content_detected : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ContractArchiveObject::equal(Self, Self) -> Bool
+pub fn ContractArchiveObject::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ContractArchiveObject::not_equal(Self, Self) -> Bool
+pub fn ContractArchiveObject::to_json(Self) -> Json
+pub fn ContractArchiveObject::to_repr(Self) -> @debug.Repr
 
 pub struct OfflineCommerceStore {
   persistence : OfflinePersistence

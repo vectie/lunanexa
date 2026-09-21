@@ -179,7 +179,7 @@ fn validate_id_token(
 
 ///|
 fn basic_authorization(client_id : String, client_secret : String) -> String {
-  "Basic \{@base64.encode(@utf8.encode("\{client_id}:\{client_secret}").view())}"
+  "Basic \{@base64.encode(@utf8.encode("\{client_id}:\{client_secret}").exact_view())}"
 }
 
 ///|

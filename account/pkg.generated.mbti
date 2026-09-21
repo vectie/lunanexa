@@ -29,12 +29,20 @@ pub(all) suberror AccountError {
   AssertionReplayed
   InvalidSnapshot(String)
 } derive(Eq, @debug.Debug)
+pub fn AccountError::equal(Self, Self) -> Bool
+pub fn AccountError::not_equal(Self, Self) -> Bool
+pub fn AccountError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AccountAuthorization {
   session_id : String
   account : AccountView
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountAuthorization::equal(Self, Self) -> Bool
+pub fn AccountAuthorization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountAuthorization::not_equal(Self, Self) -> Bool
+pub fn AccountAuthorization::to_json(Self) -> Json
+pub fn AccountAuthorization::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccountInvitation {
   invitation_id : String
@@ -49,6 +57,11 @@ pub(all) struct AccountInvitation {
   consumed_account_id : String?
   consumed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountInvitation::equal(Self, Self) -> Bool
+pub fn AccountInvitation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountInvitation::not_equal(Self, Self) -> Bool
+pub fn AccountInvitation::to_json(Self) -> Json
+pub fn AccountInvitation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccountInvitationIntent {
   invitation_id : String
@@ -59,6 +72,11 @@ pub(all) struct AccountInvitationIntent {
   created_by : String
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountInvitationIntent::equal(Self, Self) -> Bool
+pub fn AccountInvitationIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountInvitationIntent::not_equal(Self, Self) -> Bool
+pub fn AccountInvitationIntent::to_json(Self) -> Json
+pub fn AccountInvitationIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccountInvitationView {
   invitation_id : String
@@ -72,6 +90,11 @@ pub(all) struct AccountInvitationView {
   consumed_account_id : String?
   consumed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountInvitationView::equal(Self, Self) -> Bool
+pub fn AccountInvitationView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountInvitationView::not_equal(Self, Self) -> Bool
+pub fn AccountInvitationView::to_json(Self) -> Json
+pub fn AccountInvitationView::to_repr(Self) -> @debug.Repr
 
 type AccountPersistence
 
@@ -80,6 +103,11 @@ pub(all) enum AccountRole {
   AuditReader
   EnterpriseUser
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountRole::equal(Self, Self) -> Bool
+pub fn AccountRole::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountRole::not_equal(Self, Self) -> Bool
+pub fn AccountRole::to_json(Self) -> Json
+pub fn AccountRole::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AccountSnapshot {
   schema_version : String
@@ -88,6 +116,11 @@ pub(all) struct AccountSnapshot {
   invitations : Array[AccountInvitation]?
   trials : Array[TrialEntitlement]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountSnapshot::equal(Self, Self) -> Bool
+pub fn AccountSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountSnapshot::not_equal(Self, Self) -> Bool
+pub fn AccountSnapshot::to_json(Self) -> Json
+pub fn AccountSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AccountState {
   Invited
@@ -95,6 +128,11 @@ pub(all) enum AccountState {
   Suspended
   Revoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountState::equal(Self, Self) -> Bool
+pub fn AccountState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountState::not_equal(Self, Self) -> Bool
+pub fn AccountState::to_json(Self) -> Json
+pub fn AccountState::to_repr(Self) -> @debug.Repr
 
 pub struct AccountStore {
   persistence : AccountPersistence
@@ -141,6 +179,11 @@ pub(all) struct AccountView {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccountView::equal(Self, Self) -> Bool
+pub fn AccountView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountView::not_equal(Self, Self) -> Bool
+pub fn AccountView::to_json(Self) -> Json
+pub fn AccountView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct BrowserSession {
   session_id : String
@@ -152,6 +195,11 @@ pub(all) struct BrowserSession {
   last_used_unix_ms : Int64
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn BrowserSession::equal(Self, Self) -> Bool
+pub fn BrowserSession::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn BrowserSession::not_equal(Self, Self) -> Bool
+pub fn BrowserSession::to_json(Self) -> Json
+pub fn BrowserSession::to_repr(Self) -> @debug.Repr
 
 pub(all) struct BrowserSessionView {
   session_id : String
@@ -161,6 +209,11 @@ pub(all) struct BrowserSessionView {
   last_used_unix_ms : Int64
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn BrowserSessionView::equal(Self, Self) -> Bool
+pub fn BrowserSessionView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn BrowserSessionView::not_equal(Self, Self) -> Bool
+pub fn BrowserSessionView::to_json(Self) -> Json
+pub fn BrowserSessionView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct HumanAccount {
   version : String
@@ -176,27 +229,52 @@ pub(all) struct HumanAccount {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn HumanAccount::equal(Self, Self) -> Bool
+pub fn HumanAccount::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn HumanAccount::not_equal(Self, Self) -> Bool
+pub fn HumanAccount::to_json(Self) -> Json
+pub fn HumanAccount::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IssuedAccountInvitation {
   invitation : AccountInvitationView
   secret : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn IssuedAccountInvitation::equal(Self, Self) -> Bool
+pub fn IssuedAccountInvitation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn IssuedAccountInvitation::not_equal(Self, Self) -> Bool
+pub fn IssuedAccountInvitation::to_json(Self) -> Json
+pub fn IssuedAccountInvitation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IssuedBrowserSession {
   session : BrowserSessionView
   secret : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn IssuedBrowserSession::equal(Self, Self) -> Bool
+pub fn IssuedBrowserSession::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn IssuedBrowserSession::not_equal(Self, Self) -> Bool
+pub fn IssuedBrowserSession::to_json(Self) -> Json
+pub fn IssuedBrowserSession::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenRegisteredAccount {
   account : AccountView
   session : IssuedBrowserSession
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OpenRegisteredAccount::equal(Self, Self) -> Bool
+pub fn OpenRegisteredAccount::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OpenRegisteredAccount::not_equal(Self, Self) -> Bool
+pub fn OpenRegisteredAccount::to_json(Self) -> Json
+pub fn OpenRegisteredAccount::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RegisteredAccount {
   account : AccountView
   invitation : AccountInvitationView
   session : IssuedBrowserSession
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RegisteredAccount::equal(Self, Self) -> Bool
+pub fn RegisteredAccount::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RegisteredAccount::not_equal(Self, Self) -> Bool
+pub fn RegisteredAccount::to_json(Self) -> Json
+pub fn RegisteredAccount::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TrialEntitlement {
   trial_id : String
@@ -212,6 +290,11 @@ pub(all) struct TrialEntitlement {
   revoked_unix_ms : Int64?
   consumed_requests : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TrialEntitlement::equal(Self, Self) -> Bool
+pub fn TrialEntitlement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TrialEntitlement::not_equal(Self, Self) -> Bool
+pub fn TrialEntitlement::to_json(Self) -> Json
+pub fn TrialEntitlement::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TrialEntitlementIntent {
   trial_id : String
@@ -223,6 +306,11 @@ pub(all) struct TrialEntitlementIntent {
   maximum_requests : Int64
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TrialEntitlementIntent::equal(Self, Self) -> Bool
+pub fn TrialEntitlementIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TrialEntitlementIntent::not_equal(Self, Self) -> Bool
+pub fn TrialEntitlementIntent::to_json(Self) -> Json
+pub fn TrialEntitlementIntent::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

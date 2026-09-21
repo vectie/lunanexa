@@ -10,11 +10,26 @@ struct ResourceRecord {
 } derive(ToJson, FromJson)
 
 ///|
+pub extend ResourceRecord with ToJson::{to_json}
+
+///|
+pub extend ResourceRecord with FromJson::{from_json}
+
+///|
 struct ObservedContainer {
   pod_uid : String
   container_id : String
   termination_observed_unix_ms : Int64?
 } derive(ToJson, FromJson, Eq)
+
+///|
+pub extend ObservedContainer with ToJson::{to_json}
+
+///|
+pub extend ObservedContainer with FromJson::{from_json}
+
+///|
+pub extend ObservedContainer with Eq::{not_equal, equal}
 
 ///|
 struct RuntimeRecord {
@@ -33,6 +48,12 @@ struct RuntimeRecord {
 } derive(ToJson, FromJson)
 
 ///|
+pub extend RuntimeRecord with ToJson::{to_json}
+
+///|
+pub extend RuntimeRecord with FromJson::{from_json}
+
+///|
 struct RuntimeJournal {
   version : String
   settings : RuntimeSettings
@@ -40,6 +61,12 @@ struct RuntimeJournal {
   mut runtimes : Array[RuntimeRecord]
   mut pending_terminations : Array[@contracts.RuntimeTermination]?
 } derive(ToJson, FromJson)
+
+///|
+pub extend RuntimeJournal with ToJson::{to_json}
+
+///|
+pub extend RuntimeJournal with FromJson::{from_json}
 
 ///|
 pub struct RuntimeSupervisor {
@@ -60,6 +87,12 @@ pub(all) struct RuntimeObservation {
   address : String
   endpoint : @contracts.RuntimeEndpoint?
 } derive(Debug, Eq)
+
+///|
+pub extend RuntimeObservation with Debug::{to_repr}
+
+///|
+pub extend RuntimeObservation with Eq::{not_equal, equal}
 
 ///|
 fn digest_text(value : String) -> String {

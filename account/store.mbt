@@ -587,7 +587,7 @@ fn AccountStore::invitation_secret(
   now_unix_ms : Int64,
 ) -> String {
   let material = "lunanexa.account-invitation.v1|\{intent.invitation_id}|\{intent.email}|\{intent.organization_id}|\{intent.tenant_ref}|\{intent.project_id}|\{intent.expires_unix_ms}|\{now_unix_ms}"
-  "lnxi_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(self.issuer_secret).view(), @utf8.encode(material).view()))}"
+  "lnxi_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(self.issuer_secret).exact_view(), @utf8.encode(material).exact_view()))}"
 }
 
 ///|
@@ -1031,10 +1031,10 @@ fn AccountStore::session_material(
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(self.issuer_secret).view(),
+      @utf8.encode(self.issuer_secret).exact_view(),
       @utf8.encode(
         "lunanexa.browser-session.v1|\{account_id}|\{now_unix_ms}|\{ordinal}",
-      ).view(),
+      ).exact_view(),
     ),
   )
 }

@@ -5,6 +5,18 @@ pub(all) enum TransferScope {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend TransferScope with Debug::{to_repr}
+
+///|
+pub extend TransferScope with Eq::{not_equal, equal}
+
+///|
+pub extend TransferScope with ToJson::{to_json}
+
+///|
+pub extend TransferScope with FromJson::{from_json}
+
+///|
 pub(all) struct TransferGrant {
   grant_id : String
   nonce : String
@@ -17,6 +29,18 @@ pub(all) struct TransferGrant {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend TransferGrant with Debug::{to_repr}
+
+///|
+pub extend TransferGrant with Eq::{not_equal, equal}
+
+///|
+pub extend TransferGrant with ToJson::{to_json}
+
+///|
+pub extend TransferGrant with FromJson::{from_json}
+
+///|
 pub(all) struct TransferGrantUse {
   node_id : String
   deployment_id : String
@@ -25,10 +49,34 @@ pub(all) struct TransferGrantUse {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend TransferGrantUse with Debug::{to_repr}
+
+///|
+pub extend TransferGrantUse with Eq::{not_equal, equal}
+
+///|
+pub extend TransferGrantUse with ToJson::{to_json}
+
+///|
+pub extend TransferGrantUse with FromJson::{from_json}
+
+///|
 pub(all) enum GrantAuthenticity {
   Verified
   Unverified
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend GrantAuthenticity with Debug::{to_repr}
+
+///|
+pub extend GrantAuthenticity with Eq::{not_equal, equal}
+
+///|
+pub extend GrantAuthenticity with ToJson::{to_json}
+
+///|
+pub extend GrantAuthenticity with FromJson::{from_json}
 
 ///|
 pub(all) enum TransferGrantRejection {
@@ -46,6 +94,18 @@ pub(all) enum TransferGrantRejection {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend TransferGrantRejection with Debug::{to_repr}
+
+///|
+pub extend TransferGrantRejection with Eq::{not_equal, equal}
+
+///|
+pub extend TransferGrantRejection with ToJson::{to_json}
+
+///|
+pub extend TransferGrantRejection with FromJson::{from_json}
+
+///|
 pub let transfer_grant_absolute_max_lifetime_ms : Int64 = 900000L
 
 ///|
@@ -53,6 +113,18 @@ pub(all) enum TransferGrantDecision {
   Accepted(consumed_nonce~ : String)
   Rejected(TransferGrantRejection)
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend TransferGrantDecision with Debug::{to_repr}
+
+///|
+pub extend TransferGrantDecision with Eq::{not_equal, equal}
+
+///|
+pub extend TransferGrantDecision with ToJson::{to_json}
+
+///|
+pub extend TransferGrantDecision with FromJson::{from_json}
 
 ///|
 pub fn validate_transfer_grant(

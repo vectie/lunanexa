@@ -17,12 +17,30 @@ pub(all) suberror NodeError {
 } derive(Debug, Eq)
 
 ///|
+pub extend NodeError with Debug::{to_repr}
+
+///|
+pub extend NodeError with Eq::{not_equal, equal}
+
+///|
 pub(all) struct BootstrapToken {
   token_id : String
   secret : String
   expires_unix_ms : Int64
   used : Bool
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend BootstrapToken with Debug::{to_repr}
+
+///|
+pub extend BootstrapToken with Eq::{not_equal, equal}
+
+///|
+pub extend BootstrapToken with ToJson::{to_json}
+
+///|
+pub extend BootstrapToken with FromJson::{from_json}
 
 ///|
 pub(all) struct NodeCertificate {
@@ -34,10 +52,34 @@ pub(all) struct NodeCertificate {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend NodeCertificate with Debug::{to_repr}
+
+///|
+pub extend NodeCertificate with Eq::{not_equal, equal}
+
+///|
+pub extend NodeCertificate with ToJson::{to_json}
+
+///|
+pub extend NodeCertificate with FromJson::{from_json}
+
+///|
 pub(all) struct NodeAuthority {
   node_id : String
   secret_digest : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend NodeAuthority with Debug::{to_repr}
+
+///|
+pub extend NodeAuthority with Eq::{not_equal, equal}
+
+///|
+pub extend NodeAuthority with ToJson::{to_json}
+
+///|
+pub extend NodeAuthority with FromJson::{from_json}
 
 ///|
 pub struct EnrollmentService {
@@ -53,6 +95,18 @@ pub(all) struct EnrollmentSnapshot {
   certificates : Array[NodeCertificate]
   authorities : Array[NodeAuthority]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend EnrollmentSnapshot with Debug::{to_repr}
+
+///|
+pub extend EnrollmentSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend EnrollmentSnapshot with ToJson::{to_json}
+
+///|
+pub extend EnrollmentSnapshot with FromJson::{from_json}
 
 ///|
 fn secret_digest(secret : String) -> String {
@@ -290,7 +344,7 @@ pub fn assignment_signature(
     "lunanexa.assignment-mac.v1|\{unsigned.to_json().stringify()}",
   )
   @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
+    @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()),
   )
 }
 
@@ -311,9 +365,12 @@ pub fn heartbeat_signature(
     "lunanexa.heartbeat-mac.v1|\{payload.stringify()}",
   )
   @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
+    @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()),
   )
 }
+
+///|
+pub extend SharedSecretAssignmentVerifier with AssignmentVerifier::{verify}
 
 ///|
 pub impl AssignmentVerifier for SharedSecretAssignmentVerifier with fn verify(
@@ -330,6 +387,9 @@ pub fn TestAssignmentVerifier::new(
 ) -> TestAssignmentVerifier {
   { expected_signature, }
 }
+
+///|
+pub extend TestAssignmentVerifier with AssignmentVerifier::{verify}
 
 ///|
 pub impl AssignmentVerifier for TestAssignmentVerifier with fn verify(
@@ -362,6 +422,18 @@ pub(all) struct NodeAgentSnapshot {
   ready_assignment_ids : Array[String]?
   directive_generation : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend NodeAgentSnapshot with Debug::{to_repr}
+
+///|
+pub extend NodeAgentSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend NodeAgentSnapshot with ToJson::{to_json}
+
+///|
+pub extend NodeAgentSnapshot with FromJson::{from_json}
 
 ///|
 pub fn NodeAgent::new(node_id : String) -> NodeAgent {

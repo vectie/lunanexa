@@ -10,10 +10,34 @@ pub(all) struct StoreSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend StoreSnapshot with Debug::{to_repr}
+
+///|
+pub extend StoreSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend StoreSnapshot with ToJson::{to_json}
+
+///|
+pub extend StoreSnapshot with FromJson::{from_json}
+
+///|
 pub(all) struct WorkloadResultRecord {
   idempotency_key : String
   response : @contracts.WorkloadResponse
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend WorkloadResultRecord with Debug::{to_repr}
+
+///|
+pub extend WorkloadResultRecord with Eq::{not_equal, equal}
+
+///|
+pub extend WorkloadResultRecord with ToJson::{to_json}
+
+///|
+pub extend WorkloadResultRecord with FromJson::{from_json}
 
 ///|
 pub struct MemoryStore {

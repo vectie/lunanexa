@@ -7,6 +7,12 @@ pub(all) suberror DatabaseError {
 } derive(Debug, Eq)
 
 ///|
+pub extend DatabaseError with Debug::{to_repr}
+
+///|
+pub extend DatabaseError with Eq::{not_equal, equal}
+
+///|
 pub struct PostgresDatabase {
   /// Used for startup work only: schema migration, close, ping, and the
   /// projection count. It is a blocking libpq connection, so nothing on a

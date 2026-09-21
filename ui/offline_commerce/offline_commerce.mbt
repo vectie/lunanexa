@@ -5,6 +5,12 @@ pub(all) enum OfflineCommerceAudience {
 } derive(Debug, Eq)
 
 ///|
+pub extend OfflineCommerceAudience with Debug::{to_repr}
+
+///|
+pub extend OfflineCommerceAudience with Eq::{not_equal, equal}
+
+///|
 pub(all) struct OfflineCommerceState {
   locale : @i18n.Locale
   audience : OfflineCommerceAudience
@@ -29,6 +35,9 @@ pub(all) struct OfflineCommerceState {
 } derive(Eq)
 
 ///|
+pub extend OfflineCommerceState with Eq::{not_equal, equal}
+
+///|
 pub(all) enum OfflineCommerceConsequentialAction {
   QuoteOrder(String, String, String, String)
   QuoteUndertakingOrder(String, String, String)
@@ -49,11 +58,23 @@ pub(all) enum OfflineCommerceConsequentialAction {
 } derive(Debug, Eq)
 
 ///|
+pub extend OfflineCommerceConsequentialAction with Debug::{to_repr}
+
+///|
+pub extend OfflineCommerceConsequentialAction with Eq::{not_equal, equal}
+
+///|
 pub(all) struct OfflineCommerceConfirmation {
   action : OfflineCommerceConsequentialAction
   title : String
   evidence : String
 } derive(Debug, Eq)
+
+///|
+pub extend OfflineCommerceConfirmation with Debug::{to_repr}
+
+///|
+pub extend OfflineCommerceConfirmation with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct OfflineArtifactSummary {
@@ -69,6 +90,12 @@ pub(all) struct OfflineArtifactSummary {
   submitted_by : String
   created_unix_ms : Int64
 } derive(Debug, Eq)
+
+///|
+pub extend OfflineArtifactSummary with Debug::{to_repr}
+
+///|
+pub extend OfflineArtifactSummary with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum OfflineCommerceMessage {
@@ -92,6 +119,9 @@ pub(all) enum OfflineCommerceMessage {
   Refresh
   ClearNotice
 } derive(Eq)
+
+///|
+pub extend OfflineCommerceMessage with Eq::{not_equal, equal}
 
 ///|
 pub fn default_state(

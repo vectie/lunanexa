@@ -23,6 +23,9 @@ pub(all) suberror RetentionError {
   RetentionNotPermitted
   ConsentRequired
 } derive(Eq, @debug.Debug)
+pub fn RetentionError::equal(Self, Self) -> Bool
+pub fn RetentionError::not_equal(Self, Self) -> Bool
+pub fn RetentionError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct DeletionReceipt {
@@ -31,6 +34,11 @@ pub(all) struct DeletionReceipt {
   object_ref_hash : String
   policy_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DeletionReceipt::equal(Self, Self) -> Bool
+pub fn DeletionReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DeletionReceipt::not_equal(Self, Self) -> Bool
+pub fn DeletionReceipt::to_json(Self) -> Json
+pub fn DeletionReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Permission {
   EnrollNode
@@ -40,6 +48,11 @@ pub(all) enum Permission {
   ReadAudit
   InvokeModel
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Permission::equal(Self, Self) -> Bool
+pub fn Permission::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Permission::not_equal(Self, Self) -> Bool
+pub fn Permission::to_json(Self) -> Json
+pub fn Permission::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RequestLog {
   workload_id : String
@@ -49,6 +62,11 @@ pub(all) struct RequestLog {
   classification : @contracts.DataClass
   trace_token : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RequestLog::equal(Self, Self) -> Bool
+pub fn RequestLog::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RequestLog::not_equal(Self, Self) -> Bool
+pub fn RequestLog::to_json(Self) -> Json
+pub fn RequestLog::to_repr(Self) -> @debug.Repr
 
 pub struct RetentionLedger {
   records : Map[String, RetentionRecord]
@@ -66,6 +84,11 @@ pub(all) struct RetentionRecord {
   consent_receipt : String
   encrypted_object_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RetentionRecord::equal(Self, Self) -> Bool
+pub fn RetentionRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RetentionRecord::not_equal(Self, Self) -> Bool
+pub fn RetentionRecord::to_json(Self) -> Json
+pub fn RetentionRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Role {
   Administrator
@@ -73,6 +96,11 @@ pub(all) enum Role {
   Auditor
   InferenceCaller
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Role::equal(Self, Self) -> Bool
+pub fn Role::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Role::not_equal(Self, Self) -> Bool
+pub fn Role::to_json(Self) -> Json
+pub fn Role::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SecretReference {
   name : String
@@ -80,18 +108,33 @@ pub(all) struct SecretReference {
   provider_ref : String
   rotated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SecretReference::equal(Self, Self) -> Bool
+pub fn SecretReference::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SecretReference::not_equal(Self, Self) -> Bool
 pub fn SecretReference::rotate(Self, String, Int64) -> Self
+pub fn SecretReference::to_json(Self) -> Json
+pub fn SecretReference::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedSubject {
   digest : String
   signer : String
   signature_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SignedSubject::equal(Self, Self) -> Bool
+pub fn SignedSubject::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SignedSubject::not_equal(Self, Self) -> Bool
+pub fn SignedSubject::to_json(Self) -> Json
+pub fn SignedSubject::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TrustPolicy {
   allowed_signers : Array[String]
   require_sha256 : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TrustPolicy::equal(Self, Self) -> Bool
+pub fn TrustPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TrustPolicy::not_equal(Self, Self) -> Bool
+pub fn TrustPolicy::to_json(Self) -> Json
+pub fn TrustPolicy::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

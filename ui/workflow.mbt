@@ -15,9 +15,27 @@ pub(all) enum OperatorCommand {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend OperatorCommand with Debug::{to_repr}
+
+///|
+pub extend OperatorCommand with Eq::{not_equal, equal}
+
+///|
+pub extend OperatorCommand with ToJson::{to_json}
+
+///|
+pub extend OperatorCommand with FromJson::{from_json}
+
+///|
 pub(all) suberror WorkflowError {
   InvalidSequence(OperatorCommand)
 } derive(Debug, Eq)
+
+///|
+pub extend WorkflowError with Debug::{to_repr}
+
+///|
+pub extend WorkflowError with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct OperatorWorkflow {
@@ -28,6 +46,18 @@ pub(all) struct OperatorWorkflow {
   rerouted : Bool
   receipts : Array[String]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OperatorWorkflow with Debug::{to_repr}
+
+///|
+pub extend OperatorWorkflow with Eq::{not_equal, equal}
+
+///|
+pub extend OperatorWorkflow with ToJson::{to_json}
+
+///|
+pub extend OperatorWorkflow with FromJson::{from_json}
 
 ///|
 pub fn OperatorWorkflow::initial() -> OperatorWorkflow {

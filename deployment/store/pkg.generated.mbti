@@ -14,6 +14,9 @@ import {
 pub(all) suberror DeploymentStoreError {
   InvalidSnapshot(String)
 } derive(Eq, @debug.Debug)
+pub fn DeploymentStoreError::equal(Self, Self) -> Bool
+pub fn DeploymentStoreError::not_equal(Self, Self) -> Bool
+pub fn DeploymentStoreError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 type DeploymentPersistence

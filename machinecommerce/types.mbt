@@ -21,10 +21,28 @@ pub(all) suberror MachineCommerceError {
 } derive(Debug, Eq)
 
 ///|
+pub extend MachineCommerceError with Debug::{to_repr}
+
+///|
+pub extend MachineCommerceError with Eq::{not_equal, equal}
+
+///|
 pub(all) enum IdempotencyResult {
   Created
   Replayed
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend IdempotencyResult with Debug::{to_repr}
+
+///|
+pub extend IdempotencyResult with Eq::{not_equal, equal}
+
+///|
+pub extend IdempotencyResult with ToJson::{to_json}
+
+///|
+pub extend IdempotencyResult with FromJson::{from_json}
 
 ///|
 pub(all) enum MachineOfferingKind {
@@ -33,10 +51,34 @@ pub(all) enum MachineOfferingKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend MachineOfferingKind with Debug::{to_repr}
+
+///|
+pub extend MachineOfferingKind with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOfferingKind with ToJson::{to_json}
+
+///|
+pub extend MachineOfferingKind with FromJson::{from_json}
+
+///|
 pub(all) enum MachineOfferingState {
   OfferingActive
   OfferingRetired
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineOfferingState with Debug::{to_repr}
+
+///|
+pub extend MachineOfferingState with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOfferingState with ToJson::{to_json}
+
+///|
+pub extend MachineOfferingState with FromJson::{from_json}
 
 ///| A sellable machine SKU. `unit_price` is the price for one offering unit
 
@@ -65,6 +107,18 @@ pub(all) struct MachineOffering {
   updated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
+///|
+pub extend MachineOffering with Debug::{to_repr}
+
+///|
+pub extend MachineOffering with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOffering with ToJson::{to_json}
+
+///|
+pub extend MachineOffering with FromJson::{from_json}
+
 ///| A current inventory projection. Quotes never allocate capacity; capacity
 
 ///|
@@ -78,10 +132,34 @@ pub(all) struct MachineAvailability {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend MachineAvailability with Debug::{to_repr}
+
+///|
+pub extend MachineAvailability with Eq::{not_equal, equal}
+
+///|
+pub extend MachineAvailability with ToJson::{to_json}
+
+///|
+pub extend MachineAvailability with FromJson::{from_json}
+
+///|
 pub(all) struct MachineOfferingView {
   offering : MachineOffering
   availability : MachineAvailability
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineOfferingView with Debug::{to_repr}
+
+///|
+pub extend MachineOfferingView with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOfferingView with ToJson::{to_json}
+
+///|
+pub extend MachineOfferingView with FromJson::{from_json}
 
 ///|
 pub(all) struct MachineQuoteIntent {
@@ -101,6 +179,18 @@ pub(all) struct MachineQuoteIntent {
   model_template_ref : String?
   valid_for_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineQuoteIntent with Debug::{to_repr}
+
+///|
+pub extend MachineQuoteIntent with Eq::{not_equal, equal}
+
+///|
+pub extend MachineQuoteIntent with ToJson::{to_json}
+
+///|
+pub extend MachineQuoteIntent with FromJson::{from_json}
 
 ///| Server-priced and HMAC-bound quote. Every tenant, SKU, model, price and
 
@@ -131,6 +221,18 @@ pub(all) struct MachineQuote {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend MachineQuote with Debug::{to_repr}
+
+///|
+pub extend MachineQuote with Eq::{not_equal, equal}
+
+///|
+pub extend MachineQuote with ToJson::{to_json}
+
+///|
+pub extend MachineQuote with FromJson::{from_json}
+
+///|
 pub(all) struct MachineOrderIntent {
   order_id : String
   idempotency_key : String
@@ -140,6 +242,18 @@ pub(all) struct MachineOrderIntent {
   project_id : String
   purchaser_subject_ref : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineOrderIntent with Debug::{to_repr}
+
+///|
+pub extend MachineOrderIntent with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOrderIntent with ToJson::{to_json}
+
+///|
+pub extend MachineOrderIntent with FromJson::{from_json}
 
 ///|
 pub(all) enum MachineOrderState {
@@ -154,6 +268,18 @@ pub(all) enum MachineOrderState {
   Terminated
   Failed
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineOrderState with Debug::{to_repr}
+
+///|
+pub extend MachineOrderState with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOrderState with ToJson::{to_json}
+
+///|
+pub extend MachineOrderState with FromJson::{from_json}
 
 ///|
 pub(all) struct MachineOrder {
@@ -189,11 +315,35 @@ pub(all) struct MachineOrder {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend MachineOrder with Debug::{to_repr}
+
+///|
+pub extend MachineOrder with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOrder with ToJson::{to_json}
+
+///|
+pub extend MachineOrder with FromJson::{from_json}
+
+///|
 pub(all) struct MachineOrderAction {
   idempotency_key : String
   expected_generation : Int64
   reason : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineOrderAction with Debug::{to_repr}
+
+///|
+pub extend MachineOrderAction with Eq::{not_equal, equal}
+
+///|
+pub extend MachineOrderAction with ToJson::{to_json}
+
+///|
+pub extend MachineOrderAction with FromJson::{from_json}
 
 ///|
 pub(all) struct MachineProvisioningIntent {
@@ -202,6 +352,18 @@ pub(all) struct MachineProvisioningIntent {
   target_lease_ref : String?
   target_deployment_ref : String?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineProvisioningIntent with Debug::{to_repr}
+
+///|
+pub extend MachineProvisioningIntent with Eq::{not_equal, equal}
+
+///|
+pub extend MachineProvisioningIntent with ToJson::{to_json}
+
+///|
+pub extend MachineProvisioningIntent with FromJson::{from_json}
 
 ///| Authenticated payment-provider settlement. The transaction link used by
 
@@ -214,11 +376,35 @@ pub(all) struct MachinePaymentSettlement {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend MachinePaymentSettlement with Debug::{to_repr}
+
+///|
+pub extend MachinePaymentSettlement with Eq::{not_equal, equal}
+
+///|
+pub extend MachinePaymentSettlement with ToJson::{to_json}
+
+///|
+pub extend MachinePaymentSettlement with FromJson::{from_json}
+
+///|
 pub(all) struct MachineMeterIntent {
   idempotency_key : String
   expected_generation : Int64
   ended_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineMeterIntent with Debug::{to_repr}
+
+///|
+pub extend MachineMeterIntent with Eq::{not_equal, equal}
+
+///|
+pub extend MachineMeterIntent with ToJson::{to_json}
+
+///|
+pub extend MachineMeterIntent with FromJson::{from_json}
 
 ///|
 /// Durable, idempotent evidence ready for the commercial usage ledger.
@@ -240,6 +426,18 @@ pub(all) struct MachineUsageReceipt {
   receipt_digest : String
 } derive(Debug, Eq, ToJson, FromJson)
 
+///|
+pub extend MachineUsageReceipt with Debug::{to_repr}
+
+///|
+pub extend MachineUsageReceipt with Eq::{not_equal, equal}
+
+///|
+pub extend MachineUsageReceipt with ToJson::{to_json}
+
+///|
+pub extend MachineUsageReceipt with FromJson::{from_json}
+
 ///| Durable replay record for mutating lifecycle actions. The outcome
 
 ///|
@@ -253,6 +451,18 @@ pub(all) struct MachineActionReceipt {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend MachineActionReceipt with Debug::{to_repr}
+
+///|
+pub extend MachineActionReceipt with Eq::{not_equal, equal}
+
+///|
+pub extend MachineActionReceipt with ToJson::{to_json}
+
+///|
+pub extend MachineActionReceipt with FromJson::{from_json}
+
+///|
 pub(all) struct MachineCommerceSnapshot {
   schema_version : String
   offerings : Array[MachineOffering]
@@ -261,3 +471,15 @@ pub(all) struct MachineCommerceSnapshot {
   usage_receipts : Array[MachineUsageReceipt]
   action_receipts : Array[MachineActionReceipt]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend MachineCommerceSnapshot with Debug::{to_repr}
+
+///|
+pub extend MachineCommerceSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend MachineCommerceSnapshot with ToJson::{to_json}
+
+///|
+pub extend MachineCommerceSnapshot with FromJson::{from_json}

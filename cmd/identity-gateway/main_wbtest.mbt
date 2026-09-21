@@ -182,11 +182,11 @@ test "OIDC transport override preserves the public issuer path" {
 
 ///|
 test "ID token claims bind issuer client nonce and lifetime" {
-  let header = base64url(@utf8.encode("{\"alg\":\"RS256\"}").view())
+  let header = base64url(@utf8.encode("{\"alg\":\"RS256\"}").exact_view())
   let claims = base64url(
     @utf8.encode(
       "{\"iss\":\"https://106.39.18.146:5006/realms/lunanexa\",\"sub\":\"subject-1\",\"aud\":\"lunanexa-operator\",\"azp\":\"lunanexa-operator\",\"exp\":2000,\"nbf\":900,\"iat\":900,\"nonce\":\"nonce-1\"}",
-    ).view(),
+    ).exact_view(),
   )
   let token = "\{header}.\{claims}.abcdefghijklmnopqrstuvwxyz0123456789"
   let decoded = validate_id_token(

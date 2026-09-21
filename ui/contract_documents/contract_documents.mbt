@@ -14,6 +14,12 @@ pub(all) enum ContractDocumentConfirmation {
 } derive(Debug, Eq)
 
 ///|
+pub extend ContractDocumentConfirmation with Debug::{to_repr}
+
+///|
+pub extend ContractDocumentConfirmation with Eq::{not_equal, equal}
+
+///|
 /// The actions a packet offers to a given role in its current state. The
 /// action bar renders exactly this list, so both browser surfaces stay
 /// consistent with the lifecycle rules by construction.
@@ -29,6 +35,12 @@ pub(all) enum ContractPacketCapability {
   SubmitUndertaking
   ReviseUndertaking
 } derive(Debug, Eq)
+
+///|
+pub extend ContractPacketCapability with Debug::{to_repr}
+
+///|
+pub extend ContractPacketCapability with Eq::{not_equal, equal}
 
 ///|
 pub fn contract_packet_capabilities(
@@ -117,6 +129,9 @@ pub(all) struct ContractDocumentsState {
 } derive(Eq)
 
 ///|
+pub extend ContractDocumentsState with Eq::{not_equal, equal}
+
+///|
 pub(all) enum ContractDocumentsMessage {
   CopyPublicIdentifier(String)
   SelectPacket(String)
@@ -159,6 +174,9 @@ pub(all) enum ContractDocumentsMessage {
 } derive(Eq)
 
 ///|
+pub extend ContractDocumentsMessage with Eq::{not_equal, equal}
+
+///|
 /// The editable inputs of the operator action dialogs. Values are kept inside
 /// the pending confirmation so `ConfirmAction` always carries the complete,
 /// typed payload the shell needs for its HTTP call.
@@ -171,6 +189,12 @@ pub(all) enum ContractConfirmationField {
   SupersessionReason
   RejectionReason
 } derive(Debug, Eq)
+
+///|
+pub extend ContractConfirmationField with Debug::{to_repr}
+
+///|
+pub extend ContractConfirmationField with Eq::{not_equal, equal}
 
 ///|
 fn copy(locale : @i18n.Locale, en : String, zh : String) -> String {

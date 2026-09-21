@@ -58,12 +58,12 @@ pub fn signed_helper_authorization(
   let signature = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(signing_secret).view(),
+      @utf8.encode(signing_secret).exact_view(),
       @utf8.encode(
         helper_authorization_mac_payload(
           action, issued_unix_ms, expires_unix_ms,
         ),
-      ).view(),
+      ).exact_view(),
     ),
   )
   "lunanexa-helper-action-v1:\{issued_unix_ms}:\{expires_unix_ms}:\{signature}"
@@ -155,8 +155,8 @@ pub fn signed_helper_receipt(
   let signature = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(signing_secret).view(),
-      @utf8.encode(helper_receipt_mac_payload(action, verified_unix_ms)).view(),
+      @utf8.encode(signing_secret).exact_view(),
+      @utf8.encode(helper_receipt_mac_payload(action, verified_unix_ms)).exact_view(),
     ),
   )
   "lunanexa-helper-v2:\{name}:\{lease_id}:\{generation}:verified:\{verified_unix_ms}:mac:\{signature}"

@@ -8,6 +8,12 @@ pub(all) enum RunState {
 } derive(Debug, Eq)
 
 ///|
+pub extend RunState with Debug::{to_repr}
+
+///|
+pub extend RunState with Eq::{not_equal, equal}
+
+///|
 pub(all) struct DeploymentForm {
   deployment_target : @install_contract.DeploymentTarget
   companion_endpoint : String
@@ -29,6 +35,12 @@ pub(all) struct DeploymentForm {
 } derive(Debug, Eq)
 
 ///|
+pub extend DeploymentForm with Debug::{to_repr}
+
+///|
+pub extend DeploymentForm with Eq::{not_equal, equal}
+
+///|
 pub(all) struct InstallerState {
   locale : @i18n.Locale
   form : DeploymentForm
@@ -37,6 +49,12 @@ pub(all) struct InstallerState {
   terminal_lines : Array[String]
   error_message : String?
 } derive(Debug, Eq)
+
+///|
+pub extend InstallerState with Debug::{to_repr}
+
+///|
+pub extend InstallerState with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum InstallerMessage {
@@ -65,6 +83,12 @@ pub(all) enum InstallerMessage {
   RunRejected(String)
   ClearTerminal
 } derive(Debug, Eq)
+
+///|
+pub extend InstallerMessage with Debug::{to_repr}
+
+///|
+pub extend InstallerMessage with Eq::{not_equal, equal}
 
 ///|
 fn copy(locale : @i18n.Locale, english : String, chinese : String) -> String {

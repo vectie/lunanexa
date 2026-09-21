@@ -16,6 +16,9 @@ pub(all) suberror ContractPreviewError {
   InvalidDraft(String)
   MoonLeafPreviewFailed(String)
 } derive(Eq, @debug.Debug)
+pub fn ContractPreviewError::equal(Self, Self) -> Bool
+pub fn ContractPreviewError::not_equal(Self, Self) -> Bool
+pub fn ContractPreviewError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 

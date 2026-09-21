@@ -230,7 +230,7 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     allow_http_loopback=true,
   )
-  let service = ApiService::with_registry(
+  let service = @api.ApiService::with_registry(
       durable, registry, runtime, "operator-token", "inference-token", "node-token",
       "0.1.0",
     )

@@ -9,11 +9,29 @@ pub(all) struct BackupBundle {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend BackupBundle with Debug::{to_repr}
+
+///|
+pub extend BackupBundle with Eq::{not_equal, equal}
+
+///|
+pub extend BackupBundle with ToJson::{to_json}
+
+///|
+pub extend BackupBundle with FromJson::{from_json}
+
+///|
 pub(all) suberror BackupError {
   UnsignedBackup
   UnsupportedBackupVersion(String)
   ManifestDigestMismatch
 } derive(Debug, Eq)
+
+///|
+pub extend BackupError with Debug::{to_repr}
+
+///|
+pub extend BackupError with Eq::{not_equal, equal}
 
 ///|
 pub fn create_backup(
@@ -88,6 +106,18 @@ pub(all) struct FullBackupBundle {
   manifest_digest : String
   signature_ref : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend FullBackupBundle with Debug::{to_repr}
+
+///|
+pub extend FullBackupBundle with Eq::{not_equal, equal}
+
+///|
+pub extend FullBackupBundle with ToJson::{to_json}
+
+///|
+pub extend FullBackupBundle with FromJson::{from_json}
 
 ///|
 pub fn full_backup_manifest_digest(

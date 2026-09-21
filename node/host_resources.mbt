@@ -5,6 +5,18 @@ pub(all) struct HostResources {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend HostResources with Debug::{to_repr}
+
+///|
+pub extend HostResources with Eq::{not_equal, equal}
+
+///|
+pub extend HostResources with ToJson::{to_json}
+
+///|
+pub extend HostResources with FromJson::{from_json}
+
+///|
 /// Parse Linux host inventory, not container limits or advertised SKU values.
 /// Missing, duplicate or malformed measurements fail closed.
 pub fn parse_linux_host_resources(
@@ -174,6 +186,18 @@ pub(all) struct HostUtilization {
   memory_available_mib : Int64?
   cpu_utilization_per_mille : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend HostUtilization with Debug::{to_repr}
+
+///|
+pub extend HostUtilization with Eq::{not_equal, equal}
+
+///|
+pub extend HostUtilization with ToJson::{to_json}
+
+///|
+pub extend HostUtilization with FromJson::{from_json}
 
 ///|
 /// Aggregate CPU time counters from the first `cpu` line of /proc/stat, as
