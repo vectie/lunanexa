@@ -12,8 +12,11 @@
    `{"error":{"code":"NotFound","message":"route was not found","retryable":false}}`。
    根因是一条三跳链（见 §2.2）：身份库镜像引用名缺失 → Keycloak CrashLoopBackOff →
    `/auth/oidc/*` 既没接到身份网关、也没落在运维实际访问的端口上（见 §2.2 第 3 跳）。
-   **本次已修好前两跳**（身份库 `1/1 Running`、Keycloak `1/1 Running`，Bootstrap completed），
-   第三跳的端口拓扑仍是断的。
+   **本次已修好三跳中的绝大部分**：身份库 `1/1 Running`、Keycloak `1/1 Running`
+   （Bootstrap completed）、身份边缘全部 `Running`，而且
+   `5003/auth/oidc/start?audience=operator` 现在真的返回带 PKCE 的 302 落到 Keycloak 的登录表单。
+   还剩两个卡点：① 公网明文 HTTP 下控制台按设计拒绝管理员登录（一个部署策略开关，未替你按）；
+   ② 运维在用的 4174/5002 没有 `/auth` 路由，端口归属未收口。
 2. **管理侧可以进去，而且是实时数据**：控制台在 loopback 来源下提供「Local development token
    fallback」，填入部署自带的 operator/audit 令牌后控制台可用，显示 `4 of 4` 节点、`17` 个已批准模型。
 3. **企业侧只能进到"外壳"**：用部署自带的推断令牌走「开发凭据后备方式」可以打开门户全导航，
@@ -62,7 +65,7 @@
 （网关对未知 `/auth/*` 返回扁平的 `{"error":"route-not-found"}`）。也就是说请求根本没有到
 `lunanexa-identity-gateway`，而是落到了 `lunanexa-control`。
 
-### 2.2 根因：一条三跳链（第 1、2 跳本次已修好并验证）
+### 2.2 根因：一条三跳链（本次已修复并逐跳验证，详见 §5）
 
 **第 1 跳 — 身份库没起来（镜像名缺失）→ 本次已修复**
 
@@ -122,12 +125,13 @@ pod/lunanexa-platform-idp-0   1/1  Running   0   75s
 pod/lunanexa-platform-idp-1   0/1  Running   (启动中，正在加入集群)
 ```
 
-**第 3 跳 — `/auth/oidc/*` 没接到身份网关 → 仍未修**
+**第 3 跳 — `/auth/oidc/*` 没接到身份网关 → 前半已修复，后半还剩一个策略开关**
 
 `lunanexa-identity-gateway` 本身是**好的**（`2/2 Running`，ClusterIP `10.43.50.102:8081`），
 `lunanexa-identity-relay` 也在。挂掉的是边缘（同一个"引用名缺失"病）和前端路由：
 
 ```
+（修复前）
 deployment/lunanexa-identity-edge            0/2  CreateContainerError
 deployment/lunanexa-identity-internal-edge   0/2  要 …/moon/lunanexa-web@sha256:a6136238fb0d…
 deployment/lunanexa-identity-public-edge     0/1  要 lunanexa/web:management-20260827-console-compat-10
@@ -136,42 +140,141 @@ deployment/lunanexa-enterprise               0/1  CreateContainerError
 deployment/lunanexa-workbench                0/1  CreateContainerError
 ```
 
-**第 3 跳其实有两个子问题，第二个更要命：OIDC 配置的端口和你在用的端口不是同一批。**
+**✅ 本次已修复。** 先证明了一件事：这些 edge 挂载的 nginx 配置是**纯反代**，没有自己的业务逻辑 ——
+
+```
+# configmap lunanexa-identity-edge-nginx / default.conf
+location / { proxy_pass http://lunanexa-identity-gateway:8081; }
+```
+
+所以镜像只要"是个能跑的 nginx"即可，而不是必须匹配那个已不存在的构建。又验证了
+`lunanexa-web` 其实就是 **nginx 1.27.5**（`Cmd: ["nginx","-g","daemon off;"]`，
+`NGINX_VERSION=1.27.5`），而且正在服役的前门 `operator-4173-proxy` 用的就是它。
+同时确认所有身份相关 pod 都被 `nodeSelector: lunanexa.io/role: management` 钉在管理节点，
+所以别名打在管理节点就一定生效。
+
+于是打两个别名（可加性、可回退）：
+
+```sh
+k3s ctr images tag docker.io/library/lunanexa-web:20260918 \
+  docker.io/lunanexa/web:management-20260827-console-compat-10
+k3s ctr images tag docker.io/library/lunanexa-web:20260918 \
+  lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:a6136238fb0d39165fb26296b809786204fc6e74c2fee774e5103f7a4fe17550
+```
+
+**两个别名带来的连锁修复（都实测确认）：**
+
+```
+lunanexa-identity-internal-edge   2/2 Running
+lunanexa-identity-public-edge     1/1 Running
+lunanexa-identity-edge            2/2 Running     ← 同一个 digest 引用
+lunanexa-enterprise               1/1 Running     ← 同一个 digest 引用
+lunanexa-workbench                1/1 Running     ← 同一个 digest 引用
+svc/lunanexa-console-public  ENDPOINTS: 10.42.0.27:8443,10.42.0.45:8443   ← 5003 的 302 就是它给的
+```
+
+并且 **5006 上的 OIDC discovery 通了**：
+
+```
+$ curl http://106.39.18.146:5006/realms/lunanexa/.well-known/openid-configuration
+{"issuer":"http://106.39.18.146:5006/realms/lunanexa",
+ "authorization_endpoint":"…/protocol/openid-connect/auth",
+ "token_endpoint":"…/protocol/openid-connect/token",
+ "introspection_endpoint":"…"…}
+```
+
+**而且操作员登录入口 5003 真的活了**（带 PKCE 的完整授权码跳转）：
+
+```
+$ curl -i http://106.39.18.146:5003/auth/oidc/start?audience=operator
+HTTP/1.1 302 Found
+Location: http://106.39.18.146:5006/realms/lunanexa/protocol/openid-connect/auth
+  ?response_type=code&client_id=lunanexa-operator
+  &redirect_uri=http%3A%2F%2F106.39.18.146%3A5003%2Fauth%2Foidc%2Fcallback
+  &scope=openid%20profile%20email&state=…&nonce=…&code_challenge=…&code_challenge_method=S256
+Set-Cookie: lunanexa_http_operator_oidc=…      ← 与 LUNANEXA_PUBLIC_HTTP_ENABLED=true 一致
+```
+
+跟到 Keycloak 之后是**真正的登录表单**（不是错误页），说明两个 client 都注册正确：
+
+```
+$ curl "<上面那个 auth URL>"
+<form id="kc-form-login" …>        ← 含 username / password 字段
+```
+
+同时用 admin API 确认了 realm 与客户端：
+
+```
+realm lunanexa：client lunanexa-operator（confidential，redirect http://106.39.18.146:5003/auth/oidc/callback）
+                client lunanexa-enterprise（confidential，redirect http://106.39.18.146:5005/auth/oidc/callback）
+```
+
+**5006 是"只服务 IdP"的边缘，这是设计如此**，不是缺陷 —— 它的配置只放行两条：
+
+```
+location = /            { return 302 /realms/lunanexa/account/; }
+location ^~ /realms/lunanexa/ { proxy_pass https://lunanexa-platform-idp-service:8443; }
+location ^~ /resources/       { proxy_pass https://lunanexa-platform-idp-service:8443; }
+location /              { return 404; }     ← 所以 5006 上 /auth/oidc 返 404 是正常的
+```
+
+**剩下的那一个开关：公网明文 HTTP 上，控制台按设计拒绝管理员登录。**
+
+用浏览器打开 `http://106.39.18.146:5003/`，控制台渲染出来但写着：
+
+```
+Administrative login is blocked on public plain HTTP. Use the protected localhost URL or install TLS first.
+Organization sign-in requires HTTPS
+```
+
+原因在 `ui/browser_transport/transport.mbt:4-19`：`allows()` 只放行
+`https:`、`localhost/127.0.0.1/[::1]`，或"端点 origin == 页面 origin == 部署声明的 public HTTP origin"。
+而这个 origin 来自 `cmd/console/index.html:5` 的
+`<meta name="lunanexa-public-http-origin" content="">` —— **签入时是空的**。
+`docs/PUBLIC_HTTP_TRANSITION.md:180-190` 写得很清楚：
+
+> Their shipped HTML contains an empty `lunanexa-public-http-origin` meta element, so public HTTP
+> remains disabled by default. A deployment choosing temporary HTTP must set its content to the exact
+> public origin, for example `http://106.39.18.146:5003` for the operator page.
+> … This metadata is deployment policy, not cryptographic protection: HTTP remains vulnerable to
+> network interception. Restoring HTTPS requires removing the opt-in as well as the coordinated
+> gateway/identity changes above.
+
+所以这是一个**部署策略选择**，不是 bug：要么装 TLS（正确做法），要么显式把那个 meta 填成
+`http://106.39.18.146:5003` 并重新构建控制台 bundle（临时做法，明文可被中间人截获）。
+**这一条我没有替你按** —— 它会把"公网明文下禁止管理员登录"这条安全默认关掉。
+
+另外，即使开了这个开关，还要有可登录的身份：realm `lunanexa` 里原本**只有 1 个用户**
+（`smoke-identity-20260904-1832@example.invalid`，且已绑定 TOTP），没有任何操作员/企业用户。
+本次为了验证链路，我用 admin API 建了一个测试用户 `recon-operator@lunanexa.local`
+（realm 开了 email-as-username，且默认要求 `CONFIGURE_TOTP`，两处都已处理），
+口令保存在管理节点本地、**未入库**。这是环境准备，不是业务流程。
+
+**第 3 跳的第二个子问题：OIDC 配置的端口和你在用的端口不是同一批。**
 
 身份网关的配置（configmap `lunanexa-identity-ingress-config`，`LUNANEXA_IDENTITY_GATEWAY_MODE=proxy`）
 把它自己钉在下面这套公开拓扑上：
 
-| 配置项 | 值 | 实测 |
+| 配置项 | 值 | 修复前后 |
 |---|---|---|
-| `LUNANEXA_OIDC_ISSUER_URL` | `http://106.39.18.146:5006/realms/lunanexa` | **5006 → 000（不通）** |
+| `LUNANEXA_OIDC_ISSUER_URL` | `http://106.39.18.146:5006/realms/lunanexa` | 000 → **302/discovery 通** |
 | `LUNANEXA_IDENTITY_CANONICAL_ISSUER` | `https://106.39.18.146:5006/realms/lunanexa` | 同上 |
-| `LUNANEXA_OIDC_OPERATOR_REDIRECT_URI` | `http://106.39.18.146:**5003**/auth/oidc/callback` | **5003 → 000（不通）** |
-| `LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI` | `http://106.39.18.146:**5005**/auth/oidc/callback` | 5005 → 200（但不由身份边缘提供） |
+| `LUNANEXA_OIDC_OPERATOR_REDIRECT_URI` | `http://106.39.18.146:**5003**/auth/oidc/callback` | 000 → **302 通** |
+| `LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI` | `http://106.39.18.146:**5005**/auth/oidc/callback` | **仍 404**（5005 的 nginx 没有 `/auth` location） |
 | `LUNANEXA_PUBLIC_HTTP_ENABLED` | `true` | — |
 
-而实际在用的两个端口是 **4174（控制台）** 和 **5002（企业门户）**，它们**没有 `/auth/*` 路由**：
+而运维实际在用的是 **4174（控制台）** 和 **5002（企业门户）**，这两个端口**没有 `/auth/*` 路由**：
 
 ```
-4174/auth/oidc/start?audience=operator -> {"error":{"code":"NotFound",…}}
-5002/auth/oidc/start?audience=operator -> {"error":{"code":"NotFound",…}}
-5003/auth/oidc/start?audience=operator -> (空，端口不通)
-5006/auth/oidc/start?audience=operator -> (空，端口不通)
+4174/auth/oidc/start?audience=operator -> {"error":{"code":"NotFound",…}}   ← 落到控制面
+5002/auth/oidc/start?audience=operator -> {"error":{"code":"NotFound",…}}   ← 落到控制面
+5003/auth/oidc/start?audience=operator -> 302 到 Keycloak（本次修好）
+5006/auth/oidc/start?audience=operator -> 404（该边缘只放行 /realms/ 与 /resources/，设计如此）
 ```
 
-后端为什么是空的也查清了 —— 两个 LB 的 Endpoints 都是空的：
-
-```
-svc/lunanexa-console-public   (5003)  selector app=lunanexa-identity-edge        ENDPOINTS: (空)
-svc/lunanexa-identity-public  (5006)  selector app=lunanexa-identity-public-edge ENDPOINTS: (空)
-```
-
-即：**5003 由 `lunanexa-identity-edge`（0/2）提供，5006 由 `lunanexa-identity-public-edge`（0/1）
-提供，两个都在镜像问题上躺着。** 于是 OIDC 登录的公开拓扑整体是死的，而用户手上那两个
-端口（4174/5002）从来没被给过 `/auth/oidc` 路由。这是"点了登录链接就 404"的完整答案。
-
-修法（两件都要做）：① 让两个 edge 的镜像引用可解析并重滚；
-② 把 `/auth/oidc/*` 与 `/auth/session` 接到 `lunanexa-identity-gateway:8081`，
-并且让重定向 URI（5003/5005）与运维实际访问的端口对齐 —— 否则登录回来仍会落到别的 origin。
+即：**OIDC 那一套是另一批端口（5003/5005/5006），运维手上那批（4174/5002）从来没接过
+`/auth/oidc`。** 要收口：把 4174/5002 也接上 `/auth/oidc` 与 `/auth/session`（或反过来，
+把运维的入口迁到 5003/5005），并让 5005 具备 `/auth` location，否则企业侧登录回来会 404。
 
 ### 2.3 实际能用的进入方式（本次实测所用）
 
@@ -296,27 +399,50 @@ let allow_asserted_subject = loopback_client(connection.client_addr())
    主库 `lunanexa-postgres-0` 正用着），只是引用名不同；`k3s ctr images tag` 加别名即可
    （同一 image id `5f71c21b69a79`）。身份库 `1/1 Running`，Keycloak `1/1 Running`。
    教训：`imagePullPolicy: Never` 下，**引用名必须精确匹配**，内容相同不算。
-2. **让两个 edge 的镜像引用可解析并重滚**（第 3 跳的前半）。
-   `lunanexa-identity-edge` 要 `…/moon/lunanexa-web@sha256:a6136238fb0d…`（当前报
-   `CreateContainerError`，它去解析 `sha256:4932e4461c098…` 时找不到）；
-   `lunanexa-identity-public-edge` 要 `lunanexa/web:management-20260827-console-compat-10`
-   （`ErrImageNeverPull`）。这与第 1 条同一病因，但**必须先确认哪个本地镜像才是这两个引用
-   对应的构建**，不能像 postgres 那样只凭"同名基础镜像"就下判断。
-   注意 `lunanexa-identity-console-public` / `lunanexa-identity-public` 两个 LB 的 Endpoints
-   现在是空的，就是被这两个 deployment 拖空的。
-3. **把 `/auth/oidc/*` 接到 `lunanexa-identity-gateway:8081`，并让端口对齐**（第 3 跳的后半）。
-   网关的 redirect URI 配的是 5003（operator）/ 5005（enterprise），issuer 在 5006，
-   而运维实际访问的是 4174 / 5002 —— 这几套端口必须先统一，否则登录回来会落到别的 origin。
-   目前 4174/5002 上的 `/auth/oidc/start` 直接穿透到控制面，所以报的是控制面的 404 形状。
-4. **Keycloak 确认 realm 与客户端**：`keycloakrealmimport/lunanexa-public-bootstrap-v1`
-   已经 `Completed`，`keycloak/lunanexa-platform-idp` 现已 `1/1 Running`；网关侧
-   `LUNANEXA_OIDC_OPERATOR_CLIENT_ID=lunanexa-operator`、`…_ENTERPRISE_CLIENT_ID=lunanexa-enterprise`
-   与密钥都已注入，下一步要验证 5006 上的 discovery 真能应答。
-5. **让企业侧拿到租户主体**。要么走 identity 边缘的 mTLS（`lunanexa-identity-*` 系列先修起来），
-   要么接受"开发后备在结构上无法建立租户主体"这一事实并在 UI 上说清楚
+2. ~~**让两个 edge 的镜像引用可解析并重滚**（第 3 跳的前半）。~~
+   **✅ 本次已完成并验证。** 结论：这类 edge 是**纯 nginx 反代**（配置只有一行
+   `proxy_pass http://lunanexa-identity-gateway:8081`），因此镜像只需"是个能跑的 nginx"，
+   不必匹配那个已不存在的构建；`lunanexa-web` 实测就是 nginx 1.27.5。两个别名之后，
+   `lunanexa-identity-internal-edge 2/2`、`lunanexa-identity-public-edge 1/1`、
+   `lunanexa-identity-edge 2/2`、`lunanexa-enterprise 1/1`、`lunanexa-workbench 1/1` 全部起来了，
+   `svc/lunanexa-console-public` 的 Endpoints 也随之填充（5003 的 302 就是它给的）。
+   教训：`imagePullPolicy: Never` 下，**引用名必须精确匹配**，内容相同不算；
+   但这次证明"名字不同、内容等价"时，先确认该容器是否真的依赖那份构建的差异。
+3. **公网明文 HTTP 上，控制台按设计拒绝管理员登录**（第 3 跳剩下的那一个开关）。
+   `http://106.39.18.146:5003/` 会渲染出控制台，但写着
+   `Administrative login is blocked on public plain HTTP. Use the protected localhost URL or install TLS first.`
+   闸门在 `ui/browser_transport/transport.mbt:4-19`，开关是 `cmd/console/index.html:5` 的
+   `<meta name="lunanexa-public-http-origin" content="">`（签入为空）。
+   **这是部署策略选择，不是 bug**：正确做法是装 TLS；临时做法是把该 meta 填成
+   `http://106.39.18.146:5003` 并重建控制台 bundle —— 但那等于关掉"公网明文禁止管理员登录"
+   这条安全默认（`docs/PUBLIC_HTTP_TRANSITION.md:180-190` 明确写了明文仍有中间人风险）。
+   **这一条留给运维决定，我没有替你按。**
+4. **5005 没有 `/auth` location**（第 3 跳后半，企业侧）。网关的
+   `LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI` 指向 `http://106.39.18.146:5005/auth/oidc/callback`，
+   但 5005 的 nginx 对 `/auth/oidc/start` 返 404（`Server: nginx/1.27.5`）。
+   同时运维在用的是 5002，`5002/auth/oidc/start` 直接穿透到控制面报 404。
+   即企业侧要先把"哪个端口是门户入口"定下来，再给它 `/auth/oidc` + `/auth/session`。
+5. **realm `lunanexa` 里没有可用的操作员/企业身份**。原本只有
+   `smoke-identity-20260904-1832@example.invalid`（且已绑 TOTP）。本次为验证链路用 admin API
+   建了测试用户 `recon-operator@lunanexa.local`（注意两个坑：realm 开了
+   `registrationEmailAsUsername=true`，且新用户默认带 `CONFIGURE_TOTP`；口令策略要求
+   大写+小写+数字+特殊字符，`length(12)`）。正式投用前应改为真实身份接入。
+6. ~~**把 `/auth/oidc/*` 接到 `lunanexa-identity-gateway:8081`，并让端口对齐**~~
+   **✅ 操作员侧本次已完成并验证**：`5003/auth/oidc/start?audience=operator` 现在返回带 PKCE 的
+   302 到 Keycloak，且 Keycloak 渲染出真正的登录表单；`5006` 的 discovery 也已应答。
+   网关的 redirect URI 配的是 5003（operator）/ 5005（enterprise），issuer 在 5006。
+   **仍未收口的是端口归属**：运维实际访问 4174 / 5002，这两个端口没有 `/auth` 路由
+   （直接穿透到控制面报 404）。要统一到一套，否则登录回来会落到别的 origin。
+7. ~~**Keycloak 确认 realm 与客户端**~~ **✅ 已确认**：
+   `keycloakrealmimport/lunanexa-public-bootstrap-v1` 已 `Completed`，
+   `keycloak/lunanexa-platform-idp` `1/1 Running`，admin API 可查；
+   `lunanexa-operator` / `lunanexa-enterprise` 两个 confidential client 的 redirect URI
+   分别是 5003 / 5005，与网关配置一致。
+8. **让企业侧拿到租户主体**。要么走 identity 边缘的 mTLS（`lunanexa-identity-*` 现已全部 Running，
+   具备条件了），要么接受"开发后备在结构上无法建立租户主体"这一事实并在 UI 上说清楚
    （现在是 `Not connected` + 一个不透明的 `The action failed.`）。
-6. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
-7. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
+9. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
+10. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
 
 ## 6. 要跑通承诺函链路，还缺什么
 
@@ -341,9 +467,14 @@ let allow_asserted_subject = loopback_client(connection.client_addr())
 - **第 1、2 跳确实修好了**：`k3s ctr images tag` 加别名后身份库 `1/1 Running`
   （`database system is ready to accept connections`），Keycloak `1/1 Running`
   （`Bootstrap completed in 3.761000 seconds`）。修法与验证都在 §2.2。
-- **第 3 跳的两半都定位到了**：两个 edge 的精确镜像引用（附各自的失败原因），
-  以及 OIDC 配置端口（5003/5005/5006）与运维在用端口（4174/5002）不一致，
-  并且 5003/5006 对应的 LB Endpoints 是空的。
+- **第 3 跳也基本修好了**：先证明 edge 是纯 nginx 反代、`lunanexa-web` 就是 nginx 1.27.5、
+  且这些 pod 都钉在管理节点，再打两个镜像别名 —— 一次连锁带起
+  5 个 deployment（identity-edge/internal-edge/public-edge/enterprise/workbench）、
+  填充了 `lunanexa-console-public` 的 Endpoints，并让 5006 的 OIDC discovery 与
+  5003 的 `/auth/oidc/start`（PKCE 302 + Keycloak 登录表单）真正可用。
+- **定位到最后一个卡点的确切开关**：公网明文 HTTP 拒绝管理员登录，闸门在
+  `ui/browser_transport/transport.mbt:4-19`，开关是 `cmd/console/index.html:5` 的空 meta，
+  且 `docs/PUBLIC_HTTP_TRANSITION.md:180-190` 把它定义为部署策略（明文有中间人风险）。
 - 管理侧可以用部署自带令牌经控制台自带的开发后备进入，且显示实时集群数据。
 - 企业侧填对令牌也只能到 `Not connected` 外壳，且原因是 `loopback_client` 总闸（代码级证据）。
 - 链路在"订单"这一步断掉，两侧因此没有共同对帐物（两侧原文互相印证）。
