@@ -1286,3 +1286,182 @@ location /glm53/ { proxy_pass http://192.168.2.178:8888/; ... }   # 本次新增
   "注册可用"目前止步于"已登记、已校验、控制面可服务、节点代码就绪"。
 - 校验是单 worker 顺序执行的（见 14.6 的吞吐实测）。要做并发需要给进度累加器加锁并处理取消，
   这是明确可做的下一步，但本轮没有做。
+
+---
+
+## 15. MiniMax-H3 视频链路：两个断点（2026-09-21 晚）
+
+链路是 ComfyUI（`aigc-acceptance-20260915/comfyui-acceptance`）→ 自研节点
+`ComfyUI-vLLM-Omni` → `minimaxh3-fl2va`（.176）→ vLLM-Omni。一次 20 秒请求暴露了两个
+互相独立的缺陷。**15.1 已修复并验证；15.2 的根因当晚更正过一次，修复已写好但还没装上、
+20 秒端到端仍未跑通。**
+
+### 15.1 缺陷一：画布进度永远是 0%
+
+`vllm_omni/diffusion/models/progress_bar.py` 里写的是 `config["disable"] = not _is_rank_zero()`，
+而扩散 worker **不是 rank 0**，所以采样进度条被静默关掉；HTTP 侧的 `progress` 字段又只在
+作业结束时才写一次（跑着时恒为 0，完成才变 100）。两头一夹，UI 上就只有 0%。
+
+修法：补丁版 `progress_bar.py` 强制 `disable=False`，并让 `update()` 把
+`{n,total,desc,updated_unix}` 写到 `/tmp/vllm_progress.json`。装入方式是新建 configmap
+`minimaxh3-progress-patch`，给 `minimaxh3-fl2va` 加一个只读挂载 `/progress-patch`，并在
+args 前面拼一句 `cp /progress-patch/progress_bar.py <site-packages>/.../progress_bar.py &&`。
+原 sm121 补丁的 `cp ... && exec vllm serve ...` 一字未改。只改了 `fl2va`，**`ref2va` 没装**。
+
+注意：这只是让**服务端**有真实进度。**ComfyUI 画布仍不会动**——`ComfyUI-vLLM-Omni` 里
+`grep -i progress` 零匹配，节点根本没有上报代码。要让画布动，还得改
+`serving_video.py` 把步数写进 job 的 `progress`，再让节点读出来。**这步没做。**
+
+### 15.2 缺陷二：20 秒任务失败 —— 服务端编码 MP4 时堵死了自己的事件循环
+
+这一节的根因判断当晚被我**自己推翻过一次**。两轮都留着，因为"错在哪里"本身是有用的记录。
+
+#### 15.2.1 第一轮的判断：客户端 60 秒超时（不完整）
+
+第一次 20 秒请求（608×352、481 帧、8 步，标记 `Sweep20s`）的时间线：
+
+| 时刻 | 事件 | 来源 |
+|---|---|---|
+| 19:25:35 | 提交 | `/tmp/sweep.log` |
+| 19:31:07 | 去噪 7/7 完成，5 分 32 秒、47.49 s/步 | pod 日志 |
+| 19:32:39 | 服务端引擎结束 `total=424.24s stages=[0:424.24s]` | `stats.py:832` |
+| 19:33:51 | 客户端 `Prompt executed in 496.26 seconds` + `RuntimeError` | ComfyUI pod 日志 |
+| 19:34:22 | 服务端此时才把 MP4 编完：`Video response encoding (MP4 bytes): 102662.26 ms` | `serving_video.py:347` |
+
+当时看到 `nodes.py:217` 的 `VLLMOmniClient(url, timeout=60, ...)` 经 `api_client.py:73`
+变成 `aiohttp.ClientTimeout(total=60)`，`total` 覆盖整个请求**包括读 body**，于是判定
+"下载被 60 秒预算掐死"。这个 60 秒预算确实是个真隐患，**但它不是杀人的那把刀**。
+
+#### 15.2.2 更正：真正的根因在服务端
+
+去掉客户端下载超时后重跑同一配置（标记 `Sweep20sFix`），**在同一个相对时刻又断了**：
+
+| | 引擎结束 → 客户端断开 |
+|---|---|
+| 第一轮（有 60 秒下载预算） | 72 秒 |
+| 第二轮（下载预算已去掉） | 75 秒 |
+
+几乎一样。所以掐连接的东西和 60 秒无关，它绑定的是"引擎结束之后"。第二轮完整时间线：
+
+| 时刻 | 事件 |
+|---|---|
+| 19:38:40 | 提交 |
+| 19:45:51 | 去噪 7/7 完成，7 分 11 秒、61.58 s/步 |
+| 19:47:56 | 引擎结束，`serving_time_to_first_output_ms = 555,846`（9 分 16 秒） |
+| 19:49:11 | 客户端断开，`Prompt executed in 00:10:31`（631 秒） |
+| 19:49:25 | **pod `Ready=False`** |
+| — | 服务端**始终没有**打出 `Video response encoding` 这一行 |
+
+`vllm_omni/entrypoints/openai/serving_video.py` 的 `async def generate_video_bytes` 里，
+编码是**同步、CPU 密集**的，直接跑在事件循环上：
+
+```python
+video_bytes = _encode_video_bytes(artifacts.videos[0], fps=…, video_codec_options=…)
+```
+
+481 帧要编 **102.7 秒**。这 102 秒里整个 API server 什么都不响应。集群上的证据：
+
+```
+pod conditions:   Ready=False            lastTransition = 2026-09-21T11:49:25Z
+event:            Readiness probe failed: Get "http://10.42.2.221:8000/health":
+                  context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kubectl get endpoints minimaxh3-fl2va   →   ENDPOINTS 为空
+curl http://192.168.2.175:4174/h3/health →   502
+```
+
+**也就是说：每生成一个长视频，这个服务都会把自己的健康检查打挂、被踢出 Service、
+对所有其他调用方返回 502。** 这不是"20 秒跑不了"的局部问题，而是这个服务在每次长任务
+期间都会短暂失踪。`generate_videos`（base64 返回路径）有同一个毛病。
+
+#### 15.2.3 仍未查清的一环：那 70 秒是谁掐的
+
+诚实地记下来：pod 变 `Ready=False` 是在 **19:49:25**，比客户端断开（19:49:11）**晚 14 秒**，
+所以"端点被摘掉"不是直接原因，两者是同一个原因（循环被堵）的两个后果。路径上量级对得上的
+60 秒候选只剩一个：nginx 的 `send_timeout` 默认 **60 秒**（`/h3/` 只显式设了
+`proxy_read_timeout` / `proxy_send_timeout`，没设它）。这一点**还没有被证实**，只把它
+显式设成 7200s 作为待验证的假设，不当结论用。
+
+### 15.3 修复
+
+#### 15.3.1 服务端：把编码移出事件循环
+
+`deploy/acceptance/patches/vllm-omni-h3/serving_video.py`
+（md5 `914b4c058579b89d7792f811ce562d44`，原版 `97a324f58086ba4fceaa57ca6826e0d9`）改三处：
+
+1. 顶部补 `import asyncio`。
+2. `generate_video_bytes`：`video_bytes = await asyncio.to_thread(_encode_video_bytes, …)`。
+3. `generate_videos`：把 base64 编码的列表推导改成显式循环 + `await asyncio.to_thread(...)`，
+   语义不变，只是不再占着循环。
+
+装入方式沿用 15.1 的 configmap + args 前缀 `cp` 通道（镜像里是 `/usr/local/lib/python3.12/
+dist-packages/vllm_omni/…`，根文件系统只读，不能改镜像）。
+
+#### 15.3.2 客户端：下载不吃控制面预算，且不销毁已完成的作业
+
+`deploy/acceptance/patches/comfyui-vllm-omni/video_transport.py`
+（md5 `9dec50d33292ca3c1e93a3938f88ffff`，原版 `f247b36b0a430a416d3430eab36f64df`）改三处：
+
+1. `download_timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=None)`，
+   只给 `/content` 这一次 `session.get` 用；外层 `asyncio.timeout(max_poll_duration)` 仍然
+   兜住整个作业，`max_wait_seconds` 的语义不变。
+2. 记 `completed` / `delivered` 两个标志。作业已经 `completed` 但字节没送到调用方时**不删**，
+   只打一条 warning —— 删掉就等于销毁唯一一份成片。
+3. 文档字符串里写明这两处是对上游传输层的 LunaNexa 偏离及其实测依据。
+
+容器根文件系统是 `readOnlyRootFilesystem: true`，节点代码又烤在镜像里，所以用
+**hostPath + subPath 盖单个文件**装进去，不动镜像：
+
+```yaml
+volumes:
+- name: omni-video-transport-patch
+  hostPath: {path: /data/comfyui-patches/omni-video-transport, type: Directory}
+volumeMounts:
+- name: omni-video-transport-patch
+  mountPath: /opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/comfyui_vllm_omni/utils/video_transport.py
+  subPath: video_transport.py
+  readOnly: true
+```
+
+脚本：`deploy/acceptance/patch-comfyui-video-transport.sh`（幂等；ComfyUI 队列非空时**硬拒绝**
+重启）。改 `deployment/comfyui-acceptance` 的 template 会按 `Recreate` 重建 pod，
+备份在 `/tmp/comfyui-acceptance.backup-20260921.yaml`。容器内已核对 md5 与宿主一致。
+
+#### 15.3.3 nginx：把 60 秒的默认值显式覆盖掉
+
+`configmap/operator-4173-proxy` 的 `/h3/` 与 `/h3r/` 补 `send_timeout 7200s;
+proxy_connect_timeout 7200s;`（**待验证的假设**，见 15.2.3）。
+注意这个 nginx 用 `hostPort`，滚动更新会因端口占用卡住，**必须手工 `delete pod`**，
+4174 会有十几秒中断。
+
+### 15.4 实测速度（都是真数字，不是外推）
+
+| 配置 | 时长 | 去噪 | 引擎合计 | 结果 |
+|---|---|---|---|---|
+| 384×256, 56 帧, 8 步 | 2.33 s | 5 s（7 步，0.74 s/步） | — | 41 s 出片 `LunaNexaQuick_00001_.mp4` 123,652 B |
+| 608×352, 124 帧, 8 步 | 5.17 s | 54 s（7 步，7.76 s/步） | — | 111 s 出片 `Sweep5s_00001_.mp4` 499,289 B |
+| 608×352, 124 帧（UI 那次） | 5.17 s | — | 72.72 s | 出片 `LunaNexa_00002_.mp4` 406,684 B |
+| 608×352, 481 帧, 8 步（第一轮） | 20.04 s | 5 分 32 秒（47.49 s/步） | 424.24 s | 客户端断开；服务端 102.66 s 编完成片但已被删 |
+| 608×352, 481 帧, 8 步（第二轮） | 20.04 s | 7 分 11 秒（61.58 s/步） | 555.85 s | 客户端断开；服务端编码未完成 |
+
+步数是 **7** 不是 8（`total = len(video_sigmas) - 1`）。
+`denoise_step_latency_ms` 第二轮报 69,480.7 ms，和 tqdm 的 61.58 s/步 是同一量级的不同口径。
+
+**一条重要的测量教训**：先前"25 帧 @512² 跑 95 分钟、约 120 s/步"的数据几乎全是冷启动的
+`torch.compile` 区域编译成本（启动日志原话：lazy regional torch.compile with dynamic=True,
+compilation errors may surface on the first request）。拿它外推会得出"20 秒不可能"的
+错误结论。**预热之后同一个服务的每步耗时差一个数量级**，标度关系大致是 tokens^1.5
+（tokens ≈ 帧数 × (W/32) × (H/32)）。
+
+### 15.5 还没做的
+
+- **20 秒端到端仍未跑通。** 15.3.1 的服务端补丁与 15.3.3 的 nginx 改动还没装、没验。
+- 画布进度（15.1 末段）仍不通。
+- `minimaxh3-ref2va` 没装进度补丁，也没有 15.3.1 的编码补丁。
+- `UNETLoader` 是否列出两个 minimax diffusion 文件，未复核成功（解析脚本自身报错）。
+- 排障时在 ComfyUI 队列里出现过非本人提交的 pending 任务 `b8dd1d07-…`，未追查来源；
+  该任务后来正常完成，产物 `LunaNexa_00002_.mp4`（406,684 B）。第二轮验证期间队列里
+  又出现一个非本人提交的 `5db096f3-…`。
+- 为让 ComfyUI 重扫权重而重启它时，队列里正有任务在跑。时间上错开了、未造成损失，
+  但脚本打印了队列却没有据此中止——**重启前的队列检查要写成硬闸**（已在
+  `patch-comfyui-video-transport.sh` 里实现）。
+- 排障用的两个脚本 `/tmp/sweep.sh`、`/tmp/sweep20fix.sh` 只在管理节点上，没有入库。
