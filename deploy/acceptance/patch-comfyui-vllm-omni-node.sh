@@ -41,6 +41,7 @@ NODE_ROOT=/opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/comfyui_vllm_omni
 
 # module name -> path under NODE_ROOT
 MODULES="video_transport.py=utils/video_transport.py
+api_client.py=utils/api_client.py
 nodes.py=nodes.py"
 
 echo "=== staging the patch files"
@@ -77,7 +78,11 @@ PY
 }
 
 ensure_volume
-for rel in utils/video_transport.py nodes.py; do
+# Derived from MODULES, not a second hard-coded list: the first draft listed the
+# paths again here, so a module added to MODULES was staged and verified but
+# never mounted.
+while IFS='=' read -r modname rel; do
+  [ -n "$rel" ] || continue
   if s kubectl -n "$NS" get deploy "$DEPLOY" \
        -o jsonpath="{.spec.template.spec.containers[0].volumeMounts[?(@.mountPath=='$NODE_ROOT/$rel')].mountPath}" | grep -q .; then
     echo "  $rel already mounted"
@@ -94,7 +99,7 @@ PY
     s kubectl -n "$NS" patch deploy "$DEPLOY" --type=json -p "$ONE" >/dev/null
     echo "  mounted $rel"
   fi
-done
+done <<< "$MODULES"
 
 # This pod renders video for other people. Recreating it drops whatever the node
 # is waiting on, so an occupied queue is a hard stop, not a warning.

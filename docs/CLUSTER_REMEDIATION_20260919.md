@@ -1589,3 +1589,73 @@ deadline` 退出（本轮 `fl2va` 就是这么报的，而它其实起得好好�
   `ServerAliveInterval=30`。实测：45 秒和 100 秒的远端命令现在都能跑完。
   真正常驻/无人值守的活仍然该用 `setsid nohup … &`，那不是为了绕超时，而是为了不占着
   终端等。
+
+---
+
+## 16. 进度条为什么不动（2026-09-21 深夜）
+
+### 16.1 诊断：不是坏了，是从来没接过线
+
+三个断点，逐个有证据：
+
+| 断点 | 证据 |
+|---|---|
+| worker 的步数 **→ 作业记录** | 全服务只有一处写 `progress`：`api_server.py:2892` 的 `"progress": 100`（和 `status: completed` 一起）。模型定义是 `protocol/videos.py:306` 的 `Field(default=0, ...)`，所以**跑的时候恒为 0**。步数本身存在：`diffusion/models/progress_bar.py` 的 `ProgressBarMixin`（注释："provides a progress bar for denoising loops"），但它的去处只有 worker 的 stdout，以及 LunaNexa 补丁额外写的 pod 内文件 `/tmp/vllm_progress.json`。 |
+| 作业记录 **→ 节点** | 就算节点轮询 `GET /v1/videos/<id>`，读到的也是 0（见上一条）。那个 JSON 文件在 pod 里，HTTP 上看不见。 |
+| 节点 **→ ComfyUI 界面** | 整个 `ComfyUI-vLLM-Omni` 里 `grep -rniE 'progress'` 只有一处命中，是 `video_transport.py` 判断作业**状态**用的 `status not in {"queued","in_progress"}`。没有任何 `ProgressBar` / `send_sync` / websocket 调用；`web/main.js` 共 21 行，注释写着 `// Stub frontend plugin for now`。 |
+
+**澄清一句容易被误解的事**：15.1 那个 `progress_bar.py` 补丁让服务端有了真实步数，写进
+pod 日志和 pod 内文件——那是**排障用的观测通道，不是 UI 功能**。对画布一点作用都没有。
+
+### 16.2 三条线怎么补的
+
+1. **服务端**（`patches/vllm-omni-h3/patch-api-server-progress.py`）：`retrieve_video` 在
+   作业 `in_progress` 时，从步数文件算出百分比填进返回体。**只读，不动 store**——
+   用 `model_copy` 出一份副本，因为 store 交出来的是共享对象，而 100 只能由完成路径写。
+2. **节点传输层**（`video_transport.py`）：新增 `on_progress` 参数，每次状态轮询后调用。
+   回调抛异常会被吞掉——**一个坏掉的 UI 钩子不能让一次已经付过钱的渲染失败**。
+3. **节点**（`nodes.py`）：接到 `comfy.utils.ProgressBar` —— 这才是真正推动 ComfyUI
+   进度条的东西（它发的是 websocket 的 `progress` 事件）。`comfy.utils` 是**延迟导入**的：
+   它只在运行中的 ComfyUI 里存在，而这个模块也会被包自带的 `tests/` 导入。
+
+`api_client.py` 也要跟着改：它的 `generate_video` 签名以 `**extra_body` 结尾，
+**不显式声明的关键字会被当成表单字段 POST 出去**，所以 `on_progress` 必须写进签名。
+
+### 16.3 为什么 `api_server.py` 用替换驱动而不是整文件补丁
+
+它是 **3525 行 / 144 KB**。整文件入仓会把 144 KB 上游代码塞进仓库、把 20 行的改动埋进去。
+所以这一处是**带断言的定位替换**：两个锚点各断言唯一命中、替换结果先 `compile()` 再落盘、
+重复执行是 no-op。这个安全属性当场就生效过一次——第一版测试夹具我写歪了（漏了 FAILED
+分支的函数体），驱动因为编译不过**拒绝写入**，没有留下半个坏文件。
+
+### 16.4 已经核对的 / 还没验证的
+
+**已核对**（容器内实测，不是推断）：
+
+- 三个节点文件在容器内的 md5：`video_transport.py` = `e73c3aca5a9e2935503a06de379a0be7`、
+  `api_client.py` = `cf0da9c6a31a872e306f407cdb07b56d`、`nodes.py` = `1634b018431fab00ae3af810ed9ad227`
+- 节点装载正常，无导入错误；`fps` 默认仍是 24；`object_info` 正常返回
+- 注入服务端的 `_live_video_progress` 用 9 个用例跑过：
+
+  | 输入 | 返回 |
+  |---|---|
+  | `{n:3,total:7}` 文件新于作业 | `43` |
+  | `{n:7,total:7}` | `99`（**封顶**） |
+  | `{n:7,total:7}` 文件旧于作业 | `None`（不认） |
+  | `{n:4,total:7}` 无 `updated_unix` | `57` |
+  | `{}` / `total:0` / 非 JSON / 文件不存在 | `None` |
+  | `{n:9,total:7}` | `99`（夹紧） |
+
+**还没验证**：**没有在真实任务上看到画布动起来。** 服务端两个 pod 正在重启加载权重，
+起来之后需要有人在 UI 上点一次 Run 才能确认端到端。
+
+### 16.5 刻意的取舍，写清楚免得当成 bug
+
+- **封顶 99，不封 100。** 去噪只有 7 步，之后还有 VAE 解码和 MP4 编码，服务端对这两段
+  没有粒度。所以进度条会走完前约 5 分钟，然后在最后约 2.5 分钟停在 99 —— **这是真实的
+  粒度上限**，不是卡住。100 留给"成片真的存在"。
+- **步数文件是 pod 级单份的**，不带 request id。这个服务 `max_num_seqs=1`、单槽串行，
+  所以不冲突；**一旦开并发必须改成按 request id 分开**，否则会串台。
+- 一个自己的失误记在这：节点安装脚本第一版的 mount 循环**硬编码了文件名**，所以往
+  `MODULES` 里加了 `api_client.py` 之后出现"暂存了、也校验了、但根本没挂载"——是校验
+  循环把它抓出来的（脚本因此退出 1）。现在 mount 列表直接从 `MODULES` 推导。
