@@ -1426,6 +1426,59 @@ lunanexa.io/host-memory-mib    = 124608
 **第 3 条是关键**：它不是配置我能绕过的 —— 只要节点库存里没有这个标签，
 这个平台的机器售卖功能就是**恒不可用**的。
 
+### 9.8 补上 region 标签后，链路第一次走过容量页
+
+§9.7 定位到"没有任何节点带 `lunanexa.io/region`，可用容量恒为 0"。这一轮把这条路走通了
+（都是**配置层**改动，改前都备份）：
+
+**① 给四台节点的清单补上 region 标签。** 节点的标签来自各自的 ConfigMap
+`lunanexa-node-inventory-spark-*` 里的 `inventory.json`；四份都补上
+`"lunanexa.io/region": "cn-north-1"`，并重滚四个 node-agent 让它们重新上报：
+
+```
+spark-25e2-3d35c8fd -> cn-north-1
+spark-368c-0f2ee8b2 -> cn-north-1
+spark-3782-feee26eb -> cn-north-1
+spark-57f5-98a504ed -> cn-north-1
+```
+
+**② 把供给参数对齐真实清单**（原来 `nvidia-gb10 / 131072` 对不上
+`nvidia-sm121 / 124608`）。注意**同 id 更新会 409**（有不可变字段），所以用新 id 发了一条
+`offer-dgx-spark-02`（`sku` 也换了 `dgx-spark-gb10-v2`）：
+
+```
+operator snapshot: offerings 2
+  offer-dgx-spark-01  OfferingActive  nvidia-gb10   ← 旧的对不上
+  offer-dgx-spark-02  OfferingActive  nvidia-sm121  ← 对齐后
+```
+
+**③ 可用容量立刻从 0 变成 4**（门户会话令牌查）：
+
+```
+machine-offerings -> 200
+  offer-dgx-spark-01  availability.capacity_available = 0
+  offer-dgx-spark-02  availability.capacity_available = 4   ✅
+```
+
+**④ UI 上也真的通了。** 这是承诺函链路第一次越过容量这一格：
+
+```
+Bare GPU → Choose capacity
+  [卡1] DGX Spark (GB10) exclusive node · nvidia-gb10 · Unavailable · … · Select capacity
+  [卡2] DGX Spark (GB10) exclusive node · nvidia-sm121 · Available · Memory 121 GiB · CNY 0.02 / second
+按卡2 的 Select capacity 之后：
+  卡2 变为 "Selected"
+  页面出现 "Configure order" 表单：Project / Linux username（"Required for bare …"）
+```
+
+**所以"选择时间、租期"这一格现在真的可操作了** —— 下一步就是填 `Configure order`
+往下走到 Quote / Contract & payment / Provisioning，那才是承诺函真正出现的地方。
+
+**顺带再记一次那个无障碍缺陷**：两张卡的可见名称完全相同
+（`DGX Spark (GB10) exclusive node` 与 `Select capacity` 各出现两次），
+我是靠**按索引**才点中第二张的。这在真实使用里意味着用户无法从标签区分两张卡 ——
+和 §4 缺陷 #2 是同一类问题，这里又复现了一次。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
