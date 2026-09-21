@@ -974,7 +974,14 @@ async fn main {
           global_settings.telemetry_safety,
         )
       } catch {
-        _ => println("LunaNexa node reconciliation failed; retrying")
+        // The reason, not just the fact. A bare "failed" leaves a node that
+        // cannot reach its control plane indistinguishable from one whose
+        // local state is broken, and there is nothing on the host to correlate
+        // against: this line is the only evidence an operator has.
+        error =>
+          println(
+            "LunaNexa node reconciliation failed; retrying: \{Repr(error)}",
+          )
       }
       @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)
     }
