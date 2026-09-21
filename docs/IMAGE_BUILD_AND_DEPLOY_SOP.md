@@ -233,6 +233,72 @@ print(', '.join(sorted(c)))"
 
 ---
 
+## 5.1 身份网关镜像（docker-free 重建）
+
+**背景（2026-09-22 实测）**：身份网关 `cmd/identity-gateway` 的作者脚本
+`scripts/deploy/build-management-images.sh` 用的是 `docker build`，而**管理节点上没有
+docker/podman/nerdctl/buildah**（`command -v` 四个全空）。所以那条路在本机走不通，
+必须用 `ctr` 手法（和 §5 的控制面镜像同源）。
+
+**镜像长什么样**（`images/Containerfile.identity-gateway`）：
+
+```
+构建阶段：moon build cmd/identity-gateway --target native --release --jobs 1
+产物：    _build/native/release/build/cmd/identity-gateway/identity-gateway.exe
+运行阶段：FROM lunanexa/runtime-base:bookworm-amd64
+          COPY … → /usr/local/bin/lunanexa-identity-gateway
+          USER 65532:65532
+          ENTRYPOINT ["/usr/local/bin/lunanexa-identity-gateway"]
+```
+
+**不能用 `build-control-image.py` 代劳。** 它把二进制名硬编码成
+`BINARY_NAMES = ("lunanexa-control", "lunanexa-loopback-proxy")`，
+打进网关镜像会得到错误的名字与入口。网关需要一个同手法的独立覆盖步骤。
+
+**源码树的两个坑（都实测过）**：
+
+- `~/lunanexa-deploy-src` **不是 git checkout，而且是残缺树** —— 只有 `deploy/ database/
+  deployment/ desktop/ docs/ docs-site/ extensions/ guide_monitor/`，
+  **连 `cmd/` 都没有**。想改 `cmd/identity-gateway` 必须换到完整源码树
+  （如 `~/luna-src-next`）或先把修好的文件送过去。
+- 节点上 `~/.moon/bin` 为空，linux-amd64 工具链要先铺：
+  `sh scripts/deploy/stage-moonbit-linux-amd64.sh`
+  （从 `cli.moonbitlang.com` 下载并校验两个 sha256；**`.cn` 会挂住，用 `.com`**）。
+
+**顺序（遵守 §2 铁律，一步一步来）**：
+
+```sh
+# ① 把带修复的源码放到节点上的完整源码树，并确认这一行是带引号的
+grep -n 'expires_unix_ms' cmd/identity-gateway/server.mbt      # 期望看到 \"\{…}\"
+
+# ② 铺 linux-amd64 工具链 + core（core 必须在目标架构上 bundle）
+sh scripts/deploy/stage-moonbit-linux-amd64.sh
+
+# ③ 构建（产物路径见上）
+moon build cmd/identity-gateway --target native --release
+
+# ④ 覆盖进镜像：export 现有网关镜像 → 追加一层（替换 /usr/local/bin/lunanexa-identity-gateway）
+#    → 重组 OCI → ctr images import → 打目标 tag → push 到 registry
+#    （手法照抄 build-control-image.py，只换二进制名与目标路径）
+
+# ⑤ 证明它真的在 registry 里：把本地那份删掉，再从 registry 拉回来
+S k3s ctr -n k8s.io images rm  "$REF"
+S k3s ctr -n k8s.io images pull \
+    --hosts-dir /var/lib/rancher/k3s/agent/etc/containerd/certs.d \
+    --platform linux/amd64 "$REF"
+
+# ⑥ 只有 ⑤ 过了才改 Deployment 的镜像引用，然后收敛
+S kubectl -n lunanexa rollout status deploy/lunanexa-identity-gateway --timeout=180s
+```
+
+**回滚**：`S kubectl -n lunanexa rollout undo deploy/lunanexa-identity-gateway`。
+
+**当前引用形态**：Deployment 用的是 registry **digest** 而不是 tag ——
+`lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/identity-gateway@sha256:79b5bce3…`。
+所以"换个 tag"这一步在本例里等于换 digest，改引用前务必先完成 ⑤ 的拉回验证。
+
+---
+
 ## 6. 控制台镜像（UI）
 
 控制台是 **nginx 镜像里烤着浏览器 bundle**（`images/Containerfile.web` 只做 `COPY _build/browser-dist/`）。
