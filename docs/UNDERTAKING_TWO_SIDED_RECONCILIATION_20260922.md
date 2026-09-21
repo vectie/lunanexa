@@ -1304,6 +1304,79 @@ final url: http://106.39.18.146:5002/enterprise/          ← 不再带 ?demo=1
   字符串形式可解。企业侧 `cmd/enterprise/main.mbt:9-13` 与控制台
   `cmd/console/main.mbt:202-206` 两处同构，且异常都被 `catch { _ => … }` 静默吞掉。
 
+## 9. 承诺函链路的两侧实操记录
+
+地基（身份、会话、两侧数据显示）修好之后，开始按目标里的顺序**真的点按钮**。
+下面是本次走到的位置。每一条都记"按了什么 → 看到什么"。
+
+### 9.1 企业侧：注册企业（第 1 步）——自动满足
+
+企业侧用真实 OIDC 登录后，会话条即为
+`subject-b131b8c5… · trial-org-b131b8c5… · secure browser session`。
+进 `Get started` 走 6 步向导（1 Service / 2 Organization / 3 Capacity / 4 Quote /
+5 Contract & payment / 6 Provisioning），选服务后到第 2 步，页面直接显示：
+
+```
+ORGANIZATION
+Organization ready
+This order will be owned by your active organization. Tenant and subject identifiers
+are derived from your signed-in session.
+Organization  trial-org-b131b8c5…
+Tenant        trial-tenant-b131b8c5…
+Back  Continue
+```
+
+即**组织不是"填表注册"，而是从已登录身份派生**（首次 OIDC 登录时建的受限试用组织）。
+这一步没有可填字段，点 `Continue` 即通过。**这是目标里"用户一方注册企业"在本部署的实际形态。**
+
+### 9.2 企业侧：选择时间、租期（第 2 步）——卡在容量页
+
+按 `Continue` 到第 3 步 Capacity。**两条机器类服务都走不下去**：
+
+| 选的服务 | 容量页显示 |
+|---|---|
+| Bare GPU（第 3 张卡） | `No capacity available` / `Try another service or refresh availability. No order has been created.` |
+| Dedicated MaaS（第 2 张卡） | 同上 |
+
+点 `Refresh availability` 无效（仍是同一句）。页面底部另有 `Back` 与 `Integration contract`。
+
+**卡点抓到了确切那一条请求**（该步骤轮询 `machine-offerings`）：
+
+```
+GET /v1/portal/self/machine-offerings -> 403
+{"error":{"code":"MachineOrderAccessDenied",
+          "message":"machine purchasing role is required","retryable":false}}
+```
+
+**所以不是"没有容量"，是"这个账户没有购机角色"。** 两条结论：
+
+1. **真实卡点**：受限试用组织**不带 machine purchasing 角色**，因此无法创建机器类订单 →
+   没有订单就拉不起承诺函（管理侧那句 `A packet is created from an approved order` 依然成立）。
+2. **反馈缺陷（新的一条）**：UI 把这个 **403 权限错误**渲染成
+   `No capacity available`。用户会以为"平台没机器了"，而实际是"你没权限"。
+   这与 §4 里那条"错误过于不透明"是同一类，但更严重 —— 它**把原因指错了方向**，
+   运维和客户都会照错的方向去查。建议容量页区分"无可用容量"与"无购机权限"。
+
+### 9.3 旁路观察：Shared MaaS 走的是另一条路
+
+第 1 张卡（Shared MaaS）不进订单流程，而是直接给 `Create API key`
+（配合首页那条 `FREE SHARED-INFERENCE TRIAL / 23h remaining · Requests 0/100 · text.qwen`）。
+也就是说**试用期只开放共享推理这一条**，机器类服务需要另外的授权。
+
+### 9.4 管理侧：可以看到"谁来开通、怎么开通"
+
+管理侧 `Users & access` 页（§2.15 已确认能读出真实数据）带一个
+`GUIDED SETUP / Create WebIDE access` 流程，页面原话：
+"LunaNexa prepares the account, membership, workspace profile, Developer grant,
+and requested compute lease as one resumable package"，分 4 步：
+`1 Person & organization → 2 Review access → 3 MasterLease → 4 Enable WebIDE`，
+字段有 `Display name / Work email / Organization / Tenant / Identity provider`。
+
+**这看起来就是"客户越过试用、拿到真实授权"的那条管理侧路径**，也正是本次
+"两侧对帐"里管理侧该按的按钮。**下一步就从这里继续**：
+用它在管理侧把账户配置成有购机/工作区权限，然后回企业侧重新走容量页，
+看 `machine-offerings` 是否从 403 变成 200。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
