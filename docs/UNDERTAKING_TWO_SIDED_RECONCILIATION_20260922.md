@@ -16,7 +16,11 @@
    （Bootstrap completed）、身份边缘全部 `Running`，而且
    `5003/auth/oidc/start?audience=operator` 现在真的返回带 PKCE 的 302 落到 Keycloak 的登录表单。
    还剩两个卡点：① 公网明文 HTTP 下控制台按设计拒绝管理员登录（一个部署策略开关，未替你按）；
-   ② 运维在用的 4174/5002 没有 `/auth` 路由，端口归属未收口。
+   ② 运维在用的 4174/5002 把 `location /auth/` **代理到了控制面**（路由指错对象，不是"没路由"），
+   且端口归属未收口 —— 而修这一条必须前端/网关/Keycloak **三处联动**，少一处会得到
+   `400 untrusted-browser-host`。
+   另有一个授权缺陷：前端 ConfigMap 明文内嵌操作员令牌并注入每个 `/v1/` 请求，
+   4174/5002 因此无需任何会话即可调用操作员 API（§2.5 发现 4）。
 2. **管理侧可以进去，而且是实时数据**：控制台在 loopback 来源下提供「Local development token
    fallback」，填入部署自带的 operator/audit 令牌后控制台可用，显示 `4 of 4` 节点、`17` 个已批准模型。
 3. **企业侧只能进到"外壳"**：用部署自带的推断令牌走「开发凭据后备方式」可以打开门户全导航，
@@ -332,7 +336,62 @@ let allow_asserted_subject = loopback_client(connection.client_addr())
 
 推论：**浏览器 → nginx → 控制面 ClusterIP 这条路径的对端永远不是 loopback**，
 所以门户的开发后备在结构上就拿不到租户主体。生产路径必须走 identity 边缘/relay 的 mTLS
-（`ssl-client-verify: SUCCESS` + `ssl-client-subject-dn`），而那条路现在是 `0/1`。
+（`ssl-client-verify: SUCCESS` + `ssl-client-subject-dn`）；这条路的边缘本次已经全部
+`Running` 了，所以它现在是可用的，只剩端口与 client 登记要对齐（见 §2.5）。
+
+### 2.5 前端 nginx 的两处关键配置（本次新增定位，含一个授权缺陷）
+
+运维在用的前门由 configmap `operator-4173-proxy`（hostNetwork nginx）提供，
+它同时监听 8081 / 4174 / 5000 / 5002 / 5005 / 5889。摘要：
+
+```
+server { listen 8081; listen 4174;
+  location = /            { return 302 http://$host:$server_port/console/; }
+  location /console/      { proxy_pass http://lunanexa-console:8080; }
+  location /auth/         { proxy_pass http://lunanexa-CONTROL:8080;  … }   ← 关键
+  location /v1/           { proxy_pass http://lunanexa-control:8080;  … }   ← 注入了 Bearer
+  location /h3/  /h3r/  /glm53/ … }
+server { listen 127.0.0.1:5000; … comfyui-public…:8188 }                    ← 5000 = ComfyUI
+server { listen 127.0.0.1:5005; … proxy_pass http://192.168.2.175:5000 }    ← 5005 也指向 ComfyUI
+server { listen 127.0.0.1:5002;
+  location = /            { return 302 /enterprise/?demo=1; }
+  location /enterprise/   { root /srv/portal; }
+  location /auth/         { proxy_pass http://lunanexa-CONTROL:8080; … }    ← 同上
+  location /v1/           { proxy_pass http://lunanexa-control:8080; … } }
+```
+
+**发现 1（这就是 404 的确切原因）：`location /auth/` 被代理到"控制面"，而不是身份网关。**
+所以 4174/5002 上的 `/auth/oidc/start` 去问控制面，控制面没有 `/auth/*` 路由（它的鉴权路由
+在 `/v1/auth/*`），于是回了那个 `{"error":{"code":"NotFound",…}}`。
+一眼看去像"没有路由"，实际是**路由指错了对象**。
+
+**发现 2（重要约束）：光把这行改指向网关还不够。** 网关在
+`cmd/identity-gateway/server.mbt:610-611` 有一道硬闸：
+
+```moonbit
+guard host_and_audience(config, request) is Some((host, audience)) else {
+  return send_error(connection, 400, "untrusted-browser-host")
+}
+```
+
+`host_and_audience`（`server.mbt:74-86`）要求 `Host` 必须是**配置里登记过的**
+重定向 URI 主机（operator 是 5003，enterprise 是 5005）。所以把 4174/5002 的 `/auth/`
+直接改指网关，只会得到 `400 untrusted-browser-host`。
+**结论：想用运维手上的端口，必须三处一起改** —— ① 前端 `/auth/` 指向网关；
+② 网关的 `LUNANEXA_OIDC_*_REDIRECT_URI` 改到该端口；③ Keycloak 对应 client 的
+redirect URI 同步登记。少一处都不通。本次实测也印证了这点：走 loopback 隧道访问 5003
+（Host 变成 `127.0.0.1:5003`）时，拿到的是 **400**，正是这道闸。
+
+**发现 3（另外两处错位）**：`5005` 现在 `proxy_pass http://192.168.2.175:5000`，也就是
+**指向 ComfyUI**，而企业侧的重定向 URI 恰好配在 5005；企业门户实际在 5002。
+另外 5000 也是 ComfyUI。即"门户入口 / OIDC 回调入口 / ComfyUI"三个东西的端口是错位的。
+
+**发现 4（授权缺陷，建议单独跟进）**：两个 server 块的 `location /v1/` 都带了
+`proxy_set_header Authorization "Bearer <64 位十六进制操作员令牌>"` —— 令牌**以明文写在这个
+ConfigMap 里**，并被 nginx 注入到每一个 `/v1/` 请求上。后果是：
+**任何能访问 4174 或 5002 的人，不需要任何会话就能以操作员身份调用控制面全部 `/v1/` API。**
+这也解释了为什么控制台/门户在"没登录"的情况下仍能读到真实集群数据。
+（本节只描述机制，不复述令牌值；建议改为由会话令牌驱动，并把该值收进 Secret。）
 
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
@@ -443,6 +502,14 @@ let allow_asserted_subject = loopback_client(connection.client_addr())
    （现在是 `Not connected` + 一个不透明的 `The action failed.`）。
 9. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
 10. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
+11. **把前端 nginx 的 `location /auth/` 从控制面改指身份网关，并做端口对齐**（§2.5 发现 1+2）。
+    注意这是**三处联动**：前端 `/auth/` → 网关、网关的 redirect URI → 该端口、
+    Keycloak client 的 redirect URI 同步登记；只改一处会得到 `400 untrusted-browser-host`。
+    同时要理顺 5000/5002/5005 的归属（现在 5005 指向 ComfyUI，而企业回调 URI 就配在 5005）。
+12. **收敛前端的令牌注入**（§2.5 发现 4）。`operator-4173-proxy` 的 ConfigMap 里明文写着
+    操作员令牌，并被注入到每个 `/v1/` 请求；这意味着**任何能访问 4174/5002 的人都自动拥有
+    操作员 API 权限，无需任何登录**。这条建议单独评估（属安全项，且与控制台"要不要登录"
+    互相牵连），本次只做记录未改动。
 
 ## 6. 要跑通承诺函链路，还缺什么
 
@@ -480,6 +547,11 @@ let allow_asserted_subject = loopback_client(connection.client_addr())
 - 链路在"订单"这一步断掉，两侧因此没有共同对帐物（两侧原文互相印证）。
 - 演示模式数字与控制面无关（零网络请求实测）。
 - 六项状态/反馈缺陷。
+- **前端 404 的确切机理**：不是"没有路由"，而是 `location /auth/` 被指向了控制面（§2.5）。
+- **"改一行就好"并不成立**：网关的 `host_and_audience` 硬闸（`server.mbt:610`）要求
+  Host 是登记过的 5003/5005，所以必须三处联动；loopback 访问 5003 得到 400 就是这道闸。
+- **一个授权缺陷**：前端 ConfigMap 明文内嵌操作员令牌并注入每个 `/v1/` 请求，
+  4174/5002 因此无需任何会话即可调用操作员 API（§2.5 发现 4）。
 
 ## 8. 未验证
 
