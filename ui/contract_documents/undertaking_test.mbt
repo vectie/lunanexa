@@ -173,3 +173,24 @@ test "undertaking evidence picker excludes scans older than current generation" 
   assert_true(html.contains("CURRENT SCAN"))
   assert_true(html.contains("Download verified DOCX"))
 }
+
+///|
+test "both rental routes are listed and the contract route stays disabled while offline" {
+  let state = {
+    ..@contract_documents.default_state(ChineseSimplified),
+    manifest: Some(@contractdoc.undertaking_manifest()),
+    available_manifests: [
+      @contractdoc.youthpolicy_remote_lease_manifest(),
+      @contractdoc.undertaking_manifest(),
+    ],
+    selected_form: Some(MasterLease),
+  }
+  let html = @contract_documents.render(state)
+  // The undertaking route is offered and selectable.
+  assert_true(html.contains("设备使用承诺函 · 甲方审批"))
+  // The contract route is still visible so the choice is discoverable, but
+  // carries its unavailability and is never rendered as a selectable entry.
+  assert_true(html.contains("传统租赁合同 · 双方签署（暂未开放）"))
+  assert_false(html.contains("传统租赁合同 · 双方签署</option>"))
+  assert_false(@contract_documents.traditional_contract_route_available)
+}
