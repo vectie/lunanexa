@@ -37,6 +37,29 @@ async def _json(session, verb, url, **kwargs):
         return data
 
 
+def _failure_detail(data):
+    """Return the service's own reason for a failed job, as a message suffix.
+
+    The upstream transport throws this away and the caller sees only a generic
+    line, which is how "MiniMax H3 output fps is fixed at 24" reached an operator
+    as "Video generation failed or its access ended". This is not logging: the
+    text goes back to whoever asked for the clip, bounded and whitespace-folded.
+    """
+    detail = data.get("error")
+    if isinstance(detail, dict):
+        for key in ("message", "detail", "error", "reason"):
+            value = detail.get(key)
+            if isinstance(value, str) and value.strip():
+                detail = value
+                break
+        else:
+            detail = None
+    if not isinstance(detail, str):
+        return ""
+    text = " ".join(detail.split())[:200]
+    return f": {text}" if text else ""
+
+
 async def _cleanup(session, url, job_id):
     for _ in range(4):
         result = await _json(session, "DELETE", url)
@@ -105,7 +128,9 @@ async def run_video_job(
                         completed = True
                         break
                     if status in {"failed", "cancelled", "expired"}:
-                        raise RuntimeError("Video generation failed or its access ended")
+                        raise RuntimeError(
+                            "Video generation failed or its access ended" + _failure_detail(data)
+                        )
                     if status not in {"queued", "in_progress"}:
                         raise RuntimeError("Video service returned an invalid job status")
                     await asyncio.sleep(poll_interval)
