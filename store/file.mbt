@@ -4,6 +4,12 @@ pub(all) suberror DurableStoreError {
 } derive(Debug, Eq)
 
 ///|
+pub extend DurableStoreError with Debug::{to_repr}
+
+///|
+pub extend DurableStoreError with Eq::{not_equal, equal}
+
+///|
 enum StorePersistence {
   StoreFile(String)
   StorePostgres(@database.PostgresDatabase, String, Int64)

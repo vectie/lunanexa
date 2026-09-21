@@ -189,8 +189,8 @@ fn ApiService::trusted_registration_assertion(
   let signature_hex = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(self.identity_assertion_secret).view(),
-      @utf8.encode(canonical).view(),
+      @utf8.encode(self.identity_assertion_secret).exact_view(),
+      @utf8.encode(canonical).exact_view(),
     ),
   )
   if !constant_time_identity_equal(signature, "sha256:\{signature_hex}") {
@@ -241,8 +241,8 @@ fn ApiService::trusted_identity_assertion(
   let signature_hex = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(self.identity_assertion_secret).view(),
-      @utf8.encode(canonical).view(),
+      @utf8.encode(self.identity_assertion_secret).exact_view(),
+      @utf8.encode(canonical).exact_view(),
     ),
   )
   let expected = "sha256:\{signature_hex}"

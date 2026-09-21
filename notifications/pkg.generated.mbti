@@ -37,12 +37,20 @@ pub(all) suberror NotificationError {
   StaleGeneration
   InvalidTransition(String)
 } derive(Eq, @debug.Debug)
+pub fn NotificationError::equal(Self, Self) -> Bool
+pub fn NotificationError::not_equal(Self, Self) -> Bool
+pub fn NotificationError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) enum AlertComparator {
   AtLeast
   GreaterThan
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AlertComparator::equal(Self, Self) -> Bool
+pub fn AlertComparator::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AlertComparator::not_equal(Self, Self) -> Bool
+pub fn AlertComparator::to_json(Self) -> Json
+pub fn AlertComparator::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AlertObservation {
   observation_id : String
@@ -51,6 +59,11 @@ pub(all) struct AlertObservation {
   observed_unix_ms : Int64
   source_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AlertObservation::equal(Self, Self) -> Bool
+pub fn AlertObservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AlertObservation::not_equal(Self, Self) -> Bool
+pub fn AlertObservation::to_json(Self) -> Json
+pub fn AlertObservation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AlertRule {
   rule_id : String
@@ -64,6 +77,11 @@ pub(all) struct AlertRule {
   audience : NotificationAudience
   enabled : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AlertRule::equal(Self, Self) -> Bool
+pub fn AlertRule::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AlertRule::not_equal(Self, Self) -> Bool
+pub fn AlertRule::to_json(Self) -> Json
+pub fn AlertRule::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeliveryResult {
   delivery_id : String
@@ -75,6 +93,11 @@ pub(all) struct DeliveryResult {
   next_attempt_unix_ms : Int64?
   now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DeliveryResult::equal(Self, Self) -> Bool
+pub fn DeliveryResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DeliveryResult::not_equal(Self, Self) -> Bool
+pub fn DeliveryResult::to_json(Self) -> Json
+pub fn DeliveryResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeliveryState {
   PendingDelivery
@@ -84,6 +107,11 @@ pub(all) enum DeliveryState {
   DeadLetter
   DeliverySkipped
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DeliveryState::equal(Self, Self) -> Bool
+pub fn DeliveryState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DeliveryState::not_equal(Self, Self) -> Bool
+pub fn DeliveryState::to_json(Self) -> Json
+pub fn DeliveryState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationAction {
   notification_id : String
@@ -91,10 +119,20 @@ pub(all) struct NotificationAction {
   actor_ref : String
   now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationAction::equal(Self, Self) -> Bool
+pub fn NotificationAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationAction::not_equal(Self, Self) -> Bool
+pub fn NotificationAction::to_json(Self) -> Json
+pub fn NotificationAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationAdapterReceipt {
   provider_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationAdapterReceipt::equal(Self, Self) -> Bool
+pub fn NotificationAdapterReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationAdapterReceipt::not_equal(Self, Self) -> Bool
+pub fn NotificationAdapterReceipt::to_json(Self) -> Json
+pub fn NotificationAdapterReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationAssignmentAction {
   notification_id : String
@@ -103,12 +141,22 @@ pub(all) struct NotificationAssignmentAction {
   assignee_ref : String?
   now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationAssignmentAction::equal(Self, Self) -> Bool
+pub fn NotificationAssignmentAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationAssignmentAction::not_equal(Self, Self) -> Bool
+pub fn NotificationAssignmentAction::to_json(Self) -> Json
+pub fn NotificationAssignmentAction::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NotificationAudience {
   PlatformOperators
   TenantUsers(tenant_ref~ : String)
   Subject(tenant_ref~ : String, subject_ref~ : String)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationAudience::equal(Self, Self) -> Bool
+pub fn NotificationAudience::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationAudience::not_equal(Self, Self) -> Bool
+pub fn NotificationAudience::to_json(Self) -> Json
+pub fn NotificationAudience::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NotificationChannel {
   InApp
@@ -116,6 +164,11 @@ pub(all) enum NotificationChannel {
   Sms
   Webhook
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationChannel::equal(Self, Self) -> Bool
+pub fn NotificationChannel::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationChannel::not_equal(Self, Self) -> Bool
+pub fn NotificationChannel::to_json(Self) -> Json
+pub fn NotificationChannel::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDelivery {
   delivery_id : String
@@ -128,7 +181,12 @@ pub(all) struct NotificationDelivery {
   last_error_code : String?
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDelivery::equal(Self, Self) -> Bool
+pub fn NotificationDelivery::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDelivery::not_equal(Self, Self) -> Bool
 pub fn NotificationDelivery::record_result(Self, DeliveryResult, Int) -> Self raise NotificationError
+pub fn NotificationDelivery::to_json(Self) -> Json
+pub fn NotificationDelivery::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDeliveryEnvelope {
   version : String
@@ -143,6 +201,11 @@ pub(all) struct NotificationDeliveryEnvelope {
   parameters : Map[String, String]
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDeliveryEnvelope::equal(Self, Self) -> Bool
+pub fn NotificationDeliveryEnvelope::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDeliveryEnvelope::not_equal(Self, Self) -> Bool
+pub fn NotificationDeliveryEnvelope::to_json(Self) -> Json
+pub fn NotificationDeliveryEnvelope::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDeliveryReadiness {
   version : String
@@ -155,12 +218,22 @@ pub(all) struct NotificationDeliveryReadiness {
   worker_health : NotificationWorkerHealth
   supported_channels : Array[NotificationChannel]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDeliveryReadiness::equal(Self, Self) -> Bool
+pub fn NotificationDeliveryReadiness::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDeliveryReadiness::not_equal(Self, Self) -> Bool
+pub fn NotificationDeliveryReadiness::to_json(Self) -> Json
+pub fn NotificationDeliveryReadiness::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NotificationDeliveryReadinessState {
   DeliveryReady
   AdaptersPending
   DeliveryDegraded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDeliveryReadinessState::equal(Self, Self) -> Bool
+pub fn NotificationDeliveryReadinessState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDeliveryReadinessState::not_equal(Self, Self) -> Bool
+pub fn NotificationDeliveryReadinessState::to_json(Self) -> Json
+pub fn NotificationDeliveryReadinessState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDeliveryRedriveAction {
   delivery_id : String
@@ -169,6 +242,11 @@ pub(all) struct NotificationDeliveryRedriveAction {
   actor_ref : String
   now_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDeliveryRedriveAction::equal(Self, Self) -> Bool
+pub fn NotificationDeliveryRedriveAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDeliveryRedriveAction::not_equal(Self, Self) -> Bool
+pub fn NotificationDeliveryRedriveAction::to_json(Self) -> Json
+pub fn NotificationDeliveryRedriveAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDeliveryRedriveReceipt {
   receipt_id : String
@@ -177,6 +255,11 @@ pub(all) struct NotificationDeliveryRedriveReceipt {
   previous_attempt_count : Int
   accepted_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDeliveryRedriveReceipt::equal(Self, Self) -> Bool
+pub fn NotificationDeliveryRedriveReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDeliveryRedriveReceipt::not_equal(Self, Self) -> Bool
+pub fn NotificationDeliveryRedriveReceipt::to_json(Self) -> Json
+pub fn NotificationDeliveryRedriveReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationDeliveryRunSummary {
   attempted : Int
@@ -186,6 +269,11 @@ pub(all) struct NotificationDeliveryRunSummary {
   skipped : Int
   readiness : NotificationDeliveryReadiness
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationDeliveryRunSummary::equal(Self, Self) -> Bool
+pub fn NotificationDeliveryRunSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationDeliveryRunSummary::not_equal(Self, Self) -> Bool
+pub fn NotificationDeliveryRunSummary::to_json(Self) -> Json
+pub fn NotificationDeliveryRunSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationEvent {
   version : String
@@ -202,6 +290,11 @@ pub(all) struct NotificationEvent {
   created_unix_ms : Int64
   expires_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationEvent::equal(Self, Self) -> Bool
+pub fn NotificationEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationEvent::not_equal(Self, Self) -> Bool
+pub fn NotificationEvent::to_json(Self) -> Json
+pub fn NotificationEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NotificationLifecycle {
   Unread
@@ -209,6 +302,11 @@ pub(all) enum NotificationLifecycle {
   Acknowledged
   Resolved
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationLifecycle::equal(Self, Self) -> Bool
+pub fn NotificationLifecycle::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationLifecycle::not_equal(Self, Self) -> Bool
+pub fn NotificationLifecycle::to_json(Self) -> Json
+pub fn NotificationLifecycle::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationPreference {
   preference_id : String
@@ -219,6 +317,11 @@ pub(all) struct NotificationPreference {
   minimum_severity : NotificationSeverity
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationPreference::equal(Self, Self) -> Bool
+pub fn NotificationPreference::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationPreference::not_equal(Self, Self) -> Bool
+pub fn NotificationPreference::to_json(Self) -> Json
+pub fn NotificationPreference::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationPreferenceView {
   topic : NotificationTopic
@@ -226,6 +329,11 @@ pub(all) struct NotificationPreferenceView {
   minimum_severity : NotificationSeverity
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationPreferenceView::equal(Self, Self) -> Bool
+pub fn NotificationPreferenceView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationPreferenceView::not_equal(Self, Self) -> Bool
+pub fn NotificationPreferenceView::to_json(Self) -> Json
+pub fn NotificationPreferenceView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationReconciliationSummary {
   reconciled_unix_ms : Int64
@@ -235,6 +343,11 @@ pub(all) struct NotificationReconciliationSummary {
   pending_delivery_count : Int
   dead_letter_count : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationReconciliationSummary::equal(Self, Self) -> Bool
+pub fn NotificationReconciliationSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationReconciliationSummary::not_equal(Self, Self) -> Bool
+pub fn NotificationReconciliationSummary::to_json(Self) -> Json
+pub fn NotificationReconciliationSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationRecord {
   event : NotificationEvent
@@ -250,15 +363,25 @@ pub(all) struct NotificationRecord {
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn NotificationRecord::acknowledge(Self, NotificationAction) -> Self raise NotificationError
 pub fn NotificationRecord::assign(Self, NotificationAssignmentAction) -> Self raise NotificationError
+pub fn NotificationRecord::equal(Self, Self) -> Bool
+pub fn NotificationRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn NotificationRecord::mark_read(Self, NotificationAction) -> Self raise NotificationError
+pub fn NotificationRecord::not_equal(Self, Self) -> Bool
 pub fn NotificationRecord::resolve(Self, NotificationAction) -> Self raise NotificationError
 pub fn NotificationRecord::silence(Self, NotificationSilenceAction) -> Self raise NotificationError
+pub fn NotificationRecord::to_json(Self) -> Json
+pub fn NotificationRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NotificationSeverity {
   Information
   Warning
   Critical
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationSeverity::equal(Self, Self) -> Bool
+pub fn NotificationSeverity::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationSeverity::not_equal(Self, Self) -> Bool
+pub fn NotificationSeverity::to_json(Self) -> Json
+pub fn NotificationSeverity::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationSilenceAction {
   notification_id : String
@@ -267,6 +390,11 @@ pub(all) struct NotificationSilenceAction {
   now_unix_ms : Int64
   silenced_until_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationSilenceAction::equal(Self, Self) -> Bool
+pub fn NotificationSilenceAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationSilenceAction::not_equal(Self, Self) -> Bool
+pub fn NotificationSilenceAction::to_json(Self) -> Json
+pub fn NotificationSilenceAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationSnapshot {
   schema_version : String
@@ -276,6 +404,11 @@ pub(all) struct NotificationSnapshot {
   worker_health : NotificationWorkerHealth
   redrive_audit : Array[NotificationDeliveryRedriveReceipt]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationSnapshot::equal(Self, Self) -> Bool
+pub fn NotificationSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationSnapshot::not_equal(Self, Self) -> Bool
+pub fn NotificationSnapshot::to_json(Self) -> Json
+pub fn NotificationSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NotificationTopic {
   ClusterHealth
@@ -289,6 +422,11 @@ pub(all) enum NotificationTopic {
   DeliveryHealth
   Announcement
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationTopic::equal(Self, Self) -> Bool
+pub fn NotificationTopic::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationTopic::not_equal(Self, Self) -> Bool
+pub fn NotificationTopic::to_json(Self) -> Json
+pub fn NotificationTopic::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NotificationWorkerHealth {
   generation : Int64
@@ -299,6 +437,11 @@ pub(all) struct NotificationWorkerHealth {
   consecutive_failures : Int
   last_error_code : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NotificationWorkerHealth::equal(Self, Self) -> Bool
+pub fn NotificationWorkerHealth::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NotificationWorkerHealth::not_equal(Self, Self) -> Bool
+pub fn NotificationWorkerHealth::to_json(Self) -> Json
+pub fn NotificationWorkerHealth::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

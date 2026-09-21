@@ -179,8 +179,8 @@ fn encode_cookie_reference(id : String, secret : String) -> String {
   let mac = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).view(),
-      @utf8.encode("lunanexa.identity-gateway.cookie-reference.v1\n\{id}").view(),
+      @utf8.encode(secret).exact_view(),
+      @utf8.encode("lunanexa.identity-gateway.cookie-reference.v1\n\{id}").exact_view(),
     ),
   )
   "v1.\{id}.\{mac}"
@@ -203,5 +203,5 @@ fn decode_cookie_reference(value : String, secret : String) -> String? {
 
 ///|
 fn random_token(bytes : Int) -> String raise {
-  base64url(secure_random(bytes).view())
+  base64url(secure_random(bytes).exact_view())
 }

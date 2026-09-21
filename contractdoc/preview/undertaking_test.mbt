@@ -74,7 +74,7 @@ async test "undertaking source integrity and complete MoonLeaf preview" {
     [MasterLease],
     1000L,
   )
-  let scene = render(
+  let scene = @preview.render(
     fillable,
     manifest,
     packet,
@@ -93,7 +93,7 @@ async test "undertaking source integrity and complete MoonLeaf preview" {
   assert_true(text.contains("13870元/年"))
   assert_false(text.contains("{{"))
   assert_false(text.contains("使用开始日期"))
-  let built = template(fillable, manifest)
+  let built = @preview.template(fillable, manifest)
   assert_eq(
     @fs.read_file(base + "moonleaf-preview-template.v1.json").text(),
     built.to_json().stringify(),

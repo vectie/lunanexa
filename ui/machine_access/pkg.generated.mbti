@@ -29,6 +29,8 @@ pub(all) enum MachineAccessMessage {
   CancelTermination
   ConfirmTermination(String, Int64, String)
 } derive(Eq)
+pub fn MachineAccessMessage::equal(Self, Self) -> Bool
+pub fn MachineAccessMessage::not_equal(Self, Self) -> Bool
 
 pub(all) struct MachineAccessState {
   locale : @i18n.Locale
@@ -39,6 +41,8 @@ pub(all) struct MachineAccessState {
   confirmation_text : String
   loading : Bool
 } derive(Eq)
+pub fn MachineAccessState::equal(Self, Self) -> Bool
+pub fn MachineAccessState::not_equal(Self, Self) -> Bool
 pub fn MachineAccessState::update(Self, MachineAccessMessage) -> Self
 pub fn MachineAccessState::with_redeemed_credential(Self, @credential.CredentialHandoffRedemption) -> Self
 

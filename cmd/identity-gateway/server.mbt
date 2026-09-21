@@ -202,7 +202,7 @@ async fn handle_oidc_start(
     let nonce = random_token(32)
     let verifier = random_token(48)
     let challenge = base64url(
-      Bytes::from_array(@crypto.sha256(@utf8.encode(verifier))).view(),
+      Bytes::from_array(@crypto.sha256(@utf8.encode(verifier))).exact_view(),
     )
     (state, nonce, verifier, challenge)
   } catch {

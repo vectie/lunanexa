@@ -51,7 +51,7 @@ fn pod(phase? : String = "Running", ready? : Bool = true) -> Json {
 
 ///|
 test "ready requires a running ready container, not just the Pod phase" {
-  assert_eq(observe_pod(identity(), pod()), Ready)
+  assert_eq(@kubernetes.observe_pod(identity(), pod()), Ready)
   assert_eq(@kubernetes.observe_pod(identity(), pod(ready=false)), Starting)
   assert_eq(@kubernetes.observe_pod(identity(), pod(phase="Pending")), Starting)
   assert_eq(@kubernetes.observe_pod(identity(), pod(phase="Failed")), Failed)

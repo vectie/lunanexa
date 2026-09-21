@@ -9,6 +9,18 @@ pub(all) struct RuntimeSecretBinding {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RuntimeSecretBinding with Debug::{to_repr}
+
+///|
+pub extend RuntimeSecretBinding with Eq::{not_equal, equal}
+
+///|
+pub extend RuntimeSecretBinding with ToJson::{to_json}
+
+///|
+pub extend RuntimeSecretBinding with FromJson::{from_json}
+
+///|
 fn environment_identifier(value : String) -> Bool {
   let first = value.iter().next().unwrap_or('0')
   value.length() > 0 &&

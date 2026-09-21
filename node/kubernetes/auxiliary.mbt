@@ -5,12 +5,36 @@ pub(all) enum AuxiliaryKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend AuxiliaryKind with Debug::{to_repr}
+
+///|
+pub extend AuxiliaryKind with Eq::{not_equal, equal}
+
+///|
+pub extend AuxiliaryKind with ToJson::{to_json}
+
+///|
+pub extend AuxiliaryKind with FromJson::{from_json}
+
+///|
 pub(all) struct AuxiliaryIdentity {
   kind : AuxiliaryKind
   namespace_name : String
   name : String
   uid : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AuxiliaryIdentity with Debug::{to_repr}
+
+///|
+pub extend AuxiliaryIdentity with Eq::{not_equal, equal}
+
+///|
+pub extend AuxiliaryIdentity with ToJson::{to_json}
+
+///|
+pub extend AuxiliaryIdentity with FromJson::{from_json}
 
 ///|
 fn AuxiliaryKind::collection(

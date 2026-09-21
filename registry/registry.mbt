@@ -7,12 +7,36 @@ pub(all) struct Alias {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend Alias with Debug::{to_repr}
+
+///|
+pub extend Alias with Eq::{not_equal, equal}
+
+///|
+pub extend Alias with ToJson::{to_json}
+
+///|
+pub extend Alias with FromJson::{from_json}
+
+///|
 pub(all) enum LicenseStatus {
   Pending
   Accepted
   Expired
   Revoked
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend LicenseStatus with Debug::{to_repr}
+
+///|
+pub extend LicenseStatus with Eq::{not_equal, equal}
+
+///|
+pub extend LicenseStatus with ToJson::{to_json}
+
+///|
+pub extend LicenseStatus with FromJson::{from_json}
 
 ///|
 pub(all) struct LicenseRecord {
@@ -25,6 +49,18 @@ pub(all) struct LicenseRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend LicenseRecord with Debug::{to_repr}
+
+///|
+pub extend LicenseRecord with Eq::{not_equal, equal}
+
+///|
+pub extend LicenseRecord with ToJson::{to_json}
+
+///|
+pub extend LicenseRecord with FromJson::{from_json}
+
+///|
 pub(all) struct ArtifactVerification {
   digest : String
   signature_verified : Bool
@@ -32,6 +68,18 @@ pub(all) struct ArtifactVerification {
   verified_unix_ms : Int64
   verifier : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend ArtifactVerification with Debug::{to_repr}
+
+///|
+pub extend ArtifactVerification with Eq::{not_equal, equal}
+
+///|
+pub extend ArtifactVerification with ToJson::{to_json}
+
+///|
+pub extend ArtifactVerification with FromJson::{from_json}
 
 ///|
 pub(all) struct BenchmarkProfile {
@@ -49,6 +97,18 @@ pub(all) struct BenchmarkProfile {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend BenchmarkProfile with Debug::{to_repr}
+
+///|
+pub extend BenchmarkProfile with Eq::{not_equal, equal}
+
+///|
+pub extend BenchmarkProfile with ToJson::{to_json}
+
+///|
+pub extend BenchmarkProfile with FromJson::{from_json}
+
+///|
 pub(all) struct EvaluationRecord {
   evaluation_id : String
   model_id : String
@@ -61,11 +121,35 @@ pub(all) struct EvaluationRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend EvaluationRecord with Debug::{to_repr}
+
+///|
+pub extend EvaluationRecord with Eq::{not_equal, equal}
+
+///|
+pub extend EvaluationRecord with ToJson::{to_json}
+
+///|
+pub extend EvaluationRecord with FromJson::{from_json}
+
+///|
 pub(all) enum RolloutStage {
   Canary
   Stable
   RolledBack
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RolloutStage with Debug::{to_repr}
+
+///|
+pub extend RolloutStage with Eq::{not_equal, equal}
+
+///|
+pub extend RolloutStage with ToJson::{to_json}
+
+///|
+pub extend RolloutStage with FromJson::{from_json}
 
 ///|
 pub(all) struct PromotionReceipt {
@@ -81,6 +165,18 @@ pub(all) struct PromotionReceipt {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PromotionReceipt with Debug::{to_repr}
+
+///|
+pub extend PromotionReceipt with Eq::{not_equal, equal}
+
+///|
+pub extend PromotionReceipt with ToJson::{to_json}
+
+///|
+pub extend PromotionReceipt with FromJson::{from_json}
+
+///|
 pub(all) suberror RegistryError {
   ModelNotFound(String)
   LicenseNotAccepted(String)
@@ -91,6 +187,12 @@ pub(all) suberror RegistryError {
   NoRollbackTarget(String)
   InvalidMetadata(String)
 } derive(Debug, Eq)
+
+///|
+pub extend RegistryError with Debug::{to_repr}
+
+///|
+pub extend RegistryError with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct RegistrySnapshot {
@@ -106,10 +208,34 @@ pub(all) struct RegistrySnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RegistrySnapshot with Debug::{to_repr}
+
+///|
+pub extend RegistrySnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend RegistrySnapshot with ToJson::{to_json}
+
+///|
+pub extend RegistrySnapshot with FromJson::{from_json}
+
+///|
 pub(all) struct AliasHistory {
   name : String
   values : Array[Alias]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AliasHistory with Debug::{to_repr}
+
+///|
+pub extend AliasHistory with Eq::{not_equal, equal}
+
+///|
+pub extend AliasHistory with ToJson::{to_json}
+
+///|
+pub extend AliasHistory with FromJson::{from_json}
 
 ///|
 pub(all) struct SchedulingTarget {
@@ -117,6 +243,18 @@ pub(all) struct SchedulingTarget {
   model : @contracts.ModelRecord
   runtime : @contracts.RuntimeSpec
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend SchedulingTarget with Debug::{to_repr}
+
+///|
+pub extend SchedulingTarget with Eq::{not_equal, equal}
+
+///|
+pub extend SchedulingTarget with ToJson::{to_json}
+
+///|
+pub extend SchedulingTarget with FromJson::{from_json}
 
 ///|
 pub struct ModelRegistry {

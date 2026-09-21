@@ -22,6 +22,9 @@ pub(all) suberror AccessError {
   QuotaExceeded
   InvalidSnapshot(String)
 } derive(Eq, @debug.Debug)
+pub fn AccessError::equal(Self, Self) -> Bool
+pub fn AccessError::not_equal(Self, Self) -> Bool
+pub fn AccessError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 type AccessPersistence
@@ -30,6 +33,11 @@ pub(all) struct AccessSnapshot {
   schema_version : String
   credentials : Array[ApiCredential]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AccessSnapshot::equal(Self, Self) -> Bool
+pub fn AccessSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccessSnapshot::not_equal(Self, Self) -> Bool
+pub fn AccessSnapshot::to_json(Self) -> Json
+pub fn AccessSnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct AccessStore {
   persistence : AccessPersistence
@@ -55,6 +63,11 @@ pub(all) struct ApiAuthorization {
   organization_id : String
   project_id : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ApiAuthorization::equal(Self, Self) -> Bool
+pub fn ApiAuthorization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ApiAuthorization::not_equal(Self, Self) -> Bool
+pub fn ApiAuthorization::to_json(Self) -> Json
+pub fn ApiAuthorization::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ApiCredential {
   key_id : String
@@ -72,6 +85,11 @@ pub(all) struct ApiCredential {
   consumed_requests : Int64
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ApiCredential::equal(Self, Self) -> Bool
+pub fn ApiCredential::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ApiCredential::not_equal(Self, Self) -> Bool
+pub fn ApiCredential::to_json(Self) -> Json
+pub fn ApiCredential::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ApiCredentialView {
   key_id : String
@@ -88,6 +106,11 @@ pub(all) struct ApiCredentialView {
   consumed_requests : Int64
   revoked_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ApiCredentialView::equal(Self, Self) -> Bool
+pub fn ApiCredentialView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ApiCredentialView::not_equal(Self, Self) -> Bool
+pub fn ApiCredentialView::to_json(Self) -> Json
+pub fn ApiCredentialView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ApiKeyIssueIntent {
   key_id : String
@@ -101,22 +124,42 @@ pub(all) struct ApiKeyIssueIntent {
   expires_unix_ms : Int64
   maximum_requests : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ApiKeyIssueIntent::equal(Self, Self) -> Bool
+pub fn ApiKeyIssueIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ApiKeyIssueIntent::not_equal(Self, Self) -> Bool
+pub fn ApiKeyIssueIntent::to_json(Self) -> Json
+pub fn ApiKeyIssueIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ApiKeyScope {
   ModelList
   Inference
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ApiKeyScope::equal(Self, Self) -> Bool
+pub fn ApiKeyScope::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ApiKeyScope::not_equal(Self, Self) -> Bool
+pub fn ApiKeyScope::to_json(Self) -> Json
+pub fn ApiKeyScope::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IssuedApiKey {
   credential : ApiCredential
   secret : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn IssuedApiKey::equal(Self, Self) -> Bool
+pub fn IssuedApiKey::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn IssuedApiKey::not_equal(Self, Self) -> Bool
 pub fn IssuedApiKey::public_view(Self) -> IssuedApiKeyView
+pub fn IssuedApiKey::to_json(Self) -> Json
+pub fn IssuedApiKey::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IssuedApiKeyView {
   credential : ApiCredentialView
   secret : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn IssuedApiKeyView::equal(Self, Self) -> Bool
+pub fn IssuedApiKeyView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn IssuedApiKeyView::not_equal(Self, Self) -> Bool
+pub fn IssuedApiKeyView::to_json(Self) -> Json
+pub fn IssuedApiKeyView::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

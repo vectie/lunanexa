@@ -23,12 +23,20 @@ pub(all) suberror ObservabilityError {
   InvalidSnapshot(String)
   EventConflict(String)
 } derive(Eq, @debug.Debug)
+pub fn ObservabilityError::equal(Self, Self) -> Bool
+pub fn ObservabilityError::not_equal(Self, Self) -> Bool
+pub fn ObservabilityError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ExternalExportProof {
   proof_receipt : String
   exported_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExternalExportProof::equal(Self, Self) -> Bool
+pub fn ExternalExportProof::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExternalExportProof::not_equal(Self, Self) -> Bool
+pub fn ExternalExportProof::to_json(Self) -> Json
+pub fn ExternalExportProof::to_repr(Self) -> @debug.Repr
 
 type ObservabilityPersistence
 
@@ -45,12 +53,22 @@ pub(all) struct ObservabilityReadiness {
   oldest_event_unix_ms : Int64?
   newest_event_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ObservabilityReadiness::equal(Self, Self) -> Bool
+pub fn ObservabilityReadiness::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ObservabilityReadiness::not_equal(Self, Self) -> Bool
+pub fn ObservabilityReadiness::to_json(Self) -> Json
+pub fn ObservabilityReadiness::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ObservabilityReadinessState {
   LocalJsonReady
   ExternalCollectorPending
   ObservabilityDegraded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ObservabilityReadinessState::equal(Self, Self) -> Bool
+pub fn ObservabilityReadinessState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ObservabilityReadinessState::not_equal(Self, Self) -> Bool
+pub fn ObservabilityReadinessState::to_json(Self) -> Json
+pub fn ObservabilityReadinessState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ObservabilitySnapshot {
   schema_version : String
@@ -58,6 +76,11 @@ pub(all) struct ObservabilitySnapshot {
   counters : Array[OperationalCounter]
   last_external_export_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ObservabilitySnapshot::equal(Self, Self) -> Bool
+pub fn ObservabilitySnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ObservabilitySnapshot::not_equal(Self, Self) -> Bool
+pub fn ObservabilitySnapshot::to_json(Self) -> Json
+pub fn ObservabilitySnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct ObservabilityStore {
   persistence : ObservabilityPersistence
@@ -92,6 +115,11 @@ pub(all) enum OperationalActorClass {
   Provider
   Controller
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperationalActorClass::equal(Self, Self) -> Bool
+pub fn OperationalActorClass::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OperationalActorClass::not_equal(Self, Self) -> Bool
+pub fn OperationalActorClass::to_json(Self) -> Json
+pub fn OperationalActorClass::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OperationalCounter {
   event_code : String
@@ -100,6 +128,11 @@ pub(all) struct OperationalCounter {
   status_class : String
   value : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperationalCounter::equal(Self, Self) -> Bool
+pub fn OperationalCounter::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OperationalCounter::not_equal(Self, Self) -> Bool
+pub fn OperationalCounter::to_json(Self) -> Json
+pub fn OperationalCounter::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OperationalEvent {
   version : String
@@ -116,18 +149,33 @@ pub(all) struct OperationalEvent {
   status_code : Int
   duration_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperationalEvent::equal(Self, Self) -> Bool
+pub fn OperationalEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OperationalEvent::not_equal(Self, Self) -> Bool
+pub fn OperationalEvent::to_json(Self) -> Json
+pub fn OperationalEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OperationalLatencyBucket {
   target_type : String
   upper_bound_ms : Int64?
   count : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperationalLatencyBucket::equal(Self, Self) -> Bool
+pub fn OperationalLatencyBucket::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OperationalLatencyBucket::not_equal(Self, Self) -> Bool
+pub fn OperationalLatencyBucket::to_json(Self) -> Json
+pub fn OperationalLatencyBucket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OperationalLatencySummary {
   target_type : String
   count : Int64
   sum_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperationalLatencySummary::equal(Self, Self) -> Bool
+pub fn OperationalLatencySummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OperationalLatencySummary::not_equal(Self, Self) -> Bool
+pub fn OperationalLatencySummary::to_json(Self) -> Json
+pub fn OperationalLatencySummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OperationalSeverity {
   Debug
@@ -136,6 +184,11 @@ pub(all) enum OperationalSeverity {
   Error
   Critical
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OperationalSeverity::equal(Self, Self) -> Bool
+pub fn OperationalSeverity::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OperationalSeverity::not_equal(Self, Self) -> Bool
+pub fn OperationalSeverity::to_json(Self) -> Json
+pub fn OperationalSeverity::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

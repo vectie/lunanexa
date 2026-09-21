@@ -22,8 +22,8 @@ pub fn node_transport_lease(
   let mac = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(node_credential).view(),
-      @utf8.encode(node_transport_payload(lease, node_id)).view(),
+      @utf8.encode(node_credential).exact_view(),
+      @utf8.encode(node_transport_payload(lease, node_id)).exact_view(),
     ),
   )
   { ..lease, authority_receipt: "node-envelope-v1:\{mac}", }

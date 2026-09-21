@@ -8,6 +8,18 @@ pub(all) enum BenchmarkKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend BenchmarkKind with Debug::{to_repr}
+
+///|
+pub extend BenchmarkKind with Eq::{not_equal, equal}
+
+///|
+pub extend BenchmarkKind with ToJson::{to_json}
+
+///|
+pub extend BenchmarkKind with FromJson::{from_json}
+
+///|
 pub(all) struct BenchmarkSample {
   latency_ms : Int
   queue_ms : Int
@@ -20,6 +32,18 @@ pub(all) struct BenchmarkSample {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend BenchmarkSample with Debug::{to_repr}
+
+///|
+pub extend BenchmarkSample with Eq::{not_equal, equal}
+
+///|
+pub extend BenchmarkSample with ToJson::{to_json}
+
+///|
+pub extend BenchmarkSample with FromJson::{from_json}
+
+///|
 pub(all) struct BenchmarkRun {
   run_id : String
   profile : String
@@ -30,6 +54,18 @@ pub(all) struct BenchmarkRun {
   concurrency : Int
   samples : Array[BenchmarkSample]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend BenchmarkRun with Debug::{to_repr}
+
+///|
+pub extend BenchmarkRun with Eq::{not_equal, equal}
+
+///|
+pub extend BenchmarkRun with ToJson::{to_json}
+
+///|
+pub extend BenchmarkRun with FromJson::{from_json}
 
 ///|
 pub(all) struct BenchmarkSummary {
@@ -47,11 +83,29 @@ pub(all) struct BenchmarkSummary {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend BenchmarkSummary with Debug::{to_repr}
+
+///|
+pub extend BenchmarkSummary with Eq::{not_equal, equal}
+
+///|
+pub extend BenchmarkSummary with ToJson::{to_json}
+
+///|
+pub extend BenchmarkSummary with FromJson::{from_json}
+
+///|
 pub(all) suberror BenchmarkError {
   EmptyRun
   InvalidDuration
   InvalidEvidence(String)
 } derive(Debug, Eq)
+
+///|
+pub extend BenchmarkError with Debug::{to_repr}
+
+///|
+pub extend BenchmarkError with Eq::{not_equal, equal}
 
 ///|
 fn percentile(values : Array[Int], percentage : Int) -> Int {
@@ -108,6 +162,18 @@ pub(all) struct ServiceObjective {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ServiceObjective with Debug::{to_repr}
+
+///|
+pub extend ServiceObjective with Eq::{not_equal, equal}
+
+///|
+pub extend ServiceObjective with ToJson::{to_json}
+
+///|
+pub extend ServiceObjective with FromJson::{from_json}
+
+///|
 pub fn meets_objective(
   summary : BenchmarkSummary,
   objective : ServiceObjective,
@@ -127,6 +193,18 @@ pub(all) struct CapacityRecommendation {
   evidence_run_id : String
   statement : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CapacityRecommendation with Debug::{to_repr}
+
+///|
+pub extend CapacityRecommendation with Eq::{not_equal, equal}
+
+///|
+pub extend CapacityRecommendation with ToJson::{to_json}
+
+///|
+pub extend CapacityRecommendation with FromJson::{from_json}
 
 ///|
 pub fn recommend_capacity(
@@ -172,6 +250,18 @@ pub(all) struct EvidenceBundle {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend EvidenceBundle with Debug::{to_repr}
+
+///|
+pub extend EvidenceBundle with Eq::{not_equal, equal}
+
+///|
+pub extend EvidenceBundle with ToJson::{to_json}
+
+///|
+pub extend EvidenceBundle with FromJson::{from_json}
+
+///|
 pub(all) struct EvidenceBundleInput {
   release_version : String
   scenario_passed : Bool
@@ -192,6 +282,18 @@ pub(all) struct EvidenceBundleInput {
   browser_report_ref : String
   accepted_by : String?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend EvidenceBundleInput with Debug::{to_repr}
+
+///|
+pub extend EvidenceBundleInput with Eq::{not_equal, equal}
+
+///|
+pub extend EvidenceBundleInput with ToJson::{to_json}
+
+///|
+pub extend EvidenceBundleInput with FromJson::{from_json}
 
 ///|
 pub fn build_evidence_bundle(
@@ -231,12 +333,36 @@ pub(all) struct RecommendationInput {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RecommendationInput with Debug::{to_repr}
+
+///|
+pub extend RecommendationInput with Eq::{not_equal, equal}
+
+///|
+pub extend RecommendationInput with ToJson::{to_json}
+
+///|
+pub extend RecommendationInput with FromJson::{from_json}
+
+///|
 pub(all) struct RecommendationEvidence {
   summary : BenchmarkSummary
   objective : ServiceObjective
   objective_met : Bool
   capacity : CapacityRecommendation
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RecommendationEvidence with Debug::{to_repr}
+
+///|
+pub extend RecommendationEvidence with Eq::{not_equal, equal}
+
+///|
+pub extend RecommendationEvidence with ToJson::{to_json}
+
+///|
+pub extend RecommendationEvidence with FromJson::{from_json}
 
 ///|
 pub fn build_recommendation(

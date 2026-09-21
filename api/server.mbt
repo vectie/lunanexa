@@ -7,6 +7,12 @@ pub(all) enum ApiMethod {
 } derive(Debug, Eq)
 
 ///|
+pub extend ApiMethod with Debug::{to_repr}
+
+///|
+pub extend ApiMethod with Eq::{not_equal, equal}
+
+///|
 pub(all) struct HttpReply {
   status : Int
   body : String
@@ -14,11 +20,29 @@ pub(all) struct HttpReply {
 } derive(Debug, Eq)
 
 ///|
+pub extend HttpReply with Debug::{to_repr}
+
+///|
+pub extend HttpReply with Eq::{not_equal, equal}
+
+///|
 pub(all) struct CancellationReceipt {
   workload_id : String
   accepted : Bool
   receipt : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CancellationReceipt with Debug::{to_repr}
+
+///|
+pub extend CancellationReceipt with Eq::{not_equal, equal}
+
+///|
+pub extend CancellationReceipt with ToJson::{to_json}
+
+///|
+pub extend CancellationReceipt with FromJson::{from_json}
 
 ///|
 pub struct ApiService {

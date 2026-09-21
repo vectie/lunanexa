@@ -20,6 +20,12 @@ pub(all) suberror ObservabilityError {
 } derive(Debug, Eq)
 
 ///|
+pub extend ObservabilityError with Debug::{to_repr}
+
+///|
+pub extend ObservabilityError with Eq::{not_equal, equal}
+
+///|
 pub(all) enum OperationalSeverity {
   Debug
   Information
@@ -27,6 +33,18 @@ pub(all) enum OperationalSeverity {
   Error
   Critical
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OperationalSeverity with Debug::{to_repr}
+
+///|
+pub extend OperationalSeverity with Eq::{not_equal, equal}
+
+///|
+pub extend OperationalSeverity with ToJson::{to_json}
+
+///|
+pub extend OperationalSeverity with FromJson::{from_json}
 
 ///|
 pub(all) enum OperationalActorClass {
@@ -37,6 +55,18 @@ pub(all) enum OperationalActorClass {
   Provider
   Controller
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OperationalActorClass with Debug::{to_repr}
+
+///|
+pub extend OperationalActorClass with Eq::{not_equal, equal}
+
+///|
+pub extend OperationalActorClass with ToJson::{to_json}
+
+///|
+pub extend OperationalActorClass with FromJson::{from_json}
 
 ///| A bounded structured operational event. It deliberately excludes request
 
@@ -63,6 +93,18 @@ pub(all) struct OperationalEvent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend OperationalEvent with Debug::{to_repr}
+
+///|
+pub extend OperationalEvent with Eq::{not_equal, equal}
+
+///|
+pub extend OperationalEvent with ToJson::{to_json}
+
+///|
+pub extend OperationalEvent with FromJson::{from_json}
+
+///|
 pub(all) struct OperationalCounter {
   event_code : String
   target_type : String
@@ -70,6 +112,18 @@ pub(all) struct OperationalCounter {
   status_class : String
   value : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OperationalCounter with Debug::{to_repr}
+
+///|
+pub extend OperationalCounter with Eq::{not_equal, equal}
+
+///|
+pub extend OperationalCounter with ToJson::{to_json}
+
+///|
+pub extend OperationalCounter with FromJson::{from_json}
 
 ///|
 pub(all) struct ObservabilitySnapshot {
@@ -80,11 +134,35 @@ pub(all) struct ObservabilitySnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ObservabilitySnapshot with Debug::{to_repr}
+
+///|
+pub extend ObservabilitySnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend ObservabilitySnapshot with ToJson::{to_json}
+
+///|
+pub extend ObservabilitySnapshot with FromJson::{from_json}
+
+///|
 pub(all) struct OperationalLatencyBucket {
   target_type : String
   upper_bound_ms : Int64?
   count : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OperationalLatencyBucket with Debug::{to_repr}
+
+///|
+pub extend OperationalLatencyBucket with Eq::{not_equal, equal}
+
+///|
+pub extend OperationalLatencyBucket with ToJson::{to_json}
+
+///|
+pub extend OperationalLatencyBucket with FromJson::{from_json}
 
 ///|
 pub(all) struct OperationalLatencySummary {
@@ -94,11 +172,35 @@ pub(all) struct OperationalLatencySummary {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend OperationalLatencySummary with Debug::{to_repr}
+
+///|
+pub extend OperationalLatencySummary with Eq::{not_equal, equal}
+
+///|
+pub extend OperationalLatencySummary with ToJson::{to_json}
+
+///|
+pub extend OperationalLatencySummary with FromJson::{from_json}
+
+///|
 pub(all) enum ObservabilityReadinessState {
   LocalJsonReady
   ExternalCollectorPending
   ObservabilityDegraded
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend ObservabilityReadinessState with Debug::{to_repr}
+
+///|
+pub extend ObservabilityReadinessState with Eq::{not_equal, equal}
+
+///|
+pub extend ObservabilityReadinessState with ToJson::{to_json}
+
+///|
+pub extend ObservabilityReadinessState with FromJson::{from_json}
 
 ///|
 pub(all) struct ObservabilityReadiness {
@@ -115,6 +217,18 @@ pub(all) struct ObservabilityReadiness {
   newest_event_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
 
+///|
+pub extend ObservabilityReadiness with Debug::{to_repr}
+
+///|
+pub extend ObservabilityReadiness with Eq::{not_equal, equal}
+
+///|
+pub extend ObservabilityReadiness with ToJson::{to_json}
+
+///|
+pub extend ObservabilityReadiness with FromJson::{from_json}
+
 ///| Bounded proof posted only after the deployment-owned collector confirms
 
 ///|
@@ -123,3 +237,15 @@ pub(all) struct ExternalExportProof {
   proof_receipt : String
   exported_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend ExternalExportProof with Debug::{to_repr}
+
+///|
+pub extend ExternalExportProof with Eq::{not_equal, equal}
+
+///|
+pub extend ExternalExportProof with ToJson::{to_json}
+
+///|
+pub extend ExternalExportProof with FromJson::{from_json}

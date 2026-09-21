@@ -9,6 +9,18 @@ pub(all) enum CustomerMachineReachability {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CustomerMachineReachability with Debug::{to_repr}
+
+///|
+pub extend CustomerMachineReachability with Eq::{not_equal, equal}
+
+///|
+pub extend CustomerMachineReachability with ToJson::{to_json}
+
+///|
+pub extend CustomerMachineReachability with FromJson::{from_json}
+
+///|
 /// A credential handoff is a reference to the deployment-owned issuer. It is
 /// never the password, private key, SSH certificate, or internal secret-store
 /// reference used by the node provisioner.
@@ -20,6 +32,18 @@ pub(all) enum CustomerCredentialHandoffState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CustomerCredentialHandoffState with Debug::{to_repr}
+
+///|
+pub extend CustomerCredentialHandoffState with Eq::{not_equal, equal}
+
+///|
+pub extend CustomerCredentialHandoffState with ToJson::{to_json}
+
+///|
+pub extend CustomerCredentialHandoffState with FromJson::{from_json}
+
+///|
 pub(all) struct CustomerCredentialHandoff {
   state : CustomerCredentialHandoffState
   handoff_ref : String?
@@ -27,6 +51,18 @@ pub(all) struct CustomerCredentialHandoff {
   valid_until_unix_ms : Int64
   raw_secret_included : Bool
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CustomerCredentialHandoff with Debug::{to_repr}
+
+///|
+pub extend CustomerCredentialHandoff with Eq::{not_equal, equal}
+
+///|
+pub extend CustomerCredentialHandoff with ToJson::{to_json}
+
+///|
+pub extend CustomerCredentialHandoff with FromJson::{from_json}
 
 ///|
 /// Tenant-safe exclusive-machine projection. `lease_ref` is the customer
@@ -50,11 +86,35 @@ pub(all) struct CustomerExclusiveMachineView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CustomerExclusiveMachineView with Debug::{to_repr}
+
+///|
+pub extend CustomerExclusiveMachineView with Eq::{not_equal, equal}
+
+///|
+pub extend CustomerExclusiveMachineView with ToJson::{to_json}
+
+///|
+pub extend CustomerExclusiveMachineView with FromJson::{from_json}
+
+///|
 pub(all) struct CustomerExclusiveLeaseTerminationRequest {
   expected_generation : Int64
   confirmation : String
   reason : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CustomerExclusiveLeaseTerminationRequest with Debug::{to_repr}
+
+///|
+pub extend CustomerExclusiveLeaseTerminationRequest with Eq::{not_equal, equal}
+
+///|
+pub extend CustomerExclusiveLeaseTerminationRequest with ToJson::{to_json}
+
+///|
+pub extend CustomerExclusiveLeaseTerminationRequest with FromJson::{from_json}
 
 ///|
 pub fn customer_termination_confirmation(lease_id : String) -> String {

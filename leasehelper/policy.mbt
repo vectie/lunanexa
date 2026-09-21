@@ -10,6 +10,18 @@ pub(all) struct CleanupEvidence {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CleanupEvidence with Debug::{to_repr}
+
+///|
+pub extend CleanupEvidence with Eq::{not_equal, equal}
+
+///|
+pub extend CleanupEvidence with ToJson::{to_json}
+
+///|
+pub extend CleanupEvidence with FromJson::{from_json}
+
+///|
 pub fn CleanupEvidence::verified(self : CleanupEvidence) -> Bool {
   self.account_absent &&
   self.processes_absent &&

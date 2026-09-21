@@ -4,6 +4,12 @@ pub(all) suberror DeliveryWorkerError {
 } derive(Debug, Eq)
 
 ///|
+pub extend DeliveryWorkerError with Debug::{to_repr}
+
+///|
+pub extend DeliveryWorkerError with Eq::{not_equal, equal}
+
+///|
 enum DeliveryAdapterConfig {
   AdapterPending
   AdapterConfigured(

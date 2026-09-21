@@ -26,6 +26,9 @@ pub(all) suberror LunaFideError {
   StaleWebhook(String)
   ExpiredWebhook(String)
 } derive(Eq, @debug.Debug)
+pub fn LunaFideError::equal(Self, Self) -> Bool
+pub fn LunaFideError::not_equal(Self, Self) -> Bool
+pub fn LunaFideError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct EnvelopeRecord {
@@ -39,6 +42,11 @@ pub(all) struct EnvelopeRecord {
   expires_unix_ms : Int64
   executed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EnvelopeRecord::equal(Self, Self) -> Bool
+pub fn EnvelopeRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EnvelopeRecord::not_equal(Self, Self) -> Bool
+pub fn EnvelopeRecord::to_json(Self) -> Json
+pub fn EnvelopeRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EnvelopeRequest {
   protocol_version : String
@@ -51,6 +59,11 @@ pub(all) struct EnvelopeRequest {
   expires_unix_ms : Int64
   requested_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EnvelopeRequest::equal(Self, Self) -> Bool
+pub fn EnvelopeRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EnvelopeRequest::not_equal(Self, Self) -> Bool
+pub fn EnvelopeRequest::to_json(Self) -> Json
+pub fn EnvelopeRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EnvelopeState {
   AwaitingSigner
@@ -60,6 +73,11 @@ pub(all) enum EnvelopeState {
   Voided
   Expired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EnvelopeState::equal(Self, Self) -> Bool
+pub fn EnvelopeState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EnvelopeState::not_equal(Self, Self) -> Bool
+pub fn EnvelopeState::to_json(Self) -> Json
+pub fn EnvelopeState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct HealthPayload {
   identity : ServiceIdentity
@@ -67,6 +85,11 @@ pub(all) struct HealthPayload {
   state_backend : String
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn HealthPayload::equal(Self, Self) -> Bool
+pub fn HealthPayload::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn HealthPayload::not_equal(Self, Self) -> Bool
+pub fn HealthPayload::to_json(Self) -> Json
+pub fn HealthPayload::to_repr(Self) -> @debug.Repr
 
 type IdempotencyEntry
 
@@ -78,6 +101,11 @@ pub(all) struct InvoiceAction {
   reason_code : String
   acted_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn InvoiceAction::equal(Self, Self) -> Bool
+pub fn InvoiceAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn InvoiceAction::not_equal(Self, Self) -> Bool
+pub fn InvoiceAction::to_json(Self) -> Json
+pub fn InvoiceAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InvoiceRecord {
   invoice_ref : String
@@ -92,6 +120,11 @@ pub(all) struct InvoiceRecord {
   voided_unix_ms : Int64?
   replaces_invoice_ref : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn InvoiceRecord::equal(Self, Self) -> Bool
+pub fn InvoiceRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn InvoiceRecord::not_equal(Self, Self) -> Bool
+pub fn InvoiceRecord::to_json(Self) -> Json
+pub fn InvoiceRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InvoiceRequest {
   protocol_version : String
@@ -104,11 +137,21 @@ pub(all) struct InvoiceRequest {
   bill_content_sha256 : String
   requested_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn InvoiceRequest::equal(Self, Self) -> Bool
+pub fn InvoiceRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn InvoiceRequest::not_equal(Self, Self) -> Bool
+pub fn InvoiceRequest::to_json(Self) -> Json
+pub fn InvoiceRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InvoiceState {
   Issued
   Voided
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn InvoiceState::equal(Self, Self) -> Bool
+pub fn InvoiceState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn InvoiceState::not_equal(Self, Self) -> Bool
+pub fn InvoiceState::to_json(Self) -> Json
+pub fn InvoiceState::to_repr(Self) -> @debug.Repr
 
 pub struct LunaFide {
   test_secret : String
@@ -137,6 +180,11 @@ pub(all) enum PaymentOutcome {
   Decline
   RequireReview
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PaymentOutcome::equal(Self, Self) -> Bool
+pub fn PaymentOutcome::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PaymentOutcome::not_equal(Self, Self) -> Bool
+pub fn PaymentOutcome::to_json(Self) -> Json
+pub fn PaymentOutcome::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PaymentRecord {
   payment_ref : String
@@ -148,6 +196,11 @@ pub(all) struct PaymentRecord {
   reason_code : String
   processed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PaymentRecord::equal(Self, Self) -> Bool
+pub fn PaymentRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PaymentRecord::not_equal(Self, Self) -> Bool
+pub fn PaymentRecord::to_json(Self) -> Json
+pub fn PaymentRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PaymentRequest {
   protocol_version : String
@@ -159,12 +212,22 @@ pub(all) struct PaymentRequest {
   simulated_outcome : PaymentOutcome
   requested_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PaymentRequest::equal(Self, Self) -> Bool
+pub fn PaymentRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PaymentRequest::not_equal(Self, Self) -> Bool
+pub fn PaymentRequest::to_json(Self) -> Json
+pub fn PaymentRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PaymentState {
   Settled
   Declined
   UnderReview
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PaymentState::equal(Self, Self) -> Bool
+pub fn PaymentState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PaymentState::not_equal(Self, Self) -> Bool
+pub fn PaymentState::to_json(Self) -> Json
+pub fn PaymentState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ServiceIdentity {
   service_name : String
@@ -175,10 +238,20 @@ pub(all) struct ServiceIdentity {
   stores_payment_credentials : Bool
   trust_claim : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ServiceIdentity::equal(Self, Self) -> Bool
+pub fn ServiceIdentity::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ServiceIdentity::not_equal(Self, Self) -> Bool
+pub fn ServiceIdentity::to_json(Self) -> Json
+pub fn ServiceIdentity::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ServiceMode {
   TestOnly
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ServiceMode::equal(Self, Self) -> Bool
+pub fn ServiceMode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ServiceMode::not_equal(Self, Self) -> Bool
+pub fn ServiceMode::to_json(Self) -> Json
+pub fn ServiceMode::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignatureAction {
   protocol_version : String
@@ -190,16 +263,31 @@ pub(all) struct SignatureAction {
   decision : SignatureDecision
   acted_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SignatureAction::equal(Self, Self) -> Bool
+pub fn SignatureAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SignatureAction::not_equal(Self, Self) -> Bool
+pub fn SignatureAction::to_json(Self) -> Json
+pub fn SignatureAction::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SignatureDecision {
   Signed
   Declined
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SignatureDecision::equal(Self, Self) -> Bool
+pub fn SignatureDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SignatureDecision::not_equal(Self, Self) -> Bool
+pub fn SignatureDecision::to_json(Self) -> Json
+pub fn SignatureDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SignatureParty {
   Signer
   Countersigner
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SignatureParty::equal(Self, Self) -> Bool
+pub fn SignatureParty::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SignatureParty::not_equal(Self, Self) -> Bool
+pub fn SignatureParty::to_json(Self) -> Json
+pub fn SignatureParty::to_repr(Self) -> @debug.Repr
 
 pub(all) struct VerificationRecord {
   verification_ref : String
@@ -211,6 +299,11 @@ pub(all) struct VerificationRecord {
   requested_unix_ms : Int64
   resolved_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn VerificationRecord::equal(Self, Self) -> Bool
+pub fn VerificationRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn VerificationRecord::not_equal(Self, Self) -> Bool
+pub fn VerificationRecord::to_json(Self) -> Json
+pub fn VerificationRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct VerificationRequest {
   protocol_version : String
@@ -220,6 +313,11 @@ pub(all) struct VerificationRequest {
   subject_type : VerificationSubjectType
   requested_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn VerificationRequest::equal(Self, Self) -> Bool
+pub fn VerificationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn VerificationRequest::not_equal(Self, Self) -> Bool
+pub fn VerificationRequest::to_json(Self) -> Json
+pub fn VerificationRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct VerificationResolution {
   protocol_version : String
@@ -230,6 +328,11 @@ pub(all) struct VerificationResolution {
   reason_code : String
   resolved_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn VerificationResolution::equal(Self, Self) -> Bool
+pub fn VerificationResolution::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn VerificationResolution::not_equal(Self, Self) -> Bool
+pub fn VerificationResolution::to_json(Self) -> Json
+pub fn VerificationResolution::to_repr(Self) -> @debug.Repr
 
 pub(all) enum VerificationState {
   Pending
@@ -237,11 +340,21 @@ pub(all) enum VerificationState {
   Rejected
   Expired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn VerificationState::equal(Self, Self) -> Bool
+pub fn VerificationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn VerificationState::not_equal(Self, Self) -> Bool
+pub fn VerificationState::to_json(Self) -> Json
+pub fn VerificationState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum VerificationSubjectType {
   Organization
   Individual
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn VerificationSubjectType::equal(Self, Self) -> Bool
+pub fn VerificationSubjectType::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn VerificationSubjectType::not_equal(Self, Self) -> Bool
+pub fn VerificationSubjectType::to_json(Self) -> Json
+pub fn VerificationSubjectType::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WebhookEvent {
   protocol_version : String
@@ -259,6 +372,11 @@ pub(all) struct WebhookEvent {
   auth_scheme : String
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WebhookEvent::equal(Self, Self) -> Bool
+pub fn WebhookEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn WebhookEvent::not_equal(Self, Self) -> Bool
+pub fn WebhookEvent::to_json(Self) -> Json
+pub fn WebhookEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum WebhookKind {
   VerificationRequested
@@ -270,6 +388,11 @@ pub(all) enum WebhookKind {
   InvoiceVoided
   InvoiceReissued
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WebhookKind::equal(Self, Self) -> Bool
+pub fn WebhookKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn WebhookKind::not_equal(Self, Self) -> Bool
+pub fn WebhookKind::to_json(Self) -> Json
+pub fn WebhookKind::to_repr(Self) -> @debug.Repr
 
 pub struct WebhookReceiver {
   seen_event_ids : Map[String, Unit]

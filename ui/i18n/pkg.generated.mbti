@@ -20,10 +20,13 @@ pub(all) enum Locale {
   ChineseSimplified
 } derive(Eq, @debug.Debug)
 pub fn Locale::alternate(Self) -> Self
+pub fn Locale::equal(Self, Self) -> Bool
 pub fn Locale::is_chinese(Self) -> Bool
 pub fn Locale::label(Self) -> String
 pub fn Locale::language_tag(Self) -> String
+pub fn Locale::not_equal(Self, Self) -> Bool
 pub fn Locale::storage_value(Self) -> String
+pub fn Locale::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

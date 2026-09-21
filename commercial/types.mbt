@@ -24,10 +24,28 @@ pub(all) suberror CommercialError {
 } derive(Debug, Eq)
 
 ///|
+pub extend CommercialError with Debug::{to_repr}
+
+///|
+pub extend CommercialError with Eq::{not_equal, equal}
+
+///|
 pub(all) enum IdempotencyResult {
   Created
   Replayed
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend IdempotencyResult with Debug::{to_repr}
+
+///|
+pub extend IdempotencyResult with Eq::{not_equal, equal}
+
+///|
+pub extend IdempotencyResult with ToJson::{to_json}
+
+///|
+pub extend IdempotencyResult with FromJson::{from_json}
 
 ///|
 pub(all) enum OrganizationState {
@@ -40,10 +58,34 @@ pub(all) enum OrganizationState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend OrganizationState with Debug::{to_repr}
+
+///|
+pub extend OrganizationState with Eq::{not_equal, equal}
+
+///|
+pub extend OrganizationState with ToJson::{to_json}
+
+///|
+pub extend OrganizationState with FromJson::{from_json}
+
+///|
 pub(all) enum OrganizationSubjectKind {
   Individual
   Company
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OrganizationSubjectKind with Debug::{to_repr}
+
+///|
+pub extend OrganizationSubjectKind with Eq::{not_equal, equal}
+
+///|
+pub extend OrganizationSubjectKind with ToJson::{to_json}
+
+///|
+pub extend OrganizationSubjectKind with FromJson::{from_json}
 
 ///|
 pub(all) struct BillingContact {
@@ -51,6 +93,18 @@ pub(all) struct BillingContact {
   email : String
   phone : String?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend BillingContact with Debug::{to_repr}
+
+///|
+pub extend BillingContact with Eq::{not_equal, equal}
+
+///|
+pub extend BillingContact with ToJson::{to_json}
+
+///|
+pub extend BillingContact with FromJson::{from_json}
 
 ///|
 pub(all) struct OrganizationLegalProfile {
@@ -64,6 +118,18 @@ pub(all) struct OrganizationLegalProfile {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend OrganizationLegalProfile with Debug::{to_repr}
+
+///|
+pub extend OrganizationLegalProfile with Eq::{not_equal, equal}
+
+///|
+pub extend OrganizationLegalProfile with ToJson::{to_json}
+
+///|
+pub extend OrganizationLegalProfile with FromJson::{from_json}
+
+///|
 pub(all) struct Organization {
   organization_id : String
   display_name : String
@@ -72,6 +138,18 @@ pub(all) struct Organization {
   legal_profile : OrganizationLegalProfile?
   created_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend Organization with Debug::{to_repr}
+
+///|
+pub extend Organization with Eq::{not_equal, equal}
+
+///|
+pub extend Organization with ToJson::{to_json}
+
+///|
+pub extend Organization with FromJson::{from_json}
 
 ///|
 pub(all) struct CostCenter {
@@ -83,6 +161,18 @@ pub(all) struct CostCenter {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CostCenter with Debug::{to_repr}
+
+///|
+pub extend CostCenter with Eq::{not_equal, equal}
+
+///|
+pub extend CostCenter with ToJson::{to_json}
+
+///|
+pub extend CostCenter with FromJson::{from_json}
+
+///|
 pub(all) struct Project {
   project_id : String
   organization_id : String
@@ -92,11 +182,35 @@ pub(all) struct Project {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend Project with Debug::{to_repr}
+
+///|
+pub extend Project with Eq::{not_equal, equal}
+
+///|
+pub extend Project with ToJson::{to_json}
+
+///|
+pub extend Project with FromJson::{from_json}
+
+///|
 pub(all) struct FixedMoney {
   minor_units : Int64
   currency : String
   scale : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend FixedMoney with Debug::{to_repr}
+
+///|
+pub extend FixedMoney with Eq::{not_equal, equal}
+
+///|
+pub extend FixedMoney with ToJson::{to_json}
+
+///|
+pub extend FixedMoney with FromJson::{from_json}
 
 ///|
 pub(all) struct UsageObservation {
@@ -116,6 +230,18 @@ pub(all) struct UsageObservation {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend UsageObservation with Debug::{to_repr}
+
+///|
+pub extend UsageObservation with Eq::{not_equal, equal}
+
+///|
+pub extend UsageObservation with ToJson::{to_json}
+
+///|
+pub extend UsageObservation with FromJson::{from_json}
+
+///|
 pub(all) struct RateCard {
   rate_card_id : String
   version : String
@@ -127,12 +253,36 @@ pub(all) struct RateCard {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RateCard with Debug::{to_repr}
+
+///|
+pub extend RateCard with Eq::{not_equal, equal}
+
+///|
+pub extend RateCard with ToJson::{to_json}
+
+///|
+pub extend RateCard with FromJson::{from_json}
+
+///|
 pub(all) enum LedgerEntryKind {
   Charge
   Adjustment
   Credit
   Debit
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend LedgerEntryKind with Debug::{to_repr}
+
+///|
+pub extend LedgerEntryKind with Eq::{not_equal, equal}
+
+///|
+pub extend LedgerEntryKind with ToJson::{to_json}
+
+///|
+pub extend LedgerEntryKind with FromJson::{from_json}
 
 ///|
 pub(all) struct LedgerEntry {
@@ -159,6 +309,18 @@ pub(all) struct LedgerEntry {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend LedgerEntry with Debug::{to_repr}
+
+///|
+pub extend LedgerEntry with Eq::{not_equal, equal}
+
+///|
+pub extend LedgerEntry with ToJson::{to_json}
+
+///|
+pub extend LedgerEntry with FromJson::{from_json}
+
+///|
 pub(all) struct FinalizedPeriod {
   period_id : String
   organization_id : String
@@ -172,11 +334,35 @@ pub(all) struct FinalizedPeriod {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend FinalizedPeriod with Debug::{to_repr}
+
+///|
+pub extend FinalizedPeriod with Eq::{not_equal, equal}
+
+///|
+pub extend FinalizedPeriod with ToJson::{to_json}
+
+///|
+pub extend FinalizedPeriod with FromJson::{from_json}
+
+///|
 pub(all) enum BudgetAction {
   Notify
   RequireApproval
   BlockNewWork
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend BudgetAction with Debug::{to_repr}
+
+///|
+pub extend BudgetAction with Eq::{not_equal, equal}
+
+///|
+pub extend BudgetAction with ToJson::{to_json}
+
+///|
+pub extend BudgetAction with FromJson::{from_json}
 
 ///|
 pub(all) struct Budget {
@@ -193,6 +379,18 @@ pub(all) struct Budget {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend Budget with Debug::{to_repr}
+
+///|
+pub extend Budget with Eq::{not_equal, equal}
+
+///|
+pub extend Budget with ToJson::{to_json}
+
+///|
+pub extend Budget with FromJson::{from_json}
+
+///|
 pub(all) struct Quota {
   quota_id : String
   organization_id : String
@@ -204,11 +402,35 @@ pub(all) struct Quota {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend Quota with Debug::{to_repr}
+
+///|
+pub extend Quota with Eq::{not_equal, equal}
+
+///|
+pub extend Quota with ToJson::{to_json}
+
+///|
+pub extend Quota with FromJson::{from_json}
+
+///|
 pub(all) enum AdmissionDecisionKind {
   Allowed
   ApprovalRequired
   Blocked
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AdmissionDecisionKind with Debug::{to_repr}
+
+///|
+pub extend AdmissionDecisionKind with Eq::{not_equal, equal}
+
+///|
+pub extend AdmissionDecisionKind with ToJson::{to_json}
+
+///|
+pub extend AdmissionDecisionKind with FromJson::{from_json}
 
 ///|
 pub(all) struct AdmissionRequest {
@@ -223,11 +445,35 @@ pub(all) struct AdmissionRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend AdmissionRequest with Debug::{to_repr}
+
+///|
+pub extend AdmissionRequest with Eq::{not_equal, equal}
+
+///|
+pub extend AdmissionRequest with ToJson::{to_json}
+
+///|
+pub extend AdmissionRequest with FromJson::{from_json}
+
+///|
 pub(all) struct AdmissionDecision {
   kind : AdmissionDecisionKind
   reasons : Array[String]
   matching_commitment_id : String?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AdmissionDecision with Debug::{to_repr}
+
+///|
+pub extend AdmissionDecision with Eq::{not_equal, equal}
+
+///|
+pub extend AdmissionDecision with ToJson::{to_json}
+
+///|
+pub extend AdmissionDecision with FromJson::{from_json}
 
 ///|
 pub(all) enum CommitmentState {
@@ -238,6 +484,18 @@ pub(all) enum CommitmentState {
   Expired
   CancelledCommitment
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CommitmentState with Debug::{to_repr}
+
+///|
+pub extend CommitmentState with Eq::{not_equal, equal}
+
+///|
+pub extend CommitmentState with ToJson::{to_json}
+
+///|
+pub extend CommitmentState with FromJson::{from_json}
 
 ///|
 pub(all) struct CapacityCommitment {
@@ -255,6 +513,18 @@ pub(all) struct CapacityCommitment {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CapacityCommitment with Debug::{to_repr}
+
+///|
+pub extend CapacityCommitment with Eq::{not_equal, equal}
+
+///|
+pub extend CapacityCommitment with ToJson::{to_json}
+
+///|
+pub extend CapacityCommitment with FromJson::{from_json}
+
+///|
 pub(all) struct EntitlementConsumption {
   consumption_id : String
   commitment_id : String
@@ -265,11 +535,35 @@ pub(all) struct EntitlementConsumption {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend EntitlementConsumption with Debug::{to_repr}
+
+///|
+pub extend EntitlementConsumption with Eq::{not_equal, equal}
+
+///|
+pub extend EntitlementConsumption with ToJson::{to_json}
+
+///|
+pub extend EntitlementConsumption with FromJson::{from_json}
+
+///|
 pub(all) enum AgreementTemplateState {
   DraftTemplate
   ReadyTemplate
   SupersededTemplate
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AgreementTemplateState with Debug::{to_repr}
+
+///|
+pub extend AgreementTemplateState with Eq::{not_equal, equal}
+
+///|
+pub extend AgreementTemplateState with ToJson::{to_json}
+
+///|
+pub extend AgreementTemplateState with FromJson::{from_json}
 
 ///|
 pub(all) struct AgreementTemplate {
@@ -287,6 +581,18 @@ pub(all) struct AgreementTemplate {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend AgreementTemplate with Debug::{to_repr}
+
+///|
+pub extend AgreementTemplate with Eq::{not_equal, equal}
+
+///|
+pub extend AgreementTemplate with ToJson::{to_json}
+
+///|
+pub extend AgreementTemplate with FromJson::{from_json}
+
+///|
 pub(all) struct ClickwrapAcceptance {
   acceptance_id : String
   idempotency_key : String
@@ -302,6 +608,18 @@ pub(all) struct ClickwrapAcceptance {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ClickwrapAcceptance with Debug::{to_repr}
+
+///|
+pub extend ClickwrapAcceptance with Eq::{not_equal, equal}
+
+///|
+pub extend ClickwrapAcceptance with ToJson::{to_json}
+
+///|
+pub extend ClickwrapAcceptance with FromJson::{from_json}
+
+///|
 pub(all) enum AgreementState {
   DraftAgreement
   InternalReview
@@ -315,6 +633,18 @@ pub(all) enum AgreementState {
   Voided
   SupersededAgreement
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AgreementState with Debug::{to_repr}
+
+///|
+pub extend AgreementState with Eq::{not_equal, equal}
+
+///|
+pub extend AgreementState with ToJson::{to_json}
+
+///|
+pub extend AgreementState with FromJson::{from_json}
 
 ///|
 pub(all) struct Agreement {
@@ -334,6 +664,18 @@ pub(all) struct Agreement {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend Agreement with Debug::{to_repr}
+
+///|
+pub extend Agreement with Eq::{not_equal, equal}
+
+///|
+pub extend Agreement with ToJson::{to_json}
+
+///|
+pub extend Agreement with FromJson::{from_json}
+
+///|
 pub(all) struct SignatureCallback {
   callback_id : String
   organization_id : String
@@ -350,6 +692,18 @@ pub(all) struct SignatureCallback {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend SignatureCallback with Debug::{to_repr}
+
+///|
+pub extend SignatureCallback with Eq::{not_equal, equal}
+
+///|
+pub extend SignatureCallback with ToJson::{to_json}
+
+///|
+pub extend SignatureCallback with FromJson::{from_json}
+
+///|
 pub(all) enum OrganizationRole {
   OrganizationOwner
   BillingAdministrator
@@ -361,6 +715,18 @@ pub(all) enum OrganizationRole {
   Auditor
   PlatformOperator
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend OrganizationRole with Debug::{to_repr}
+
+///|
+pub extend OrganizationRole with Eq::{not_equal, equal}
+
+///|
+pub extend OrganizationRole with ToJson::{to_json}
+
+///|
+pub extend OrganizationRole with FromJson::{from_json}
 
 ///|
 pub(all) enum CommercialPermission {
@@ -377,6 +743,18 @@ pub(all) enum CommercialPermission {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CommercialPermission with Debug::{to_repr}
+
+///|
+pub extend CommercialPermission with Eq::{not_equal, equal}
+
+///|
+pub extend CommercialPermission with ToJson::{to_json}
+
+///|
+pub extend CommercialPermission with FromJson::{from_json}
+
+///|
 pub(all) struct RoleGrant {
   grant_id : String
   organization_id : String
@@ -386,6 +764,18 @@ pub(all) struct RoleGrant {
   granted_unix_ms : Int64
   expires_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RoleGrant with Debug::{to_repr}
+
+///|
+pub extend RoleGrant with Eq::{not_equal, equal}
+
+///|
+pub extend RoleGrant with ToJson::{to_json}
+
+///|
+pub extend RoleGrant with FromJson::{from_json}
 
 ///|
 pub(all) struct CommercialSummary {
@@ -402,6 +792,18 @@ pub(all) struct CommercialSummary {
   executed_agreement_count : Int
   provisional_total : FixedMoney
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CommercialSummary with Debug::{to_repr}
+
+///|
+pub extend CommercialSummary with Eq::{not_equal, equal}
+
+///|
+pub extend CommercialSummary with ToJson::{to_json}
+
+///|
+pub extend CommercialSummary with FromJson::{from_json}
 
 ///|
 pub(all) struct CommercialSnapshot {
@@ -423,6 +825,18 @@ pub(all) struct CommercialSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CommercialSnapshot with Debug::{to_repr}
+
+///|
+pub extend CommercialSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend CommercialSnapshot with ToJson::{to_json}
+
+///|
+pub extend CommercialSnapshot with FromJson::{from_json}
+
+///|
 /// Restart-complete state. Public tenant views continue to use
 /// `CommercialSnapshot`; callback payloads stay inside the trusted store.
 pub(all) struct CommercialDurableSnapshot {
@@ -430,6 +844,18 @@ pub(all) struct CommercialDurableSnapshot {
   commercial : CommercialSnapshot
   signature_callbacks : Array[SignatureCallback]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CommercialDurableSnapshot with Debug::{to_repr}
+
+///|
+pub extend CommercialDurableSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend CommercialDurableSnapshot with ToJson::{to_json}
+
+///|
+pub extend CommercialDurableSnapshot with FromJson::{from_json}
 
 ///|
 pub(all) struct CommercialExport {
@@ -441,3 +867,15 @@ pub(all) struct CommercialExport {
   content_sha256 : String
   row_count : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CommercialExport with Debug::{to_repr}
+
+///|
+pub extend CommercialExport with Eq::{not_equal, equal}
+
+///|
+pub extend CommercialExport with ToJson::{to_json}
+
+///|
+pub extend CommercialExport with FromJson::{from_json}

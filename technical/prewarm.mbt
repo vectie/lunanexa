@@ -8,6 +8,18 @@ pub(all) enum PrewarmFailure {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PrewarmFailure with Debug::{to_repr}
+
+///|
+pub extend PrewarmFailure with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmFailure with ToJson::{to_json}
+
+///|
+pub extend PrewarmFailure with FromJson::{from_json}
+
+///|
 pub(all) enum PrewarmState {
   Queued
   Reserved
@@ -21,6 +33,18 @@ pub(all) enum PrewarmState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PrewarmState with Debug::{to_repr}
+
+///|
+pub extend PrewarmState with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmState with ToJson::{to_json}
+
+///|
+pub extend PrewarmState with FromJson::{from_json}
+
+///|
 pub(all) struct PrewarmIntent {
   operation_id : String
   deployment_id : String
@@ -32,11 +56,35 @@ pub(all) struct PrewarmIntent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PrewarmIntent with Debug::{to_repr}
+
+///|
+pub extend PrewarmIntent with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmIntent with ToJson::{to_json}
+
+///|
+pub extend PrewarmIntent with FromJson::{from_json}
+
+///|
 pub(all) struct PrewarmProgress {
   transferred_bytes : Int64
   total_bytes : Int64
   updated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend PrewarmProgress with Debug::{to_repr}
+
+///|
+pub extend PrewarmProgress with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmProgress with ToJson::{to_json}
+
+///|
+pub extend PrewarmProgress with FromJson::{from_json}
 
 ///|
 pub(all) struct CacheReservation {
@@ -47,6 +95,18 @@ pub(all) struct CacheReservation {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CacheReservation with Debug::{to_repr}
+
+///|
+pub extend CacheReservation with Eq::{not_equal, equal}
+
+///|
+pub extend CacheReservation with ToJson::{to_json}
+
+///|
+pub extend CacheReservation with FromJson::{from_json}
+
+///|
 pub(all) struct PrewarmOperation {
   intent : PrewarmIntent
   state : PrewarmState
@@ -54,6 +114,18 @@ pub(all) struct PrewarmOperation {
   reservation : CacheReservation?
   updated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend PrewarmOperation with Debug::{to_repr}
+
+///|
+pub extend PrewarmOperation with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmOperation with ToJson::{to_json}
+
+///|
+pub extend PrewarmOperation with FromJson::{from_json}
 
 ///|
 pub(all) enum PrewarmEvent {
@@ -67,6 +139,18 @@ pub(all) enum PrewarmEvent {
   Fail(reason~ : PrewarmFailure)
   ObserveTime
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend PrewarmEvent with Debug::{to_repr}
+
+///|
+pub extend PrewarmEvent with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmEvent with ToJson::{to_json}
+
+///|
+pub extend PrewarmEvent with FromJson::{from_json}
 
 ///|
 pub(all) enum PrewarmRejection {
@@ -85,10 +169,34 @@ pub(all) enum PrewarmRejection {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PrewarmRejection with Debug::{to_repr}
+
+///|
+pub extend PrewarmRejection with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmRejection with ToJson::{to_json}
+
+///|
+pub extend PrewarmRejection with FromJson::{from_json}
+
+///|
 pub(all) enum PrewarmDecision {
   Accepted(PrewarmOperation)
   Rejected(PrewarmRejection)
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend PrewarmDecision with Debug::{to_repr}
+
+///|
+pub extend PrewarmDecision with Eq::{not_equal, equal}
+
+///|
+pub extend PrewarmDecision with ToJson::{to_json}
+
+///|
+pub extend PrewarmDecision with FromJson::{from_json}
 
 ///|
 fn valid_digest(value : String) -> Bool {

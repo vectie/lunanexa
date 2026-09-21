@@ -27,10 +27,16 @@ pub(all) suberror Cx7PairError {
   PairTopologyNotValidated(String)
   NoValidatedCx7Pair
 } derive(Eq, @debug.Debug)
+pub fn Cx7PairError::equal(Self, Self) -> Bool
+pub fn Cx7PairError::not_equal(Self, Self) -> Bool
+pub fn Cx7PairError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror SchedulerStateError {
   InvalidSchedulerState(String)
 } derive(Eq, @debug.Debug)
+pub fn SchedulerStateError::equal(Self, Self) -> Bool
+pub fn SchedulerStateError::not_equal(Self, Self) -> Bool
+pub fn SchedulerStateError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ActiveAdmission {
@@ -41,6 +47,11 @@ pub(all) struct ActiveAdmission {
   priority : @contracts.Priority
   started_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ActiveAdmission::equal(Self, Self) -> Bool
+pub fn ActiveAdmission::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ActiveAdmission::not_equal(Self, Self) -> Bool
+pub fn ActiveAdmission::to_json(Self) -> Json
+pub fn ActiveAdmission::to_repr(Self) -> @debug.Repr
 
 pub struct AdmissionController {
   quotas : Map[String, TenantQuota]
@@ -62,6 +73,11 @@ pub(all) enum AdmissionResult {
   Accepted(queue_position~ : Int)
   Rejected(reason~ : RejectionReason)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AdmissionResult::equal(Self, Self) -> Bool
+pub fn AdmissionResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AdmissionResult::not_equal(Self, Self) -> Bool
+pub fn AdmissionResult::to_json(Self) -> Json
+pub fn AdmissionResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CandidateScore {
   node_id : String
@@ -72,12 +88,22 @@ pub(all) struct CandidateScore {
   reliability : Int
   utilization : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CandidateScore::equal(Self, Self) -> Bool
+pub fn CandidateScore::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CandidateScore::not_equal(Self, Self) -> Bool
+pub fn CandidateScore::to_json(Self) -> Json
+pub fn CandidateScore::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CapacityForecast {
   schedulable_nodes : Int
   total_free_memory_mib : Int
   estimated_additional_instances : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CapacityForecast::equal(Self, Self) -> Bool
+pub fn CapacityForecast::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CapacityForecast::not_equal(Self, Self) -> Bool
+pub fn CapacityForecast::to_json(Self) -> Json
+pub fn CapacityForecast::to_repr(Self) -> @debug.Repr
 
 pub struct FileScheduler {
   persistence : SchedulerPersistence
@@ -117,6 +143,11 @@ pub(all) struct NodeSnapshot {
   reliability_per_mille : Int
   accelerator_utilization_per_mille : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NodeSnapshot::equal(Self, Self) -> Bool
+pub fn NodeSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NodeSnapshot::not_equal(Self, Self) -> Bool
+pub fn NodeSnapshot::to_json(Self) -> Json
+pub fn NodeSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlacementDecision {
   workload_id : String
@@ -126,6 +157,11 @@ pub(all) struct PlacementDecision {
   candidates : Array[CandidateScore]
   rejected : Array[RejectedNode]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PlacementDecision::equal(Self, Self) -> Bool
+pub fn PlacementDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PlacementDecision::not_equal(Self, Self) -> Bool
+pub fn PlacementDecision::to_json(Self) -> Json
+pub fn PlacementDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlacementRequirements {
   workload_id : String
@@ -140,11 +176,21 @@ pub(all) struct PlacementRequirements {
   multi_node : Bool
   topology_profile : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn PlacementRequirements::equal(Self, Self) -> Bool
+pub fn PlacementRequirements::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PlacementRequirements::not_equal(Self, Self) -> Bool
+pub fn PlacementRequirements::to_json(Self) -> Json
+pub fn PlacementRequirements::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RejectedNode {
   node_id : String
   reasons : Array[RejectionReason]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RejectedNode::equal(Self, Self) -> Bool
+pub fn RejectedNode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RejectedNode::not_equal(Self, Self) -> Bool
+pub fn RejectedNode::to_json(Self) -> Json
+pub fn RejectedNode::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RejectionReason {
   NoHealthyNode
@@ -159,6 +205,11 @@ pub(all) enum RejectionReason {
   DeadlineImpossible
   WorkloadAlreadyActive
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RejectionReason::equal(Self, Self) -> Bool
+pub fn RejectionReason::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RejectionReason::not_equal(Self, Self) -> Bool
+pub fn RejectionReason::to_json(Self) -> Json
+pub fn RejectionReason::to_repr(Self) -> @debug.Repr
 
 type SchedulerPersistence
 
@@ -172,6 +223,11 @@ pub(all) struct SchedulerSnapshot {
   queued_count : Int?
   running_count : Int?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn SchedulerSnapshot::equal(Self, Self) -> Bool
+pub fn SchedulerSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SchedulerSnapshot::not_equal(Self, Self) -> Bool
+pub fn SchedulerSnapshot::to_json(Self) -> Json
+pub fn SchedulerSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ScorePolicy {
   version : String
@@ -182,6 +238,11 @@ pub(all) struct ScorePolicy {
   utilization_weight : Int
   validated_topology_profiles : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ScorePolicy::equal(Self, Self) -> Bool
+pub fn ScorePolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ScorePolicy::not_equal(Self, Self) -> Bool
+pub fn ScorePolicy::to_json(Self) -> Json
+pub fn ScorePolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TenantQuota {
   tenant_ref : String
@@ -189,6 +250,11 @@ pub(all) struct TenantQuota {
   max_accelerator_ms : Int64
   window_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TenantQuota::equal(Self, Self) -> Bool
+pub fn TenantQuota::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TenantQuota::not_equal(Self, Self) -> Bool
+pub fn TenantQuota::to_json(Self) -> Json
+pub fn TenantQuota::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TenantUsage {
   tenant_ref : String
@@ -196,6 +262,11 @@ pub(all) struct TenantUsage {
   completed_workloads : Int64
   window_started_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TenantUsage::equal(Self, Self) -> Bool
+pub fn TenantUsage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TenantUsage::not_equal(Self, Self) -> Bool
+pub fn TenantUsage::to_json(Self) -> Json
+pub fn TenantUsage::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

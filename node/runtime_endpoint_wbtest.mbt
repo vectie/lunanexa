@@ -130,7 +130,7 @@ test "endpoint heartbeats authenticate routes without changing the legacy MAC" {
   let key = @utf8.encode("fixture-node-key")
   let material = @utf8.encode("lunanexa.heartbeat-mac.v1|" + legacy.stringify())
   let expected = @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
+    @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()),
   )
   assert_eq(heartbeat_signature(heartbeat, "fixture-node-key"), expected)
   let endpoint = endpoint_fixture()

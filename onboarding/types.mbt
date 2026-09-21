@@ -14,6 +14,18 @@ pub(all) enum AccessOnboardingStep {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend AccessOnboardingStep with Debug::{to_repr}
+
+///|
+pub extend AccessOnboardingStep with Eq::{not_equal, equal}
+
+///|
+pub extend AccessOnboardingStep with ToJson::{to_json}
+
+///|
+pub extend AccessOnboardingStep with FromJson::{from_json}
+
+///|
 pub(all) enum AccessOnboardingStatus {
   Running
   RecoverableFailure
@@ -21,6 +33,18 @@ pub(all) enum AccessOnboardingStatus {
   Completed
   Conflicted
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AccessOnboardingStatus with Debug::{to_repr}
+
+///|
+pub extend AccessOnboardingStatus with Eq::{not_equal, equal}
+
+///|
+pub extend AccessOnboardingStatus with ToJson::{to_json}
+
+///|
+pub extend AccessOnboardingStatus with FromJson::{from_json}
 
 ///|
 pub(all) struct AccessOnboardingIntent {
@@ -44,6 +68,18 @@ pub(all) struct AccessOnboardingIntent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend AccessOnboardingIntent with Debug::{to_repr}
+
+///|
+pub extend AccessOnboardingIntent with Eq::{not_equal, equal}
+
+///|
+pub extend AccessOnboardingIntent with ToJson::{to_json}
+
+///|
+pub extend AccessOnboardingIntent with FromJson::{from_json}
+
+///|
 pub(all) struct AccessOnboardingRecord {
   intent : AccessOnboardingIntent
   step : AccessOnboardingStep
@@ -56,10 +92,34 @@ pub(all) struct AccessOnboardingRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend AccessOnboardingRecord with Debug::{to_repr}
+
+///|
+pub extend AccessOnboardingRecord with Eq::{not_equal, equal}
+
+///|
+pub extend AccessOnboardingRecord with ToJson::{to_json}
+
+///|
+pub extend AccessOnboardingRecord with FromJson::{from_json}
+
+///|
 pub(all) struct AccessOnboardingSnapshot {
   schema_version : String
   operations : Array[AccessOnboardingRecord]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AccessOnboardingSnapshot with Debug::{to_repr}
+
+///|
+pub extend AccessOnboardingSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend AccessOnboardingSnapshot with ToJson::{to_json}
+
+///|
+pub extend AccessOnboardingSnapshot with FromJson::{from_json}
 
 ///|
 pub(all) suberror AccessOnboardingError {
@@ -69,3 +129,9 @@ pub(all) suberror AccessOnboardingError {
   InvalidTransition(String)
   InvalidSnapshot(String)
 } derive(Debug, Eq)
+
+///|
+pub extend AccessOnboardingError with Debug::{to_repr}
+
+///|
+pub extend AccessOnboardingError with Eq::{not_equal, equal}

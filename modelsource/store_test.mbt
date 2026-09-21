@@ -2,7 +2,7 @@
 async test "model import recovery and retry transitions are durable" {
   let directory = @fs.tmpdir(prefix="lunanexa-modelsource-store-")
   let path = "\{directory}/imports.json"
-  let store = FileImportStore::open(path)
+  let store = @modelsource.FileImportStore::open(path)
   let created = store.create(
     { model_id: "OpenBMB/MiniCPM5-1B", revision: "master", },
     "apache-2.0",
@@ -23,7 +23,7 @@ async test "model import recovery and retry transitions are durable" {
     }),
   )
 
-  let recovered = FileImportStore::open(path)
+  let recovered = @modelsource.FileImportStore::open(path)
   guard recovered.get(created.import_id) is Some(after_restart) else {
     fail("expected the import to survive restart")
   }
@@ -63,7 +63,7 @@ async test "model import recovery and retry transitions are durable" {
 async test "cancelled imports can retry without creating a duplicate identity" {
   let directory = @fs.tmpdir(prefix="lunanexa-modelsource-cancel-")
   let path = "\{directory}/imports.json"
-  let store = FileImportStore::open(path)
+  let store = @modelsource.FileImportStore::open(path)
   let first = store.create(
     { model_id: "OpenBMB/MiniCPM5-1B", revision: "master", },
     "apache-2.0",

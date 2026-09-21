@@ -7,10 +7,34 @@ pub(all) enum RecoveryAction {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RecoveryAction with Debug::{to_repr}
+
+///|
+pub extend RecoveryAction with Eq::{not_equal, equal}
+
+///|
+pub extend RecoveryAction with ToJson::{to_json}
+
+///|
+pub extend RecoveryAction with FromJson::{from_json}
+
+///|
 pub(all) struct RecoveryPlan {
   controller_epoch : Int64
   actions : Array[RecoveryAction]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RecoveryPlan with Debug::{to_repr}
+
+///|
+pub extend RecoveryPlan with Eq::{not_equal, equal}
+
+///|
+pub extend RecoveryPlan with ToJson::{to_json}
+
+///|
+pub extend RecoveryPlan with FromJson::{from_json}
 
 ///|
 fn has_id(values : Array[String], expected : String) -> Bool {

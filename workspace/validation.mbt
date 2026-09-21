@@ -12,6 +12,12 @@ pub(all) suberror WorkspaceContractError {
 } derive(Debug, Eq)
 
 ///|
+pub extend WorkspaceContractError with Debug::{to_repr}
+
+///|
+pub extend WorkspaceContractError with Eq::{not_equal, equal}
+
+///|
 pub(all) suberror WorkspaceDirectoryError {
   DuplicateRecord(String)
   RecordNotFound(String)
@@ -21,6 +27,12 @@ pub(all) suberror WorkspaceDirectoryError {
   ConcurrentRequestLimitExceeded(String)
   HourlyRequestLimitExceeded(String)
 } derive(Debug, Eq)
+
+///|
+pub extend WorkspaceDirectoryError with Debug::{to_repr}
+
+///|
+pub extend WorkspaceDirectoryError with Eq::{not_equal, equal}
 
 ///|
 pub fn valid_identifier(value : String, maximum_length? : Int = 256) -> Bool {
