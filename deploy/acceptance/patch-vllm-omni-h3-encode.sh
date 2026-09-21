@@ -94,7 +94,12 @@ PY
     s kubectl -n "$NS" patch deploy "$D" --type=json -p "$PATCH"
   fi
 
-  echo "=== recreating the pod (startup takes ~8 min on this node)"
+  echo "=== recreating the pod (startup takes ~8-11 min on this node)"
+  # The image loads 13 weight shards before it answers /health, which took 11m
+  # on the last measured restart. With the stock progressDeadlineSeconds of 600
+  # every honest restart is reported as a failed rollout, so give it room. This
+  # is a Deployment spec field, not a pod-template field: no extra rollout.
+  s kubectl -n "$NS" patch deploy "$D" --type=merge -p '{"spec":{"progressDeadlineSeconds":1800}}'
   s kubectl -n "$NS" rollout restart deploy "$D"
   s kubectl -n "$NS" rollout status deploy "$D" --timeout="${READY_TIMEOUT}s"
 

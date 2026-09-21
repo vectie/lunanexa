@@ -1479,12 +1479,25 @@ UnexpectedAdmissionError 这些哨兵。`lunanexa-identity` 的 CrashLoopBackOff
 `dra-driver-nvidia-gpu` 的 Init:ImagePullBackOff **没动**——它们是还在反复重试的活故障，
 属于另一条工作线，删 pod 只是重启一次同样的失败。
 
-### 15.7 还没做的
+### 15.7 顺带修的：`progressDeadlineSeconds` 比真实启动时间短
 
-- **20 秒端到端仍未跑通。** 15.3.1 的服务端补丁已装、pod 重建中，但**还没验证过出片**。
+两个 H3 deployment 的 `progressDeadlineSeconds` 都是 **600 秒**，而实测启动（加载 13 个
+权重分片、再起 APIServer）要 **约 11 分钟**。后果是**每一次诚实的重启都会被报成一次失败的
+rollout**：`kubectl rollout status` 直接以 `error: deployment "…" exceeded its progress
+deadline` 退出（本轮 `fl2va` 就是这么报的，而它其实起得好好的——`grep -c asyncio.to_thread`
+返回 3，补丁在位）。
+
+已把两个 deployment 都改成 **1800**。这是 Deployment 的 spec 字段、**不在 pod template 里**，
+所以改它不会触发重新调度，pod 年龄不变（改完仍是 11m、1/1 Running）。
+`patch-vllm-omni-h3-encode.sh` 里也加上了这一步，免得下次重犯。
+
+### 15.8 还没做的
+
+- **20 秒端到端仍未验证。** 三处改动都已装上并逐层核对，但**没有提交过任何真实生成任务**，
+  所以"`asyncio.to_thread` 是否真的止住那个约 70 秒的断开"仍是未验证的。
 - 15.2.3 那个约 70 秒的断开**仍未查清**，15.3.3 只是对冲。
 - 画布进度（15.1 末段）仍不通。
-- `minimaxh3-ref2va` 装了 15.3.1 的编码补丁，但**没有**进度补丁。
+- `minimaxh3-ref2va` 装了编码补丁，但**没有**进度补丁。
 - `UNETLoader` 是否列出两个 minimax diffusion 文件，未复核成功（解析脚本自身报错）。
 - 排障时在 ComfyUI 队列里出现过非本人提交的任务 `b8dd1d07-…` 和 `5db096f3-…`，未追查
   来源；两个都正常完成了，产物分别是 `LunaNexa_00002_.mp4`（406,684 B）和
@@ -1492,7 +1505,10 @@ UnexpectedAdmissionError 这些哨兵。`lunanexa-identity` 的 CrashLoopBackOff
 - 为让 ComfyUI 重扫权重而重启它时，队列里正有任务在跑。时间上错开了、未造成损失，
   但脚本打印了队列却没有据此中止——**重启前的队列检查要写成硬闸**（已在
   `patch-comfyui-video-transport.sh` 和 `patch-vllm-omni-h3-encode.sh` 里实现）。
-- 排障用的两个脚本 `/tmp/sweep.sh`、`/tmp/sweep20fix.sh` 只在管理节点上，没有入库。
+- 排障用的脚本 `/tmp/sweep.sh`、`/tmp/sweep20fix.sh`、`/tmp/waitready.sh` 只在管理节点上，
+  没有入库。
 - 写这些脚本时踩到的另一类坑，记下免得重犯：**`sudo -S` 从 stdin 读密码**，所以
   `s kubectl create ... | s kubectl apply -f -` 永远失败（`error: no objects passed to
-  apply`），必须把清单落临时文件再 `apply -f <file>`。
+  apply`），必须把清单落临时文件再 `apply -f <file>`。还有 **`/tmp/luna_ssh.exp` 有 30 秒
+  硬超时**：任何超过约 25 秒的远端命令都必须 `setsid nohup … &` 再另起读日志，否则会被
+  掐在半路（本轮两次中招）。
