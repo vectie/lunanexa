@@ -1028,6 +1028,50 @@ match lease {
 **这一条我还没动手**：它是约 40 行字面量的结构改动，改完还要按 SOP §5 重建并重滚控制面镜像，
 属于下一轮的一整块工作。先把"为什么会长成这样"和"应该怎么改"记全。
 
+### 2.15 修复上线并验收：管理侧终于显示出真实数据，两侧在账目层对上了
+
+§2.13/§2.14 定位、§上一轮改好源码之后，按 SOP §5 走完控制面的重建与重滚，**在真实页面上验收通过**。
+
+**先看接口形状（决定性）**：
+
+```
+GET /v1/onboarding/access-packages -> 200，2 个包
+   grant_id        = "grant-3b407b45…"    (type=str)   ← 修复前是 ["grant-…"]
+   lease_id        = "lease-3b407b45…"    (type=str)
+   lease_state     = "Active"             (type=str)
+   expires_unix_ms = "1792552691962"      (type=str)
+```
+
+**再看控制台页面**（同一个 `Users & access`，前后对比）：
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| 概要 | `0 users · 0 grants` | **`12 users · 16 grants`** |
+| 试用统计 | `Trial statistics unavailable.` | **`Registered trials 1 / Active trials 1 / Expired 0 / Converted 0`** |
+
+**这就是"两侧对帐"第一次真正对上**：企业侧那次真实 OIDC 首次登录建出来的试用账户，
+在管理侧显示为 `Registered trials: 1 / Active trials: 1`，
+而 workspace 目录里的 12 个用户、16 条授权也如实渲染出来了。
+在此之前，管理侧无论怎么看都是 `0 users · 0 grants` + "统计不可用"。
+
+**这一轮实际做了什么**（全部可复核）：
+
+1. 把同一处修复打到节点源码树（精准补丁，改前备份），
+2. `moon build cmd/control` + `cmd/loopback-proxy`（linux/amd64，0 errors），
+3. 用 `deploy/cluster/build-control-image.py` 原地覆盖 `lunanexa-control:20260918`
+   —— 它**成功找到并替换了二进制层**（`replacing binary layer 1 (42 files)`），
+   这正是被我补上的 `isfile()` 修复在起作用；
+4. 按 SOP ⑤ 确认 digest 变了（`eb82fdc6…` → `8e9c4dda…`）才重滚；
+5. `rollout restart` → `4/4 Running`，然后按上面的两种方式验收。
+
+**顺带说明**：控制面这个 tag 是本地覆盖式的（不像网关要推 registry），
+所以 SOP §2 的"删掉本地再从 registry 拉回"那一步在这里不适用，
+取而代之的是 SOP §5 自己的判据 —— **digest 必须变**，我照做了。
+
+**至此，本次任务真正的堵点清单里，"两侧状态不一致"这一类已经清掉了一条完整的**：
+不是数据没生成，也不是权限不通，而是**生产侧把一个 Option 序列化成数组、消费侧又把解码异常吞成空态**。
+两类问题叠加，才伪装成"管理侧什么都没有"。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
