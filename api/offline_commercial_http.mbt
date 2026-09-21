@@ -241,18 +241,6 @@ pub(all) struct OfflineUploadTransferView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineUploadTransferView with Debug::{to_repr}
-
-///|
-pub extend OfflineUploadTransferView with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineUploadTransferView with ToJson::{to_json}
-
-///|
-pub extend OfflineUploadTransferView with FromJson::{from_json}
-
-///|
 pub(all) struct OfflineArtifactView {
   artifact_id : String
   order_id : String
@@ -267,18 +255,6 @@ pub(all) struct OfflineArtifactView {
   review_state : @offline.ArtifactReviewState
   created_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineArtifactView with Debug::{to_repr}
-
-///|
-pub extend OfflineArtifactView with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineArtifactView with ToJson::{to_json}
-
-///|
-pub extend OfflineArtifactView with FromJson::{from_json}
 
 ///|
 fn @offline.DocumentArtifact::public_view(
@@ -337,7 +313,7 @@ fn offline_transfer_token(
   let material = @utf8.encode(
     "lunanexa.offline-transfer.v1\n\{session_id}\n\{idempotency_key}\n\{subject_ref}",
   )
-  "lnxot_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(secret).exact_view(), material.exact_view()))}"
+  "lnxot_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), @utf8.encode(secret).view(), material.view()))}"
 }
 
 ///|

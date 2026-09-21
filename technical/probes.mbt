@@ -6,18 +6,6 @@ pub(all) enum ProbeKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ProbeKind with Debug::{to_repr}
-
-///|
-pub extend ProbeKind with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeKind with ToJson::{to_json}
-
-///|
-pub extend ProbeKind with FromJson::{from_json}
-
-///|
 pub(all) struct ProbeStagePolicy {
   initial_delay_ms : Int64
   period_ms : Int64
@@ -27,35 +15,11 @@ pub(all) struct ProbeStagePolicy {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ProbeStagePolicy with Debug::{to_repr}
-
-///|
-pub extend ProbeStagePolicy with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeStagePolicy with ToJson::{to_json}
-
-///|
-pub extend ProbeStagePolicy with FromJson::{from_json}
-
-///|
 pub(all) struct ProbePolicy {
   startup : ProbeStagePolicy
   readiness : ProbeStagePolicy
   liveness : ProbeStagePolicy
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ProbePolicy with Debug::{to_repr}
-
-///|
-pub extend ProbePolicy with Eq::{not_equal, equal}
-
-///|
-pub extend ProbePolicy with ToJson::{to_json}
-
-///|
-pub extend ProbePolicy with FromJson::{from_json}
 
 ///|
 pub(all) struct ProbeCounters {
@@ -64,36 +28,12 @@ pub(all) struct ProbeCounters {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ProbeCounters with Debug::{to_repr}
-
-///|
-pub extend ProbeCounters with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeCounters with ToJson::{to_json}
-
-///|
-pub extend ProbeCounters with FromJson::{from_json}
-
-///|
 pub(all) enum RuntimeHealthState {
   Starting
   NotReady
   Ready
   RestartRequired
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RuntimeHealthState with Debug::{to_repr}
-
-///|
-pub extend RuntimeHealthState with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeHealthState with ToJson::{to_json}
-
-///|
-pub extend RuntimeHealthState with FromJson::{from_json}
 
 ///|
 pub(all) struct ProbeState {
@@ -108,35 +48,11 @@ pub(all) struct ProbeState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ProbeState with Debug::{to_repr}
-
-///|
-pub extend ProbeState with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeState with ToJson::{to_json}
-
-///|
-pub extend ProbeState with FromJson::{from_json}
-
-///|
 pub(all) struct ProbeObservation {
   kind : ProbeKind
   success : Bool
   observed_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ProbeObservation with Debug::{to_repr}
-
-///|
-pub extend ProbeObservation with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeObservation with ToJson::{to_json}
-
-///|
-pub extend ProbeObservation with FromJson::{from_json}
 
 ///|
 pub(all) enum ProbeRejection {
@@ -150,34 +66,10 @@ pub(all) enum ProbeRejection {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ProbeRejection with Debug::{to_repr}
-
-///|
-pub extend ProbeRejection with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeRejection with ToJson::{to_json}
-
-///|
-pub extend ProbeRejection with FromJson::{from_json}
-
-///|
 pub(all) enum ProbeDecision {
   Applied(ProbeState)
   Rejected(ProbeRejection)
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ProbeDecision with Debug::{to_repr}
-
-///|
-pub extend ProbeDecision with Eq::{not_equal, equal}
-
-///|
-pub extend ProbeDecision with ToJson::{to_json}
-
-///|
-pub extend ProbeDecision with FromJson::{from_json}
 
 ///|
 fn valid_stage_policy(policy : ProbeStagePolicy) -> Bool {

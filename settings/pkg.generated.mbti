@@ -29,10 +29,6 @@ pub(all) suberror SettingsError {
   UserPreferenceExceedsGlobalPolicy(String)
   InvalidLocalPreference(String)
 } derive(Eq, ToJson, @debug.Debug)
-pub fn SettingsError::equal(Self, Self) -> Bool
-pub fn SettingsError::not_equal(Self, Self) -> Bool
-pub fn SettingsError::to_json(Self) -> Json
-pub fn SettingsError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ControlTimingSettings {
@@ -49,11 +45,6 @@ pub(all) struct ControlTimingSettings {
   lease_receipt_stale_after_ms : Int64
   workspace_reservation_max_lifetime_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ControlTimingSettings::equal(Self, Self) -> Bool
-pub fn ControlTimingSettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ControlTimingSettings::not_equal(Self, Self) -> Bool
-pub fn ControlTimingSettings::to_json(Self) -> Json
-pub fn ControlTimingSettings::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EffectiveUserRequest {
   model_alias : String
@@ -61,11 +52,6 @@ pub(all) struct EffectiveUserRequest {
   max_output_units : Int
   global_generation : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EffectiveUserRequest::equal(Self, Self) -> Bool
-pub fn EffectiveUserRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EffectiveUserRequest::not_equal(Self, Self) -> Bool
-pub fn EffectiveUserRequest::to_json(Self) -> Json
-pub fn EffectiveUserRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct GlobalAdminSettings {
   schema_version : String
@@ -77,22 +63,12 @@ pub(all) struct GlobalAdminSettings {
   node_runtime : NodeRuntimeSettings
   telemetry_safety : TelemetrySafetySettings
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn GlobalAdminSettings::equal(Self, Self) -> Bool
-pub fn GlobalAdminSettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn GlobalAdminSettings::not_equal(Self, Self) -> Bool
-pub fn GlobalAdminSettings::to_json(Self) -> Json
-pub fn GlobalAdminSettings::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NodeRuntimeSettings {
   container_pid_limit : Int
   artifact_io_chunk_bytes : Int
   signature_artifact_maximum_bytes : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NodeRuntimeSettings::equal(Self, Self) -> Bool
-pub fn NodeRuntimeSettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeRuntimeSettings::not_equal(Self, Self) -> Bool
-pub fn NodeRuntimeSettings::to_json(Self) -> Json
-pub fn NodeRuntimeSettings::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PublicSettingsView {
   schema_version : String
@@ -101,11 +77,6 @@ pub(all) struct PublicSettingsView {
   control_timing : ControlTimingSettings
   authorities : Array[SettingDescriptor]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PublicSettingsView::equal(Self, Self) -> Bool
-pub fn PublicSettingsView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PublicSettingsView::not_equal(Self, Self) -> Bool
-pub fn PublicSettingsView::to_json(Self) -> Json
-pub fn PublicSettingsView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RequestBudgetSettings {
   maximum_request_body_bytes : Int
@@ -119,22 +90,12 @@ pub(all) struct RequestBudgetSettings {
   runtime_stream_event_bytes : Int
   runtime_stream_total_bytes : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RequestBudgetSettings::equal(Self, Self) -> Bool
-pub fn RequestBudgetSettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RequestBudgetSettings::not_equal(Self, Self) -> Bool
-pub fn RequestBudgetSettings::to_json(Self) -> Json
-pub fn RequestBudgetSettings::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RetentionSettings {
   scheduler_decision_entries : Int
   telemetry_sample_entries : Int
   benchmark_run_entries : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RetentionSettings::equal(Self, Self) -> Bool
-pub fn RetentionSettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RetentionSettings::not_equal(Self, Self) -> Bool
-pub fn RetentionSettings::to_json(Self) -> Json
-pub fn RetentionSettings::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SchedulerPolicySettings {
   admission_capacity : Int
@@ -148,11 +109,6 @@ pub(all) struct SchedulerPolicySettings {
   reliability_weight : Int
   utilization_weight : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SchedulerPolicySettings::equal(Self, Self) -> Bool
-pub fn SchedulerPolicySettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SchedulerPolicySettings::not_equal(Self, Self) -> Bool
-pub fn SchedulerPolicySettings::to_json(Self) -> Json
-pub fn SchedulerPolicySettings::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SettingAuthority {
   GlobalAdministrator
@@ -160,11 +116,6 @@ pub(all) enum SettingAuthority {
   LocalClient
   FixedSafetyBoundary
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SettingAuthority::equal(Self, Self) -> Bool
-pub fn SettingAuthority::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SettingAuthority::not_equal(Self, Self) -> Bool
-pub fn SettingAuthority::to_json(Self) -> Json
-pub fn SettingAuthority::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SettingDescriptor {
   key : String
@@ -172,11 +123,6 @@ pub(all) struct SettingDescriptor {
   restart_required : Bool
   description : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SettingDescriptor::equal(Self, Self) -> Bool
-pub fn SettingDescriptor::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SettingDescriptor::not_equal(Self, Self) -> Bool
-pub fn SettingDescriptor::to_json(Self) -> Json
-pub fn SettingDescriptor::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TelemetrySafetySettings {
   maximum_sensor_rows : Int
@@ -186,11 +132,6 @@ pub(all) struct TelemetrySafetySettings {
   maximum_temperature_celsius : Double
   maximum_power_watts : Double
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TelemetrySafetySettings::equal(Self, Self) -> Bool
-pub fn TelemetrySafetySettings::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TelemetrySafetySettings::not_equal(Self, Self) -> Bool
-pub fn TelemetrySafetySettings::to_json(Self) -> Json
-pub fn TelemetrySafetySettings::to_repr(Self) -> @debug.Repr
 
 pub(all) struct UserLocalPreferences {
   locale : String
@@ -198,22 +139,12 @@ pub(all) struct UserLocalPreferences {
   output_display_characters : Int
   remember_last_model : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn UserLocalPreferences::equal(Self, Self) -> Bool
-pub fn UserLocalPreferences::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn UserLocalPreferences::not_equal(Self, Self) -> Bool
-pub fn UserLocalPreferences::to_json(Self) -> Json
-pub fn UserLocalPreferences::to_repr(Self) -> @debug.Repr
 
 pub(all) struct UserRequestPreferences {
   model_alias : String
   deadline_ms : Int64
   max_output_units : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn UserRequestPreferences::equal(Self, Self) -> Bool
-pub fn UserRequestPreferences::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn UserRequestPreferences::not_equal(Self, Self) -> Bool
-pub fn UserRequestPreferences::to_json(Self) -> Json
-pub fn UserRequestPreferences::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

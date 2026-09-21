@@ -9,12 +9,6 @@ pub(all) suberror ContractError {
 } derive(Debug, Eq)
 
 ///|
-pub extend ContractError with Debug::{to_repr}
-
-///|
-pub extend ContractError with Eq::{not_equal, equal}
-
-///|
 pub fn valid_identifier(value : String, maximum_length? : Int = 256) -> Bool {
   value != "" &&
   value.length() <= maximum_length &&

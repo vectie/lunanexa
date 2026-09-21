@@ -27,18 +27,6 @@ pub(all) struct ManagementReadiness {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ManagementReadiness with Debug::{to_repr}
-
-///|
-pub extend ManagementReadiness with Eq::{not_equal, equal}
-
-///|
-pub extend ManagementReadiness with ToJson::{to_json}
-
-///|
-pub extend ManagementReadiness with FromJson::{from_json}
-
-///|
 /// A stale success must not mask a newer failed probe.
 fn latest_component_event_healthy(
   events : Array[@observability.OperationalEvent],

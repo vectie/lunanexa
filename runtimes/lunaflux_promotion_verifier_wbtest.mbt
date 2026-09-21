@@ -33,7 +33,7 @@ fn sign_verifier_test_receipt(
 ) -> LunaFluxSignedEvidenceApproval {
   let material = receipt.canonical_signing_bytes(candidate_manifest_digest)
   let signature = @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), secret.exact_view(), material.exact_view()),
+    @crypto.hmac(@crypto.SHA256::new(), secret.view(), material.view()),
   )
   { ..receipt, signature, }
 }
@@ -82,7 +82,7 @@ fn verifier_test_fixture() -> (
 ///|
 test "authenticated LunaFlux verifier admits exactly ten signed subjects" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
-  let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+  let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   let report = verifier.verify(request, receipts)
   assert_true(report.evidence_well_formed)
   assert_true(report.routable)
@@ -104,10 +104,10 @@ test "verifier HMAC matches the approved crypto primitive" {
   let material = @utf8.encode("lunanexa-verifier-hmac-cross-check")
   let expected = @crypto.hmac(
     @crypto.SHA256::new(),
-    secret.exact_view(),
-    material.exact_view(),
+    secret.view(),
+    material.view(),
   )
-  let actual = verifier_hmac_sha256(secret.exact_view().to_fixedarray(), material)
+  let actual = verifier_hmac_sha256(secret.view().to_fixedarray(), material)
   assert_true(fixed_sha256_equal(expected, actual))
   expected.fill(0)
   actual.fill(0)
@@ -127,7 +127,7 @@ test "every signed promotion subject is independently exact" {
     changed[index] = sign_verifier_test_receipt(
       substituted, candidate_digest, secret,
     )
-    let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+    let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
     let report = verifier.verify(request, changed)
     assert_false(report.routable)
     assert_eq(report.authority, None)
@@ -151,7 +151,7 @@ test "receipt policy binds rollout authority and verifier key" {
     changed[0] = sign_verifier_test_receipt(
       substitution, candidate_digest, secret,
     )
-    let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+    let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
     let report = verifier.verify(request, changed)
     assert_false(report.routable)
     assert_true(
@@ -167,7 +167,7 @@ test "missing duplicate and reused signed receipts fail closed" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
   let missing = receipts.copy()
   missing[1] = missing[0]
-  let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+  let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   let missing_report = verifier.verify(request, missing)
   assert_false(missing_report.routable)
   assert_true(
@@ -205,7 +205,7 @@ test "signature candidate and key substitution fail authentication" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
   let bad_signature = receipts.copy()
   bad_signature[0] = { ..bad_signature[0], signature: "f".repeat(64), }
-  let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+  let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   let signature_report = verifier.verify(request, bad_signature)
   assert_false(signature_report.routable)
   assert_true(
@@ -216,7 +216,7 @@ test "signature candidate and key substitution fail authentication" {
   let wrong_secret = @utf8.encode("fedcba9876543210fedcba9876543210")
   let wrong_verifier = LunaFluxPromotionVerifier::new(
     policy,
-    wrong_secret.exact_view(),
+    wrong_secret.view(),
   )
   let key_report = wrong_verifier.verify(request, receipts)
   assert_false(key_report.routable)
@@ -247,7 +247,7 @@ test "signature candidate and key substitution fail authentication" {
 ///|
 test "malformed and unbounded signed receipt sets fail closed" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
-  let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+  let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   let malformed = receipts.copy()
   malformed[0] = { ..malformed[0], signature: "ABCDEF".repeat(10) + "ABCD", }
   let malformed_report = verifier.verify(request, malformed)
@@ -271,7 +271,7 @@ test "verifier policy and secret admission are exact" {
   try
     LunaFluxPromotionVerifier::new(
       { ..policy, schema_version: "future", },
-      secret.exact_view(),
+      secret.view(),
     )
   catch {
     UnsupportedPromotionVerifierPolicySchema => ()
@@ -285,7 +285,7 @@ test "verifier policy and secret admission are exact" {
   } noraise {
     _ => fail("short verifier key was admitted")
   }
-  try LunaFluxPromotionVerifier::new(policy, Bytes::make(32, 0).exact_view()) catch {
+  try LunaFluxPromotionVerifier::new(policy, Bytes::make(32, 0).view()) catch {
     InvalidPromotionVerifierSecret => ()
     _ => fail("zero verifier key returned the wrong error")
   } noraise {
@@ -296,7 +296,7 @@ test "verifier policy and secret admission are exact" {
   try
     LunaFluxPromotionVerifier::new(
       { ..policy, authorities: missing, },
-      secret.exact_view(),
+      secret.view(),
     )
   catch {
     InvalidPromotionVerifierAuthorityCount(9) => ()
@@ -309,7 +309,7 @@ test "verifier policy and secret admission are exact" {
 ///|
 test "closing promotion verifier wipes key authority and is idempotent" {
   let (request, policy, secret, receipts) = verifier_test_fixture()
-  let verifier = LunaFluxPromotionVerifier::new(policy, secret.exact_view())
+  let verifier = LunaFluxPromotionVerifier::new(policy, secret.view())
   assert_true(verifier.key_bytes.any(byte => byte != 0))
   verifier.close()
   verifier.close()

@@ -8,18 +8,6 @@ pub(all) struct TrialSummary {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend TrialSummary with Debug::{to_repr}
-
-///|
-pub extend TrialSummary with Eq::{not_equal, equal}
-
-///|
-pub extend TrialSummary with ToJson::{to_json}
-
-///|
-pub extend TrialSummary with FromJson::{from_json}
-
-///|
 pub(all) struct AnnouncementDraft {
   announcement_id : String
   tenant_ref : String
@@ -27,12 +15,6 @@ pub(all) struct AnnouncementDraft {
   body : String
   expires_unix_ms : String
 } derive(Debug, Eq)
-
-///|
-pub extend AnnouncementDraft with Debug::{to_repr}
-
-///|
-pub extend AnnouncementDraft with Eq::{not_equal, equal}
 
 ///|
 pub fn empty_announcement_draft() -> AnnouncementDraft {

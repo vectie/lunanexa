@@ -8,18 +8,6 @@ pub(all) struct AdmissionLimits {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend AdmissionLimits with Debug::{to_repr}
-
-///|
-pub extend AdmissionLimits with Eq::{not_equal, equal}
-
-///|
-pub extend AdmissionLimits with ToJson::{to_json}
-
-///|
-pub extend AdmissionLimits with FromJson::{from_json}
-
-///|
 pub(all) struct AdmissionSnapshot {
   running : Int
   queued : Int
@@ -30,18 +18,6 @@ pub(all) struct AdmissionSnapshot {
   now_unix_ms : Int64
   lease_valid : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend AdmissionSnapshot with Debug::{to_repr}
-
-///|
-pub extend AdmissionSnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend AdmissionSnapshot with ToJson::{to_json}
-
-///|
-pub extend AdmissionSnapshot with FromJson::{from_json}
 
 ///|
 pub(all) enum AdmissionRejection {
@@ -57,35 +33,11 @@ pub(all) enum AdmissionRejection {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend AdmissionRejection with Debug::{to_repr}
-
-///|
-pub extend AdmissionRejection with Eq::{not_equal, equal}
-
-///|
-pub extend AdmissionRejection with ToJson::{to_json}
-
-///|
-pub extend AdmissionRejection with FromJson::{from_json}
-
-///|
 pub(all) enum BackpressureDecision {
   StartImmediately
   Queue(position~ : Int)
   Reject(reason~ : AdmissionRejection, retryable~ : Bool)
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend BackpressureDecision with Debug::{to_repr}
-
-///|
-pub extend BackpressureDecision with Eq::{not_equal, equal}
-
-///|
-pub extend BackpressureDecision with ToJson::{to_json}
-
-///|
-pub extend BackpressureDecision with FromJson::{from_json}
 
 ///|
 pub fn decide_admission(

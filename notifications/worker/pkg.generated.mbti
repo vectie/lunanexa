@@ -14,9 +14,6 @@ import {
 pub(all) suberror DeliveryWorkerError {
   InvalidConfiguration(String)
 } derive(Eq, @debug.Debug)
-pub fn DeliveryWorkerError::equal(Self, Self) -> Bool
-pub fn DeliveryWorkerError::not_equal(Self, Self) -> Bool
-pub fn DeliveryWorkerError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 type DeliveryAdapterConfig

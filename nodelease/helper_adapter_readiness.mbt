@@ -21,18 +21,6 @@ pub(all) struct MachineHelperAdapterReadinessEvidence {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend MachineHelperAdapterReadinessEvidence with Debug::{to_repr}
-
-///|
-pub extend MachineHelperAdapterReadinessEvidence with Eq::{not_equal, equal}
-
-///|
-pub extend MachineHelperAdapterReadinessEvidence with ToJson::{to_json}
-
-///|
-pub extend MachineHelperAdapterReadinessEvidence with FromJson::{from_json}
-
-///|
 pub fn machine_helper_adapter_evidence_ready(
   evidence : MachineHelperAdapterReadinessEvidence,
   now_unix_ms : Int64,
@@ -85,8 +73,8 @@ pub fn machine_helper_adapter_signature(
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).exact_view(),
-      @utf8.encode(machine_helper_adapter_material(evidence)).exact_view(),
+      @utf8.encode(secret).view(),
+      @utf8.encode(machine_helper_adapter_material(evidence)).view(),
     ),
   )
 }

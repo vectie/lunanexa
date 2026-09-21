@@ -28,9 +28,6 @@ pub(all) suberror DeploymentError {
   IdempotencyConflict(String)
   NotFound(String)
 } derive(Eq, @debug.Debug)
-pub fn DeploymentError::equal(Self, Self) -> Bool
-pub fn DeploymentError::not_equal(Self, Self) -> Bool
-pub fn DeploymentError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct DeploymentOperation {
@@ -46,11 +43,6 @@ pub(all) struct DeploymentOperation {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DeploymentOperation::equal(Self, Self) -> Bool
-pub fn DeploymentOperation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DeploymentOperation::not_equal(Self, Self) -> Bool
-pub fn DeploymentOperation::to_json(Self) -> Json
-pub fn DeploymentOperation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeploymentOperationState {
   Submitted
@@ -64,11 +56,6 @@ pub(all) enum DeploymentOperationState {
   Failed
   Deleted
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DeploymentOperationState::equal(Self, Self) -> Bool
-pub fn DeploymentOperationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DeploymentOperationState::not_equal(Self, Self) -> Bool
-pub fn DeploymentOperationState::to_json(Self) -> Json
-pub fn DeploymentOperationState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeploymentPlan {
   plan_id : String
@@ -79,11 +66,6 @@ pub(all) struct DeploymentPlan {
   executable : Bool
   endpoint : ServiceEndpoint?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DeploymentPlan::equal(Self, Self) -> Bool
-pub fn DeploymentPlan::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DeploymentPlan::not_equal(Self, Self) -> Bool
-pub fn DeploymentPlan::to_json(Self) -> Json
-pub fn DeploymentPlan::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeploymentSnapshot {
   schema_version : String
@@ -91,11 +73,6 @@ pub(all) struct DeploymentSnapshot {
   operations : Array[DeploymentOperation]
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn DeploymentSnapshot::equal(Self, Self) -> Bool
-pub fn DeploymentSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn DeploymentSnapshot::not_equal(Self, Self) -> Bool
-pub fn DeploymentSnapshot::to_json(Self) -> Json
-pub fn DeploymentSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum FindingCode {
   InvalidIntent
@@ -117,22 +94,12 @@ pub(all) enum FindingCode {
   RuntimeCannotPair
   NoCx7Pair
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn FindingCode::equal(Self, Self) -> Bool
-pub fn FindingCode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn FindingCode::not_equal(Self, Self) -> Bool
-pub fn FindingCode::to_json(Self) -> Json
-pub fn FindingCode::to_repr(Self) -> @debug.Repr
 
 pub(all) enum FindingSeverity {
   Blocking
   Warning
   Information
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn FindingSeverity::equal(Self, Self) -> Bool
-pub fn FindingSeverity::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn FindingSeverity::not_equal(Self, Self) -> Bool
-pub fn FindingSeverity::to_json(Self) -> Json
-pub fn FindingSeverity::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ManagementNode {
   node_id : String
@@ -145,11 +112,6 @@ pub(all) struct ManagementNode {
   cx7_peer : String
   cx7_address : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ManagementNode::equal(Self, Self) -> Bool
-pub fn ManagementNode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ManagementNode::not_equal(Self, Self) -> Bool
-pub fn ManagementNode::to_json(Self) -> Json
-pub fn ManagementNode::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelServiceIntent {
   version : String
@@ -162,11 +124,6 @@ pub(all) struct ModelServiceIntent {
   promote_when_ready : Bool
   topology_profile : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelServiceIntent::equal(Self, Self) -> Bool
-pub fn ModelServiceIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelServiceIntent::not_equal(Self, Self) -> Bool
-pub fn ModelServiceIntent::to_json(Self) -> Json
-pub fn ModelServiceIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelServiceTemplate {
   template_id : String
@@ -189,11 +146,6 @@ pub(all) struct ModelServiceTemplate {
   approval_receipt : String
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ModelServiceTemplate::equal(Self, Self) -> Bool
-pub fn ModelServiceTemplate::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ModelServiceTemplate::not_equal(Self, Self) -> Bool
-pub fn ModelServiceTemplate::to_json(Self) -> Json
-pub fn ModelServiceTemplate::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlannedReplica {
   replica_id : String
@@ -201,33 +153,18 @@ pub(all) struct PlannedReplica {
   devices : Array[String]
   group : @contracts.AssignmentGroup?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PlannedReplica::equal(Self, Self) -> Bool
-pub fn PlannedReplica::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PlannedReplica::not_equal(Self, Self) -> Bool
-pub fn PlannedReplica::to_json(Self) -> Json
-pub fn PlannedReplica::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlanningContext {
   registry : Array[RegistryEvidence]
   nodes : Array[ManagementNode]
   available_secret_refs : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PlanningContext::equal(Self, Self) -> Bool
-pub fn PlanningContext::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PlanningContext::not_equal(Self, Self) -> Bool
-pub fn PlanningContext::to_json(Self) -> Json
-pub fn PlanningContext::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PreflightFinding {
   code : FindingCode
   severity : FindingSeverity
   message : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PreflightFinding::equal(Self, Self) -> Bool
-pub fn PreflightFinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PreflightFinding::not_equal(Self, Self) -> Bool
-pub fn PreflightFinding::to_json(Self) -> Json
-pub fn PreflightFinding::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RegistryEvidence {
   model_id : String
@@ -244,11 +181,6 @@ pub(all) struct RegistryEvidence {
   evaluation_passed : Bool
   alias_points_to_model : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RegistryEvidence::equal(Self, Self) -> Bool
-pub fn RegistryEvidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RegistryEvidence::not_equal(Self, Self) -> Bool
-pub fn RegistryEvidence::to_json(Self) -> Json
-pub fn RegistryEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RolloutPolicy {
   canary_replicas : Int
@@ -256,31 +188,16 @@ pub(all) struct RolloutPolicy {
   automatic_rollback : Bool
   readiness_timeout_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RolloutPolicy::equal(Self, Self) -> Bool
-pub fn RolloutPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RolloutPolicy::not_equal(Self, Self) -> Bool
-pub fn RolloutPolicy::to_json(Self) -> Json
-pub fn RolloutPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ServiceEndpoint {
   canonical_path : String
   model_selector : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ServiceEndpoint::equal(Self, Self) -> Bool
-pub fn ServiceEndpoint::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ServiceEndpoint::not_equal(Self, Self) -> Bool
-pub fn ServiceEndpoint::to_json(Self) -> Json
-pub fn ServiceEndpoint::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TemplateRef {
   template_id : String
   version : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TemplateRef::equal(Self, Self) -> Bool
-pub fn TemplateRef::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TemplateRef::not_equal(Self, Self) -> Bool
-pub fn TemplateRef::to_json(Self) -> Json
-pub fn TemplateRef::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

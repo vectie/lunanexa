@@ -7,12 +7,6 @@ pub(all) struct DraftFile {
 } derive(Debug, Eq)
 
 ///|
-pub extend DraftFile with Debug::{to_repr}
-
-///|
-pub extend DraftFile with Eq::{not_equal, equal}
-
-///|
 pub(all) struct UsageSummary {
   requests_used : Int
   requests_limit : Int
@@ -22,23 +16,11 @@ pub(all) struct UsageSummary {
 } derive(Debug, Eq)
 
 ///|
-pub extend UsageSummary with Debug::{to_repr}
-
-///|
-pub extend UsageSummary with Eq::{not_equal, equal}
-
-///|
 pub(all) struct IntegrationSummary {
   provider : @workspace.IntegrationProvider
   state : @workspace.ConnectionState
   description : String
 } derive(Debug, Eq)
-
-///|
-pub extend IntegrationSummary with Debug::{to_repr}
-
-///|
-pub extend IntegrationSummary with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct WorkbenchState {
@@ -62,9 +44,6 @@ pub(all) struct WorkbenchState {
 } derive(Eq)
 
 ///|
-pub extend WorkbenchState with Eq::{not_equal, equal}
-
-///|
 pub(all) enum WorkbenchMessage {
   LocaleChanged(@i18n.Locale)
   SelectFile(String)
@@ -78,9 +57,6 @@ pub(all) enum WorkbenchMessage {
   ExportDrafts
   CopyDiagnostic(String)
 } derive(Eq)
-
-///|
-pub extend WorkbenchMessage with Eq::{not_equal, equal}
 
 ///|
 fn integration_description(

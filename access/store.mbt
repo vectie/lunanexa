@@ -219,7 +219,7 @@ fn AccessStore::issue_secret(
   let material = @utf8.encode(
     "lunanexa.api-key.v2|\{intent.key_id}|\{intent.tenant_ref}|\{intent.subject_ref}|\{intent.organization_id}|\{intent.project_id}|\{now_unix_ms}",
   )
-  "lnx_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()))}"
+  "lnx_\{@crypto.bytes_to_hex_string(@crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()))}"
 }
 
 ///|

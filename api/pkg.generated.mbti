@@ -42,9 +42,6 @@ pub(all) suberror StreamError {
   Backpressure
   StreamClosed
 } derive(Eq, @debug.Debug)
-pub fn StreamError::equal(Self, Self) -> Bool
-pub fn StreamError::not_equal(Self, Self) -> Bool
-pub fn StreamError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) enum ApiMethod {
@@ -53,9 +50,6 @@ pub(all) enum ApiMethod {
   Put
   Delete
 } derive(Eq, @debug.Debug)
-pub fn ApiMethod::equal(Self, Self) -> Bool
-pub fn ApiMethod::not_equal(Self, Self) -> Bool
-pub fn ApiMethod::to_repr(Self) -> @debug.Repr
 
 pub struct ApiService {
   media : MediaService?
@@ -223,20 +217,12 @@ pub(all) struct CancellationReceipt {
   accepted : Bool
   receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CancellationReceipt::equal(Self, Self) -> Bool
-pub fn CancellationReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CancellationReceipt::not_equal(Self, Self) -> Bool
-pub fn CancellationReceipt::to_json(Self) -> Json
-pub fn CancellationReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct HttpReply {
   status : Int
   body : String
   content_type : String
 } derive(Eq, @debug.Debug)
-pub fn HttpReply::equal(Self, Self) -> Bool
-pub fn HttpReply::not_equal(Self, Self) -> Bool
-pub fn HttpReply::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ManagementReadiness {
   version : String
@@ -257,11 +243,6 @@ pub(all) struct ManagementReadiness {
   guide_diagnostics_configured : Bool
   exclusive_lease_expiry_reconciler_healthy : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ManagementReadiness::equal(Self, Self) -> Bool
-pub fn ManagementReadiness::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ManagementReadiness::not_equal(Self, Self) -> Bool
-pub fn ManagementReadiness::to_json(Self) -> Json
-pub fn ManagementReadiness::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MediaBinding {
   deployment_id : String
@@ -272,7 +253,6 @@ pub(all) struct MediaBinding {
   profile : @provider.Profile
   instance_id : String?
 } derive(@json.FromJson)
-pub fn MediaBinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 pub struct MediaService {
   jobs : @jobs.JobStore
@@ -290,7 +270,6 @@ pub(all) struct MediaTemplateBinding {
   profile : @provider.Profile
   runtime_route : @contracts.RuntimeRoutePolicy?
 } derive(@json.FromJson)
-pub fn MediaTemplateBinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 pub(all) struct OfflineArtifactView {
   artifact_id : String
@@ -306,21 +285,11 @@ pub(all) struct OfflineArtifactView {
   review_state : @offline.ArtifactReviewState
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OfflineArtifactView::equal(Self, Self) -> Bool
-pub fn OfflineArtifactView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OfflineArtifactView::not_equal(Self, Self) -> Bool
-pub fn OfflineArtifactView::to_json(Self) -> Json
-pub fn OfflineArtifactView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineUploadTransferView {
   evidence : @offline.OfflineUploadGrantView
   transfer : @offline.OfflineTransferGrant
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn OfflineUploadTransferView::equal(Self, Self) -> Bool
-pub fn OfflineUploadTransferView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn OfflineUploadTransferView::not_equal(Self, Self) -> Bool
-pub fn OfflineUploadTransferView::to_json(Self) -> Json
-pub fn OfflineUploadTransferView::to_repr(Self) -> @debug.Repr
 
 pub(all) enum StreamEvent {
   Opened
@@ -330,11 +299,6 @@ pub(all) enum StreamEvent {
   Failed(@contracts.PublicError)
   Cancelled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn StreamEvent::equal(Self, Self) -> Bool
-pub fn StreamEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn StreamEvent::not_equal(Self, Self) -> Bool
-pub fn StreamEvent::to_json(Self) -> Json
-pub fn StreamEvent::to_repr(Self) -> @debug.Repr
 
 pub struct StreamSession {
   workload_id : String

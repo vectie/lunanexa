@@ -18,18 +18,6 @@ pub(all) struct LunaFluxCandidateManifest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxCandidateManifest with Debug::{to_repr}
-
-///|
-pub extend LunaFluxCandidateManifest with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxCandidateManifest with ToJson::{to_json}
-
-///|
-pub extend LunaFluxCandidateManifest with FromJson::{from_json}
-
-///|
 /// Stable, payload-free reasons why a LunaFlux candidate cannot be promoted.
 pub(all) enum LunaFluxCandidateBlocker {
   UnsupportedCandidateSchema
@@ -58,18 +46,6 @@ pub(all) enum LunaFluxCandidateBlocker {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxCandidateBlocker with Debug::{to_repr}
-
-///|
-pub extend LunaFluxCandidateBlocker with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxCandidateBlocker with ToJson::{to_json}
-
-///|
-pub extend LunaFluxCandidateBlocker with FromJson::{from_json}
-
-///|
 /// A candidate report is intentionally not an adapter admission. Even a
 /// syntactically valid candidate remains unroutable while the promoted runtime
 /// contract and its external evidence are absent.
@@ -78,18 +54,6 @@ pub(all) struct LunaFluxCandidateReport {
   routable : Bool
   blockers : Array[LunaFluxCandidateBlocker]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LunaFluxCandidateReport with Debug::{to_repr}
-
-///|
-pub extend LunaFluxCandidateReport with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxCandidateReport with ToJson::{to_json}
-
-///|
-pub extend LunaFluxCandidateReport with FromJson::{from_json}
 
 ///|
 fn unique_architectures(values : Array[String]) -> Bool {

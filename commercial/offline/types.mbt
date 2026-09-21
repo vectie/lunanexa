@@ -20,12 +20,6 @@ pub(all) suberror OfflineCommerceError {
 } derive(Debug, Eq)
 
 ///|
-pub extend OfflineCommerceError with Debug::{to_repr}
-
-///|
-pub extend OfflineCommerceError with Eq::{not_equal, equal}
-
-///|
 pub(all) enum OfflineOrderState {
   Draft
   Quoted
@@ -45,34 +39,10 @@ pub(all) enum OfflineOrderState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineOrderState with Debug::{to_repr}
-
-///|
-pub extend OfflineOrderState with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineOrderState with ToJson::{to_json}
-
-///|
-pub extend OfflineOrderState with FromJson::{from_json}
-
-///|
 pub(all) enum OfflineCommerceReadinessStatus {
   OfflineCommerceAdaptersPending
   OfflineCommerceReady
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineCommerceReadinessStatus with Debug::{to_repr}
-
-///|
-pub extend OfflineCommerceReadinessStatus with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineCommerceReadinessStatus with ToJson::{to_json}
-
-///|
-pub extend OfflineCommerceReadinessStatus with FromJson::{from_json}
 
 ///|
 pub(all) enum OfflineCommerceCapability {
@@ -89,36 +59,12 @@ pub(all) enum OfflineCommerceCapability {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineCommerceCapability with Debug::{to_repr}
-
-///|
-pub extend OfflineCommerceCapability with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineCommerceCapability with ToJson::{to_json}
-
-///|
-pub extend OfflineCommerceCapability with FromJson::{from_json}
-
-///|
 pub(all) struct OfflineCommerceCapabilityEvidence {
   capability : OfflineCommerceCapability
   configured : Bool
   verified : Bool
   evidence_ref : String?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineCommerceCapabilityEvidence with Debug::{to_repr}
-
-///|
-pub extend OfflineCommerceCapabilityEvidence with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineCommerceCapabilityEvidence with ToJson::{to_json}
-
-///|
-pub extend OfflineCommerceCapabilityEvidence with FromJson::{from_json}
 
 ///|
 pub(all) struct OfflineCommerceReadiness {
@@ -129,18 +75,6 @@ pub(all) struct OfflineCommerceReadiness {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineCommerceReadiness with Debug::{to_repr}
-
-///|
-pub extend OfflineCommerceReadiness with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineCommerceReadiness with ToJson::{to_json}
-
-///|
-pub extend OfflineCommerceReadiness with FromJson::{from_json}
-
-///|
 pub(all) enum EntitlementKind {
   CapacityCommitment
   WorkspaceLease
@@ -148,35 +82,11 @@ pub(all) enum EntitlementKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend EntitlementKind with Debug::{to_repr}
-
-///|
-pub extend EntitlementKind with Eq::{not_equal, equal}
-
-///|
-pub extend EntitlementKind with ToJson::{to_json}
-
-///|
-pub extend EntitlementKind with FromJson::{from_json}
-
-///|
 pub(all) enum EntitlementActivationState {
   EntitlementActivationRequested
   EntitlementActivationConfirmed
   EntitlementActivationRejected
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend EntitlementActivationState with Debug::{to_repr}
-
-///|
-pub extend EntitlementActivationState with Eq::{not_equal, equal}
-
-///|
-pub extend EntitlementActivationState with ToJson::{to_json}
-
-///|
-pub extend EntitlementActivationState with FromJson::{from_json}
 
 ///|
 pub(all) struct EntitlementActivation {
@@ -198,18 +108,6 @@ pub(all) struct EntitlementActivation {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend EntitlementActivation with Debug::{to_repr}
-
-///|
-pub extend EntitlementActivation with Eq::{not_equal, equal}
-
-///|
-pub extend EntitlementActivation with ToJson::{to_json}
-
-///|
-pub extend EntitlementActivation with FromJson::{from_json}
-
-///|
 pub(all) enum CommercialReversalReason {
   CustomerCancellation
   ContractExpired
@@ -220,35 +118,11 @@ pub(all) enum CommercialReversalReason {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CommercialReversalReason with Debug::{to_repr}
-
-///|
-pub extend CommercialReversalReason with Eq::{not_equal, equal}
-
-///|
-pub extend CommercialReversalReason with ToJson::{to_json}
-
-///|
-pub extend CommercialReversalReason with FromJson::{from_json}
-
-///|
 pub(all) enum CommercialReversalState {
   ReversalRequested
   ReversalConfirmed
   ReversalFailed
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend CommercialReversalState with Debug::{to_repr}
-
-///|
-pub extend CommercialReversalState with Eq::{not_equal, equal}
-
-///|
-pub extend CommercialReversalState with ToJson::{to_json}
-
-///|
-pub extend CommercialReversalState with FromJson::{from_json}
 
 ///|
 pub(all) struct CommercialReversal {
@@ -268,36 +142,12 @@ pub(all) struct CommercialReversal {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CommercialReversal with Debug::{to_repr}
-
-///|
-pub extend CommercialReversal with Eq::{not_equal, equal}
-
-///|
-pub extend CommercialReversal with ToJson::{to_json}
-
-///|
-pub extend CommercialReversal with FromJson::{from_json}
-
-///|
 /// Operator decision after an authenticated entitlement authority failure.
 pub(all) enum ReversalRecoveryDecision {
   RetryReversal
   ConfirmRevoked
   ConfirmStillActive
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ReversalRecoveryDecision with Debug::{to_repr}
-
-///|
-pub extend ReversalRecoveryDecision with Eq::{not_equal, equal}
-
-///|
-pub extend ReversalRecoveryDecision with ToJson::{to_json}
-
-///|
-pub extend ReversalRecoveryDecision with FromJson::{from_json}
 
 ///|
 /// Durable, generation-fenced evidence for resolving manual intervention.
@@ -316,18 +166,6 @@ pub(all) struct ReversalRecovery {
   recovered_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
-///|
-pub extend ReversalRecovery with Debug::{to_repr}
-
-///|
-pub extend ReversalRecovery with Eq::{not_equal, equal}
-
-///|
-pub extend ReversalRecovery with ToJson::{to_json}
-
-///|
-pub extend ReversalRecovery with FromJson::{from_json}
-
 ///| Provider-neutral, browser-safe byte-transfer authority. The token is
 
 ///| opaque and one-time; object-store routing and provider credentials remain
@@ -340,35 +178,11 @@ pub(all) enum OfflineTransferDirection {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineTransferDirection with Debug::{to_repr}
-
-///|
-pub extend OfflineTransferDirection with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineTransferDirection with ToJson::{to_json}
-
-///|
-pub extend OfflineTransferDirection with FromJson::{from_json}
-
-///|
 pub(all) enum OfflineTransferState {
   TransferIssued
   TransferConsumed
   TransferExpired
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineTransferState with Debug::{to_repr}
-
-///|
-pub extend OfflineTransferState with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineTransferState with ToJson::{to_json}
-
-///|
-pub extend OfflineTransferState with FromJson::{from_json}
 
 ///|
 pub(all) struct OfflineTransferSession {
@@ -389,18 +203,6 @@ pub(all) struct OfflineTransferSession {
   consumed_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
 
-///|
-pub extend OfflineTransferSession with Debug::{to_repr}
-
-///|
-pub extend OfflineTransferSession with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineTransferSession with ToJson::{to_json}
-
-///|
-pub extend OfflineTransferSession with FromJson::{from_json}
-
 ///| Only this projection may cross into a browser. It exposes a same-origin
 
 ///|
@@ -416,18 +218,6 @@ pub(all) struct OfflineTransferGrant {
   expires_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
-///|
-pub extend OfflineTransferGrant with Debug::{to_repr}
-
-///|
-pub extend OfflineTransferGrant with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineTransferGrant with ToJson::{to_json}
-
-///|
-pub extend OfflineTransferGrant with FromJson::{from_json}
-
 ///| Provider-neutral, byte-bound completion evidence. The raw one-time token
 
 ///|
@@ -442,35 +232,11 @@ pub(all) struct OfflineTransferEvidence {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineTransferEvidence with Debug::{to_repr}
-
-///|
-pub extend OfflineTransferEvidence with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineTransferEvidence with ToJson::{to_json}
-
-///|
-pub extend OfflineTransferEvidence with FromJson::{from_json}
-
-///|
 pub(all) enum InvoiceTiming {
   InvoiceBeforeFulfillment
   InvoiceAfterFulfillment
   InvoiceNotRequired
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend InvoiceTiming with Debug::{to_repr}
-
-///|
-pub extend InvoiceTiming with Eq::{not_equal, equal}
-
-///|
-pub extend InvoiceTiming with ToJson::{to_json}
-
-///|
-pub extend InvoiceTiming with FromJson::{from_json}
 
 ///|
 pub(all) struct FulfillmentPolicy {
@@ -482,18 +248,6 @@ pub(all) struct FulfillmentPolicy {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend FulfillmentPolicy with Debug::{to_repr}
-
-///|
-pub extend FulfillmentPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend FulfillmentPolicy with ToJson::{to_json}
-
-///|
-pub extend FulfillmentPolicy with FromJson::{from_json}
-
-///|
 pub(all) struct QuoteLine {
   line_id : String
   description : String
@@ -502,18 +256,6 @@ pub(all) struct QuoteLine {
   unit_price : @commercial.FixedMoney
   line_total : @commercial.FixedMoney
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend QuoteLine with Debug::{to_repr}
-
-///|
-pub extend QuoteLine with Eq::{not_equal, equal}
-
-///|
-pub extend QuoteLine with ToJson::{to_json}
-
-///|
-pub extend QuoteLine with FromJson::{from_json}
 
 ///|
 pub(all) struct ImmutableQuote {
@@ -532,34 +274,10 @@ pub(all) struct ImmutableQuote {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ImmutableQuote with Debug::{to_repr}
-
-///|
-pub extend ImmutableQuote with Eq::{not_equal, equal}
-
-///|
-pub extend ImmutableQuote with ToJson::{to_json}
-
-///|
-pub extend ImmutableQuote with FromJson::{from_json}
-
-///|
 pub(all) enum DocumentTemplateKind {
   ContractTemplate
   QuoteScheduleTemplate
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend DocumentTemplateKind with Debug::{to_repr}
-
-///|
-pub extend DocumentTemplateKind with Eq::{not_equal, equal}
-
-///|
-pub extend DocumentTemplateKind with ToJson::{to_json}
-
-///|
-pub extend DocumentTemplateKind with FromJson::{from_json}
 
 ///|
 pub(all) struct DocumentTemplate {
@@ -577,18 +295,6 @@ pub(all) struct DocumentTemplate {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DocumentTemplate with Debug::{to_repr}
-
-///|
-pub extend DocumentTemplate with Eq::{not_equal, equal}
-
-///|
-pub extend DocumentTemplate with ToJson::{to_json}
-
-///|
-pub extend DocumentTemplate with FromJson::{from_json}
-
-///|
 pub(all) enum DocumentArtifactKind {
   EditableContractDocx
   QuoteScheduleXlsx
@@ -601,36 +307,12 @@ pub(all) enum DocumentArtifactKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DocumentArtifactKind with Debug::{to_repr}
-
-///|
-pub extend DocumentArtifactKind with Eq::{not_equal, equal}
-
-///|
-pub extend DocumentArtifactKind with ToJson::{to_json}
-
-///|
-pub extend DocumentArtifactKind with FromJson::{from_json}
-
-///|
 pub(all) enum ArtifactGenerationState {
   GenerationRequested
   ArtifactGenerated
   GenerationFailed
   UserUploaded
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ArtifactGenerationState with Debug::{to_repr}
-
-///|
-pub extend ArtifactGenerationState with Eq::{not_equal, equal}
-
-///|
-pub extend ArtifactGenerationState with ToJson::{to_json}
-
-///|
-pub extend ArtifactGenerationState with FromJson::{from_json}
 
 ///|
 pub(all) enum ArtifactScanState {
@@ -640,36 +322,12 @@ pub(all) enum ArtifactScanState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ArtifactScanState with Debug::{to_repr}
-
-///|
-pub extend ArtifactScanState with Eq::{not_equal, equal}
-
-///|
-pub extend ArtifactScanState with ToJson::{to_json}
-
-///|
-pub extend ArtifactScanState with FromJson::{from_json}
-
-///|
 pub(all) enum ArtifactReviewState {
   ReviewNotRequired
   AwaitingReview
   ReviewAccepted
   ReviewRejected
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ArtifactReviewState with Debug::{to_repr}
-
-///|
-pub extend ArtifactReviewState with Eq::{not_equal, equal}
-
-///|
-pub extend ArtifactReviewState with ToJson::{to_json}
-
-///|
-pub extend ArtifactReviewState with FromJson::{from_json}
 
 ///|
 pub(all) struct DocumentArtifact {
@@ -694,18 +352,6 @@ pub(all) struct DocumentArtifact {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DocumentArtifact with Debug::{to_repr}
-
-///|
-pub extend DocumentArtifact with Eq::{not_equal, equal}
-
-///|
-pub extend DocumentArtifact with ToJson::{to_json}
-
-///|
-pub extend DocumentArtifact with FromJson::{from_json}
-
-///|
 pub(all) struct ArtifactGenerationRequest {
   request_id : String
   order_id : String
@@ -722,34 +368,10 @@ pub(all) struct ArtifactGenerationRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ArtifactGenerationRequest with Debug::{to_repr}
-
-///|
-pub extend ArtifactGenerationRequest with Eq::{not_equal, equal}
-
-///|
-pub extend ArtifactGenerationRequest with ToJson::{to_json}
-
-///|
-pub extend ArtifactGenerationRequest with FromJson::{from_json}
-
-///|
 pub(all) enum OfflineWorkerKind {
   ArtifactDispatcher
   EntitlementDispatcher
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineWorkerKind with Debug::{to_repr}
-
-///|
-pub extend OfflineWorkerKind with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineWorkerKind with ToJson::{to_json}
-
-///|
-pub extend OfflineWorkerKind with FromJson::{from_json}
 
 ///| A durable, retry-bounded claim. Re-polling before `retry_after_unix_ms`
 
@@ -765,18 +387,6 @@ pub(all) struct OfflineWorkClaim {
   completed_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
 
-///|
-pub extend OfflineWorkClaim with Debug::{to_repr}
-
-///|
-pub extend OfflineWorkClaim with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineWorkClaim with ToJson::{to_json}
-
-///|
-pub extend OfflineWorkClaim with FromJson::{from_json}
-
 ///| Durable worker evidence used by production readiness. Configuration flags
 
 ///|
@@ -790,18 +400,6 @@ pub(all) struct OfflineWorkerHealth {
   reconciler_success_unix_ms : Int64?
   reconciler_failure_code : String?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineWorkerHealth with Debug::{to_repr}
-
-///|
-pub extend OfflineWorkerHealth with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineWorkerHealth with ToJson::{to_json}
-
-///|
-pub extend OfflineWorkerHealth with FromJson::{from_json}
 
 ///|
 pub fn empty_offline_worker_health() -> OfflineWorkerHealth {
@@ -825,18 +423,6 @@ pub(all) struct OfflineAuthorityWorkBatch {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineAuthorityWorkBatch with Debug::{to_repr}
-
-///|
-pub extend OfflineAuthorityWorkBatch with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineAuthorityWorkBatch with ToJson::{to_json}
-
-///|
-pub extend OfflineAuthorityWorkBatch with FromJson::{from_json}
-
-///|
 pub(all) struct ArtifactGenerationResult {
   request_id : String
   artifact_id : String
@@ -855,36 +441,12 @@ pub(all) struct ArtifactGenerationResult {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ArtifactGenerationResult with Debug::{to_repr}
-
-///|
-pub extend ArtifactGenerationResult with Eq::{not_equal, equal}
-
-///|
-pub extend ArtifactGenerationResult with ToJson::{to_json}
-
-///|
-pub extend ArtifactGenerationResult with FromJson::{from_json}
-
-///|
 pub(all) enum UploadGrantState {
   UploadGranted
   UploadCompleted
   UploadExpired
   UploadRejected
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend UploadGrantState with Debug::{to_repr}
-
-///|
-pub extend UploadGrantState with Eq::{not_equal, equal}
-
-///|
-pub extend UploadGrantState with ToJson::{to_json}
-
-///|
-pub extend UploadGrantState with FromJson::{from_json}
 
 ///|
 pub(all) struct EvidenceUploadGrant {
@@ -904,18 +466,6 @@ pub(all) struct EvidenceUploadGrant {
   created_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
-///|
-pub extend EvidenceUploadGrant with Debug::{to_repr}
-
-///|
-pub extend EvidenceUploadGrant with Eq::{not_equal, equal}
-
-///|
-pub extend EvidenceUploadGrant with ToJson::{to_json}
-
-///|
-pub extend EvidenceUploadGrant with FromJson::{from_json}
-
 ///| Browser-safe projection. Object-store routing, caller identity, and
 
 ///|
@@ -934,18 +484,6 @@ pub(all) struct OfflineUploadGrantView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend OfflineUploadGrantView with Debug::{to_repr}
-
-///|
-pub extend OfflineUploadGrantView with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineUploadGrantView with ToJson::{to_json}
-
-///|
-pub extend OfflineUploadGrantView with FromJson::{from_json}
-
-///|
 pub(all) struct EvidenceUploadCallback {
   callback_id : String
   grant_id : String
@@ -961,18 +499,6 @@ pub(all) struct EvidenceUploadCallback {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend EvidenceUploadCallback with Debug::{to_repr}
-
-///|
-pub extend EvidenceUploadCallback with Eq::{not_equal, equal}
-
-///|
-pub extend EvidenceUploadCallback with ToJson::{to_json}
-
-///|
-pub extend EvidenceUploadCallback with FromJson::{from_json}
-
-///|
 pub(all) enum OfflineEvidenceKind {
   ExecutedAgreementEvidence
   PaymentEvidence
@@ -980,18 +506,6 @@ pub(all) enum OfflineEvidenceKind {
   InternalApproval
   IdentityVerification
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineEvidenceKind with Debug::{to_repr}
-
-///|
-pub extend OfflineEvidenceKind with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineEvidenceKind with ToJson::{to_json}
-
-///|
-pub extend OfflineEvidenceKind with FromJson::{from_json}
 
 ///|
 pub(all) struct EvidenceReview {
@@ -1005,18 +519,6 @@ pub(all) struct EvidenceReview {
   audit_receipt : String
   reviewed_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend EvidenceReview with Debug::{to_repr}
-
-///|
-pub extend EvidenceReview with Eq::{not_equal, equal}
-
-///|
-pub extend EvidenceReview with ToJson::{to_json}
-
-///|
-pub extend EvidenceReview with FromJson::{from_json}
 
 ///|
 pub(all) struct CommercialOrder {
@@ -1041,18 +543,6 @@ pub(all) struct CommercialOrder {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CommercialOrder with Debug::{to_repr}
-
-///|
-pub extend CommercialOrder with Eq::{not_equal, equal}
-
-///|
-pub extend CommercialOrder with ToJson::{to_json}
-
-///|
-pub extend CommercialOrder with FromJson::{from_json}
-
-///|
 pub(all) struct OfflineCommerceSnapshot {
   schema_version : String
   templates : Array[DocumentTemplate]
@@ -1070,15 +560,3 @@ pub(all) struct OfflineCommerceSnapshot {
   work_claims : Array[OfflineWorkClaim]
   worker_health : OfflineWorkerHealth
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend OfflineCommerceSnapshot with Debug::{to_repr}
-
-///|
-pub extend OfflineCommerceSnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend OfflineCommerceSnapshot with ToJson::{to_json}
-
-///|
-pub extend OfflineCommerceSnapshot with FromJson::{from_json}

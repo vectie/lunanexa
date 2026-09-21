@@ -4,12 +4,6 @@ pub(all) suberror DeploymentStoreError {
 } derive(Debug, Eq)
 
 ///|
-pub extend DeploymentStoreError with Debug::{to_repr}
-
-///|
-pub extend DeploymentStoreError with Eq::{not_equal, equal}
-
-///|
 enum DeploymentPersistence {
   DeploymentFile(String)
   DeploymentPostgres(@database.PostgresDatabase)
@@ -39,7 +33,7 @@ fn sign_material(material : String, secret : String) -> String {
   let key = @utf8.encode(secret)
   let encoded = @utf8.encode(material)
   @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), encoded.exact_view()),
+    @crypto.hmac(@crypto.SHA256::new(), key.view(), encoded.view()),
   )
 }
 

@@ -11,18 +11,6 @@ pub(all) enum RuntimeLifecycle {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RuntimeLifecycle with Debug::{to_repr}
-
-///|
-pub extend RuntimeLifecycle with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeLifecycle with ToJson::{to_json}
-
-///|
-pub extend RuntimeLifecycle with FromJson::{from_json}
-
-///|
 pub(open) trait RuntimeAdapter {
   fn name(Self) -> String
   fn inspect(Self, @contracts.RuntimeSpec) -> Bool
@@ -35,12 +23,6 @@ pub(all) suberror RuntimeError {
   NotReady
   Draining
 } derive(Debug, Eq)
-
-///|
-pub extend RuntimeError with Debug::{to_repr}
-
-///|
-pub extend RuntimeError with Eq::{not_equal, equal}
 
 ///|
 pub struct FakeRuntime {
@@ -99,9 +81,6 @@ pub fn FakeRuntime::invoke(
     "text": "deterministic response",
   }
 }
-
-///|
-pub extend FakeRuntime with RuntimeAdapter::{name, inspect}
 
 ///|
 pub impl RuntimeAdapter for FakeRuntime with fn name(self) {

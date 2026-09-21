@@ -9,24 +9,12 @@ pub(all) suberror StorageError {
 } derive(Debug, Eq)
 
 ///|
-pub extend StorageError with Debug::{to_repr}
-
-///|
-pub extend StorageError with Eq::{not_equal, equal}
-
-///|
 pub(all) struct S3ArtifactStore {
   endpoint_ref : String
   bucket : String
   credential_ref : String
   require_tls : Bool
 } derive(Debug, Eq)
-
-///|
-pub extend S3ArtifactStore with Debug::{to_repr}
-
-///|
-pub extend S3ArtifactStore with Eq::{not_equal, equal}
 
 ///|
 pub fn S3ArtifactStore::new(
@@ -46,18 +34,6 @@ pub(all) struct VerifiedArtifactDownload {
   digest : String
   size_bytes : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend VerifiedArtifactDownload with Debug::{to_repr}
-
-///|
-pub extend VerifiedArtifactDownload with Eq::{not_equal, equal}
-
-///|
-pub extend VerifiedArtifactDownload with ToJson::{to_json}
-
-///|
-pub extend VerifiedArtifactDownload with FromJson::{from_json}
 
 ///|
 pub struct S3HttpVerifier {
@@ -169,12 +145,6 @@ pub(all) struct OciRuntimeRegistry {
   credential_ref : String
   require_signature : Bool
 } derive(Debug, Eq)
-
-///|
-pub extend OciRuntimeRegistry with Debug::{to_repr}
-
-///|
-pub extend OciRuntimeRegistry with Eq::{not_equal, equal}
 
 ///|
 pub fn OciRuntimeRegistry::runtime_spec(

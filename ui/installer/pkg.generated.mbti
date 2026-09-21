@@ -43,9 +43,6 @@ pub(all) struct DeploymentForm {
   cli_path : String
   confirmation : String
 } derive(Eq, @debug.Debug)
-pub fn DeploymentForm::equal(Self, Self) -> Bool
-pub fn DeploymentForm::not_equal(Self, Self) -> Bool
-pub fn DeploymentForm::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InstallerMessage {
   LocaleChanged(@i18n.Locale)
@@ -73,9 +70,6 @@ pub(all) enum InstallerMessage {
   RunRejected(String)
   ClearTerminal
 } derive(Eq, @debug.Debug)
-pub fn InstallerMessage::equal(Self, Self) -> Bool
-pub fn InstallerMessage::not_equal(Self, Self) -> Bool
-pub fn InstallerMessage::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InstallerState {
   locale : @i18n.Locale
@@ -85,9 +79,6 @@ pub(all) struct InstallerState {
   terminal_lines : Array[String]
   error_message : String?
 } derive(Eq, @debug.Debug)
-pub fn InstallerState::equal(Self, Self) -> Bool
-pub fn InstallerState::not_equal(Self, Self) -> Bool
-pub fn InstallerState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RunState {
   Idle
@@ -96,9 +87,6 @@ pub(all) enum RunState {
   Succeeded
   Failed
 } derive(Eq, @debug.Debug)
-pub fn RunState::equal(Self, Self) -> Bool
-pub fn RunState::not_equal(Self, Self) -> Bool
-pub fn RunState::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

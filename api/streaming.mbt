@@ -9,28 +9,10 @@ pub(all) enum StreamEvent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend StreamEvent with Debug::{to_repr}
-
-///|
-pub extend StreamEvent with Eq::{not_equal, equal}
-
-///|
-pub extend StreamEvent with ToJson::{to_json}
-
-///|
-pub extend StreamEvent with FromJson::{from_json}
-
-///|
 pub(all) suberror StreamError {
   Backpressure
   StreamClosed
 } derive(Debug, Eq)
-
-///|
-pub extend StreamError with Debug::{to_repr}
-
-///|
-pub extend StreamError with Eq::{not_equal, equal}
 
 ///|
 pub struct StreamSession {

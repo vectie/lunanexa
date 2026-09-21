@@ -42,8 +42,8 @@ fn assertion_headers(
   let signature = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(config.assertion_secret).exact_view(),
-      @utf8.encode(canonical).exact_view(),
+      @utf8.encode(config.assertion_secret).view(),
+      @utf8.encode(canonical).view(),
     ),
   )
   let headers : Map[String, String] = {

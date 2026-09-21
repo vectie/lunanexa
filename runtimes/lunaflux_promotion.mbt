@@ -13,18 +13,6 @@ pub(all) enum LunaFluxApprovalSubject {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxApprovalSubject with Debug::{to_repr}
-
-///|
-pub extend LunaFluxApprovalSubject with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxApprovalSubject with ToJson::{to_json}
-
-///|
-pub extend LunaFluxApprovalSubject with FromJson::{from_json}
-
-///|
 /// A decision asserted by untrusted promotion input. This is a claim, not
 /// verifier-issued authority.
 pub(all) enum LunaFluxClaimedDecision {
@@ -32,18 +20,6 @@ pub(all) enum LunaFluxClaimedDecision {
   Rejected
   Approved
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LunaFluxClaimedDecision with Debug::{to_repr}
-
-///|
-pub extend LunaFluxClaimedDecision with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxClaimedDecision with ToJson::{to_json}
-
-///|
-pub extend LunaFluxClaimedDecision with FromJson::{from_json}
 
 ///|
 /// An untrusted claim that one subject digest has an independently retained
@@ -57,18 +33,6 @@ pub(all) struct LunaFluxApprovalClaim {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxApprovalClaim with Debug::{to_repr}
-
-///|
-pub extend LunaFluxApprovalClaim with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxApprovalClaim with ToJson::{to_json}
-
-///|
-pub extend LunaFluxApprovalClaim with FromJson::{from_json}
-
-///|
 /// Only a qualified OpenAI Responses contract can use LunaNexa's existing
 /// production text adapter. The native-framed LunaFlux diagnostic protocol is
 /// intentionally represented as unqualified.
@@ -76,18 +40,6 @@ pub(all) enum LunaFluxInvocationProtocol {
   InvocationUnqualified
   OpenAiResponsesV1
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LunaFluxInvocationProtocol with Debug::{to_repr}
-
-///|
-pub extend LunaFluxInvocationProtocol with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxInvocationProtocol with ToJson::{to_json}
-
-///|
-pub extend LunaFluxInvocationProtocol with FromJson::{from_json}
 
 ///|
 /// Readiness must be an independently reviewed HTTP contract. A TCP listener
@@ -98,18 +50,6 @@ pub(all) enum LunaFluxHealthProtocol {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxHealthProtocol with Debug::{to_repr}
-
-///|
-pub extend LunaFluxHealthProtocol with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxHealthProtocol with ToJson::{to_json}
-
-///|
-pub extend LunaFluxHealthProtocol with FromJson::{from_json}
-
-///|
 /// LunaNexa needs an authenticated external control operation translated by
 /// deployment ownership into LunaFlux's inherited Unix-stream drain channel.
 /// LunaFlux exposes no HTTP drain route.
@@ -117,18 +57,6 @@ pub(all) enum LunaFluxDrainProtocol {
   DrainUnqualified
   AuthenticatedInheritedDrainV1
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LunaFluxDrainProtocol with Debug::{to_repr}
-
-///|
-pub extend LunaFluxDrainProtocol with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxDrainProtocol with ToJson::{to_json}
-
-///|
-pub extend LunaFluxDrainProtocol with FromJson::{from_json}
 
 ///|
 /// Exact deployment-facing facts that have to be proven together. This type
@@ -152,18 +80,6 @@ pub(all) struct LunaFluxServingContract {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxServingContract with Debug::{to_repr}
-
-///|
-pub extend LunaFluxServingContract with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxServingContract with ToJson::{to_json}
-
-///|
-pub extend LunaFluxServingContract with FromJson::{from_json}
-
-///|
 /// Untrusted promotion input is separate from candidate metadata. No claim,
 /// endpoint, protocol, or benchmark fact is inferred from the candidate, and
 /// structural inspection of this input never grants routing authority.
@@ -174,18 +90,6 @@ pub(all) struct LunaFluxPromotionSubmission {
   benchmark_evidence_digest : String
   approval_claims : Array[LunaFluxApprovalClaim]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LunaFluxPromotionSubmission with Debug::{to_repr}
-
-///|
-pub extend LunaFluxPromotionSubmission with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxPromotionSubmission with ToJson::{to_json}
-
-///|
-pub extend LunaFluxPromotionSubmission with FromJson::{from_json}
 
 ///|
 /// Opaque routing authority produced only by an exact local promotion-catalog
@@ -215,12 +119,6 @@ pub struct LunaFluxAdapterAuthority {
   benchmark_evidence_digest : String
   approval_catalog_digest : String
 } derive(Debug, Eq)
-
-///|
-pub extend LunaFluxAdapterAuthority with Debug::{to_repr}
-
-///|
-pub extend LunaFluxAdapterAuthority with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum LunaFluxPromotionBlocker {
@@ -267,27 +165,12 @@ pub(all) enum LunaFluxPromotionBlocker {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxPromotionBlocker with Debug::{to_repr}
-
-///|
-pub extend LunaFluxPromotionBlocker with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxPromotionBlocker with ToJson::{to_json}
-
-///|
-pub extend LunaFluxPromotionBlocker with FromJson::{from_json}
-
-///|
 pub(all) struct LunaFluxPromotionReport {
   evidence_well_formed : Bool
   routable : Bool
   authority : LunaFluxAdapterAuthority?
   blockers : Array[LunaFluxPromotionBlocker]
 } derive(Debug)
-
-///|
-pub extend LunaFluxPromotionReport with Debug::{to_repr}
 
 ///|
 fn promotion_subjects() -> Array[LunaFluxApprovalSubject] {

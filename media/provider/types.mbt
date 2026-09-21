@@ -12,15 +12,6 @@ pub(all) struct Profile {
 } derive(Eq, ToJson, FromJson)
 
 ///|
-pub extend Profile with Eq::{not_equal, equal}
-
-///|
-pub extend Profile with ToJson::{to_json}
-
-///|
-pub extend Profile with FromJson::{from_json}
-
-///|
 /// Prompt-bearing values intentionally have no Debug or automatic serialization.
 pub struct VideoRequest {
   model : String
@@ -35,12 +26,6 @@ pub(all) struct Observation {
 } derive(Debug, Eq)
 
 ///|
-pub extend Observation with Debug::{to_repr}
-
-///|
-pub extend Observation with Eq::{not_equal, equal}
-
-///|
 pub(all) suberror ProviderError {
   InvalidConfiguration
   InvalidRequest
@@ -48,12 +33,6 @@ pub(all) suberror ProviderError {
   InvalidResponse
   ContentUnavailable
 } derive(Debug, Eq)
-
-///|
-pub extend ProviderError with Debug::{to_repr}
-
-///|
-pub extend ProviderError with Eq::{not_equal, equal}
 
 ///|
 /// Construct only from approved deployment configuration, never a caller URL.

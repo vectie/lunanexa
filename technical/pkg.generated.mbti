@@ -41,11 +41,6 @@ pub(all) struct AdmissionLimits {
   max_tenant_queued : Int
   max_payload_bytes : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AdmissionLimits::equal(Self, Self) -> Bool
-pub fn AdmissionLimits::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AdmissionLimits::not_equal(Self, Self) -> Bool
-pub fn AdmissionLimits::to_json(Self) -> Json
-pub fn AdmissionLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AdmissionRejection {
   InvalidLimits
@@ -58,11 +53,6 @@ pub(all) enum AdmissionRejection {
   RunningCapacity
   QueueCapacity
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AdmissionRejection::equal(Self, Self) -> Bool
-pub fn AdmissionRejection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AdmissionRejection::not_equal(Self, Self) -> Bool
-pub fn AdmissionRejection::to_json(Self) -> Json
-pub fn AdmissionRejection::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AdmissionSnapshot {
   running : Int
@@ -74,22 +64,12 @@ pub(all) struct AdmissionSnapshot {
   now_unix_ms : Int64
   lease_valid : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AdmissionSnapshot::equal(Self, Self) -> Bool
-pub fn AdmissionSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AdmissionSnapshot::not_equal(Self, Self) -> Bool
-pub fn AdmissionSnapshot::to_json(Self) -> Json
-pub fn AdmissionSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum BackpressureDecision {
   StartImmediately
   Queue(position~ : Int)
   Reject(reason~ : AdmissionRejection, retryable~ : Bool)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BackpressureDecision::equal(Self, Self) -> Bool
-pub fn BackpressureDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BackpressureDecision::not_equal(Self, Self) -> Bool
-pub fn BackpressureDecision::to_json(Self) -> Json
-pub fn BackpressureDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CacheAction {
   RetainReferenced
@@ -97,11 +77,6 @@ pub(all) enum CacheAction {
   EligibleForEviction
   QuarantineInvalidTelemetry(Array[CacheTelemetryFinding])
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CacheAction::equal(Self, Self) -> Bool
-pub fn CacheAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CacheAction::not_equal(Self, Self) -> Bool
-pub fn CacheAction::to_json(Self) -> Json
-pub fn CacheAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CacheEntryTelemetry {
   node_ref : String
@@ -114,11 +89,6 @@ pub(all) struct CacheEntryTelemetry {
   last_access_unix_ms : Int64
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CacheEntryTelemetry::equal(Self, Self) -> Bool
-pub fn CacheEntryTelemetry::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CacheEntryTelemetry::not_equal(Self, Self) -> Bool
-pub fn CacheEntryTelemetry::to_json(Self) -> Json
-pub fn CacheEntryTelemetry::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CacheLifecycleState {
   Reserved
@@ -128,11 +98,6 @@ pub(all) enum CacheLifecycleState {
   Evicting
   Quarantined
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CacheLifecycleState::equal(Self, Self) -> Bool
-pub fn CacheLifecycleState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CacheLifecycleState::not_equal(Self, Self) -> Bool
-pub fn CacheLifecycleState::to_json(Self) -> Json
-pub fn CacheLifecycleState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CacheReservation {
   node_id : String
@@ -140,11 +105,6 @@ pub(all) struct CacheReservation {
   bytes : Int64
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CacheReservation::equal(Self, Self) -> Bool
-pub fn CacheReservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CacheReservation::not_equal(Self, Self) -> Bool
-pub fn CacheReservation::to_json(Self) -> Json
-pub fn CacheReservation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CacheTelemetryFinding {
   MissingNodeReference
@@ -156,31 +116,16 @@ pub(all) enum CacheTelemetryFinding {
   ReadyWithoutSignature
   InvalidPressureBounds
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CacheTelemetryFinding::equal(Self, Self) -> Bool
-pub fn CacheTelemetryFinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CacheTelemetryFinding::not_equal(Self, Self) -> Bool
-pub fn CacheTelemetryFinding::to_json(Self) -> Json
-pub fn CacheTelemetryFinding::to_repr(Self) -> @debug.Repr
 
 pub(all) enum GrantAuthenticity {
   Verified
   Unverified
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn GrantAuthenticity::equal(Self, Self) -> Bool
-pub fn GrantAuthenticity::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn GrantAuthenticity::not_equal(Self, Self) -> Bool
-pub fn GrantAuthenticity::to_json(Self) -> Json
-pub fn GrantAuthenticity::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PrewarmDecision {
   Accepted(PrewarmOperation)
   Rejected(PrewarmRejection)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmDecision::equal(Self, Self) -> Bool
-pub fn PrewarmDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmDecision::not_equal(Self, Self) -> Bool
-pub fn PrewarmDecision::to_json(Self) -> Json
-pub fn PrewarmDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PrewarmEvent {
   Reserve
@@ -193,11 +138,6 @@ pub(all) enum PrewarmEvent {
   Fail(reason~ : PrewarmFailure)
   ObserveTime
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmEvent::equal(Self, Self) -> Bool
-pub fn PrewarmEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmEvent::not_equal(Self, Self) -> Bool
-pub fn PrewarmEvent::to_json(Self) -> Json
-pub fn PrewarmEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PrewarmFailure {
   TransferUnavailable
@@ -206,11 +146,6 @@ pub(all) enum PrewarmFailure {
   InsufficientCache
   NodeUnavailable
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmFailure::equal(Self, Self) -> Bool
-pub fn PrewarmFailure::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmFailure::not_equal(Self, Self) -> Bool
-pub fn PrewarmFailure::to_json(Self) -> Json
-pub fn PrewarmFailure::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PrewarmIntent {
   operation_id : String
@@ -221,11 +156,6 @@ pub(all) struct PrewarmIntent {
   created_unix_ms : Int64
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmIntent::equal(Self, Self) -> Bool
-pub fn PrewarmIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmIntent::not_equal(Self, Self) -> Bool
-pub fn PrewarmIntent::to_json(Self) -> Json
-pub fn PrewarmIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PrewarmOperation {
   intent : PrewarmIntent
@@ -234,22 +164,12 @@ pub(all) struct PrewarmOperation {
   reservation : CacheReservation?
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmOperation::equal(Self, Self) -> Bool
-pub fn PrewarmOperation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmOperation::not_equal(Self, Self) -> Bool
-pub fn PrewarmOperation::to_json(Self) -> Json
-pub fn PrewarmOperation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PrewarmProgress {
   transferred_bytes : Int64
   total_bytes : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmProgress::equal(Self, Self) -> Bool
-pub fn PrewarmProgress::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmProgress::not_equal(Self, Self) -> Bool
-pub fn PrewarmProgress::to_json(Self) -> Json
-pub fn PrewarmProgress::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PrewarmRejection {
   InvalidIdentity
@@ -265,11 +185,6 @@ pub(all) enum PrewarmRejection {
   ObservationBeforeLastUpdate
   InvalidOperation
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmRejection::equal(Self, Self) -> Bool
-pub fn PrewarmRejection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmRejection::not_equal(Self, Self) -> Bool
-pub fn PrewarmRejection::to_json(Self) -> Json
-pub fn PrewarmRejection::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PrewarmState {
   Queued
@@ -282,64 +197,34 @@ pub(all) enum PrewarmState {
   Failed(PrewarmFailure)
   Expired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PrewarmState::equal(Self, Self) -> Bool
-pub fn PrewarmState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PrewarmState::not_equal(Self, Self) -> Bool
-pub fn PrewarmState::to_json(Self) -> Json
-pub fn PrewarmState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProbeCounters {
   consecutive_successes : Int
   consecutive_failures : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeCounters::equal(Self, Self) -> Bool
-pub fn ProbeCounters::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeCounters::not_equal(Self, Self) -> Bool
-pub fn ProbeCounters::to_json(Self) -> Json
-pub fn ProbeCounters::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ProbeDecision {
   Applied(ProbeState)
   Rejected(ProbeRejection)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeDecision::equal(Self, Self) -> Bool
-pub fn ProbeDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeDecision::not_equal(Self, Self) -> Bool
-pub fn ProbeDecision::to_json(Self) -> Json
-pub fn ProbeDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ProbeKind {
   Startup
   Readiness
   Liveness
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeKind::equal(Self, Self) -> Bool
-pub fn ProbeKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeKind::not_equal(Self, Self) -> Bool
-pub fn ProbeKind::to_json(Self) -> Json
-pub fn ProbeKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProbeObservation {
   kind : ProbeKind
   success : Bool
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeObservation::equal(Self, Self) -> Bool
-pub fn ProbeObservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeObservation::not_equal(Self, Self) -> Bool
-pub fn ProbeObservation::to_json(Self) -> Json
-pub fn ProbeObservation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProbePolicy {
   startup : ProbeStagePolicy
   readiness : ProbeStagePolicy
   liveness : ProbeStagePolicy
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbePolicy::equal(Self, Self) -> Bool
-pub fn ProbePolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbePolicy::not_equal(Self, Self) -> Bool
-pub fn ProbePolicy::to_json(Self) -> Json
-pub fn ProbePolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ProbeRejection {
   InvalidPolicy
@@ -350,11 +235,6 @@ pub(all) enum ProbeRejection {
   InitialDelayActive
   InvalidState
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeRejection::equal(Self, Self) -> Bool
-pub fn ProbeRejection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeRejection::not_equal(Self, Self) -> Bool
-pub fn ProbeRejection::to_json(Self) -> Json
-pub fn ProbeRejection::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProbeStagePolicy {
   initial_delay_ms : Int64
@@ -363,11 +243,6 @@ pub(all) struct ProbeStagePolicy {
   success_threshold : Int
   failure_threshold : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeStagePolicy::equal(Self, Self) -> Bool
-pub fn ProbeStagePolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeStagePolicy::not_equal(Self, Self) -> Bool
-pub fn ProbeStagePolicy::to_json(Self) -> Json
-pub fn ProbeStagePolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProbeState {
   runtime_state : RuntimeHealthState
@@ -379,23 +254,13 @@ pub(all) struct ProbeState {
   startup_completed_unix_ms : Int64?
   last_observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ProbeState::equal(Self, Self) -> Bool
-pub fn ProbeState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ProbeState::not_equal(Self, Self) -> Bool
 pub fn ProbeState::route_eligible(Self) -> Bool
-pub fn ProbeState::to_json(Self) -> Json
-pub fn ProbeState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ReviewedSidecar {
   InferenceGateway
   TelemetryExporter
   CertificateReloader
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ReviewedSidecar::equal(Self, Self) -> Bool
-pub fn ReviewedSidecar::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ReviewedSidecar::not_equal(Self, Self) -> Bool
-pub fn ReviewedSidecar::to_json(Self) -> Json
-pub fn ReviewedSidecar::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RuntimeHealthState {
   Starting
@@ -403,32 +268,17 @@ pub(all) enum RuntimeHealthState {
   Ready
   RestartRequired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeHealthState::equal(Self, Self) -> Bool
-pub fn RuntimeHealthState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeHealthState::not_equal(Self, Self) -> Bool
-pub fn RuntimeHealthState::to_json(Self) -> Json
-pub fn RuntimeHealthState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SidecarDecision {
   Accepted(Array[SidecarProfile])
   Rejected(SidecarRejection)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SidecarDecision::equal(Self, Self) -> Bool
-pub fn SidecarDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SidecarDecision::not_equal(Self, Self) -> Bool
-pub fn SidecarDecision::to_json(Self) -> Json
-pub fn SidecarDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SidecarEgress {
   ControllerOnly
   TelemetrySinkOnly
   Disabled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SidecarEgress::equal(Self, Self) -> Bool
-pub fn SidecarEgress::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SidecarEgress::not_equal(Self, Self) -> Bool
-pub fn SidecarEgress::to_json(Self) -> Json
-pub fn SidecarEgress::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SidecarProfile {
   name : ReviewedSidecar
@@ -441,32 +291,17 @@ pub(all) struct SidecarProfile {
   drops_all_capabilities : Bool
   host_network : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SidecarProfile::equal(Self, Self) -> Bool
-pub fn SidecarProfile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SidecarProfile::not_equal(Self, Self) -> Bool
-pub fn SidecarProfile::to_json(Self) -> Json
-pub fn SidecarProfile::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SidecarRejection {
   ProfileNotAllowed
   DuplicateProfile
   InvalidConfigurationReference
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SidecarRejection::equal(Self, Self) -> Bool
-pub fn SidecarRejection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SidecarRejection::not_equal(Self, Self) -> Bool
-pub fn SidecarRejection::to_json(Self) -> Json
-pub fn SidecarRejection::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SidecarRequest {
   profile : ReviewedSidecar
   configuration_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SidecarRequest::equal(Self, Self) -> Bool
-pub fn SidecarRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SidecarRequest::not_equal(Self, Self) -> Bool
-pub fn SidecarRequest::to_json(Self) -> Json
-pub fn SidecarRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TransferGrant {
   grant_id : String
@@ -478,21 +313,11 @@ pub(all) struct TransferGrant {
   issued_unix_ms : Int64
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TransferGrant::equal(Self, Self) -> Bool
-pub fn TransferGrant::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TransferGrant::not_equal(Self, Self) -> Bool
-pub fn TransferGrant::to_json(Self) -> Json
-pub fn TransferGrant::to_repr(Self) -> @debug.Repr
 
 pub(all) enum TransferGrantDecision {
   Accepted(consumed_nonce~ : String)
   Rejected(TransferGrantRejection)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TransferGrantDecision::equal(Self, Self) -> Bool
-pub fn TransferGrantDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TransferGrantDecision::not_equal(Self, Self) -> Bool
-pub fn TransferGrantDecision::to_json(Self) -> Json
-pub fn TransferGrantDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum TransferGrantRejection {
   AuthenticityRequired
@@ -507,11 +332,6 @@ pub(all) enum TransferGrantRejection {
   ModelMismatch
   ScopeMismatch
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TransferGrantRejection::equal(Self, Self) -> Bool
-pub fn TransferGrantRejection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TransferGrantRejection::not_equal(Self, Self) -> Bool
-pub fn TransferGrantRejection::to_json(Self) -> Json
-pub fn TransferGrantRejection::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TransferGrantUse {
   node_id : String
@@ -519,21 +339,11 @@ pub(all) struct TransferGrantUse {
   model_digest : String
   scope : TransferScope
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TransferGrantUse::equal(Self, Self) -> Bool
-pub fn TransferGrantUse::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TransferGrantUse::not_equal(Self, Self) -> Bool
-pub fn TransferGrantUse::to_json(Self) -> Json
-pub fn TransferGrantUse::to_repr(Self) -> @debug.Repr
 
 pub(all) enum TransferScope {
   ModelRead
   RuntimeImageRead
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TransferScope::equal(Self, Self) -> Bool
-pub fn TransferScope::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TransferScope::not_equal(Self, Self) -> Bool
-pub fn TransferScope::to_json(Self) -> Json
-pub fn TransferScope::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

@@ -10,12 +10,6 @@ pub(all) suberror RemoteRuntimeError {
 } derive(Debug, Eq)
 
 ///|
-pub extend RemoteRuntimeError with Debug::{to_repr}
-
-///|
-pub extend RemoteRuntimeError with Eq::{not_equal, equal}
-
-///|
 pub(all) struct RuntimeInvocationResult {
   output : Json
   artifact_digest : String
@@ -23,18 +17,6 @@ pub(all) struct RuntimeInvocationResult {
   input_units : Int
   output_units : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RuntimeInvocationResult with Debug::{to_repr}
-
-///|
-pub extend RuntimeInvocationResult with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeInvocationResult with ToJson::{to_json}
-
-///|
-pub extend RuntimeInvocationResult with FromJson::{from_json}
 
 ///|
 pub struct OpenAiTextRuntime {
@@ -56,18 +38,6 @@ pub(all) struct NodeRuntimeEndpoint {
   node_id : String
   endpoint : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend NodeRuntimeEndpoint with Debug::{to_repr}
-
-///|
-pub extend NodeRuntimeEndpoint with Eq::{not_equal, equal}
-
-///|
-pub extend NodeRuntimeEndpoint with ToJson::{to_json}
-
-///|
-pub extend NodeRuntimeEndpoint with FromJson::{from_json}
 
 ///|
 priv struct UpstreamUsage {

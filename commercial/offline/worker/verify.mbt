@@ -7,12 +7,6 @@ pub(all) suberror WorkerVerificationError {
 } derive(Debug, Eq)
 
 ///|
-pub extend WorkerVerificationError with Debug::{to_repr}
-
-///|
-pub extend WorkerVerificationError with Eq::{not_equal, equal}
-
-///|
 pub(all) struct OoxmlVerification {
   moonleaf_verified : Bool
   diagnostic_codes : Array[String]
@@ -22,28 +16,10 @@ pub(all) struct OoxmlVerification {
 } derive(Debug, Eq)
 
 ///|
-pub extend OoxmlVerification with Debug::{to_repr}
-
-///|
-pub extend OoxmlVerification with Eq::{not_equal, equal}
-
-///|
 pub(all) struct TextReplacement {
   placeholder : String
   value : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend TextReplacement with Debug::{to_repr}
-
-///|
-pub extend TextReplacement with Eq::{not_equal, equal}
-
-///|
-pub extend TextReplacement with ToJson::{to_json}
-
-///|
-pub extend TextReplacement with FromJson::{from_json}
 
 ///|
 pub(all) struct CellReplacement {
@@ -54,29 +30,11 @@ pub(all) struct CellReplacement {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CellReplacement with Debug::{to_repr}
-
-///|
-pub extend CellReplacement with Eq::{not_equal, equal}
-
-///|
-pub extend CellReplacement with ToJson::{to_json}
-
-///|
-pub extend CellReplacement with FromJson::{from_json}
-
-///|
 pub(all) struct CustomizedOoxml {
   bytes : FixedArray[Byte]
   replacement_count : Int
   verification : OoxmlVerification
 } derive(Debug, Eq)
-
-///|
-pub extend CustomizedOoxml with Debug::{to_repr}
-
-///|
-pub extend CustomizedOoxml with Eq::{not_equal, equal}
 
 ///|
 fn active_part(name : String) -> Bool {

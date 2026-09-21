@@ -18,9 +18,6 @@ pub(all) suberror TechnicalStoreError {
   OperationConflict(String)
   OperationNotFound(String)
 } derive(Eq, @debug.Debug)
-pub fn TechnicalStoreError::equal(Self, Self) -> Bool
-pub fn TechnicalStoreError::not_equal(Self, Self) -> Bool
-pub fn TechnicalStoreError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 type TechnicalPersistence
@@ -30,11 +27,6 @@ pub(all) struct TechnicalSnapshot {
   prewarm_operations : Array[@technical.PrewarmOperation]
   consumed_transfer_nonces : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn TechnicalSnapshot::equal(Self, Self) -> Bool
-pub fn TechnicalSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn TechnicalSnapshot::not_equal(Self, Self) -> Bool
-pub fn TechnicalSnapshot::to_json(Self) -> Json
-pub fn TechnicalSnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct TechnicalStore {
   persistence : TechnicalPersistence

@@ -34,9 +34,6 @@ pub(all) suberror PortalError {
   StaleGeneration
   AgreementRequired
 } derive(Eq, @debug.Debug)
-pub fn PortalError::equal(Self, Self) -> Bool
-pub fn PortalError::not_equal(Self, Self) -> Bool
-pub fn PortalError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct AgreementExecution {
@@ -46,11 +43,6 @@ pub(all) struct AgreementExecution {
   executed_artifact_hash : String
   evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn AgreementExecution::equal(Self, Self) -> Bool
-pub fn AgreementExecution::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn AgreementExecution::not_equal(Self, Self) -> Bool
-pub fn AgreementExecution::to_json(Self) -> Json
-pub fn AgreementExecution::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EnterpriseLeaseRequest {
   submission : LeaseRequestSubmission
@@ -63,12 +55,7 @@ pub(all) struct EnterpriseLeaseRequest {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EnterpriseLeaseRequest::equal(Self, Self) -> Bool
-pub fn EnterpriseLeaseRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EnterpriseLeaseRequest::not_equal(Self, Self) -> Bool
 pub fn EnterpriseLeaseRequest::review(Self, LeaseReview, String?, Int64) -> Self raise PortalError
-pub fn EnterpriseLeaseRequest::to_json(Self) -> Json
-pub fn EnterpriseLeaseRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EnterpriseMembership {
   membership_id : String
@@ -79,11 +66,6 @@ pub(all) struct EnterpriseMembership {
   active : Bool
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EnterpriseMembership::equal(Self, Self) -> Bool
-pub fn EnterpriseMembership::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EnterpriseMembership::not_equal(Self, Self) -> Bool
-pub fn EnterpriseMembership::to_json(Self) -> Json
-pub fn EnterpriseMembership::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EnterpriseModelSummary {
   model_id : String
@@ -92,11 +74,6 @@ pub(all) struct EnterpriseModelSummary {
   compatible_architectures : Array[String]
   minimum_memory_mib : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EnterpriseModelSummary::equal(Self, Self) -> Bool
-pub fn EnterpriseModelSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EnterpriseModelSummary::not_equal(Self, Self) -> Bool
-pub fn EnterpriseModelSummary::to_json(Self) -> Json
-pub fn EnterpriseModelSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EnterpriseRole {
   OrganizationAdministrator
@@ -105,11 +82,6 @@ pub(all) enum EnterpriseRole {
   BillingViewer
   Developer
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EnterpriseRole::equal(Self, Self) -> Bool
-pub fn EnterpriseRole::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EnterpriseRole::not_equal(Self, Self) -> Bool
-pub fn EnterpriseRole::to_json(Self) -> Json
-pub fn EnterpriseRole::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EnterpriseSelfView {
   version : String
@@ -119,11 +91,6 @@ pub(all) struct EnterpriseSelfView {
   can_sign : Bool
   can_request_lease : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EnterpriseSelfView::equal(Self, Self) -> Bool
-pub fn EnterpriseSelfView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EnterpriseSelfView::not_equal(Self, Self) -> Bool
-pub fn EnterpriseSelfView::to_json(Self) -> Json
-pub fn EnterpriseSelfView::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LeaseRequestState {
   Submitted
@@ -131,11 +98,6 @@ pub(all) enum LeaseRequestState {
   Rejected
   Cancelled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LeaseRequestState::equal(Self, Self) -> Bool
-pub fn LeaseRequestState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LeaseRequestState::not_equal(Self, Self) -> Bool
-pub fn LeaseRequestState::to_json(Self) -> Json
-pub fn LeaseRequestState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LeaseRequestSubmission {
   request_id : String
@@ -149,11 +111,6 @@ pub(all) struct LeaseRequestSubmission {
   requested_model_ids : Array[String]
   justification : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LeaseRequestSubmission::equal(Self, Self) -> Bool
-pub fn LeaseRequestSubmission::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LeaseRequestSubmission::not_equal(Self, Self) -> Bool
-pub fn LeaseRequestSubmission::to_json(Self) -> Json
-pub fn LeaseRequestSubmission::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LeaseReview {
   request_id : String
@@ -162,21 +119,11 @@ pub(all) struct LeaseReview {
   node_id : String?
   evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LeaseReview::equal(Self, Self) -> Bool
-pub fn LeaseReview::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LeaseReview::not_equal(Self, Self) -> Bool
-pub fn LeaseReview::to_json(Self) -> Json
-pub fn LeaseReview::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LeaseReviewDecision {
   Approve
   Reject
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LeaseReviewDecision::equal(Self, Self) -> Bool
-pub fn LeaseReviewDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LeaseReviewDecision::not_equal(Self, Self) -> Bool
-pub fn LeaseReviewDecision::to_json(Self) -> Json
-pub fn LeaseReviewDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PortalAgreement {
   agreement_id : String
@@ -194,13 +141,8 @@ pub(all) struct PortalAgreement {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PortalAgreement::equal(Self, Self) -> Bool
-pub fn PortalAgreement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PortalAgreement::not_equal(Self, Self) -> Bool
 pub fn PortalAgreement::record_execution(Self, AgreementExecution, Int64) -> Self raise PortalError
 pub fn PortalAgreement::request_signature(Self, String, String, Int64, Int64) -> Self raise PortalError
-pub fn PortalAgreement::to_json(Self) -> Json
-pub fn PortalAgreement::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PortalAgreementState {
   ReviewRequired
@@ -209,11 +151,6 @@ pub(all) enum PortalAgreementState {
   Declined
   Superseded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PortalAgreementState::equal(Self, Self) -> Bool
-pub fn PortalAgreementState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PortalAgreementState::not_equal(Self, Self) -> Bool
-pub fn PortalAgreementState::to_json(Self) -> Json
-pub fn PortalAgreementState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PortalSnapshot {
   schema_version : String
@@ -221,22 +158,12 @@ pub(all) struct PortalSnapshot {
   agreements : Array[PortalAgreement]
   lease_requests : Array[EnterpriseLeaseRequest]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn PortalSnapshot::equal(Self, Self) -> Bool
-pub fn PortalSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn PortalSnapshot::not_equal(Self, Self) -> Bool
-pub fn PortalSnapshot::to_json(Self) -> Json
-pub fn PortalSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignatureRequest {
   agreement_id : String
   expected_generation : Int64
   idempotency_key : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn SignatureRequest::equal(Self, Self) -> Bool
-pub fn SignatureRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn SignatureRequest::not_equal(Self, Self) -> Bool
-pub fn SignatureRequest::to_json(Self) -> Json
-pub fn SignatureRequest::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

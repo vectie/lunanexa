@@ -5,15 +5,6 @@ pub(all) struct ModelScopeTree {
 } derive(Debug, Eq, ToJson)
 
 ///|
-pub extend ModelScopeTree with Debug::{to_repr}
-
-///|
-pub extend ModelScopeTree with Eq::{not_equal, equal}
-
-///|
-pub extend ModelScopeTree with ToJson::{to_json}
-
-///|
 pub struct ModelScopeClient {
   origin : String
 }

@@ -9,18 +9,6 @@ pub(all) enum CacheLifecycleState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CacheLifecycleState with Debug::{to_repr}
-
-///|
-pub extend CacheLifecycleState with Eq::{not_equal, equal}
-
-///|
-pub extend CacheLifecycleState with ToJson::{to_json}
-
-///|
-pub extend CacheLifecycleState with FromJson::{from_json}
-
-///|
 pub(all) struct CacheEntryTelemetry {
   node_ref : String
   model_digest : String
@@ -32,18 +20,6 @@ pub(all) struct CacheEntryTelemetry {
   last_access_unix_ms : Int64
   observed_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend CacheEntryTelemetry with Debug::{to_repr}
-
-///|
-pub extend CacheEntryTelemetry with Eq::{not_equal, equal}
-
-///|
-pub extend CacheEntryTelemetry with ToJson::{to_json}
-
-///|
-pub extend CacheEntryTelemetry with FromJson::{from_json}
 
 ///|
 pub(all) enum CacheTelemetryFinding {
@@ -58,36 +34,12 @@ pub(all) enum CacheTelemetryFinding {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend CacheTelemetryFinding with Debug::{to_repr}
-
-///|
-pub extend CacheTelemetryFinding with Eq::{not_equal, equal}
-
-///|
-pub extend CacheTelemetryFinding with ToJson::{to_json}
-
-///|
-pub extend CacheTelemetryFinding with FromJson::{from_json}
-
-///|
 pub(all) enum CacheAction {
   RetainReferenced
   RetainBelowHighWater
   EligibleForEviction
   QuarantineInvalidTelemetry(Array[CacheTelemetryFinding])
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend CacheAction with Debug::{to_repr}
-
-///|
-pub extend CacheAction with Eq::{not_equal, equal}
-
-///|
-pub extend CacheAction with ToJson::{to_json}
-
-///|
-pub extend CacheAction with FromJson::{from_json}
 
 ///|
 pub fn validate_cache_telemetry(

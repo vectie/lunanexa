@@ -16,18 +16,6 @@ pub(all) struct RuntimeTermination {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RuntimeTermination with Debug::{to_repr}
-
-///|
-pub extend RuntimeTermination with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeTermination with ToJson::{to_json}
-
-///|
-pub extend RuntimeTermination with FromJson::{from_json}
-
-///|
 /// A bounded, node-authenticated delivery batch. Retries may use a fresh send
 /// timestamp while retaining identical evidence records. Acceptance must be
 /// durable and idempotent before the controller acknowledges individual records.
@@ -37,15 +25,3 @@ pub(all) struct RuntimeTerminationReport {
   records : Array[RuntimeTermination]
   signature : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend RuntimeTerminationReport with Debug::{to_repr}
-
-///|
-pub extend RuntimeTerminationReport with Eq::{not_equal, equal}
-
-///|
-pub extend RuntimeTerminationReport with ToJson::{to_json}
-
-///|
-pub extend RuntimeTerminationReport with FromJson::{from_json}

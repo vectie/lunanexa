@@ -78,22 +78,16 @@ pub async fn ContractDocumentStore::waive_obligation(Self, String, Int64, String
 type ContractPersistence
 
 type LegacyContractDocumentSnapshotV1 derive(@json.FromJson)
-pub fn LegacyContractDocumentSnapshotV1::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type LegacyContractDocumentSnapshotV2 derive(@json.FromJson)
-pub fn LegacyContractDocumentSnapshotV2::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type LegacyContractDocumentSnapshotV3 derive(@json.FromJson)
-pub fn LegacyContractDocumentSnapshotV3::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type LegacyContractDocumentSnapshotV4 derive(@json.FromJson)
-pub fn LegacyContractDocumentSnapshotV4::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type LegacyContractPacketV1 derive(@json.FromJson)
-pub fn LegacyContractPacketV1::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type LegacyContractPacketV2 derive(@json.FromJson)
-pub fn LegacyContractPacketV2::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 // Type aliases
 

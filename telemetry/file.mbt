@@ -7,28 +7,10 @@ pub(all) struct TelemetrySnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend TelemetrySnapshot with Debug::{to_repr}
-
-///|
-pub extend TelemetrySnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend TelemetrySnapshot with ToJson::{to_json}
-
-///|
-pub extend TelemetrySnapshot with FromJson::{from_json}
-
-///|
 pub(all) suberror TelemetryError {
   PayloadMetricRejected
   InvalidTelemetryState(String)
 } derive(Debug, Eq)
-
-///|
-pub extend TelemetryError with Debug::{to_repr}
-
-///|
-pub extend TelemetryError with Eq::{not_equal, equal}
 
 ///|
 enum TelemetryPersistence {

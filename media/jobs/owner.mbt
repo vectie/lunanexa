@@ -1,10 +1,6 @@
 ///|
 /// Preserve commercial JSON byte-for-byte, including field order, because it
 /// participates in persisted idempotency digests. Private ownership is explicit.
-
-///|
-pub extend Owner with ToJson::{to_json}
-
 pub impl ToJson for Owner with fn to_json(self) {
   let fields : Map[String, Json] = {
     "tenant_ref": self.tenant_ref.to_json(),
@@ -28,9 +24,6 @@ priv struct OwnerWire {
   order_id : String?
   workspace_lease_id : String?
 } derive(FromJson)
-
-///|
-pub extend Owner with FromJson::{from_json}
 
 ///|
 pub impl @json.FromJson for Owner with fn from_json(value, path) {

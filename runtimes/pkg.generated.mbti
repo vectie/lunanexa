@@ -29,9 +29,6 @@ pub(all) suberror LunaFluxPromotionCatalogError {
   InvalidPromotionAuthority(LunaFluxPromotionAuthoritySubject)
   ReusedPromotionAuthorityReceipt(LunaFluxPromotionAuthoritySubject)
 } derive(Eq, @debug.Debug)
-pub fn LunaFluxPromotionCatalogError::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionCatalogError::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionCatalogError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror LunaFluxPromotionVerifierError {
   UnsupportedPromotionVerifierPolicySchema
@@ -43,9 +40,6 @@ pub(all) suberror LunaFluxPromotionVerifierError {
   DuplicatePromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
   InvalidPromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
 } derive(Eq, @debug.Debug)
-pub fn LunaFluxPromotionVerifierError::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerifierError::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerifierError::to_repr(Self) -> @debug.Repr
 
 pub suberror LunaFluxRuntimeDiscoveryError {
   MissingReadyPublication
@@ -60,9 +54,6 @@ pub suberror LunaFluxRuntimeDiscoveryError {
   InvalidControlProbeTimeout
   ControlProbeFailed
 } derive(Eq, @debug.Debug)
-pub fn LunaFluxRuntimeDiscoveryError::equal(Self, Self) -> Bool
-pub fn LunaFluxRuntimeDiscoveryError::not_equal(Self, Self) -> Bool
-pub fn LunaFluxRuntimeDiscoveryError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror RemoteRuntimeError {
   InsecureEndpoint(String)
@@ -73,18 +64,12 @@ pub(all) suberror RemoteRuntimeError {
   UpstreamFailed(code~ : String, retryable~ : Bool)
   InvalidUpstreamResponse(String)
 } derive(Eq, @debug.Debug)
-pub fn RemoteRuntimeError::equal(Self, Self) -> Bool
-pub fn RemoteRuntimeError::not_equal(Self, Self) -> Bool
-pub fn RemoteRuntimeError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror RuntimeError {
   InvalidSpec(String)
   NotReady
   Draining
 } derive(Eq, @debug.Debug)
-pub fn RuntimeError::equal(Self, Self) -> Bool
-pub fn RuntimeError::not_equal(Self, Self) -> Bool
-pub fn RuntimeError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub struct FakeRuntime {
@@ -94,11 +79,9 @@ pub struct FakeRuntime {
   invocations : Array[String]
 }
 pub fn FakeRuntime::drain(Self) -> Unit
-pub fn FakeRuntime::inspect(Self, @contracts.RuntimeSpec) -> Bool
 pub fn FakeRuntime::invocation_count(Self) -> Int
 pub fn FakeRuntime::invoke(Self, @contracts.WorkloadEnvelope) -> Json raise RuntimeError
 pub fn FakeRuntime::is_ready(Self) -> Bool
-pub fn FakeRuntime::name(Self) -> String
 pub fn FakeRuntime::new(String) -> Self
 pub fn FakeRuntime::start(Self) -> Unit
 pub fn FakeRuntime::stop(Self) -> Unit
@@ -130,13 +113,10 @@ pub struct LunaFluxAdapterAuthority {
 } derive(Eq, @debug.Debug)
 pub fn LunaFluxAdapterAuthority::approval_catalog_digest(Self) -> String
 pub fn LunaFluxAdapterAuthority::drain_path(Self) -> String
-pub fn LunaFluxAdapterAuthority::equal(Self, Self) -> Bool
 pub fn LunaFluxAdapterAuthority::health_path(Self) -> String
-pub fn LunaFluxAdapterAuthority::not_equal(Self, Self) -> Bool
 pub fn LunaFluxAdapterAuthority::opaque_adapter(Self) -> LunaFluxOpaqueAdapter
 pub fn LunaFluxAdapterAuthority::openai_text_runtime(Self, String) -> OpenAiTextRuntime raise RemoteRuntimeError
 pub fn LunaFluxAdapterAuthority::readiness_path(Self) -> String
-pub fn LunaFluxAdapterAuthority::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxApprovalClaim {
   subject : LunaFluxApprovalSubject
@@ -144,11 +124,6 @@ pub(all) struct LunaFluxApprovalClaim {
   approval_receipt_digest : String
   decision : LunaFluxClaimedDecision
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxApprovalClaim::equal(Self, Self) -> Bool
-pub fn LunaFluxApprovalClaim::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxApprovalClaim::not_equal(Self, Self) -> Bool
-pub fn LunaFluxApprovalClaim::to_json(Self) -> Json
-pub fn LunaFluxApprovalClaim::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxApprovalSubject {
   RuntimeImage
@@ -160,11 +135,6 @@ pub(all) enum LunaFluxApprovalSubject {
   PhysicalServing
   BenchmarkComparison
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxApprovalSubject::equal(Self, Self) -> Bool
-pub fn LunaFluxApprovalSubject::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxApprovalSubject::not_equal(Self, Self) -> Bool
-pub fn LunaFluxApprovalSubject::to_json(Self) -> Json
-pub fn LunaFluxApprovalSubject::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxCandidateBlocker {
   UnsupportedCandidateSchema
@@ -191,11 +161,6 @@ pub(all) enum LunaFluxCandidateBlocker {
   PhysicalServingEvidenceUnapproved
   BenchmarkComparisonMissing
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxCandidateBlocker::equal(Self, Self) -> Bool
-pub fn LunaFluxCandidateBlocker::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxCandidateBlocker::not_equal(Self, Self) -> Bool
-pub fn LunaFluxCandidateBlocker::to_json(Self) -> Json
-pub fn LunaFluxCandidateBlocker::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxCandidateManifest {
   schema_version : String
@@ -208,63 +173,33 @@ pub(all) struct LunaFluxCandidateManifest {
   license_manifest_digest : String
   physical_serving_evidence_digest : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxCandidateManifest::equal(Self, Self) -> Bool
-pub fn LunaFluxCandidateManifest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxCandidateManifest::not_equal(Self, Self) -> Bool
-pub fn LunaFluxCandidateManifest::to_json(Self) -> Json
-pub fn LunaFluxCandidateManifest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxCandidateReport {
   manifest_valid : Bool
   routable : Bool
   blockers : Array[LunaFluxCandidateBlocker]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxCandidateReport::equal(Self, Self) -> Bool
-pub fn LunaFluxCandidateReport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxCandidateReport::not_equal(Self, Self) -> Bool
-pub fn LunaFluxCandidateReport::to_json(Self) -> Json
-pub fn LunaFluxCandidateReport::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxClaimedDecision {
   Pending
   Rejected
   Approved
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxClaimedDecision::equal(Self, Self) -> Bool
-pub fn LunaFluxClaimedDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxClaimedDecision::not_equal(Self, Self) -> Bool
-pub fn LunaFluxClaimedDecision::to_json(Self) -> Json
-pub fn LunaFluxClaimedDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxDrainProtocol {
   DrainUnqualified
   AuthenticatedInheritedDrainV1
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxDrainProtocol::equal(Self, Self) -> Bool
-pub fn LunaFluxDrainProtocol::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxDrainProtocol::not_equal(Self, Self) -> Bool
-pub fn LunaFluxDrainProtocol::to_json(Self) -> Json
-pub fn LunaFluxDrainProtocol::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxHealthProtocol {
   HealthReadinessUnqualified
   HttpJsonReadinessV1
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxHealthProtocol::equal(Self, Self) -> Bool
-pub fn LunaFluxHealthProtocol::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxHealthProtocol::not_equal(Self, Self) -> Bool
-pub fn LunaFluxHealthProtocol::to_json(Self) -> Json
-pub fn LunaFluxHealthProtocol::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxInvocationProtocol {
   InvocationUnqualified
   OpenAiResponsesV1
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxInvocationProtocol::equal(Self, Self) -> Bool
-pub fn LunaFluxInvocationProtocol::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxInvocationProtocol::not_equal(Self, Self) -> Bool
-pub fn LunaFluxInvocationProtocol::to_json(Self) -> Json
-pub fn LunaFluxInvocationProtocol::to_repr(Self) -> @debug.Repr
 
 pub struct LunaFluxOpaqueAdapter {
   // private fields
@@ -293,11 +228,6 @@ pub(all) enum LunaFluxPromotionAuthoritySubject {
   ControlContractAuthority
   InvocationContractAuthority
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxPromotionAuthoritySubject::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionAuthoritySubject::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxPromotionAuthoritySubject::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionAuthoritySubject::to_json(Self) -> Json
-pub fn LunaFluxPromotionAuthoritySubject::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LunaFluxPromotionBlocker {
   UnsupportedPromotionSchema
@@ -341,11 +271,6 @@ pub(all) enum LunaFluxPromotionBlocker {
   PromotionVerifierCatalogRejected
   PromotionVerifierUnavailable
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxPromotionBlocker::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionBlocker::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxPromotionBlocker::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionBlocker::to_json(Self) -> Json
-pub fn LunaFluxPromotionBlocker::to_repr(Self) -> @debug.Repr
 
 pub struct LunaFluxPromotionCatalog {
   // private fields
@@ -359,7 +284,6 @@ pub(all) struct LunaFluxPromotionReport {
   authority : LunaFluxAdapterAuthority?
   blockers : Array[LunaFluxPromotionBlocker]
 } derive(@debug.Debug)
-pub fn LunaFluxPromotionReport::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxPromotionSubmission {
   schema_version : String
@@ -368,11 +292,6 @@ pub(all) struct LunaFluxPromotionSubmission {
   benchmark_evidence_digest : String
   approval_claims : Array[LunaFluxApprovalClaim]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxPromotionSubmission::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionSubmission::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxPromotionSubmission::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionSubmission::to_json(Self) -> Json
-pub fn LunaFluxPromotionSubmission::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxPromotionVerificationRequest {
   schema_version : String
@@ -380,11 +299,6 @@ pub(all) struct LunaFluxPromotionVerificationRequest {
   serving : LunaFluxServingContract
   benchmark_evidence_digest : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxPromotionVerificationRequest::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerificationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxPromotionVerificationRequest::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerificationRequest::to_json(Self) -> Json
-pub fn LunaFluxPromotionVerificationRequest::to_repr(Self) -> @debug.Repr
 
 pub struct LunaFluxPromotionVerifier {
   // private fields
@@ -397,11 +311,6 @@ pub(all) struct LunaFluxPromotionVerifierAuthority {
   subject : LunaFluxPromotionAuthoritySubject
   authority_id : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxPromotionVerifierAuthority::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerifierAuthority::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxPromotionVerifierAuthority::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerifierAuthority::to_json(Self) -> Json
-pub fn LunaFluxPromotionVerifierAuthority::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxPromotionVerifierPolicy {
   schema_version : String
@@ -409,11 +318,6 @@ pub(all) struct LunaFluxPromotionVerifierPolicy {
   verifier_key_id : String
   authorities : Array[LunaFluxPromotionVerifierAuthority]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxPromotionVerifierPolicy::equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerifierPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxPromotionVerifierPolicy::not_equal(Self, Self) -> Bool
-pub fn LunaFluxPromotionVerifierPolicy::to_json(Self) -> Json
-pub fn LunaFluxPromotionVerifierPolicy::to_repr(Self) -> @debug.Repr
 
 pub struct LunaFluxRuntimeDiscovery {
   // private fields
@@ -440,11 +344,6 @@ pub(all) struct LunaFluxServingContract {
   health_protocol : LunaFluxHealthProtocol
   drain_protocol : LunaFluxDrainProtocol
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn LunaFluxServingContract::equal(Self, Self) -> Bool
-pub fn LunaFluxServingContract::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxServingContract::not_equal(Self, Self) -> Bool
-pub fn LunaFluxServingContract::to_json(Self) -> Json
-pub fn LunaFluxServingContract::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LunaFluxSignedEvidenceApproval {
   schema_version : String
@@ -457,21 +356,11 @@ pub(all) struct LunaFluxSignedEvidenceApproval {
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn LunaFluxSignedEvidenceApproval::canonical_signing_bytes(Self, String) -> Bytes
-pub fn LunaFluxSignedEvidenceApproval::equal(Self, Self) -> Bool
-pub fn LunaFluxSignedEvidenceApproval::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn LunaFluxSignedEvidenceApproval::not_equal(Self, Self) -> Bool
-pub fn LunaFluxSignedEvidenceApproval::to_json(Self) -> Json
-pub fn LunaFluxSignedEvidenceApproval::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NodeRuntimeEndpoint {
   node_id : String
   endpoint : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn NodeRuntimeEndpoint::equal(Self, Self) -> Bool
-pub fn NodeRuntimeEndpoint::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn NodeRuntimeEndpoint::not_equal(Self, Self) -> Bool
-pub fn NodeRuntimeEndpoint::to_json(Self) -> Json
-pub fn NodeRuntimeEndpoint::to_repr(Self) -> @debug.Repr
 
 pub struct OpenAiTextRuntime {
   endpoint : String
@@ -507,11 +396,6 @@ pub(all) struct RuntimeInvocationResult {
   input_units : Int
   output_units : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeInvocationResult::equal(Self, Self) -> Bool
-pub fn RuntimeInvocationResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeInvocationResult::not_equal(Self, Self) -> Bool
-pub fn RuntimeInvocationResult::to_json(Self) -> Json
-pub fn RuntimeInvocationResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RuntimeLifecycle {
   Inspect
@@ -523,11 +407,6 @@ pub(all) enum RuntimeLifecycle {
   Stop
   CollectMetrics
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RuntimeLifecycle::equal(Self, Self) -> Bool
-pub fn RuntimeLifecycle::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RuntimeLifecycle::not_equal(Self, Self) -> Bool
-pub fn RuntimeLifecycle::to_json(Self) -> Json
-pub fn RuntimeLifecycle::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

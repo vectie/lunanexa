@@ -12,9 +12,6 @@ pub(all) struct MediaBinding {
 } derive(FromJson)
 
 ///|
-pub extend MediaBinding with FromJson::{from_json}
-
-///|
 /// One operator-qualified template/node profile serves every subsequent order;
 /// customers never configure endpoints or wait for per-order config edits.
 pub(all) struct MediaTemplateBinding {
@@ -26,9 +23,6 @@ pub(all) struct MediaTemplateBinding {
   profile : @media_provider.Profile
   runtime_route : @contracts.RuntimeRoutePolicy?
 } derive(FromJson)
-
-///|
-pub extend MediaTemplateBinding with FromJson::{from_json}
 
 ///|
 pub struct MediaService {

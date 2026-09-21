@@ -24,7 +24,7 @@ pub fn sign_webhook(event : WebhookEvent, test_secret : String) -> String {
     let key = @utf8.encode(test_secret)
     let material = @utf8.encode(webhook_material(event))
     @crypto.bytes_to_hex_string(
-      @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()),
+      @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
     )
   }
 }

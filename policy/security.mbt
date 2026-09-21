@@ -7,18 +7,6 @@ pub(all) enum Role {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend Role with Debug::{to_repr}
-
-///|
-pub extend Role with Eq::{not_equal, equal}
-
-///|
-pub extend Role with ToJson::{to_json}
-
-///|
-pub extend Role with FromJson::{from_json}
-
-///|
 pub(all) enum Permission {
   EnrollNode
   ManageModel
@@ -27,18 +15,6 @@ pub(all) enum Permission {
   ReadAudit
   InvokeModel
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend Permission with Debug::{to_repr}
-
-///|
-pub extend Permission with Eq::{not_equal, equal}
-
-///|
-pub extend Permission with ToJson::{to_json}
-
-///|
-pub extend Permission with FromJson::{from_json}
 
 ///|
 pub fn authorized(role : Role, permission : Permission) -> Bool {
@@ -58,18 +34,6 @@ pub(all) struct SecretReference {
   provider_ref : String
   rotated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend SecretReference with Debug::{to_repr}
-
-///|
-pub extend SecretReference with Eq::{not_equal, equal}
-
-///|
-pub extend SecretReference with ToJson::{to_json}
-
-///|
-pub extend SecretReference with FromJson::{from_json}
 
 ///|
 pub fn SecretReference::rotate(
@@ -93,34 +57,10 @@ pub(all) struct SignedSubject {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend SignedSubject with Debug::{to_repr}
-
-///|
-pub extend SignedSubject with Eq::{not_equal, equal}
-
-///|
-pub extend SignedSubject with ToJson::{to_json}
-
-///|
-pub extend SignedSubject with FromJson::{from_json}
-
-///|
 pub(all) struct TrustPolicy {
   allowed_signers : Array[String]
   require_sha256 : Bool
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend TrustPolicy with Debug::{to_repr}
-
-///|
-pub extend TrustPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend TrustPolicy with ToJson::{to_json}
-
-///|
-pub extend TrustPolicy with FromJson::{from_json}
 
 ///|
 pub fn trusted(subject : SignedSubject, policy : TrustPolicy) -> Bool {
@@ -145,18 +85,6 @@ pub(all) struct RequestLog {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RequestLog with Debug::{to_repr}
-
-///|
-pub extend RequestLog with Eq::{not_equal, equal}
-
-///|
-pub extend RequestLog with ToJson::{to_json}
-
-///|
-pub extend RequestLog with FromJson::{from_json}
-
-///|
 pub fn redacted_request_log(
   request : @contracts.WorkloadEnvelope,
 ) -> RequestLog {
@@ -179,18 +107,6 @@ pub(all) struct RetentionRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend RetentionRecord with Debug::{to_repr}
-
-///|
-pub extend RetentionRecord with Eq::{not_equal, equal}
-
-///|
-pub extend RetentionRecord with ToJson::{to_json}
-
-///|
-pub extend RetentionRecord with FromJson::{from_json}
-
-///|
 pub(all) struct DeletionReceipt {
   workload_id : String
   deleted_unix_ms : Int64
@@ -199,28 +115,10 @@ pub(all) struct DeletionReceipt {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend DeletionReceipt with Debug::{to_repr}
-
-///|
-pub extend DeletionReceipt with Eq::{not_equal, equal}
-
-///|
-pub extend DeletionReceipt with ToJson::{to_json}
-
-///|
-pub extend DeletionReceipt with FromJson::{from_json}
-
-///|
 pub(all) suberror RetentionError {
   RetentionNotPermitted
   ConsentRequired
 } derive(Debug, Eq)
-
-///|
-pub extend RetentionError with Debug::{to_repr}
-
-///|
-pub extend RetentionError with Eq::{not_equal, equal}
 
 ///|
 pub struct RetentionLedger {

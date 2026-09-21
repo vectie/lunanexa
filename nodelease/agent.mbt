@@ -17,18 +17,6 @@ pub(all) enum LeaseAgentAction {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LeaseAgentAction with Debug::{to_repr}
-
-///|
-pub extend LeaseAgentAction with Eq::{not_equal, equal}
-
-///|
-pub extend LeaseAgentAction with ToJson::{to_json}
-
-///|
-pub extend LeaseAgentAction with FromJson::{from_json}
-
-///|
 pub(all) enum LeaseAgentState {
   Idle
   ProvisionPending
@@ -40,18 +28,6 @@ pub(all) enum LeaseAgentState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LeaseAgentState with Debug::{to_repr}
-
-///|
-pub extend LeaseAgentState with Eq::{not_equal, equal}
-
-///|
-pub extend LeaseAgentState with ToJson::{to_json}
-
-///|
-pub extend LeaseAgentState with FromJson::{from_json}
-
-///|
 pub(all) struct LeaseAgentSnapshot {
   schema_version : String
   node_id : String
@@ -60,18 +36,6 @@ pub(all) struct LeaseAgentSnapshot {
   observed_generation : Int64
   last_receipt : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend LeaseAgentSnapshot with Debug::{to_repr}
-
-///|
-pub extend LeaseAgentSnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend LeaseAgentSnapshot with ToJson::{to_json}
-
-///|
-pub extend LeaseAgentSnapshot with FromJson::{from_json}
 
 ///|
 pub struct LeaseAgentGuard {

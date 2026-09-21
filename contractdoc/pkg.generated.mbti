@@ -66,9 +66,6 @@ pub(all) suberror ContractDocumentError {
   ContractApprovalSelfDecision(String)
   ContractApprovalAlreadyDecided(String)
 } derive(Eq, @debug.Debug)
-pub fn ContractDocumentError::equal(Self, Self) -> Bool
-pub fn ContractDocumentError::not_equal(Self, Self) -> Bool
-pub fn ContractDocumentError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ContractAdmissionView {
@@ -80,11 +77,6 @@ pub(all) struct ContractAdmissionView {
   exclusive_lease_present : Bool
   evaluated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractAdmissionView::equal(Self, Self) -> Bool
-pub fn ContractAdmissionView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractAdmissionView::not_equal(Self, Self) -> Bool
-pub fn ContractAdmissionView::to_json(Self) -> Json
-pub fn ContractAdmissionView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractAmendment {
   amendment_id : String
@@ -101,11 +93,6 @@ pub(all) struct ContractAmendment {
   updated_unix_ms : Int64
   revision : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractAmendment::equal(Self, Self) -> Bool
-pub fn ContractAmendment::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractAmendment::not_equal(Self, Self) -> Bool
-pub fn ContractAmendment::to_json(Self) -> Json
-pub fn ContractAmendment::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractAmendmentState {
   Draft
@@ -114,11 +101,6 @@ pub(all) enum ContractAmendmentState {
   Superseded
   Rejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractAmendmentState::equal(Self, Self) -> Bool
-pub fn ContractAmendmentState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractAmendmentState::not_equal(Self, Self) -> Bool
-pub fn ContractAmendmentState::to_json(Self) -> Json
-pub fn ContractAmendmentState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractApproval {
   approval_id : String
@@ -133,11 +115,6 @@ pub(all) struct ContractApproval {
   decided_unix_ms : Int64?
   decision_reason : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractApproval::equal(Self, Self) -> Bool
-pub fn ContractApproval::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractApproval::not_equal(Self, Self) -> Bool
-pub fn ContractApproval::to_json(Self) -> Json
-pub fn ContractApproval::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractApprovalPayload {
   evidence_sha256 : String?
@@ -147,11 +124,6 @@ pub(all) struct ContractApprovalPayload {
   amount_minor_units : Int64?
   packet_values_sha256 : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractApprovalPayload::equal(Self, Self) -> Bool
-pub fn ContractApprovalPayload::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractApprovalPayload::not_equal(Self, Self) -> Bool
-pub fn ContractApprovalPayload::to_json(Self) -> Json
-pub fn ContractApprovalPayload::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractApprovalStatus {
   Pending
@@ -159,11 +131,6 @@ pub(all) enum ContractApprovalStatus {
   Applied
   Rejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractApprovalStatus::equal(Self, Self) -> Bool
-pub fn ContractApprovalStatus::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractApprovalStatus::not_equal(Self, Self) -> Bool
-pub fn ContractApprovalStatus::to_json(Self) -> Json
-pub fn ContractApprovalStatus::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractClosure {
   kind : ContractClosureKind
@@ -171,22 +138,12 @@ pub(all) struct ContractClosure {
   closed_by : String
   closed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractClosure::equal(Self, Self) -> Bool
-pub fn ContractClosure::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractClosure::not_equal(Self, Self) -> Bool
-pub fn ContractClosure::to_json(Self) -> Json
-pub fn ContractClosure::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractClosureKind {
   Expired
   EarlyTermination
   Settled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractClosureKind::equal(Self, Self) -> Bool
-pub fn ContractClosureKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractClosureKind::not_equal(Self, Self) -> Bool
-pub fn ContractClosureKind::to_json(Self) -> Json
-pub fn ContractClosureKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractClosureProposal {
   proposal_id : String
@@ -199,22 +156,12 @@ pub(all) struct ContractClosureProposal {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractClosureProposal::equal(Self, Self) -> Bool
-pub fn ContractClosureProposal::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractClosureProposal::not_equal(Self, Self) -> Bool
-pub fn ContractClosureProposal::to_json(Self) -> Json
-pub fn ContractClosureProposal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractCollectionPolicy {
   PersistedContractData
   PersistedPersonalContact
   CompleteOffline
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractCollectionPolicy::equal(Self, Self) -> Bool
-pub fn ContractCollectionPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractCollectionPolicy::not_equal(Self, Self) -> Bool
-pub fn ContractCollectionPolicy::to_json(Self) -> Json
-pub fn ContractCollectionPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractCompletionSummary {
   customer_required : Int
@@ -225,11 +172,6 @@ pub(all) struct ContractCompletionSummary {
   system_completed : Int
   offline_fields : Int
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractCompletionSummary::equal(Self, Self) -> Bool
-pub fn ContractCompletionSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractCompletionSummary::not_equal(Self, Self) -> Bool
-pub fn ContractCompletionSummary::to_json(Self) -> Json
-pub fn ContractCompletionSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractDocumentSnapshot {
   schema_version : String
@@ -242,11 +184,6 @@ pub(all) struct ContractDocumentSnapshot {
   closure_proposals : Array[ContractClosureProposal]
   numbers : Array[ContractNumber]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractDocumentSnapshot::equal(Self, Self) -> Bool
-pub fn ContractDocumentSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractDocumentSnapshot::not_equal(Self, Self) -> Bool
-pub fn ContractDocumentSnapshot::to_json(Self) -> Json
-pub fn ContractDocumentSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractExecution {
   evidence_sha256 : String
@@ -254,11 +191,6 @@ pub(all) struct ContractExecution {
   registered_by : String
   registered_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractExecution::equal(Self, Self) -> Bool
-pub fn ContractExecution::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractExecution::not_equal(Self, Self) -> Bool
-pub fn ContractExecution::to_json(Self) -> Json
-pub fn ContractExecution::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractFieldAssignment {
   field_id : String
@@ -268,11 +200,6 @@ pub(all) struct ContractFieldAssignment {
   updated_by : String
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFieldAssignment::equal(Self, Self) -> Bool
-pub fn ContractFieldAssignment::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFieldAssignment::not_equal(Self, Self) -> Bool
-pub fn ContractFieldAssignment::to_json(Self) -> Json
-pub fn ContractFieldAssignment::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractFieldDefinition {
   field_id : String
@@ -287,11 +214,6 @@ pub(all) struct ContractFieldDefinition {
   owner : ContractFieldOwner
   locator : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFieldDefinition::equal(Self, Self) -> Bool
-pub fn ContractFieldDefinition::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFieldDefinition::not_equal(Self, Self) -> Bool
-pub fn ContractFieldDefinition::to_json(Self) -> Json
-pub fn ContractFieldDefinition::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractFieldKind {
   PlainText
@@ -303,11 +225,6 @@ pub(all) enum ContractFieldKind {
   Choice
   MultilineText
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFieldKind::equal(Self, Self) -> Bool
-pub fn ContractFieldKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFieldKind::not_equal(Self, Self) -> Bool
-pub fn ContractFieldKind::to_json(Self) -> Json
-pub fn ContractFieldKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractFieldOwner {
   CustomerMessenger
@@ -316,21 +233,11 @@ pub(all) enum ContractFieldOwner {
   OfflineParticipant
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn ContractFieldOwner::can_edit(Self, Self) -> Bool
-pub fn ContractFieldOwner::equal(Self, Self) -> Bool
-pub fn ContractFieldOwner::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFieldOwner::not_equal(Self, Self) -> Bool
-pub fn ContractFieldOwner::to_json(Self) -> Json
-pub fn ContractFieldOwner::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractFieldValue {
   field_id : String
   value : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFieldValue::equal(Self, Self) -> Bool
-pub fn ContractFieldValue::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFieldValue::not_equal(Self, Self) -> Bool
-pub fn ContractFieldValue::to_json(Self) -> Json
-pub fn ContractFieldValue::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractFormDefinition {
   form : ContractFormKind
@@ -338,11 +245,6 @@ pub(all) struct ContractFormDefinition {
   title_en : String
   field_ids : Array[String]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFormDefinition::equal(Self, Self) -> Bool
-pub fn ContractFormDefinition::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFormDefinition::not_equal(Self, Self) -> Bool
-pub fn ContractFormDefinition::to_json(Self) -> Json
-pub fn ContractFormDefinition::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractFormKind {
   MasterLease
@@ -353,21 +255,11 @@ pub(all) enum ContractFormKind {
   SettlementConfirmation
   EarlyTerminationApplication
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFormKind::equal(Self, Self) -> Bool
-pub fn ContractFormKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFormKind::not_equal(Self, Self) -> Bool
-pub fn ContractFormKind::to_json(Self) -> Json
-pub fn ContractFormKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractFormStage {
   InitialStage
   EffectiveStage
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractFormStage::equal(Self, Self) -> Bool
-pub fn ContractFormStage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractFormStage::not_equal(Self, Self) -> Bool
-pub fn ContractFormStage::to_json(Self) -> Json
-pub fn ContractFormStage::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractGeneratedArtifact {
   artifact_id : String
@@ -378,11 +270,6 @@ pub(all) struct ContractGeneratedArtifact {
   render_evidence_sha256 : String
   generated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractGeneratedArtifact::equal(Self, Self) -> Bool
-pub fn ContractGeneratedArtifact::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractGeneratedArtifact::not_equal(Self, Self) -> Bool
-pub fn ContractGeneratedArtifact::to_json(Self) -> Json
-pub fn ContractGeneratedArtifact::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractGovernanceDashboard {
   tenant_ref : String
@@ -394,11 +281,6 @@ pub(all) struct ContractGovernanceDashboard {
   next_expiry_unix_ms : Int64?
   generated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractGovernanceDashboard::equal(Self, Self) -> Bool
-pub fn ContractGovernanceDashboard::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractGovernanceDashboard::not_equal(Self, Self) -> Bool
-pub fn ContractGovernanceDashboard::to_json(Self) -> Json
-pub fn ContractGovernanceDashboard::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractNumber {
   number : String
@@ -407,11 +289,6 @@ pub(all) struct ContractNumber {
   sequence : Int64
   issued_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractNumber::equal(Self, Self) -> Bool
-pub fn ContractNumber::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractNumber::not_equal(Self, Self) -> Bool
-pub fn ContractNumber::to_json(Self) -> Json
-pub fn ContractNumber::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractObligation {
   obligation_id : String
@@ -431,21 +308,11 @@ pub(all) struct ContractObligation {
   updated_unix_ms : Int64
   revision : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractObligation::equal(Self, Self) -> Bool
-pub fn ContractObligation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractObligation::not_equal(Self, Self) -> Bool
-pub fn ContractObligation::to_json(Self) -> Json
-pub fn ContractObligation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractObligationKind {
   PaymentMilestone
   Acceptance
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractObligationKind::equal(Self, Self) -> Bool
-pub fn ContractObligationKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractObligationKind::not_equal(Self, Self) -> Bool
-pub fn ContractObligationKind::to_json(Self) -> Json
-pub fn ContractObligationKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractObligationState {
   Open
@@ -453,11 +320,6 @@ pub(all) enum ContractObligationState {
   Overdue
   Waived
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractObligationState::equal(Self, Self) -> Bool
-pub fn ContractObligationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractObligationState::not_equal(Self, Self) -> Bool
-pub fn ContractObligationState::to_json(Self) -> Json
-pub fn ContractObligationState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPacket {
   packet_id : String
@@ -491,19 +353,14 @@ pub fn ContractPacket::canonical_values_material(Self) -> String
 pub fn ContractPacket::close_packet(Self, Int64, ContractClosure, Bool, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::complete_generation(Self, Int64, ContractGeneratedArtifact, ContractGeneratedArtifact, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::confirm_information(Self, ContractTemplateManifest, Int64, String, String, Int64) -> Self raise ContractDocumentError
-pub fn ContractPacket::equal(Self, Self) -> Bool
 pub fn ContractPacket::fail_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
-pub fn ContractPacket::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn ContractPacket::marker_replacements(Self, Array[String]) -> Array[ContractFieldValue] raise ContractDocumentError
 pub fn ContractPacket::marker_value(Self, String) -> String raise ContractDocumentError
-pub fn ContractPacket::not_equal(Self, Self) -> Bool
 pub fn ContractPacket::register_execution(Self, Int64, ContractExecution, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::renewal_draft(Self, ContractTemplateManifest, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::request_generation(Self, Int64, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::supersede_effective(Self, Int64, ContractSupersession, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::supersede_packet(Self, Int64, ContractSupersession, Int64) -> Self raise ContractDocumentError
-pub fn ContractPacket::to_json(Self) -> Json
-pub fn ContractPacket::to_repr(Self) -> @debug.Repr
 pub fn ContractPacket::update_information(Self, ContractTemplateManifest, Int64, Array[ContractFieldValue], ContractFieldOwner, String, String, Int64) -> Self raise ContractDocumentError
 pub fn ContractPacket::value(Self, String) -> String?
 
@@ -518,11 +375,6 @@ pub(all) struct ContractPacketEvent {
   artifact_sha256 : String?
   occurred_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPacketEvent::equal(Self, Self) -> Bool
-pub fn ContractPacketEvent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPacketEvent::not_equal(Self, Self) -> Bool
-pub fn ContractPacketEvent::to_json(Self) -> Json
-pub fn ContractPacketEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractPacketEventKind {
   PacketCreated
@@ -536,11 +388,6 @@ pub(all) enum ContractPacketEventKind {
   PacketClosedEvent
   PacketSupersededEvent
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPacketEventKind::equal(Self, Self) -> Bool
-pub fn ContractPacketEventKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPacketEventKind::not_equal(Self, Self) -> Bool
-pub fn ContractPacketEventKind::to_json(Self) -> Json
-pub fn ContractPacketEventKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractPacketState {
   InformationDraft
@@ -553,11 +400,6 @@ pub(all) enum ContractPacketState {
   Closed
   Superseded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPacketState::equal(Self, Self) -> Bool
-pub fn ContractPacketState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPacketState::not_equal(Self, Self) -> Bool
-pub fn ContractPacketState::to_json(Self) -> Json
-pub fn ContractPacketState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewBlock {
   kind : String
@@ -576,11 +418,6 @@ pub(all) struct ContractPreviewBlock {
   hanging_twips : Int?
   grid_widths_twips : Array[Int]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewBlock::equal(Self, Self) -> Bool
-pub fn ContractPreviewBlock::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewBlock::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewBlock::to_json(Self) -> Json
-pub fn ContractPreviewBlock::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewCell {
   text : String
@@ -594,11 +431,6 @@ pub(all) struct ContractPreviewCell {
   margin_left_twips : Int?
   vertical_alignment : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewCell::equal(Self, Self) -> Bool
-pub fn ContractPreviewCell::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewCell::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewCell::to_json(Self) -> Json
-pub fn ContractPreviewCell::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewDocument {
   engine : String
@@ -615,21 +447,11 @@ pub(all) struct ContractPreviewDocument {
   margin_bottom_twips : Int?
   margin_left_twips : Int?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewDocument::equal(Self, Self) -> Bool
-pub fn ContractPreviewDocument::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewDocument::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewDocument::to_json(Self) -> Json
-pub fn ContractPreviewDocument::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewMarker {
   marker : String
   value : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewMarker::equal(Self, Self) -> Bool
-pub fn ContractPreviewMarker::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewMarker::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewMarker::to_json(Self) -> Json
-pub fn ContractPreviewMarker::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewParagraph {
   runs : Array[ContractPreviewRun]
@@ -643,22 +465,12 @@ pub(all) struct ContractPreviewParagraph {
   first_line_twips : Int?
   hanging_twips : Int?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewParagraph::equal(Self, Self) -> Bool
-pub fn ContractPreviewParagraph::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewParagraph::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewParagraph::to_json(Self) -> Json
-pub fn ContractPreviewParagraph::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewRow {
   cells : Array[ContractPreviewCell]
   height_twips : Int?
   height_rule : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewRow::equal(Self, Self) -> Bool
-pub fn ContractPreviewRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewRow::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewRow::to_json(Self) -> Json
-pub fn ContractPreviewRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewRun {
   text : String
@@ -671,11 +483,6 @@ pub(all) struct ContractPreviewRun {
   font_east_asia : String?
   font_complex_script : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewRun::equal(Self, Self) -> Bool
-pub fn ContractPreviewRun::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewRun::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewRun::to_json(Self) -> Json
-pub fn ContractPreviewRun::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractPreviewTemplate {
   template_id : String
@@ -685,11 +492,6 @@ pub(all) struct ContractPreviewTemplate {
   page_forms : Array[ContractFormKind]
   marker_defaults : Array[ContractPreviewMarker]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractPreviewTemplate::equal(Self, Self) -> Bool
-pub fn ContractPreviewTemplate::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractPreviewTemplate::not_equal(Self, Self) -> Bool
-pub fn ContractPreviewTemplate::to_json(Self) -> Json
-pub fn ContractPreviewTemplate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractProposalState {
   Draft
@@ -698,11 +500,6 @@ pub(all) enum ContractProposalState {
   Rejected
   Applied
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractProposalState::equal(Self, Self) -> Bool
-pub fn ContractProposalState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractProposalState::not_equal(Self, Self) -> Bool
-pub fn ContractProposalState::to_json(Self) -> Json
-pub fn ContractProposalState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractSettlementDraft {
   draft_id : String
@@ -715,11 +512,6 @@ pub(all) struct ContractSettlementDraft {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractSettlementDraft::equal(Self, Self) -> Bool
-pub fn ContractSettlementDraft::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractSettlementDraft::not_equal(Self, Self) -> Bool
-pub fn ContractSettlementDraft::to_json(Self) -> Json
-pub fn ContractSettlementDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractSupersession {
   successor_ref : String
@@ -727,11 +519,6 @@ pub(all) struct ContractSupersession {
   superseded_by : String
   superseded_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractSupersession::equal(Self, Self) -> Bool
-pub fn ContractSupersession::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractSupersession::not_equal(Self, Self) -> Bool
-pub fn ContractSupersession::to_json(Self) -> Json
-pub fn ContractSupersession::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ContractTemplateManifest {
   contract_version : String
@@ -750,12 +537,7 @@ pub(all) struct ContractTemplateManifest {
   forms : Array[ContractFormDefinition]
   fields : Array[ContractFieldDefinition]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ContractTemplateManifest::equal(Self, Self) -> Bool
 pub fn ContractTemplateManifest::field(Self, String) -> ContractFieldDefinition?
-pub fn ContractTemplateManifest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ContractTemplateManifest::not_equal(Self, Self) -> Bool
-pub fn ContractTemplateManifest::to_json(Self) -> Json
-pub fn ContractTemplateManifest::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

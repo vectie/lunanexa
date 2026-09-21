@@ -16,18 +16,6 @@ pub(all) enum LunaFluxPromotionAuthoritySubject {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxPromotionAuthoritySubject with Debug::{to_repr}
-
-///|
-pub extend LunaFluxPromotionAuthoritySubject with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxPromotionAuthoritySubject with ToJson::{to_json}
-
-///|
-pub extend LunaFluxPromotionAuthoritySubject with FromJson::{from_json}
-
-///|
 /// Private fixture shape for approval authenticated by a future embedding
 /// controller. It is not constructible through the production interface and
 /// does not claim that LunaNexa verified an external signature.
@@ -67,29 +55,11 @@ pub(all) struct LunaFluxPromotionVerificationRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend LunaFluxPromotionVerificationRequest with Debug::{to_repr}
-
-///|
-pub extend LunaFluxPromotionVerificationRequest with Eq::{not_equal, equal}
-
-///|
-pub extend LunaFluxPromotionVerificationRequest with ToJson::{to_json}
-
-///|
-pub extend LunaFluxPromotionVerificationRequest with FromJson::{from_json}
-
-///|
 pub(all) suberror LunaFluxPromotionCatalogError {
   UnsupportedPromotionAuthoritySchema
   InvalidPromotionAuthority(LunaFluxPromotionAuthoritySubject)
   ReusedPromotionAuthorityReceipt(LunaFluxPromotionAuthoritySubject)
 } derive(Debug, Eq)
-
-///|
-pub extend LunaFluxPromotionCatalogError with Debug::{to_repr}
-
-///|
-pub extend LunaFluxPromotionCatalogError with Eq::{not_equal, equal}
 
 ///|
 /// Immutable one-rollout approval catalog. Its public API exposes verification,

@@ -16,23 +16,11 @@ pub(all) struct PodIdentity {
 } derive(Debug, Eq)
 
 ///|
-pub extend PodIdentity with Debug::{to_repr}
-
-///|
-pub extend PodIdentity with Eq::{not_equal, equal}
-
-///|
 pub(all) suberror ObservationError {
   InvalidIdentity
   IdentityMismatch
   InvalidObservation
 } derive(Debug, Eq)
-
-///|
-pub extend ObservationError with Debug::{to_repr}
-
-///|
-pub extend ObservationError with Eq::{not_equal, equal}
 
 ///|
 /// Classify an authenticated Kubernetes API observation. Running alone is not

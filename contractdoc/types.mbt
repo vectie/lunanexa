@@ -27,12 +27,6 @@ pub(all) suberror ContractDocumentError {
 } derive(Debug, Eq)
 
 ///|
-pub extend ContractDocumentError with Debug::{to_repr}
-
-///|
-pub extend ContractDocumentError with Eq::{not_equal, equal}
-
-///|
 pub(all) enum ContractFormKind {
   MasterLease
   ReservationApplication
@@ -44,18 +38,6 @@ pub(all) enum ContractFormKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractFormKind with Debug::{to_repr}
-
-///|
-pub extend ContractFormKind with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFormKind with ToJson::{to_json}
-
-///|
-pub extend ContractFormKind with FromJson::{from_json}
-
-///|
 /// The lifecycle stage at which a source form may start a new packet. Initial
 /// forms open the contract relationship; effective-stage forms follow an
 /// already effective packet through `preceding_packet_ref`.
@@ -63,18 +45,6 @@ pub(all) enum ContractFormStage {
   InitialStage
   EffectiveStage
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractFormStage with Debug::{to_repr}
-
-///|
-pub extend ContractFormStage with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFormStage with ToJson::{to_json}
-
-///|
-pub extend ContractFormStage with FromJson::{from_json}
 
 ///|
 pub(all) enum ContractFieldKind {
@@ -89,35 +59,11 @@ pub(all) enum ContractFieldKind {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractFieldKind with Debug::{to_repr}
-
-///|
-pub extend ContractFieldKind with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFieldKind with ToJson::{to_json}
-
-///|
-pub extend ContractFieldKind with FromJson::{from_json}
-
-///|
 pub(all) enum ContractCollectionPolicy {
   PersistedContractData
   PersistedPersonalContact
   CompleteOffline
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractCollectionPolicy with Debug::{to_repr}
-
-///|
-pub extend ContractCollectionPolicy with Eq::{not_equal, equal}
-
-///|
-pub extend ContractCollectionPolicy with ToJson::{to_json}
-
-///|
-pub extend ContractCollectionPolicy with FromJson::{from_json}
 
 ///|
 /// Declares who owns the authoritative value for one source-document slot.
@@ -130,18 +76,6 @@ pub(all) enum ContractFieldOwner {
   PlatformDerived
   OfflineParticipant
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractFieldOwner with Debug::{to_repr}
-
-///|
-pub extend ContractFieldOwner with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFieldOwner with ToJson::{to_json}
-
-///|
-pub extend ContractFieldOwner with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractFieldDefinition {
@@ -159,36 +93,12 @@ pub(all) struct ContractFieldDefinition {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractFieldDefinition with Debug::{to_repr}
-
-///|
-pub extend ContractFieldDefinition with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFieldDefinition with ToJson::{to_json}
-
-///|
-pub extend ContractFieldDefinition with FromJson::{from_json}
-
-///|
 pub(all) struct ContractFormDefinition {
   form : ContractFormKind
   title_zh_cn : String
   title_en : String
   field_ids : Array[String]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractFormDefinition with Debug::{to_repr}
-
-///|
-pub extend ContractFormDefinition with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFormDefinition with ToJson::{to_json}
-
-///|
-pub extend ContractFormDefinition with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractTemplateManifest {
@@ -210,34 +120,10 @@ pub(all) struct ContractTemplateManifest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractTemplateManifest with Debug::{to_repr}
-
-///|
-pub extend ContractTemplateManifest with Eq::{not_equal, equal}
-
-///|
-pub extend ContractTemplateManifest with ToJson::{to_json}
-
-///|
-pub extend ContractTemplateManifest with FromJson::{from_json}
-
-///|
 pub(all) struct ContractFieldValue {
   field_id : String
   value : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractFieldValue with Debug::{to_repr}
-
-///|
-pub extend ContractFieldValue with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFieldValue with ToJson::{to_json}
-
-///|
-pub extend ContractFieldValue with FromJson::{from_json}
 
 ///|
 /// One styled text run produced by MoonLeaf's neutral DOCX scene.
@@ -254,18 +140,6 @@ pub(all) struct ContractPreviewRun {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPreviewRun with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewRun with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewRun with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewRun with FromJson::{from_json}
-
-///|
 pub(all) struct ContractPreviewParagraph {
   runs : Array[ContractPreviewRun]
   alignment : String?
@@ -278,18 +152,6 @@ pub(all) struct ContractPreviewParagraph {
   first_line_twips : Int?
   hanging_twips : Int?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractPreviewParagraph with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewParagraph with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewParagraph with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewParagraph with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractPreviewCell {
@@ -306,35 +168,11 @@ pub(all) struct ContractPreviewCell {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPreviewCell with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewCell with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewCell with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewCell with FromJson::{from_json}
-
-///|
 pub(all) struct ContractPreviewRow {
   cells : Array[ContractPreviewCell]
   height_twips : Int?
   height_rule : String?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractPreviewRow with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewRow with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewRow with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewRow with FromJson::{from_json}
 
 ///| A provider-neutral MoonLeaf block. `kind` is one of paragraph, heading,
 
@@ -358,18 +196,6 @@ pub(all) struct ContractPreviewBlock {
   grid_widths_twips : Array[Int]
 } derive(Debug, Eq, ToJson, FromJson)
 
-///|
-pub extend ContractPreviewBlock with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewBlock with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewBlock with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewBlock with FromJson::{from_json}
-
 ///| Bounded live preview derived from the authoritative fillable DOCX by
 
 ///|
@@ -391,35 +217,11 @@ pub(all) struct ContractPreviewDocument {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPreviewDocument with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewDocument with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewDocument with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewDocument with FromJson::{from_json}
-
-///|
 /// A source marker and its field-free value in a MoonLeaf preview scene.
 pub(all) struct ContractPreviewMarker {
   marker : String
   value : String
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractPreviewMarker with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewMarker with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewMarker with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewMarker with FromJson::{from_json}
 
 ///|
 /// A build-time MoonLeaf scene used only when the browser runs in demo mode.
@@ -439,18 +241,6 @@ pub(all) struct ContractPreviewTemplate {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPreviewTemplate with Debug::{to_repr}
-
-///|
-pub extend ContractPreviewTemplate with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPreviewTemplate with ToJson::{to_json}
-
-///|
-pub extend ContractPreviewTemplate with FromJson::{from_json}
-
-///|
 pub(all) struct ContractFieldAssignment {
   field_id : String
   value : String
@@ -459,18 +249,6 @@ pub(all) struct ContractFieldAssignment {
   updated_by : String
   updated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractFieldAssignment with Debug::{to_repr}
-
-///|
-pub extend ContractFieldAssignment with Eq::{not_equal, equal}
-
-///|
-pub extend ContractFieldAssignment with ToJson::{to_json}
-
-///|
-pub extend ContractFieldAssignment with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractCompletionSummary {
@@ -482,18 +260,6 @@ pub(all) struct ContractCompletionSummary {
   system_completed : Int
   offline_fields : Int
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractCompletionSummary with Debug::{to_repr}
-
-///|
-pub extend ContractCompletionSummary with Eq::{not_equal, equal}
-
-///|
-pub extend ContractCompletionSummary with ToJson::{to_json}
-
-///|
-pub extend ContractCompletionSummary with FromJson::{from_json}
 
 ///|
 pub(all) enum ContractPacketState {
@@ -509,18 +275,6 @@ pub(all) enum ContractPacketState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPacketState with Debug::{to_repr}
-
-///|
-pub extend ContractPacketState with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPacketState with ToJson::{to_json}
-
-///|
-pub extend ContractPacketState with FromJson::{from_json}
-
-///|
 pub(all) struct ContractGeneratedArtifact {
   artifact_id : String
   media_type : String
@@ -530,18 +284,6 @@ pub(all) struct ContractGeneratedArtifact {
   render_evidence_sha256 : String
   generated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractGeneratedArtifact with Debug::{to_repr}
-
-///|
-pub extend ContractGeneratedArtifact with Eq::{not_equal, equal}
-
-///|
-pub extend ContractGeneratedArtifact with ToJson::{to_json}
-
-///|
-pub extend ContractGeneratedArtifact with FromJson::{from_json}
 
 ///|
 /// Registered evidence of the offline signed and stamped contract. Signing
@@ -555,35 +297,11 @@ pub(all) struct ContractExecution {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractExecution with Debug::{to_repr}
-
-///|
-pub extend ContractExecution with Eq::{not_equal, equal}
-
-///|
-pub extend ContractExecution with ToJson::{to_json}
-
-///|
-pub extend ContractExecution with FromJson::{from_json}
-
-///|
 pub(all) enum ContractClosureKind {
   Expired
   EarlyTermination
   Settled
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractClosureKind with Debug::{to_repr}
-
-///|
-pub extend ContractClosureKind with Eq::{not_equal, equal}
-
-///|
-pub extend ContractClosureKind with ToJson::{to_json}
-
-///|
-pub extend ContractClosureKind with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractClosure {
@@ -594,36 +312,12 @@ pub(all) struct ContractClosure {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractClosure with Debug::{to_repr}
-
-///|
-pub extend ContractClosure with Eq::{not_equal, equal}
-
-///|
-pub extend ContractClosure with ToJson::{to_json}
-
-///|
-pub extend ContractClosure with FromJson::{from_json}
-
-///|
 pub(all) struct ContractSupersession {
   successor_ref : String
   reason : String
   superseded_by : String
   superseded_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractSupersession with Debug::{to_repr}
-
-///|
-pub extend ContractSupersession with Eq::{not_equal, equal}
-
-///|
-pub extend ContractSupersession with ToJson::{to_json}
-
-///|
-pub extend ContractSupersession with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractPacket {
@@ -655,18 +349,6 @@ pub(all) struct ContractPacket {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPacket with Debug::{to_repr}
-
-///|
-pub extend ContractPacket with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPacket with ToJson::{to_json}
-
-///|
-pub extend ContractPacket with FromJson::{from_json}
-
-///|
 pub(all) enum ContractPacketEventKind {
   PacketCreated
   InformationUpdated
@@ -679,18 +361,6 @@ pub(all) enum ContractPacketEventKind {
   PacketClosedEvent
   PacketSupersededEvent
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractPacketEventKind with Debug::{to_repr}
-
-///|
-pub extend ContractPacketEventKind with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPacketEventKind with ToJson::{to_json}
-
-///|
-pub extend ContractPacketEventKind with FromJson::{from_json}
 
 ///| Values are deliberately absent: audit records field identifiers and
 
@@ -709,36 +379,12 @@ pub(all) struct ContractPacketEvent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractPacketEvent with Debug::{to_repr}
-
-///|
-pub extend ContractPacketEvent with Eq::{not_equal, equal}
-
-///|
-pub extend ContractPacketEvent with ToJson::{to_json}
-
-///|
-pub extend ContractPacketEvent with FromJson::{from_json}
-
-///|
 pub(all) enum ContractApprovalStatus {
   Pending
   Approved
   Applied
   Rejected
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractApprovalStatus with Debug::{to_repr}
-
-///|
-pub extend ContractApprovalStatus with Eq::{not_equal, equal}
-
-///|
-pub extend ContractApprovalStatus with ToJson::{to_json}
-
-///|
-pub extend ContractApprovalStatus with FromJson::{from_json}
 
 ///|
 /// A controlled change to an effective packet. The original packet remains
@@ -751,18 +397,6 @@ pub(all) enum ContractAmendmentState {
   Superseded
   Rejected
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractAmendmentState with Debug::{to_repr}
-
-///|
-pub extend ContractAmendmentState with Eq::{not_equal, equal}
-
-///|
-pub extend ContractAmendmentState with ToJson::{to_json}
-
-///|
-pub extend ContractAmendmentState with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractAmendment {
@@ -782,35 +416,11 @@ pub(all) struct ContractAmendment {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractAmendment with Debug::{to_repr}
-
-///|
-pub extend ContractAmendment with Eq::{not_equal, equal}
-
-///|
-pub extend ContractAmendment with ToJson::{to_json}
-
-///|
-pub extend ContractAmendment with FromJson::{from_json}
-
-///|
 /// Durable payment and acceptance obligations are separate from form text.
 pub(all) enum ContractObligationKind {
   PaymentMilestone
   Acceptance
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractObligationKind with Debug::{to_repr}
-
-///|
-pub extend ContractObligationKind with Eq::{not_equal, equal}
-
-///|
-pub extend ContractObligationKind with ToJson::{to_json}
-
-///|
-pub extend ContractObligationKind with FromJson::{from_json}
 
 ///|
 pub(all) enum ContractObligationState {
@@ -819,18 +429,6 @@ pub(all) enum ContractObligationState {
   Overdue
   Waived
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractObligationState with Debug::{to_repr}
-
-///|
-pub extend ContractObligationState with Eq::{not_equal, equal}
-
-///|
-pub extend ContractObligationState with ToJson::{to_json}
-
-///|
-pub extend ContractObligationState with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractObligation {
@@ -855,18 +453,6 @@ pub(all) struct ContractObligation {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractObligation with Debug::{to_repr}
-
-///|
-pub extend ContractObligation with Eq::{not_equal, equal}
-
-///|
-pub extend ContractObligation with ToJson::{to_json}
-
-///|
-pub extend ContractObligation with FromJson::{from_json}
-
-///|
 pub(all) enum ContractProposalState {
   Draft
   PendingApproval
@@ -874,18 +460,6 @@ pub(all) enum ContractProposalState {
   Rejected
   Applied
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractProposalState with Debug::{to_repr}
-
-///|
-pub extend ContractProposalState with Eq::{not_equal, equal}
-
-///|
-pub extend ContractProposalState with ToJson::{to_json}
-
-///|
-pub extend ContractProposalState with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractSettlementDraft {
@@ -901,18 +475,6 @@ pub(all) struct ContractSettlementDraft {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractSettlementDraft with Debug::{to_repr}
-
-///|
-pub extend ContractSettlementDraft with Eq::{not_equal, equal}
-
-///|
-pub extend ContractSettlementDraft with ToJson::{to_json}
-
-///|
-pub extend ContractSettlementDraft with FromJson::{from_json}
-
-///|
 pub(all) struct ContractClosureProposal {
   proposal_id : String
   packet_id : String
@@ -926,18 +488,6 @@ pub(all) struct ContractClosureProposal {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractClosureProposal with Debug::{to_repr}
-
-///|
-pub extend ContractClosureProposal with Eq::{not_equal, equal}
-
-///|
-pub extend ContractClosureProposal with ToJson::{to_json}
-
-///|
-pub extend ContractClosureProposal with FromJson::{from_json}
-
-///|
 /// Server-owned, tenant-scoped contract number allocation.
 pub(all) struct ContractNumber {
   number : String
@@ -946,18 +496,6 @@ pub(all) struct ContractNumber {
   sequence : Int64
   issued_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractNumber with Debug::{to_repr}
-
-///|
-pub extend ContractNumber with Eq::{not_equal, equal}
-
-///|
-pub extend ContractNumber with ToJson::{to_json}
-
-///|
-pub extend ContractNumber with FromJson::{from_json}
 
 ///|
 /// A deterministic read model for the operator business dashboard.
@@ -973,18 +511,6 @@ pub(all) struct ContractGovernanceDashboard {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractGovernanceDashboard with Debug::{to_repr}
-
-///|
-pub extend ContractGovernanceDashboard with Eq::{not_equal, equal}
-
-///|
-pub extend ContractGovernanceDashboard with ToJson::{to_json}
-
-///|
-pub extend ContractGovernanceDashboard with FromJson::{from_json}
-
-///|
 /// One admission projection consumed by key, workspace, and machine clients.
 pub(all) struct ContractAdmissionView {
   tenant_ref : String
@@ -995,18 +521,6 @@ pub(all) struct ContractAdmissionView {
   exclusive_lease_present : Bool
   evaluated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractAdmissionView with Debug::{to_repr}
-
-///|
-pub extend ContractAdmissionView with Eq::{not_equal, equal}
-
-///|
-pub extend ContractAdmissionView with ToJson::{to_json}
-
-///|
-pub extend ContractAdmissionView with FromJson::{from_json}
 
 ///|
 /// The recorded intent of a pending approval. Execution registrations carry
@@ -1023,18 +537,6 @@ pub(all) struct ContractApprovalPayload {
   /// projection. Legacy v5 approvals migrate with `None`.
   packet_values_sha256 : String?
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractApprovalPayload with Debug::{to_repr}
-
-///|
-pub extend ContractApprovalPayload with Eq::{not_equal, equal}
-
-///|
-pub extend ContractApprovalPayload with ToJson::{to_json}
-
-///|
-pub extend ContractApprovalPayload with FromJson::{from_json}
 
 ///|
 /// A durable four-eyes approval for a high-value lifecycle action. The
@@ -1057,18 +559,6 @@ pub(all) struct ContractApproval {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
-pub extend ContractApproval with Debug::{to_repr}
-
-///|
-pub extend ContractApproval with Eq::{not_equal, equal}
-
-///|
-pub extend ContractApproval with ToJson::{to_json}
-
-///|
-pub extend ContractApproval with FromJson::{from_json}
-
-///|
 pub(all) struct ContractDocumentSnapshot {
   schema_version : String
   packets : Array[ContractPacket]
@@ -1080,15 +570,3 @@ pub(all) struct ContractDocumentSnapshot {
   closure_proposals : Array[ContractClosureProposal]
   numbers : Array[ContractNumber]
 } derive(Debug, Eq, ToJson, FromJson)
-
-///|
-pub extend ContractDocumentSnapshot with Debug::{to_repr}
-
-///|
-pub extend ContractDocumentSnapshot with Eq::{not_equal, equal}
-
-///|
-pub extend ContractDocumentSnapshot with ToJson::{to_json}
-
-///|
-pub extend ContractDocumentSnapshot with FromJson::{from_json}
