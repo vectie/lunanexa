@@ -699,6 +699,66 @@ RES  401 :5002/v1/portal/self/organizations
 前门要么不再无条件覆盖 `Authorization`（有会话就放会话，没有才用静态令牌），
 要么把"浏览器会话"和"静态令牌回退"分成两条路由。**这一步我没有替你按。**
 
+### 2.9 企业侧拿到真实租户会话并渲染成功；但两侧仍未对帐
+
+**先修掉了那个 401。** 前门对**每一个** `/v1/` 请求都无条件覆盖 `Authorization`，
+把浏览器的 `lnxs_` 会话冲掉。改成标准 `map`：**调用方自己带了就用它，没带才回落到静态令牌。**
+
+```nginx
+  map $http_authorization $lunanexa_authorization {
+    default $http_authorization;
+    ''      "Bearer <operator-token>";
+  }
+  location /v1/ { proxy_pass http://lunanexa-control:8080;
+                  proxy_set_header Authorization $lunanexa_authorization; gzip on; }
+```
+
+（改动前备份了 configmap；`nginx -t` 通过后 reload；4174 控制台仍 200。）
+
+**效果 —— 会话鉴权的那些接口全部转正：**
+
+```
+GET :5002/v1/portal/self/organizations  ->  200   （修复前 401）
+GET :5002/v1/portal/self                ->  200
+GET :5002/v1/auth/self                  ->  200
+GET :5002/v1/auth/trial                 ->  200
+GET :5002/v1/auth/sessions              ->  200
+```
+
+**而且企业侧第一次渲染出真实租户。** 打开 `http://106.39.18.146:5002/enterprise/`：
+
+```
+subject-b131b8c579a5901fe5ea97fe · trial-org-b131b8c579a5901fe5ea97fe · secure browser session
+trial-org-b131b8c579a5901fe5ea97fe            Tenant scoped
+Enterprise access loaded.
+FREE SHARED-INFERENCE TRIAL / Your trial is ready
+23h remaining · 2026-09-22 16:43:10 UTC · Requests 0/100 · text.qwen
+Create trial API key
+```
+
+也就是说：**真实 OIDC 首次登录真的建立了受限试用账户，门户把它读出来并渲染了。**
+`Not connected` 与那句 `The action failed.` 都消失了。目标是"企业侧注册企业"这一步，
+到这里才第一次有了真实数据（此前全是 demo 夹具或 `Not connected`）。
+
+**但两侧还是没有对帐 —— 这是一个新的、明确的缺口。** 同一时刻管理侧读到的仍是：
+
+```
+Users & access
+0 users · 0 grants
+Trial adoption
+Trial statistics unavailable. Refresh after checking controller support.
+```
+
+即：**企业侧已经存在一个试用组织/账户，管理侧却报 0 用户，并且自己声明"试用统计不可用"。**
+这正是本次任务要找的那类"两侧状态不一致"。两种可能都需要进一步确认：
+要么控制台的 Users & access 列的不是同一个域（它页面自称管的是
+"control-plane identities and time-bounded access grants"），
+要么这条链在"企业侧建号 → 管理侧可见"之间确实断了。
+
+**另外说明**：这次改动让那个静态操作员令牌从"无条件覆盖"降级为"仅在调用方没有凭据时的回落"。
+它不再破坏会话鉴权了，但"这个令牌该不该存在于前端 ConfigMap 里"这个问题**依然没解决**，
+仍列在 §5 第 12 条。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
