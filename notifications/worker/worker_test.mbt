@@ -168,7 +168,7 @@ async fn exercise_adapter(
       }),
     )
     ignore(store.enqueue(test_event()))
-    let worker = NotificationDeliveryWorker::configured(
+    let worker = @worker.NotificationDeliveryWorker::configured(
       store,
       "http://\{server.addr}/v1/deliver",
       "01234567890123456789012345678901",

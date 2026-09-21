@@ -33,12 +33,20 @@ pub(all) suberror MachineCommerceError {
   PriceMismatch
   CapacityUnavailable
 } derive(Eq, @debug.Debug)
+pub fn MachineCommerceError::equal(Self, Self) -> Bool
+pub fn MachineCommerceError::not_equal(Self, Self) -> Bool
+pub fn MachineCommerceError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) enum IdempotencyResult {
   Created
   Replayed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn IdempotencyResult::equal(Self, Self) -> Bool
+pub fn IdempotencyResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn IdempotencyResult::not_equal(Self, Self) -> Bool
+pub fn IdempotencyResult::to_json(Self) -> Json
+pub fn IdempotencyResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineActionReceipt {
   order_id : String
@@ -47,6 +55,11 @@ pub(all) struct MachineActionReceipt {
   outcome_generation : Int64
   recorded_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineActionReceipt::equal(Self, Self) -> Bool
+pub fn MachineActionReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineActionReceipt::not_equal(Self, Self) -> Bool
+pub fn MachineActionReceipt::to_json(Self) -> Json
+pub fn MachineActionReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineAvailability {
   offering_id : String
@@ -55,6 +68,11 @@ pub(all) struct MachineAvailability {
   capacity_available : Int64
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineAvailability::equal(Self, Self) -> Bool
+pub fn MachineAvailability::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineAvailability::not_equal(Self, Self) -> Bool
+pub fn MachineAvailability::to_json(Self) -> Json
+pub fn MachineAvailability::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineCommerceSnapshot {
   schema_version : String
@@ -64,6 +82,11 @@ pub(all) struct MachineCommerceSnapshot {
   usage_receipts : Array[MachineUsageReceipt]
   action_receipts : Array[MachineActionReceipt]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineCommerceSnapshot::equal(Self, Self) -> Bool
+pub fn MachineCommerceSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineCommerceSnapshot::not_equal(Self, Self) -> Bool
+pub fn MachineCommerceSnapshot::to_json(Self) -> Json
+pub fn MachineCommerceSnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct MachineCommerceStore {
   signing_secret : String
@@ -106,6 +129,11 @@ pub(all) struct MachineMeterIntent {
   expected_generation : Int64
   ended_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineMeterIntent::equal(Self, Self) -> Bool
+pub fn MachineMeterIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineMeterIntent::not_equal(Self, Self) -> Bool
+pub fn MachineMeterIntent::to_json(Self) -> Json
+pub fn MachineMeterIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineOffering {
   offering_id : String
@@ -129,21 +157,41 @@ pub(all) struct MachineOffering {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOffering::equal(Self, Self) -> Bool
+pub fn MachineOffering::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOffering::not_equal(Self, Self) -> Bool
+pub fn MachineOffering::to_json(Self) -> Json
+pub fn MachineOffering::to_repr(Self) -> @debug.Repr
 
 pub(all) enum MachineOfferingKind {
   BareMachine
   DedicatedEndpoint
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOfferingKind::equal(Self, Self) -> Bool
+pub fn MachineOfferingKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOfferingKind::not_equal(Self, Self) -> Bool
+pub fn MachineOfferingKind::to_json(Self) -> Json
+pub fn MachineOfferingKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum MachineOfferingState {
   OfferingActive
   OfferingRetired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOfferingState::equal(Self, Self) -> Bool
+pub fn MachineOfferingState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOfferingState::not_equal(Self, Self) -> Bool
+pub fn MachineOfferingState::to_json(Self) -> Json
+pub fn MachineOfferingState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineOfferingView {
   offering : MachineOffering
   availability : MachineAvailability
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOfferingView::equal(Self, Self) -> Bool
+pub fn MachineOfferingView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOfferingView::not_equal(Self, Self) -> Bool
+pub fn MachineOfferingView::to_json(Self) -> Json
+pub fn MachineOfferingView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineOrder {
   order_id : String
@@ -176,12 +224,22 @@ pub(all) struct MachineOrder {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOrder::equal(Self, Self) -> Bool
+pub fn MachineOrder::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOrder::not_equal(Self, Self) -> Bool
+pub fn MachineOrder::to_json(Self) -> Json
+pub fn MachineOrder::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineOrderAction {
   idempotency_key : String
   expected_generation : Int64
   reason : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOrderAction::equal(Self, Self) -> Bool
+pub fn MachineOrderAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOrderAction::not_equal(Self, Self) -> Bool
+pub fn MachineOrderAction::to_json(Self) -> Json
+pub fn MachineOrderAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineOrderIntent {
   order_id : String
@@ -192,6 +250,11 @@ pub(all) struct MachineOrderIntent {
   project_id : String
   purchaser_subject_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOrderIntent::equal(Self, Self) -> Bool
+pub fn MachineOrderIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOrderIntent::not_equal(Self, Self) -> Bool
+pub fn MachineOrderIntent::to_json(Self) -> Json
+pub fn MachineOrderIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum MachineOrderState {
   AwaitingPayment
@@ -205,12 +268,22 @@ pub(all) enum MachineOrderState {
   Terminated
   Failed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineOrderState::equal(Self, Self) -> Bool
+pub fn MachineOrderState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineOrderState::not_equal(Self, Self) -> Bool
+pub fn MachineOrderState::to_json(Self) -> Json
+pub fn MachineOrderState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachinePaymentSettlement {
   provider_event_id : String
   payment_ref : String
   settled_amount : @commercial.FixedMoney
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachinePaymentSettlement::equal(Self, Self) -> Bool
+pub fn MachinePaymentSettlement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachinePaymentSettlement::not_equal(Self, Self) -> Bool
+pub fn MachinePaymentSettlement::to_json(Self) -> Json
+pub fn MachinePaymentSettlement::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineProvisioningIntent {
   idempotency_key : String
@@ -218,6 +291,11 @@ pub(all) struct MachineProvisioningIntent {
   target_lease_ref : String?
   target_deployment_ref : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineProvisioningIntent::equal(Self, Self) -> Bool
+pub fn MachineProvisioningIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineProvisioningIntent::not_equal(Self, Self) -> Bool
+pub fn MachineProvisioningIntent::to_json(Self) -> Json
+pub fn MachineProvisioningIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineQuote {
   quote_id : String
@@ -242,6 +320,11 @@ pub(all) struct MachineQuote {
   created_unix_ms : Int64
   valid_until_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineQuote::equal(Self, Self) -> Bool
+pub fn MachineQuote::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineQuote::not_equal(Self, Self) -> Bool
+pub fn MachineQuote::to_json(Self) -> Json
+pub fn MachineQuote::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineQuoteIntent {
   quote_id : String
@@ -258,6 +341,11 @@ pub(all) struct MachineQuoteIntent {
   model_template_ref : String?
   valid_for_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineQuoteIntent::equal(Self, Self) -> Bool
+pub fn MachineQuoteIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineQuoteIntent::not_equal(Self, Self) -> Bool
+pub fn MachineQuoteIntent::to_json(Self) -> Json
+pub fn MachineQuoteIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineUsageReceipt {
   receipt_id : String
@@ -277,6 +365,11 @@ pub(all) struct MachineUsageReceipt {
   receipt_digest : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn MachineUsageReceipt::commercial_observation(Self) -> @commercial.UsageObservation
+pub fn MachineUsageReceipt::equal(Self, Self) -> Bool
+pub fn MachineUsageReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineUsageReceipt::not_equal(Self, Self) -> Bool
+pub fn MachineUsageReceipt::to_json(Self) -> Json
+pub fn MachineUsageReceipt::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

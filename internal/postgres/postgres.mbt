@@ -73,6 +73,12 @@ pub(all) suberror PostgresError {
 } derive(Debug, Eq)
 
 ///|
+pub extend PostgresError with Debug::{to_repr}
+
+///|
+pub extend PostgresError with Eq::{not_equal, equal}
+
+///|
 pub struct Connection {
   handle : NativeConnection
 }

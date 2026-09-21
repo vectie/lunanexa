@@ -25,6 +25,9 @@ pub(all) suberror WorkerVerificationError {
   MoonLeafRejected(String)
   FormulaErrors(Int)
 } derive(Eq, @debug.Debug)
+pub fn WorkerVerificationError::equal(Self, Self) -> Bool
+pub fn WorkerVerificationError::not_equal(Self, Self) -> Bool
+pub fn WorkerVerificationError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct CellReplacement {
@@ -33,12 +36,20 @@ pub(all) struct CellReplacement {
   column : Int
   value : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CellReplacement::equal(Self, Self) -> Bool
+pub fn CellReplacement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CellReplacement::not_equal(Self, Self) -> Bool
+pub fn CellReplacement::to_json(Self) -> Json
+pub fn CellReplacement::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CustomizedOoxml {
   bytes : FixedArray[Byte]
   replacement_count : Int
   verification : OoxmlVerification
 } derive(Eq, @debug.Debug)
+pub fn CustomizedOoxml::equal(Self, Self) -> Bool
+pub fn CustomizedOoxml::not_equal(Self, Self) -> Bool
+pub fn CustomizedOoxml::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OoxmlVerification {
   moonleaf_verified : Bool
@@ -47,11 +58,19 @@ pub(all) struct OoxmlVerification {
   active_content_detected : Bool
   reopened_byte_count : Int
 } derive(Eq, @debug.Debug)
+pub fn OoxmlVerification::equal(Self, Self) -> Bool
+pub fn OoxmlVerification::not_equal(Self, Self) -> Bool
+pub fn OoxmlVerification::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TextReplacement {
   placeholder : String
   value : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TextReplacement::equal(Self, Self) -> Bool
+pub fn TextReplacement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TextReplacement::not_equal(Self, Self) -> Bool
+pub fn TextReplacement::to_json(Self) -> Json
+pub fn TextReplacement::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

@@ -40,6 +40,9 @@ pub(all) suberror ModelSourceError {
   FileSizeMismatch
   FilesystemRejected
 } derive(Eq, @debug.Debug)
+pub fn ModelSourceError::equal(Self, Self) -> Bool
+pub fn ModelSourceError::not_equal(Self, Self) -> Bool
+pub fn ModelSourceError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct CatalogModel {
@@ -58,6 +61,10 @@ pub(all) struct CatalogModel {
   private : Bool
   gated : Bool
 } derive(Eq, ToJson, @debug.Debug)
+pub fn CatalogModel::equal(Self, Self) -> Bool
+pub fn CatalogModel::not_equal(Self, Self) -> Bool
+pub fn CatalogModel::to_json(Self) -> Json
+pub fn CatalogModel::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CatalogPage {
   models : Array[CatalogModel]
@@ -65,6 +72,10 @@ pub(all) struct CatalogPage {
   page_number : Int
   page_size : Int
 } derive(Eq, ToJson, @debug.Debug)
+pub fn CatalogPage::equal(Self, Self) -> Bool
+pub fn CatalogPage::not_equal(Self, Self) -> Bool
+pub fn CatalogPage::to_json(Self) -> Json
+pub fn CatalogPage::to_repr(Self) -> @debug.Repr
 
 pub struct FileImportStore {
   path : String
@@ -100,11 +111,21 @@ pub(all) struct ImportOperation {
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ImportOperation::equal(Self, Self) -> Bool
+pub fn ImportOperation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ImportOperation::not_equal(Self, Self) -> Bool
+pub fn ImportOperation::to_json(Self) -> Json
+pub fn ImportOperation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ImportRequest {
   model_id : String
   revision : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ImportRequest::equal(Self, Self) -> Bool
+pub fn ImportRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ImportRequest::not_equal(Self, Self) -> Bool
+pub fn ImportRequest::to_json(Self) -> Json
+pub fn ImportRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ImportState {
   Queued
@@ -114,6 +135,11 @@ pub(all) enum ImportState {
   Failed
   Cancelled
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ImportState::equal(Self, Self) -> Bool
+pub fn ImportState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ImportState::not_equal(Self, Self) -> Bool
+pub fn ImportState::to_json(Self) -> Json
+pub fn ImportState::to_repr(Self) -> @debug.Repr
 
 pub struct ModelScopeClient {
   origin : String
@@ -131,11 +157,20 @@ pub(all) struct ModelScopeFile {
   size : Int64
   lfs : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ModelScopeFile::equal(Self, Self) -> Bool
+pub fn ModelScopeFile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelScopeFile::not_equal(Self, Self) -> Bool
+pub fn ModelScopeFile::to_json(Self) -> Json
+pub fn ModelScopeFile::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ModelScopeTree {
   revision : String
   files : Array[ModelScopeFile]
 } derive(Eq, ToJson, @debug.Debug)
+pub fn ModelScopeTree::equal(Self, Self) -> Bool
+pub fn ModelScopeTree::not_equal(Self, Self) -> Bool
+pub fn ModelScopeTree::to_json(Self) -> Json
+pub fn ModelScopeTree::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

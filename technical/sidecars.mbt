@@ -6,11 +6,35 @@ pub(all) enum ReviewedSidecar {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ReviewedSidecar with Debug::{to_repr}
+
+///|
+pub extend ReviewedSidecar with Eq::{not_equal, equal}
+
+///|
+pub extend ReviewedSidecar with ToJson::{to_json}
+
+///|
+pub extend ReviewedSidecar with FromJson::{from_json}
+
+///|
 pub(all) enum SidecarEgress {
   ControllerOnly
   TelemetrySinkOnly
   Disabled
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend SidecarEgress with Debug::{to_repr}
+
+///|
+pub extend SidecarEgress with Eq::{not_equal, equal}
+
+///|
+pub extend SidecarEgress with ToJson::{to_json}
+
+///|
+pub extend SidecarEgress with FromJson::{from_json}
 
 ///|
 pub(all) struct SidecarProfile {
@@ -26,10 +50,34 @@ pub(all) struct SidecarProfile {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend SidecarProfile with Debug::{to_repr}
+
+///|
+pub extend SidecarProfile with Eq::{not_equal, equal}
+
+///|
+pub extend SidecarProfile with ToJson::{to_json}
+
+///|
+pub extend SidecarProfile with FromJson::{from_json}
+
+///|
 pub(all) struct SidecarRequest {
   profile : ReviewedSidecar
   configuration_ref : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend SidecarRequest with Debug::{to_repr}
+
+///|
+pub extend SidecarRequest with Eq::{not_equal, equal}
+
+///|
+pub extend SidecarRequest with ToJson::{to_json}
+
+///|
+pub extend SidecarRequest with FromJson::{from_json}
 
 ///|
 pub(all) enum SidecarRejection {
@@ -39,10 +87,34 @@ pub(all) enum SidecarRejection {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend SidecarRejection with Debug::{to_repr}
+
+///|
+pub extend SidecarRejection with Eq::{not_equal, equal}
+
+///|
+pub extend SidecarRejection with ToJson::{to_json}
+
+///|
+pub extend SidecarRejection with FromJson::{from_json}
+
+///|
 pub(all) enum SidecarDecision {
   Accepted(Array[SidecarProfile])
   Rejected(SidecarRejection)
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend SidecarDecision with Debug::{to_repr}
+
+///|
+pub extend SidecarDecision with Eq::{not_equal, equal}
+
+///|
+pub extend SidecarDecision with ToJson::{to_json}
+
+///|
+pub extend SidecarDecision with FromJson::{from_json}
 
 ///|
 pub fn reviewed_sidecar_profile(name : ReviewedSidecar) -> SidecarProfile {

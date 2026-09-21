@@ -6,6 +6,12 @@ pub(all) suberror TelemetryCollectorError {
 } derive(Debug, Eq)
 
 ///|
+pub extend TelemetryCollectorError with Debug::{to_repr}
+
+///|
+pub extend TelemetryCollectorError with Eq::{not_equal, equal}
+
+///|
 pub(all) struct AcceleratorSensorSnapshot {
   accelerator_count : Int
   memory_used_mib : Double
@@ -20,6 +26,18 @@ pub(all) struct AcceleratorSensorSnapshot {
   maximum_temperature_celsius : Double
   power_watts : Double
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AcceleratorSensorSnapshot with Debug::{to_repr}
+
+///|
+pub extend AcceleratorSensorSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend AcceleratorSensorSnapshot with ToJson::{to_json}
+
+///|
+pub extend AcceleratorSensorSnapshot with FromJson::{from_json}
 
 ///|
 fn finite_bounded(value : Double, maximum : Double) -> Bool {

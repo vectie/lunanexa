@@ -17,6 +17,9 @@ pub(all) suberror ProviderError {
   InvalidResponse
   ContentUnavailable
 } derive(Eq, @debug.Debug)
+pub fn ProviderError::equal(Self, Self) -> Bool
+pub fn ProviderError::not_equal(Self, Self) -> Bool
+pub fn ProviderError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct Observation {
@@ -24,6 +27,9 @@ pub(all) struct Observation {
   state : @jobs.State
   progress : Int?
 } derive(Eq, @debug.Debug)
+pub fn Observation::equal(Self, Self) -> Bool
+pub fn Observation::not_equal(Self, Self) -> Bool
+pub fn Observation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Profile {
   model : String
@@ -35,6 +41,10 @@ pub(all) struct Profile {
   maximum_steps : Int
   sound_supported : Bool
 } derive(Eq, ToJson, @json.FromJson)
+pub fn Profile::equal(Self, Self) -> Bool
+pub fn Profile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Profile::not_equal(Self, Self) -> Bool
+pub fn Profile::to_json(Self) -> Json
 
 pub struct Provider {
   origin : String

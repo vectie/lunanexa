@@ -257,8 +257,8 @@ fn ClientHandoffStore::hmac_hex(
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(self.issuer_secret).view(),
-      @utf8.encode(material).view(),
+      @utf8.encode(self.issuer_secret).exact_view(),
+      @utf8.encode(material).exact_view(),
     ),
   )
 }

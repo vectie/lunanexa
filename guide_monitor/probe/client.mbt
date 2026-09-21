@@ -20,8 +20,8 @@ fn identity_signature(
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).view(),
-      @utf8.encode(payload).view(),
+      @utf8.encode(secret).exact_view(),
+      @utf8.encode(payload).exact_view(),
     ),
   )
 }

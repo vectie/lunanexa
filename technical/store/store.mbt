@@ -9,11 +9,29 @@ pub(all) struct TechnicalSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend TechnicalSnapshot with Debug::{to_repr}
+
+///|
+pub extend TechnicalSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend TechnicalSnapshot with ToJson::{to_json}
+
+///|
+pub extend TechnicalSnapshot with FromJson::{from_json}
+
+///|
 pub(all) suberror TechnicalStoreError {
   InvalidSnapshot(String)
   OperationConflict(String)
   OperationNotFound(String)
 } derive(Debug, Eq)
+
+///|
+pub extend TechnicalStoreError with Debug::{to_repr}
+
+///|
+pub extend TechnicalStoreError with Eq::{not_equal, equal}
 
 ///|
 enum TechnicalPersistence {

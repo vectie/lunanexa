@@ -5,12 +5,36 @@ pub(all) struct ComputeTarget {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ComputeTarget with Debug::{to_repr}
+
+///|
+pub extend ComputeTarget with Eq::{not_equal, equal}
+
+///|
+pub extend ComputeTarget with ToJson::{to_json}
+
+///|
+pub extend ComputeTarget with FromJson::{from_json}
+
+///|
 pub(all) enum DeploymentTarget {
   ManagementFoundation
   ComputeExpansion
   ManagementAndCompute
   LocalSimulation
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend DeploymentTarget with Debug::{to_repr}
+
+///|
+pub extend DeploymentTarget with Eq::{not_equal, equal}
+
+///|
+pub extend DeploymentTarget with ToJson::{to_json}
+
+///|
+pub extend DeploymentTarget with FromJson::{from_json}
 
 ///|
 pub(all) struct InstallRequest {
@@ -34,9 +58,27 @@ pub(all) struct InstallRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend InstallRequest with Debug::{to_repr}
+
+///|
+pub extend InstallRequest with Eq::{not_equal, equal}
+
+///|
+pub extend InstallRequest with ToJson::{to_json}
+
+///|
+pub extend InstallRequest with FromJson::{from_json}
+
+///|
 pub(all) suberror InstallValidationError {
   InvalidField(String)
 } derive(Debug, Eq)
+
+///|
+pub extend InstallValidationError with Debug::{to_repr}
+
+///|
+pub extend InstallValidationError with Eq::{not_equal, equal}
 
 ///|
 pub let request_version : String = "lunanexa.install.v4"

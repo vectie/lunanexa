@@ -27,12 +27,20 @@ pub fn validate_request(InstallRequest) -> Unit raise InstallValidationError
 pub(all) suberror InstallValidationError {
   InvalidField(String)
 } derive(Eq, @debug.Debug)
+pub fn InstallValidationError::equal(Self, Self) -> Bool
+pub fn InstallValidationError::not_equal(Self, Self) -> Bool
+pub fn InstallValidationError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ComputeTarget {
   node_name : String
   ssh_host : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ComputeTarget::equal(Self, Self) -> Bool
+pub fn ComputeTarget::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ComputeTarget::not_equal(Self, Self) -> Bool
+pub fn ComputeTarget::to_json(Self) -> Json
+pub fn ComputeTarget::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeploymentTarget {
   ManagementFoundation
@@ -41,8 +49,13 @@ pub(all) enum DeploymentTarget {
   LocalSimulation
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn DeploymentTarget::confirmation(Self) -> String
+pub fn DeploymentTarget::equal(Self, Self) -> Bool
+pub fn DeploymentTarget::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn DeploymentTarget::installs_compute(Self) -> Bool
 pub fn DeploymentTarget::installs_management(Self) -> Bool
+pub fn DeploymentTarget::not_equal(Self, Self) -> Bool
+pub fn DeploymentTarget::to_json(Self) -> Json
+pub fn DeploymentTarget::to_repr(Self) -> @debug.Repr
 pub fn DeploymentTarget::uses_ssh(Self) -> Bool
 
 pub(all) struct InstallRequest {
@@ -64,6 +77,11 @@ pub(all) struct InstallRequest {
   secret_directory : String
   cli_path : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn InstallRequest::equal(Self, Self) -> Bool
+pub fn InstallRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn InstallRequest::not_equal(Self, Self) -> Bool
+pub fn InstallRequest::to_json(Self) -> Json
+pub fn InstallRequest::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

@@ -16,6 +16,18 @@ pub(all) enum WorkspaceUserState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceUserState with Debug::{to_repr}
+
+///|
+pub extend WorkspaceUserState with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceUserState with ToJson::{to_json}
+
+///|
+pub extend WorkspaceUserState with FromJson::{from_json}
+
+///|
 /// Provider-neutral identity metadata used by workspace policy.
 ///
 /// This record never contains an authentication credential, source checkout,
@@ -33,6 +45,18 @@ pub(all) struct WorkspaceUser {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceUser with Debug::{to_repr}
+
+///|
+pub extend WorkspaceUser with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceUser with ToJson::{to_json}
+
+///|
+pub extend WorkspaceUser with FromJson::{from_json}
+
+///|
 /// An access level within the user-facing workspace control plane.
 pub(all) enum WorkspaceAccess {
   Administrator
@@ -41,11 +65,35 @@ pub(all) enum WorkspaceAccess {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceAccess with Debug::{to_repr}
+
+///|
+pub extend WorkspaceAccess with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceAccess with ToJson::{to_json}
+
+///|
+pub extend WorkspaceAccess with FromJson::{from_json}
+
+///|
 pub(all) enum WorkspaceAccessGrantState {
   GrantActive
   GrantExpired
   GrantRevoked
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend WorkspaceAccessGrantState with Debug::{to_repr}
+
+///|
+pub extend WorkspaceAccessGrantState with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceAccessGrantState with ToJson::{to_json}
+
+///|
+pub extend WorkspaceAccessGrantState with FromJson::{from_json}
 
 ///|
 /// A time-bounded role assignment for one user and opaque tenant scope.
@@ -62,6 +110,18 @@ pub(all) struct WorkspaceAccessGrant {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceAccessGrant with Debug::{to_repr}
+
+///|
+pub extend WorkspaceAccessGrant with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceAccessGrant with ToJson::{to_json}
+
+///|
+pub extend WorkspaceAccessGrant with FromJson::{from_json}
+
+///|
 /// Generic inference capabilities available through a workspace lease.
 ///
 /// This intentionally excludes repository, shell, credential, and agent-runtime
@@ -75,6 +135,18 @@ pub(all) enum WorkspaceCapability {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceCapability with Debug::{to_repr}
+
+///|
+pub extend WorkspaceCapability with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceCapability with ToJson::{to_json}
+
+///|
+pub extend WorkspaceCapability with FromJson::{from_json}
+
+///|
 pub(all) struct CapabilityLimit {
   capability : WorkspaceCapability
   max_concurrent_requests : Int
@@ -84,6 +156,18 @@ pub(all) struct CapabilityLimit {
   max_input_units_per_request : Int
   max_output_units_per_request : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CapabilityLimit with Debug::{to_repr}
+
+///|
+pub extend CapabilityLimit with Eq::{not_equal, equal}
+
+///|
+pub extend CapabilityLimit with ToJson::{to_json}
+
+///|
+pub extend CapabilityLimit with FromJson::{from_json}
 
 ///|
 pub(all) struct WorkspaceLimits {
@@ -98,6 +182,18 @@ pub(all) struct WorkspaceLimits {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceLimits with Debug::{to_repr}
+
+///|
+pub extend WorkspaceLimits with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceLimits with ToJson::{to_json}
+
+///|
+pub extend WorkspaceLimits with FromJson::{from_json}
+
+///|
 pub(all) enum WorkspaceLeaseState {
   Requested
   Active
@@ -105,6 +201,18 @@ pub(all) enum WorkspaceLeaseState {
   Expired
   Revoked
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend WorkspaceLeaseState with Debug::{to_repr}
+
+///|
+pub extend WorkspaceLeaseState with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceLeaseState with ToJson::{to_json}
+
+///|
+pub extend WorkspaceLeaseState with FromJson::{from_json}
 
 ///|
 /// A control-plane capacity entitlement for generic inference access.
@@ -125,10 +233,34 @@ pub(all) struct WorkspaceLease {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceLease with Debug::{to_repr}
+
+///|
+pub extend WorkspaceLease with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceLease with ToJson::{to_json}
+
+///|
+pub extend WorkspaceLease with FromJson::{from_json}
+
+///|
 pub(all) enum EditorConnectionKind {
   WebIde
   VSCode
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend EditorConnectionKind with Debug::{to_repr}
+
+///|
+pub extend EditorConnectionKind with Eq::{not_equal, equal}
+
+///|
+pub extend EditorConnectionKind with ToJson::{to_json}
+
+///|
+pub extend EditorConnectionKind with FromJson::{from_json}
 
 ///|
 /// An external editor or assistant integration. This is routing metadata only;
@@ -142,6 +274,18 @@ pub(all) enum IntegrationProvider {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend IntegrationProvider with Debug::{to_repr}
+
+///|
+pub extend IntegrationProvider with Eq::{not_equal, equal}
+
+///|
+pub extend IntegrationProvider with ToJson::{to_json}
+
+///|
+pub extend IntegrationProvider with FromJson::{from_json}
+
+///|
 pub(all) enum ConnectionState {
   Pending
   Connecting
@@ -150,6 +294,18 @@ pub(all) enum ConnectionState {
   Failed
   Revoked
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend ConnectionState with Debug::{to_repr}
+
+///|
+pub extend ConnectionState with Eq::{not_equal, equal}
+
+///|
+pub extend ConnectionState with ToJson::{to_json}
+
+///|
+pub extend ConnectionState with FromJson::{from_json}
 
 ///|
 /// A connection to a user-facing workspace hosted outside the managed-node
@@ -168,6 +324,18 @@ pub(all) struct WorkspaceSession {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceSession with Debug::{to_repr}
+
+///|
+pub extend WorkspaceSession with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceSession with ToJson::{to_json}
+
+///|
+pub extend WorkspaceSession with FromJson::{from_json}
+
+///|
 /// Durable, topology-free workspace authority state.
 pub(all) struct WorkspaceDirectorySnapshot {
   schema_version : String
@@ -177,6 +345,18 @@ pub(all) struct WorkspaceDirectorySnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceDirectorySnapshot with Debug::{to_repr}
+
+///|
+pub extend WorkspaceDirectorySnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceDirectorySnapshot with ToJson::{to_json}
+
+///|
+pub extend WorkspaceDirectorySnapshot with FromJson::{from_json}
+
+///|
 /// Why an individual workbench can or cannot submit a new workload.
 pub(all) enum WorkspaceReadiness {
   WorkspaceReady
@@ -184,6 +364,18 @@ pub(all) enum WorkspaceReadiness {
   AccessUnavailable
   LeaseUnavailable
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend WorkspaceReadiness with Debug::{to_repr}
+
+///|
+pub extend WorkspaceReadiness with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceReadiness with ToJson::{to_json}
+
+///|
+pub extend WorkspaceReadiness with FromJson::{from_json}
 
 ///|
 /// The subject-scoped read contract used by an individual workbench.
@@ -202,6 +394,18 @@ pub(all) struct WorkspaceSelfContract {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkspaceSelfContract with Debug::{to_repr}
+
+///|
+pub extend WorkspaceSelfContract with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceSelfContract with ToJson::{to_json}
+
+///|
+pub extend WorkspaceSelfContract with FromJson::{from_json}
+
+///|
 /// Evidence selected by a successful workspace authorization decision.
 pub(all) struct WorkspaceAuthorization {
   subject_ref : String
@@ -209,3 +413,15 @@ pub(all) struct WorkspaceAuthorization {
   access_grant : WorkspaceAccessGrant
   lease : WorkspaceLease
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend WorkspaceAuthorization with Debug::{to_repr}
+
+///|
+pub extend WorkspaceAuthorization with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceAuthorization with ToJson::{to_json}
+
+///|
+pub extend WorkspaceAuthorization with FromJson::{from_json}

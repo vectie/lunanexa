@@ -6,6 +6,18 @@ pub(all) struct ClientConfig {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ClientConfig with Debug::{to_repr}
+
+///|
+pub extend ClientConfig with Eq::{not_equal, equal}
+
+///|
+pub extend ClientConfig with ToJson::{to_json}
+
+///|
+pub extend ClientConfig with FromJson::{from_json}
+
+///|
 pub(all) struct CapabilityDescriptor {
   capability : @contracts.Capability
   selectors : Array[String]
@@ -13,6 +25,18 @@ pub(all) struct CapabilityDescriptor {
   cancellation : Bool
   healthy : Bool
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CapabilityDescriptor with Debug::{to_repr}
+
+///|
+pub extend CapabilityDescriptor with Eq::{not_equal, equal}
+
+///|
+pub extend CapabilityDescriptor with ToJson::{to_json}
+
+///|
+pub extend CapabilityDescriptor with FromJson::{from_json}
 
 ///|
 pub(all) enum ClientErrorCode {
@@ -23,9 +47,27 @@ pub(all) enum ClientErrorCode {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ClientErrorCode with Debug::{to_repr}
+
+///|
+pub extend ClientErrorCode with Eq::{not_equal, equal}
+
+///|
+pub extend ClientErrorCode with ToJson::{to_json}
+
+///|
+pub extend ClientErrorCode with FromJson::{from_json}
+
+///|
 pub(all) suberror ClientError {
   ClientError(code~ : ClientErrorCode, message~ : String, retryable~ : Bool)
 } derive(Debug, Eq)
+
+///|
+pub extend ClientError with Debug::{to_repr}
+
+///|
+pub extend ClientError with Eq::{not_equal, equal}
 
 ///|
 pub(open) trait ProviderTransport {
@@ -219,6 +261,9 @@ pub fn FixtureTransport::cancelled_workload(self : FixtureTransport) -> String? 
 }
 
 ///|
+pub extend FixtureTransport with ProviderTransport::{invoke, discover, health, stream, cancel}
+
+///|
 pub impl ProviderTransport for FixtureTransport with fn invoke(
   self,
   _,
@@ -375,6 +420,9 @@ fn transport_failure() -> ClientError {
     retryable=true,
   )
 }
+
+///|
+pub extend HttpTransport with ProviderTransport::{invoke, discover, health, stream, cancel}
 
 ///|
 pub impl ProviderTransport for HttpTransport with fn invoke(self, config, body) {

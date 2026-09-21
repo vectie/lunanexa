@@ -7,6 +7,12 @@ pub(all) suberror LifecycleError {
 } derive(Debug, Eq)
 
 ///|
+pub extend LifecycleError with Debug::{to_repr}
+
+///|
+pub extend LifecycleError with Eq::{not_equal, equal}
+
+///|
 /// Transport implementations must authenticate the API server, bound response
 /// sizes and deadlines, and never include Kubernetes response bodies in errors.
 pub type Transport = async (String, String, Json?) -> (Int, Json)

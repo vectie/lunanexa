@@ -9,6 +9,18 @@ enum WorkloadReservationState {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkloadReservationState with Debug::{to_repr}
+
+///|
+pub extend WorkloadReservationState with Eq::{not_equal, equal}
+
+///|
+pub extend WorkloadReservationState with ToJson::{to_json}
+
+///|
+pub extend WorkloadReservationState with FromJson::{from_json}
+
+///|
 struct WorkloadReservation {
   version : String
   workload_id : String
@@ -24,10 +36,34 @@ struct WorkloadReservation {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend WorkloadReservation with Debug::{to_repr}
+
+///|
+pub extend WorkloadReservation with Eq::{not_equal, equal}
+
+///|
+pub extend WorkloadReservation with ToJson::{to_json}
+
+///|
+pub extend WorkloadReservation with FromJson::{from_json}
+
+///|
 struct WorkspaceAdmissionSnapshot {
   schema_version : String
   reservations : Array[WorkloadReservation]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend WorkspaceAdmissionSnapshot with Debug::{to_repr}
+
+///|
+pub extend WorkspaceAdmissionSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend WorkspaceAdmissionSnapshot with ToJson::{to_json}
+
+///|
+pub extend WorkspaceAdmissionSnapshot with FromJson::{from_json}
 
 ///|
 fn sorted_reservations(

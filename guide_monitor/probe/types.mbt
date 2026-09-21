@@ -12,6 +12,12 @@ pub(all) suberror GuideProbeError {
   UntrustedResponse
 } derive(Debug, Eq)
 
+///|
+pub extend GuideProbeError with Debug::{to_repr}
+
+///|
+pub extend GuideProbeError with Eq::{not_equal, equal}
+
 /// Configuration deliberately excludes both signing secrets so accidental
 /// serialization or diagnostics cannot expose them.
 
@@ -26,11 +32,29 @@ pub(all) struct GuideProbeConfig {
 } derive(Debug, Eq)
 
 ///|
+pub extend GuideProbeConfig with Debug::{to_repr}
+
+///|
+pub extend GuideProbeConfig with Eq::{not_equal, equal}
+
+///|
 pub(all) struct GuideProbeSchedulerState {
   schema_version : String
   sequence : Int64
   last_scheduled_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend GuideProbeSchedulerState with Debug::{to_repr}
+
+///|
+pub extend GuideProbeSchedulerState with Eq::{not_equal, equal}
+
+///|
+pub extend GuideProbeSchedulerState with ToJson::{to_json}
+
+///|
+pub extend GuideProbeSchedulerState with FromJson::{from_json}
 
 ///|
 pub(all) struct GuideProbeRunResult {
@@ -39,6 +63,12 @@ pub(all) struct GuideProbeRunResult {
   failure_code : String?
   monitor_result : @guide_monitor.GuideMonitorResult?
 } derive(Debug, ToJson)
+
+///|
+pub extend GuideProbeRunResult with Debug::{to_repr}
+
+///|
+pub extend GuideProbeRunResult with ToJson::{to_json}
 
 ///|
 pub struct GuideProbeScheduler {

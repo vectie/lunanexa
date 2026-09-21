@@ -22,6 +22,18 @@ pub(all) struct CredentialIssuerReadinessEvidence {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CredentialIssuerReadinessEvidence with Debug::{to_repr}
+
+///|
+pub extend CredentialIssuerReadinessEvidence with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialIssuerReadinessEvidence with ToJson::{to_json}
+
+///|
+pub extend CredentialIssuerReadinessEvidence with FromJson::{from_json}
+
+///|
 pub(all) struct CredentialHandoffIssueIntent {
   request_id : String
   lease_id : String
@@ -31,6 +43,18 @@ pub(all) struct CredentialHandoffIssueIntent {
   host_key_fingerprint : String
   issuer_redirect_url : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CredentialHandoffIssueIntent with Debug::{to_repr}
+
+///|
+pub extend CredentialHandoffIssueIntent with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialHandoffIssueIntent with ToJson::{to_json}
+
+///|
+pub extend CredentialHandoffIssueIntent with FromJson::{from_json}
 
 ///|
 /// Operator intent before an external credential issuer has created its
@@ -43,6 +67,18 @@ pub(all) struct CredentialIssuerRequestIntent {
   ssh_port : Int
   host_key_fingerprint : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CredentialIssuerRequestIntent with Debug::{to_repr}
+
+///|
+pub extend CredentialIssuerRequestIntent with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialIssuerRequestIntent with ToJson::{to_json}
+
+///|
+pub extend CredentialIssuerRequestIntent with FromJson::{from_json}
 
 ///|
 /// Durable minimal-disclosure issuer outbox record.
@@ -61,6 +97,18 @@ pub(all) struct CredentialIssuerRequest {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CredentialIssuerRequest with Debug::{to_repr}
+
+///|
+pub extend CredentialIssuerRequest with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialIssuerRequest with ToJson::{to_json}
+
+///|
+pub extend CredentialIssuerRequest with FromJson::{from_json}
+
+///|
 /// Machine adapter receipt. It acknowledges ceremony creation only; it does
 /// not contain an SSH key, certificate, password, or node identity.
 pub(all) struct CredentialIssuerDispatchReceipt {
@@ -68,6 +116,18 @@ pub(all) struct CredentialIssuerDispatchReceipt {
   issuer_redirect_url : String
   accepted_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CredentialIssuerDispatchReceipt with Debug::{to_repr}
+
+///|
+pub extend CredentialIssuerDispatchReceipt with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialIssuerDispatchReceipt with ToJson::{to_json}
+
+///|
+pub extend CredentialIssuerDispatchReceipt with FromJson::{from_json}
 
 ///|
 pub(all) struct CredentialHandoffRecord {
@@ -90,6 +150,18 @@ pub(all) struct CredentialHandoffRecord {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CredentialHandoffRecord with Debug::{to_repr}
+
+///|
+pub extend CredentialHandoffRecord with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialHandoffRecord with ToJson::{to_json}
+
+///|
+pub extend CredentialHandoffRecord with FromJson::{from_json}
+
+///|
 pub(all) struct CustomerCredentialHandoffView {
   handoff_ref : String
   lease_ref : String
@@ -103,6 +175,18 @@ pub(all) struct CustomerCredentialHandoffView {
   can_redeem : Bool
   can_recover : Bool
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CustomerCredentialHandoffView with Debug::{to_repr}
+
+///|
+pub extend CustomerCredentialHandoffView with Eq::{not_equal, equal}
+
+///|
+pub extend CustomerCredentialHandoffView with ToJson::{to_json}
+
+///|
+pub extend CustomerCredentialHandoffView with FromJson::{from_json}
 
 ///|
 pub(all) struct CredentialHandoffRedemption {
@@ -122,11 +206,35 @@ pub(all) struct CredentialHandoffRedemption {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CredentialHandoffRedemption with Debug::{to_repr}
+
+///|
+pub extend CredentialHandoffRedemption with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialHandoffRedemption with ToJson::{to_json}
+
+///|
+pub extend CredentialHandoffRedemption with FromJson::{from_json}
+
+///|
 pub(all) struct CredentialHandoffSnapshot {
   schema_version : String
   records : Array[CredentialHandoffRecord]
   issuer_requests : Array[CredentialIssuerRequest]?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CredentialHandoffSnapshot with Debug::{to_repr}
+
+///|
+pub extend CredentialHandoffSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend CredentialHandoffSnapshot with ToJson::{to_json}
+
+///|
+pub extend CredentialHandoffSnapshot with FromJson::{from_json}
 
 ///|
 pub(all) suberror CredentialHandoffError {
@@ -140,3 +248,9 @@ pub(all) suberror CredentialHandoffError {
   StaleGeneration
   IdempotencyConflict
 } derive(Debug, Eq)
+
+///|
+pub extend CredentialHandoffError with Debug::{to_repr}
+
+///|
+pub extend CredentialHandoffError with Eq::{not_equal, equal}

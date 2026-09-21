@@ -16,6 +16,12 @@ pub suberror LunaFluxRuntimeDiscoveryError {
 } derive(Debug, Eq)
 
 ///|
+pub extend LunaFluxRuntimeDiscoveryError with Debug::{to_repr}
+
+///|
+pub extend LunaFluxRuntimeDiscoveryError with Eq::{not_equal, equal}
+
+///|
 /// One immutable same-origin runtime/control publication parsed from an approved
 /// LunaFlux process. Construction remains inside the opaque adapter boundary.
 pub struct LunaFluxRuntimeDiscovery {

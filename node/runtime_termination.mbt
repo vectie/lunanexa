@@ -13,6 +13,6 @@ pub fn termination_report_signature(
     ToJson::to_json(unsigned).stringify(),
   )
   @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
+    @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()),
   )
 }

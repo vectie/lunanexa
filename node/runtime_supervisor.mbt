@@ -6,6 +6,12 @@ pub(all) suberror RuntimeSupervisorError {
 } derive(Debug, Eq)
 
 ///|
+pub extend RuntimeSupervisorError with Debug::{to_repr}
+
+///|
+pub extend RuntimeSupervisorError with Eq::{not_equal, equal}
+
+///|
 pub(all) struct RuntimeInstance {
   assignment_id : String
   container_name : String
@@ -15,6 +21,18 @@ pub(all) struct RuntimeInstance {
   container_address : String
   endpoint : @contracts.RuntimeEndpoint?
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RuntimeInstance with Debug::{to_repr}
+
+///|
+pub extend RuntimeInstance with Eq::{not_equal, equal}
+
+///|
+pub extend RuntimeInstance with ToJson::{to_json}
+
+///|
+pub extend RuntimeInstance with FromJson::{from_json}
 
 ///|
 pub struct OciRuntimeSupervisor {

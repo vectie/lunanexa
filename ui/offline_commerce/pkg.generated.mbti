@@ -36,17 +36,26 @@ pub(all) struct OfflineArtifactSummary {
   submitted_by : String
   created_unix_ms : Int64
 } derive(Eq, @debug.Debug)
+pub fn OfflineArtifactSummary::equal(Self, Self) -> Bool
+pub fn OfflineArtifactSummary::not_equal(Self, Self) -> Bool
+pub fn OfflineArtifactSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceAudience {
   CustomerCommerce
   OperatorCommerce
 } derive(Eq, @debug.Debug)
+pub fn OfflineCommerceAudience::equal(Self, Self) -> Bool
+pub fn OfflineCommerceAudience::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceAudience::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineCommerceConfirmation {
   action : OfflineCommerceConsequentialAction
   title : String
   evidence : String
 } derive(Eq, @debug.Debug)
+pub fn OfflineCommerceConfirmation::equal(Self, Self) -> Bool
+pub fn OfflineCommerceConfirmation::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceConfirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceConsequentialAction {
   QuoteOrder(String, String, String, String)
@@ -61,6 +70,9 @@ pub(all) enum OfflineCommerceConsequentialAction {
   RequestEntitlementReversal(String, Int64)
   RecoverFailedReversal(String, String, Int64, @offline.ReversalRecoveryDecision)
 } derive(Eq, @debug.Debug)
+pub fn OfflineCommerceConsequentialAction::equal(Self, Self) -> Bool
+pub fn OfflineCommerceConsequentialAction::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceConsequentialAction::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceMessage {
   SelectOrder(String)
@@ -83,6 +95,8 @@ pub(all) enum OfflineCommerceMessage {
   Refresh
   ClearNotice
 } derive(Eq)
+pub fn OfflineCommerceMessage::equal(Self, Self) -> Bool
+pub fn OfflineCommerceMessage::not_equal(Self, Self) -> Bool
 
 pub(all) struct OfflineCommerceState {
   locale : @i18n.Locale
@@ -106,6 +120,8 @@ pub(all) struct OfflineCommerceState {
   success_message : String?
   error_message : String?
 } derive(Eq)
+pub fn OfflineCommerceState::equal(Self, Self) -> Bool
+pub fn OfflineCommerceState::not_equal(Self, Self) -> Bool
 pub fn OfflineCommerceState::update(Self, OfflineCommerceMessage) -> Self
 
 // Type aliases

@@ -31,7 +31,7 @@ async test "file store preserves payment reservation and action idempotency" {
   let path = "\{directory}/state.json"
   let secret = "durable-machine-commerce-signing-secret-0001"
   let now = 5000000L
-  let store = MachineCommerceStore::open(path, secret)
+  let store = @store.MachineCommerceStore::open(path, secret)
   ignore(store.put_offering(persisted_test_offering(now)))
   let (quote, _) = store.create_quote(
     {
@@ -119,7 +119,7 @@ async test "file store preserves payment reservation and action idempotency" {
   )
   assert_eq(provisioning.state, Provisioning)
 
-  let reopened = MachineCommerceStore::open(path, secret)
+  let reopened = @store.MachineCommerceStore::open(path, secret)
   let loaded = reopened.order(order.order_id).unwrap()
   assert_eq(loaded.state, Provisioning)
   assert_eq(
