@@ -20,6 +20,8 @@
 ## 用法
 
 脚本在**管理节点**上、从本仓库的 checkout 里运行，执行用户需要能 sudo。
+**改镜像、换工具链、重滚节点 agent 之前先看 [`docs/IMAGE_BUILD_AND_DEPLOY_SOP.md`](../docs/IMAGE_BUILD_AND_DEPLOY_SOP.md)**
+—— 那份记录了这台集群上真正有效的命令、回滚方式，以及每条"看起来像别的问题"的报错。
 
 ```sh
 # 只做体检，不改任何东西
