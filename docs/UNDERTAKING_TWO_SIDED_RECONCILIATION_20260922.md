@@ -1072,6 +1072,46 @@ GET /v1/onboarding/access-packages -> 200，2 个包
 不是数据没生成，也不是权限不通，而是**生产侧把一个 Option 序列化成数组、消费侧又把解码异常吞成空态**。
 两类问题叠加，才伪装成"管理侧什么都没有"。
 
+### 2.16 登录后落在真实门户了：把根跳转改成"看 cookie"
+
+§4 缺陷 #7 那条（前端 `location = /` 无条件把人送进 demo）修掉了，修法是**按 cookie 分流**，
+既保住 demo 展示，又修掉"刚登录也被塞进 demo"这个 bug：
+
+```nginx
+location = / {
+  if ($cookie_lunanexa_http_enterprise_oidc = "") { return 302 /enterprise/?demo=1; }
+  return 302 /enterprise/;
+}
+location = /enterprise { …同上… }
+```
+
+**行为验收**（`curl` 直接看跳转目标）：
+
+| 请求 | 修复前 | 修复后 |
+|---|---|---|
+| `5002/`（无 cookie） | `302 /enterprise/?demo=1` | `302 /enterprise/?demo=1`（展示照旧） |
+| `5002/`（带会话 cookie） | `302 /enterprise/?demo=1` ❌ | **`302 /enterprise/`** ✅ |
+
+**浏览器端到端**（真实 OIDC 登录，CDP 抓的最终地址）：
+
+```
+final url: http://106.39.18.146:5002/enterprise/          ← 不再带 ?demo=1
+   200 :5002/auth/session
+   200 :5002/v1/auth/self
+   200 :5002/v1/auth/trial
+   200 :5002/v1/auth/sessions
+```
+
+**至此"登录后看不到自己数据"这件事的两个成因都清掉了**：
+一是 §2.7 那个 JSON 契约（会话解不出来），二是这里这个根跳转（解出来却被送去 demo）。
+现在登录后直接落在真实门户、并且渲染真实租户。
+
+顺带记一个操作教训：**这个前门 nginx 的配置挂在 `/etc/nginx/custom/`，不是 `/etc/nginx/nginx.conf`**；
+而且在这个环境里 `kubectl exec ... grep -c` 的返回**不可靠**（多次在中途返回 0，
+与随后被行为验证为"已生效"相矛盾）。所以判断配置是否生效，
+**一律用行为验证（curl 看跳转/状态），不要信 pod 内 grep**。改完记得等挂载同步
+（本次首次 reload 就抢在同步之前，白跑一轮）。
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
