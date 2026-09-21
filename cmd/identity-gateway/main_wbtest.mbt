@@ -272,3 +272,32 @@ test "API proxy forwards organization selector but strips identity authority" {
   assert_eq(forwarded.get("X-LunaNexa-Identity-Subject"), None)
   assert_eq(forwarded.get("Authorization"), Some("Bearer lnxs_bound"))
 }
+
+///|
+/// The browser bootstrap document must be decodable by the JS clients, whose
+/// `Int64::from_json` only accepts the number in string representation. Emitting
+/// a bare JSON number silently broke both the portal and the console.
+test "browser session body encodes expires_unix_ms as a string" {
+  let session : GatewayCookie = {
+    kind: "identity",
+    audience: "enterprise",
+    host: "106.39.18.146:5002",
+    state: "",
+    nonce: "",
+    verifier: "",
+    issuer: "http://106.39.18.146:5006/realms/lunanexa",
+    subject: "subject-1",
+    email: "user@example.test",
+    display_name: "Test",
+    bearer: "lnxs_test_session",
+    csrf: "csrf-token",
+    created_unix_ms: 1000L,
+    last_used_unix_ms: 1000L,
+    expires_unix_ms: 1790037781541L,
+  }
+  let body = browser_session_body(session)
+  assert_true(body.contains("\"expires_unix_ms\":\"1790037781541\""))
+  assert_false(body.contains("\"expires_unix_ms\":1790037781541"))
+  assert_true(body.contains("\"session_token\":\"lnxs_test_session\""))
+  assert_true(body.contains("\"csrf_token\":\"csrf-token\""))
+}

@@ -584,13 +584,61 @@ priv struct GatewayBrowserSession {
 **这也是一个可诊断性缺陷**：异常被 `catch { _ => … }` 丢弃，界面上只表现为"回到登录门"，
 既没有错误码也没有日志，导致这条链路此前一直被误判为网络/端口/密钥问题。
 
-**修法（三选一，建议第 1 条）**：
-1. 解析侧改成先取字符串再 `@string.parse_int64` —— 仓库里已有同款先例
-   （`ui/beginner_operations.mbt:28` 的 `expires_unix_ms : String`，
-   `cmd/console/main.mbt:4131` 也是 `@string.parse_int64(draft.expires_unix_ms)`）；
-2. 生产侧（网关/控制面）改为发送字符串；
-3. 抽一个共享解码器，两侧复用，避免第三处再踩。
-另外无论选哪条，都建议把 `catch` 里的原因**至少记一条日志或带进 UI**，不要再静默。
+**修法已确定并实施：改生产侧那一行，而不是改三个消费侧。**
+
+先查了"仓库的既定惯例到底是哪种"。用同一个临时包实测：
+
+```
+ToJson emits: {"session_token":"lnxs_x","expires_unix_ms":"1790037781541"}
+int64 to_json: "1790037781541"
+round-trip ok: 1790037781541
+```
+
+即 **MoonBit 的 `ToJson for Int64` 在 JS 后端就是把 int64 输出成"带引号的字符串"**，
+`FromJson` 也正好要求这种形式。所以仓库的惯例是 **int64 走字符串**，
+而网关那段**手写**的 JSON 是**唯一的例外**。全仓库扫描确认只有这一处：
+
+```
+$ grep -rn 'unix_ms\":\{' --include=*.mbt cmd/ api/
+cmd/identity-gateway/server.mbt:368   ← 仅此一处
+```
+
+**而且这个 body 有三个消费侧，都是同一句解析**：
+
+| 消费侧 | 结构体 | 结果 |
+|---|---|---|
+| 企业门户 | `cmd/enterprise/main.mbt:18` `GatewayBrowserBootstrap` | → `BootstrapUnavailable` → 登录门 |
+| 运维控制台 | `cmd/console/main.mbt:203` `GatewayBrowserSession` | → `GatewaySessionUnavailable` → 登录门 |
+| workbench / 试用 | `cmd/workbench/trial_session.mbt:2` `TrialBrowserSession` | → `fail("invalid or expired browser session")` |
+
+所以改生产侧一行，三个消费侧同时修好；改消费侧则要动三处、并和仓库惯例逆向。
+
+**已实施**：把 `cmd/identity-gateway/server.mbt` 里那一段抽成
+`fn browser_session_body(session)`，并把 `expires_unix_ms` 的值加上引号：
+
+```moonbit
+fn browser_session_body(session : GatewayCookie) -> String {
+  "{\"session_token\":\"\{session.bearer}\",\"csrf_token\":\"\{session.csrf}\",\"expires_unix_ms\":\"\{session.expires_unix_ms}\"}"
+}
+```
+
+并加了回归测试（`cmd/identity-gateway/main_wbtest.mbt`）：
+
+```moonbit
+test "browser session body encodes expires_unix_ms as a string" {
+  ...
+  assert_true(body.contains("\"expires_unix_ms\":\"1790037781541\""))
+  assert_false(body.contains("\"expires_unix_ms\":1790037781541"))
+}
+```
+
+`moon test cmd/identity-gateway --target native` → **17/17 通过**。
+
+**注意：这只改到了源码。线上网关仍然发数字形式**，要等重建并重滚 `lunanexa-identity-gateway`
+才会生效（这是下一步）。
+
+另外建议（未做）：把三处 `catch { _ => … }` 里丢弃的原因至少记一条日志，或带进 UI ——
+这条 bug 之所以能藏这么久，正是因为它被静默吞掉了。
 
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
