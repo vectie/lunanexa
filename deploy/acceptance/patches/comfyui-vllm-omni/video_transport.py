@@ -10,6 +10,8 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 _JOB_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+_CONTENT_ATTEMPTS = 2
+_CONTENT_RETRY_DELAY = 5.0
 
 
 async def _json(session, verb, url, **kwargs):
@@ -60,7 +62,7 @@ async def run_video_job(
     Server-side reconciliation remains necessary if cancellation cannot reach
     the service or no job identifier was received.
 
-    LunaNexa deviations from the transport above, both measured against the
+    LunaNexa deviations from the transport above, all measured against the
     MiniMax-H3 service:
 
     * The completed-video download does not inherit the control-plane timeout.
@@ -70,6 +72,11 @@ async def run_video_job(
     * A job that reached `completed` but whose bytes never reached the caller is
       left in place instead of being deleted: cleanup would destroy the only copy
       of a clip the caller never received.
+    * The download is attempted twice. Something on this path drops a silent
+      connection roughly 70 s into the download (see the remediation log,
+      section 15.2), and losing a ten-minute generation to one reset is not
+      acceptable. The retry is bounded to one because it costs the service a
+      second encode, and the enclosing asyncio.timeout still bounds the job.
     """
     if not 0 < poll_interval <= 60 or not 0 < max_poll_duration <= 7200:
         raise ValueError("Video polling limits are invalid")
@@ -103,20 +110,31 @@ async def run_video_job(
                         raise RuntimeError("Video service returned an invalid job status")
                     await asyncio.sleep(poll_interval)
                     data = await _json(session, "GET", url)
-                async with session.get(
-                    url + "/content", allow_redirects=False, timeout=download_timeout
-                ) as response:
-                    if response.status != 200 or response.content_type != "video/mp4":
-                        raise RuntimeError("Completed video content is unavailable")
-                    result = bytearray()
-                    async for chunk in response.content.iter_chunked(65536):
-                        result.extend(chunk)
-                        if len(result) > maximum_result_bytes:
-                            raise RuntimeError("Video result exceeds its download limit")
-                    if not result:
-                        raise RuntimeError("Video service returned empty content")
-                    delivered = True
-                    return bytes(result)
+                for attempt in range(_CONTENT_ATTEMPTS):
+                    try:
+                        async with session.get(
+                            url + "/content", allow_redirects=False, timeout=download_timeout
+                        ) as response:
+                            if response.status != 200 or response.content_type != "video/mp4":
+                                raise RuntimeError("Completed video content is unavailable")
+                            result = bytearray()
+                            async for chunk in response.content.iter_chunked(65536):
+                                result.extend(chunk)
+                                if len(result) > maximum_result_bytes:
+                                    raise RuntimeError("Video result exceeds its download limit")
+                            if not result:
+                                raise RuntimeError("Video service returned empty content")
+                            delivered = True
+                            return bytes(result)
+                    except (aiohttp.ClientError, TimeoutError):
+                        # LunaNexa: the clip is already paid for, so one dropped
+                        # connection should not discard it. The retry re-issues
+                        # the whole request, which costs the service another
+                        # encode, so it is bounded to one and still fits inside
+                        # the caller's max_poll_duration.
+                        if attempt + 1 >= _CONTENT_ATTEMPTS:
+                            raise
+                        await asyncio.sleep(_CONTENT_RETRY_DELAY)
         except (aiohttp.ClientError, TimeoutError):
             raise RuntimeError(
                 "Video operation timed out or disconnected; do not enqueue another copy until its status is reconciled"

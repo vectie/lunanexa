@@ -44,21 +44,32 @@ READY_TIMEOUT=1200
 expect_md5="$(md5 -q "$SRC" 2>/dev/null || md5sum "$SRC" | cut -d' ' -f1)"
 
 echo "=== publishing the patch as configmap/$CM"
+# `sudo -S` reads the password from stdin, so the generated manifest goes to a
+# file rather than through a pipe into `kubectl apply -f -`.
+CM_YAML="$(mktemp)"
 s kubectl -n "$NS" create configmap "$CM" --from-file=serving_video.py="$SRC" \
-  --dry-run=client -o yaml | s kubectl apply -f -
+  --dry-run=client -o yaml > "$CM_YAML"
+s kubectl apply -f "$CM_YAML"
+rm -f "$CM_YAML"
+s kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.serving_video\.py}' | wc -c
 
 for D in "${DEPLOYS[@]}"; do
   echo "=== $D"
 
   # An encode is holding the GPU and the job would be lost with the pod. The
-  # service is single-slot, so a non-empty queue is a hard stop.
-  BUSY="$(curl -s -m 10 "http://192.168.2.175:4174/h3/v1/videos" 2>/dev/null | python3 -c '
+  # service is single-slot, so a non-empty queue is a hard stop. Each deployment
+  # is fronted by its own proxy location, so the queue to check depends on it.
+  case "$D" in
+    *ref2va*) PREFIX=/h3r ;;   # reference-to-video
+    *)        PREFIX=/h3 ;;    # first/last-frame to video
+  esac
+  BUSY="$(curl -s -m 10 "http://192.168.2.175:4174$PREFIX/v1/videos" 2>/dev/null | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
 except Exception: print("unknown"); raise SystemExit
 print(sum(1 for v in d.get("data",[]) if v.get("status") in {"queued","in_progress"}))' 2>/dev/null || echo unknown)"
   if [ "$BUSY" != "0" ]; then
-    echo "$D has $BUSY queued/in-progress video job(s); not restarting." >&2
+    echo "$D has $BUSY queued/in-progress video job(s) on $PREFIX; not restarting." >&2
     exit 2
   fi
 

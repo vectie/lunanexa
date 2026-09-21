@@ -33,14 +33,11 @@ spec:
               $patch: delete
             - name: LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET
               $patch: delete
-            # Evaluation is shelved for this deployment: no benchmark exists for
-            # the adopted models yet, so approval would be impossible and the
-            # whole onboarding chain would stop here. The default is to require
-            # an evaluation; switching it off is a deliberate decision, and every
-            # promotion receipt written under it records that no evaluation
-            # took part. Remove this (or set it to 1) once benchmarks exist.
-            - name: LUNANEXA_REQUIRE_MODEL_EVALUATION
-              value: "0"
+            # Approval keeps requiring a passing evaluation. This patch used to
+            # override the default to "0" so that adopted models with no
+            # benchmark could still be approved; that override is gone, so the
+            # binary default of 1 applies and the chain stops at approval until
+            # a real evaluation exists.
             - name: LUNANEXA_ENABLE_GUIDE_MONITOR
               value: "0"
             - name: LUNANEXA_GUIDE_ORIGIN

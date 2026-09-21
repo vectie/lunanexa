@@ -1428,12 +1428,30 @@ volumeMounts:
 
 #### 15.3.3 nginx：把 60 秒的默认值显式覆盖掉
 
-`configmap/operator-4173-proxy` 的 `/h3/` 与 `/h3r/` 补 `send_timeout 7200s;
-proxy_connect_timeout 7200s;`（**待验证的假设**，见 15.2.3）。
+`configmap/operator-4173-proxy` 的 `/h3/` 与 `/h3r/` 补 `proxy_connect_timeout 7200s;
+send_timeout 7200s;`（原来只设了 `proxy_read_timeout` / `proxy_send_timeout`）。
+**这是针对 15.2.3 那个未证实假设的对冲，不是已证实的修复**——真正的机制仍是待查的。
+备份 `/tmp/operator-4173-proxy.backup-20260921.yaml`。
 注意这个 nginx 用 `hostPort`，滚动更新会因端口占用卡住，**必须手工 `delete pod`**，
 4174 会有十几秒中断。
 
-### 15.4 实测速度（都是真数字，不是外推）
+改这个配置时踩了一个坑值得记下：幂等判断不能写成 `'send_timeout' not in line`，
+因为 `proxy_send_timeout` **包含** `send_timeout` 子串，那样会 0 处命中。
+要匹配带前导空格的 `' send_timeout'`。
+
+### 15.4 本轮的另一处改动：20 秒模板
+
+`/data/models/comfyui-templates/lunanexa-h3/example_workflows/` 下新增
+`LunaNexa MiniMax H3 - 20s 16x9.json`（由 5s 模板克隆而来）：608×352、**481 帧**、
+24 fps、8 步、`generate_sound` 关、`max_wait_seconds` **1800**。
+
+481 是 H3 自己的 20 秒值：`max(5, round(20×24)) + (5 − (480 mod 17)) % 17 = 480 + 1`。
+帧数会被 H3 吸附到 17 帧栅格，所以要 481 而不是 480。
+
+模板路由是**按请求读目录**的，加文件后不需要重启 ComfyUI：
+`GET /api/workflow_templates` 立刻就能列出新名字。
+
+### 15.5 实测速度（都是真数字，不是外推）
 
 | 配置 | 时长 | 去噪 | 引擎合计 | 结果 |
 |---|---|---|---|---|
@@ -1452,16 +1470,29 @@ compilation errors may surface on the first request）。拿它外推会得出"2
 错误结论。**预热之后同一个服务的每步耗时差一个数量级**，标度关系大致是 tokens^1.5
 （tokens ≈ 帧数 × (W/32) × (H/32)）。
 
-### 15.5 还没做的
+### 15.6 本轮清理
 
-- **20 秒端到端仍未跑通。** 15.3.1 的服务端补丁与 15.3.3 的 nginx 改动还没装、没验。
+`kubectl delete` 掉了 5 个命名空间里 `phase != Running/Succeeded` 的**终态残留 pod**
+共 24 个（`aigc-acceptance-20260915`、`lunanexa`、`lunanexa-identity`、
+`lunanexa-image-staging`、`lunanexa-build-staging`）：Error / ContainerStatusUnknown /
+UnexpectedAdmissionError 这些哨兵。`lunanexa-identity` 的 CrashLoopBackOff 和
+`dra-driver-nvidia-gpu` 的 Init:ImagePullBackOff **没动**——它们是还在反复重试的活故障，
+属于另一条工作线，删 pod 只是重启一次同样的失败。
+
+### 15.7 还没做的
+
+- **20 秒端到端仍未跑通。** 15.3.1 的服务端补丁已装、pod 重建中，但**还没验证过出片**。
+- 15.2.3 那个约 70 秒的断开**仍未查清**，15.3.3 只是对冲。
 - 画布进度（15.1 末段）仍不通。
-- `minimaxh3-ref2va` 没装进度补丁，也没有 15.3.1 的编码补丁。
+- `minimaxh3-ref2va` 装了 15.3.1 的编码补丁，但**没有**进度补丁。
 - `UNETLoader` 是否列出两个 minimax diffusion 文件，未复核成功（解析脚本自身报错）。
-- 排障时在 ComfyUI 队列里出现过非本人提交的 pending 任务 `b8dd1d07-…`，未追查来源；
-  该任务后来正常完成，产物 `LunaNexa_00002_.mp4`（406,684 B）。第二轮验证期间队列里
-  又出现一个非本人提交的 `5db096f3-…`。
+- 排障时在 ComfyUI 队列里出现过非本人提交的任务 `b8dd1d07-…` 和 `5db096f3-…`，未追查
+  来源；两个都正常完成了，产物分别是 `LunaNexa_00002_.mp4`（406,684 B）和
+  `video_gen_7447526c405e4d5ba9ef279b0afd55.mp4`。
 - 为让 ComfyUI 重扫权重而重启它时，队列里正有任务在跑。时间上错开了、未造成损失，
   但脚本打印了队列却没有据此中止——**重启前的队列检查要写成硬闸**（已在
-  `patch-comfyui-video-transport.sh` 里实现）。
+  `patch-comfyui-video-transport.sh` 和 `patch-vllm-omni-h3-encode.sh` 里实现）。
 - 排障用的两个脚本 `/tmp/sweep.sh`、`/tmp/sweep20fix.sh` 只在管理节点上，没有入库。
+- 写这些脚本时踩到的另一类坑，记下免得重犯：**`sudo -S` 从 stdin 读密码**，所以
+  `s kubectl create ... | s kubectl apply -f -` 永远失败（`error: no objects passed to
+  apply`），必须把清单落临时文件再 `apply -f <file>`。
