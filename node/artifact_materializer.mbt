@@ -11,6 +11,12 @@ pub(all) suberror ArtifactMaterializationError {
 } derive(Debug, Eq)
 
 ///|
+pub extend ArtifactMaterializationError with Debug::{to_repr}
+
+///|
+pub extend ArtifactMaterializationError with Eq::{not_equal, equal}
+
+///|
 pub struct MaterializedArtifact {
   digest : String
   host_path : String
@@ -89,6 +95,9 @@ fn artifact_cosign_arguments(
   args.push(artifact_path)
   args
 }
+
+///|
+pub extend CosignArtifactSignatureVerifier with ArtifactSignatureVerifier::{verify}
 
 ///|
 pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier with fn verify(
@@ -361,8 +370,8 @@ fn sha256_hex(value : String) -> String {
 fn hmac_sha256(key : FixedArray[Byte], value : String) -> FixedArray[Byte] {
   @crypto.hmac(
     @crypto.SHA256::new(),
-    Bytes::from_array(key.view()).view(),
-    @utf8.encode(value).view(),
+    Bytes::from_array(key.exact_view()).exact_view(),
+    @utf8.encode(value).exact_view(),
   )
 }
 
@@ -645,11 +654,17 @@ struct ManagedRevisionManifest {
 } derive(FromJson)
 
 ///|
+pub extend ManagedRevisionManifest with FromJson::{from_json}
+
+///|
 struct ManagedRevisionFile {
   path : String
   sha256 : String
   size : Int64
 } derive(FromJson)
+
+///|
+pub extend ManagedRevisionFile with FromJson::{from_json}
 
 ///|
 fn ArtifactMaterializer::revision_root(

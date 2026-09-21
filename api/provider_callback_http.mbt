@@ -62,7 +62,7 @@ pub fn provider_callback_signature(
     "lunanexa.provider-callback.v1|\{provider}|\{environment}|\{event_id}|\{event_unix_ms}|\{body}",
   )
   @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), key.view(), material.view()),
+    @crypto.hmac(@crypto.SHA256::new(), key.exact_view(), material.exact_view()),
   )
 }
 

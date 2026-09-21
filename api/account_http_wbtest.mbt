@@ -13,8 +13,8 @@ fn signed_identity_headers(
   let signature = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).view(),
-      @utf8.encode(canonical).view(),
+      @utf8.encode(secret).exact_view(),
+      @utf8.encode(canonical).exact_view(),
     ),
   )
   {
@@ -44,8 +44,8 @@ fn signed_registration_headers(
   let signature = @crypto.bytes_to_hex_string(
     @crypto.hmac(
       @crypto.SHA256::new(),
-      @utf8.encode(secret).view(),
-      @utf8.encode(canonical).view(),
+      @utf8.encode(secret).exact_view(),
+      @utf8.encode(canonical).exact_view(),
     ),
   )
   {

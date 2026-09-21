@@ -2,7 +2,6 @@ import {
   "vectie/lunanexa/workspace",
   "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",
-  "moonbit-community/rabbita/cmd",
   "moonbit-community/rabbita/html",
 }
 

@@ -9,12 +9,36 @@ pub(all) struct ActiveAdmission {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ActiveAdmission with Debug::{to_repr}
+
+///|
+pub extend ActiveAdmission with Eq::{not_equal, equal}
+
+///|
+pub extend ActiveAdmission with ToJson::{to_json}
+
+///|
+pub extend ActiveAdmission with FromJson::{from_json}
+
+///|
 pub(all) struct TenantUsage {
   tenant_ref : String
   accelerator_ms : Int64
   completed_workloads : Int64
   window_started_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend TenantUsage with Debug::{to_repr}
+
+///|
+pub extend TenantUsage with Eq::{not_equal, equal}
+
+///|
+pub extend TenantUsage with ToJson::{to_json}
+
+///|
+pub extend TenantUsage with FromJson::{from_json}
 
 ///|
 pub(all) struct SchedulerSnapshot {
@@ -29,9 +53,27 @@ pub(all) struct SchedulerSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend SchedulerSnapshot with Debug::{to_repr}
+
+///|
+pub extend SchedulerSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend SchedulerSnapshot with ToJson::{to_json}
+
+///|
+pub extend SchedulerSnapshot with FromJson::{from_json}
+
+///|
 pub(all) suberror SchedulerStateError {
   InvalidSchedulerState(String)
 } derive(Debug, Eq)
+
+///|
+pub extend SchedulerStateError with Debug::{to_repr}
+
+///|
+pub extend SchedulerStateError with Eq::{not_equal, equal}
 
 ///|
 enum SchedulerPersistence {

@@ -74,6 +74,9 @@ pub(all) suberror ExclusiveLeaseError {
   InvalidTransition(ExclusiveLeaseState, ExclusiveLeaseState)
   StaleGeneration
 } derive(Eq, @debug.Debug)
+pub fn ExclusiveLeaseError::equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseError::not_equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct CustomerCredentialHandoff {
@@ -83,6 +86,11 @@ pub(all) struct CustomerCredentialHandoff {
   valid_until_unix_ms : Int64
   raw_secret_included : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CustomerCredentialHandoff::equal(Self, Self) -> Bool
+pub fn CustomerCredentialHandoff::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CustomerCredentialHandoff::not_equal(Self, Self) -> Bool
+pub fn CustomerCredentialHandoff::to_json(Self) -> Json
+pub fn CustomerCredentialHandoff::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CustomerCredentialHandoffState {
   Pending
@@ -90,12 +98,22 @@ pub(all) enum CustomerCredentialHandoffState {
   Recoverable
   Closed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CustomerCredentialHandoffState::equal(Self, Self) -> Bool
+pub fn CustomerCredentialHandoffState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CustomerCredentialHandoffState::not_equal(Self, Self) -> Bool
+pub fn CustomerCredentialHandoffState::to_json(Self) -> Json
+pub fn CustomerCredentialHandoffState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CustomerExclusiveLeaseTerminationRequest {
   expected_generation : Int64
   confirmation : String
   reason : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CustomerExclusiveLeaseTerminationRequest::equal(Self, Self) -> Bool
+pub fn CustomerExclusiveLeaseTerminationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CustomerExclusiveLeaseTerminationRequest::not_equal(Self, Self) -> Bool
+pub fn CustomerExclusiveLeaseTerminationRequest::to_json(Self) -> Json
+pub fn CustomerExclusiveLeaseTerminationRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CustomerExclusiveMachineView {
   version : String
@@ -113,17 +131,32 @@ pub(all) struct CustomerExclusiveMachineView {
   can_terminate : Bool
   termination_confirmation : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CustomerExclusiveMachineView::equal(Self, Self) -> Bool
+pub fn CustomerExclusiveMachineView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CustomerExclusiveMachineView::not_equal(Self, Self) -> Bool
+pub fn CustomerExclusiveMachineView::to_json(Self) -> Json
+pub fn CustomerExclusiveMachineView::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CustomerMachineReachability {
   Online
   Delayed
   Unknown
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CustomerMachineReachability::equal(Self, Self) -> Bool
+pub fn CustomerMachineReachability::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CustomerMachineReachability::not_equal(Self, Self) -> Bool
+pub fn CustomerMachineReachability::to_json(Self) -> Json
+pub fn CustomerMachineReachability::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExclusiveLeaseSnapshot {
   schema_version : String
   leases : Array[ExclusiveNodeLease]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveLeaseSnapshot::equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveLeaseSnapshot::not_equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseSnapshot::to_json(Self) -> Json
+pub fn ExclusiveLeaseSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ExclusiveLeaseState {
   Requested
@@ -138,17 +171,32 @@ pub(all) enum ExclusiveLeaseState {
   Cancelled
   Quarantined
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveLeaseState::equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveLeaseState::not_equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseState::to_json(Self) -> Json
+pub fn ExclusiveLeaseState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExclusiveLeaseTerminationRequest {
   expected_generation : Int64
   reason : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveLeaseTerminationRequest::equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseTerminationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveLeaseTerminationRequest::not_equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseTerminationRequest::to_json(Self) -> Json
+pub fn ExclusiveLeaseTerminationRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExclusiveLeaseTransitionRequest {
   expected_generation : Int64
   state : ExclusiveLeaseState
   evidence_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveLeaseTransitionRequest::equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseTransitionRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveLeaseTransitionRequest::not_equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseTransitionRequest::to_json(Self) -> Json
+pub fn ExclusiveLeaseTransitionRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ExclusiveNodeLease {
   intent : ExclusiveNodeLeaseIntent
@@ -159,6 +207,11 @@ pub(all) struct ExclusiveNodeLease {
   evidence_receipt : String
   authority_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveNodeLease::equal(Self, Self) -> Bool
+pub fn ExclusiveNodeLease::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveNodeLease::not_equal(Self, Self) -> Bool
+pub fn ExclusiveNodeLease::to_json(Self) -> Json
+pub fn ExclusiveNodeLease::to_repr(Self) -> @debug.Repr
 pub fn ExclusiveNodeLease::transition(Self, ExclusiveLeaseState, Int64, String, Int64) -> Self raise ExclusiveLeaseError
 
 pub(all) struct ExclusiveNodeLeaseIntent {
@@ -172,6 +225,11 @@ pub(all) struct ExclusiveNodeLeaseIntent {
   starts_unix_ms : Int64
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveNodeLeaseIntent::equal(Self, Self) -> Bool
+pub fn ExclusiveNodeLeaseIntent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveNodeLeaseIntent::not_equal(Self, Self) -> Bool
+pub fn ExclusiveNodeLeaseIntent::to_json(Self) -> Json
+pub fn ExclusiveNodeLeaseIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LeaseAgentAction {
   NoAction
@@ -180,6 +238,11 @@ pub(all) enum LeaseAgentAction {
   SanitizeLease(lease_id~ : String, username~ : String, generation~ : Int64)
   QuarantineNode(lease_id~ : String, username~ : String, generation~ : Int64)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LeaseAgentAction::equal(Self, Self) -> Bool
+pub fn LeaseAgentAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn LeaseAgentAction::not_equal(Self, Self) -> Bool
+pub fn LeaseAgentAction::to_json(Self) -> Json
+pub fn LeaseAgentAction::to_repr(Self) -> @debug.Repr
 
 pub struct LeaseAgentGuard {
   mut snapshot : LeaseAgentSnapshot
@@ -203,6 +266,11 @@ pub(all) struct LeaseAgentObservation {
   receipt : String
   observed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LeaseAgentObservation::equal(Self, Self) -> Bool
+pub fn LeaseAgentObservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn LeaseAgentObservation::not_equal(Self, Self) -> Bool
+pub fn LeaseAgentObservation::to_json(Self) -> Json
+pub fn LeaseAgentObservation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LeaseAgentSnapshot {
   schema_version : String
@@ -212,6 +280,11 @@ pub(all) struct LeaseAgentSnapshot {
   observed_generation : Int64
   last_receipt : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LeaseAgentSnapshot::equal(Self, Self) -> Bool
+pub fn LeaseAgentSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn LeaseAgentSnapshot::not_equal(Self, Self) -> Bool
+pub fn LeaseAgentSnapshot::to_json(Self) -> Json
+pub fn LeaseAgentSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LeaseAgentState {
   Idle
@@ -222,6 +295,11 @@ pub(all) enum LeaseAgentState {
   Sanitized
   QuarantinedAgent
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn LeaseAgentState::equal(Self, Self) -> Bool
+pub fn LeaseAgentState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn LeaseAgentState::not_equal(Self, Self) -> Bool
+pub fn LeaseAgentState::to_json(Self) -> Json
+pub fn LeaseAgentState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MachineHelperAdapterReadinessEvidence {
   version : String
@@ -237,11 +315,21 @@ pub(all) struct MachineHelperAdapterReadinessEvidence {
   quarantine_verified : Bool
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn MachineHelperAdapterReadinessEvidence::equal(Self, Self) -> Bool
+pub fn MachineHelperAdapterReadinessEvidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MachineHelperAdapterReadinessEvidence::not_equal(Self, Self) -> Bool
+pub fn MachineHelperAdapterReadinessEvidence::to_json(Self) -> Json
+pub fn MachineHelperAdapterReadinessEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) enum NodeOperatingMode {
   ManagedService
   ExclusiveLease
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NodeOperatingMode::equal(Self, Self) -> Bool
+pub fn NodeOperatingMode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NodeOperatingMode::not_equal(Self, Self) -> Bool
+pub fn NodeOperatingMode::to_json(Self) -> Json
+pub fn NodeOperatingMode::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

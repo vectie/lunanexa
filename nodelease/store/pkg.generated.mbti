@@ -19,6 +19,9 @@ pub(all) suberror ExclusiveLeaseStoreError {
   LeaseNotFound(String)
   LeaseExpired(String)
 } derive(Eq, @debug.Debug)
+pub fn ExclusiveLeaseStoreError::equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseStoreError::not_equal(Self, Self) -> Bool
+pub fn ExclusiveLeaseStoreError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 type ExclusiveLeasePersistence

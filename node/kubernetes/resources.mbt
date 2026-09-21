@@ -28,6 +28,18 @@ pub(all) struct RuntimeSettings {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RuntimeSettings with Debug::{to_repr}
+
+///|
+pub extend RuntimeSettings with Eq::{not_equal, equal}
+
+///|
+pub extend RuntimeSettings with ToJson::{to_json}
+
+///|
+pub extend RuntimeSettings with FromJson::{from_json}
+
+///|
 /// Resources must be installed in order: network policy, claim template, Pod.
 /// Artifact verification and assignment signature verification precede rendering.
 pub(all) struct RuntimeResources {
@@ -36,6 +48,12 @@ pub(all) struct RuntimeResources {
   claim_template : Json?
   network_policy : Json
 } derive(Debug, Eq)
+
+///|
+pub extend RuntimeResources with Debug::{to_repr}
+
+///|
+pub extend RuntimeResources with Eq::{not_equal, equal}
 
 ///|
 fn safe_path(value : String) -> Bool {

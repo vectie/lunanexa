@@ -30,10 +30,16 @@ pub(all) suberror BackupError {
   UnsupportedBackupVersion(String)
   ManifestDigestMismatch
 } derive(Eq, @debug.Debug)
+pub fn BackupError::equal(Self, Self) -> Bool
+pub fn BackupError::not_equal(Self, Self) -> Bool
+pub fn BackupError::to_repr(Self) -> @debug.Repr
 
 pub(all) suberror DurableStoreError {
   InvalidState(String)
 } derive(Eq, @debug.Debug)
+pub fn DurableStoreError::equal(Self, Self) -> Bool
+pub fn DurableStoreError::not_equal(Self, Self) -> Bool
+pub fn DurableStoreError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct BackupBundle {
@@ -44,6 +50,11 @@ pub(all) struct BackupBundle {
   audit_tail_hash : String
   signature_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn BackupBundle::equal(Self, Self) -> Bool
+pub fn BackupBundle::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn BackupBundle::not_equal(Self, Self) -> Bool
+pub fn BackupBundle::to_json(Self) -> Json
+pub fn BackupBundle::to_repr(Self) -> @debug.Repr
 
 pub struct FileStore {
   persistence : StorePersistence
@@ -88,6 +99,11 @@ pub(all) struct FullBackupBundle {
   manifest_digest : String
   signature_ref : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn FullBackupBundle::equal(Self, Self) -> Bool
+pub fn FullBackupBundle::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn FullBackupBundle::not_equal(Self, Self) -> Bool
+pub fn FullBackupBundle::to_json(Self) -> Json
+pub fn FullBackupBundle::to_repr(Self) -> @debug.Repr
 
 pub struct MemoryStore {
   assignments : Map[String, @contracts.DesiredAssignment]
@@ -131,11 +147,21 @@ pub(all) struct StoreSnapshot {
   node_directives : Array[@contracts.NodeDirective]
   controller_epoch : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn StoreSnapshot::equal(Self, Self) -> Bool
+pub fn StoreSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn StoreSnapshot::not_equal(Self, Self) -> Bool
+pub fn StoreSnapshot::to_json(Self) -> Json
+pub fn StoreSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) struct WorkloadResultRecord {
   idempotency_key : String
   response : @contracts.WorkloadResponse
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkloadResultRecord::equal(Self, Self) -> Bool
+pub fn WorkloadResultRecord::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn WorkloadResultRecord::not_equal(Self, Self) -> Bool
+pub fn WorkloadResultRecord::to_json(Self) -> Json
+pub fn WorkloadResultRecord::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

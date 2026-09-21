@@ -11,12 +11,36 @@ pub(all) enum SettingAuthority {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend SettingAuthority with Debug::{to_repr}
+
+///|
+pub extend SettingAuthority with Eq::{not_equal, equal}
+
+///|
+pub extend SettingAuthority with ToJson::{to_json}
+
+///|
+pub extend SettingAuthority with FromJson::{from_json}
+
+///|
 pub(all) struct SettingDescriptor {
   key : String
   authority : SettingAuthority
   restart_required : Bool
   description : String
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend SettingDescriptor with Debug::{to_repr}
+
+///|
+pub extend SettingDescriptor with Eq::{not_equal, equal}
+
+///|
+pub extend SettingDescriptor with ToJson::{to_json}
+
+///|
+pub extend SettingDescriptor with FromJson::{from_json}
 
 ///|
 pub(all) struct ControlTimingSettings {
@@ -35,6 +59,18 @@ pub(all) struct ControlTimingSettings {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend ControlTimingSettings with Debug::{to_repr}
+
+///|
+pub extend ControlTimingSettings with Eq::{not_equal, equal}
+
+///|
+pub extend ControlTimingSettings with ToJson::{to_json}
+
+///|
+pub extend ControlTimingSettings with FromJson::{from_json}
+
+///|
 pub(all) struct RequestBudgetSettings {
   maximum_request_body_bytes : Int
   response_cache_entries : Int
@@ -47,6 +83,18 @@ pub(all) struct RequestBudgetSettings {
   runtime_stream_event_bytes : Int
   runtime_stream_total_bytes : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RequestBudgetSettings with Debug::{to_repr}
+
+///|
+pub extend RequestBudgetSettings with Eq::{not_equal, equal}
+
+///|
+pub extend RequestBudgetSettings with ToJson::{to_json}
+
+///|
+pub extend RequestBudgetSettings with FromJson::{from_json}
 
 ///|
 pub(all) struct SchedulerPolicySettings {
@@ -63,6 +111,18 @@ pub(all) struct SchedulerPolicySettings {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend SchedulerPolicySettings with Debug::{to_repr}
+
+///|
+pub extend SchedulerPolicySettings with Eq::{not_equal, equal}
+
+///|
+pub extend SchedulerPolicySettings with ToJson::{to_json}
+
+///|
+pub extend SchedulerPolicySettings with FromJson::{from_json}
+
+///|
 pub(all) struct RetentionSettings {
   scheduler_decision_entries : Int
   telemetry_sample_entries : Int
@@ -70,11 +130,35 @@ pub(all) struct RetentionSettings {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RetentionSettings with Debug::{to_repr}
+
+///|
+pub extend RetentionSettings with Eq::{not_equal, equal}
+
+///|
+pub extend RetentionSettings with ToJson::{to_json}
+
+///|
+pub extend RetentionSettings with FromJson::{from_json}
+
+///|
 pub(all) struct NodeRuntimeSettings {
   container_pid_limit : Int
   artifact_io_chunk_bytes : Int
   signature_artifact_maximum_bytes : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend NodeRuntimeSettings with Debug::{to_repr}
+
+///|
+pub extend NodeRuntimeSettings with Eq::{not_equal, equal}
+
+///|
+pub extend NodeRuntimeSettings with ToJson::{to_json}
+
+///|
+pub extend NodeRuntimeSettings with FromJson::{from_json}
 
 ///|
 pub(all) struct TelemetrySafetySettings {
@@ -85,6 +169,18 @@ pub(all) struct TelemetrySafetySettings {
   maximum_temperature_celsius : Double
   maximum_power_watts : Double
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend TelemetrySafetySettings with Debug::{to_repr}
+
+///|
+pub extend TelemetrySafetySettings with Eq::{not_equal, equal}
+
+///|
+pub extend TelemetrySafetySettings with ToJson::{to_json}
+
+///|
+pub extend TelemetrySafetySettings with FromJson::{from_json}
 
 ///|
 pub(all) struct GlobalAdminSettings {
@@ -99,6 +195,18 @@ pub(all) struct GlobalAdminSettings {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend GlobalAdminSettings with Debug::{to_repr}
+
+///|
+pub extend GlobalAdminSettings with Eq::{not_equal, equal}
+
+///|
+pub extend GlobalAdminSettings with ToJson::{to_json}
+
+///|
+pub extend GlobalAdminSettings with FromJson::{from_json}
+
+///|
 /// User-selectable request preferences. These may be sent with a request, but
 /// they never weaken the global administrator policy or hard safety ceilings.
 pub(all) struct UserRequestPreferences {
@@ -106,6 +214,18 @@ pub(all) struct UserRequestPreferences {
   deadline_ms : Int64
   max_output_units : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend UserRequestPreferences with Debug::{to_repr}
+
+///|
+pub extend UserRequestPreferences with Eq::{not_equal, equal}
+
+///|
+pub extend UserRequestPreferences with ToJson::{to_json}
+
+///|
+pub extend UserRequestPreferences with FromJson::{from_json}
 
 ///|
 /// Browser/editor-only preferences. LunaNexa's management database does not
@@ -118,12 +238,36 @@ pub(all) struct UserLocalPreferences {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend UserLocalPreferences with Debug::{to_repr}
+
+///|
+pub extend UserLocalPreferences with Eq::{not_equal, equal}
+
+///|
+pub extend UserLocalPreferences with ToJson::{to_json}
+
+///|
+pub extend UserLocalPreferences with FromJson::{from_json}
+
+///|
 pub(all) struct EffectiveUserRequest {
   model_alias : String
   deadline_ms : Int64
   max_output_units : Int
   global_generation : Int64
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend EffectiveUserRequest with Debug::{to_repr}
+
+///|
+pub extend EffectiveUserRequest with Eq::{not_equal, equal}
+
+///|
+pub extend EffectiveUserRequest with ToJson::{to_json}
+
+///|
+pub extend EffectiveUserRequest with FromJson::{from_json}
 
 ///|
 pub(all) struct PublicSettingsView {
@@ -135,11 +279,32 @@ pub(all) struct PublicSettingsView {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PublicSettingsView with Debug::{to_repr}
+
+///|
+pub extend PublicSettingsView with Eq::{not_equal, equal}
+
+///|
+pub extend PublicSettingsView with ToJson::{to_json}
+
+///|
+pub extend PublicSettingsView with FromJson::{from_json}
+
+///|
 pub(all) suberror SettingsError {
   InvalidGlobalSetting(String)
   UserPreferenceExceedsGlobalPolicy(String)
   InvalidLocalPreference(String)
 } derive(Debug, Eq, ToJson)
+
+///|
+pub extend SettingsError with Debug::{to_repr}
+
+///|
+pub extend SettingsError with Eq::{not_equal, equal}
+
+///|
+pub extend SettingsError with ToJson::{to_json}
 
 ///|
 pub fn default_global_admin_settings() -> GlobalAdminSettings {

@@ -12,6 +12,12 @@ pub(all) suberror PgError {
 } derive(Debug, Eq)
 
 ///|
+pub extend PgError with Debug::{to_repr}
+
+///|
+pub extend PgError with Eq::{not_equal, equal}
+
+///|
 /// One finished statement.
 pub struct PgResult {
   handle : @postgres.QueryResult

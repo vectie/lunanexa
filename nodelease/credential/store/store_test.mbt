@@ -114,8 +114,8 @@ async fn ready_store(
   path : String,
   secret : String,
   now : Int64,
-) -> CredentialHandoffStore {
-  CredentialHandoffStore::open(path, secret).with_issuer_readiness({
+) -> @store.CredentialHandoffStore {
+  @store.CredentialHandoffStore::open(path, secret).with_issuer_readiness({
     version: @credential.issuer_readiness_contract_version,
     adapter_id: "ssh-ca-test",
     health_endpoint: "https://ssh-ca.example/healthz",
@@ -166,7 +166,7 @@ async test "handoff is subject node generation bound one time and restart safe" 
   assert_true(redemption.redemption_receipt.has_prefix("lnxr_"))
   assert_false(redemption.raw_secret_included)
   assert_false(redemption.to_json().stringify().contains("private-node-1"))
-  let reopened = CredentialHandoffStore::open(path, secret)
+  let reopened = @store.CredentialHandoffStore::open(path, secret)
   let recovered_view = reopened
     .view_for_lease(lease, "subject-1", now + 2L)
     .unwrap()
@@ -296,7 +296,7 @@ async test "revocation closes all unredeemed handoffs for the lease" {
 async test "external issuer readiness is explicit and expires in process" {
   let directory = @fs.tmpdir(prefix="lunanexa-credential-readiness-")
   let now = @async.now()
-  let store = CredentialHandoffStore::open(
+  let store = @store.CredentialHandoffStore::open(
     "\{directory}/handoffs.json",
     "credential-readiness-secret-with-more-than-32-bytes",
   )
@@ -313,7 +313,7 @@ async test "external issuer readiness is explicit and expires in process" {
   }
   let evidence = {
     ..unsigned,
-    signature: issuer_readiness_signature(
+    signature: @store.issuer_readiness_signature(
       unsigned, "issuer-evidence-signing-secret-more-than-32-bytes",
     ),
   }
@@ -328,7 +328,7 @@ async test "external issuer readiness is explicit and expires in process" {
     permission=0o600,
   )
   assert_eq(
-    load_issuer_readiness_evidence(
+    @store.load_issuer_readiness_evidence(
       Some(path),
       Some("issuer-evidence-signing-secret-more-than-32-bytes"),
       now,
@@ -347,7 +347,7 @@ async test "external issuer readiness is explicit and expires in process" {
   let projected_path = "\{directory}/projected-issuer-readiness.json"
   @fs.symlink(target=projected_target, projected_path)
   assert_eq(
-    load_issuer_readiness_evidence(
+    @store.load_issuer_readiness_evidence(
       Some(projected_path),
       Some("issuer-evidence-signing-secret-more-than-32-bytes"),
       now,
@@ -365,7 +365,7 @@ async test "external issuer readiness is explicit and expires in process" {
   let escaping_path = "\{directory}/escaping-issuer-readiness.json"
   @fs.symlink(target=outside_target, escaping_path)
   ignore(
-    load_issuer_readiness_evidence(
+    @store.load_issuer_readiness_evidence(
       Some(escaping_path),
       Some("issuer-evidence-signing-secret-more-than-32-bytes"),
       now,
@@ -381,7 +381,7 @@ async test "external issuer readiness is explicit and expires in process" {
     permission=0o600,
   )
   ignore(
-    load_issuer_readiness_evidence(
+    @store.load_issuer_readiness_evidence(
       Some(path),
       Some("issuer-evidence-signing-secret-more-than-32-bytes"),
       now,

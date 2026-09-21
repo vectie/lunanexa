@@ -14,6 +14,18 @@ pub(all) enum RejectionReason {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend RejectionReason with Debug::{to_repr}
+
+///|
+pub extend RejectionReason with Eq::{not_equal, equal}
+
+///|
+pub extend RejectionReason with ToJson::{to_json}
+
+///|
+pub extend RejectionReason with FromJson::{from_json}
+
+///|
 pub(all) struct NodeSnapshot {
   node_id : String
   /// The node this one names as its CX7 peer, or "" when it claims none. The
@@ -34,6 +46,18 @@ pub(all) struct NodeSnapshot {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend NodeSnapshot with Debug::{to_repr}
+
+///|
+pub extend NodeSnapshot with Eq::{not_equal, equal}
+
+///|
+pub extend NodeSnapshot with ToJson::{to_json}
+
+///|
+pub extend NodeSnapshot with FromJson::{from_json}
+
+///|
 pub(all) struct PlacementRequirements {
   workload_id : String
   model_key : String
@@ -49,6 +73,18 @@ pub(all) struct PlacementRequirements {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PlacementRequirements with Debug::{to_repr}
+
+///|
+pub extend PlacementRequirements with Eq::{not_equal, equal}
+
+///|
+pub extend PlacementRequirements with ToJson::{to_json}
+
+///|
+pub extend PlacementRequirements with FromJson::{from_json}
+
+///|
 pub(all) struct ScorePolicy {
   version : String
   warm_model_weight : Int
@@ -58,6 +94,18 @@ pub(all) struct ScorePolicy {
   utilization_weight : Int
   validated_topology_profiles : Array[String]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend ScorePolicy with Debug::{to_repr}
+
+///|
+pub extend ScorePolicy with Eq::{not_equal, equal}
+
+///|
+pub extend ScorePolicy with ToJson::{to_json}
+
+///|
+pub extend ScorePolicy with FromJson::{from_json}
 
 ///|
 pub(all) struct CandidateScore {
@@ -71,10 +119,34 @@ pub(all) struct CandidateScore {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend CandidateScore with Debug::{to_repr}
+
+///|
+pub extend CandidateScore with Eq::{not_equal, equal}
+
+///|
+pub extend CandidateScore with ToJson::{to_json}
+
+///|
+pub extend CandidateScore with FromJson::{from_json}
+
+///|
 pub(all) struct RejectedNode {
   node_id : String
   reasons : Array[RejectionReason]
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend RejectedNode with Debug::{to_repr}
+
+///|
+pub extend RejectedNode with Eq::{not_equal, equal}
+
+///|
+pub extend RejectedNode with ToJson::{to_json}
+
+///|
+pub extend RejectedNode with FromJson::{from_json}
 
 ///|
 pub(all) struct PlacementDecision {
@@ -89,12 +161,30 @@ pub(all) struct PlacementDecision {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend PlacementDecision with Debug::{to_repr}
+
+///|
+pub extend PlacementDecision with Eq::{not_equal, equal}
+
+///|
+pub extend PlacementDecision with ToJson::{to_json}
+
+///|
+pub extend PlacementDecision with FromJson::{from_json}
+
+///|
 pub(all) suberror Cx7PairError {
   /// The request did not name the one profile this platform admits.
   PairTopologyNotValidated(String)
   /// No two schedulable nodes named each other over CX7.
   NoValidatedCx7Pair
 } derive(Debug, Eq)
+
+///|
+pub extend Cx7PairError with Debug::{to_repr}
+
+///|
+pub extend Cx7PairError with Eq::{not_equal, equal}
 
 ///|
 /// Select the pair a multi-node request runs on.
@@ -272,10 +362,34 @@ pub(all) struct TenantQuota {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub extend TenantQuota with Debug::{to_repr}
+
+///|
+pub extend TenantQuota with Eq::{not_equal, equal}
+
+///|
+pub extend TenantQuota with ToJson::{to_json}
+
+///|
+pub extend TenantQuota with FromJson::{from_json}
+
+///|
 pub(all) enum AdmissionResult {
   Accepted(queue_position~ : Int)
   Rejected(reason~ : RejectionReason)
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AdmissionResult with Debug::{to_repr}
+
+///|
+pub extend AdmissionResult with Eq::{not_equal, equal}
+
+///|
+pub extend AdmissionResult with ToJson::{to_json}
+
+///|
+pub extend AdmissionResult with FromJson::{from_json}
 
 ///|
 pub fn priority_capacity_limit(
@@ -420,6 +534,18 @@ pub(all) struct CapacityForecast {
   total_free_memory_mib : Int
   estimated_additional_instances : Int
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend CapacityForecast with Debug::{to_repr}
+
+///|
+pub extend CapacityForecast with Eq::{not_equal, equal}
+
+///|
+pub extend CapacityForecast with ToJson::{to_json}
+
+///|
+pub extend CapacityForecast with FromJson::{from_json}
 
 ///|
 pub fn forecast(

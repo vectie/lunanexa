@@ -30,6 +30,9 @@ pub fn recovery_plan(Int64, Array[@contracts.DesiredAssignment], Array[String], 
 pub(all) suberror AuthenticationError {
   InvalidOperatorCredential
 } derive(Eq, @debug.Debug)
+pub fn AuthenticationError::equal(Self, Self) -> Bool
+pub fn AuthenticationError::not_equal(Self, Self) -> Bool
+pub fn AuthenticationError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub struct ControlPlane {
@@ -51,6 +54,9 @@ pub(all) struct OperatorIdentity {
   roles : Array[String]
   authenticated : Bool
 } derive(Eq, @debug.Debug)
+pub fn OperatorIdentity::equal(Self, Self) -> Bool
+pub fn OperatorIdentity::not_equal(Self, Self) -> Bool
+pub fn OperatorIdentity::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RecoveryAction {
   StartMissing(String)
@@ -58,11 +64,21 @@ pub(all) enum RecoveryAction {
   ExpireLease(String)
   MarkNodeUnreachable(String)
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RecoveryAction::equal(Self, Self) -> Bool
+pub fn RecoveryAction::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RecoveryAction::not_equal(Self, Self) -> Bool
+pub fn RecoveryAction::to_json(Self) -> Json
+pub fn RecoveryAction::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RecoveryPlan {
   controller_epoch : Int64
   actions : Array[RecoveryAction]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn RecoveryPlan::equal(Self, Self) -> Bool
+pub fn RecoveryPlan::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RecoveryPlan::not_equal(Self, Self) -> Bool
+pub fn RecoveryPlan::to_json(Self) -> Json
+pub fn RecoveryPlan::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

@@ -14,6 +14,9 @@ pub fn canonical_http_loopback_endpoint(String) -> Bool
 pub(all) suberror ClientError {
   ClientError(code~ : ClientErrorCode, message~ : String, retryable~ : Bool)
 } derive(Eq, @debug.Debug)
+pub fn ClientError::equal(Self, Self) -> Bool
+pub fn ClientError::not_equal(Self, Self) -> Bool
+pub fn ClientError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct CapabilityDescriptor {
@@ -23,6 +26,11 @@ pub(all) struct CapabilityDescriptor {
   cancellation : Bool
   healthy : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CapabilityDescriptor::equal(Self, Self) -> Bool
+pub fn CapabilityDescriptor::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CapabilityDescriptor::not_equal(Self, Self) -> Bool
+pub fn CapabilityDescriptor::to_json(Self) -> Json
+pub fn CapabilityDescriptor::to_repr(Self) -> @debug.Repr
 
 pub struct Client[T] {
   config : ClientConfig
@@ -40,6 +48,11 @@ pub(all) struct ClientConfig {
   inference_credential_ref : String
   timeout_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ClientConfig::equal(Self, Self) -> Bool
+pub fn ClientConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ClientConfig::not_equal(Self, Self) -> Bool
+pub fn ClientConfig::to_json(Self) -> Json
+pub fn ClientConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ClientErrorCode {
   Transport
@@ -47,6 +60,11 @@ pub(all) enum ClientErrorCode {
   ProviderRejected
   ProviderUnavailable
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ClientErrorCode::equal(Self, Self) -> Bool
+pub fn ClientErrorCode::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ClientErrorCode::not_equal(Self, Self) -> Bool
+pub fn ClientErrorCode::to_json(Self) -> Json
+pub fn ClientErrorCode::to_repr(Self) -> @debug.Repr
 
 pub struct FixtureTransport {
   response : @contracts.WorkloadResponse
@@ -54,15 +72,25 @@ pub struct FixtureTransport {
   mut cancelled_workload : String?
   healthy_value : Bool
 }
+pub async fn FixtureTransport::cancel(Self, ClientConfig, String) -> Bool raise ClientError
 pub fn FixtureTransport::cancelled_workload(Self) -> String?
+pub async fn FixtureTransport::discover(Self, ClientConfig) -> Array[CapabilityDescriptor] raise ClientError
+pub async fn FixtureTransport::health(Self, ClientConfig) -> Bool raise ClientError
+pub async fn FixtureTransport::invoke(Self, ClientConfig, String) -> String raise ClientError
 pub fn FixtureTransport::new(@contracts.WorkloadResponse, Array[CapabilityDescriptor], healthy? : Bool) -> Self
+pub async fn FixtureTransport::stream(Self, ClientConfig, String, async (@contracts.WorkloadStreamEvent) -> Unit noraise) -> Unit raise ClientError
 pub impl ProviderTransport for FixtureTransport
 
 pub struct HttpTransport {
   credential_value : String
   subject_ref : String?
 }
+pub async fn HttpTransport::cancel(Self, ClientConfig, String) -> Bool raise ClientError
+pub async fn HttpTransport::discover(Self, ClientConfig) -> Array[CapabilityDescriptor] raise ClientError
+pub async fn HttpTransport::health(Self, ClientConfig) -> Bool raise ClientError
+pub async fn HttpTransport::invoke(Self, ClientConfig, String) -> String raise ClientError
 pub fn HttpTransport::new(String) -> Self
+pub async fn HttpTransport::stream(Self, ClientConfig, String, async (@contracts.WorkloadStreamEvent) -> Unit noraise) -> Unit raise ClientError
 pub fn HttpTransport::with_subject_ref(Self, String) -> Self raise ClientError
 pub impl ProviderTransport for HttpTransport
 

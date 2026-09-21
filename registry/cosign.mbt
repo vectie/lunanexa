@@ -7,12 +7,30 @@ pub(all) suberror SignatureVerificationError {
 } derive(Debug, Eq)
 
 ///|
+pub extend SignatureVerificationError with Debug::{to_repr}
+
+///|
+pub extend SignatureVerificationError with Eq::{not_equal, equal}
+
+///|
 pub(all) struct SignatureVerificationReceipt {
   subject : String
   digest : String
   verifier : String
   verified : Bool
 } derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend SignatureVerificationReceipt with Debug::{to_repr}
+
+///|
+pub extend SignatureVerificationReceipt with Eq::{not_equal, equal}
+
+///|
+pub extend SignatureVerificationReceipt with ToJson::{to_json}
+
+///|
+pub extend SignatureVerificationReceipt with FromJson::{from_json}
 
 ///|
 pub struct CosignVerifier {

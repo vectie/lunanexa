@@ -60,6 +60,9 @@ pub(all) suberror OfflineCommerceError {
   EvidenceMissing(Array[OfflineEvidenceKind])
   ArtifactUnavailable(String)
 } derive(Eq, @debug.Debug)
+pub fn OfflineCommerceError::equal(Self, Self) -> Bool
+pub fn OfflineCommerceError::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct ArtifactGenerationRequest {
@@ -76,6 +79,11 @@ pub(all) struct ArtifactGenerationRequest {
   requested_by : String
   requested_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ArtifactGenerationRequest::equal(Self, Self) -> Bool
+pub fn ArtifactGenerationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ArtifactGenerationRequest::not_equal(Self, Self) -> Bool
+pub fn ArtifactGenerationRequest::to_json(Self) -> Json
+pub fn ArtifactGenerationRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ArtifactGenerationResult {
   request_id : String
@@ -93,6 +101,11 @@ pub(all) struct ArtifactGenerationResult {
   visual_evidence_sha256 : String
   completed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ArtifactGenerationResult::equal(Self, Self) -> Bool
+pub fn ArtifactGenerationResult::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ArtifactGenerationResult::not_equal(Self, Self) -> Bool
+pub fn ArtifactGenerationResult::to_json(Self) -> Json
+pub fn ArtifactGenerationResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ArtifactGenerationState {
   GenerationRequested
@@ -100,6 +113,11 @@ pub(all) enum ArtifactGenerationState {
   GenerationFailed
   UserUploaded
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ArtifactGenerationState::equal(Self, Self) -> Bool
+pub fn ArtifactGenerationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ArtifactGenerationState::not_equal(Self, Self) -> Bool
+pub fn ArtifactGenerationState::to_json(Self) -> Json
+pub fn ArtifactGenerationState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ArtifactReviewState {
   ReviewNotRequired
@@ -107,12 +125,22 @@ pub(all) enum ArtifactReviewState {
   ReviewAccepted
   ReviewRejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ArtifactReviewState::equal(Self, Self) -> Bool
+pub fn ArtifactReviewState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ArtifactReviewState::not_equal(Self, Self) -> Bool
+pub fn ArtifactReviewState::to_json(Self) -> Json
+pub fn ArtifactReviewState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ArtifactScanState {
   AwaitingScan
   ScanPassed
   ScanRejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ArtifactScanState::equal(Self, Self) -> Bool
+pub fn ArtifactScanState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ArtifactScanState::not_equal(Self, Self) -> Bool
+pub fn ArtifactScanState::to_json(Self) -> Json
+pub fn ArtifactScanState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CommercialOrder {
   order_id : String
@@ -138,13 +166,18 @@ pub fn CommercialOrder::begin_offline_execution(Self, Int64, Int64) -> Self rais
 pub fn CommercialOrder::cancel(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::confirm_activation(Self, Int64, String, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::confirm_reversal(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::equal(Self, Self) -> Bool
 pub fn CommercialOrder::expire(Self, Int64) -> Self
+pub fn CommercialOrder::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn CommercialOrder::hold_failed_reversal(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::mark_reconciling(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::not_equal(Self, Self) -> Bool
 pub fn CommercialOrder::recover_failed_reversal(Self, Int64, ReversalRecoveryDecision, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::release_offline_packet(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::request_activation(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::request_reversal(Self, Int64, Int64) -> Self raise OfflineCommerceError
+pub fn CommercialOrder::to_json(Self) -> Json
+pub fn CommercialOrder::to_repr(Self) -> @debug.Repr
 pub fn CommercialOrder::with_quote(Self, ImmutableQuote, String, Int64) -> Self raise OfflineCommerceError
 
 pub(all) struct CommercialReversal {
@@ -162,6 +195,11 @@ pub(all) struct CommercialReversal {
   requested_unix_ms : Int64
   completed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CommercialReversal::equal(Self, Self) -> Bool
+pub fn CommercialReversal::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CommercialReversal::not_equal(Self, Self) -> Bool
+pub fn CommercialReversal::to_json(Self) -> Json
+pub fn CommercialReversal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CommercialReversalReason {
   CustomerCancellation
@@ -171,12 +209,22 @@ pub(all) enum CommercialReversalReason {
   InvoiceVoided
   PolicyRevoked
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CommercialReversalReason::equal(Self, Self) -> Bool
+pub fn CommercialReversalReason::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CommercialReversalReason::not_equal(Self, Self) -> Bool
+pub fn CommercialReversalReason::to_json(Self) -> Json
+pub fn CommercialReversalReason::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CommercialReversalState {
   ReversalRequested
   ReversalConfirmed
   ReversalFailed
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CommercialReversalState::equal(Self, Self) -> Bool
+pub fn CommercialReversalState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CommercialReversalState::not_equal(Self, Self) -> Bool
+pub fn CommercialReversalState::to_json(Self) -> Json
+pub fn CommercialReversalState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DocumentArtifact {
   artifact_id : String
@@ -198,6 +246,11 @@ pub(all) struct DocumentArtifact {
   creator_receipt : String
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DocumentArtifact::equal(Self, Self) -> Bool
+pub fn DocumentArtifact::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DocumentArtifact::not_equal(Self, Self) -> Bool
+pub fn DocumentArtifact::to_json(Self) -> Json
+pub fn DocumentArtifact::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DocumentArtifactKind {
   EditableContractDocx
@@ -209,6 +262,11 @@ pub(all) enum DocumentArtifactKind {
   InternalApprovalEvidence
   IdentityVerificationEvidence
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DocumentArtifactKind::equal(Self, Self) -> Bool
+pub fn DocumentArtifactKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DocumentArtifactKind::not_equal(Self, Self) -> Bool
+pub fn DocumentArtifactKind::to_json(Self) -> Json
+pub fn DocumentArtifactKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DocumentTemplate {
   template_id : String
@@ -223,11 +281,21 @@ pub(all) struct DocumentTemplate {
   created_unix_ms : Int64
   superseded_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DocumentTemplate::equal(Self, Self) -> Bool
+pub fn DocumentTemplate::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DocumentTemplate::not_equal(Self, Self) -> Bool
+pub fn DocumentTemplate::to_json(Self) -> Json
+pub fn DocumentTemplate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DocumentTemplateKind {
   ContractTemplate
   QuoteScheduleTemplate
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DocumentTemplateKind::equal(Self, Self) -> Bool
+pub fn DocumentTemplateKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DocumentTemplateKind::not_equal(Self, Self) -> Bool
+pub fn DocumentTemplateKind::to_json(Self) -> Json
+pub fn DocumentTemplateKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EntitlementActivation {
   activation_id : String
@@ -246,18 +314,33 @@ pub(all) struct EntitlementActivation {
   requested_unix_ms : Int64
   completed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EntitlementActivation::equal(Self, Self) -> Bool
+pub fn EntitlementActivation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EntitlementActivation::not_equal(Self, Self) -> Bool
+pub fn EntitlementActivation::to_json(Self) -> Json
+pub fn EntitlementActivation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EntitlementActivationState {
   EntitlementActivationRequested
   EntitlementActivationConfirmed
   EntitlementActivationRejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EntitlementActivationState::equal(Self, Self) -> Bool
+pub fn EntitlementActivationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EntitlementActivationState::not_equal(Self, Self) -> Bool
+pub fn EntitlementActivationState::to_json(Self) -> Json
+pub fn EntitlementActivationState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EntitlementKind {
   CapacityCommitment
   WorkspaceLease
   ExclusiveMachineLease
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EntitlementKind::equal(Self, Self) -> Bool
+pub fn EntitlementKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EntitlementKind::not_equal(Self, Self) -> Bool
+pub fn EntitlementKind::to_json(Self) -> Json
+pub fn EntitlementKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EvidenceReview {
   review_id : String
@@ -270,6 +353,11 @@ pub(all) struct EvidenceReview {
   audit_receipt : String
   reviewed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EvidenceReview::equal(Self, Self) -> Bool
+pub fn EvidenceReview::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EvidenceReview::not_equal(Self, Self) -> Bool
+pub fn EvidenceReview::to_json(Self) -> Json
+pub fn EvidenceReview::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EvidenceUploadCallback {
   callback_id : String
@@ -284,6 +372,11 @@ pub(all) struct EvidenceUploadCallback {
   verified : Bool
   completed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EvidenceUploadCallback::equal(Self, Self) -> Bool
+pub fn EvidenceUploadCallback::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EvidenceUploadCallback::not_equal(Self, Self) -> Bool
+pub fn EvidenceUploadCallback::to_json(Self) -> Json
+pub fn EvidenceUploadCallback::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EvidenceUploadGrant {
   grant_id : String
@@ -301,6 +394,11 @@ pub(all) struct EvidenceUploadGrant {
   state : UploadGrantState
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn EvidenceUploadGrant::equal(Self, Self) -> Bool
+pub fn EvidenceUploadGrant::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn EvidenceUploadGrant::not_equal(Self, Self) -> Bool
+pub fn EvidenceUploadGrant::to_json(Self) -> Json
+pub fn EvidenceUploadGrant::to_repr(Self) -> @debug.Repr
 
 pub(all) struct FulfillmentPolicy {
   require_executed_agreement : Bool
@@ -309,6 +407,11 @@ pub(all) struct FulfillmentPolicy {
   require_identity_verification : Bool
   require_internal_approval : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn FulfillmentPolicy::equal(Self, Self) -> Bool
+pub fn FulfillmentPolicy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn FulfillmentPolicy::not_equal(Self, Self) -> Bool
+pub fn FulfillmentPolicy::to_json(Self) -> Json
+pub fn FulfillmentPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ImmutableQuote {
   quote_id : String
@@ -324,12 +427,22 @@ pub(all) struct ImmutableQuote {
   terms_digest : String
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ImmutableQuote::equal(Self, Self) -> Bool
+pub fn ImmutableQuote::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ImmutableQuote::not_equal(Self, Self) -> Bool
+pub fn ImmutableQuote::to_json(Self) -> Json
+pub fn ImmutableQuote::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InvoiceTiming {
   InvoiceBeforeFulfillment
   InvoiceAfterFulfillment
   InvoiceNotRequired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn InvoiceTiming::equal(Self, Self) -> Bool
+pub fn InvoiceTiming::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn InvoiceTiming::not_equal(Self, Self) -> Bool
+pub fn InvoiceTiming::to_json(Self) -> Json
+pub fn InvoiceTiming::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineAuthorityWorkBatch {
   activations : Array[EntitlementActivation]
@@ -337,6 +450,11 @@ pub(all) struct OfflineAuthorityWorkBatch {
   claims : Array[OfflineWorkClaim]
   heartbeat_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineAuthorityWorkBatch::equal(Self, Self) -> Bool
+pub fn OfflineAuthorityWorkBatch::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineAuthorityWorkBatch::not_equal(Self, Self) -> Bool
+pub fn OfflineAuthorityWorkBatch::to_json(Self) -> Json
+pub fn OfflineAuthorityWorkBatch::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceCapability {
   ApprovedLegalTemplates
@@ -350,6 +468,11 @@ pub(all) enum OfflineCommerceCapability {
   EntitlementAuthority
   FinanceLegalPolicy
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineCommerceCapability::equal(Self, Self) -> Bool
+pub fn OfflineCommerceCapability::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineCommerceCapability::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceCapability::to_json(Self) -> Json
+pub fn OfflineCommerceCapability::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineCommerceCapabilityEvidence {
   capability : OfflineCommerceCapability
@@ -357,6 +480,11 @@ pub(all) struct OfflineCommerceCapabilityEvidence {
   verified : Bool
   evidence_ref : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineCommerceCapabilityEvidence::equal(Self, Self) -> Bool
+pub fn OfflineCommerceCapabilityEvidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineCommerceCapabilityEvidence::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceCapabilityEvidence::to_json(Self) -> Json
+pub fn OfflineCommerceCapabilityEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineCommerceReadiness {
   status : OfflineCommerceReadinessStatus
@@ -364,11 +492,21 @@ pub(all) struct OfflineCommerceReadiness {
   blocker_codes : Array[String]
   evaluated_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineCommerceReadiness::equal(Self, Self) -> Bool
+pub fn OfflineCommerceReadiness::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineCommerceReadiness::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceReadiness::to_json(Self) -> Json
+pub fn OfflineCommerceReadiness::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceReadinessStatus {
   OfflineCommerceAdaptersPending
   OfflineCommerceReady
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineCommerceReadinessStatus::equal(Self, Self) -> Bool
+pub fn OfflineCommerceReadinessStatus::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineCommerceReadinessStatus::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceReadinessStatus::to_json(Self) -> Json
+pub fn OfflineCommerceReadinessStatus::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineCommerceSnapshot {
   schema_version : String
@@ -387,6 +525,11 @@ pub(all) struct OfflineCommerceSnapshot {
   work_claims : Array[OfflineWorkClaim]
   worker_health : OfflineWorkerHealth
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineCommerceSnapshot::equal(Self, Self) -> Bool
+pub fn OfflineCommerceSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineCommerceSnapshot::not_equal(Self, Self) -> Bool
+pub fn OfflineCommerceSnapshot::to_json(Self) -> Json
+pub fn OfflineCommerceSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineEvidenceKind {
   ExecutedAgreementEvidence
@@ -395,6 +538,11 @@ pub(all) enum OfflineEvidenceKind {
   InternalApproval
   IdentityVerification
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineEvidenceKind::equal(Self, Self) -> Bool
+pub fn OfflineEvidenceKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineEvidenceKind::not_equal(Self, Self) -> Bool
+pub fn OfflineEvidenceKind::to_json(Self) -> Json
+pub fn OfflineEvidenceKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineOrderState {
   Draft
@@ -413,11 +561,21 @@ pub(all) enum OfflineOrderState {
   Cancelled
   Expired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineOrderState::equal(Self, Self) -> Bool
+pub fn OfflineOrderState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineOrderState::not_equal(Self, Self) -> Bool
+pub fn OfflineOrderState::to_json(Self) -> Json
+pub fn OfflineOrderState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineTransferDirection {
   UploadTransfer
   DownloadTransfer
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineTransferDirection::equal(Self, Self) -> Bool
+pub fn OfflineTransferDirection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineTransferDirection::not_equal(Self, Self) -> Bool
+pub fn OfflineTransferDirection::to_json(Self) -> Json
+pub fn OfflineTransferDirection::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineTransferEvidence {
   session_id : String
@@ -427,6 +585,11 @@ pub(all) struct OfflineTransferEvidence {
   provider_receipt : String
   completed_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineTransferEvidence::equal(Self, Self) -> Bool
+pub fn OfflineTransferEvidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineTransferEvidence::not_equal(Self, Self) -> Bool
+pub fn OfflineTransferEvidence::to_json(Self) -> Json
+pub fn OfflineTransferEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineTransferGrant {
   session_id : String
@@ -438,6 +601,11 @@ pub(all) struct OfflineTransferGrant {
   expected_sha256 : String?
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineTransferGrant::equal(Self, Self) -> Bool
+pub fn OfflineTransferGrant::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineTransferGrant::not_equal(Self, Self) -> Bool
+pub fn OfflineTransferGrant::to_json(Self) -> Json
+pub fn OfflineTransferGrant::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineTransferSession {
   session_id : String
@@ -456,12 +624,22 @@ pub(all) struct OfflineTransferSession {
   expires_unix_ms : Int64
   consumed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineTransferSession::equal(Self, Self) -> Bool
+pub fn OfflineTransferSession::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineTransferSession::not_equal(Self, Self) -> Bool
+pub fn OfflineTransferSession::to_json(Self) -> Json
+pub fn OfflineTransferSession::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineTransferState {
   TransferIssued
   TransferConsumed
   TransferExpired
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineTransferState::equal(Self, Self) -> Bool
+pub fn OfflineTransferState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineTransferState::not_equal(Self, Self) -> Bool
+pub fn OfflineTransferState::to_json(Self) -> Json
+pub fn OfflineTransferState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineUploadGrantView {
   grant_id : String
@@ -475,6 +653,11 @@ pub(all) struct OfflineUploadGrantView {
   state : UploadGrantState
   created_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineUploadGrantView::equal(Self, Self) -> Bool
+pub fn OfflineUploadGrantView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineUploadGrantView::not_equal(Self, Self) -> Bool
+pub fn OfflineUploadGrantView::to_json(Self) -> Json
+pub fn OfflineUploadGrantView::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineWorkClaim {
   work_id : String
@@ -485,6 +668,11 @@ pub(all) struct OfflineWorkClaim {
   retry_after_unix_ms : Int64
   completed_unix_ms : Int64?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineWorkClaim::equal(Self, Self) -> Bool
+pub fn OfflineWorkClaim::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineWorkClaim::not_equal(Self, Self) -> Bool
+pub fn OfflineWorkClaim::to_json(Self) -> Json
+pub fn OfflineWorkClaim::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OfflineWorkerHealth {
   artifact_dispatcher_heartbeat_unix_ms : Int64?
@@ -495,11 +683,21 @@ pub(all) struct OfflineWorkerHealth {
   reconciler_success_unix_ms : Int64?
   reconciler_failure_code : String?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineWorkerHealth::equal(Self, Self) -> Bool
+pub fn OfflineWorkerHealth::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineWorkerHealth::not_equal(Self, Self) -> Bool
+pub fn OfflineWorkerHealth::to_json(Self) -> Json
+pub fn OfflineWorkerHealth::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineWorkerKind {
   ArtifactDispatcher
   EntitlementDispatcher
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineWorkerKind::equal(Self, Self) -> Bool
+pub fn OfflineWorkerKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineWorkerKind::not_equal(Self, Self) -> Bool
+pub fn OfflineWorkerKind::to_json(Self) -> Json
+pub fn OfflineWorkerKind::to_repr(Self) -> @debug.Repr
 
 pub(all) struct QuoteLine {
   line_id : String
@@ -509,6 +707,11 @@ pub(all) struct QuoteLine {
   unit_price : @commercial.FixedMoney
   line_total : @commercial.FixedMoney
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn QuoteLine::equal(Self, Self) -> Bool
+pub fn QuoteLine::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn QuoteLine::not_equal(Self, Self) -> Bool
+pub fn QuoteLine::to_json(Self) -> Json
+pub fn QuoteLine::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ReversalRecovery {
   recovery_id : String
@@ -524,12 +727,22 @@ pub(all) struct ReversalRecovery {
   recovered_by : String
   recovered_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ReversalRecovery::equal(Self, Self) -> Bool
+pub fn ReversalRecovery::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ReversalRecovery::not_equal(Self, Self) -> Bool
+pub fn ReversalRecovery::to_json(Self) -> Json
+pub fn ReversalRecovery::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ReversalRecoveryDecision {
   RetryReversal
   ConfirmRevoked
   ConfirmStillActive
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ReversalRecoveryDecision::equal(Self, Self) -> Bool
+pub fn ReversalRecoveryDecision::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ReversalRecoveryDecision::not_equal(Self, Self) -> Bool
+pub fn ReversalRecoveryDecision::to_json(Self) -> Json
+pub fn ReversalRecoveryDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum UploadGrantState {
   UploadGranted
@@ -537,6 +750,11 @@ pub(all) enum UploadGrantState {
   UploadExpired
   UploadRejected
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn UploadGrantState::equal(Self, Self) -> Bool
+pub fn UploadGrantState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UploadGrantState::not_equal(Self, Self) -> Bool
+pub fn UploadGrantState::to_json(Self) -> Json
+pub fn UploadGrantState::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

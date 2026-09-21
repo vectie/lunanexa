@@ -32,6 +32,9 @@ pub(all) enum ContractConfirmationField {
   SupersessionReason
   RejectionReason
 } derive(Eq, @debug.Debug)
+pub fn ContractConfirmationField::equal(Self, Self) -> Bool
+pub fn ContractConfirmationField::not_equal(Self, Self) -> Bool
+pub fn ContractConfirmationField::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractDocumentConfirmation {
   ConfirmInformation(String, Int64)
@@ -46,6 +49,9 @@ pub(all) enum ContractDocumentConfirmation {
   ReviseUndertaking(String, Int64)
   WithdrawUndertaking(String, String)
 } derive(Eq, @debug.Debug)
+pub fn ContractDocumentConfirmation::equal(Self, Self) -> Bool
+pub fn ContractDocumentConfirmation::not_equal(Self, Self) -> Bool
+pub fn ContractDocumentConfirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ContractDocumentsMessage {
   CopyPublicIdentifier(String)
@@ -82,6 +88,8 @@ pub(all) enum ContractDocumentsMessage {
   UploadUndertakingEvidence(String)
   DownloadDocument(String)
 } derive(Eq)
+pub fn ContractDocumentsMessage::equal(Self, Self) -> Bool
+pub fn ContractDocumentsMessage::not_equal(Self, Self) -> Bool
 
 pub(all) struct ContractDocumentsState {
   locale : @i18n.Locale
@@ -115,6 +123,8 @@ pub(all) struct ContractDocumentsState {
   error_message : String?
 } derive(Eq)
 pub fn ContractDocumentsState::current_manifest(Self) -> @contractdoc.ContractTemplateManifest?
+pub fn ContractDocumentsState::equal(Self, Self) -> Bool
+pub fn ContractDocumentsState::not_equal(Self, Self) -> Bool
 pub fn ContractDocumentsState::preview_request(Self) -> ContractDocumentsMessage?
 pub fn ContractDocumentsState::update(Self, ContractDocumentsMessage) -> Self
 
@@ -130,6 +140,9 @@ pub(all) enum ContractPacketCapability {
   SubmitUndertaking
   ReviseUndertaking
 } derive(Eq, @debug.Debug)
+pub fn ContractPacketCapability::equal(Self, Self) -> Bool
+pub fn ContractPacketCapability::not_equal(Self, Self) -> Bool
+pub fn ContractPacketCapability::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

@@ -5,6 +5,12 @@ pub(all) suberror ContractPreviewError {
 } derive(Debug, Eq)
 
 ///|
+pub extend ContractPreviewError with Debug::{to_repr}
+
+///|
+pub extend ContractPreviewError with Eq::{not_equal, equal}
+
+///|
 /// The retained youth-policy DOCX omits `w:pgMar`. WPS applies the Chinese
 /// document default in that case: 1 inch vertically and 1.25 inches
 /// horizontally. Keep that inherited layout explicit in MoonLeaf so browser

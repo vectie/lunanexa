@@ -50,10 +50,25 @@ pub async fn FileWorkspaceDirectory::workload_owned_by(Self, String, String, Str
 pub async fn FileWorkspaceDirectory::workload_owned_by_subject(Self, String, String, Int64) -> Bool
 
 type WorkloadReservation derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkloadReservation::equal(Self, Self) -> Bool
+pub fn WorkloadReservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn WorkloadReservation::not_equal(Self, Self) -> Bool
+pub fn WorkloadReservation::to_json(Self) -> Json
+pub fn WorkloadReservation::to_repr(Self) -> @debug.Repr
 
 type WorkloadReservationState derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkloadReservationState::equal(Self, Self) -> Bool
+pub fn WorkloadReservationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn WorkloadReservationState::not_equal(Self, Self) -> Bool
+pub fn WorkloadReservationState::to_json(Self) -> Json
+pub fn WorkloadReservationState::to_repr(Self) -> @debug.Repr
 
 type WorkspaceAdmissionSnapshot derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn WorkspaceAdmissionSnapshot::equal(Self, Self) -> Bool
+pub fn WorkspaceAdmissionSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn WorkspaceAdmissionSnapshot::not_equal(Self, Self) -> Bool
+pub fn WorkspaceAdmissionSnapshot::to_json(Self) -> Json
+pub fn WorkspaceAdmissionSnapshot::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

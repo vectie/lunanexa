@@ -27,6 +27,11 @@ pub(all) struct CleanupEvidence {
   lease_state_absent : Bool
   access_material_absent : Bool
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CleanupEvidence::equal(Self, Self) -> Bool
+pub fn CleanupEvidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CleanupEvidence::not_equal(Self, Self) -> Bool
+pub fn CleanupEvidence::to_json(Self) -> Json
+pub fn CleanupEvidence::to_repr(Self) -> @debug.Repr
 pub fn CleanupEvidence::verified(Self) -> Bool
 
 // Type aliases
