@@ -47,7 +47,9 @@ $SSH 'set -e
   export LIBRARY_PATH=$HOME/libpq-root/usr/lib/aarch64-linux-gnu
   cd ~/src
   moon build --target native --release cmd/node cmd/loopback-proxy
-  cp _build/native/release/build/cmd/loopback-proxy/loopback-proxy ~/lunanexa-loopback-proxy-arm64
+  proxy=_build/native/release/build/cmd/loopback-proxy/loopback-proxy
+  [ -x "$proxy" ] || proxy="$proxy.exe"
+  cp "$proxy" ~/lunanexa-loopback-proxy-arm64
   ls -l _build/native/release/build/cmd/node/node.exe ~/lunanexa-loopback-proxy-arm64'
 echo "BUILD-OK"
 
