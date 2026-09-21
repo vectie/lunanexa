@@ -452,22 +452,43 @@ GET /auth/session  ->  401 {"error":"browser-session-required"}      （随后�
 ```
 
 `503` 出现在回调刚完成之后，之后又退化为 `401` —— 像是"cookie 有效 → 与控制面交换失败 →
-网关清掉 cookie"。网关侧日志**没有任何错误输出**，所以只能从拓扑上排除：
+网关清掉 cookie"。网关侧日志**没有任何错误输出**，而网关镜像里没有 shell，无法进去抓包，
+于是从拓扑上定位，**根因已确认**：
 
-- relay 不是独立 Pod，而是控制面 Pod 里的 sidecar：`svc/lunanexa-identity-relay`
-  的 selector 是 `app=lunanexa-control,lunanexa.io/browser-identity-sidecar=enabled`，
-  控制面 Pod 上这个 label **在**；容器名是 **`runtime-loopback-proxy`**（不是 `browser-identity-*`），
-  它把 8081 转到控制面的 `127.0.0.1:8082` 身份监听器。
-- 一个可疑点：`kubectl get endpoints lunanexa-identity-relay` 显示 `<none>`，
-  而 EndpointSlice 里 `10.42.0.42` 是 `ready:true` —— 两个视图不一致（legacy Endpoints 陈旧）。
-- 控制面侧 `LUNANEXA_IDENTITY_LISTEN_ADDRESS = 127.0.0.1:8082`，
-  `LUNANEXA_IDENTITY_ASSERTION_SECRET` 来自 secret（网关同名变量也来自 secret）——
-  **两边这个断言密钥是否真的是同一个值，是下一步最该验证的一点**（不一致就会让每次
-  交换都失败，表现正是 503/401）。
+```
+# svc/lunanexa-identity-relay 的 selector
+app=lunanexa-control,lunanexa.io/browser-identity-sidecar=enabled
 
-结论：**登录链路已经通到"网关换发会话 cookie"这一步，卡在"cookie → lnxs_ 租户会话"的交换。**
-这一步是网关/控制面的内部契约问题，值得单独一轮聚焦排查（先比对上述断言密钥与
-`/v1/auth/register` 的实际响应码）。
+# 控制面 Pod 的三个容器
+runtime-loopback-proxy      args: 127.0.0.1 19090  lunaflux-runtime…:43120
+control                     args: (LUNANEXA_LISTEN_ADDRESS=0.0.0.0:8080,
+                                    LUNANEXA_IDENTITY_LISTEN_ADDRESS=127.0.0.1:8082)
+runtime-loopback-proxy-glm  args: 127.0.0.1 19091  glm53-exl3…:8899
+
+# 从另一个 Pod 实测（curl 在 operator-4173-proxy 里）
+relay8081 = 000     ← 连不上，没人监听
+gateway8081 = 400   ← 网关本身是活的
+podip:8081 = 000 / podip:8082 = 000
+```
+
+也就是说：**控制面 Pod 带着 `lunanexa.io/browser-identity-sidecar=enabled` 这个标签，
+`lunanexa-identity-relay` 服务因此把它选为端点，但 Pod 里根本没有身份 relay 这个容器** ——
+那两个 `runtime-loopback-proxy*` 是给 runtime 和 GLM 做回环代理的，args 里写得很清楚，
+与身份无关。于是 8081 上没有任何监听，网关所有走 relay 的调用都失败，
+`/auth/session` 自然换不出 `lnxs_` 会话。
+
+**这就把整条链的最后一跳钉死了：缺的是"browser-identity 旁车容器"，
+而不是密钥、不是端口、也不是 TLS。** 顺带解释了为什么
+`kubectl get endpoints lunanexa-identity-relay` 显示 `<none>` 而 EndpointSlice 里却有一个
+`ready:true` 的地址 —— 标签匹配上了，端口却是空的。
+
+（另外核对了断言密钥：网关与控制面**都引用同一个 secret 的同一个 key**
+`lunanexa-identity-ingress-credentials/identity-assertion-secret`，所以密钥不是原因。）
+
+修法方向：要么把真正的身份 relay 容器补进控制面 Pod（与 `runtime-loopback-proxy` 同款
+sidecar 形态），要么让网关直接访问控制面 Pod 的 `127.0.0.1:8082` 等价通道
+（当前跨 Pod 不可达，因为它是回环监听）。**这一处我没有动** —— 它属于控制面 Pod 规格的改动，
+且与上面的安全决定应当一起评估。
 
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
@@ -563,10 +584,12 @@ GET /auth/session  ->  401 {"error":"browser-session-required"}      （随后�
    网关的 enterprise redirect URI 改到 5002、Keycloak 客户端追加 5002 回调。
    结果：`5002/auth/oidc/start?audience=enterprise` 返回正确的 PKCE 302，
    并且**在浏览器里真的完成了 Keycloak 登录、回调换发了会话 cookie**；5003 操作员无回归。
-   **剩下的最后一跳**：`/auth/session` 把 cookie 换成 `lnxs_` 租户会话时失败
-   （先 503、后退化为 401 `browser-session-required`），网关日志无输出。
-   下一步应优先比对网关与控制面两边的**断言密钥是否同值**，
-   并抓 `/v1/auth/register` 的实际响应码（详见 §2.6 末段）。
+   **剩下的最后一跳根因已确认**：控制面 Pod 带着
+   `lunanexa.io/browser-identity-sidecar=enabled` 标签（所以 relay 服务选中它），
+   但 Pod 里**没有身份 relay 容器** —— 两个 `runtime-loopback-proxy*` 是给 runtime/GLM 的。
+   于是 8081 无人监听（实测 `relay8081=000`，而 `gateway8081=400` 说明网关活着），
+   网关走 relay 的调用全失败，`/auth/session` 换不出 `lnxs_`（503/401）。
+   密钥不是原因（两侧引用同一个 secret/key）。详见 §2.6 末段。
 5. ~~**登录后看不到真实数据**~~ **✅ 根因已定位**：前端 5002 的 `location = /` 无条件
    `302 /enterprise/?demo=1`，把刚登录的用户直接送进 demo（§4 缺陷 #7）。修法很轻，
    本次只定位未改。
@@ -586,9 +609,11 @@ GET /auth/session  ->  401 {"error":"browser-session-required"}      （随后�
    `keycloak/lunanexa-platform-idp` `1/1 Running`，admin API 可查；
    `lunanexa-operator` → 5003，`lunanexa-enterprise` → 5005 **与 5002**（本次追加，
    与网关配置一致）。
-9. **让企业侧拿到租户主体**（这是现在的主线）。链路已经推进到"网关换发会话 cookie"，
-   只剩 `/auth/session` → `lnxs_` 的交换（§2.6 末段）。这一步通了，企业侧才会有
-   真实租户主体，订单才可能创建。
+9. **让企业侧拿到租户主体**（这是现在的主线）。链路已推进到"网关换发会话 cookie"，
+   卡在 `/auth/session` → `lnxs_` 的交换，**根因已确认：控制面 Pod 缺少身份 relay 旁车容器**
+   （Pod 有 `lunanexa.io/browser-identity-sidecar=enabled` 标签、服务也选中它，
+   但 8081 无人监听，实测 `relay8081=000`）。补齐该旁车后企业侧才会有真实租户主体，
+   订单才可能创建。这是目前最高优先级的一处。
 10. **给订单一条真实可用的创建路径**。这是整条承诺函链的硬前提，两侧的原话都指向它。
 11. **统一状态源**：企业侧同一页的三个状态读数必须来自同一份生命周期事实。
 12. **收敛前端的令牌注入**（§2.5 发现 4）。`operator-4173-proxy` 的 ConfigMap 里明文写着
@@ -644,6 +669,9 @@ GET /auth/session  ->  401 {"error":"browser-session-required"}      （随后�
   网关日志无输出；已排除 relay 缺失（它是控制面 Pod 里的 `runtime-loopback-proxy` sidecar），
   下一步该比对两边断言密钥（§2.6 末段）。
 - **定位到"登录后看不到真实数据"的根因**：前端 `location = /` 无条件 `302 ?demo=1`（§4 缺陷 #7）。
+- **钉死最后一跳的根因**：`lunanexa-identity-relay` 服务选中的控制面 Pod 上**没有身份 relay 容器**
+  （两个 `runtime-loopback-proxy*` 是给 runtime/GLM 的，args 可证）；实测 `relay8081=000`
+  而 `gateway8081=400`。断言密钥两侧同源，不是原因。
 
 ## 8. 未验证
 
