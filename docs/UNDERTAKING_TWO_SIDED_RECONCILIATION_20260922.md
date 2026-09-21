@@ -485,10 +485,42 @@ podip:8081 = 000 / podip:8082 = 000
 （另外核对了断言密钥：网关与控制面**都引用同一个 secret 的同一个 key**
 `lunanexa-identity-ingress-credentials/identity-assertion-secret`，所以密钥不是原因。）
 
-修法方向：要么把真正的身份 relay 容器补进控制面 Pod（与 `runtime-loopback-proxy` 同款
-sidecar 形态），要么让网关直接访问控制面 Pod 的 `127.0.0.1:8082` 等价通道
-（当前跨 Pod 不可达，因为它是回环监听）。**这一处我没有动** —— 它属于控制面 Pod 规格的改动，
-且与上面的安全决定应当一起评估。
+**✅ 已修复并验证。** 缺失的旁车在仓库里本来就有定义 ——
+`deploy/oidc-browser-ingress-controller-patch.yaml` 给出了完整的 `identity-relay` 容器
+（模式 `relay`、监听 `0.0.0.0:8081`、转发到 `http://127.0.0.1:8082`、
+只放行 POST 的 `/v1/auth/session:exchange` 与 `/v1/auth/register`）。**它只是从未被应用。**
+
+按既有定义执行，分两步（改动前已备份 deployment）：
+
+1. **先做冒烟**：把该镜像按 `mode=relay` 起一个临时 Pod（不碰控制面），结果
+   `1/1 Running`，另一个 Pod 访问 `http://10.42.0.48:8081/health` 得到 **200** ——
+   证明镜像与参数都对。
+2. **再把旁车打进控制面 Deployment**（strategic merge，容器按名字合并）：
+
+```
+control pod: containers = ['identity-relay','runtime-loopback-proxy','control','runtime-loopback-proxy-glm']
+            4/4 Running，identity-relay ready=True restarts=0
+relay8081 = 200        ← 修复前是 000
+```
+
+**然后关键结果：`/auth/session` 从 401/503 变成 200，并且真的换出了租户会话：**
+
+```
+GET /auth/session -> 200
+{"session_token":"lnxs_<…>","csrf_token":"<…>","expires_unix_ms":1790037781541}
+```
+
+也就是说 **"cookie → `lnxs_` 租户会话"这一跳通了**，而且这条会话是**在浏览器里
+经真实 OIDC 登录拿到的**（`session_token` 带 `lnxs_` 前缀，`csrf_token` 非空，
+与 `cmd/enterprise/main.mbt:2333-2334` 的校验条件一致）。这是整条链到目前为止最深的一次打通。
+
+**但门户界面仍停在登录门。** 实测该页面加载时确实发起了 `/auth/session`，
+**之后再没有任何 `/v1/` 请求**（`performance` 里只有 `/auth/session` 一条），
+于是渲染回登录门。对照源码，入口处 `Bootstrap` 会走
+`bootstrap_command → BootstrapReady → organization_bootstrap_command`
+（`cmd/enterprise/main.mbt:2324-2360、3439-3459`），
+`BootstrapReady` 之后应当带着 token 去调 `/v1/`；现在它没有走到那一步。
+这属于**前端启动流程**的问题，与已经修好的身份链路分开，是下一步要单独查的。
 
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
@@ -584,12 +616,12 @@ sidecar 形态），要么让网关直接访问控制面 Pod 的 `127.0.0.1:8082
    网关的 enterprise redirect URI 改到 5002、Keycloak 客户端追加 5002 回调。
    结果：`5002/auth/oidc/start?audience=enterprise` 返回正确的 PKCE 302，
    并且**在浏览器里真的完成了 Keycloak 登录、回调换发了会话 cookie**；5003 操作员无回归。
-   **剩下的最后一跳根因已确认**：控制面 Pod 带着
-   `lunanexa.io/browser-identity-sidecar=enabled` 标签（所以 relay 服务选中它），
-   但 Pod 里**没有身份 relay 容器** —— 两个 `runtime-loopback-proxy*` 是给 runtime/GLM 的。
-   于是 8081 无人监听（实测 `relay8081=000`，而 `gateway8081=400` 说明网关活着），
-   网关走 relay 的调用全失败，`/auth/session` 换不出 `lnxs_`（503/401）。
-   密钥不是原因（两侧引用同一个 secret/key）。详见 §2.6 末段。
+   **最后一跳本次已修好并验证**：控制面 Pod 缺的是仓库里本来就有定义的 `identity-relay` 旁车
+   （`deploy/oidc-browser-ingress-controller-patch.yaml`，从未被应用）。先冒烟、再打进
+   Deployment 后，`relay8081` 由 000 变 200，**`/auth/session` 由 401/503 变 200，
+   并在浏览器里换出了真实的 `lnxs_` 租户会话**（§2.6）。
+   剩下的是**前端启动流程**：页面调了 `/auth/session` 却不再跟进任何 `/v1/` 请求，
+   于是仍停在登录门。
 5. ~~**登录后看不到真实数据**~~ **✅ 根因已定位**：前端 5002 的 `location = /` 无条件
    `302 /enterprise/?demo=1`，把刚登录的用户直接送进 demo（§4 缺陷 #7）。修法很轻，
    本次只定位未改。
@@ -669,9 +701,13 @@ sidecar 形态），要么让网关直接访问控制面 Pod 的 `127.0.0.1:8082
   网关日志无输出；已排除 relay 缺失（它是控制面 Pod 里的 `runtime-loopback-proxy` sidecar），
   下一步该比对两边断言密钥（§2.6 末段）。
 - **定位到"登录后看不到真实数据"的根因**：前端 `location = /` 无条件 `302 ?demo=1`（§4 缺陷 #7）。
-- **钉死最后一跳的根因**：`lunanexa-identity-relay` 服务选中的控制面 Pod 上**没有身份 relay 容器**
-  （两个 `runtime-loopback-proxy*` 是给 runtime/GLM 的，args 可证）；实测 `relay8081=000`
-  而 `gateway8081=400`。断言密钥两侧同源，不是原因。
+- **钉死并修好了最后一跳**：控制面 Pod 缺的是仓库里本就有定义的 `identity-relay` 旁车
+  （`deploy/oidc-browser-ingress-controller-patch.yaml` 给了完整定义，只是从未应用）。
+  先以冒烟 Pod 验证镜像/参数（`/health` 200），再打进 Deployment —— 控制面 `4/4 Running`，
+  `relay8081` 000→200，**`/auth/session` 401/503→200 并返回真实的 `lnxs_` 租户会话**。
+  断言密钥两侧同源，不是原因。
+- **新定位**：拿到会话后门户仍停在登录门，因为页面发完 `/auth/session` 后不再跟进任何
+  `/v1/` 请求（`performance` 只有那一条），未走到 `BootstrapReady → organization_bootstrap_command`。
 
 ## 8. 未验证
 
