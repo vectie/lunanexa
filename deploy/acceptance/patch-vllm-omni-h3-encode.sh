@@ -39,19 +39,36 @@ CM=minimaxh3-serving-video-patch
 VOL=serving-video-patch
 MOUNT=/serving-video-patch
 TARGET=/usr/local/lib/python3.12/dist-packages/vllm_omni/entrypoints/openai/serving_video.py
+DRIVER="$HERE/patches/vllm-omni-h3/patch-api-server-progress.py"
+DRIVER_NAME=patch-api-server-progress.py
 READY_TIMEOUT=1200
+
+# Compose the container command prefix: run the api_server driver, then copy the
+# serving_video patch into place, then whatever the deployment already did. The
+# driver is a no-op on an already patched file, and so is this function on an
+# already prefixed command.
+patch_args() {
+  case "$1" in
+    "python3 $MOUNT/$DRIVER_NAME"*) printf '%s' "$1" ;;
+    "cp $MOUNT/serving_video.py"*)  printf '%s' "python3 $MOUNT/$DRIVER_NAME && $1" ;;
+    *) printf '%s' "python3 $MOUNT/$DRIVER_NAME && cp $MOUNT/serving_video.py $TARGET && $1" ;;
+  esac
+}
 
 expect_md5="$(md5 -q "$SRC" 2>/dev/null || md5sum "$SRC" | cut -d' ' -f1)"
 
-echo "=== publishing the patch as configmap/$CM"
+echo "=== publishing the patches as configmap/$CM"
 # `sudo -S` reads the password from stdin, so the generated manifest goes to a
 # file rather than through a pipe into `kubectl apply -f -`.
 CM_YAML="$(mktemp)"
-s kubectl -n "$NS" create configmap "$CM" --from-file=serving_video.py="$SRC" \
+s kubectl -n "$NS" create configmap "$CM" \
+  --from-file=serving_video.py="$SRC" \
+  --from-file=patch-api-server-progress.py="$DRIVER" \
   --dry-run=client -o yaml > "$CM_YAML"
 s kubectl apply -f "$CM_YAML"
 rm -f "$CM_YAML"
 s kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.serving_video\.py}' | wc -c
+s kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.patch-api-server-progress\.py}' | wc -c
 
 for D in "${DEPLOYS[@]}"; do
   echo "=== $D"
@@ -78,7 +95,7 @@ print(sum(1 for v in d.get("data",[]) if v.get("status") in {"queued","in_progre
     echo "mount already present"
   else
     ARGS0="$(s kubectl -n "$NS" get deploy "$D" -o jsonpath='{.spec.template.spec.containers[0].args[0]}')"
-    NEW="cp $MOUNT/serving_video.py $TARGET && $ARGS0"
+    NEW="$(patch_args "$ARGS0")"
     PATCH="$(python3 - "$VOL" "$CM" "$MOUNT" "$NEW" <<'PY'
 import json, sys
 vol, cm, mount, newargs = sys.argv[1:5]
@@ -92,6 +109,23 @@ print(json.dumps([
 PY
 )"
     s kubectl -n "$NS" patch deploy "$D" --type=json -p "$PATCH"
+  fi
+
+  # A cluster patched before api_server.py came into this script has the mount and
+  # the serving_video cp but not the driver invocation, so check the args
+  # separately from the mount. Nothing is scheduled by this patch on its own.
+  ARGS0="$(s kubectl -n "$NS" get deploy "$D" -o jsonpath='{.spec.template.spec.containers[0].args[0]}')"
+  if [ "$ARGS0" = "$(patch_args "$ARGS0")" ]; then
+    echo "args already carry the api_server driver"
+  else
+    NEW="$(patch_args "$ARGS0")"
+    s kubectl -n "$NS" patch deploy "$D" --type=json -p "$(python3 - "$NEW" <<'PY'
+import json, sys
+print(json.dumps([{"op": "replace", "path": "/spec/template/spec/containers/0/args/0",
+                   "value": sys.argv[1]}]))
+PY
+)" >/dev/null
+    echo "args now run the api_server driver first"
   fi
 
   echo "=== recreating the pod (startup takes ~8-11 min on this node)"

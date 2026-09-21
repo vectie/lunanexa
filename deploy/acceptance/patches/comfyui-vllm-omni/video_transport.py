@@ -69,6 +69,26 @@ async def _cleanup(session, url, job_id):
     raise RuntimeError("Video cancellation has not been acknowledged")
 
 
+def _report_progress(on_progress, data):
+    """Forward the service's best-effort progress to the caller, if it gave one.
+
+    The API documents `progress` as "best-effort ... from 0 to 100" and upstream
+    writes it exactly once, with 100, when the job finishes. LunaNexa's service
+    patch fills it in per denoising step while the job runs, which is what makes
+    a ComfyUI progress bar possible at all. A broken hook must never fail a
+    render that is otherwise fine, so any exception here is swallowed.
+    """
+    if on_progress is None:
+        return
+    value = data.get("progress")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return
+    try:
+        on_progress(max(0, min(100, int(value))))
+    except Exception:
+        logger.debug("Video progress callback raised; continuing", exc_info=True)
+
+
 async def run_video_job(
     base_url,
     form,
@@ -77,6 +97,7 @@ async def run_video_job(
     poll_interval=5.0,
     max_poll_duration=7200.0,
     maximum_result_bytes=1024 * 1024 * 1024,
+    on_progress=None,
 ):
     """POST exactly once, poll within a deadline, and clean up every known job.
 
@@ -100,6 +121,9 @@ async def run_video_job(
       section 15.2), and losing a ten-minute generation to one reset is not
       acceptable. The retry is bounded to one because it costs the service a
       second encode, and the enclosing asyncio.timeout still bounds the job.
+    * `on_progress` is called with the service's best-effort 0-100 value after
+      every status poll, so a caller can drive a UI progress bar. It defaults to
+      None and never affects the transfer.
     """
     if not 0 < poll_interval <= 60 or not 0 < max_poll_duration <= 7200:
         raise ValueError("Video polling limits are invalid")
@@ -124,6 +148,7 @@ async def run_video_job(
                     if data.get("id") != job_id:
                         raise RuntimeError("Video service returned a different job")
                     status = data.get("status")
+                    _report_progress(on_progress, data)
                     if status == "completed":
                         completed = True
                         break

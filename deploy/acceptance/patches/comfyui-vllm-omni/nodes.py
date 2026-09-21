@@ -223,6 +223,23 @@ class VLLMOmniGenerateVideo(_VLLMOmniGenerateBase):
             model_params = {key: value for key, value in model_params.items() if key != "type"}
 
         client = VLLMOmniClient(url, timeout=60, max_poll_duration=max_wait_seconds)
+        # ComfyUI's progress bar is driven by the "progress" websocket event and
+        # only a node can emit it. Nothing in this package did, so a ten-minute
+        # render showed no movement at all -- see the remediation log, section 16.
+        # comfy.utils is imported lazily: it only exists inside a running ComfyUI,
+        # and this module is also imported by the package's own tests.
+        progress_bar = None
+        try:
+            from comfy.utils import ProgressBar as _ProgressBar
+        except Exception:
+            _ProgressBar = None
+        if _ProgressBar is not None:
+            progress_bar = _ProgressBar(100)
+
+        def _on_progress(value: int) -> None:
+            if progress_bar is not None:
+                progress_bar.update_absolute(value, 100)
+
         output = await client.generate_video(
             model=model,
             prompt=prompt,
@@ -236,6 +253,7 @@ class VLLMOmniGenerateVideo(_VLLMOmniGenerateBase):
             lora=lora,
             model_params=model_params,
             generate_sound=generate_sound,
+            on_progress=_on_progress,
         )
         return (output,)
 
