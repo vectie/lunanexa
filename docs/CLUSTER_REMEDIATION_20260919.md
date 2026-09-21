@@ -1659,3 +1659,108 @@ pod 日志和 pod 内文件——那是**排障用的观测通道，不是 UI �
 - 一个自己的失误记在这：节点安装脚本第一版的 mount 循环**硬编码了文件名**，所以往
   `MODULES` 里加了 `api_client.py` 之后出现"暂存了、也校验了、但根本没挂载"——是校验
   循环把它抓出来的（脚本因此退出 1）。现在 mount 列表直接从 `MODULES` 推导。
+
+---
+
+## 17. 内存监控为什么是假的，以及 CPU 用量（2026-09-21 深夜）
+
+### 17.1 三处伪造，一个根子
+
+控制台上"GPU 内存可用"是编出来的。链路上有**三处**把**声明值**当成**测量值**发布，
+而声明的"可用"本身就是总数的副本：
+
+| 位置 | 干的事 |
+|---|---|
+| `cmd/node/main.mbt` 的 GB10 分支 | 把 `inventory.accelerators[].memory_total_mib` / `memory_free_mib` 相加后当作测量值发布；注释还写着"truthfully measured host inventory values"——那是**静态声明**，不是实测 |
+| `cmd/node/main.mbt` 的"无传感器"分支 | 同一件事，第三份 |
+| `cmd/console/main.mbt` 的 `free_memory_mib` | 直接从心跳 inventory 取 `memory_free_mib` 渲染 |
+
+**根子在集群描述符的渲染**：`deploy/cluster/render.py:91-92` 里
+`"memory_free_mib": node.get("memoryTotalMib", 124608)` —— **可用 = 总数**。
+四台 spark 的 `deploy/cluster/cluster.json:35,50,65,80` 都是 `124608`。
+
+为什么一直没被发现：GB10 是**统一内存**，`nvidia-smi` 的内存三项全是 `[N/A]`
+（`node/telemetry_collector.mbt:85-102` 的注释和 `telemetry_collector_test.mbt:16-36`
+的用例都记着这件事），所以那条"实测"路径从来不会走；节点永远走伪造分支，而伪造出来的
+数字看起来又很合理。
+
+### 17.2 改法：测量归测量，声明归声明
+
+1. **节点不再伪造。** GB10 分支和无传感器分支**都不再发布 `accelerator_memory_*`**。
+   NVML 没测到就是没测到，宁可不报。
+2. **采集真实的 host 内存与 CPU。** `node/host_resources.mbt` 新增：
+   - `parse_linux_memory_mib`：一次读完 `MemTotal` 与 `MemAvailable`。
+     `MemAvailable` 是**可选**的——老内核没有这个字段，用 `MemFree` 顶替会严重低估
+     （页缓存大部分可回收）。**未知就保持未知**，不编数。
+   - `parse_linux_cpu_times` / `parse_linux_cpu_utilization_per_mille`：
+     解析 `/proc/stat` 首行，两次采样求 busy 占比。`idle` 含 `iowait`；`guest`/`guest_nice`
+     不计入 `total`，因为它们已经被算进 `user`/`nice`，重复计入会低估忙碌程度。
+   - `collect_linux_host_utilization`：两次 `/proc/stat` 间隔 **250 ms** 采样 + 一次
+     `/proc/meminfo`。CPU 占用是**速率**，只读一次算不出来；用短窗口而不是跨 reconcile
+     存状态，是为了让采集器保持无状态、指标是真实样本。
+   - 全新的 `HostUtilization` 类型，**故意与 `HostResources` 分开**：后者是要签进
+     inventory 标签的**容量声明**，而"当前可用多少内存""CPU 多忙"都不是容量声明。
+     两者混在一起，正是这次把声明当measurement发布的根源。
+3. **新增四个遥测指标**，并进白名单（`telemetry/telemetry.mbt`）：
+   `host_memory_total_mib`、`host_memory_available_mib`、`host_memory_used_mib`、
+   `host_cpu_utilization_per_mille`（0–1000，与既有 `accelerator_utilization_per_mille` 同惯例）。
+4. **控制台与 UI**（`cmd/console/main.mbt`、`ui/console.mbt`）：优先显示实测的 host 内存；
+   `free` 由 `total − used` 派生，**不再从 inventory 取**。`NodeRow` 增加三个字段
+   `memory_measured`、`cpu_per_mille`、`cpu_measured`；**没测到就显示"未上报"**，
+   而不是把缺席渲染成 `0%` / `0 MiB`。摘要里的标签从 "GPU memory" 改成 "Memory"、
+   "free" 改成 "free (measured)"——因为在统一内存节点上那是**整机共享池**的数字，
+   继续叫 GPU 内存本身就是那句话里假的部分。
+5. `--inspect-host-resources` 现在也打印 `HostUtilization`，运维可以直接在节点上看到
+   真实内存与 CPU。
+
+### 17.3 我**没有**改的，以及为什么
+
+**`deploy/cluster/render.py:92` 那行 `memory_free_mib = memoryTotalMib` 仍然存在**，
+而且调度准入还在用它：`api/server.mbt:1635-1638` 把它求和进 `NodeSnapshot`，
+`scheduler/scheduler.mbt:147` 用它做准入、`:183` 用它算余量。
+
+为什么不动：把它改成节点实测值，等于把**准入逻辑的数据源**从"运维声明"换成"实时遥测"，
+这是设计决策，不是 bug 修复；而如果只是把那行删掉/置零，调度会认为没有可用内存而**拒绝
+所有部署**。正确的做法需要一个运维选定的声明值（比如"每节点预留多少给实例"），那个值只能
+由人来定。**这是一处需要你决定的事，我把它标出来而不是替你改。**
+
+### 17.4 验证状态：门禁跑不了，这是环境级阻塞
+
+**`moon check` / `moon test` 在本机无法运行**，与本次改动无关：
+
+```
+$ moon version
+moon 0.1.20260807 (4da23f8 2026-08-07)
+$ moon check --target native
+Failed with 364 warnings, 749 errors
+```
+
+原因：仓库用的是**更新版 moon 的语法**。最直接的一例是 `errdefer`，
+`node/kubernetes/termination.mbt:38` 在用，而本机工具链把它当保留字
+（`Warning: The word errdefer is reserved for possible future use`）。`errdefer` 在 HEAD
+里被**14 处以上、多个包**使用（`account/store.mbt` 一处文件就有 14 次），749 个错误
+集中在 `account/store.mbt`（205）、`notifications/store/store.mbt`（126）、
+`nodelease/credential/store/store.mbt`（88）等生成风格的文件里。
+
+试过修：`moon upgrade -f` 需要交互式 TTY（`Error: IO error: not a terminal`），
+用 `script` 造伪终端也不行（`tcgetattr/ioctl: Operation not supported on socket`）。
+**所以这不是我能绕过去的，也不该悄悄绕过去。**
+
+**能验证的到哪一步**：`moon fmt --check` 对本次改动的全部 9 个文件**解析通过、
+0 parse errors**（它退出非零只是因为格式化风格差异，而且差异出现在我根本没碰的文件上——
+本机 fmt 会删掉单行记录字面量的尾逗号，与仓库风格不符，所以**没有**运行 `moon fmt`，
+否则会重排 200 行以上无关代码）。**类型检查完全没有验证过。**
+
+工具链修好之后，按 AGENTS.md 的门禁跑这四条即可：
+`moon info && moon fmt && moon check --target native --deny-warn && moon test --target native --deny-warn`。
+注意 `moon info` 还需要重生成 `node/pkg.generated.mbti` 和 `ui/pkg.generated.mbti`
+（`NodeRow` 多了三个字段、`HostUtilization` 是新类型）。
+
+### 17.5 还没做的
+
+- `node/pkg.generated.mbti`、`ui/pkg.generated.mbti` 未重生成（同上，需要可用的工具链）。
+- `docs/DEPLOYMENT.md:1348-1351` 说"实时利用率与已用/总内存来自固定的 nvidia-smi 查询"，
+  已经过时（节点侧改了），未更新。
+- 17.3 那个调度准入的数据源问题。
+- `accelerator_healthy_count` 在无传感器时仍来自**声明的** accelerator 列表，
+  即"声明有几张卡"而不是"实测几张卡健康"。这一轮没动，但它和内存是同一类问题，记在这。

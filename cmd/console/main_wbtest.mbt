@@ -1219,7 +1219,10 @@ fn cluster_poll_test_row(
     total_memory_mib: 131072,
     free_memory_mib: 65536,
     used_memory_mib: 65536,
+    memory_measured: true,
     utilization_per_mille: 500,
+    cpu_per_mille: 500,
+    cpu_measured: true,
     temperature_celsius: 41,
     power_watts: 320,
     workloads: 1,
@@ -1270,6 +1273,136 @@ test "cluster poll refreshes nodes only for the live generation" {
   assert_eq(current.console.nodes[1].node_id, "node-2")
   assert_eq(current.console.overview.active_nodes, 1)
   assert_eq(current.console.overview.total_nodes, 2)
+}
+
+///|
+fn node_row_sample(
+  node_id : String,
+  metric : String,
+  value : Double,
+) -> @contracts.TelemetrySample {
+  {
+    node_id,
+    deployment_id: "",
+    metric,
+    value,
+    timestamp_unix_ms: current_unix_ms(),
+  }
+}
+
+///|
+/// A heartbeat whose signed inventory claims the whole declared pool is free,
+/// which is how a unified-memory descriptor is rendered today.
+fn node_row_heartbeat(
+  node_id : String,
+  declared_memory_mib : Int,
+) -> @contracts.NodeHeartbeat {
+  {
+    node_id,
+    state: Active,
+    observed_generation: 1L,
+    controller_epoch: 1L,
+    inventory: {
+      node_id,
+      agent_version: "0.1.0",
+      os_release: "linux",
+      runtime_names: [],
+      accelerators: [
+        {
+          device_id: "gpu-0",
+          architecture: "nvidia-gb10",
+          memory_total_mib: declared_memory_mib,
+          memory_free_mib: declared_memory_mib,
+          healthy: true,
+        },
+      ],
+      labels: Map([]),
+      taints: [],
+    },
+    running_deployments: [],
+    runtime_endpoints: None,
+    timestamp_unix_ms: current_unix_ms(),
+    signature: "",
+  }
+}
+
+///|
+fn node_row_telemetry(
+  samples : Array[@contracts.TelemetrySample],
+) -> ConsoleTelemetrySnapshot {
+  { samples, benchmark_summaries: [], }
+}
+
+///|
+test "node rows prefer measured host memory over the declared inventory" {
+  let node_id = "node-1"
+  let rows = build_node_rows(
+    [node_row_heartbeat(node_id, declared_memory_mib=65536)],
+    node_row_telemetry([
+      node_row_sample(node_id, "host_memory_total_mib", 122880.0),
+      node_row_sample(node_id, "host_memory_used_mib", 40960.0),
+      node_row_sample(node_id, "accelerator_memory_total_mib", 65536.0),
+      node_row_sample(node_id, "accelerator_memory_used_mib", 1024.0),
+      node_row_sample(node_id, "host_cpu_utilization_per_mille", 0.0),
+    ]),
+    None,
+    English,
+  )
+  let row = rows[0]
+  assert_eq(row.total_memory_mib, 122880)
+  assert_eq(row.used_memory_mib, 40960)
+  assert_eq(row.free_memory_mib, 81920)
+  assert_true(row.memory_measured)
+  assert_true(row.cpu_measured)
+  assert_eq(row.cpu_per_mille, 0)
+}
+
+///|
+test "node rows fall back to accelerator memory and derive free from it" {
+  let node_id = "node-1"
+  let rows = build_node_rows(
+    [node_row_heartbeat(node_id, declared_memory_mib=65536)],
+    node_row_telemetry([
+      node_row_sample(node_id, "accelerator_memory_total_mib", 32768.0),
+      node_row_sample(node_id, "accelerator_memory_used_mib", 8192.0),
+    ]),
+    None,
+    English,
+  )
+  let row = rows[0]
+  assert_eq(row.total_memory_mib, 32768)
+  assert_eq(row.free_memory_mib, 24576)
+  assert_true(row.memory_measured)
+  assert_false(row.cpu_measured)
+  assert_eq(row.cpu_per_mille, 0)
+}
+
+///|
+test "node rows never present the declared inventory as memory evidence" {
+  let node_id = "node-1"
+  let declared_only_rows = build_node_rows(
+    [node_row_heartbeat(node_id, declared_memory_mib=65536)],
+    node_row_telemetry([]),
+    None,
+    English,
+  )
+  let declared_only = declared_only_rows[0]
+  assert_eq(declared_only.total_memory_mib, 65536)
+  assert_eq(declared_only.used_memory_mib, 0)
+  assert_false(declared_only.memory_measured)
+  // A host total without an availability sample cannot back a free figure, and
+  // the declared "free" is a copy of the declared total.
+  let host_total_only_rows = build_node_rows(
+    [node_row_heartbeat(node_id, declared_memory_mib=65536)],
+    node_row_telemetry([
+      node_row_sample(node_id, "host_memory_total_mib", 122880.0),
+    ]),
+    None,
+    English,
+  )
+  let host_total_only = host_total_only_rows[0]
+  assert_false(host_total_only.memory_measured)
+  assert_eq(host_total_only.used_memory_mib, 0)
 }
 
 ///|
