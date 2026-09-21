@@ -323,6 +323,19 @@ async fn handle_oidc_callback(
 }
 
 ///|
+/// Renders the same-origin browser bootstrap document.
+///
+/// The browser clients decode this with `Int64::from_json`, which on the JS
+/// target requires the number in string representation -- the shape
+/// `ToJson for Int64` emits everywhere else in this module. Interpolating the
+/// bare `Int64` produced a JSON number instead, so every browser bootstrap
+/// failed to decode and both the portal and the console fell back to their
+/// login gates.
+fn browser_session_body(session : GatewayCookie) -> String {
+  "{\"session_token\":\"\{session.bearer}\",\"csrf_token\":\"\{session.csrf}\",\"expires_unix_ms\":\"\{session.expires_unix_ms}\"}"
+}
+
+///|
 async fn handle_browser_session(
   store : GatewaySessionStore,
   config : GatewayConfig,
@@ -365,7 +378,7 @@ async fn handle_browser_session(
     active_id,
     config.cookie_secret(audience),
   )
-  let body = "{\"session_token\":\"\{refreshed.bearer}\",\"csrf_token\":\"\{refreshed.csrf}\",\"expires_unix_ms\":\{refreshed.expires_unix_ms}}"
+  let body = browser_session_body(refreshed)
   send_body(
     connection,
     200,
