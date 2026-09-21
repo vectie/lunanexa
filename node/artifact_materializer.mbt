@@ -492,9 +492,17 @@ async fn digest_file(path : String, io_chunk_bytes : Int) -> (String, Int64) {
 }
 
 ///|
+/// A leftover revision is a directory of files, and a finished one is a file;
+/// a non-recursive remove cannot tell them apart and refuses the directory,
+/// which is what used to leave a partial revision stuck forever and stop the
+/// whole reconcile. Directories go down recursively.
 async fn remove_if_present(path : String) -> Unit {
   if @fs.exists(path) {
-    @fs.remove(path)
+    try @fs.remove(path) catch {
+      _ => @fs.rmdir(path, recursive=true)
+    } noraise {
+      _ => ()
+    }
   }
 }
 
