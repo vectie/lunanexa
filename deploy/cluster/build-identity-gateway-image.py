@@ -193,6 +193,11 @@ def main():
     with open(f"{work}/base/blobs/sha256/{config_digest}", "wb") as handle:
         handle.write(config_raw)
 
+    # The base may be a Docker schema2 manifest. Once the layers and the index
+    # entry are OCI, the manifest body must say OCI too: the registry rejects the
+    # push with "manifest invalid" when the index entry and the manifest mediaType
+    # disagree, and ctr still reports the push as complete.
+    manifest["mediaType"] = "application/vnd.oci.image.manifest.v1+json"
     manifest["config"] = {
         "mediaType": "application/vnd.oci.image.config.v1+json",
         "digest": f"sha256:{config_digest}",
