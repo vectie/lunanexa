@@ -1289,12 +1289,16 @@ location /glm53/ { proxy_pass http://192.168.2.178:8888/; ... }   # 本次新增
 
 ---
 
-## 15. MiniMax-H3 视频链路：两个断点（2026-09-21 晚）
+## 15. MiniMax-H3 视频链路：四个缺陷（2026-09-21 晚）
 
 链路是 ComfyUI（`aigc-acceptance-20260915/comfyui-acceptance`）→ 自研节点
-`ComfyUI-vLLM-Omni` → `minimaxh3-fl2va`（.176）→ vLLM-Omni。一次 20 秒请求暴露了两个
-互相独立的缺陷。**15.1 已修复并验证；15.2 的根因当晚更正过一次，修复已写好但还没装上、
-20 秒端到端仍未跑通。**
+`ComfyUI-vLLM-Omni` → `minimaxh3-fl2va`（.176）→ vLLM-Omni。一次 20 秒请求串出了四个
+互相独立的缺陷。
+
+**结论：20 秒视频已跑通**，产物 `LunaNexa20s_00001_.mp4`（4,519,434 B，
+md5 `d8dbb9b1304cd077157da6f56be172e6`），由用户在 UI 上用 15.4 的模板触发，
+不是脚本伪造的。四个缺陷里**服务端那一条已被证实修好**，客户端那两条**只装了、没被触发**，
+画布进度**仍未解决**。分项依据见 15.5.1。
 
 ### 15.1 缺陷一：画布进度永远是 0%
 
@@ -1399,14 +1403,18 @@ dist-packages/vllm_omni/…`，根文件系统只读，不能改镜像）。
 #### 15.3.2 客户端：下载不吃控制面预算，且不销毁已完成的作业
 
 `deploy/acceptance/patches/comfyui-vllm-omni/video_transport.py`
-（md5 `9dec50d33292ca3c1e93a3938f88ffff`，原版 `f247b36b0a430a416d3430eab36f64df`）改三处：
+（md5 `e856e3c75d45bdfd55c9c5a983782487`，原版 `f247b36b0a430a416d3430eab36f64df`）改四处：
 
 1. `download_timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=None)`，
    只给 `/content` 这一次 `session.get` 用；外层 `asyncio.timeout(max_poll_duration)` 仍然
    兜住整个作业，`max_wait_seconds` 的语义不变。
-2. 记 `completed` / `delivered` 两个标志。作业已经 `completed` 但字节没送到调用方时**不删**，
+2. `/content` 下载失败**重试一次**（`_CONTENT_ATTEMPTS = 2`，间隔 5 秒）。重试会重新发起
+   整个请求、服务端要再编码一遍，所以只给一次，并且仍然落在 `max_poll_duration` 之内。
+3. 记 `completed` / `delivered` 两个标志。作业已经 `completed` 但字节没送到调用方时**不删**，
    只打一条 warning —— 删掉就等于销毁唯一一份成片。
-3. 文档字符串里写明这两处是对上游传输层的 LunaNexa 偏离及其实测依据。
+4. `_failure_detail(data)`：把作业的 `error` 字段附在失败消息之后（见 15.3.4）。
+
+文档字符串里写明了这几处是对上游传输层的 LunaNexa 偏离及其实测依据。
 
 容器根文件系统是 `readOnlyRootFilesystem: true`，节点代码又烤在镜像里，所以用
 **hostPath + subPath 盖单个文件**装进去，不动镜像：
@@ -1422,7 +1430,7 @@ volumeMounts:
   readOnly: true
 ```
 
-脚本：`deploy/acceptance/patch-comfyui-video-transport.sh`（幂等；ComfyUI 队列非空时**硬拒绝**
+脚本：`deploy/acceptance/patch-comfyui-vllm-omni-node.sh`（幂等；ComfyUI 队列非空时**硬拒绝**
 重启）。改 `deployment/comfyui-acceptance` 的 template 会按 `Recreate` 重建 pod，
 备份在 `/tmp/comfyui-acceptance.backup-20260921.yaml`。容器内已核对 md5 与宿主一致。
 
@@ -1438,6 +1446,36 @@ send_timeout 7200s;`（原来只设了 `proxy_read_timeout` / `proxy_send_timeou
 改这个配置时踩了一个坑值得记下：幂等判断不能写成 `'send_timeout' not in line`，
 因为 `proxy_send_timeout` **包含** `send_timeout` 子串，那样会 0 处命中。
 要匹配带前导空格的 `' send_timeout'`。
+
+#### 15.3.4 节点侧：fps 默认值，以及把服务端的错误透传出来
+
+装上 15.3.1–15.3.3 之后，UI 上又失败了一次，这次是 **5 秒就死**，而且原因完全不同：
+
+```
+ERROR 12:09:50 [diffusion_worker.py:1316] ValueError: MiniMax H3 output fps is fixed at 24
+  ← pipeline_minimax_h3.py:402, in _resolve_shape
+→ RuntimeError: MiniMax H3 output fps is fixed at 24
+→ POST /v1/videos  HTTP 500
+```
+
+两个独立的缺陷：
+
+1. **`nodes.py:162` 把 `fps` 默认成 16，而 H3 只接受 24。** 也就是说
+   **一个新画布在能跑之前就注定失败**——只要不去手动改那个格子。
+   已改成 `default: 24`（`nodes.py`，md5 `37e7db584c2c35a55394537d99ee08b6`）。
+   已核对：容器内 `grep '"fps"'` 显示 `default: 24`，且运行中的服务
+   `GET /object_info/VLLMOmniGenerateVideo` 回报 `fps -> ['INT', {'default': 24, 'min': 1}]`。
+
+2. **节点把服务端的错误正文丢掉了**，只留一句 `Video generation failed or its access ended`。
+   于是"fps 必须是 24"这条极其明确的信息，到操作者眼里变成了一句无从下手的套话。
+   已在 `video_transport.py` 里加 `_failure_detail(data)`：把 job 的 `error` 字段
+   （字符串或 `{message|detail|error|reason}` 字典）折成单行、截到 200 字符，附在消息后面。
+   这是**回给调用方**而不是记日志，所以不违反本模块"不记录提供方错误正文"的约定。
+
+两个文件都由 `deploy/acceptance/patch-comfyui-vllm-omni-node.sh` 装（hostPath + subPath，
+一份补丁目录带出两个文件）。写这个脚本时又踩到一个：**JSON patch 的 `add /-` 是追加**，
+所以"每个模块加一次 volume"会在 `spec.volumes` 里产生两个同名条目、被 API server 拒；
+现在 volume 只加一次，mount 逐个判断是否存在。
 
 ### 15.4 本轮的另一处改动：20 秒模板
 
@@ -1460,15 +1498,44 @@ send_timeout 7200s;`（原来只设了 `proxy_read_timeout` / `proxy_send_timeou
 | 608×352, 124 帧（UI 那次） | 5.17 s | — | 72.72 s | 出片 `LunaNexa_00002_.mp4` 406,684 B |
 | 608×352, 481 帧, 8 步（第一轮） | 20.04 s | 5 分 32 秒（47.49 s/步） | 424.24 s | 客户端断开；服务端 102.66 s 编完成片但已被删 |
 | 608×352, 481 帧, 8 步（第二轮） | 20.04 s | 7 分 11 秒（61.58 s/步） | 555.85 s | 客户端断开；服务端编码未完成 |
+| **608×352, 481 帧, 8 步（15.3 修完之后，UI 上跑的）** | **20.04 s** | **5 分 10 秒（7 步，48,285 ms/步）** | **386.28 s** | **成功出片 `LunaNexa20s_00001_.mp4`，4,519,434 B（md5 `d8dbb9b1304cd077157da6f56be172e6`）** |
+
+（更正一处自己犯的错：我第一次量到这个产物报的是 2,883,632 B，那是我在 **12:19:0x** 采的样，
+而文件直到 **12:20:24** 才写完。**列出文件大小之前要先确认它不再增长**——先看两次 md5 是否
+一致，`ls` 的瞬时大小会把半成品当成成品。）
 
 步数是 **7** 不是 8（`total = len(video_sigmas) - 1`）。
-`denoise_step_latency_ms` 第二轮报 69,480.7 ms，和 tqdm 的 61.58 s/步 是同一量级的不同口径。
+`denoise_step_latency_ms` 这一轮报 48,285.2 ms，和 tqdm 口径同量级。第三轮的引擎 386.28 s
+比第二轮 555.85 s 快，**原因没有查清**（同样的模型、同样的分辨率与帧数），不编解释。
 
 **一条重要的测量教训**：先前"25 帧 @512² 跑 95 分钟、约 120 s/步"的数据几乎全是冷启动的
 `torch.compile` 区域编译成本（启动日志原话：lazy regional torch.compile with dynamic=True,
 compilation errors may surface on the first request）。拿它外推会得出"20 秒不可能"的
 错误结论。**预热之后同一个服务的每步耗时差一个数量级**，标度关系大致是 tokens^1.5
 （tokens ≈ 帧数 × (W/32) × (H/32)）。
+
+#### 15.5.1 修复到底有没有生效——分项结论，不许含糊
+
+**服务端那一条（15.3.1）：已被证实。**
+
+| | 修之前（第二轮） | 修之后（第三轮） |
+|---|---|---|
+| 编码期间 pod `Ready` | `Ready=False` lastTransition 11:49:25 | **`Ready=True`，lastTransition 停在 12:07:56 不动** |
+| readiness 探针 | `Readiness probe failed: … context deadline exceeded` | **一条失败事件都没有** |
+| `kubectl get endpoints` | 空 | `10.42.2.222:8000` 一直在 |
+| 编码耗时 | 102.66 s（期间服务对所有人 502） | 49.21 s，期间 `/health` 正常应答 |
+
+上一轮那个 pod 唯一的 `Unhealthy` 事件是**启动期**的 `Startup probe failed: connection
+refused`（模型还没加载完，正常）。**没有一次 readiness 失败** —— 编码不再堵住事件循环。
+
+**客户端那一条（15.3.2）：这一轮不能作数，如实说明。**
+第三轮的编码只用了 **49.21 秒**，**低于**原来那 60 秒的预算——也就是说
+**即使不打这个补丁，这一轮也不会被 60 秒超时掐死**。所以这次成功并不能证明
+下载超时补丁是必需的。它的依据仍然是第一轮实测的 102.66 秒编码。同理，
+`_CONTENT_ATTEMPTS = 2` 的重试这一轮**没有被触发过**，它是否有效仍未验证。
+
+**15.2.3 那个约 70 秒的断开：仍然没有查清。** 三处改动之后它没有再出现，但有一次
+编码只要 49 秒，说明不了问题；不能因为"这次没炸"就把它记为已解决。
 
 ### 15.6 本轮清理
 
@@ -1493,10 +1560,15 @@ deadline` 退出（本轮 `fl2va` 就是这么报的，而它其实起得好好�
 
 ### 15.8 还没做的
 
-- **20 秒端到端仍未验证。** 三处改动都已装上并逐层核对，但**没有提交过任何真实生成任务**，
-  所以"`asyncio.to_thread` 是否真的止住那个约 70 秒的断开"仍是未验证的。
-- 15.2.3 那个约 70 秒的断开**仍未查清**，15.3.3 只是对冲。
-- 画布进度（15.1 末段）仍不通。
+- **15.2.3 那个约 70 秒的断开仍未查清。** 三处改动之后它没有再出现，但第三轮的编码只花了
+  49 秒，说明不了问题。15.3.3 的 nginx 改动仍然只是对冲，不是已证实的修复。
+- **15.3.2 的两条（下载不吃控制面预算、失败后重试一次）这一轮没有被触发。** 编码 49.21 s
+  低于原来的 60 s 预算，`_CONTENT_ATTEMPTS` 也一次没用到。它们仍然只由第一轮实测的
+  102.66 s 编码作依据，未被独立验证。
+- **`_failure_detail` 的新错误文本只做了单元级验证。** 没有在真实的 HTTP 500 上走一遍——
+  要确认它真能把 "MiniMax H3 output fps is fixed at 24" 送到 UI 上，得再故意用
+  `fps≠24` 跑一次。
+- 画布进度（15.1 末段）仍不通，这是**UI 上唯一还看得见的老问题**。
 - `minimaxh3-ref2va` 装了编码补丁，但**没有**进度补丁。
 - `UNETLoader` 是否列出两个 minimax diffusion 文件，未复核成功（解析脚本自身报错）。
 - 排障时在 ComfyUI 队列里出现过非本人提交的任务 `b8dd1d07-…` 和 `5db096f3-…`，未追查
@@ -1504,7 +1576,7 @@ deadline` 退出（本轮 `fl2va` 就是这么报的，而它其实起得好好�
   `video_gen_7447526c405e4d5ba9ef279b0afd55.mp4`。
 - 为让 ComfyUI 重扫权重而重启它时，队列里正有任务在跑。时间上错开了、未造成损失，
   但脚本打印了队列却没有据此中止——**重启前的队列检查要写成硬闸**（已在
-  `patch-comfyui-video-transport.sh` 和 `patch-vllm-omni-h3-encode.sh` 里实现）。
+  `patch-comfyui-vllm-omni-node.sh` 和 `patch-vllm-omni-h3-encode.sh` 里实现）。
 - 排障用的脚本 `/tmp/sweep.sh`、`/tmp/sweep20fix.sh`、`/tmp/waitready.sh` 只在管理节点上，
   没有入库。
 - 写这些脚本时踩到的另一类坑，记下免得重犯：**`sudo -S` 从 stdin 读密码**，所以
