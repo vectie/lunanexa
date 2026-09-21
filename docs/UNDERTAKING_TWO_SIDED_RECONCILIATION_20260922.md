@@ -640,6 +640,65 @@ test "browser session body encodes expires_unix_ms as a string" {
 另外建议（未做）：把三处 `catch { _ => … }` 里丢弃的原因至少记一条日志，或带进 UI ——
 这条 bug 之所以能藏这么久，正是因为它被静默吞掉了。
 
+### 2.8 修复已上线并验证：门户首次进入"登录后的 shell"
+
+按 SOP §5.1 的六步把带修复的网关镜像做完并重滚（细节见 §5 第 1 条）：
+
+```
+构建    : moon build cmd/identity-gateway --target native --release  → (9 warnings, 0 errors)
+镜像    : deploy/cluster/build-identity-gateway-image.py  → GATEWAY-IMAGE-OK
+里层校验: 新镜像最后一层的 /usr/local/bin/lunanexa-identity-gateway
+          sha256 = 1a82244e… 与刚构建的完全一致（下面是旧的 2064624 字节版本）
+推 registry: …/acceptance/identity-gateway:20260922-sessionfix
+          manifest sha256:4135e0dff89f3410af43624bcdcb3cd3a31e6a710d3249f295f49a2ff4d772a6
+铁律验证: 删掉本地那份 → 从 registry 拉回来 → 成功复现 ✔
+          registry tags/list 里出现 "20260922-sessionfix" ✔
+重滚    : set image …@sha256:4135e0df…  →  2/2 Running，两个 Pod 都用新 digest
+```
+
+**修复生效的直接证据**（浏览器上下文里探测 `/auth/session`）：
+
+```
+status=200 {"session_token":"lnxs_…","csrf_token":"…","expires_unix_ms":"1790038426940"}
+                                          ↑ 现在是带引号的字符串（修复前是裸数字）
+```
+
+**而且门户第一次进到了"登录后的 shell"**。对比之前（停在登录门，只有
+`Sign in or create an account`），现在打开 `http://106.39.18.146:5002/enterprise/`（不带 `?demo=1`）：
+
+```
+Organization setup · secure browser session; ends on logout or expiry
+Log out
+…完整导航（Overview / Get started / … / WebIDE）…
+Not connected · Tenant scoped
+Operation: The action failed. Refresh and retry; …
+```
+
+即 **JSON 契约这一环彻底通了**：会话被正确解码、门户进入已认证外壳。
+"登录成功却只能看到登录门"这个从第 9 轮追到现在的症状结束了。
+
+**下一个卡点已经抓到了确切那一条请求：**
+
+```
+REQ  GET :5002/v1/portal/self/organizations
+RES  401 :5002/v1/portal/self/organizations
+```
+
+门户拿会话之后向控制面要自己的组织，得到 **401**，于是显示
+`Not connected` + 那句不透明的 `The action failed.`。
+
+**原因基本可以锁定在前门那条令牌注入上**（§2.5 发现 4）：前门 nginx 对**每一个** `/v1/`
+请求都 `proxy_set_header Authorization "Bearer <操作员令牌>"`，把浏览器自己发的
+`lnxs_` 会话头**覆盖掉**。控制面于是看到的是操作员令牌而不是门户会话，
+`/v1/portal/self/organizations` 这种要"门户主体"的路由自然拒绝。
+
+也就是说：**那条"明文内嵌操作员令牌"不只是安全气味，它正在实质性地破坏门户的会话鉴权。**
+这同时解释了为什么控制台在"没登录"时反而有数据 —— 它吃的就是被注入的操作员令牌。
+
+修法需要做一个明确的取舍（属于运维/安全决策，与本报告 §5 第 12 条同一件事）：
+前门要么不再无条件覆盖 `Authorization`（有会话就放会话，没有才用静态令牌），
+要么把"浏览器会话"和"静态令牌回退"分成两条路由。**这一步我没有替你按。**
+
 ## 3. 复现步骤表：按下的按钮 → 两侧看到什么 → 是否有反馈
 
 | # | 侧 | 按下的控件 | 结果原文 | 反馈 |
