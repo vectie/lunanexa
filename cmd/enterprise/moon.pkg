@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/ui/browser_transport",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/integrations" @commercial_integrations,
   "vectie/lunanexa/commercial/offline",

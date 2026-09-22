@@ -5965,6 +5965,11 @@ fn update(
 }
 
 ///|
+/// Loopback-only, for the development credential fallback. The login and
+/// registration forms use the shared transport policy instead: they hand their
+/// credential to the gateway, so they may run wherever the deployment has
+/// opted public HTTP in. The development tokens are different -- they go
+/// straight to the controller as a bearer -- so they stay localhost-only.
 extern "js" fn development_transport_allowed(endpoint : String) -> Bool =
   #| (endpoint) => {
   #|   try {
@@ -5980,7 +5985,11 @@ fn app_view(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Html {
   let locale = model.portal.locale
-  let transport_allowed = development_transport_allowed(model.endpoint)
+  // The login and registration forms post to the same-origin gateway, so they
+  // follow the deployment's public-HTTP opt-in exactly as the operator console
+  // does. Development tokens keep their own loopback check.
+  let transport_allowed = @browser_transport.endpoint_allowed(model.endpoint)
+  let development_allowed = development_transport_allowed(model.endpoint)
   let shell_styles =
     #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{box-sizing:border-box;width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}.login-card form{margin:.95rem 0 0}.login-actions{display:flex;flex-wrap:wrap;gap:.6rem}.login-actions button{flex:1 1 auto}.login-actions button[type=button]{background:transparent;color:#ecf5f2;border-color:#35505f}.login-divider{display:flex;align-items:center;gap:.6rem;margin:1.1rem 0 .6rem;color:#9db0b6;font-size:.75rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#29424f;content:""}@media(max-width:38rem){.demo-flag{position:absolute}.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
   if model.demo_mode {
@@ -6169,7 +6178,28 @@ fn app_view(
               )
             None => @html.nothing
           },
-          if transport_allowed {
+          if !transport_allowed {
+            @html.p(
+              class="login-error",
+              attrs=@html.Attrs::build().role("alert"),
+              portal_copy(
+                locale, "Account login is blocked on public plain HTTP. Use the protected localhost URL or install TLS first.",
+                "公共明文 HTTP 已禁止账户登录。请使用受保护的本机地址，或先部署 TLS。",
+              ),
+            )
+          } else if model.endpoint.has_prefix("http://") &&
+            !development_allowed {
+            @html.p(
+              class="development-warning",
+              portal_copy(
+                locale, "Temporary HTTP mode is enabled by this deployment. Browser traffic is not encrypted; use only on a trusted network.",
+                "此部署已开启临时 HTTP 模式。浏览器流量未加密，请仅在可信网络中使用。",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
+          if development_allowed {
             @html.details(class="development-fallback", [
               @html.summary(
                 portal_copy(
@@ -6232,7 +6262,7 @@ fn app_view(
                   disabled=model.connecting ||
                     model.token == "" ||
                     model.subject_ref == "" ||
-                    !transport_allowed,
+                    !development_allowed,
                   on_click=emit(Connect),
                   if model.connecting {
                     portal_copy(locale, "Connecting…", "正在连接…")
@@ -6242,7 +6272,7 @@ fn app_view(
                     )
                   },
                 ),
-                if transport_allowed {
+                if development_allowed {
                   @html.nothing
                 } else {
                   @html.p(
