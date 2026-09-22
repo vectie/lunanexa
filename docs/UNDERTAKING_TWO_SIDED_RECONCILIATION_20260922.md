@@ -2081,7 +2081,49 @@ offline-order-0f50a176-… · week × 1
 | 企业侧那条路线选择器 | ✅ 正确：承诺函可选，传统合同显示为 `Traditional rental contract · bilateral execution (temporarily unavailable)` 且不可选（§11.6 的开关生效） |
 | 价目是否与 §10 一致 | ✅ 下拉选项原文：`1 day · 49 / 7 days · 322 / 30 days · 1290 / 90 days · 3600 / 365 days · 13870` |
 
-### 12.6 本轮仍未验证 / 未做
+### 12.6 企业侧其实有**两条**租赁路径，只有一条是承诺函
+
+走到这里才看清结构：企业侧 UI 上有两条互不相干的租赁路线。
+
+| 路径 | 入口 | 租期口径 | 状态 |
+|---|---|---|---|
+| **自服务机器订单** | `Get started` → 选服务（Call a model API / Deploy a private model endpoint / Rent a GPU workspace）→ `Choose capacity` → 选容量 → 填 Project / Linux username / Region / **Rental period** → `Review price` → `SIGNED QUOTE` → `Contract & payment` → `Provisioning` | `24 hours / 7 days / 30 days`（**按秒计价**，`CNY 0.02 / second`） | 页面能走到报价，但**试用租户会被 403 挡住**（见 12.7） |
+| **线下商务订单** | `Orders & documents` → `Create draft order` → 运营侧 `Quote undertaking tariff` | 承诺函档位 `1 day 49 / 7 days 322 / 30 days 1290 / 90 days 3600 / 365 days 13870`（**按台**） | 卡在 §12.4 的就绪闸门 |
+
+**本任务描述的"承诺函链"是第二条**。第一条的租期是"小时/天"、按秒计价，和承诺函的
+"日/周/月/季/年、按台固定价"不是同一件事。这一点值得写清楚，因为从企业侧首页看，
+两条路长得像同一件事的两个入口。
+
+### 12.7 自服务路径上的两个堵点
+
+**堵点 F（试用租户被给了永远走不通的动作）**
+
+`Get started` → `Rent a GPU workspace` → 选容量 → 填 Project / Linux username / Region →
+`Rental period` 选 `24 hours` → `Review price` 变成 enabled，点下去：
+
+```
+POST /v1/portal/self/machine-quotes  →  403
+```
+
+页面提示：
+
+> Operation: The action failed. Refresh and retry; if it persists, contact your operator
+> with the action and time. **Sensitive technical details are hidden.**
+
+但控制面的真实原因是 `403 MachineOrderAccessDenied`「**lease requester role is required**」
+（`api/machine_commerce_http.mbt:641`）——**试用租户的 membership 里没有 `LeaseRequester` 角色**。
+也就是说：这个按钮对试用账号**永远不可能成功**，而界面既没有禁用它，
+也没有把"缺角色"这件事说出来，反而让用户"重试"。
+按 §9.3 的记录，试用期本来就只开放共享推理，所以限制是设计，**问题是反馈**。
+
+**堵点 G（租期上限只写在说明小字里）**
+
+`Rental period` 下拉有 `24 hours / 7 days / 30 days` 三项。选 `7 days` 或 `30 days` 时
+`Review price` 直接变灰，页面上唯一的解释是下拉下方那句静态小字 **"0–24 hours allowed"**；
+选回 `24 hours` 按钮立刻可用。也就是说试用租户的租期被限制在 24 小时内，
+但界面上**没有说这是试用限制**，也没有把不可选的两项标出来。
+
+### 12.8 本轮仍未验证 / 未做
 
 - 第 3–7 步（承诺函生成、管理侧批准、登记签署证据、开通权限）**在当前部署上不可达**，原因见 §12.4。
   要在真实节点上走完，需要先满足那十项生产闸门并签出就绪文档——这是运维/法务的决定，不是代码问题。
