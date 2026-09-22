@@ -25,6 +25,14 @@ must point to this gateway's public `/connect` endpoint; its model API origin
 must match the host's configured gateway exactly. A reachable public application
 page or issued handoff alone is not successful delivery.
 
+Deploy a controller supporting `LUNANEXA_CLIENT_HTTP_LAUNCH_ORIGINS_JSON` before
+running `scripts/deploy-public-comfyui.mbtx`. The value is a JSON array of exact
+approved HTTP origins; it applies only to client launch URLs, never to model API
+URLs. Catalog `handoff_lifetime_ms` and `maximum_requests` are Int64 and must be
+JSON **strings**, not numbers. The deployment script retains private backups,
+waits for component readiness, and switches the public service last. On a failed
+controller rollout, restore its prior catalog before attempting customer launch.
+
 Acceptance must prove UI launch, isolated persistence across reopening, result
 download and expiration/revocation denial. Unit tests of the override are not
 evidence that any public deployment was switched or accepted.

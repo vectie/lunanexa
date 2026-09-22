@@ -1000,8 +1000,12 @@ pub fn ApiService::with_client_handoff_store(
   self : ApiService,
   client_handoff_store : @client_handoff_store.ClientHandoffStore,
   client_launch_config : @client_handoff.ClientLaunchConfig,
+  allowed_http_launch_origins? : Array[String] = [],
 ) -> ApiService raise Failure {
-  if !@client_handoff.valid_client_launch_config(client_launch_config) {
+  if !@client_handoff.valid_client_launch_config(
+      client_launch_config,
+      allowed_http_launch_origins~,
+    ) {
     raise Failure("client launch configuration is invalid")
   }
   {
@@ -1018,9 +1022,13 @@ pub fn ApiService::with_client_handoff_store(
 pub fn ApiService::with_client_launch_catalog(
   self : ApiService,
   configs : Array[@client_handoff.ClientLaunchConfig],
+  allowed_http_launch_origins? : Array[String] = [],
 ) -> ApiService raise Failure {
   guard self.client_handoff_store is Some(_) &&
-    @client_handoff.valid_client_launch_catalog(configs) &&
+    @client_handoff.valid_client_launch_catalog(
+      configs,
+      allowed_http_launch_origins~,
+    ) &&
     configs.get(0) is Some(first) else {
     raise Failure(
       "client launch catalog is invalid or handoff store is missing",

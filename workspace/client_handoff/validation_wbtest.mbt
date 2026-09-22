@@ -14,6 +14,46 @@ fn launch_fixture(
 }
 
 ///|
+test "explicit HTTP launch origin does not relax model API or adjacent origins" {
+  let allowed = ["http://198.51.100.5:5000"]
+  let config = launch_fixture(
+    "http://198.51.100.5:5000/connect", "https://gateway.example/v1",
+  )
+  assert_false(valid_client_launch_config(config))
+  assert_true(
+    valid_client_launch_config(config, allowed_http_launch_origins=allowed),
+  )
+  assert_true(
+    valid_client_launch_catalog([config], allowed_http_launch_origins=allowed),
+  )
+  for
+    uri in [
+      "http://198.51.100.5:5001/connect", "http://198.51.100.6:5000/connect", "http://198.51.100.5:5000.evil/connect",
+      "http://user@198.51.100.5:5000/connect", "http://198.51.100.5:5000/connect#secret",
+      "http://198.51.100.5:5000\\evil/connect",
+    ] {
+    assert_false(
+      valid_client_launch_config(
+        { ..config, launch_uri: uri, },
+        allowed_http_launch_origins=allowed,
+      ),
+    )
+  }
+  assert_false(
+    valid_client_launch_config(
+      { ..config, public_api_base_url: "http://198.51.100.5:5000/v1", },
+      allowed_http_launch_origins=allowed,
+    ),
+  )
+  let decoded : ClientLaunchConfig = @json.from_json(
+    @json.parse(config.to_json().stringify()),
+  )
+  assert_true(
+    valid_client_launch_config(decoded, allowed_http_launch_origins=allowed),
+  )
+}
+
+///|
 test "client launch URLs accept HTTPS and exact loopback HTTP only" {
   assert_true(
     valid_client_launch_config(

@@ -1062,7 +1062,15 @@ async fn main {
         },
       ]
   }
-  guard @client_handoff.valid_client_launch_catalog(client_launch_catalog) &&
+  let allowed_http_launch_origins : Array[String] = match
+    @env.get_env_var("LUNANEXA_CLIENT_HTTP_LAUNCH_ORIGINS_JSON") {
+    Some(document) => @json.from_json(@json.parse(document))
+    None => []
+  }
+  guard @client_handoff.valid_client_launch_catalog(
+      client_launch_catalog,
+      allowed_http_launch_origins~,
+    ) &&
     client_launch_catalog.get(0) is Some(client_launch_config) else {
     raise Failure("client launch catalog is invalid")
   }
@@ -1350,8 +1358,15 @@ async fn main {
     )
     .with_exclusive_lease_store(exclusive_lease_store)
     .with_credential_handoff_store(credential_handoff_store)
-    .with_client_handoff_store(client_handoff_store, client_launch_config)
-    .with_client_launch_catalog(client_launch_catalog)
+    .with_client_handoff_store(
+      client_handoff_store,
+      client_launch_config,
+      allowed_http_launch_origins~,
+    )
+    .with_client_launch_catalog(
+      client_launch_catalog,
+      allowed_http_launch_origins~,
+    )
     .with_lease_helper_receipt_secret(lease_helper_receipt_secret)
     .with_portal_store(portal_store)
     .with_notification_store(notification_store)
