@@ -1815,6 +1815,21 @@ test "page-scoped reads map routes to groups and load each group once" {
   assert_eq(console_read_group_paths(DeploymentReads, ""), [
     "/v1/assignments", "/v1/service-deployments",
   ])
+  // The commerce loader reads the production-readiness projection alongside
+  // the snapshot, so the operator's offline-commerce route shows what is
+  // blocking the pipeline without a second trip.
+  assert_eq(console_read_group_paths(CommerceReads, ""), [
+    "/v1/portal/operator/snapshot",
+    "/v1/offline-commerce/operator/snapshot",
+    "/v1/offline-commerce/operator/readiness",
+  ])
+  assert_eq(console_read_group_paths(CommerceReads, "org-northstar"), [
+    "/v1/portal/operator/snapshot",
+    "/v1/offline-commerce/operator/snapshot",
+    "/v1/offline-commerce/operator/readiness",
+    "/v1/commercial/organizations/org-northstar/snapshot",
+    "/v1/commercial/organizations/org-northstar/integrations",
+  ])
 
   let model = deferred_read_test_model(Overview)
   assert_true(deferred_read_pending(model, Audit) is Some(AuditReads))
