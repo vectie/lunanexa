@@ -1,0 +1,32 @@
+# Live Spark profile, prepared from read-only inventory. Not automatically applied.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lunanexa-reservation-host-spark
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    resourceNames:
+      - spark-25e2-3d35c8fd
+      - spark-3782-feee26eb
+      - spark-57f5-98a504ed
+      - spark-368c-0f2ee8b2
+    verbs: [get, patch]
+  # Adapter lists all namespaces filtered by one node to detect unknown occupants.
+  # Restricting this to known namespaces would hide conflicting workloads.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lunanexa-reservation-host-spark
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lunanexa-reservation-host-spark
+subjects:
+  - kind: ServiceAccount
+    name: lunanexa-control
+    namespace: lunanexa

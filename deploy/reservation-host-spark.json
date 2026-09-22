@@ -1,0 +1,23 @@
+{
+  "kubernetes_origin": "https://kubernetes.default.svc",
+  "token_file": "/var/run/lunanexa/reservation-host/token",
+  "ca_file": "/var/run/lunanexa/reservation-host/ca.crt",
+  "workload_namespaces": ["lunanexa-managed-runtime", "aigc-acceptance-20260915"],
+  "node_names": {
+    "spark-25e2-3d35c8fd": "spark-25e2-3d35c8fd",
+    "spark-3782-feee26eb": "spark-3782-feee26eb",
+    "spark-57f5-98a504ed": "spark-57f5-98a504ed",
+    "spark-368c-0f2ee8b2": "spark-368c-0f2ee8b2"
+  },
+  "infrastructure": [
+    {"namespace_name":"lunanexa","service_account":"lunanexa-node","label_key":"app","label_value":"lunanexa-node-agent"},
+    {"namespace_name":"kube-system","service_account":"default","label_key":"app.kubernetes.io/name","label_value":"nvidia-device-plugin"},
+    {"namespace_name":"dra-driver-nvidia-gpu","service_account":"dra-driver-nvidia-gpu-service-account-kubeletplugin","label_key":"dra-driver-nvidia-gpu-component","label_value":"kubelet-plugin"},
+    {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-comfyui-public-77e2cfa7"},
+    {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-glm53-exl3-a5867a07"},
+    {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-lunanexa-console-public-32ba9a98"},
+    {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-lunanexa-coursebook-public-2d9e97b3"},
+    {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-lunanexa-identity-public-6d5d117f"},
+    {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-traefik-7f511ce3"}
+  ]
+}
