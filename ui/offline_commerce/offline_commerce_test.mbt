@@ -253,3 +253,25 @@ test "immutable quote requires an approved legal terms digest" {
   )
   assert_true(@offline.valid_sha256(valid.terms_digest))
 }
+
+///|
+test "the route reports its own failures instead of looking inert" {
+  // Every rejected action on this route used to leave the screen unchanged: a
+  // failed order creation looked like a button that did nothing.
+  let failed = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, CustomerCommerce),
+    error_message: Some("Operation: The action failed. Refresh and retry."),
+  })
+  assert_true(failed.contains("role=\"alert\""))
+  assert_true(failed.contains("The action failed"))
+  let accepted = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, CustomerCommerce),
+    success_message: Some("Draft order created."),
+  })
+  assert_true(accepted.contains("Draft order created."))
+  let busy = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, CustomerCommerce),
+    loading: true,
+  })
+  assert_true(busy.contains("Working…"))
+}

@@ -1450,6 +1450,37 @@ fn offline_view(
         copy(state.locale, "Refresh", "刷新"),
       ),
     ]),
+    // Without this the route has no failure channel at all: every rejected
+    // action looked like a button that did nothing, which is how a dead
+    // "Create draft order" was read as "the UI is broken" rather than "the
+    // order was refused".
+    match state.error_message {
+      Some(message) =>
+        @html.p(
+          class="notice error",
+          attrs=@html.Attrs::build().role("alert"),
+          message,
+        )
+      None => @html.nothing
+    },
+    match state.success_message {
+      Some(message) =>
+        @html.p(
+          class="notice success",
+          attrs=@html.Attrs::build().role("status").aria_live("polite"),
+          message,
+        )
+      None => @html.nothing
+    },
+    if state.loading {
+      @html.p(
+        class="offline-action-note",
+        attrs=@html.Attrs::build().role("status").aria_live("polite"),
+        copy(state.locale, "Working…", "正在处理…"),
+      )
+    } else {
+      @html.nothing
+    },
     @html.div(class="offline-order-layout", [
       @html.nav(
         class="offline-order-list",
