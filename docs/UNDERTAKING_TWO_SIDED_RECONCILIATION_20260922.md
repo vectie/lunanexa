@@ -2917,3 +2917,123 @@ subject → `LunaNexa holds no account or workspace lease for this subject yet.`
 **注意**：第 1 步做完**不会**让链通。十项能力仍然会全报 Pending，因为载体文档还没挂。
 这是设计如此——`capabilities: []` 会同时报 `ReadinessCapabilitySetInvalid`
 和十个 `…Pending`，不给"只做一半就放行"留缝。
+### 12.21 让就绪机制真正跑起来：十项里证明了 3 项，7 项明确缺什么
+
+§12.20 说 B 组第 1、7 项（挂 readiness 载体、写生成/签名工具）是工程活。这两项做完了，
+并且**没有**把做不到的东西写成 `verified: true`。这一节记录做了什么、结果是什么、
+以及为什么剩下 7 项不能靠"批准"消掉。
+
+#### 先说结论
+
+| | 之前 | 现在 |
+|---|---|---|
+| `capabilities` | `[]` | **10 条**（十项各一条） |
+| blocker 数 | 17 | **12** |
+| `ReadinessCapabilitySetInvalid` | 有 | **消失** |
+| `ReadinessEvidenceExpired` | 有 | **消失** |
+| 被证明的能力 | 0 | **3**：`MachineCallbackIdentity`、`EntitlementAuthority`、`FinanceLegalPolicy` |
+
+`status` 仍是 `OfflineCommerceAdaptersPending` —— 这是正确的，因为剩下 7 项能力和
+4 条 dispatcher 心跳确实不满足。
+
+#### 做了什么
+
+**1. 补上了缺失的那一半工具（B 组第 7 项）**
+
+控制面一直能**读**就绪文档、并且对无法验签的文档**拒绝启动**，但仓库里**没有任何东西能写**它。
+所以 `capabilities` 只可能是空的，十项只可能全报 Pending —— 这是"缺工具"，不是"缺批准"。
+
+新增 `cmd/offline-readiness`：先校验再签名（十项各一条、`evidence_ref` 唯一且合法、
+窗口 ≤31 天、密钥 32–4096 字符），最后**用读取端自己的投影再对一遍**，
+凡是会产生 `Readiness` 前缀 blocker 的集合一律拒签。所以它**签不出控制面会拒绝的文档**。
+
+规范材料与签名函数搬进 `commercial/offline`，读端和写端调用同一个函数。
+材料字符串**逐字节未变**（有 golden 测试钉住），但从"读端和写端各有一份"变成"只有一份"。
+
+**2. 修掉两处 HEAD 上就存在的破坏**
+
+- `moon check --target native --deny-warn`（AGENTS.md 里的 phase gate）在
+  `UndertakingTermTier` 上失败：`derive(ToJson, FromJson)` 被隐式提升为常规方法。
+  补上警告要求的两个显式 `pub extend` 声明即通过。
+- `commercial/offline/store/{store_test,postgres_test}.mbt` **编译不过**：两处都构造
+  `CommercialOrder` 却没给 `requested_undertaking_term`（档位工作加进结构体的字段）。
+  **仓库自己的测试从那时起一直是红的**，只是没被跑过。两处补 `None`。
+
+**3. 挂上载体并发布文档（B 组第 1 项）**
+
+`deploy/controller.yaml:206` 本来就设了 `LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH`
+和 `_SECRET`，但**线上部署里这两个变量不存在**（实测）—— 线上与清单已经漂移。
+现在补齐：secret 里新增 `offline-commerce-readiness-secret`（64 字符），
+签好的文档写进 `lunanexa-offline-commerce-readiness` 的 `readiness.json` 键，
+两个环境变量打到 control 容器上。
+
+**验证控制面确实读到了**：文档非法会让 `load_offline_readiness_evidence` 抛错、
+**进程起不来**。rollout 成功、Pod 4/4 Running、正常服务请求 —— 说明签名与边界都过了。
+
+#### 哪些证明是真的，依据是什么
+
+| capability | 依据 |
+|---|---|
+| `MachineCallbackIdentity` | `lunanexa-control-credentials` 里三个回调身份（`artifact-worker-` / `artifact-scanner-` / `entitlement-authority-callback-token`）各 64 字节、两两不同、且与该 secret 里全部 21 个值都不同（实测） |
+| `EntitlementAuthority` | 第三套不可复用身份 `entitlement-authority-callback-token` 存在（64 字节） |
+| `FinanceLegalPolicy` | 部署的策略是 `api/offline_commercial_http.mbt` 的 `hybrid_offline_policy()`：已签协议、已付款、先票后付、身份核验、内部审批全部必需且客户请求不能削弱。**由平台管理员于 2026-09-22 批准 —— 这是按批准人自身权限记录的操作员批准，不是第三方审计** |
+
+#### 剩下 7 项为什么不能靠"批准"消掉
+
+这不是谨慎，是**没有可批准的对象**：
+
+| capability | 缺的是实物，不是许可 |
+|---|---|
+| `ApprovedLegalTemplates` | 要求**中英双语**法律模板。仓库里两个模板 `contractdoc/youthpolicy.mbt:1386` 与 `contractdoc/undertaking.mbt` 都是 `locale: "zh-CN"`。模板本身是真的（有不可变哈希与版面记录），**不存在的是"双语那一对"**，以及具名法务负责人。`assets/contracts/youthpolicy/undertaking-v1/README.md` 还写明保留原文措辞"不是平台对可执行性的认证" |
+| `ObjectStorage` | 没有 S3 兼容存储，树里也没有对应客户端。对象流量按文档走 transfer adapter，而 adapter 本身也不存在 |
+| `MalwareScanner` | 没有扫描服务，也没有扫描客户端。`commercial/offline` 只知道这个能力码、并携带一个 `scan_receipt` 字段 —— 没有任何东西产生它 |
+| `OoxmlWorker` | `cmd/offline-artifact-worker` 有源码，但 `images/Containerfile.control` 只构建 `cmd/control/control.exe`，**没有任何镜像包含这个 worker**；Job 模板引用的 `${CONTROLLER_IMAGE_DIGEST}` 里没有它，且它需要 `lunanexa-offline-artifact-worker` secret（不存在）。也没有东西会触发这个 Job —— 外部 dispatcher 不存在 |
+| `PdfRenderer` | **MoonLeaf 没有渲染器**。`.mooncakes/vectie/moonleaf/render/` 只有 `Evidence` 收据类型（`engine_id`、`contract_version`、`Evidence`），没有渲染实现。`deploy/offline-pdf-pipeline-job.yaml` 钉的是 `registry.invalid/moonleaf/renderer@${MOONLEAF_RENDERER_IMAGE_DIGEST}` 占位符，并写明**换一个 office 引擎不算等价证据** |
+| `SpreadsheetFormulaEngine` | 没实现。`.mooncakes/vectie/moonleaf/xlsx/edit.mbt:254` 原话："intentionally does not recalculate formulas, shared strings, dimensions, tables, charts, or pivot caches"，`inspect.mbt` 只读公式文本与缓存值。要求是重算 + 错误扫描 + 渲染页检查 |
+| `CjkFonts` | 三个授权字体**按设计不入库**：`assets/fonts/private/README.md` 要求从组织授权来源提供 `FangSong_GB2312.ttf`、`FZXiaoBiaoSong-B05S.ttf`、`SimHei.ttf`，且**不接受改名替代**。目录里现在只有那个 README |
+
+**为什么不能写 `verified: true`**：把不存在的 PDF 渲染器、不存在的对象存储、
+不存在的扫描器、不存在的公式引擎标成已验证，后果是平台会告诉操作员
+"离线文档流水线已验证"，而那份承诺函**连 PDF 都产不出来**——
+而这道闸门存在的全部意义，就是阻止把生成的报文说成"已合法签署"。
+`docs/OFFLINE_COMMERCE.md` 自己也写了：*"the platform may demonstrate state
+transitions locally but must not represent the generated packet or uploaded
+evidence as legally executed or financially settled."*
+
+#### 还要什么才能真正清掉这 12 条
+
+| blocker | 需要什么 | 谁做 |
+|---|---|---|
+| `ReadinessTransferAdapterUnavailable` | secret 里补 `offline-transfer-adapter-endpoint` / `-token` / `offline-transfer-session-secret` 三个键，指向**真实存在**的传输适配器 | 运维（要先有服务） |
+| `ReadinessArtifactDispatcherHeartbeatStale` / `…SuccessStale` | 一个真在轮询 `/v1/offline-commerce/operator/artifact-work/pending` 的 dispatcher，留下心跳与成功回执 | **软件还不存在，要写** |
+| `ReadinessEntitlementDispatcherHeartbeatStale` / `…SuccessStale` | 同上，entitlement 那条 | **软件还不存在，要写** |
+| `ObjectStorage` / `MalwareScanner` | 存储与扫描服务 + 客户端代码 | 运维 + 开发 |
+| `PdfRenderer` / `CjkFonts` | MoonLeaf 合格渲染器镜像 + 授权字体 + 逐页视觉基线 | **MoonLeaf 侧 + 组织授权** |
+| `SpreadsheetFormulaEngine` | XLSX 公式重算实现 | 开发 |
+| `ApprovedLegalTemplates` | 中英双语模板对 + 具名法务负责人 | 法务 |
+| `OoxmlWorker` | 把 worker 打进镜像并钉摘要、补 Job 需要的 secret、有东西触发它 | 开发 + 运维 |
+
+#### 复核方式
+
+```sh
+# 生成（换 --issued-unix-ms 与 --validity-ms 可控制窗口，最大 31 天）
+moon run cmd/offline-readiness --target native -- \
+  --input deploy/offline-readiness/capabilities.json \
+  --output /tmp/readiness.json \
+  --secret "$LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET"
+
+# 发布（控制面从挂载的 secret 读）
+kubectl -n lunanexa create secret generic lunanexa-offline-commerce-readiness \
+  --from-file=readiness.json=/tmp/readiness.json --dry-run=client -o yaml | kubectl apply -f -
+
+# 看结果
+curl -s "$CONTROL/v1/offline-commerce/operator/readiness" -H "Authorization: Bearer $OP" | python3 -m json.tool
+```
+
+`deploy/offline-readiness/README.md` 记着每一项为什么是 true/false，以及缺什么；
+`deploy/offline-readiness/capabilities.json` 是签名的输入，**故意入仓** ——
+一份背书应该能在 git 里被复核，而不是只活在集群的 secret 里。
+
+测试：`moon test --target native --deny-warn` **946/946**
+（在这个提交之前是**编译不过**）；`moon check --target native --deny-warn` 干净；
+`commercial/offline` js 检查通过；`ui/offline_commerce` + `cmd/console` + `cmd/enterprise` js 105/105。
