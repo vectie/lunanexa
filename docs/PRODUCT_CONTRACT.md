@@ -1,5 +1,34 @@
 # LunaNexa product contract
 
+## Exclusive delivery revision — 2026-09-23
+
+[`EXCLUSIVE_NODE_DELIVERY.md`](EXCLUSIVE_NODE_DELIVERY.md) supersedes the legacy
+single-node order, immediate cache eviction and management-only workspace
+placement rules below for the new exclusive delivery path. Existing bare-metal
+directives and shared management-host workspaces remain compatibility paths;
+they are not evidence that the new path is deployed.
+
+An authorized delivery binds tenant, organization, authorization/order, lease
+and an atomically reserved set of whole nodes. Other tenants and shared platform
+inference cannot occupy that set. The same tenant may run approved application
+and model containers within its allocation and capacity budget. Necessary node
+agents and monitoring remain platform-owned. IaaS grants container access, not
+host root; PaaS grants an application workspace; MaaS grants an API. Legacy
+bare-metal access is a separately selected delivery, not silently replaced.
+
+Customer containers belong to an exclusive customer execution domain, not the
+shared managed-inference domain. Product-specific application behavior stays in
+opaque runtime images and published client contracts; LunaNexa does not acquire
+MoonSuite source dependencies, agent logic or application credentials. User
+volumes are separate from immutable approved public model caches. API-only
+model licenses never authorize mounting weights into customer containers.
+
+Private-cloud administrator grants, public trial grants and commercial orders
+remain distinct admission authorities. None is synthesized from registration
+or a delivery request. Stopping an instance retains user data according to its
+published policy and does not automatically evict public weights. Node release
+follows confirmed workload termination and cleanup, not merely lease expiry.
+
 ## 1. Purpose
 
 LunaNexa turns an explicitly inventoried accelerator fleet into a governed

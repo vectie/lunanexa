@@ -26,6 +26,14 @@ flowchart LR
 
 ## Product boundary
 
+The new delivery target is specified in
+[exclusive-node delivery](docs/EXCLUSIVE_NODE_DELIVERY.md). Its minimum resource
+unit is a whole accelerator node, with atomic multi-node reservations. Default
+IaaS means an exclusive GPU container, not host administration; PaaS and MaaS
+use the same customer resource allocation. The legacy bare-metal path remains
+available separately. This is an implementation target, not a claim that the
+deployed cluster already passes its acceptance scenarios.
+
 LunaNexa owns:
 
 - node inventory, health and capacity;
@@ -91,10 +99,10 @@ default, and retained only when an explicit policy permits it.
   Prometheus-compatible telemetry rather than new Luna products.
 
 The initial production profile deliberately has no batch-job subsystem and no
-autoscaling. One exclusive lease names exactly one subject and one explicitly
-selected compute node; the management plane copies only the assigned model to
-that node through a short-lived, assignment-bound download and leaves other
-node caches alone.
+autoscaling. The legacy host-access directive names one subject and one node;
+it does not limit an order to one node. The new delivery reservation owns the
+whole selected node set. Assigned nodes prepare only the required approved
+models, while verified idle public caches follow a separate retention policy.
 
 ## Local validation
 
