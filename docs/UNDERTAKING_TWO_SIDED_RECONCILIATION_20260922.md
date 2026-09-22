@@ -2115,6 +2115,7 @@ offline-order-0f50a176-… · week × 1
 | 操作员能不能**事先**看到这条流水线没就绪 | ⚠️ 部分能：Overview 的 `Production acceptance gate` 卡片里列了 "Offline commerce pipeline · Action required"，但那张卡片**没有链接/按钮可以展开**，看不到具体缺哪几项 |
 | 企业侧在被挡住时说了什么 | ✅ 说得很对：指出应由甲方确认固定档位报价；没有假造出可选的订单 |
 | 企业侧那条路线选择器 | ✅ 正确：承诺函可选，传统合同显示为 `Traditional rental contract · bilateral execution (temporarily unavailable)` 且不可选（§11.6 的开关生效） |
+| 管理侧 `Contract documents` 页在被挡住时说了什么 | ✅ 干净：`TASK INBOX 0/0/0` + **"No contract task is waiting for you."**，`OPERATING VIEW` 全 0，资料包区写 **"No contract packet yet — A packet is created from an approved order; no blank or invented contract is generated."**（与客户侧同一句）。**没有死按钮**：没东西可点，也说明了为什么 |
 | 价目是否与 §10 一致 | ✅ 下拉选项原文：`1 day · 49 / 7 days · 322 / 30 days · 1290 / 90 days · 3600 / 365 days · 13870` |
 
 ### 12.6 企业侧其实有**两条**租赁路径，只有一条是承诺函
@@ -2317,3 +2318,35 @@ Approved models: 17 · Previous connections: 0 · Access remains lease-bound
 **部署上没有"没有试用的账号"可做对照**，所以无法区分是
 （a）授权包对客户视图确实没有影响，还是（b）有影响但被试用权益盖住了。
 要判死这一点，需要一个**不带试用**的账号做第三个对照。
+
+### 12.12 要解锁第 3–6 步，具体需要做什么（可执行清单）
+
+这不是代码问题，是**运维/法务/财务要真实证明的东西**。`docs/OFFLINE_COMMERCE.md` 的
+Production readiness gates 一节列了十项，和 §12.4 里那 17 条 blocker code 一一对应：
+
+| blocker code | 需要先真实具备的东西 |
+|---|---|
+| `ApprovedLegalTemplatesPending` | 已批准的中英双语法律 DOCX 模板 + 不可变哈希 + 具名法务负责人 |
+| `ObjectStoragePending` | S3 兼容对象存储：租户隔离前缀、保留策略、版本、加密、短时 multipart 上传授权 |
+| `MalwareScannerPending` | 恶意/主动内容扫描，带签名回调与 ZIP 炸弹上限 |
+| `OoxmlWorkerPending` | 管理面文档 worker，固定镜像摘要 + 只读模板挂载 |
+| `MoonLeafPdfRendererPending` | 确定性的 MoonLeaf DOCX→PDF 渲染 + **逐页图像视觉回归基线** |
+| `SpreadsheetFormulaEnginePending` | XLSX 公式重算、错误扫描、渲染页检查 |
+| `CjkFontsPending` | 随渲染器一起保留的中文生产字体证明 |
+| `MachineCallbackIdentityPending` | 与人类运维权限**分离**的 mTLS 或签名回调身份 |
+| `EntitlementAuthorityPending` | 权限授予/撤销的授权方（回调身份 + token） |
+| `FinanceLegalPolicyPending` | 已批准的履约政策：先票/后票、退款、作废、取消、到期、权限撤销 |
+| `ReadinessTransferAdapterUnavailable` | 传输适配器三元组（endpoint / token / session secret ≥32 字节） |
+| `ReadinessEvidenceExpired` + `ReadinessCapabilitySetInvalid` | 一份**签名**就绪文档：schema `lunanexa.offline-commerce-readiness.v1`、签发/失效窗口 ≤31 天、每个能力恰好一条、`evidence_ref` 唯一，用 HMAC-SHA256 签名 |
+| `ReadinessArtifactDispatcherHeartbeatStale` / `…SuccessStale` | artifact dispatcher 真的在轮询受保护的工作路由，并留下近期心跳与成功回执 |
+| `ReadinessEntitlementDispatcherHeartbeatStale` / `…SuccessStale` | entitlement dispatcher 同上 |
+
+然后把 `LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH` 与 `…_SECRET` 挂到控制面容器上
+（**当前全集群没有任何 Pod 挂这两个变量**，Secret 内容就是字面量 `pending`）。
+
+另外文档还要求两项**演练**才算完：`offline_commerce` 快照与不可变审计链的备份/恢复，
+以及一次**跨角色 UI-to-UI 演练**（法务、财务、采购方、复核人、运维）+ 一次线下实物履约演练。
+
+在这之前，文档的原话是：**"the platform may demonstrate state transitions locally but must not
+represent the generated packet or uploaded evidence as legally executed or financially settled."**
+—— 也就是说，本报告没有把任何东西说成"已合法签署/已结算"，第 3–6 步保持"不可达"是**正确的状态**。
