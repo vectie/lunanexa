@@ -1,0 +1,69 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn remote(target : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "ssh",
+    ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", target, "docker"] + args,
+  ).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, backup] else {
+    fail(
+      "Usage on management: pause-glm-for-acceptance.mbtx NEW_PRIVATE_BACKUP_DIRECTORY",
+    )
+  }
+  @fs.mkdir(backup, permission=0o700)
+  let targets = [
+    ("wlc003s@192.168.2.178", "glm53-exl3-head"),
+    ("wlc004s@192.168.2.179", "glm53-exl3-worker"),
+  ]
+  let containers : Array[(String, String, String)] = []
+  for (target, name) in targets {
+    let source = remote(target, ["inspect", name])
+    guard @json.parse(source)
+      is Array(
+        [
+          {
+            "Id": String(id),
+            "Name": String(actual),
+            "Config": { "Image": String(image), .. },
+            ..
+          },
+        ]
+      ) &&
+      actual == "/" + name &&
+      id.length() == 64 &&
+      id.iter().all(c => c is ('0'..='9' | 'a'..='f')) &&
+      image.contains("glm-5.3-flash-2x-dgx-sparks") else {
+      fail("expected the named GLM service container")
+    }
+    // Full inspection may contain environment credentials; keep it private and
+    // never emit it to logs. Retain containers and volumes for docker start.
+    @fs.write_file(
+      backup + "/" + name + ".json",
+      source,
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    containers.push((target, name, id))
+  }
+  for (target, name, id) in containers {
+    ignore(remote(target, ["stop", "--time=60", id]))
+    println(name + ": stopped; container and volumes retained")
+  }
+  println(
+    "Restore the same head/worker containers with docker start using their saved IDs. NFS and all other containers were untouched.",
+  )
+}
