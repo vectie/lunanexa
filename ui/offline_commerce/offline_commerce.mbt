@@ -945,11 +945,20 @@ fn customer_actions(
     actions.push(
       @html.p(
         class="offline-action-note",
-        copy(
-          state.locale,
-          "No customer action is required at this stage. We will notify you when the next step is ready.",
-          "当前阶段无需客户操作。下一步可办理时，我们会通知您。",
-        ),
+        match order.state {
+          Revoked | Expired | Cancelled | Rejected =>
+            copy(
+              state.locale,
+              "This order has ended and will not open access automatically. Review its status above; submit a new request or contact your administrator if access is still needed.",
+              "此订单已结束，不会自动开通权限。请查看上方状态；如仍需使用，请重新申请或联系管理员。",
+            )
+          _ =>
+            copy(
+              state.locale,
+              "No customer action is required at this stage. We will notify you when the next step is ready.",
+              "当前阶段无需客户操作。下一步可办理时，我们会通知您。",
+            )
+        },
       ),
     )
   }

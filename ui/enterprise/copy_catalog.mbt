@@ -1032,7 +1032,8 @@ fn enterprise_copy(
       )
     YourOperatorNeedsToEnableThe =>
       @i18n.copy(
-        locale, "Your operator needs to enable the prepared workspace lease.", "需要运维人员启用已准备的工作区租约。",
+        locale, "No active workspace access. Check Orders & Materials for expiry or revocation, or contact your administrator.",
+        "当前没有有效的工作区权限。请在“订单与材料”查看到期或撤销状态，或联系管理员。",
       )
     YourOperatorNeedsToApproveAt =>
       @i18n.copy(
@@ -1095,7 +1096,7 @@ fn enterprise_copy(
       )
     WaitingForOperatorEnablement =>
       @i18n.copy(
-        locale, "Waiting for operator enablement.", "等待运维人员启用。",
+        locale, "No active access: not yet enabled, expired, or revoked.", "无有效权限：尚未开通、已到期或已撤销。",
       )
     ApprovedModels => @i18n.copy(locale, "Approved models", "已批准模型")
     NoModelAliasIsReadyYet =>

@@ -50,6 +50,29 @@ fn evidence() -> @offline_commerce.OfflineArtifactSummary {
 }
 
 ///|
+test "terminal customer orders do not promise a future activation notification" {
+  for
+    status in [
+      @offline.OfflineOrderState::Revoked,
+      Expired,
+      Cancelled,
+      Rejected,
+    ] {
+    let rendered = @offline_commerce.render({
+      ..@offline_commerce.default_state(ChineseSimplified, CustomerCommerce),
+      orders: [offline_order(status)],
+      selected_order_id: Some("order-2026-001"),
+    })
+    assert_true(
+      rendered.contains("此订单已结束，不会自动开通权限"),
+    )
+    assert_false(
+      rendered.contains("下一步可办理时，我们会通知您"),
+    )
+  }
+}
+
+///|
 test "customer workflow is clear bilingual and hides internal object authority" {
   let english = @offline_commerce.render({
     ..@offline_commerce.default_state(English, CustomerCommerce),
