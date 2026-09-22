@@ -23,6 +23,8 @@ docs/IMAGE_BUILD_AND_DEPLOY_SOP.md section 5.1:
     in some archives and then look like non-binary files.
 """
 
+import argparse
+import gzip
 import hashlib
 import io
 import json

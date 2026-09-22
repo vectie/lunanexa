@@ -14,12 +14,20 @@
 ///   `LUNANEXA_OIDC_ADMIN_ORIGIN` unset, `/auth/register` answers 503 and
 ///   customer accounts must be created by an administrator.
 /// * Whether a new account starts with the realm's default required actions.
-///   A direct-grant login cannot complete an interactive action, and the realm
-///   marks `CONFIGURE_TOTP` as a default action, so an account created here
-///   starts with none. That is a deliberate, reversible relaxation of the
-///   realm's default posture -- the route is only reachable while the browser
-///   paths are still plain HTTP -- and removing `requiredActions` from the
-///   body below restores the realm's own behaviour.
+///   A direct-grant login cannot complete an interactive action, so the body
+///   below asks for none -- and this deployment's realm no longer marks
+///   `CONFIGURE_TOTP` as a default action, because a default action applied by
+///   the realm would override that empty list and leave every new customer
+///   unable to sign in ("Account is not fully set up"). Both halves are needed:
+///   the empty list for the account, the cleared default for the realm.
+///
+/// The admin origin must be an origin this gateway is allowed to reach. In this
+/// deployment the provider's own pods accept connections from nothing but their
+/// edges, so `LUNANEXA_OIDC_ADMIN_ORIGIN` is the same identity internal edge
+/// `LUNANEXA_OIDC_TRANSPORT_ORIGIN` names, extended there with a
+/// `POST`-only `/admin/realms/<realm>/users` location. Pointing it straight at
+/// the provider's service name does not fail at startup; it fails at the first
+/// registration with a refused connection.
 priv suberror RegistrationError {
   EmailTaken
   PasswordRejected
@@ -49,6 +57,16 @@ priv struct AdminTokenResponse {
   access_token : String
   token_type : String
 } derive(FromJson)
+
+///|
+/// One line naming the stage that refused a registration. The provider's own
+/// text is not repeated here -- only the stage and a status or short reason --
+/// because this line is the operator's only view into a route the customer
+/// cannot inspect. It goes to stderr: this process buffers stdout, so a line
+/// written there can sit unread for as long as the buffer takes to fill.
+fn registration_stage_failed(stage : String, detail : String) -> Unit {
+  eprintln("[identity-gateway] customer registration failed at \{stage}: \{detail}")
+}
 
 ///|
 /// A registration failure the browser is allowed to distinguish.
@@ -146,13 +164,17 @@ async fn registration_admin_token(
 ) -> String raise RegistrationError {
   guard config.registration_client_id is Some(client_id) &&
     config.registration_client_secret is Some(secret) else {
+    registration_stage_failed("admin-token", "the service account is not configured")
     raise RegistrationError::RegistrationUnavailable
   }
   let url = registration_endpoint(
     config,
     "/realms/\{realm}/protocol/openid-connect/token",
   ) catch {
-    _ => raise RegistrationError::RegistrationUnavailable
+    error => {
+      registration_stage_failed("admin-token-endpoint", error.to_string())
+      raise RegistrationError::RegistrationUnavailable
+    }
   }
   let (response, body) = registration_post(
     config,
@@ -161,17 +183,27 @@ async fn registration_admin_token(
     basic_authorization(client_id, secret),
     "application/x-www-form-urlencoded",
   ) catch {
-    _ => raise RegistrationError::RegistrationUnavailable
+    error => {
+      registration_stage_failed("admin-token-transport", error.to_string())
+      raise RegistrationError::RegistrationUnavailable
+    }
   }
   guard response.code == 200 else {
+    registration_stage_failed(
+      "admin-token-status", "HTTP \{response.code}",
+    )
     raise RegistrationError::RegistrationUnavailable
   }
   let token : AdminTokenResponse = @json.from_json(@json.parse(body)) catch {
-    _ => raise RegistrationError::RegistrationUnavailable
+    error => {
+      registration_stage_failed("admin-token-body", error.to_string())
+      raise RegistrationError::RegistrationUnavailable
+    }
   }
   guard token.token_type.to_lower() == "bearer" &&
     token.access_token.length() >= 32 &&
     token.access_token.length() <= 8192 else {
+    registration_stage_failed("admin-token-shape", token.token_type)
     raise RegistrationError::RegistrationUnavailable
   }
   token.access_token
@@ -231,7 +263,10 @@ async fn registration_create_user(
   request : RegistrationRequest,
 ) -> Unit raise RegistrationError {
   let url = registration_endpoint(config, "/admin/realms/\{realm}/users") catch {
-    _ => raise RegistrationError::RegistrationUnavailable
+    error => {
+      registration_stage_failed("create-user-endpoint", error.to_string())
+      raise RegistrationError::RegistrationUnavailable
+    }
   }
   let (response, _) = registration_post(
     config,
@@ -240,9 +275,13 @@ async fn registration_create_user(
     "Bearer \{admin_token}",
     "application/json",
   ) catch {
-    _ => raise RegistrationError::RegistrationUnavailable
+    error => {
+      registration_stage_failed("create-user-transport", error.to_string())
+      raise RegistrationError::RegistrationUnavailable
+    }
   }
   guard response.code == 201 else {
+    registration_stage_failed("create-user-status", "HTTP \{response.code}")
     raise registration_create_failure(response.code)
   }
 }
@@ -282,6 +321,9 @@ async fn handle_registration(
     return send_error(connection, 403, "registration-origin-rejected")
   }
   if config.registration_admin_origin is None {
+    registration_stage_failed(
+      "configuration", "no LUNANEXA_OIDC_ADMIN_ORIGIN in this process",
+    )
     return send_error(connection, 503, "registration-unavailable")
   }
   let now = @async.now()
@@ -304,8 +346,13 @@ async fn handle_registration(
     return send_error(connection, 400, "invalid-registration-audience")
   }
   let realm = configured_realm(config.issuer) catch {
-    _ => return send_error(connection, 503, "registration-unavailable")
+    error => {
+      registration_stage_failed("realm", error.to_string())
+      return send_error(connection, 503, "registration-unavailable")
+    }
   }
+  // Each step logs its own stage before it raises, so this catch only has to
+  // keep the route's single browser-facing code.
   let admin_token = registration_admin_token(config, realm) catch {
     _ => return send_error(connection, 503, "registration-unavailable")
   }
