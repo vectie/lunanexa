@@ -22,7 +22,7 @@ fn digest(value : String) -> String {
 
 ///|
 pub fn identity_subject_digest(issuer : String, subject : String) -> String {
-  digest("lunanexa.external-identity.v1\n\{issuer}\n\{subject}")
+  @identity.subject_digest(issuer, subject)
 }
 
 ///|
@@ -745,7 +745,9 @@ pub async fn AccountStore::register_with_invitation(
   let external_digest = identity_subject_digest(
     identity_issuer, identity_subject,
   )
-  let fingerprint = external_digest[7:31].to_owned()
+  let fingerprint = @identity.subject_fingerprint(
+    identity_issuer, identity_subject,
+  )
   let account_id = "account-\{fingerprint}"
   let subject_ref = "subject-\{fingerprint}"
   let result = {
@@ -868,7 +870,9 @@ pub async fn AccountStore::register_open(
   let external_digest = identity_subject_digest(
     identity_issuer, identity_subject,
   )
-  let fingerprint = external_digest[7:31].to_owned()
+  let fingerprint = @identity.subject_fingerprint(
+    identity_issuer, identity_subject,
+  )
   let account_id = "account-\{fingerprint}"
   let account = match
     self.views().iter().find_first(value => value.account_id == account_id) {

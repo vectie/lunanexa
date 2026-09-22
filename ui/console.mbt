@@ -4339,6 +4339,47 @@ fn access_package_card(
 }
 
 ///|
+/// The account reference an operator should see before pasting a raw provider
+/// subject. LunaNexa never shows the raw subject anywhere -- every surface
+/// (account rows, membership rows, the users table) shows only the derived
+/// `subject-…` reference -- so without this preview the field is a blind paste
+/// and the operator cannot tell whether the UUID they copied belongs to the
+/// person whose row they were reading.
+///
+/// The hash is taken over the field exactly as it will be submitted, spaces
+/// included, so a stray paste shows up as a reference that does not match the
+/// account row instead of being silently normalised away here.
+fn access_identity_reference(
+  state : ConsoleState,
+  issuer : String,
+  subject : String,
+  help_id : String,
+) -> @rabbita.Html {
+  if issuer.trim() == "" || subject.trim() == "" {
+    return @html.p(
+      id=help_id,
+      class="field-help",
+      localized(
+        state.locale,
+        "Paste the provider's own subject (the id the provider issued), not the derived reference. LunaNexa derives the account reference below; nothing leaves the browser until you submit.",
+        "请粘贴提供商自己签发的原始主体，而不是派生引用。LunaNexa 会在下方派生账户引用；提交前不会发送任何内容。",
+      ),
+    )
+  }
+  let reference = @identity.subject_reference(issuer, subject)
+  let account_id = @identity.account_identifier(issuer, subject)
+  @html.p(
+    id=help_id,
+    class="field-help",
+    localized(
+      state.locale,
+      "Derives \{reference} · \{account_id} — check it against the Subject column below before you submit.",
+      "将派生为 \{reference} · \{account_id} —— 提交前请与下方「主体」列核对。",
+    ),
+  )
+}
+
+///|
 fn users_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -4648,9 +4689,18 @@ fn users_view(
                 value=state.access_package_draft.identity_subject,
                 maxlength=1024,
                 auto_complete=Off,
+                attrs=@html.Attrs::build().aria_describedby(
+                  "access-provider-subject-help",
+                ),
                 on_input=text_command(emit, value => {
                   AccessPackageSubjectChanged(value)
                 }),
+              ),
+              access_identity_reference(
+                state,
+                state.access_package_draft.identity_issuer,
+                state.access_package_draft.identity_subject,
+                "access-provider-subject-help",
               ),
             ]),
           ]),
@@ -4867,14 +4917,11 @@ fn users_view(
                 AccountInviteProviderSubjectChanged(value)
               }),
             ),
-            @html.p(
-              id="account-provider-subject-help",
-              class="field-help",
-              localized(
-                state.locale,
-                "Submitted once for hashing; neither the provider subject nor its digest appears in account views.",
-                "仅提交一次以生成哈希；账户视图不会显示提供商主体或其摘要。",
-              ),
+            access_identity_reference(
+              state,
+              state.account_invite.identity_issuer,
+              state.account_invite.identity_subject,
+              "account-provider-subject-help",
             ),
           ]),
           @html.div(class="field-group", [

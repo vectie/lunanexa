@@ -35,8 +35,7 @@ fn webide_access_package_fingerprint(
   issuer : String,
   subject : String,
 ) -> String {
-  let digest = @account.identity_subject_digest(issuer, subject)
-  digest[7:31].to_owned()
+  @identity.subject_fingerprint(issuer, subject)
 }
 
 ///|
