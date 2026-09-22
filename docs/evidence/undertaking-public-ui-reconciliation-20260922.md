@@ -199,9 +199,35 @@ These tests do not establish completion of the nine-step public UI journey.
     waiver through UI, retaining non-commercial provenance and limited authority.
     Real commercial submissions must continue requiring actual evidence.
 
+26. Enterprise `下载已验证 PDF` initially failed. Diagnostic correlation showed
+    the download grant was created (201), but the subsequent transfer GET went
+    to the controller and returned 404. Repaired both public proxy listeners to
+    forward only GET/PUT transfer paths to the transfer service. Kept per-transfer
+    bearer checks, upstream TLS verification and private configuration backups.
+    Repeated the same UI button: `已下载并校验文档` for the packet's PDF. Repeated
+    `下载已验证 DOCX`: the same verified-download success for its DOCX.
+27. Operator's frozen revision-6 preview failed because the frontend replayed
+    stale editable fields into a read-only preview request. Added a regression
+    across six frozen states; contract UI tests 30/30 pass. Deployed web r9
+    `sha256:dd4777f0c7b8e3fd6b5e84c41011b86974b15e5fac43515d24425720582563a7`.
+    Operator reload → `合同资料` → selected the exact test tenant: same packet,
+    revision 6, `预览已自动同步`, all four page containers present. This proves
+    preview and verified transfer, not that the unsigned PDF is legally executed.
+28. User explicitly approved extending the technical waiver to this exact order
+    ending `b0cc` for limited IaaS/PaaS/MaaS acceptance, retaining isolation and
+    expiry and classifying it as unsigned/unpaid/non-commercial. This approval
+    does not mark a waiver as recorded in the live order; its UI action and
+    actual resource provisioning are still pending.
+29. Operator `用户与访问权限`: test account is active; the company access package
+    is `AttentionRequired`, with workspace/model and WebIDE still incomplete.
+    The current operator UI reports static-token fallback, not a personal
+    operator session. The access form only offered 7/30/90 days, incompatible
+    with the one-hour acceptance limit. Both findings remain explicit gates;
+    no longer grant was issued and no proxy token was impersonated as a person.
+
 ## Outstanding acceptance work
 
-- Verify both-side generated file downloads and final PDF contents.
+- Verify final downloaded PDF contents and the management-side download.
 - Add/use an explicit UI technical-waiver path, then test submission, management
   decision, entitlement provisioning and customer launch without forged evidence.
 - Verify fresh real organization identity provider separately from technical

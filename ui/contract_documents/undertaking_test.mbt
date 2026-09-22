@@ -221,3 +221,36 @@ test "both rental routes are listed and the contract route stays disabled while 
   assert_false(html.contains("传统租赁合同 · 双方签署</option>"))
   assert_false(@contract_documents.traditional_contract_route_available)
 }
+
+///|
+test "frozen previews never replay stale role drafts" {
+  let manifest = @contractdoc.undertaking_manifest()
+  let states : Array[@contractdoc.ContractPacketState] = [
+    GenerationRequested,
+    Generated,
+    GenerationFailed,
+    Effective,
+    Closed,
+    Superseded,
+  ]
+  for lifecycle in states {
+    let packet = undertaking_packet(lifecycle)
+    let state = {
+      ..@contract_documents.default_state(ChineseSimplified),
+      manifest: Some(manifest),
+      actor_owner: ManagerOperator,
+      packets: [packet],
+      selected_packet_id: Some(packet.packet_id),
+      selected_form: Some(MasterLease),
+      draft_values: [
+        { field_id: "lease.start_date", value: "stale-unsaved-value", },
+      ],
+    }
+    guard state.preview_request()
+      is Some(RequestPreview(_, revision, _, changes)) else {
+      fail("frozen packet should remain previewable")
+    }
+    assert_eq(revision, packet.revision)
+    assert_eq(changes.length(), 0)
+  }
+}
