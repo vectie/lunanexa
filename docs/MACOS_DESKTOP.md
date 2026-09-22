@@ -1,5 +1,35 @@
 # LunaNexa desktop apps for macOS
 
+## Private Operator auto-login profile
+
+`desktop/native` adds a MoonBit-owned Lepusa runtime for the explicitly approved
+`http://192.168.2.175:4174` Operator deployment, account `wlc`. This is an
+intentional plaintext LAN exception, not a change to Enterprise or public-browser
+authentication. Use only the trusted LAN/VPN: HTTP does not encrypt credentials.
+The app reads the password from macOS Keychain, exchanges it at `/auth/password`,
+checks live `/v1/auth/self` authority, installs the returned HttpOnly cookie in
+WebKit, then opens the centrally hosted Rabbita console. No password is shipped
+in the app, embedded into JavaScript, or exposed through a native plugin.
+
+On a different Mac, configure the password once using the native secure field.
+An unavailable network, locked/denied Keychain, rejected password or revoked
+session does not open an authorized console; a native dialog offers Retry,
+Exit and Update Password. Reopening creates a fresh session. Logout remains
+effective within the current window; reopening explicitly signs in again.
+
+The runtime module has its own workspace, referencing the sibling Lepusa
+checkout. Its tests do not change the controller or GPU-node dependencies.
+The application icon uses the existing edge-to-edge pale-blue
+`assets/platform-logo-light.png`, without the dark icon's outer white border.
+
+Build this Apple Silicon profile from the repository root with
+`moon run scripts/build-operator-macos.mbtx`. Output lives under
+`_build/macos/operator-autologin/releases/`. The DMG contains the app,
+Applications shortcut and first-launch instructions; credentials are provisioned
+on the receiving Mac, not distributed inside the image. This profile is locally
+ad-hoc signed, not Apple-notarized. Network/UI acceptance on the target LAN is
+separate from native unit tests, signature and image-integrity checks.
+
 LunaNexa ships two Mac desktop shells built with Lepusa:
 
 - **LunaNexa Operator** opens the Rabbita operator console at `/console/`.

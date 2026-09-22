@@ -1,0 +1,146 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn run(program : String, args : Array[String], cwd : String) -> Unit {
+  @shell.Cmd(program, args, cwd~, env={ "MACOSX_DEPLOYMENT_TARGET": "13.0" }).run()
+}
+
+///|
+async fn main {
+  let repo = @shell.Cmd("pwd", []).output().stdout().trim().to_owned()
+  let native = repo + "/desktop/native"
+  let arch = @shell.Cmd("uname", ["-m"]).output().stdout().trim().to_owned()
+  guard arch == "arm64" else {
+    fail("This release profile requires an Apple Silicon build host")
+  }
+  let out = repo + "/_build/macos/operator-autologin"
+  let target = out + "/target-macos-13"
+  if !@fs.exists(out) {
+    @fs.mkdir(out, recursive=true)
+  }
+  run(
+    "moon",
+    [
+      "build", "main", "../../../lepusa/cmd/main", "--target", "native", "--release",
+      "--warn-list", "-79", "--target-dir", target,
+    ],
+    native,
+  )
+  let built = target + "/native/release/build"
+  let cli = built + "/vectie/lepusa/cmd/main/main.exe"
+  let runtime = built + "/vectie/lunanexa-desktop/main/main.exe"
+  let iconset = out + "/platform.iconset"
+  if !@fs.exists(iconset) {
+    @fs.mkdir(iconset, recursive=true)
+  }
+  for size in [16, 32, 128, 256, 512] {
+    for scale in [1, 2] {
+      let pixels = size * scale
+      let suffix = if scale == 2 { "@2x" } else { "" }
+      run(
+        "/usr/bin/sips",
+        [
+          "-z",
+          pixels.to_string(),
+          pixels.to_string(),
+          repo + "/assets/platform-logo-light.png",
+          "--out",
+          "\{iconset}/icon_\{size}x\{size}\{suffix}.png",
+        ],
+        repo,
+      )
+    }
+  }
+  let icon = out + "/platform.icns"
+  run("/usr/bin/iconutil", ["-c", "icns", iconset, "-o", icon], repo)
+  let manifest = @json.parse(
+    @fs.read_file(repo + "/desktop/operator/lepusa.template.json").text(),
+  )
+  guard manifest is Object(config) &&
+    config.get("window") is Some(Object(window)) else {
+    fail("Invalid template")
+  }
+  config["version"] = Json::string("0.2.0")
+  config["icon"] = Json::string(icon)
+  window["source"] = { "url": "http://192.168.2.175:4174/console/" }
+  let project = out + "/operator.json"
+  @fs.write_file(project, manifest.stringify())
+  let staging = out + "/staging"
+  @shell.Cmd(cli, ["bundle-write", "macos", staging, "--project", project], env={
+    "LEPUSA_RUNTIME_EXECUTABLE": runtime,
+  }).run()
+  let app = staging + "/lunanexa-operator.app"
+  let plist = app + "/Contents/Info.plist"
+  run(
+    "/usr/libexec/PlistBuddy",
+    ["-c", "Set :CFBundleExecutable lepusa-runtime", plist],
+    repo,
+  )
+  run(
+    "/usr/libexec/PlistBuddy",
+    ["-c", "Add :LSMinimumSystemVersion string 13.0", plist],
+    repo,
+  )
+  // IP-address HTTP is an explicit, fixed LAN deployment choice. The WebView
+  // override applies only to web content; no general NSURLSession exception.
+  run(
+    "/usr/libexec/PlistBuddy",
+    ["-c", "Add :NSAppTransportSecurity dict", plist],
+    repo,
+  )
+  run(
+    "/usr/libexec/PlistBuddy",
+    [
+      "-c", "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true",
+      plist,
+    ],
+    repo,
+  )
+  run(
+    "/usr/libexec/PlistBuddy",
+    [
+      "-c", "Add :NSLocalNetworkUsageDescription string Connect to the LunaNexa management node on your LAN.",
+      plist,
+    ],
+    repo,
+  )
+  run(
+    "/usr/bin/codesign",
+    ["--force", "--deep", "--options", "runtime", "--sign", "-", app],
+    repo,
+  )
+  run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app], repo)
+  if !@fs.exists(staging + "/Applications") {
+    run("/bin/ln", ["-s", "/Applications", staging + "/Applications"], repo)
+  }
+  @fs.write_file(
+    staging + "/使用说明.txt",
+    "LunaNexa Operator\n\n将应用拖入 Applications。\n预设地址：http://192.168.2.175:4174\n预设用户名：wlc\n首次打开输入平台密码，之后由本机钥匙串自动登录。\n需要内网或 VPN；此版本使用 HTTP。\n此安装包为本地临时签名版本，尚未经过 Apple 公证。\n",
+  )
+  let releases = out + "/releases"
+  if !@fs.exists(releases) {
+    @fs.mkdir(releases, recursive=true)
+  }
+  let dmg = releases + "/LunaNexa-Operator-0.2.0-macos-arm64.dmg"
+  run(
+    "/usr/bin/hdiutil",
+    [
+      "create", "-ov", "-volname", "LunaNexa Operator", "-srcfolder", staging, "-format",
+      "UDZO", dmg,
+    ],
+    repo,
+  )
+  run("/usr/bin/hdiutil", ["verify", dmg], repo)
+  let checksum = @shell.Cmd("/usr/bin/shasum", ["-a", "256", dmg])
+    .output()
+    .stdout()
+  @fs.write_file(dmg + ".sha256", checksum)
+  println("Ready: " + app)
+  println("Ready: " + dmg)
+}
