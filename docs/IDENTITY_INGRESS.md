@@ -188,6 +188,26 @@ sent directly to native port 8080.
   This route exists because this deployment has no TLS yet; it depends on the
   provider having direct access grants enabled, and both should be turned off
   once TLS is in place.
+- `POST /auth/register` with `{"email":"...","display_name":"...","password":"...","audience":"enterprise"}`
+  creates a customer account on the enterprise host and then logs it in, so the
+  response is byte-for-byte what `/auth/password` returns, with status `201`.
+  The operator audience is refused with `403`; the platform's one administrator
+  account is not created from a web form. The gateway calls the provider's admin
+  API with a service-account credential held only for this purpose — the secret
+  stays in this process and the browser never learns the provider's admin
+  origin. Failures return `400 {"error":"invalid-registration-request"}` for a
+  body the gateway rejects, `409 {"error":"email-taken"}` when the address is
+  already registered, `400 {"error":"password-rejected"}` when the provider
+  refuses the password under the realm policy, and `503
+  {"error":"registration-unavailable"}` when the admin credential is not
+  configured or the provider cannot be reached. The route exists only when
+  `LUNANEXA_OIDC_ADMIN_ORIGIN` and its client id and secret are set; without
+  them it answers `503` and an administrator must create the account.
+  Two deliberate, reversible relaxations belong to the no-TLS period: the
+  account is created `emailVerified` because this deployment has no mail path,
+  and it is created with no required actions because a direct-grant login cannot
+  complete an interactive one while the realm marks `CONFIGURE_TOTP` as a
+  default action. Both are removed with the route when TLS arrives.
 - `GET /auth/session` uses the current host-specific HttpOnly gateway cookie.
   A signed-out or expired session returns `401` and no credential. On the
   first call after OIDC login, the gateway performs one signed loopback

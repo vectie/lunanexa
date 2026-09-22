@@ -23,6 +23,10 @@ test "demo one-time key walkthrough creates no authority and dismissal clears fi
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..portal, route: AccountAccess, api_key_issue_open: true, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (preview, _) = update(model, Portal(SubmitApiKeyIssue), emit)
@@ -61,6 +65,10 @@ test "enterprise demo lease submission never claims an operator mutation" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let before = model.portal.lease_requests.length()
@@ -86,6 +94,10 @@ test "enterprise contract preview is reactive and generation fenced" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -134,6 +146,10 @@ test "demo machine termination mirrors the controller cleanup transition" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (begun, _) = update(
@@ -182,6 +198,10 @@ test "demo credential redemption is explicit and never contains a secret" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (redeemed, _) = update(
@@ -230,6 +250,10 @@ test "enterprise demo renews the selected effective contract packet" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (selected, _) = update(
@@ -277,13 +301,20 @@ test "signed-out enterprise gate hides application navigation and actions" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: @enterprise_ui.default_state(1000L),
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(app_view(model, emit))
   })
-  assert_true(html.contains("Sign in or create an account"))
-  assert_true(html.contains("bounded trial when trials are enabled"))
+  // The gate is now the customer's own form; organization sign-in stays as a
+  // second option, and the development fallback stays hidden on public HTTP.
+  assert_true(html.contains("portal-login-email"))
+  assert_true(html.contains("portal-login-password"))
+  assert_true(html.contains("Register a new account"))
   assert_true(html.contains("href=\"/auth/oidc/start?audience=enterprise\""))
   assert_false(html.contains("Development credential fallback"))
   assert_false(html.contains("session_token="))
@@ -319,6 +350,10 @@ test "logout erases account key and one-time secret state and fences stale issue
         memory_ceiling_mib: Some(4096),
       }),
     },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (signed_out, _) = update(model, Logout, emit)
@@ -360,6 +395,10 @@ test "gateway bootstrap remains memory-only and generation fenced" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: @enterprise_ui.default_state(1000L),
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (started, _) = update(model, Bootstrap, emit)
@@ -403,6 +442,10 @@ test "matching browser-session expiry clears the local session" {
       ..portal,
       machine_access: { ..portal.machine_access, now_unix_ms: 500L, },
     },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (expired, _) = update(
@@ -524,6 +567,10 @@ test "enterprise demo checkout requires an explicit provider-link click" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal: { ..portal, route: Costs, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (submitted, _) = update(model, Portal(SubmitPaymentCheckout), emit)
@@ -604,6 +651,10 @@ test "authenticated users without a company reach organization self-service" {
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
     portal,
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let html = @rabbita.render_to_string(() => {
@@ -841,4 +892,177 @@ test "organization mock response keeps verification provider action and redacted
   }
   assert_true(verification.required)
   assert_eq(record.action_url, Some("https://verify.example.test/start"))
+}
+
+///|
+test "portal failures reach the refusal-specific friendly copy" {
+  let conflict = portal_failure_message(
+    @i18n.English,
+    "Unable to approve the model version: " +
+    "HTTP 409: {\"error\":{\"code\":\"RegistryRejected\",\"message\":\"model approval prerequisites were not met\"}}",
+  )
+  assert_true(conflict.contains("The resource changed"))
+  assert_true(conflict.contains("Operation"))
+  let denied = portal_failure_message(
+    @i18n.English,
+    "Unable to load your organizations: " +
+    "HTTP 403: {\"error\":{\"code\":\"PortalAccessDenied\",\"message\":\"denied\"}}",
+  )
+  assert_true(denied.contains("lacks permission"))
+  let unauthenticated = portal_failure_message(
+    @i18n.English,
+    "HTTP 401: {\"error\":{\"code\":\"Unauthenticated\"}}",
+  )
+  assert_true(
+    unauthenticated.contains("Session") ||
+    unauthenticated.contains("credential"),
+  )
+}
+
+///|
+test "an opaque debug representation cannot select friendly copy" {
+  // The regression this guards: interpolating the debug `Repr` of the error
+  // never carries the status line, so every refusal silently fell through to
+  // the generic copy instead of its own recovery guidance.
+  let debug_repr = portal_failure_message(
+    @i18n.English,
+    "Unable to approve the model version: Error(\"RegistryRejected\")",
+  )
+  assert_true(debug_repr.contains("The action failed"))
+  assert_false(debug_repr.contains("The resource changed"))
+}
+
+///|
+fn gateway_auth_test_model() -> AppModel {
+  {
+    endpoint: "https://controller.example.test",
+    token: "",
+    csrf_token: "",
+    subject_ref: "",
+    connecting: false,
+    bootstrap_started: true,
+    demo_mode: false,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    portal: @enterprise_ui.default_state(1000L),
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
+  }
+}
+
+///|
+test "the gateway's refusal codes choose the customer-facing copy" {
+  let refusal = fn(code : String, registering : Bool) -> String {
+    gateway_auth_refusal(English, {
+      status: 401,
+      body: "{\"error\":\"\{code}\"}",
+    }, registering)
+  }
+  assert_true(refusal("invalid-credentials", false).contains("not accepted"))
+  assert_true(refusal("email-taken", true).contains("already has an account"))
+  // The realm's password policy is the provider's, so the form repeats it
+  // rather than inventing its own rule.
+  assert_true(refusal("password-rejected", true).contains("12 characters"))
+  assert_true(
+    refusal("registration-unavailable", true).contains(
+      "platform administrator",
+    ),
+  )
+  assert_true(refusal("too-many-attempts", false).contains("five minutes"))
+  assert_true(refusal("identity-provider-unavailable", false).contains("unavailable"))
+  // An unrecognised code still names which action was refused.
+  assert_true(refusal("something-else", true).contains("registration"))
+  assert_true(refusal("something-else", false).contains("sign-in"))
+  assert_true(refusal("not json", false).contains("sign-in"))
+}
+
+///|
+test "the customer gate needs both fields and drops the password once it is used" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = gateway_auth_test_model()
+  // An incomplete draft cannot be submitted and does not start a connection.
+  let (unsubmitted, _) = update(
+    { ..model, login_email: "buyer@example.test" },
+    EnterpriseSignInSubmitted,
+    emit,
+  )
+  assert_false(unsubmitted.connecting)
+  // Registration additionally needs a display name.
+  let (incomplete_registration, _) = update(
+    { ..model, registering: true, login_email: "buyer@example.test", login_password: "Correct-Horse-9!" },
+    EnterpriseRegistrationSubmitted,
+    emit,
+  )
+  assert_false(incomplete_registration.connecting)
+  let (submitted, _) = update(
+    {
+      ..model,
+      login_email: "buyer@example.test",
+      login_password: "Correct-Horse-9!",
+    },
+    EnterpriseSignInSubmitted,
+    emit,
+  )
+  assert_true(submitted.connecting)
+  let (refused, _) = update(
+    submitted,
+    EnterpriseAuthRefused(
+      English, gateway_auth_refusal(English, {
+        status: 401,
+        body: "{\"error\":\"invalid-credentials\"}",
+      }, false),
+    ),
+    emit,
+  )
+  assert_false(refused.connecting)
+  // The address is kept so the customer can correct only what is wrong; the
+  // password is not.
+  assert_eq(refused.login_email, "buyer@example.test")
+  assert_eq(refused.login_password, "")
+  assert_true(refused.portal.error_message.unwrap().contains("not accepted"))
+}
+
+///|
+test "switching between sign-in and registration clears the other form's secret" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let model = {
+    ..gateway_auth_test_model(),
+    login_email: "buyer@example.test",
+    login_password: "Correct-Horse-9!",
+    portal: {
+      ..@enterprise_ui.default_state(1000L),
+      error_message: Some("stale refusal"),
+    },
+  }
+  let (registering, _) = update(model, ToggleRegistration, emit)
+  assert_true(registering.registering)
+  assert_eq(registering.login_password, "")
+  assert_eq(registering.login_email, "buyer@example.test")
+  assert_eq(registering.portal.error_message, None)
+  let (back, _) = update(registering, ToggleRegistration, emit)
+  assert_false(back.registering)
+}
+
+///|
+#warnings("-alert_unstable")
+test "the registration form asks for a display name the sign-in form does not" {
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(gateway_auth_test_model(), emit))
+  })
+  assert_true(html.contains("portal-login-email"))
+  assert_false(html.contains("portal-register-name"))
+  let registering = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(
+      app_view({ ..gateway_auth_test_model(), registering: true }, emit),
+    )
+  })
+  assert_true(registering.contains("portal-register-name"))
+  assert_true(registering.contains("Create account"))
+  // The realm's password policy is stated before the customer picks one.
+  assert_true(registering.contains("12 characters"))
 }

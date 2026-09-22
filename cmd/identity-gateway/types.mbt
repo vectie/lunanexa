@@ -53,6 +53,16 @@ priv struct GatewayConfig {
   session_idle_ms : Int64
   session_absolute_ms : Int64
   assertion_lifetime_ms : Int64
+  /// Customer self-registration. All three are present or absent together; an
+  /// absent triple means the gateway answers `/auth/register` with 503 and the
+  /// portal must ask an administrator to create the account instead.
+  ///
+  /// `registration_admin_origin` is the provider's own origin, not a browser
+  /// origin: the admin API is never reachable from the browser, and the
+  /// service account it carries can only create users.
+  registration_admin_origin : String?
+  registration_client_id : String?
+  registration_client_secret : String?
 }
 
 ///|
