@@ -170,6 +170,12 @@ fn sorted_trials(
 let completed_session_retention_ms : Int64 = 2592000000L
 
 ///|
+/// How many sessions one account may hold at once. Reaching it evicts the least
+/// recently used session; it never refuses a sign-in that just presented the
+/// account's own credential.
+const MaximumActiveSessionsPerAccount : Int = 8
+
+///|
 fn AccountStore::prune_completed_sessions_unlocked(
   self : AccountStore,
   now_unix_ms : Int64,
@@ -1083,16 +1089,37 @@ pub async fn AccountStore::issue_session(
     .any(value => value.source_assertion_sha256 == assertion_digest) {
     raise AssertionReplayed
   }
-  let active_session_count = self.sessions
-    .values()
-    .filter(session => {
-      session.account_id == account.account_id &&
+  let active_sessions : Array[BrowserSession] = []
+  for session in self.sessions.values() {
+    if session.account_id == account.account_id &&
       session.revoked_unix_ms is None &&
-      session.expires_unix_ms > now_unix_ms
+      session.expires_unix_ms > now_unix_ms {
+      active_sessions.push(session)
+    }
+  }
+  // The bound is on how many sessions may exist, not on whether the account may
+  // sign in. Whoever reaches this line has just presented the account's
+  // credential, so the least recently used session yields instead of the
+  // sign-in failing: refusing here closed every entry point at once, and the
+  // account could not reach the session list that would have freed a slot.
+  if active_sessions.length() >= MaximumActiveSessionsPerAccount {
+    active_sessions.sort_by((left, right) => {
+      if left.last_used_unix_ms != right.last_used_unix_ms {
+        (left.last_used_unix_ms - right.last_used_unix_ms).to_int()
+      } else {
+        (left.created_unix_ms - right.created_unix_ms).to_int()
+      }
     })
-    .count()
-  if active_session_count >= 8 {
-    raise InvalidInput("account active-session limit is reached")
+    for
+      index = 0
+      index <= active_sessions.length() - MaximumActiveSessionsPerAccount
+      index = index + 1 {
+      let stale = active_sessions[index]
+      self.sessions[stale.session_id] = {
+        ..stale,
+        revoked_unix_ms: Some(now_unix_ms),
+      }
+    }
   }
   let ordinal = self.sessions.length()
   let material = self.session_material(account.account_id, now_unix_ms, ordinal)
