@@ -1,5 +1,7 @@
 import {
+  "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/json",
+  "moonbitlang/x/crypto",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/contracts",
 }

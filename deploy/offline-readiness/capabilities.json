@@ -1,0 +1,64 @@
+{
+  "capabilities": [
+    {
+      "capability": "ApprovedLegalTemplates",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "ObjectStorage",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "MalwareScanner",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "OoxmlWorker",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "PdfRenderer",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "SpreadsheetFormulaEngine",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "CjkFonts",
+      "configured": false,
+      "verified": false,
+      "evidence_ref": null
+    },
+    {
+      "capability": "MachineCallbackIdentity",
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "lunanexa-control-credentials/callback-identities-20260922-3x64B-distinct-from-human"
+    },
+    {
+      "capability": "EntitlementAuthority",
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "lunanexa-control-credentials/entitlement-authority-callback-token-20260922-64B"
+    },
+    {
+      "capability": "FinanceLegalPolicy",
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "operator-approval/wlc-20260922-hybrid-offline-policy-invoice-before-fulfillment"
+    }
+  ]
+}

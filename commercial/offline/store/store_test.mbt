@@ -99,6 +99,7 @@ fn order(
     agreement_ref: Some("agreement-a"),
     artifact_ids: [],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state: Draft,
     generation: 1L,
     created_unix_ms: 1000L,
