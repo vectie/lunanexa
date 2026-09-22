@@ -19,6 +19,10 @@ test "failed contract operation clears loading so a corrected submission can ret
         loading: true,
       },
     },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let (failed, _) = update(

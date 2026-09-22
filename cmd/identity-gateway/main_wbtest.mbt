@@ -103,6 +103,9 @@ test "OIDC transport override preserves the public issuer path" {
     session_idle_ms: 1800000L,
     session_absolute_ms: 28800000L,
     assertion_lifetime_ms: 30000L,
+    registration_admin_origin: None,
+    registration_client_id: None,
+    registration_client_secret: None,
   }
   assert_eq(
     oidc_transport_url(

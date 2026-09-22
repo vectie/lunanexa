@@ -107,6 +107,9 @@ fn load_config() -> GatewayConfig raise {
       session_idle_ms: 0L,
       session_absolute_ms: 0L,
       assertion_lifetime_ms: 0L,
+      registration_admin_origin: None,
+      registration_client_id: None,
+      registration_client_secret: None,
     }
   }
   let issuer = required_environment("LUNANEXA_OIDC_ISSUER_URL")
@@ -220,6 +223,46 @@ fn load_config() -> GatewayConfig raise {
   guard assertion_lifetime_ms <= 30000L else {
     raise Failure("identity assertion lifetime exceeds 30 seconds")
   }
+  // Customer self-registration is optional: a deployment that does not want the
+  // gateway to hold any provider-admin credential simply leaves these unset.
+  let registration_admin_origin = optional_environment(
+    "LUNANEXA_OIDC_ADMIN_ORIGIN",
+  )
+  let registration_client_id = optional_environment(
+    "LUNANEXA_OIDC_REALM_REGISTRATION_CLIENT_ID",
+  )
+  let registration_client_secret = optional_environment(
+    "LUNANEXA_OIDC_REALM_REGISTRATION_CLIENT_SECRET",
+  )
+  match registration_admin_origin {
+    Some(origin) => {
+      guard registration_client_id is Some(client_id) &&
+        registration_client_secret is Some(secret) else {
+        raise Failure(
+          "LUNANEXA_OIDC_ADMIN_ORIGIN requires the registration client id and secret",
+        )
+      }
+      validate_https_origin(origin, "LUNANEXA_OIDC_ADMIN_ORIGIN")
+      guard !origin[8:].contains("/") else {
+        raise Failure("OIDC admin origin must not include a path")
+      }
+      guard secret.length() >= 32 &&
+        client_id != operator_client_id &&
+        client_id != enterprise_client_id else {
+        raise Failure(
+          "the registration client must be distinct and its secret at least 32 bytes",
+        )
+      }
+    }
+    None => {
+      guard registration_client_id is None &&
+        registration_client_secret is None else {
+        raise Failure(
+          "the registration client id and secret require LUNANEXA_OIDC_ADMIN_ORIGIN",
+        )
+      }
+    }
+  }
   {
     mode,
     listen_address,
@@ -254,7 +297,37 @@ fn load_config() -> GatewayConfig raise {
     ) *
     1000L,
     assertion_lifetime_ms,
+    registration_admin_origin,
+    registration_client_id,
+    registration_client_secret,
   }
+}
+
+///|
+/// The provider realm the gateway serves, read from the configured issuer. The
+/// admin API is addressed by realm, so the same realm the browser logs in to is
+/// the realm self-registration creates accounts in -- there is no second
+/// setting that could disagree.
+fn configured_realm(issuer : String) -> String raise {
+  guard issuer.find("/realms/") is Some(index) else {
+    raise Failure("OIDC issuer does not name a realm")
+  }
+  let realm = issuer[index + 8:].to_owned()
+  guard realm.length() > 0 &&
+    realm.length() <= 128 &&
+    !realm.contains("/") &&
+    realm
+    .iter()
+    .all(c => {
+      (c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9') ||
+      c == '-' ||
+      c == '_'
+    }) else {
+    raise Failure("OIDC issuer realm name is invalid")
+  }
+  realm
 }
 
 ///|

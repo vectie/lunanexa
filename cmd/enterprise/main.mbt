@@ -12,6 +12,13 @@ priv struct AppModel {
   machine_clock_generation : Int64
   contract_preview_generation : Int64
   portal : @enterprise_ui.EnterpriseState
+  /// The customer sign-in and registration draft. The password stays in memory
+  /// only: it is sent to the same-origin gateway and never written to a URL or
+  /// browser storage.
+  login_email : String
+  login_password : String
+  register_display_name : String
+  registering : Bool
 } derive(Eq)
 
 ///|
@@ -19,6 +26,22 @@ priv struct GatewayBrowserBootstrap {
   session_token : String
   csrf_token : String
   expires_unix_ms : Int64
+} derive(FromJson)
+
+///|
+/// What the gateway's username/password and registration routes answered. The
+/// status is kept apart from the body so a refusal can be reported without
+/// echoing anything the gateway did not deliberately send.
+priv struct GatewayAuthOutcome {
+  status : Int
+  body : String
+} derive(FromJson)
+
+///|
+/// The gateway's refusal body. Its `error` code is the only thing the browser
+/// is told, so the copy below is driven by that code and never by upstream text.
+priv struct GatewayAuthError {
+  error : String
 } derive(FromJson)
 
 ///|
@@ -351,6 +374,13 @@ priv enum AppMessage {
   EndpointChanged(String)
   TokenChanged(String)
   SubjectChanged(String)
+  LoginEmailChanged(String)
+  LoginPasswordChanged(String)
+  RegisterDisplayNameChanged(String)
+  ToggleRegistration
+  EnterpriseSignInSubmitted
+  EnterpriseRegistrationSubmitted
+  EnterpriseAuthRefused(@i18n.Locale, String)
   Connect
   Bootstrap
   BootstrapReady(Int64, GatewayBrowserBootstrap)
@@ -451,6 +481,21 @@ fn portal_copy(
   } else {
     english
   }
+}
+
+///|
+/// The portal's user-facing failure text. Every `Failed` outcome below builds its
+/// message by interpolating the transport `Show` of the error, because
+/// `friendly_failure` tells one refusal from another by looking for the status
+/// line (`HTTP 409: {"error":...}`) and the control plane's own error code. The
+/// debug `Repr` of a Rabbita error is opaque, so interpolating it instead would
+/// silently downgrade every refusal to the generic "the action failed" copy.
+fn portal_failure_message(locale : @i18n.Locale, message : String) -> String {
+  @enterprise_ui.friendly_failure(
+    locale,
+    portal_copy(locale, "Operation", "操作"),
+    message,
+  )
 }
 
 ///|
@@ -594,6 +639,52 @@ extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
   #|     redirect: "error",
   #|   });
   #|   if (!response.ok) throw new Error(`gateway logout HTTP ${response.status}`);
+  #| }
+
+///|
+/// Submit the customer's username and password to the same-origin gateway.
+/// The audience is fixed here, so the portal cannot ask the operator page's
+/// audience from a customer form. The password is read at submit time and goes
+/// straight into the request; it is never placed in a URL or browser storage.
+extern "js" fn password_login_promise(
+  username : String,
+  password : String,
+) -> @js.Promise =
+  #| async (username, password) => {
+  #|   if (!username || !password) return JSON.stringify({ status: 0, body: "" });
+  #|   const response = await fetch("/auth/password", {
+  #|     method: "POST",
+  #|     headers: { "Accept": "application/json", "Content-Type": "application/json" },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error",
+  #|     body: JSON.stringify({ username, password, audience: "enterprise" })
+  #|   });
+  #|   const text = await response.text();
+  #|   return JSON.stringify({ status: response.status, body: text.slice(0, 4096) });
+  #| }
+
+///|
+/// Ask the gateway to create the account and sign it in. Registration and
+/// sign-in answer with the same session document, so the portal treats a
+/// successful registration as a successful sign-in.
+extern "js" fn registration_promise(
+  email : String,
+  display_name : String,
+  password : String,
+) -> @js.Promise =
+  #| async (email, displayName, password) => {
+  #|   if (!email || !displayName || !password) return JSON.stringify({ status: 0, body: "" });
+  #|   const response = await fetch("/auth/register", {
+  #|     method: "POST",
+  #|     headers: { "Accept": "application/json", "Content-Type": "application/json" },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error",
+  #|     body: JSON.stringify({ email, display_name: displayName, password, audience: "enterprise" })
+  #|   });
+  #|   const text = await response.text();
+  #|   return JSON.stringify({ status: response.status, body: text.slice(0, 4096) });
   #| }
 
 ///| The raw one-time capability lives only in this browser operation. It is
@@ -751,8 +842,8 @@ fn organization_bootstrap_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to load your organizations: \{Repr(error)}",
-            "无法加载您的组织：\{Repr(error)}",
+            "Unable to load your organizations: \{error.to_string()}",
+            "无法加载您的组织：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -846,8 +937,8 @@ fn organization_create_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to create the company: \{Repr(error)}",
-            "无法创建公司：\{Repr(error)}",
+            "Unable to create the company: \{error.to_string()}",
+            "无法创建公司：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -868,8 +959,8 @@ fn organization_join_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to accept the company invitation: \{Repr(error)}",
-            "无法接受公司邀请：\{Repr(error)}",
+            "Unable to accept the company invitation: \{error.to_string()}",
+            "无法接受公司邀请：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -1123,8 +1214,8 @@ fn machine_terms_acceptance_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to record machine terms acceptance: \{Repr(error)}",
-            "无法记录机器条款接受证据：\{Repr(error)}",
+            "Unable to record machine terms acceptance: \{error.to_string()}",
+            "无法记录机器条款接受证据：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -1198,8 +1289,8 @@ fn machine_commerce_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to load machine inventory and orders: \{Repr(error)}",
-            "无法加载机器库存与订单：\{Repr(error)}",
+            "Unable to load machine inventory and orders: \{error.to_string()}",
+            "无法加载机器库存与订单：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -1275,8 +1366,8 @@ fn machine_quote_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to create the signed machine quote: \{Repr(error)}",
-            "无法创建签名机器报价：\{Repr(error)}",
+            "Unable to create the signed machine quote: \{error.to_string()}",
+            "无法创建签名机器报价：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -1328,8 +1419,8 @@ fn machine_order_create_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to create the machine order: \{Repr(error)}",
-            "无法创建机器订单：\{Repr(error)}",
+            "Unable to create the machine order: \{error.to_string()}",
+            "无法创建机器订单：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -1383,13 +1474,13 @@ fn machine_order_action_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to \{action} the machine order: \{Repr(error)}",
+            "Unable to \{action} the machine order: \{error.to_string()}",
             (if action == "cancel" {
               "无法取消机器订单："
             } else {
               "无法终止机器订单："
             }) +
-            "\{Repr(error)}",
+            "\{error.to_string()}",
           ),
         )
     } noraise {
@@ -1449,8 +1540,8 @@ fn desktop_client_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to open the desktop WebIDE: \{Repr(error)}",
-            "无法打开桌面 WebIDE：\{Repr(error)}",
+            "Unable to open the desktop WebIDE: \{error.to_string()}",
+            "无法打开桌面 WebIDE：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2228,8 +2319,8 @@ fn api_key_issue_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to create the API key: \{Repr(error)}",
-            "无法创建 API 密钥：\{Repr(error)}",
+            "Unable to create the API key: \{error.to_string()}",
+            "无法创建 API 密钥：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2267,8 +2358,8 @@ fn api_key_revoke_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to revoke the API key: \{Repr(error)}",
-            "无法撤销 API 密钥：\{Repr(error)}",
+            "Unable to revoke the API key: \{error.to_string()}",
+            "无法撤销 API 密钥：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2295,8 +2386,8 @@ fn copy_api_key_secret_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Clipboard access failed. Select and copy the secret manually: \{Repr(error)}",
-            "无法访问剪贴板。请手动选择并复制密钥：\{Repr(error)}",
+            "Clipboard access failed. Select and copy the secret manually: \{error.to_string()}",
+            "无法访问剪贴板。请手动选择并复制密钥：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2323,6 +2414,142 @@ fn bootstrap_command(
       BootstrapReady(generation, session)
     } catch {
       _ => BootstrapUnavailable(generation)
+    }
+  })
+}
+
+///|
+fn gateway_auth_error_code(body : String) -> String {
+  try {
+    (@json.from_json(@json.parse(body)) : GatewayAuthError).error
+  } catch {
+    _ => ""
+  }
+}
+
+///|
+/// Map the gateway's refusal onto customer-facing copy. The gateway collapses
+/// its own failures into a small set of codes precisely so the browser never
+/// learns more than the class of refusal.
+fn gateway_auth_refusal(
+  locale : @i18n.Locale,
+  outcome : GatewayAuthOutcome,
+  registering : Bool,
+) -> String {
+  match gateway_auth_error_code(outcome.body) {
+    "email-taken" =>
+      portal_copy(
+        locale,
+        "That address already has an account. Sign in instead, or use another address.",
+        "该邮箱已注册。请直接登录，或改用其他邮箱。",
+      )
+    "password-rejected" =>
+      portal_copy(
+        locale,
+        "The identity provider rejected this password. It must be at least 12 characters and contain an uppercase letter, a lowercase letter, a digit and a symbol, and must not contain your address or username.",
+        "身份提供商拒绝了该密码。密码至少 12 位，且需包含大写字母、小写字母、数字和符号，并且不能包含邮箱或用户名。",
+      )
+    "registration-unavailable" =>
+      portal_copy(
+        locale,
+        "Self-registration is not available on this deployment yet. Ask a platform administrator to create the account.",
+        "当前部署尚未开放自助注册。请联系平台管理员创建账户。",
+      )
+    "invalid-registration-request" =>
+      portal_copy(
+        locale,
+        "The registration form was incomplete. A valid email address, a display name and a password are all required.",
+        "注册信息不完整。邮箱、名称和密码都必须填写。",
+      )
+    "invalid-credentials" =>
+      portal_copy(
+        locale,
+        "The address or password was not accepted. Check both and try again.",
+        "邮箱或密码不正确，请检查后重试。",
+      )
+    "identity-rejected" =>
+      portal_copy(
+        locale,
+        "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
+        "登录成功，但该身份暂时不可用。请联系平台管理员启用账户。",
+      )
+    "identity-provider-unavailable" =>
+      portal_copy(
+        locale,
+        "The identity provider is unavailable. Try again shortly.",
+        "身份提供商当前不可用，请稍后重试。",
+      )
+    "too-many-attempts" =>
+      portal_copy(
+        locale,
+        "Too many failed attempts from this address. Wait five minutes and try again.",
+        "此地址的失败尝试过多，请等待五分钟后再试。",
+      )
+    _ =>
+      if registering {
+        portal_copy(
+          locale,
+          "The gateway refused the registration.",
+          "网关拒绝了本次注册。",
+        )
+      } else {
+        portal_copy(locale, "The gateway refused the sign-in.", "网关拒绝了本次登录。")
+      }
+  }
+}
+
+///|
+/// A refusal the gateway named, carried to the update loop as the copy the
+/// customer reads. Every other failure of the same call is a transport or
+/// decoding failure and reads as an unreachable gateway instead.
+priv suberror GatewayAuthFailure {
+  GatewayRefused(String)
+}
+
+///|
+/// Exchange the customer's address and password, or a new account, for a
+/// gateway session. The gateway is the only party that sees the identity
+/// provider's client secret; what comes back is the same session document the
+/// OIDC callback produces, so everything below the gate is unchanged.
+fn gateway_auth_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let generation = model.session_generation
+  let locale = model.portal.locale
+  let registering = model.registering
+  let email = model.login_email
+  let password = model.login_password
+  let display_name = model.register_display_name
+  @rabbita.perform(result => emit(result), async fn() noraise {
+    try {
+      let text : String = if registering {
+        registration_promise(email, display_name, password).wait().cast()
+      } else {
+        password_login_promise(email, password).wait().cast()
+      }
+      let outcome : GatewayAuthOutcome = @json.from_json(@json.parse(text))
+      guard outcome.status == 200 || outcome.status == 201 else {
+        raise GatewayRefused(gateway_auth_refusal(locale, outcome, registering))
+      }
+      let session : GatewayBrowserBootstrap = @json.from_json(
+        @json.parse(outcome.body),
+      )
+      if !session.session_token.has_prefix("lnxs_") ||
+        session.csrf_token == "" ||
+        session.expires_unix_ms <= current_unix_ms() {
+        raise Failure("gateway returned an invalid or expired browser session")
+      }
+      BootstrapReady(generation, session)
+    } catch {
+      GatewayRefused(message) => EnterpriseAuthRefused(locale, message)
+      _ =>
+        EnterpriseAuthRefused(
+          locale,
+          portal_copy(
+            locale, "The identity gateway could not be reached.", "无法连接身份网关。",
+          ),
+        )
     }
   })
 }
@@ -2378,8 +2605,8 @@ fn load_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to load enterprise access: \{Repr(error)}",
-            "无法加载企业访问权限：\{Repr(error)}",
+            "Unable to load enterprise access: \{error.to_string()}",
+            "无法加载企业访问权限：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2444,8 +2671,8 @@ fn offline_order_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to create the offline order: \{Repr(error)}",
-            "无法创建线上线下协同订单：\{Repr(error)}",
+            "Unable to create the offline order: \{error.to_string()}",
+            "无法创建线上线下协同订单：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2485,8 +2712,8 @@ fn offline_order_cancellation_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to cancel the order or end access: \{Repr(error)}",
-            "无法取消订单或结束访问：\{Repr(error)}",
+            "Unable to cancel the order or end access: \{error.to_string()}",
+            "无法取消订单或结束访问：\{error.to_string()}",
           ),
         )
     }
@@ -2510,8 +2737,8 @@ fn offline_upload_grant_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to create the evidence upload grant: \{Repr(error)}",
-            "无法创建凭证上传授权：\{Repr(error)}",
+            "Unable to create the evidence upload grant: \{error.to_string()}",
+            "无法创建凭证上传授权：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2533,8 +2760,8 @@ fn offline_artifact_download_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to download the verified artifact: \{Repr(error)}",
-            "无法下载已验证文件：\{Repr(error)}",
+            "Unable to download the verified artifact: \{error.to_string()}",
+            "无法下载已验证文件：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2557,8 +2784,8 @@ fn notification_read_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to update notification: \{Repr(error)}",
-            "无法更新通知：\{Repr(error)}",
+            "Unable to update notification: \{error.to_string()}",
+            "无法更新通知：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2581,8 +2808,8 @@ fn notification_preference_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to update delivery preferences: \{Repr(error)}",
-            "无法更新投递偏好：\{Repr(error)}",
+            "Unable to update delivery preferences: \{error.to_string()}",
+            "无法更新投递偏好：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2608,8 +2835,8 @@ fn machine_termination_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to terminate machine access: \{Repr(error)}",
-            "无法终止机器访问：\{Repr(error)}",
+            "Unable to terminate machine access: \{error.to_string()}",
+            "无法终止机器访问：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2632,8 +2859,8 @@ fn credential_redemption_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to redeem machine access: \{Repr(error)}",
-            "无法领取机器访问凭据：\{Repr(error)}",
+            "Unable to redeem machine access: \{error.to_string()}",
+            "无法领取机器访问凭据：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2739,8 +2966,8 @@ fn signature_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Signature request was rejected: \{Repr(error)}",
-            "签署请求被拒绝：\{Repr(error)}",
+            "Signature request was rejected: \{error.to_string()}",
+            "签署请求被拒绝：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2762,8 +2989,8 @@ fn provider_requests_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Provider status could not be refreshed: \{Repr(error)}",
-            "无法刷新服务商状态：\{Repr(error)}",
+            "Provider status could not be refreshed: \{error.to_string()}",
+            "无法刷新服务商状态：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2784,8 +3011,8 @@ fn payment_checkout_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Checkout request was rejected: \{Repr(error)}",
-            "支付请求被拒绝：\{Repr(error)}",
+            "Checkout request was rejected: \{error.to_string()}",
+            "支付请求被拒绝：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -2806,8 +3033,8 @@ fn lease_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Lease request was rejected: \{Repr(error)}",
-            "租用申请被拒绝：\{Repr(error)}",
+            "Lease request was rejected: \{error.to_string()}",
+            "租用申请被拒绝：\{error.to_string()}",
           ),
         )
     } noraise {
@@ -3237,8 +3464,8 @@ fn contract_packet_command(
       error => {
         let failure = portal_copy(
           model.portal.locale,
-          "Contract document operation failed: \{Repr(error)}",
-          "合同文件操作失败：\{Repr(error)}",
+          "Contract document operation failed: \{error.to_string()}",
+          "合同文件操作失败：\{error.to_string()}",
         )
         if message is RequestPreview(_, _, _, _) {
           ContractPreviewFailed(generation, model.portal.locale, failure)
@@ -3275,8 +3502,8 @@ fn contract_approval_nudge_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to send the approval reminder: \{Repr(error)}",
-            "无法发送审批催办：\{Repr(error)}",
+            "Unable to send the approval reminder: \{error.to_string()}",
+            "无法发送审批催办：\{error.to_string()}",
           ),
         )
     }
@@ -3392,6 +3619,71 @@ fn update(
     EndpointChanged(value) => ({ ..model, endpoint: value, }, @rabbita.none)
     TokenChanged(value) => ({ ..model, token: value, }, @rabbita.none)
     SubjectChanged(value) => ({ ..model, subject_ref: value, }, @rabbita.none)
+    LoginEmailChanged(value) => ({ ..model, login_email: value, }, @rabbita.none)
+    LoginPasswordChanged(value) =>
+      ({ ..model, login_password: value, }, @rabbita.none)
+    RegisterDisplayNameChanged(value) =>
+      ({ ..model, register_display_name: value, }, @rabbita.none)
+    ToggleRegistration => {
+      // Switching forms must not carry a half-typed password across, and it
+      // must clear whatever the previous form reported.
+      let next = {
+        ..model,
+        registering: !model.registering,
+        login_password: "",
+        portal: { ..model.portal, error_message: None, success_message: None },
+      }
+      (next, @rabbita.none)
+    }
+    EnterpriseSignInSubmitted =>
+      if model.login_email.trim() == "" || model.login_password == "" {
+        (model, @rabbita.none)
+      } else {
+        let next = {
+          ..model,
+          connecting: true,
+          portal: { ..model.portal, error_message: None, success_message: None },
+        }
+        (next, gateway_auth_command(next, emit))
+      }
+    EnterpriseRegistrationSubmitted =>
+      if model.login_email.trim() == "" ||
+        model.register_display_name.trim() == "" ||
+        model.login_password == "" {
+        (model, @rabbita.none)
+      } else {
+        let next = {
+          ..model,
+          connecting: true,
+          portal: { ..model.portal, error_message: None, success_message: None },
+        }
+        (next, gateway_auth_command(next, emit))
+      }
+    EnterpriseAuthRefused(dispatched_locale, message) =>
+      (
+        {
+          ..model,
+          connecting: false,
+          // The draft keeps the address the customer typed, but not the
+          // password: it is dropped as soon as it has been used.
+          login_password: "",
+          portal: {
+            ..model.portal,
+            error_message: Some(
+              if dispatched_locale == model.portal.locale {
+                message
+              } else {
+                portal_copy(
+                  model.portal.locale,
+                  "The identity gateway refused the request. Retry it.",
+                  "身份网关拒绝了该请求。请重试。",
+                )
+              },
+            ),
+          },
+        },
+        @rabbita.none,
+      )
     Connect =>
       if model.token == "" || model.endpoint == "" {
         (
@@ -3913,7 +4205,7 @@ fn update(
                     ContractPreviewFailed(
                       generation,
                       model.portal.locale,
-                      "MoonLeaf preview failed: \{Repr(error)}",
+                      "MoonLeaf preview failed: \{error.to_string()}",
                     )
                 } noraise {
                   preview => ContractPreviewLoaded(generation, preview)
@@ -5604,11 +5896,7 @@ fn update(
         }
       }
     Outcome(Failed(dispatched_locale, message)) => {
-      let message = @enterprise_ui.friendly_failure(
-        model.portal.locale,
-        portal_copy(model.portal.locale, "Operation", "操作"),
-        message,
-      )
+      let message = portal_failure_message(model.portal.locale, message)
       (
         {
           ..model,
@@ -5694,7 +5982,7 @@ fn app_view(
   let locale = model.portal.locale
   let transport_allowed = development_transport_allowed(model.endpoint)
   let shell_styles =
-    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{box-sizing:border-box;width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}@media(max-width:38rem){.demo-flag{position:absolute}.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{box-sizing:border-box;width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}.login-card form{margin:.95rem 0 0}.login-actions{display:flex;flex-wrap:wrap;gap:.6rem}.login-actions button{flex:1 1 auto}.login-actions button[type=button]{background:transparent;color:#ecf5f2;border-color:#35505f}.login-divider{display:flex;align-items:center;gap:.6rem;margin:1.1rem 0 .6rem;color:#9db0b6;font-size:.75rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#29424f;content:""}@media(max-width:38rem){.demo-flag{position:absolute}.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
   if model.demo_mode {
     return @html.div([
       @html.style_tag(shell_styles),
@@ -5745,16 +6033,120 @@ fn app_view(
           ),
           @html.p(
             class="login-sso-note",
-            portal_copy(
-              locale, "Production access uses ingress-managed authentication and MFA. An eligible first sign-in creates the account and a bounded trial when trials are enabled. LunaNexa never accepts an account password here.",
-              "生产访问使用入口管理的身份认证和多因素认证。首次登录的合格用户会创建账户；平台启用体验时还会获得受限体验。LunaNexa 不会在此接收账户密码。",
+            if model.registering {
+              portal_copy(
+                locale, "A new account needs an email address, the name you want shown, and a password of at least 12 characters with an uppercase letter, a lowercase letter, a digit and a symbol. An eligible first sign-in also creates a bounded trial when trials are enabled.",
+                "新账户需要邮箱、希望显示的名称，以及至少 12 位且包含大写字母、小写字母、数字和符号的密码。开启体验时，符合条件的首次登录还会获得受限体验额度。",
+              )
+            } else {
+              portal_copy(
+                locale, "Sign in with the address and password you registered. The gateway checks them and hands this page a short-lived session; LunaNexa never stores your password.",
+                "请使用注册时的邮箱和密码登录。网关校验后向前端签发短期会话；LunaNexa 不保存您的密码。",
+              )
+            },
+          ),
+          @html.form(
+            class="development-form",
+            on_submit=emit(
+              if model.registering {
+                EnterpriseRegistrationSubmitted
+              } else {
+                EnterpriseSignInSubmitted
+              },
             ),
+            [
+              @html.div([
+                @html.label(
+                  for_="portal-login-email",
+                  portal_copy(locale, "Email address", "邮箱"),
+                ),
+                @html.input(
+                  id="portal-login-email",
+                  value=model.login_email,
+                  auto_complete=On,
+                  maxlength=320,
+                  attrs=@html.Attrs::build().disabled(
+                    !transport_allowed || model.connecting,
+                  ),
+                  on_input=emit.map(value => LoginEmailChanged(value)),
+                ),
+              ]),
+              if model.registering {
+                @html.div([
+                  @html.label(
+                    for_="portal-register-name",
+                    portal_copy(locale, "Display name", "显示名称"),
+                  ),
+                  @html.input(
+                    id="portal-register-name",
+                    value=model.register_display_name,
+                    auto_complete=On,
+                    maxlength=128,
+                    attrs=@html.Attrs::build().disabled(
+                      !transport_allowed || model.connecting,
+                    ),
+                    on_input=emit.map(value => RegisterDisplayNameChanged(value)),
+                  ),
+                ])
+              } else {
+                @html.nothing
+              },
+              @html.div([
+                @html.label(
+                  for_="portal-login-password",
+                  portal_copy(locale, "Password", "密码"),
+                ),
+                @html.input(
+                  id="portal-login-password",
+                  input_type=Password,
+                  value=model.login_password,
+                  auto_complete=On,
+                  maxlength=256,
+                  attrs=@html.Attrs::build().disabled(
+                    !transport_allowed || model.connecting,
+                  ),
+                  on_input=emit.map(value => LoginPasswordChanged(value)),
+                ),
+              ]),
+              @html.div(class="login-actions", [
+                @html.button(
+                  type_="submit",
+                  disabled=!transport_allowed ||
+                    model.connecting ||
+                    model.login_email.trim() == "" ||
+                    model.login_password == "" ||
+                    (model.registering &&
+                      model.register_display_name.trim() == ""),
+                  if model.connecting {
+                    portal_copy(locale, "Connecting…", "正在连接…")
+                  } else if model.registering {
+                    portal_copy(locale, "Create account", "创建账户")
+                  } else {
+                    portal_copy(locale, "Sign in", "登录")
+                  },
+                ),
+                @html.button(
+                  type_="button",
+                  disabled=model.connecting,
+                  on_click=emit(ToggleRegistration),
+                  if model.registering {
+                    portal_copy(locale, "I already have an account", "我已有账户，去登录")
+                  } else {
+                    portal_copy(locale, "Register a new account", "注册新账户")
+                  },
+                ),
+              ]),
+            ],
+          ),
+          @html.div(
+            class="login-divider",
+            portal_copy(locale, "or use organization sign-in", "或使用组织账户登录"),
           ),
           @html.a(
             class="sso-start",
             href="/auth/oidc/start?audience=enterprise",
             portal_copy(
-              locale, "Sign in or create an account", "登录或创建账户",
+              locale, "Sign in with the organization identity provider", "使用组织身份提供商登录",
             ),
           ),
           if model.connecting {
@@ -5985,6 +6377,10 @@ fn main {
           },
         }
       },
+      login_email: "",
+      login_password: "",
+      register_display_name: "",
+      registering: false,
     },
     view=app_view,
     update~,

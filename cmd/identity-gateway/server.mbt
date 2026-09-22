@@ -651,6 +651,10 @@ async fn handle_proxy(
       handle_password_login(
         store, config, request, reader, connection, host, audience,
       )
+    "/auth/register" =>
+      handle_registration(
+        store, config, request, reader, connection, host, audience,
+      )
     "/auth/session" =>
       handle_browser_session(store, config, request, connection, host, audience)
     "/auth/logout" =>
