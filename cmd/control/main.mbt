@@ -461,6 +461,14 @@ async fn run_access_onboarding_reconciler(service : @api.ApiService) -> Unit {
 }
 
 ///|
+async fn run_delivery_reconciler(service : @api.ApiService) -> Unit {
+  for ;; {
+    service.reconcile_deliveries()
+    @async.sleep(5000)
+  }
+}
+
+///|
 fn valid_external_ha_postgres_url(database_url : String) -> Bool {
   let value = database_url.trim()
   let secure_scheme = value.has_prefix("postgresql://") ||
@@ -822,6 +830,15 @@ async fn main {
   let exclusive_lease_signing_secret = required_environment(
     "LUNANEXA_EXCLUSIVE_LEASE_SIGNING_SECRET",
   )
+  let delivery_store = match management_database {
+    Some(database) => @delivery.DeliveryStore::open_postgres(database)
+    None =>
+      @delivery.DeliveryStore::open(
+        @env.get_env_var("LUNANEXA_EXCLUSIVE_DELIVERY_PATH").unwrap_or(
+          "lunanexa-exclusive-deliveries.json",
+        ),
+      )
+  }
   let exclusive_lease_store = match management_database {
     Some(database) =>
       @nodelease_store.FileExclusiveLeaseStore::open_postgres(
@@ -1357,6 +1374,12 @@ async fn main {
       available_secret_refs=secret_references(),
     )
     .with_exclusive_lease_store(exclusive_lease_store)
+    .with_delivery_store(
+      delivery_store,
+      gateway_observation_token=@env.get_env_var(
+        "LUNANEXA_WEBIDE_OBSERVATION_TOKEN",
+      ).unwrap_or(""),
+    )
     .with_credential_handoff_store(credential_handoff_store)
     .with_client_handoff_store(
       client_handoff_store,
@@ -1608,6 +1631,9 @@ async fn main {
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_access_onboarding_reconciler(service)
+    }
+    group.spawn_bg(allow_failure=false) <| () => {
+      run_delivery_reconciler(service)
     }
     group.spawn_bg(allow_failure=false) <| () => {
       service.run_exclusive_lease_expiry_reconciler_forever(

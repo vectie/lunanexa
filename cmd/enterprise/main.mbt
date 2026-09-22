@@ -375,6 +375,20 @@ priv enum Outcome {
 
 ///|
 priv enum AppMessage {
+  DeliveriesLoaded(
+    Int64,
+    String?,
+    Int64,
+    Result[
+      (
+        @enterprise_ui.DeliveryOptions,
+        Array[@enterprise_ui.DeliveryView],
+        String?,
+      ),
+      String,
+    ]
+  )
+  DeliveryPollDue(Int64, String?, Int64)
   EndpointChanged(String)
   TokenChanged(String)
   SubjectChanged(String)
@@ -3817,6 +3831,76 @@ fn update(
         @rabbita.none,
       )
     }
+    DeliveryPollDue(generation, organization, poll_generation) => {
+      if generation != model.session_generation ||
+        organization != model.portal.selected_organization_id ||
+        poll_generation != model.portal.deliveries.poll_generation ||
+        model.portal.route != DesktopIde ||
+        model.portal.deliveries.loading {
+        return (model, @rabbita.none)
+      }
+      let next = { ..model, portal: model.portal.update(Delivery(Refresh)), }
+      (next, delivery_command(next, None, emit))
+    }
+    DeliveriesLoaded(generation, organization, poll_generation, result) => {
+      if generation != model.session_generation ||
+        organization != model.portal.selected_organization_id ||
+        poll_generation != model.portal.deliveries.poll_generation {
+        return (model, @rabbita.none)
+      }
+      let panel = model.portal.deliveries
+      let deliveries = match result {
+        Ok((options, operations, error)) =>
+          {
+            ..panel,
+            options,
+            operations,
+            loaded: true,
+            loading: false,
+            error,
+            stop_confirmation: None,
+          }
+        Err(error) => { ..panel, loading: false, error: Some(error), }
+      }
+      let next = { ..model, portal: { ..model.portal, deliveries, }, }
+      (next, delivery_poll_command(next, emit))
+    }
+    Portal(Delivery(message)) => {
+      if model.portal.deliveries.loading {
+        return (model, @rabbita.none)
+      }
+      let next = { ..model, portal: model.portal.update(Delivery(message)), }
+      match message {
+        OpenWorkspace(id) if !model.demo_mode =>
+          (next, delivery_workspace_command(next, id, emit))
+        SelectReservation(_)
+        | SelectTemplate(_)
+        | RequestStop(_)
+        | CancelStop => (next, @rabbita.none)
+        _ if model.demo_mode => (model, @rabbita.none)
+        Start if !@enterprise_ui.delivery_start_available(
+            model.portal.deliveries,
+          ) => (model, @rabbita.none)
+        _ => {
+          let panel = next.portal.deliveries
+          let next = if message == Start && panel.idempotency_key == "" {
+            {
+              ..next,
+              portal: {
+                ..next.portal,
+                deliveries: {
+                  ..panel,
+                  idempotency_key: random_identifier("delivery"),
+                },
+              },
+            }
+          } else {
+            next
+          }
+          (next, delivery_command(next, Some(message), emit))
+        }
+      }
+    }
     Portal(Navigate(route)) => {
       let portal = model.portal.update(Navigate(route))
       let next = {
@@ -3825,6 +3909,10 @@ fn update(
         contract_poll_generation: model.contract_poll_generation + 1L,
       }
       match route {
+        DesktopIde if !model.demo_mode => {
+          let next = { ..next, portal: next.portal.update(Delivery(Refresh)), }
+          (next, delivery_command(next, None, emit))
+        }
         ContractDocuments =>
           schedule_contract_preview(next, portal.contract_documents, 0, emit)
         SelfService if !model.demo_mode &&
@@ -3851,7 +3939,10 @@ fn update(
       )
       let next = {
         ..model,
-        portal,
+        portal: {
+          ..portal,
+          deliveries: @enterprise_ui.default_delivery_panel(),
+        },
         contract_poll_generation: model.contract_poll_generation + 1L,
       }
       match @enterprise_ui.selected_organization_header(portal) {

@@ -61,6 +61,10 @@ async fn ApiService::machine_offering_nodes(
 ) -> Array[String] {
   let candidates : Array[String] = []
   for heartbeat in self.store.heartbeats() {
+    if self.scheduler is Some(scheduler) &&
+      scheduler.node_is_reserved(heartbeat.node_id) {
+      continue
+    }
     guard @node.inventory_host_resources(heartbeat.inventory) is Some(host) &&
       host.cpu_count.to_int64() >= offering.cpu_count &&
       host.memory_total_mib >= offering.memory_mib else {
@@ -123,6 +127,8 @@ async fn ApiService::start_paid_machine_order(
 ) -> Unit {
   match order.offering_kind {
     BareMachine => {
+      self.resource_mutex.acquire()
+      defer self.resource_mutex.release()
       guard self.exclusive_lease_store is Some(leases) &&
         self.machine_bare_node(offering, now_unix_ms) is Some(node_id) &&
         order.unix_username is Some(unix_username) else {

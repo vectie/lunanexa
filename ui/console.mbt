@@ -2014,6 +2014,7 @@ pub(all) struct ConsoleState {
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
   exclusive_node_leases : Array[ExclusiveNodeLeaseRow]
+  resource_delivery : ResourceDeliveryPanel
   cost_centers : Array[CostCenterRow]
   agreements : Array[AgreementRow]
   enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
@@ -2054,6 +2055,7 @@ pub extend ConsoleState with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum ConsoleMessage {
+  ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
   AlertsWindowChanged(AlertsWindow)
@@ -2247,6 +2249,7 @@ pub fn default_state() -> ConsoleState {
     access_grants: [],
     compute_leases: [],
     exclusive_node_leases: [],
+    resource_delivery: default_resource_delivery_panel(),
     cost_centers: [],
     agreements: [],
     enterprise_lease_requests: [],
@@ -5389,6 +5392,7 @@ fn leases_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("leases-title"), [
+    resource_delivery_view(state, emit),
     @html.div(class="section-heading", [
       @html.div([
         @html.h2(

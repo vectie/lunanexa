@@ -13,6 +13,7 @@ import {
   "vectie/lunanexa/api",
   "vectie/lunanexa/database",
   "vectie/lunanexa/deployment/store" @deployment_store,
+  "vectie/lunanexa/deployment/delivery",
   "vectie/lunanexa/guide_monitor/probe" @guide_probe,
   "vectie/lunanexa/runtimes",
   "vectie/lunanexa/registry",

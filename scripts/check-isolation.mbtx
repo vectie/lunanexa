@@ -158,10 +158,12 @@ async fn main {
     }
   }
   // --no-ignore preserves the old find-based coverage, including untracked
-  // source files. Only build outputs and Git's own storage are omitted.
+  // source files. Generated outputs, downloaded package caches and Git storage
+  // are omitted at every nested project depth; owned manifests remain scanned.
   let files = @shell.Cmd("rg", ["--files", "--hidden", "--no-ignore", "--null",
     "-g", "*.mbt", "-g", "moon.pkg", "-g", "moon.mod",
-    "-g", "!_build/**", "-g", "!target/**", "-g", "!.git/**", root]).output()
+    "-g", "!**/_build/**", "-g", "!**/target/**", "-g", "!**/.git/**",
+    "-g", "!**/.mooncakes/**", root]).output()
   guard files.exit_code() == 0 else { fail("Isolation scan could not enumerate source files") }
   let paths = files.stdout().split("\u0000").filter(path => path != "").map(path => path.to_owned()).collect()
   let mut failed = false

@@ -74,6 +74,8 @@ pub struct ApiService {
   // a packet whose `lease.total_rent` exceeds it requires a second operator.
   contract_approval_threshold_minor_units : Int64?
   deployment_store : @deployment_store.FileDeploymentStore?
+  delivery_store : @delivery.DeliveryStore?
+  workspace_gateway_observation_token : String
   exclusive_lease_store : @nodelease_store.FileExclusiveLeaseStore?
   credential_handoff_store : @credential_store.CredentialHandoffStore?
   credential_issuer_adapter_token : String?
@@ -135,6 +137,7 @@ pub struct ApiService {
   response_cache : Map[String, @contracts.WorkloadResponse]
   response_cache_order : Array[String]
   audit_mutex : @async.Mutex
+  resource_mutex : @async.Mutex
   execution_slots : @async.Semaphore
 }
 
@@ -173,6 +176,8 @@ pub fn ApiService::new(
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
     deployment_store: None,
+    delivery_store: None,
+    workspace_gateway_observation_token: "",
     exclusive_lease_store: None,
     credential_handoff_store: None,
     credential_issuer_adapter_token: None,
@@ -231,6 +236,7 @@ pub fn ApiService::new(
     response_cache: Map([]),
     response_cache_order: [],
     audit_mutex: Mutex(),
+    resource_mutex: Mutex(),
     execution_slots: Semaphore(128),
   }
 }
@@ -271,6 +277,8 @@ pub fn ApiService::with_registry(
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
     deployment_store: None,
+    delivery_store: None,
+    workspace_gateway_observation_token: "",
     exclusive_lease_store: None,
     credential_handoff_store: None,
     credential_issuer_adapter_token: None,
@@ -329,6 +337,7 @@ pub fn ApiService::with_registry(
     response_cache: Map([]),
     response_cache_order: [],
     audit_mutex: Mutex(),
+    resource_mutex: Mutex(),
     execution_slots: Semaphore(128),
   }
 }
@@ -370,6 +379,8 @@ pub fn ApiService::with_services(
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
     deployment_store: None,
+    delivery_store: None,
+    workspace_gateway_observation_token: "",
     exclusive_lease_store: None,
     credential_handoff_store: None,
     credential_issuer_adapter_token: None,
@@ -428,6 +439,7 @@ pub fn ApiService::with_services(
     response_cache: Map([]),
     response_cache_order: [],
     audit_mutex: Mutex(),
+    resource_mutex: Mutex(),
     execution_slots: Semaphore(128),
   }
 }
@@ -471,6 +483,8 @@ pub fn ApiService::with_control_plane(
     contract_document_worker_token: "",
     contract_approval_threshold_minor_units: None,
     deployment_store: None,
+    delivery_store: None,
+    workspace_gateway_observation_token: "",
     exclusive_lease_store: None,
     credential_handoff_store: None,
     credential_issuer_adapter_token: None,
@@ -529,6 +543,7 @@ pub fn ApiService::with_control_plane(
     response_cache: Map([]),
     response_cache_order: [],
     audit_mutex: Mutex(),
+    resource_mutex: Mutex(),
     execution_slots: Semaphore(128),
   }
 }
@@ -1783,8 +1798,20 @@ async fn ApiService::schedule_and_admit(
   self : ApiService,
   request : @contracts.WorkloadEnvelope,
   required_deployment_id : String?,
+  authority? : @access.ApiAuthorization,
 ) -> (HttpReply?, Array[String]) {
   let now = @async.now()
+  let (delivery, delivery_error) = match authority {
+    Some(value) => self.delivery_binding(value)
+    None => (None, None)
+  }
+  if delivery_error is Some(reply) {
+    return (Some(reply), [])
+  }
+  let required_deployment_id = match delivery {
+    Some(operation) => Some(operation.operation_id)
+    None => required_deployment_id
+  }
   let budgets = self.global_settings.request_budgets
   if request.deadline_unix_ms > now + budgets.openai_max_deadline_ms ||
     request.resource_ceiling.max_runtime_ms > budgets.openai_max_deadline_ms ||
@@ -1802,7 +1829,20 @@ async fn ApiService::schedule_and_admit(
       [],
     )
   }
-  guard self.scheduler is Some(scheduler) else { return (None, []) }
+  guard self.scheduler is Some(scheduler) else {
+    return if delivery is Some(_) {
+      (
+        Some(
+          api_error(
+            503, "DeliveryUnavailable", "reserved placement is unavailable", true,
+          ),
+        ),
+        [],
+      )
+    } else {
+      (None, [])
+    }
+  }
   guard self.registry is Some(registry) else {
     return (
       Some(
@@ -1904,29 +1944,42 @@ async fn ApiService::schedule_and_admit(
       )
     }
   ]
-  let decision = scheduler.place(
-    nodes,
-    {
-      workload_id: request.workload_id,
-      model_key: target.model_key,
-      architecture,
-      // The request value is an upper safety ceiling, not memory demand. Once
-      // the model is proven to fit below it, placement needs only the model's
-      // approved minimum resident memory.
-      memory_mib: target.model.minimum_memory_mib,
-      runtime: target.runtime.name,
-      data_class: request.data_policy.classification,
-      deadline_unix_ms: request.deadline_unix_ms,
-      now_unix_ms: now,
-      estimated_runtime_ms: placement_runtime_estimate_ms(
-        request.resource_ceiling.max_runtime_ms,
-        None,
-      ),
-      multi_node: false,
-      topology_profile: None,
-    },
-    score_policy(self.global_settings.scheduler),
-  )
+  let requirements : @scheduler.PlacementRequirements = {
+    workload_id: request.workload_id,
+    model_key: target.model_key,
+    architecture,
+    // The request value is an upper safety ceiling, not memory demand. Once
+    // the model is proven to fit below it, placement needs only the model's
+    // approved minimum resident memory.
+    memory_mib: target.model.minimum_memory_mib,
+    runtime: target.runtime.name,
+    data_class: request.data_policy.classification,
+    deadline_unix_ms: request.deadline_unix_ms,
+    now_unix_ms: now,
+    estimated_runtime_ms: placement_runtime_estimate_ms(
+      request.resource_ceiling.max_runtime_ms,
+      None,
+    ),
+    multi_node: false,
+    topology_profile: None,
+  }
+  let decision = match delivery {
+    Some(operation) =>
+      scheduler.place_reserved(
+        nodes,
+        requirements,
+        score_policy(self.global_settings.scheduler),
+        operation.reservation_id.unwrap(),
+        operation.intent.tenant_id,
+        now,
+      )
+    None =>
+      scheduler.place(
+        nodes,
+        requirements,
+        score_policy(self.global_settings.scheduler),
+      )
+  }
   guard decision.selected_node_id is Some(_) else {
     return (
       Some(
@@ -2355,7 +2408,9 @@ async fn ApiService::invoke_workload(
     None => None
   }
   let (admission_error, routing_nodes) = self.schedule_and_admit(
-    request, required_deployment_id,
+    request,
+    required_deployment_id,
+    authority~,
   )
   if admission_error is Some(reply) {
     return reply
@@ -2783,7 +2838,9 @@ async fn ApiService::stream_workload(
     None => None
   }
   let (admission_error, routing_nodes) = self.schedule_and_admit(
-    request, required_deployment_id,
+    request,
+    required_deployment_id,
+    authority~,
   )
   if admission_error is Some(reply) {
     connection.send_response(reply.status, reason(reply.status), extra_headers={
@@ -3125,6 +3182,17 @@ async fn ApiService::dispatch_with_transport(
     return self.handle_machine_commerce(
       verb, path, headers, body, allow_asserted_subject,
     )
+  }
+  if delivery_path(path) {
+    return self.handle_delivery(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
+  if resource_reservation_path(path) {
+    return self.handle_resource_reservation(verb, path, headers, body)
+  }
+  if path.has_prefix("/v1/workspace-delivery/") {
+    return self.handle_workspace_delivery(verb, path, headers, body)
   }
   if enterprise_portal_path(path) {
     return self.handle_enterprise_portal(
@@ -4215,6 +4283,8 @@ async fn ApiService::dispatch_with_transport(
       )
     }
     (Put, "/v1/assignments") => {
+      self.resource_mutex.acquire()
+      defer self.resource_mutex.release()
       if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
@@ -4248,6 +4318,12 @@ async fn ApiService::dispatch_with_transport(
         leases.node_blocks_managed_placement(assignment.node_id) {
         return api_error(
           409, "NodeExclusiveLease", "node is reserved for an exclusive lease", false,
+        )
+      }
+      if self.scheduler is Some(scheduler) &&
+        scheduler.node_is_reserved(assignment.node_id) {
+        return api_error(
+          409, "NodeReserved", "node belongs to an exclusive delivery", false,
         )
       }
       let signed_assignment = {

@@ -174,11 +174,16 @@ async fn ApiService::deployment_planning_context(
           now,
           self.global_settings.control_timing.heartbeat_timeout_ms,
         )
-        match self.exclusive_lease_store {
-          Some(leases) if leases.node_blocks_managed_placement(
-              heartbeat.node_id,
-            ) => { ..node, state: Cordoned, }
-          _ => node
+        if self.scheduler is Some(scheduler) &&
+          scheduler.node_is_reserved(heartbeat.node_id) {
+          { ..node, state: Cordoned, }
+        } else {
+          match self.exclusive_lease_store {
+            Some(leases) if leases.node_blocks_managed_placement(
+                heartbeat.node_id,
+              ) => { ..node, state: Cordoned, }
+            _ => node
+          }
         }
       }
     ],
@@ -207,7 +212,11 @@ async fn ApiService::deployment_plan(
 async fn ApiService::publish_planned_assignment(
   self : ApiService,
   unsigned : @contracts.DesiredAssignment,
+  reservation_id? : String,
+  tenant_ref? : String,
 ) -> Unit {
+  self.resource_mutex.acquire()
+  defer self.resource_mutex.release()
   if self.assignment_signing_secret == "" {
     raise @deployment.DeploymentError::InvalidState("signer unavailable")
   }
@@ -215,6 +224,29 @@ async fn ApiService::publish_planned_assignment(
     raise @deployment.DeploymentError::InvalidState("registry unavailable")
   }
   let now = @async.now()
+  if self.scheduler is Some(scheduler) &&
+    scheduler.node_is_reserved(unsigned.node_id) {
+    guard reservation_id is Some(id) &&
+      tenant_ref is Some(tenant) &&
+      scheduler.node_reservation(id) is Some(reservation) &&
+      reservation.state == Reserved &&
+      reservation.request.tenant_ref == tenant &&
+      reservation.request.node_ids.contains(unsigned.node_id) &&
+      reservation.request.starts_unix_ms <= now &&
+      reservation.request.expires_unix_ms >= unsigned.lease_expires_unix_ms &&
+      reservation.services.any(service => {
+        service.node_id == unsigned.node_id &&
+        service.service_id == unsigned.assignment_id
+      }) else {
+      raise @deployment.DeploymentError::InvalidState(
+        "node is reserved for another resource authority",
+      )
+    }
+  } else if reservation_id is Some(_) {
+    raise @deployment.DeploymentError::InvalidState(
+      "node reservation is unavailable",
+    )
+  }
   if !valid_assignment_shape(unsigned, now) ||
     unsigned.signature != "" ||
     unsigned.controller_epoch != self.store.controller_epoch() {

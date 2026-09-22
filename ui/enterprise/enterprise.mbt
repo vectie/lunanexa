@@ -192,6 +192,7 @@ pub(all) struct EnterpriseState {
   desktop_client : EnterpriseDesktopClient?
   desktop_clients : Array[EnterpriseDesktopClient]
   webide_order_id : String?
+  deliveries : DeliveryPanel
   self_service : SelfServiceState
   project_id : String
   unix_username : String
@@ -237,6 +238,7 @@ pub(all) enum EnterpriseMessage {
   LaunchDesktopClient
   SelectWebIde(String)
   SelectWebIdeOrder(String)
+  Delivery(DeliveryMessage)
   MarkNotificationRead(String, Int64)
   SetNotificationEmail(@notifications.NotificationTopic, Bool)
   MachineAccess(@machine_access.MachineAccessMessage)
@@ -296,6 +298,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     desktop_client: None,
     desktop_clients: [],
     webide_order_id: None,
+    deliveries: default_delivery_panel(),
     self_service: default_self_service_state(),
     project_id: "",
     unix_username: "",
@@ -842,6 +845,8 @@ pub fn EnterpriseState::update(
   message : EnterpriseMessage,
 ) -> EnterpriseState {
   match message {
+    Delivery(message) =>
+      { ..self, deliveries: self.deliveries.update(message), }
     SelectWebIdeOrder(order_id) => {
       if self.loading {
         return self
@@ -3178,6 +3183,7 @@ fn desktop_ide_view(
     enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
   }
   @html.div(class="page-stack", [
+    delivery_panel_view(state.deliveries, state.locale, emit),
     if state.desktop_clients.length() > 1 {
       @html.section(class="workflow-panel", [
         @html.h2(enterprise_copy(state.locale, ChooseYourWebide)),

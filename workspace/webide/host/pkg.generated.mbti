@@ -26,6 +26,34 @@ pub fn HostError::not_equal(Self, Self) -> Bool
 pub fn HostError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub(all) struct ExclusiveContainer {
+  image : String
+  command : Array[String]
+  args : Array[String]
+  port : Int
+  cpu_millis : Int
+  memory_mib : Int
+  gpu : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusiveContainer::equal(Self, Self) -> Bool
+pub fn ExclusiveContainer::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusiveContainer::not_equal(Self, Self) -> Bool
+pub fn ExclusiveContainer::to_json(Self) -> Json
+pub fn ExclusiveContainer::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ExclusivePlacement {
+  reservation_id : String
+  tenant_ref : String
+  organization_id : String
+  project_id : String
+  node_name : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ExclusivePlacement::equal(Self, Self) -> Bool
+pub fn ExclusivePlacement::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ExclusivePlacement::not_equal(Self, Self) -> Bool
+pub fn ExclusivePlacement::to_json(Self) -> Json
+pub fn ExclusivePlacement::to_repr(Self) -> @debug.Repr
+
 pub(all) struct HostConfig {
   namespace_name : String
   controller_namespace : String
@@ -53,14 +81,17 @@ pub fn ModelProxyConfig::to_json(Self) -> Json
 
 pub struct WorkspaceHost {
   config : HostConfig
+  require_exclusive : Bool
+  observation_token : String
   locks : Map[String, @async.Mutex]
   kubernetes_override : (async (@http.RequestMethod, String, Json?) -> (Int, Json))?
 }
 pub async fn WorkspaceHost::authorize(Self, @webide.Grant) -> Bool
-pub fn WorkspaceHost::new(HostConfig) -> Self raise HostError
-pub async fn WorkspaceHost::provision(Self, String, @webide.Grant) -> @webide.Backend
+pub fn WorkspaceHost::new(HostConfig, require_exclusive? : Bool, observation_token? : String) -> Self raise HostError
+pub async fn WorkspaceHost::provision(Self, String, @webide.Grant, placement? : ExclusivePlacement, container? : ExclusiveContainer) -> @webide.Backend
 pub async fn WorkspaceHost::reconcile(Self) -> Unit
 pub async fn WorkspaceHost::redeem(Self, String, String) -> @webide.Grant
+pub async fn WorkspaceHost::stop(Self, String) -> Unit
 
 // Type aliases
 

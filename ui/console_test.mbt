@@ -209,6 +209,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         state: GrantActive,
       },
     ],
+    resource_delivery: @ui.default_resource_delivery_panel(),
     compute_leases: [
       {
         lease_id: "lease-1",

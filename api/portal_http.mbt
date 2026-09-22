@@ -235,6 +235,14 @@ async fn ApiService::approve_portal_lease(
     }
   }
   let exclusive_lease_id = "exclusive-\{review.request_id}"
+  self.resource_mutex.acquire()
+  defer self.resource_mutex.release()
+  if self.scheduler is Some(scheduler) && scheduler.node_is_reserved(node_id) {
+    return api_error(
+      409, "NodeUnavailable", "node belongs to an exclusive resource reservation",
+      false,
+    )
+  }
   let intent : @nodelease.ExclusiveNodeLeaseIntent = {
     version: @nodelease.contract_version,
     idempotency_key: "portal-approval-\{review.request_id}",

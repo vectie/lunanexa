@@ -32,6 +32,8 @@ pub fn data_class_name(@contracts.DataClass) -> String
 
 pub fn data_class_options() -> Array[@contracts.DataClass]
 
+pub fn default_resource_delivery_panel() -> ResourceDeliveryPanel
+
 pub fn default_runtime_draft() -> RuntimeProfileDraft
 
 pub fn default_state() -> ConsoleState
@@ -77,6 +79,8 @@ pub fn parse_quick_topology(String) -> QuickTopology
 pub fn parse_runtime_capability(String) -> @contracts.Capability
 
 pub fn render(ConsoleState) -> String
+
+pub fn resource_reservation_available(ResourceDeliveryPanel) -> Bool
 
 pub fn runtime_capability_name(@contracts.Capability) -> String
 
@@ -313,6 +317,7 @@ pub fn Confirmation::to_json(Self) -> Json
 pub fn Confirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ConsoleMessage {
+  ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
   AlertsWindowChanged(AlertsWindow)
@@ -458,6 +463,7 @@ pub(all) struct ConsoleState {
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
   exclusive_node_leases : Array[ExclusiveNodeLeaseRow]
+  resource_delivery : ResourceDeliveryPanel
   cost_centers : Array[CostCenterRow]
   agreements : Array[AgreementRow]
   enterprise_lease_requests : Array[EnterpriseLeaseRequestRow]
@@ -943,6 +949,89 @@ pub fn RequestMetrics::from_json(Json, @json.JsonPath) -> Self raise @json.JsonD
 pub fn RequestMetrics::not_equal(Self, Self) -> Bool
 pub fn RequestMetrics::to_json(Self) -> Json
 pub fn RequestMetrics::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ResourceDeliveryMessage {
+  RefreshResources
+  SelectResourceLease(String)
+  ToggleResourceNode(String)
+  ConfirmResourceIdle
+  ReserveResources
+} derive(Eq)
+pub fn ResourceDeliveryMessage::equal(Self, Self) -> Bool
+pub fn ResourceDeliveryMessage::not_equal(Self, Self) -> Bool
+
+pub(all) struct ResourceDeliveryPanel {
+  leases : Array[ResourceLeaseOption]
+  reservations : Array[ResourceReservationRow]
+  deliveries : Array[ResourceDeliveryRow]
+  selected_lease : String
+  selected_nodes : Array[String]
+  confirmed_idle : Bool
+  reservation_id : String
+  loading : Bool
+  reservation_starts_ms : Int64
+  loaded : Bool
+  error : String?
+} derive(Eq)
+pub fn ResourceDeliveryPanel::equal(Self, Self) -> Bool
+pub fn ResourceDeliveryPanel::not_equal(Self, Self) -> Bool
+pub fn ResourceDeliveryPanel::update(Self, ResourceDeliveryMessage) -> Self
+
+pub(all) struct ResourceDeliveryRow {
+  operation_id : String
+  template_id : String
+  template_version : String
+  kind : String
+  node_count : Int
+  stage : String
+  failure_code : String?
+  cache_hit : Bool
+  transferred_bytes : Int64
+  expires_at_ms : Int64
+} derive(Eq, @json.FromJson)
+pub fn ResourceDeliveryRow::equal(Self, Self) -> Bool
+pub fn ResourceDeliveryRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ResourceDeliveryRow::not_equal(Self, Self) -> Bool
+
+pub(all) struct ResourceLeaseOption {
+  key : String
+  label : String
+  tenant_ref : String
+  organization_id : String
+  authority_ref : String
+  lease_id : String
+  expires_unix_ms : Int64
+} derive(Eq)
+pub fn ResourceLeaseOption::equal(Self, Self) -> Bool
+pub fn ResourceLeaseOption::not_equal(Self, Self) -> Bool
+
+pub(all) struct ResourceReservationRequest {
+  reservation_id : String
+  idempotency_key : String
+  tenant_ref : String
+  organization_id : String
+  authority_ref : String
+  lease_id : String
+  node_ids : Array[String]
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  memory_mib_per_node : Int
+  gpu_memory_mib_per_node : Int
+  max_concurrency_per_node : Int
+} derive(Eq, ToJson, @json.FromJson)
+pub fn ResourceReservationRequest::equal(Self, Self) -> Bool
+pub fn ResourceReservationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ResourceReservationRequest::not_equal(Self, Self) -> Bool
+pub fn ResourceReservationRequest::to_json(Self) -> Json
+
+pub(all) struct ResourceReservationRow {
+  request : ResourceReservationRequest
+  state : String
+  generation : Int64
+} derive(Eq, @json.FromJson)
+pub fn ResourceReservationRow::equal(Self, Self) -> Bool
+pub fn ResourceReservationRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ResourceReservationRow::not_equal(Self, Self) -> Bool
 
 pub(all) struct RuntimeProfileDraft {
   name : String

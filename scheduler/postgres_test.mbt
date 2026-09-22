@@ -16,6 +16,16 @@ async test "scheduler capacity and state restore from PostgreSQL" {
   let work = { ..request(), deadline_unix_ms: now + 60000L, }
   assert_eq(scheduler.admit(work, now), Accepted(queue_position=0))
   scheduler.mark_started(work.workload_id, now + 1L)
+  let reservation = reservation_request("pg-reservation", "tenant", [
+    "spark-a", "spark-b",
+  ])
+  ignore(
+    scheduler.reserve_nodes(
+      { ..reservation, starts_unix_ms: now, expires_unix_ms: now + 60000L, },
+      ["spark-a", "spark-b"],
+      now,
+    ),
+  )
   let before = scheduler.snapshot()
   database.close()
   for _ in 0..<2 {
@@ -32,6 +42,7 @@ async test "scheduler capacity and state restore from PostgreSQL" {
   let reopened = @scheduler.FileScheduler::open_postgres(recovered_database, 99)
   assert_eq(reopened.snapshot().capacity, 7)
   assert_eq(reopened.snapshot(), before)
+  assert_true(reopened.node_is_reserved("spark-a"))
   assert_eq(
     reopened.admit(work, now + 2L),
     Rejected(reason=WorkloadAlreadyActive),

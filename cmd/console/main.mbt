@@ -1461,6 +1461,7 @@ async fn load_console(
     access_grants: [],
     compute_leases: [],
     exclusive_node_leases: [],
+    resource_delivery: @ui.default_resource_delivery_panel(),
     cost_centers: [],
     agreements: [],
     enterprise_lease_requests: [],
@@ -2528,6 +2529,7 @@ priv struct AppModel {
 
 ///|
 priv enum AppMessage {
+  ResourcesLoaded(String, Result[@ui.ResourceDeliveryPanel, String])
   GatewaySessionLoaded(GatewayBrowserSession)
   GatewaySessionUnavailable
   AccountSessionChanged(String)
@@ -2644,6 +2646,7 @@ fn merge_loaded_console(
     access_grants: current.access_grants,
     compute_leases: current.compute_leases,
     exclusive_node_leases: current.exclusive_node_leases,
+    resource_delivery: current.resource_delivery,
     deployments: current.deployments,
     service_deployments: current.service_deployments,
     cost_centers: current.cost_centers,
@@ -5555,6 +5558,61 @@ fn update_live(
         },
         @rabbita.none,
       )
+    ResourcesLoaded(credential, result) => {
+      if credential != model.credential {
+        return (model, @rabbita.none)
+      }
+      let panel = model.console.resource_delivery
+      let resource_delivery = match result {
+        Ok(loaded) =>
+          {
+            ..loaded,
+            selected_lease: panel.selected_lease,
+            selected_nodes: panel.selected_nodes,
+            confirmed_idle: panel.confirmed_idle,
+            reservation_id: panel.reservation_id,
+            reservation_starts_ms: panel.reservation_starts_ms,
+          }
+        Err(error) => { ..panel, loading: false, error: Some(error), }
+      }
+      (
+        { ..model, console: { ..model.console, resource_delivery, }, },
+        @rabbita.none,
+      )
+    }
+    Console(ResourceDelivery(message)) => {
+      let panel = model.console.resource_delivery
+      if panel.loading || model.demo_mode {
+        return (model, @rabbita.none)
+      }
+      if message == ReserveResources &&
+        !@ui.resource_reservation_available(panel) {
+        return (model, @rabbita.none)
+      }
+      let updated = panel.update(message)
+      let updated = if message == ReserveResources &&
+        updated.reservation_id == "" {
+        {
+          ..updated,
+          reservation_id: random_identifier("reservation"),
+          reservation_starts_ms: current_unix_ms(),
+        }
+      } else {
+        updated
+      }
+      let next = {
+        ..model,
+        console: { ..model.console, resource_delivery: updated, },
+      }
+      match message {
+        RefreshResources | ReserveResources =>
+          (
+            next,
+            resource_delivery_command(next, message == ReserveResources, emit),
+          )
+        _ => (next, @rabbita.none)
+      }
+    }
     Console(Navigate(route)) => {
       scroll_console_top()
       let next = {
@@ -5578,7 +5636,12 @@ fn update_live(
           )
         _ => (scheduled, @rabbita.none)
       }
-      (previewed, @rabbita.batch([deferred, preview]))
+      let resources = if route == Leases && !model.demo_mode {
+        resource_delivery_command(previewed, false, emit)
+      } else {
+        @rabbita.none
+      }
+      (previewed, @rabbita.batch([deferred, preview, resources]))
     }
     Console(BeginDrain(node_id)) =>
       (

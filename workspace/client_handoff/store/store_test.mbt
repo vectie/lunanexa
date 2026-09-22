@@ -156,6 +156,73 @@ async test "client handoff is restart safe, single use, and secret free at rest"
 }
 
 ///|
+async test "delivery binding persists and cannot change on handoff retry" {
+  let directory = @fs.tmpdir(prefix="lunanexa-handoff-delivery-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/handoffs.json"
+  let now = @async.now()
+  let store = test_store(path)
+  let intent = handoff_intent(now)
+  let issued = store.issue(intent, now, delivery_id="delivery-a")
+  assert_eq(store.issue(intent, now, delivery_id="delivery-a"), issued)
+  try store.issue(intent, now, delivery_id="delivery-b") catch {
+    @handoff.ClientHandoffError::IdempotencyConflict => ()
+    error => raise error
+  } noraise {
+    _ => fail("delivery binding changed")
+  }
+  try store.issue(intent, now) catch {
+    @handoff.ClientHandoffError::IdempotencyConflict => ()
+    error => raise error
+  } noraise {
+    _ => fail("delivery binding removed")
+  }
+  let reopened = test_store(path)
+  let snapshot = reopened.snapshot()
+  assert_eq(snapshot.handoffs[0].delivery_id, Some("delivery-a"))
+  assert_eq(snapshot.credentials[0].delivery_id, Some("delivery-a"))
+  let redemption = reopened.redeem(
+    issued.handoff_code,
+    "desktop-client",
+    now + 1L,
+  )
+  let authorization = reopened.authorize(
+    redemption.api_secret,
+    Inference,
+    now + 2L,
+    false,
+  )
+  assert_eq(authorization.key_id, redemption.api_key_id)
+}
+
+///|
+async test "legacy handoff snapshots without delivery fields still redeem" {
+  let directory = @fs.tmpdir(prefix="lunanexa-handoff-legacy-delivery-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/handoffs.json"
+  let now = @async.now()
+  let store = test_store(path)
+  let issued = store.issue(handoff_intent(now), now)
+  let snapshot = @json.parse(@fs.read_file(path).text())
+  guard snapshot
+    is { "handoffs": Array(handoffs), "credentials": Array(credentials), .. } else {
+    fail("invalid fixture")
+  }
+  for value in handoffs + credentials {
+    guard value is Object(fields) else { fail("invalid fixture record") }
+    fields.remove("delivery_id")
+  }
+  @fs.write_file(path, snapshot.stringify())
+  let reopened = test_store(path)
+  assert_eq(reopened.snapshot().credentials[0].delivery_id, None)
+  assert_true(
+    reopened.redeem(issued.handoff_code, "desktop-client", now + 1L).api_secret.has_prefix(
+      "lnx_",
+    ),
+  )
+}
+
+///|
 async test "client handoff rejects wrong client, expiry, and idempotency drift" {
   let directory = @fs.tmpdir(prefix="lunanexa-client-handoff-negative-")
   defer @fs.rmdir(directory, recursive=true)

@@ -115,18 +115,84 @@ pub struct FileScheduler {
   active : Map[String, ActiveAdmission]
   usage : Map[String, TenantUsage]
   decisions : Array[PlacementDecision]
+  node_reservations : Map[String, NodeReservation]
   mutex : @async.Mutex
 }
 pub async fn FileScheduler::admission(Self, String) -> ActiveAdmission?
 pub async fn FileScheduler::admit(Self, @contracts.WorkloadEnvelope, Int64) -> AdmissionResult
+pub async fn FileScheduler::begin_node_release(Self, String, Int64) -> NodeReservation
 pub async fn FileScheduler::cancel(Self, String) -> Bool
+pub async fn FileScheduler::claim_node_service(Self, String, String, NodeServiceClaim, Int64) -> NodeReservation
 pub async fn FileScheduler::complete(Self, String, Int64) -> Unit
+pub async fn FileScheduler::complete_node_release(Self, String, Array[String], Int64) -> NodeReservation
+pub async fn FileScheduler::confirm_node_service_stopped(Self, String, String, Int64) -> Unit
 pub async fn FileScheduler::mark_started(Self, String, Int64) -> Unit
+pub async fn FileScheduler::node_is_reserved(Self, String) -> Bool
+pub async fn FileScheduler::node_reservation(Self, String) -> NodeReservation?
 pub async fn FileScheduler::open(String, Int, decision_history_limit? : Int, background_capacity_percent? : Int, normal_capacity_percent? : Int) -> Self
 pub async fn FileScheduler::open_postgres(@database.PostgresDatabase, Int, decision_history_limit? : Int, background_capacity_percent? : Int, normal_capacity_percent? : Int) -> Self
 pub async fn FileScheduler::place(Self, Array[NodeSnapshot], PlacementRequirements, ScorePolicy) -> PlacementDecision
+pub async fn FileScheduler::place_reserved(Self, Array[NodeSnapshot], PlacementRequirements, ScorePolicy, String, String, Int64) -> PlacementDecision
+pub async fn FileScheduler::reserve_nodes(Self, NodeReservationRequest, Array[String], Int64) -> NodeReservation
 pub async fn FileScheduler::set_quota(Self, TenantQuota) -> Unit
 pub async fn FileScheduler::snapshot(Self) -> SchedulerSnapshot
+
+pub(all) struct NodeReservation {
+  request : NodeReservationRequest
+  state : NodeReservationState
+  generation : Int64
+  updated_unix_ms : Int64
+  services : Array[NodeServiceClaim]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NodeReservation::equal(Self, Self) -> Bool
+pub fn NodeReservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NodeReservation::not_equal(Self, Self) -> Bool
+pub fn NodeReservation::to_json(Self) -> Json
+pub fn NodeReservation::to_repr(Self) -> @debug.Repr
+
+pub(all) struct NodeReservationRequest {
+  reservation_id : String
+  idempotency_key : String
+  tenant_ref : String
+  organization_id : String
+  authority_ref : String
+  lease_id : String
+  node_ids : Array[String]
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  memory_mib_per_node : Int
+  gpu_memory_mib_per_node : Int
+  max_concurrency_per_node : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NodeReservationRequest::equal(Self, Self) -> Bool
+pub fn NodeReservationRequest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NodeReservationRequest::not_equal(Self, Self) -> Bool
+pub fn NodeReservationRequest::to_json(Self) -> Json
+pub fn NodeReservationRequest::to_repr(Self) -> @debug.Repr
+
+pub(all) enum NodeReservationState {
+  Reserved
+  Draining
+  Released
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NodeReservationState::equal(Self, Self) -> Bool
+pub fn NodeReservationState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NodeReservationState::not_equal(Self, Self) -> Bool
+pub fn NodeReservationState::to_json(Self) -> Json
+pub fn NodeReservationState::to_repr(Self) -> @debug.Repr
+
+pub(all) struct NodeServiceClaim {
+  service_id : String
+  node_id : String
+  memory_mib : Int
+  gpu_memory_mib : Int
+  concurrency : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn NodeServiceClaim::equal(Self, Self) -> Bool
+pub fn NodeServiceClaim::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn NodeServiceClaim::not_equal(Self, Self) -> Bool
+pub fn NodeServiceClaim::to_json(Self) -> Json
+pub fn NodeServiceClaim::to_repr(Self) -> @debug.Repr
 
 pub(all) struct NodeSnapshot {
   node_id : String
@@ -222,6 +288,7 @@ pub(all) struct SchedulerSnapshot {
   decisions : Array[PlacementDecision]
   queued_count : Int?
   running_count : Int?
+  node_reservations : Array[NodeReservation]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn SchedulerSnapshot::equal(Self, Self) -> Bool
 pub fn SchedulerSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError

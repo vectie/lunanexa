@@ -523,6 +523,8 @@ async fn ApiService::handle_exclusive_lease_management(
     (Get, "/v1/exclusive-node-leases") =>
       json_reply(200, leases.leases().to_json())
     (Post, "/v1/exclusive-node-leases") => {
+      self.resource_mutex.acquire()
+      defer self.resource_mutex.release()
       guard decode_exclusive_lease_intent(body) is Some(intent) else {
         return api_error(
           400, "InvalidRequest", "invalid exclusive-node lease intent", false,
@@ -531,6 +533,13 @@ async fn ApiService::handle_exclusive_lease_management(
       if !self.node_exists(intent.node_id) {
         return api_error(
           409, "NodeUnavailable", "exclusive lease node is not enrolled", false,
+        )
+      }
+      if self.scheduler is Some(scheduler) &&
+        scheduler.node_is_reserved(intent.node_id) {
+        return api_error(
+          409, "NodeUnavailable", "node belongs to an exclusive resource reservation",
+          false,
         )
       }
       let accepted = try leases.issue(intent, @async.now()) catch {

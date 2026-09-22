@@ -3,6 +3,8 @@ async test "workspace drain waits for old pods and rejects incomplete listings" 
   let calls = Ref(0)
   let mode = Ref(0)
   let host : WorkspaceHost = {
+    require_exclusive: false,
+    observation_token: "",
     config: host_config(),
     locks: {},
     kubernetes_override: Some((_, path, _) => {
@@ -54,6 +56,8 @@ async test "workspace drain waits for old pods and rejects incomplete listings" 
 async test "gateway restart reads desired replica state instead of assuming old pods are active" {
   let value : Ref[Json] = Ref({ "items": [] })
   let host : WorkspaceHost = {
+    require_exclusive: false,
+    observation_token: "",
     config: host_config(),
     locks: {},
     kubernetes_override: Some((_, path, _) => {

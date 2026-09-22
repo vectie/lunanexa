@@ -234,6 +234,7 @@ async fn ApiService::media_all_bindings(
       }
     }
   }
+  self.append_delivery_media_bindings(result, templates)
   result
 }
 
@@ -397,6 +398,26 @@ async fn ApiService::media_execution_authorized(
   model : String,
   context : @media_jobs.ExecutionContext,
 ) -> Bool {
+  if self.delivery_store is Some(deliveries) &&
+    deliveries.operation(context.deployment_id) is Some(delivery) {
+    guard delivery.stage is (Ready | StartingWorkspace | LoadingModel) &&
+      delivery.intent.expires_at_ms > @async.now() &&
+      self.deployment_store is Some(catalog) &&
+      catalog.template({
+        template_id: delivery.intent.template_id,
+        version: delivery.intent.template_version,
+      })
+      is Some(template) &&
+      template.capability == VideoGenerate &&
+      template.model_selector == model &&
+      self.store.assignment(delivery_assignment_id(delivery))
+      is Some(assignment) else {
+      return false
+    }
+    return assignment.node_id == context.node_id &&
+      assignment.generation == context.generation &&
+      assignment.artifact.digest == template.artifact.digest
+  }
   guard self.deployment_store is Some(deployments) &&
     deployments.deployment(context.deployment_id) is Some(operation) &&
     operation.generation == context.generation &&
@@ -428,6 +449,11 @@ async fn ApiService::media_authorized(
   if !self.media_order_matches(owner, binding.execution_context()) {
     return false
   }
+  if self.delivery_store is Some(deliveries) &&
+    deliveries.operation(binding.deployment_id) is Some(operation) {
+    return operation.stage == Ready &&
+      self.media_execution_authorized(model, binding.execution_context())
+  }
   guard self.deployment_store is Some(deployments) &&
     deployments.deployment(binding.deployment_id) is Some(operation) &&
     operation.state == Ready else {
@@ -442,6 +468,16 @@ async fn ApiService::media_order_matches(
   owner : @media_jobs.Owner,
   context : @media_jobs.ExecutionContext,
 ) -> Bool {
+  if self.delivery_store is Some(deliveries) &&
+    deliveries.operation(context.deployment_id) is Some(operation) {
+    return operation.intent.tenant_id == owner.tenant_ref &&
+      operation.intent.organization_id == owner.organization_id &&
+      operation.intent.project_id == owner.project_id &&
+      (match owner.authority {
+        PrivateWorkspace(lease_id) => lease_id == operation.intent.lease_id
+        DedicatedOrder(_) => false
+      })
+  }
   match owner.authority {
     PrivateWorkspace(_) => true
     DedicatedOrder(order_id) =>
@@ -631,9 +667,29 @@ async fn ApiService::handle_media(
           false,
         )
       }
+      let (bound_delivery, delivery_error) = match
+        self.api_key_authorization(headers, Inference, false) {
+        Some(authority) => self.delivery_binding(authority)
+        None =>
+          (
+            None,
+            Some(
+              api_error(
+                403, "VideoEntitlementRequired", "active video authority is required",
+                false,
+              ),
+            ),
+          )
+      }
+      if delivery_error is Some(reply) {
+        return reply
+      }
       let candidates = self
         .media_all_bindings(media.bindings, media.templates)
         .filter(binding => {
+          bound_delivery.map_or(true, delivery => {
+            delivery.operation_id == binding.deployment_id
+          }) &&
           order.map_or(true, order => {
             order.target_deployment_ref == Some(binding.deployment_id) &&
             order.requested_model_selector == Some(binding.profile.model)
