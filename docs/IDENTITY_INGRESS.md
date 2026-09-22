@@ -206,8 +206,20 @@ sent directly to native port 8080.
   Two deliberate, reversible relaxations belong to the no-TLS period: the
   account is created `emailVerified` because this deployment has no mail path,
   and it is created with no required actions because a direct-grant login cannot
-  complete an interactive one while the realm marks `CONFIGURE_TOTP` as a
-  default action. Both are removed with the route when TLS arrives.
+  complete an interactive one. Because the realm's own defaults override an
+  empty `requiredActions` list, the realm's `CONFIGURE_TOTP` default action is
+  also cleared — otherwise every new customer fails to sign in with "Account is
+  not fully set up". Both are removed with the route when TLS arrives.
+
+  The admin origin is not the provider's service name. The provider's pods
+  accept connections from their edges only, so `LUNANEXA_OIDC_ADMIN_ORIGIN`
+  names the same identity internal edge as `LUNANEXA_OIDC_TRANSPORT_ORIGIN`,
+  which carries one extra `POST`-only location,
+  `^~ /admin/realms/<realm>/users`. The edge's own NetworkPolicy allows ingress
+  from this gateway alone, so the admin route is not reachable from anywhere
+  else in the cluster. Configuring the provider's own service name instead is
+  not caught at startup; it fails at the first registration with a refused
+  connection.
 - `GET /auth/session` uses the current host-specific HttpOnly gateway cookie.
   A signed-out or expired session returns `401` and no credential. On the
   first call after OIDC login, the gateway performs one signed loopback
