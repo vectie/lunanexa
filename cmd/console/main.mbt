@@ -626,7 +626,7 @@ extern "js" fn stream_request_promise(
 /// Start every initial console read at once; `request` consumes these
 /// promises when the load path reaches them, so the page waits on the
 /// slowest call instead of the sum of all of them.
-extern "js" fn prefetch_get(urls : Array[String], token : String) -> Unit =
+extern "js" fn prefetch_get(urls : FixedArray[String], token : String) -> Unit =
   #| (urls, token) => {
   #|   const cache = {};
   #|   globalThis.__lunanexaGetCache = cache;
@@ -755,7 +755,10 @@ fn prefetch_console_reads(
       }
     None => ()
   }
-  prefetch_get([ for path in paths => "\{base}\{path}" ], token)
+  prefetch_get(
+    FixedArray::from_array([ for path in paths => "\{base}\{path}" ]),
+    token,
+  )
 }
 
 ///|
@@ -9008,8 +9011,7 @@ fn app_view(
               )
             } else if deployment_console_open() {
               console_copy(
-                locale,
-                "Deployment open — the same-origin proxy attaches operator authority",
+                locale, "Deployment open — the same-origin proxy attaches operator authority",
                 "部署已开放 —— 同源代理会附加运维权限",
               )
             } else if model.credential != "" && model.audit_credential != "" {
