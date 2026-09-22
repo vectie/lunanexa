@@ -635,6 +635,9 @@ fn offline_error_reply(error : Error) -> HttpReply {
 
 ///|
 fn offline_operator_audit_action(path : String) -> String {
+  if path == "/v1/offline-commerce/operator/technical-acceptance-targets" {
+    return "offline.technical-target.prepare"
+  }
   if path == "/v1/offline-commerce/operator/technical-acceptance-waivers" {
     return "offline.technical-waiver.authorize"
   }
@@ -1196,6 +1199,10 @@ async fn ApiService::handle_offline_commerce(
     let server_now = @async.now()
     let reply = try {
       match (verb, path) {
+        (Get, "/v1/offline-commerce/operator/technical-acceptance-authorization"
+        ) => json_reply(200, self.technical_authorization_view())
+        (Post, "/v1/offline-commerce/operator/technical-acceptance-targets") =>
+          self.prepare_technical_workspace(headers, body)
         (Post, "/v1/offline-commerce/operator/technical-acceptance-waivers") =>
           self.authorize_technical_waiver(headers, body)
         (Get, "/v1/offline-commerce/operator/snapshot") =>

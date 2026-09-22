@@ -429,3 +429,36 @@ async test "access onboarding recovers after a cross-store crash boundary and re
   assert_true(operations.body.contains("PreparedForEnablement"))
   assert_false(operations.body.contains("restart-user"))
 }
+
+///|
+test "one-hour onboarding lifetime must be explicit and cannot silently widen to days" {
+  let baseline : WebIdeAccessPackageIntent = {
+    identity_issuer: "https://identity.example",
+    identity_subject: "hour-user",
+    display_name: "Hour Test",
+    email: "hour@example.test",
+    organization_id: "org-hour",
+    tenant_ref: "tenant-hour",
+    template_id: "webide-developer",
+    lifetime_days: 0,
+    lifetime_minutes: Some(60),
+    identity_verified: true,
+  }
+  assert_true(valid_access_onboarding_request(baseline))
+  assert_eq(baseline.duration_ms(), 3600000L)
+  let prepared = access_onboarding_intent("operator", baseline, 1000L)
+  assert_eq(prepared.expires_unix_ms, 3601000L)
+  for
+    bad in [
+      { ..baseline, lifetime_minutes: None, },
+      { ..baseline, lifetime_minutes: Some(0), },
+      { ..baseline, lifetime_minutes: Some(61), },
+      { ..baseline, lifetime_days: 30, },
+    ] {
+    assert_false(valid_access_onboarding_request(bad))
+  }
+  assert_eq(
+    { ..baseline, lifetime_days: 30, lifetime_minutes: None, }.duration_ms(),
+    2592000000L,
+  )
+}

@@ -28,6 +28,9 @@ pub(all) struct OfflineCommerceState {
   undertaking_quantity : String
   terms_digest : String
   entitlement_ref : String
+  technical_authorization : @offline.TechnicalAcceptanceAuthorization?
+  technical_grant_id : String
+  technical_target_ref : String
   confirmation : OfflineCommerceConfirmation?
   loading : Bool
   success_message : String?
@@ -46,6 +49,8 @@ pub extend OfflineCommerceState with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum OfflineCommerceConsequentialAction {
+  PrepareTechnicalWorkspace(String, Int64)
+  AuthorizeTechnicalOrder(String, Int64, String, String, String, Int64)
   QuoteOrder(String, String, String, String)
   QuoteUndertakingOrder(String, String, String)
   BeginOrder(String, Int64)
@@ -123,6 +128,8 @@ pub(all) enum OfflineCommerceMessage {
   UndertakingQuantityChanged(String)
   TermsDigestChanged(String)
   EntitlementChanged(String)
+  TechnicalGrantChanged(String)
+  TechnicalTargetChanged(String)
   Refresh
   ClearNotice
 } derive(Eq)
@@ -152,6 +159,9 @@ pub fn default_state(
     undertaking_quantity: "1",
     terms_digest: "",
     entitlement_ref: "",
+    technical_authorization: None,
+    technical_grant_id: "",
+    technical_target_ref: "",
     confirmation: None,
     loading: false,
     success_message: None,
@@ -318,6 +328,8 @@ pub fn OfflineCommerceState::update(
       { ..self, undertaking_quantity: value, }
     TermsDigestChanged(value) => { ..self, terms_digest: value, }
     EntitlementChanged(value) => { ..self, entitlement_ref: value, }
+    TechnicalGrantChanged(value) => { ..self, technical_grant_id: value, }
+    TechnicalTargetChanged(value) => { ..self, technical_target_ref: value, }
     BeginConfirmation(action) =>
       { ..self, confirmation: Some(confirmation_for_action(action)), }
     DismissConfirmation => { ..self, confirmation: None, }
@@ -416,11 +428,36 @@ fn confirmation_for_action(
         title: "Create entitlement",
         evidence: "\{order_id} · generation \{generation}",
       }
+    AuthorizeTechnicalOrder(
+      order_id,
+      generation,
+      target,
+      grant,
+      reference,
+      expires
+    ) => {
+      let deadline = if expires == 0L {
+        "existing resource expiry (maximum one hour)"
+      } else {
+        expires.to_string()
+      }
+      {
+        action,
+        title: "Limited non-commercial technical acceptance",
+        evidence: "\{order_id} · generation \{generation} · target \{target} · grant \{grant} · \{reference} · \{deadline}",
+      }
+    }
     CancelOrder(order_id, generation) =>
       {
         action,
         title: "Cancel order or end access",
         evidence: "\{order_id} · generation \{generation}",
+      }
+    PrepareTechnicalWorkspace(order_id, generation) =>
+      {
+        action,
+        title: "Prepare a bounded test workspace",
+        evidence: "\{order_id} · generation \{generation} · maximum 45 minutes",
       }
     RequestEntitlementReversal(order_id, generation) =>
       {
@@ -795,14 +832,27 @@ fn policy_items(
 fn steps(
   locale : @i18n.Locale,
   current : @offline.OfflineOrderState,
+  technical~ : Bool,
 ) -> @rabbita.Html {
   let labels = [
     copy(locale, "Configure", "配置"),
     copy(locale, "Quote", "报价"),
-    copy(locale, "Offline execution", "线下办理"),
-    copy(locale, "Upload evidence", "上传凭证"),
+    if technical {
+      copy(locale, "Offline steps waived", "线下步骤已豁免")
+    } else {
+      copy(locale, "Offline execution", "线下办理")
+    },
+    if technical {
+      copy(locale, "Waiver recorded", "记录测试豁免")
+    } else {
+      copy(locale, "Upload evidence", "上传凭证")
+    },
     copy(locale, "Reconcile", "核验"),
-    copy(locale, "Fulfill", "履约"),
+    if technical {
+      copy(locale, "Test access", "测试资源开通")
+    } else {
+      copy(locale, "Fulfill", "履约")
+    },
   ]
   let index = match current {
     Draft => 0
@@ -1133,6 +1183,10 @@ fn operator_actions(
     )
   }
   if order.state == UnderReconciliation {
+    let target = order.technical_acceptance_waiver.map_or(
+      state.entitlement_ref,
+      w => w.authority_target_ref,
+    )
     actions.push(
       @html.div(class="offline-field", [
         @html.label(
@@ -1141,7 +1195,10 @@ fn operator_actions(
         ),
         @html.input(
           id="offline-entitlement",
-          value=state.entitlement_ref,
+          value=target,
+          attrs=@html.Attrs::build().disabled(
+            order.technical_acceptance_waiver is Some(_),
+          ),
           maxlength=160,
           on_input=text_command(emit, value => EntitlementChanged(value)),
         ),
@@ -1151,7 +1208,7 @@ fn operator_actions(
       @html.button(
         type_="button",
         class="primary-action",
-        disabled=state.loading || state.entitlement_ref.trim() == "",
+        disabled=state.loading || target.trim() == "",
         on_click=command(
           emit,
           BeginConfirmation(
@@ -1377,10 +1434,15 @@ fn order_detail(
       ]),
       @html.span(
         class="status-pill",
-        order_state_label(state.locale, order.state),
+        technical_order_status(state.locale, order),
       ),
     ]),
-    steps(state.locale, order.state),
+    steps(
+      state.locale,
+      order.state,
+      technical=order.technical_acceptance_waiver is Some(_),
+    ),
+    technical_acceptance_panel(state, emit, order),
     @html.div(class="offline-two-column", [
       @html.section(class="offline-panel", [
         @html.h3(copy(state.locale, "Order details", "订单详情")),
@@ -1416,7 +1478,11 @@ fn order_detail(
         ),
         @html.ul(
           class="offline-policy-list",
-          policy_items(state.locale, order.policy),
+          if order.technical_acceptance_waiver is Some(_) {
+            technical_policy_items(state.locale)
+          } else {
+            policy_items(state.locale, order.policy)
+          },
         ),
       ]),
     ]),
@@ -1575,6 +1641,14 @@ fn confirmation_title(
       )
     FulfillVerifiedOrder(_, _) =>
       copy(locale, "Create the entitlement now?", "确认立即创建权益？")
+    PrepareTechnicalWorkspace(_, _) =>
+      copy(
+        locale, "Prepare this purchaser's limited workspace access?", "为本订单使用人准备限时工作区权限？",
+      )
+    AuthorizeTechnicalOrder(_, _, _, _, _, _) =>
+      copy(
+        locale, "Authorize limited non-commercial testing?", "确认授权本订单限时非商业测试？",
+      )
     CancelOrder(_, _) =>
       copy(
         locale, "Cancel this order or end its active access?", "确认取消此订单或结束其有效访问？",
@@ -1602,6 +1676,11 @@ fn confirmation_description(
   action : OfflineCommerceConsequentialAction,
 ) -> String {
   match action {
+    PrepareTechnicalWorkspace(_, _) =>
+      copy(
+        locale, "Creates a scoped Developer grant and a requested workspace lease for at most 45 minutes, using the existing customer account. Does not allocate an exclusive machine, activate the lease, sign or pay. Existing isolation and expiry remain enforced.",
+        "使用现有客户账户，创建最多 45 分钟的本企业开发者授权与待开通工作区租约；不分配独占机器、不激活租约、不签署或付款。保留隔离和到期回收。",
+      )
     QuoteOrder(_, _, _, _) | QuoteUndertakingOrder(_, _, _) =>
       copy(
         locale, "The price, validity window, terms digest, service, and SLA become immutable for this quote revision.",
@@ -1636,6 +1715,11 @@ fn confirmation_description(
       copy(
         locale, "Fulfillment creates the entitlement only when every policy-required artifact is scan-passed and independently accepted.",
         "仅当所有策略要求的材料均通过扫描并经独立审核接受后，履约才会创建权益。",
+      )
+    AuthorizeTechnicalOrder(_, _, _, _, _, _) =>
+      copy(
+        locale, "Unsigned, unpaid, non-commercial testing only. No signature, payment or invoice evidence is fabricated. Existing administrator grants, target binding and automatic expiry remain mandatory; resource activation is a separate action.",
+        "仅用于未签署、未付款、非商业测试，不伪造签字、付款或发票凭证。仍须已有管理员资源授权、精确资源绑定和到期回收；本操作不直接开通资源。",
       )
     CancelOrder(_, _) =>
       copy(
@@ -1829,7 +1913,7 @@ fn offline_view(
               on_click=command(emit, SelectOrder(order.order_id)),
               [
                 @html.strong(order.order_id),
-                @html.span(order_state_label(state.locale, order.state)),
+                @html.span(technical_order_status(state.locale, order)),
                 @html.small(
                   "\{order.selected_service_code} · \{order.selected_sla_code}",
                 ),

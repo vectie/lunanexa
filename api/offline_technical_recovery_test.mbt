@@ -46,6 +46,7 @@ async test "removed technical scope rejects durable pending work and compensates
       reason: "technical-test",
       issued_unix_ms: now - 1000L,
       expires_unix_ms: now + 3599000L,
+      order_binding: None,
     }
     let order = {
       ..previous,

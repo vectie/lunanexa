@@ -163,6 +163,12 @@ async fn ApiService::undertaking_fulfillment_allowed(
   order_id : String,
   now : Int64,
 ) -> Bool {
+  if self.offline_commerce_store is Some(commerce) &&
+    commerce.snapshot().orders.iter().find_first(o => o.order_id == order_id)
+    is Some(order) &&
+    order.technical_acceptance_waiver is Some(_) {
+    return self.technical_documentary_waiver_allowed(order, now)
+  }
   guard self.contract_document_store is Some(documents) else { return true }
   for packet in documents.snapshot().packets {
     if packet.order_ref != order_id ||

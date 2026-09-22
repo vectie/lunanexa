@@ -1,0 +1,41 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+// Deployment configuration only. Business waiver/preparation/activation must
+// still be requested by a real operator session through the public UI.
+async fn main {
+  guard @env.args() is [_, kubeconfig, private_dir, image, order_id, subject, organization, tenant, approval_ref] else {
+    fail("Usage: deploy-scoped-technical-order.mbtx KUBECONFIG NEW_PRIVATE_DIR PINNED_IMAGE ORDER SUBJECT ORGANIZATION TENANT APPROVAL_REF")
+  }
+  guard image.contains("@sha256:") && order_id.has_prefix("offline-order-") && approval_ref.has_prefix("docs/evidence/") else {
+    fail("Immutable image and exact documented order approval required")
+  }
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let before = @shell.Cmd("kubectl", [..k, "get", "deployment", "lunanexa-control", "-o", "json"]).output()
+  before.check()
+  // This read is deployment input discovery, not a business mutation or E2E
+  // substitute. Do not print the snapshot or any credentials from deployment.
+  let read = @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "http://127.0.0.1:4174/v1/offline-commerce/operator/snapshot"]).output()
+  read.check()
+  guard @json.parse(read.stdout()) is { "orders": Array(orders), .. } else { fail("Missing order snapshot") }
+  let found = orders.iter().find_first(o => match o { { "order_id": String(id), .. } => id == order_id; _ => false })
+  guard found is Some({ "purchaser_subject_ref": String(owner), "organization_id": String(org), "tenant_ref": String(t), "quote": Object(quote), .. }) &&
+    owner == subject && org == organization && t == tenant else { fail("Order does not match the explicitly approved scope") }
+  let authorization : Json = {
+    "order_id": order_id, "purchaser_subject_ref": subject, "user_authorization_ref": approval_ref,
+    // A two-hour deployment window is NOT a two-hour resource grant. The API
+    // prepares at most 45 minutes and the durable waiver is capped at one hour.
+    "expires_unix_ms": @async.now() + 7200000L,
+    "order_binding": { "organization_id": organization, "tenant_ref": tenant, "quote": Json::object(quote), "entitlement_kind": "WorkspaceLease" },
+  }
+  guard authorization.stringify().length() <= 4096 else { fail("Authorization exceeds controller configuration bound") }
+  @fs.mkdir(private_dir, permission=0o700)
+  @fs.write_file(private_dir + "/deployment-before.json", before.stdout(), create_mode=CreateNew, permission=0o600)
+  let patch : Json = { "spec": { "template": { "spec": { "containers": [{ "name": "control", "image": image,
+    "imagePullPolicy": "IfNotPresent", "env": [{ "name": "LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON", "value": authorization.stringify(), "valueFrom": null }] }] } } } }
+  let path = private_dir + "/scoped-control-patch.json"
+  @fs.write_file(path, patch.stringify(), create_mode=CreateNew, permission=0o600)
+  @shell.Cmd("kubectl", [..k, "patch", "deployment", "lunanexa-control", "--type=strategic", "--patch-file=" + path, "--dry-run=server", "-o", "name"]).run()
+  @shell.Cmd("kubectl", [..k, "patch", "deployment", "lunanexa-control", "--type=strategic", "--patch-file=" + path]).run()
+  @shell.Cmd("kubectl", [..k, "rollout", "status", "deployment/lunanexa-control", "--timeout=180s"]).run()
+  println("Scoped controller deployed; no waiver, signature, payment or resource activation was submitted")
+}
