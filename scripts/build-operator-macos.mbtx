@@ -3,6 +3,8 @@ import {
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/async/shell",
+  "moonbitlang/async/stdio",
+  "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
 
@@ -13,14 +15,26 @@ async fn run(program : String, args : Array[String], cwd : String) -> Unit {
 
 ///|
 async fn main {
+  let private_build = @env.args().contains("--private-password-stdin")
+  let credential = if private_build {
+    @stdio.stdin.read_all().text().trim_end(chars="\r\n").to_owned()
+  } else {
+    ""
+  }
+  guard !private_build ||
+    (credential.length() > 0 && credential.length() <= 1024) else {
+    fail("A bounded private credential is required on stdin")
+  }
   let repo = @shell.Cmd("pwd", []).output().stdout().trim().to_owned()
   let native = repo + "/desktop/native"
   let arch = @shell.Cmd("uname", ["-m"]).output().stdout().trim().to_owned()
   guard arch == "arm64" else {
     fail("This release profile requires an Apple Silicon build host")
   }
-  let out = repo + "/_build/macos/operator-autologin"
-  let target = out + "/target-macos-13"
+  let out = repo +
+    "/_build/macos/operator-autologin" +
+    (if private_build { "-private" } else { "" })
+  let target = repo + "/_build/macos/operator-autologin/target-macos-13"
   if !@fs.exists(out) {
     @fs.mkdir(out, recursive=true)
   }
@@ -76,6 +90,12 @@ async fn main {
     "LEPUSA_RUNTIME_EXECUTABLE": runtime,
   }).run()
   let app = staging + "/lunanexa-operator.app"
+  let bootstrap = app + "/Contents/Resources/operator-bootstrap.secret"
+  if private_build {
+    @fs.write_file(bootstrap, credential)
+  } else if @fs.exists(bootstrap) {
+    @fs.remove(bootstrap)
+  }
   let plist = app + "/Contents/Info.plist"
   run(
     "/usr/libexec/PlistBuddy",
@@ -121,13 +141,21 @@ async fn main {
   }
   @fs.write_file(
     staging + "/使用说明.txt",
-    "LunaNexa Operator\n\n将应用拖入 Applications。\n预设地址：http://192.168.2.175:4174\n预设用户名：wlc\n首次打开输入平台密码，之后由本机钥匙串自动登录。\n需要内网或 VPN；此版本使用 HTTP。\n此安装包为本地临时签名版本，尚未经过 Apple 公证。\n",
+    "LunaNexa Operator\n\n将应用拖入 Applications。\n预设地址：http://192.168.2.175:4174\n预设用户名：wlc\n" +
+    (if private_build {
+      "此专用包内置管理员凭据，首次打开自动导入钥匙串。不要公开分发：包内密码可被提取。\n"
+    } else {
+      "首次打开输入平台密码，之后由本机钥匙串自动登录。\n"
+    }) +
+    "需要内网或 VPN；此版本使用 HTTP。\n此安装包为本地临时签名版本，尚未经过 Apple 公证。\n",
   )
   let releases = out + "/releases"
   if !@fs.exists(releases) {
     @fs.mkdir(releases, recursive=true)
   }
-  let dmg = releases + "/LunaNexa-Operator-0.2.0-macos-arm64.dmg"
+  let dmg = releases +
+    "/LunaNexa-Operator-0.2.0-macos-arm64" +
+    (if private_build { "-private.dmg" } else { ".dmg" })
   run(
     "/usr/bin/hdiutil",
     [
@@ -141,6 +169,9 @@ async fn main {
     .output()
     .stdout()
   @fs.write_file(dmg + ".sha256", checksum)
+  if private_build {
+    run("/bin/chmod", ["600", dmg], repo)
+  }
   println("Ready: " + app)
   println("Ready: " + dmg)
 }

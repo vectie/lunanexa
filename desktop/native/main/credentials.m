@@ -70,6 +70,16 @@ MOONBIT_FFI_EXPORT moonbit_bytes_t lnx_password(const unsigned char *service, co
     CFTypeRef result = NULL;
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)q, &result);
     if (status == errSecSuccess) return bytes(CFBridgingRelease(result));
+    // Explicit private-distribution option. This resource is recoverable by
+    // anyone holding the app; it is provisioning, NOT secret encryption.
+    // Never bypass a locked Keychain or a denied access prompt.
+    if (status == errSecItemNotFound) {
+      NSString *path = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"operator-bootstrap.secret"];
+      NSData *data = [NSData dataWithContentsOfFile:path];
+      if (data.length > 0 && data.length <= 1024 && save(str(service), str(account), data) == 0) {
+        return bytes(data);
+      }
+    }
     return bytes([NSData data]);
   }
 }
