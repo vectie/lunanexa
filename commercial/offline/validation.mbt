@@ -120,6 +120,14 @@ pub fn validate_order(
   if order.artifact_ids.length() > 256 {
     raise InvalidInput("too many order artifacts")
   }
+  match order.requested_undertaking_term {
+    Some(term) => {
+      guard undertaking_term_tier(term) is Some(_) else {
+        raise InvalidInput("requested undertaking term is not a fixed tier")
+      }
+    }
+    None => ()
+  }
   if (
       order.state == Fulfilled ||
       order.state == ReversalPending ||

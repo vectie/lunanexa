@@ -22,6 +22,7 @@ fn offline_order(
     agreement_ref: Some("agreement-a"),
     artifact_ids: ["artifact-contract"],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state,
     generation: 5L,
     created_unix_ms: 1000L,
@@ -274,4 +275,56 @@ test "the route reports its own failures instead of looking inert" {
     loading: true,
   })
   assert_true(busy.contains("Working…"))
+}
+
+///|
+test "both sides render the undertaking's tiers from the one list" {
+  // The customer's own order form carries the tier picker, and the operator's
+  // tariff picker renders the same five options with the same prices.
+  let customer = @offline_commerce.render(
+    @offline_commerce.default_state(English, CustomerCommerce),
+  )
+  assert_true(customer.contains("id=\"offline-undertaking-term\""))
+  assert_true(customer.contains("Rental tier"))
+  let operator = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    orders: [offline_order(Draft)],
+  })
+  assert_true(operator.contains("id=\"undertaking-tariff\""))
+  for label in ["1 day · 49", "7 days · 322", "30 days · 1290", "90 days · 3600", "365 days · 13870"] {
+    assert_true(customer.contains(label))
+    assert_true(operator.contains(label))
+  }
+  // Chinese renders the same tiers.
+  let chinese = @offline_commerce.render(
+    @offline_commerce.default_state(ChineseSimplified, CustomerCommerce),
+  )
+  assert_true(chinese.contains("租赁档位"))
+  assert_true(chinese.contains("7 天 · 322 元"))
+}
+
+///|
+test "opening an order adopts the tier the customer asked for" {
+  let base = @offline_commerce.default_state(English, OperatorCommerce)
+  let requested = {
+    ..offline_order(Draft),
+    requested_undertaking_term: Some("quarter"),
+  }
+  // The state default is month; opening the order must move the picker to the
+  // tier that was actually requested.
+  assert_eq(base.undertaking_term, "month")
+  let opened = base.update(SelectOrder(requested.order_id))
+  // No order in the list yet, so the default stands.
+  assert_eq(opened.undertaking_term, "month")
+  let with_order = { ..base, orders: [requested] }.update(
+    SelectOrder(requested.order_id),
+  )
+  assert_eq(with_order.undertaking_term, "quarter")
+  // A request that is not a fixed tier is ignored rather than adopted.
+  let unknown = {
+    ..offline_order(Draft),
+    requested_undertaking_term: Some("hour"),
+  }
+  let ignored = { ..base, orders: [unknown] }.update(SelectOrder(unknown.order_id))
+  assert_eq(ignored.undertaking_term, "month")
 }

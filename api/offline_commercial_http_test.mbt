@@ -155,6 +155,7 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
       "project_id": "project-a",
       "selected_service_code": "exclusive-dgx",
       "selected_sla_code": "standard",
+      "requested_undertaking_term": "week",
       "policy": {
         "require_executed_agreement": true,
         "require_payment": true,
@@ -188,6 +189,27 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
   assert_eq(secure_order.policy.invoice_timing, InvoiceBeforeFulfillment)
   assert_true(secure_order.policy.require_identity_verification)
   assert_true(secure_order.policy.require_internal_approval)
+  // The customer's tier request travels on the order; it is a request, not a
+  // price, so the operator still freezes the quote.
+  assert_eq(secure_order.requested_undertaking_term, Some("week"))
+  let unknown_tier = service.handle(
+    Post,
+    "/v1/offline-commerce/self/orders",
+    subject_a,
+    (
+      {
+        "order_id": "order-http-bad-term",
+        "idempotency_key": "idem-http-bad-term",
+        "project_id": "project-a",
+        "selected_service_code": "exclusive-dgx",
+        "selected_sla_code": "standard",
+        "requested_undertaking_term": "hour",
+        "expires_unix_ms": (now + 3600000L).to_json(),
+      } : Json
+    ).stringify(),
+  )
+  assert_eq(unknown_tier.status, 400)
+  assert_true(unknown_tier.body.contains("InvalidTerm"))
   let replay = service.handle(
     Post,
     "/v1/offline-commerce/self/orders",
@@ -310,6 +332,7 @@ async test "offline operator route rejects customers and exposes no artifact byt
       agreement_ref: None,
       artifact_ids: [],
       entitlement_ref: None,
+      requested_undertaking_term: None,
       state: Draft,
       generation: 1L,
       created_unix_ms: now,
@@ -519,6 +542,7 @@ async test "entitlement callback authority is distinct terminal and idempotent" 
     agreement_ref: None,
     artifact_ids: [],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state: Draft,
     generation: 1L,
     created_unix_ms: now,
@@ -857,6 +881,7 @@ async test "offline lifecycle reconciliation emits safe deduplicated customer no
       agreement_ref: None,
       artifact_ids: [],
       entitlement_ref: None,
+      requested_undertaking_term: None,
       state: Draft,
       generation: 1L,
       created_unix_ms: now,

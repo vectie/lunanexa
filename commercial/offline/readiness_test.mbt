@@ -59,3 +59,27 @@ test "offline commerce readiness is complete only with evidence for every gate" 
   assert_eq(bad_time.status, OfflineCommerceAdaptersPending)
   assert_true(bad_time.blocker_codes.contains("ReadinessEvaluationTimeInvalid"))
 }
+
+///|
+test "the undertaking's tiers are one ordered list both sides can render" {
+  // The operator's tariff picker and the enterprise portal's term picker both
+  // read this list. If they ever read two lists, a customer can ask for a tier
+  // the operator cannot quote.
+  assert_eq(@offline.undertaking_term_tiers.length(), 5)
+  let units = @offline.undertaking_term_tiers.map(tier => tier.unit)
+  assert_eq(units, ["day", "week", "month", "quarter", "year"])
+  // Shortest first, and the days must increase with the price.
+  for index = 1; index < @offline.undertaking_term_tiers.length(); index = index + 1 {
+    let previous = @offline.undertaking_term_tiers[index - 1]
+    let current = @offline.undertaking_term_tiers[index]
+    assert_true(previous.days < current.days)
+    assert_true(previous.minor_units < current.minor_units)
+  }
+  // The tariff and the day count are derived from the list, never restated.
+  for tier in @offline.undertaking_term_tiers {
+    assert_eq(@offline.undertaking_tariff(tier.unit), Some(tier.minor_units))
+    assert_eq(@offline.undertaking_term_days(tier.unit), Some(tier.days))
+  }
+  assert_eq(@offline.undertaking_tariff("hour"), None)
+  assert_eq(@offline.undertaking_term_tier("hour"), None)
+}
