@@ -48,6 +48,9 @@ pub(all) suberror BridgeError {
   CapacityExceeded
   UpstreamUnavailable
   AuthorityUnavailable
+  StorageBusy
+  StorageMigrationRequired
+  StorageNotConfigured
 } derive(Debug, Eq)
 
 ///|

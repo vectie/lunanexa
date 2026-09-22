@@ -1,4 +1,14 @@
 ///|
+test "overview resource allocation does not impose a single-node delivery" {
+  let english = enterprise_copy(English, OperatorAssignsOneNode)
+  let chinese = enterprise_copy(ChineseSimplified, OperatorAssignsOneNode)
+  assert_eq(english, "Administrator allocates approved resources")
+  assert_eq(chinese, "管理员分配已批准的资源")
+  assert_false(english.contains("one node"))
+  assert_false(chinese.contains("一个节点"))
+}
+
+///|
 test "static enterprise catalog has complete unique bilingual entries" {
   let keys : Array[EnterpriseCopyMessage] = [
     SelectAnActiveOrganizationBeforeContinuing,

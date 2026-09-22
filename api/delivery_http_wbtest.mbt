@@ -31,6 +31,7 @@ test "delivery projection reports stage without leaking physical placement" {
     failure_code: None,
     updated_at_ms: 500L,
     model_assignment_generation: None,
+    model_replicas: None,
     stop_requested_at_ms: None,
   }
   let view = delivery_view(operation)
@@ -48,6 +49,38 @@ test "delivery projection reports stage without leaking physical placement" {
   )
   assert_false(view.stringify().contains("private-node"))
   assert_false(view.stringify().contains("grant-a"))
+  assert_true(view is { "model_replica_progress": Null, .. })
+  let replica : @delivery.ModelReplica = {
+    assignment_id: "private-assignment",
+    node_id: "private-node-a",
+    generation: 1L,
+    prepared: true,
+    ready: true,
+    stopped: false,
+  }
+  let replicated = delivery_view({
+    ..operation,
+    model_replicas: Some([
+      replica,
+      { ..replica, node_id: "private-node-b", stopped: true, },
+    ]),
+  })
+  assert_true(
+    replicated
+    is {
+      "model_replica_progress": {
+        "topology": String("independent_replicas"),
+        "observed": Number(2, ..),
+        "prepared": Number(2, ..),
+        "ready": Number(1, ..),
+        "stopped": Number(1, ..),
+        ..
+      },
+      ..
+    },
+  )
+  assert_false(replicated.stringify().contains("private-node"))
+  assert_false(replicated.stringify().contains("private-assignment"))
   let expired = delivery_view({ ..operation, stage: Expired, })
   assert_true(expired is { "stage": String("Expired"), .. })
 }

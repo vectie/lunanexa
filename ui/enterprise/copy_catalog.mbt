@@ -654,7 +654,7 @@ fn enterprise_copy(
       )
     OperatorAssignsOneNode =>
       @i18n.copy(
-        locale, "Operator assigns one node", "运维分配一个节点",
+        locale, "Administrator allocates approved resources", "管理员分配已批准的资源",
       )
     ACredentialReferenceIsCreatedNo =>
       @i18n.copy(

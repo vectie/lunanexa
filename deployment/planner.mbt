@@ -267,6 +267,7 @@ pub fn preflight(
   templates : Array[ModelServiceTemplate],
   intent : ModelServiceIntent,
   context : PlanningContext,
+  preferred_node_ids? : Array[String] = [],
 ) -> DeploymentPlan {
   let findings : Array[PreflightFinding] = []
   try validate_intent(intent) catch {
@@ -426,6 +427,17 @@ pub fn preflight(
     )
   }
   let nodes = compatible_nodes(context, template, intent)
+  nodes.sort_by((left, right) => {
+    let left_cached = preferred_node_ids.contains(left.node_id)
+    let right_cached = preferred_node_ids.contains(right.node_id)
+    if left_cached == right_cached {
+      left.node_id.compare(right.node_id)
+    } else if left_cached {
+      -1
+    } else {
+      1
+    }
+  })
   // A pair is produced below only from two compatible nodes that name each
   // other and both declare a fabric address; anything less is refused here
   // rather than half-placed.

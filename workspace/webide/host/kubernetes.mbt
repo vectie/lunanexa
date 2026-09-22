@@ -24,7 +24,11 @@ async fn WorkspaceHost::kubernetes(
     client.request(verb, path, extra_headers={
       "authorization": "Bearer " + token,
       "content-type": if verb == Patch {
-        "application/apply-patch+yaml"
+        if body is Some(Array(_)) {
+          "application/json-patch+json"
+        } else {
+          "application/apply-patch+yaml"
+        }
       } else {
         "application/json"
       },
@@ -35,6 +39,18 @@ async fn WorkspaceHost::kubernetes(
     }
     let response = client.end_request()
     let bytes = limited(client, 4194304)
+    let observed = if response.code == 422 &&
+      verb == Patch &&
+      storage_cas_version(path, body) is Some(_) {
+      let (_, current) = self.kubernetes(Get, path, None)
+      Some(current)
+    } else {
+      None
+    }
+    if verb == Patch &&
+      storage_cas_conflict(response.code, path, body, observed) {
+      raise @webide.BridgeError::StorageBusy
+    }
     // Kubernetes errors can contain a submitted Secret. Do not include their
     // content in an exception or a browser readiness response.
     if response.code < 200 || response.code >= 300 {
@@ -89,6 +105,14 @@ pub async fn WorkspaceHost::provision(
           )
         }
       }
+      guard placement is Some(assigned) else {
+        raise HostError::ControllerRejected
+      }
+      for (path, resource) in resources {
+        if path.contains("/persistentvolumeclaims/") {
+          self.ensure_storage(id, assigned, path, resource)
+        }
+      }
       self.report_delivery_starting(grant, container)
     }
     // Recreate controls rollouts, not a rapid scale-to-zero/scale-up cycle.
@@ -97,6 +121,9 @@ pub async fn WorkspaceHost::provision(
     self.wait_for_workspace_pods(name, terminating_only=!stopped)
     for entry in resources {
       let (path, resource) = entry
+      if self.require_exclusive && path.contains("/persistentvolumeclaims/") {
+        continue
+      }
       ignore(
         self.kubernetes(
           Patch,
@@ -283,6 +310,7 @@ async fn WorkspaceHost::reconcile_page(
         if resource_name(id) != name {
           raise HostError::ControllerRejected
         }
+        self.release_storage(id)
         self.report_delivery_stopped(id)
       }
     }

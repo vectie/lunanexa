@@ -15,6 +15,64 @@ pub(all) struct MediaBinding {
 pub extend MediaBinding with FromJson::{from_json}
 
 ///|
+priv enum MediaReplicaSelection {
+  MediaUnavailable
+  MediaAmbiguous
+  MediaSelected(MediaBinding)
+}
+
+///|
+/// A retry stays on its durable original runtime. New requests may use the
+/// least-busy independent replica of one approved delivery/profile only.
+fn select_media_replica(
+  bindings : Array[MediaBinding],
+  jobs : Array[@media_jobs.StoredJob],
+  owner : @media_jobs.Owner,
+  key : String,
+) -> MediaReplicaSelection {
+  let digest = "sha256:" +
+    digest_hex(({ "owner": owner.to_json(), "key": key } : Json).stringify())
+  if jobs
+    .iter()
+    .find_first(job => job.owner == owner && job.idempotency_digest == digest)
+    is Some(existing) {
+    return match
+      bindings
+      .iter()
+      .find_first(binding => {
+        binding.identity() == existing.deployment_id &&
+        existing.execution_context.map_or(true, context => {
+          context == binding.execution_context()
+        })
+      }) {
+      Some(binding) => MediaSelected(binding)
+      None => MediaUnavailable
+    }
+  }
+  guard bindings.get(0) is Some(first) else { return MediaUnavailable }
+  let nodes : Map[String, Bool] = Map([])
+  for binding in bindings {
+    if binding.deployment_id != first.deployment_id ||
+      binding.profile != first.profile ||
+      nodes.contains(binding.node_id) {
+      return MediaAmbiguous
+    }
+    nodes[binding.node_id] = true
+  }
+  let ranked = bindings.copy()
+  ranked.sort_by_key(binding => {
+    let identity = binding.identity()
+    (
+      jobs
+      .filter(job => job.deployment_id == identity && !job.execution_terminal)
+      .length(),
+      identity,
+    )
+  })
+  MediaSelected(ranked[0])
+}
+
+///|
 /// One operator-qualified template/node profile serves every subsequent order;
 /// customers never configure endpoints or wait for per-order config edits.
 pub(all) struct MediaTemplateBinding {
@@ -409,14 +467,21 @@ async fn ApiService::media_execution_authorized(
       })
       is Some(template) &&
       template.capability == VideoGenerate &&
-      template.model_selector == model &&
-      self.store.assignment(delivery_assignment_id(delivery))
-      is Some(assignment) else {
+      template.model_selector == model else {
       return false
     }
-    return assignment.node_id == context.node_id &&
-      assignment.generation == context.generation &&
-      assignment.artifact.digest == template.artifact.digest
+    return self.store
+      .assignments()
+      .any(assignment => {
+        assignment.deployment_id == delivery.operation_id &&
+        assignment.node_id == context.node_id &&
+        assignment.generation == context.generation &&
+        assignment.artifact.digest == template.artifact.digest &&
+        assignment.reservation.map_or(false, value => {
+          Some(value.reservation_id) == delivery.reservation_id &&
+          value.tenant_ref == delivery.intent.tenant_id
+        })
+      })
   }
   guard self.deployment_store is Some(deployments) &&
     deployments.deployment(context.deployment_id) is Some(operation) &&
@@ -733,19 +798,20 @@ async fn ApiService::handle_media(
           false,
         )
       }
-      guard active.length() == 1 else {
-        if active.is_empty() {
+      let binding = match
+        select_media_replica(active, media.jobs.snapshot().jobs, owner, key) {
+        MediaUnavailable =>
           return api_error(
             503, "VideoUnavailable", "no authorized ready video runtime is currently available; retain the same request key",
             true,
           )
-        }
-        return api_error(
-          503, "MediaProfileUnavailable", "the selected model does not have exactly one authorized active media profile",
-          false,
-        )
+        MediaAmbiguous =>
+          return api_error(
+            503, "MediaProfileUnavailable", "the selected model has conflicting authorized runtime profiles",
+            false,
+          )
+        MediaSelected(binding) => binding
       }
-      let binding = active[0]
       let request = @media_provider.VideoRequest::decode(
         binding.profile,
         header(headers, "content-type").unwrap_or("application/json"),

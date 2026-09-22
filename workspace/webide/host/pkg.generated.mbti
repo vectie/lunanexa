@@ -61,6 +61,7 @@ pub(all) struct HostConfig {
   comfyui_image : String
   model_proxy_image : String
   storage_class : String
+  storage_access_mode : String?
   storage_gib : Int
   cpu_millis : Int
   memory_mib : Int

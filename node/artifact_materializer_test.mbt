@@ -170,6 +170,9 @@ async test "assigned node materializes verifies reuses and prunes its model" {
     assert_eq(@fs.read_file(artifact.host_path()).text(), "artifact-bytes")
     assert_eq(request_count.val, 2)
     assert_eq(verifier.calls, 1)
+    assert_eq(materializer.verified_cache_digests(), [
+      materialization_assignment().artifact.digest,
+    ])
     let downloaded = materializer.preparation_samples(
       "node-a", "deployment-materialize-1", 1000L,
     )
@@ -193,13 +196,18 @@ async test "assigned node materializes verifies reuses and prunes its model" {
       maximum_artifact_size_bytes=1024L,
       allow_http_loopback=true,
     )
+    assert_eq(restarted.verified_cache_digests(), [])
     ignore(restarted.materialize(materialization_assignment(), verifier))
+    assert_eq(restarted.verified_cache_digests(), [
+      materialization_assignment().artifact.digest,
+    ])
     assert_eq(request_count.val, 2)
     assert_eq(verifier.calls, 2)
     restarted.prune_unassigned([], now_unix_ms=1000L)
     assert_true(@fs.exists(artifact.host_path()))
     restarted.prune_unassigned([], now_unix_ms=604801001L)
     assert_false(@fs.exists(artifact.host_path()))
+    assert_eq(restarted.verified_cache_digests(), [])
     @fs.rmdir(directory, recursive=true)
     server.close()
   }

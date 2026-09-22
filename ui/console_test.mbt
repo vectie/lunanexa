@@ -492,8 +492,9 @@ test "demo snapshot presents the four-node nine-model fleet" {
   let overview = @ui.render(state)
   assert_true(overview.contains("4 of 4"))
   assert_true(overview.contains("9"))
-  assert_true(overview.contains("Ready for one-click deployment"))
-  assert_true(overview.contains("Open one-click deployment"))
+  assert_true(overview.contains("Choose a service template"))
+  assert_true(overview.contains("Open service catalog"))
+  assert_false(overview.contains("Ready for one-click deployment"))
   let nodes = @ui.render({ ..state, route: Nodes, })
   assert_true(nodes.contains("dgx-spark-04"))
   let models = @ui.render({ ..state, route: Models, })
@@ -1218,7 +1219,7 @@ test "overview distinguishes healthy, attention, and awaiting telemetry states" 
 }
 
 ///|
-test "authoritative readiness blockers disable launch and render bilingually" {
+test "platform blockers remain visible without disabling catalog navigation" {
   let base = @ui.demo_state()
   let blocked = @ui.render({
     ..base,
@@ -1227,14 +1228,31 @@ test "authoritative readiness blockers disable launch and render bilingually" {
       loading: false,
       blocker_codes: [
         "GuideDiagnosticsUnavailable", "ExclusiveLeaseExpiryReconcilerUnavailable",
+        "CommercialProviderAdapterUnavailable",
       ],
       error: None,
     },
   })
-  assert_true(blocked.contains("Deployment prerequisites remain"))
+  assert_true(blocked.contains("Choose a service template"))
   assert_true(blocked.contains("Guide diagnostics"))
   assert_true(blocked.contains("Lease expiry controller"))
-  assert_true(blocked.contains("disabled"))
+  assert_true(blocked.contains("CommercialProviderAdapterUnavailable"))
+  assert_true(blocked.contains("separate from catalog access"))
+  assert_true(
+    blocked.contains(
+      "controller checks authorization and model/resource readiness before deployment",
+    ),
+  )
+  assert_false(blocked.contains("Ready for one-click deployment"))
+  let mut action = ""
+  for index, segment in blocked.split("<button").to_array() {
+    let button = segment.split("</button>").to_array()[0]
+    if index > 0 && button.contains("readiness-action") {
+      action = button.to_owned()
+    }
+  }
+  assert_true(action.contains("Open service catalog"))
+  assert_false(action.contains("disabled"))
   let chinese = @ui.render({
     ..base,
     locale: ChineseSimplified,
@@ -1246,7 +1264,10 @@ test "authoritative readiness blockers disable launch and render bilingually" {
     },
   })
   assert_true(chinese.contains("外部可观测性导出"))
-  assert_true(chinese.contains("仍有部署前提未满足"))
+  assert_true(chinese.contains("选择服务模板"))
+  assert_true(
+    chinese.contains("平台整体生产验收（不限制浏览目录）"),
+  )
 }
 
 ///|

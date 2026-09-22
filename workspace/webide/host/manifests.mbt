@@ -49,7 +49,10 @@ fn WorkspaceHost::resources(
   let meta = metadata(name, config.namespace_name)
   let storage_name = resource_name(@webide.workspace_storage_id(grant))
   if meta is Object(fields) {
-    fields["annotations"] = { "lunanexa.io/workspace-id": id }
+    fields["annotations"] = {
+      "lunanexa.io/workspace-id": id,
+      "lunanexa.io/storage-name": storage_name,
+    }
   }
   let labels : Json = { "lunanexa.io/workspace": name }
   let trust_env : Array[Json] = match config.trusted_ca_config_map {
@@ -104,7 +107,7 @@ fn WorkspaceHost::resources(
     "kind": "PersistentVolumeClaim",
     "metadata": metadata(storage_name, config.namespace_name),
     "spec": {
-      "accessModes": ["ReadWriteOnce"],
+      "accessModes": [config.storage_access_mode.unwrap_or("ReadWriteOnce")],
       "storageClassName": config.storage_class,
       "resources": { "requests": { "storage": "\{config.storage_gib}Gi" } },
     },

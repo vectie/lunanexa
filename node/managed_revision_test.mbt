@@ -122,6 +122,9 @@ async test "a managed revision is fetched file by file and refuses a drifted tre
     )
     let assignment = revision_assignment("stepfun", manifest, total)
     let artifact = materializer.materialize(assignment, Unused)
+    assert_eq(materializer.verified_cache_digests(), [
+      assignment.artifact.digest,
+    ])
     assert_eq(artifact.size_bytes(), total)
     assert_true(artifact.host_path().has_suffix(".revision"))
     assert_eq(
@@ -137,6 +140,20 @@ async test "a managed revision is fetched file by file and refuses a drifted tre
     let reused = materializer.materialize(assignment, Unused)
     assert_eq(reused.host_path(), artifact.host_path())
     assert_eq(fetched.length(), downloads)
+    let restarted = @node.ArtifactMaterializer::open(
+      directory,
+      "http://\{server.addr}",
+      "artifact-token",
+      maximum_artifact_size_bytes=1048576L,
+      allow_http_loopback=true,
+    )
+    assert_eq(restarted.verified_cache_digests(), [assignment.artifact.digest])
+    @fs.write_file(
+      "\{artifact.host_path()}/config.json",
+      "bad",
+      create_mode=CreateOrTruncate,
+    )
+    assert_eq(restarted.verified_cache_digests(), [])
 
     // A tree whose bytes no longer reproduce the signed manifest is refused,
     // and the digest is taken from the manifest the controller pinned, so a
