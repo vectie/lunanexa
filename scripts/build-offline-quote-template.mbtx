@@ -1,0 +1,100 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+}
+
+// Deterministic engineering template, not a legal approval or signed quote.
+
+///|
+async fn main {
+  guard @env.args() is [_, output] else {
+    fail("Usage: build-offline-quote-template.mbtx OUTPUT.xlsx")
+  }
+  let temp = @shell.Cmd("mktemp", ["-d", "/tmp/lunanexa-quote-template.XXXXXX"]).output()
+  temp.check()
+  let root = temp.stdout().trim().to_owned()
+  guard root.has_prefix("/tmp/lunanexa-quote-template.") && !root.contains("\n") else {
+    fail("Unexpected temporary directory")
+  }
+  let parts : Array[(String, String)] = [
+    (
+      "[Content_Types].xml", "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>",
+    ),
+    (
+      "_rels/.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    ),
+    (
+      "xl/workbook.xml", "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Quote\" sheetId=\"1\" r:id=\"rId1\"/></sheets><calcPr calcMode=\"auto\" fullCalcOnLoad=\"1\"/></workbook>",
+    ),
+    (
+      "xl/_rels/workbook.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>",
+    ),
+    (
+      "xl/styles.xml", "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"1\"><font><sz val=\"11\"/><name val=\"Noto Sans CJK SC\"/></font></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"1\"><border/></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"3\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"1\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/><xf numFmtId=\"10\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>",
+    ),
+  ]
+  let labels = [
+    "报价明细 / Quote schedule", "订单 / Order", "组织 / Organization", "报价编号 / Quote reference",
+    "币种 / Currency", "小计（最小单位）/ Subtotal (minor units)", "税额（最小单位）/ Tax (minor units)",
+    "总计（最小单位）/ Total (minor units)", "小数位 / Currency scale",
+    "工程模板，须与已批准报价核对 / Not a signed agreement",
+  ]
+  let sheet = StringBuilder()
+  sheet <+
+    "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"A1:B13\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"22\"/><cols><col min=\"1\" max=\"1\" width=\"64\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"36\" customWidth=\"1\"/></cols><sheetData>"
+  for index, label in labels {
+    let row = index + 1
+    sheet <+
+      "<row r=\"\{row}\"><c r=\"A\{row}\" t=\"inlineStr\"><is><t>\{label}</t></is></c>"
+    if row >= 2 && row <= 9 {
+      let value = match row {
+        2 => "<c r=\"B2\" t=\"inlineStr\"><is><t>UNASSIGNED</t></is></c>"
+        3 => "<c r=\"B3\" t=\"inlineStr\"><is><t>UNASSIGNED</t></is></c>"
+        4 => "<c r=\"B4\" t=\"inlineStr\"><is><t>UNASSIGNED</t></is></c>"
+        5 => "<c r=\"B5\" t=\"inlineStr\"><is><t>CNY</t></is></c>"
+        8 => "<c r=\"B8\" s=\"1\"><f>SUM(B6:B7)</f><v>0</v></c>"
+        9 => "<c r=\"B9\" s=\"1\"><v>2</v></c>"
+        _ => "<c r=\"B\{row}\" s=\"1\"><v>0</v></c>"
+      }
+      sheet.write_string(value)
+    }
+    sheet.write_string("</row>")
+  }
+  sheet.write_string(
+    "</sheetData><pageMargins left=\"0.3\" right=\"0.3\" top=\"0.5\" bottom=\"0.5\" header=\"0.2\" footer=\"0.2\"/><pageSetup orientation=\"landscape\" paperSize=\"9\" fitToWidth=\"1\" fitToHeight=\"1\"/></worksheet>",
+  )
+  parts.push(("xl/worksheets/sheet1.xml", sheet.to_string()))
+  let mkdir = @shell.Cmd("mkdir", [
+    "-p",
+    root + "/_rels",
+    root + "/xl/_rels",
+    root + "/xl/worksheets",
+  ]).output()
+  mkdir.check()
+  let names : Array[String] = []
+  for (name, text) in parts {
+    @fs.write_file(root + "/" + name, text, create_mode=CreateOrTruncate)
+    names.push(name)
+  }
+  let stamp = @shell.Cmd("touch", ["-t", "202601010000.00"] + names, cwd=root).output()
+  stamp.check()
+  let zipped = @shell.Cmd(
+    "zip",
+    ["-q", "-X", "template.xlsx"] + names,
+    cwd=root,
+  ).output()
+  zipped.check()
+  @fs.write_file(
+    output,
+    @fs.read_file(root + "/template.xlsx").binary(),
+    create_mode=CreateOrTruncate,
+  )
+  let cleanup = @shell.Cmd("rm", ["-r", "--", root]).output()
+  cleanup.check()
+  println(
+    "Generated quote-v1 engineering template; legal approval remains separate",
+  )
+}

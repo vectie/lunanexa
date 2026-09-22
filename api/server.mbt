@@ -46,6 +46,7 @@ pub extend CancellationReceipt with FromJson::{from_json}
 
 ///|
 pub struct ApiService {
+  offline_template_approvals : Array[OfflineTemplateApproval]?
   media : MediaService?
   global_settings : @settings.GlobalAdminSettings
   store : @store.FileStore
@@ -115,6 +116,7 @@ pub struct ApiService {
   commercial_provider_environment : String?
   commercial_provider_action_origin : String?
   artifact_worker_callback_token : String?
+  technical_acceptance_authorization : @offline.TechnicalAcceptanceAuthorization?
   artifact_scanner_callback_token : String?
   entitlement_authority_callback_token : String?
   offline_transfer_adapter_endpoint : String?
@@ -211,6 +213,7 @@ pub fn ApiService::new(
     commercial_provider_environment: None,
     commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
+    technical_acceptance_authorization: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
@@ -218,6 +221,7 @@ pub fn ApiService::new(
     model_source_adapter_endpoint: None,
     model_source_adapter_token: None,
     offline_transfer_session_secret: "",
+    offline_template_approvals: None,
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
@@ -307,6 +311,7 @@ pub fn ApiService::with_registry(
     commercial_provider_environment: None,
     commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
+    technical_acceptance_authorization: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
@@ -314,6 +319,7 @@ pub fn ApiService::with_registry(
     model_source_adapter_endpoint: None,
     model_source_adapter_token: None,
     offline_transfer_session_secret: "",
+    offline_template_approvals: None,
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
@@ -404,6 +410,7 @@ pub fn ApiService::with_services(
     commercial_provider_environment: None,
     commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
+    technical_acceptance_authorization: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
@@ -411,6 +418,7 @@ pub fn ApiService::with_services(
     model_source_adapter_endpoint: None,
     model_source_adapter_token: None,
     offline_transfer_session_secret: "",
+    offline_template_approvals: None,
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
@@ -503,6 +511,7 @@ pub fn ApiService::with_control_plane(
     commercial_provider_environment: None,
     commercial_provider_action_origin: None,
     artifact_worker_callback_token: None,
+    technical_acceptance_authorization: None,
     artifact_scanner_callback_token: None,
     entitlement_authority_callback_token: None,
     offline_transfer_adapter_endpoint: None,
@@ -510,6 +519,7 @@ pub fn ApiService::with_control_plane(
     model_source_adapter_endpoint: None,
     model_source_adapter_token: None,
     offline_transfer_session_secret: "",
+    offline_template_approvals: None,
     offline_commerce_capabilities: [],
     offline_commerce_capabilities_expires_unix_ms: 0L,
     node_token,
@@ -1671,7 +1681,9 @@ fn scheduler_node(
     cx7_peer: label_values(
       heartbeat.inventory.labels,
       @contracts.cx7_peer_label,
-    ).get(0).unwrap_or(""),
+    )
+    .get(0)
+    .unwrap_or(""),
     state: if now_unix_ms - heartbeat.timestamp_unix_ms > heartbeat_timeout_ms {
       Unreachable
     } else {

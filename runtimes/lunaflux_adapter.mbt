@@ -1,4 +1,44 @@
 ///|
+pub fn LunaFluxAdapterAuthority::readiness_path(
+  self : LunaFluxAdapterAuthority,
+) -> String {
+  self.readiness_path
+}
+
+///|
+pub fn LunaFluxAdapterAuthority::drain_path(
+  self : LunaFluxAdapterAuthority,
+) -> String {
+  self.drain_path
+}
+
+///|
+/// Constructs the existing OpenAI Responses adapter only from validated
+/// promotion authority. The credential value is supplied at runtime and is
+/// never retained in promotion evidence.
+pub fn LunaFluxAdapterAuthority::openai_text_runtime(
+  self : LunaFluxAdapterAuthority,
+  credential_value : String,
+) -> OpenAiTextRuntime raise RemoteRuntimeError {
+  if credential_value.trim() == "" ||
+    credential_value.contains_char(' ') ||
+    credential_value.contains_char('\t') ||
+    credential_value.contains_char('\n') ||
+    credential_value.contains_char('\r') {
+    raise InvalidUpstreamResponse(
+      "deployment bearer credential must be non-empty and contain no whitespace",
+    )
+  }
+  OpenAiTextRuntime::new(
+    self.listener_origin + self.invocation_path,
+    credential_value,
+    self.runtime.version,
+    self.runtime.image_digest,
+    self.model_artifact_digest,
+  )
+}
+
+///|
 /// Opaque LunaNexa-side capability for one exactly approved LunaFlux rollout.
 ///
 /// This is not a serialized deployment template. It can only be derived from

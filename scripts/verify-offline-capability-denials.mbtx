@@ -1,0 +1,38 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+enum Direction { DownloadTransfer } derive(ToJson)
+async fn main {
+  guard @env.args() is [_, private_dir, kubeconfig] else {fail("Usage: verify-offline-capability-denials.mbtx PRIVATE_DIR KUBECONFIG")}
+  let k = ["--kubeconfig",kubeconfig,"-n","lunanexa"]
+  let found = @shell.Cmd("kubectl",[..k,"get","pods","-l","app=lunanexa-offline-transfer","-o","jsonpath={.items[0].metadata.name}"]).output()
+  found.check()
+  let pod = found.stdout()
+  @shell.Cmd("kubectl",[..k,"cp",private_dir+"/adapter-curl.conf",pod+":/tmp/denial-admin.conf","-c","adapter"]).run()
+  let endpoint = "https://lunanexa-offline-transfer.lunanexa.svc:8443"
+  let ids = ["acceptance-a-20260922", "acceptance-b-20260922", "acceptance-expiry-20260922"]
+  for i, id in ids {
+    let random = @shell.Cmd("openssl",["rand","-hex","32"]).output()
+    random.check()
+    let token = random.stdout().trim().to_owned()
+    @fs.write_file(private_dir+"/denial-token-"+id,token,permission=0o600)
+    let hash = @shell.Cmd("sha256sum",[private_dir+"/denial-token-"+id]).output()
+    hash.check()
+    let token_hash = "sha256:"+hash.stdout().split(" ").next().unwrap().to_owned()
+    let intent : Json = {"session_id":id,"idempotency_key":id,"direction":ToJson::to_json(DownloadTransfer),"object_ref":"s3://lunanexa-offline-commerce/templates/offline-quote-v1/1/quote.xlsx","session_token_sha256":token_hash,"media_types":["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],"maximum_byte_count":"67108864","expires_unix_ms":(@async.now()+(if i==2 {5000L} else {60000L})).to_json()}
+    @fs.write_file(private_dir+"/denial-intent.json",intent.stringify(),permission=0o600)
+    @shell.Cmd("kubectl",[..k,"cp",private_dir+"/denial-intent.json",pod+":/tmp/denial-intent.json","-c","adapter"]).run()
+    let issue = @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","curl","--config","/tmp/denial-admin.conf","-H","content-type: application/json","--data-binary","@/tmp/denial-intent.json",endpoint+"/v1/offline-transfers"]).output()
+    issue.check()
+    @fs.write_file(private_dir+"/denial-"+id+".conf","header = \"Authorization: Bearer "+token+"\"\ncacert = \"/trust/ca.crt\"\nsilent\nshow-error\nmax-time = 10\n",permission=0o600)
+    @shell.Cmd("kubectl",[..k,"cp",private_dir+"/denial-"+id+".conf",pod+":/tmp/denial-"+id+".conf","-c","adapter"]).run()
+  }
+  let mismatch = @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","curl","--config","/tmp/denial-"+ids[0]+".conf","-o","/tmp/denial-response","-w","%{http_code}",endpoint+"/v1/offline-transfers/"+ids[1]]).output()
+  mismatch.check()
+  guard mismatch.stdout()=="401" else {fail("Cross-session token was not denied")}
+  @async.sleep(6000)
+  let expired = @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","curl","--config","/tmp/denial-"+ids[2]+".conf","-o","/tmp/denial-response","-w","%{http_code}",endpoint+"/v1/offline-transfers/"+ids[2]]).output()
+  expired.check()
+  guard expired.stdout()=="401" else {fail("Expired capability was not denied")}
+  let cleanup = ["/tmp/denial-admin.conf","/tmp/denial-intent.json","/tmp/denial-response",..ids.map(id=>"/tmp/denial-"+id+".conf")]
+  @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","rm",..cleanup]).run()
+  println("{\"cross_session_token_denied\":401,\"expired_capability_denied\":401,\"controller_callback_invoked\":false,\"tenant_account_isolation_claimed\":false}")
+}

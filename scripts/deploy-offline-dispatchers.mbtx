@@ -1,0 +1,66 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, kubeconfig, image] else {
+    fail(
+      "usage: deploy-offline-dispatchers.mbtx KUBECONFIG DIGEST_PINNED_IMAGE",
+    )
+  }
+  let parts = image.split("@sha256:").to_array()
+  guard parts.length() == 2 &&
+    parts[0].length() > 0 &&
+    parts[1].length() == 64 &&
+    parts[1].all(c => c is ('0'..='9' | 'a'..='f')) else {
+    fail("an immutable OCI image digest is required")
+  }
+  for
+    reference in [
+      ("secret", "lunanexa-control-credentials"),
+      ("secret", "lunanexa-offline-transfer"),
+      ("secret", "lunanexa-offline-render-evidence"),
+      ("configmap", "lunanexa-offline-ca"),
+      ("pvc", "lunanexa-offline-approved-fonts"),
+    ] {
+    let present = @shell.Cmd("kubectl", [
+      "--kubeconfig",
+      kubeconfig,
+      "-n",
+      "lunanexa",
+      "get",
+      reference.0,
+      reference.1,
+      "-o",
+      "name",
+    ]).output()
+    present.check()
+  }
+  for
+    path in [
+      "deploy/offline-dispatcher-state.yaml", "deploy/offline-dispatcher-config.yaml",
+      "deploy/offline-dispatcher-admission.yaml", "deploy/offline-dispatchers.yaml",
+    ] {
+    let text = @fs.read_file(path)
+      .text()
+      .replace_all(
+        old="REPLACE_WITH_OFFLINE_DISPATCHER_IMAGE_DIGEST",
+        new=image,
+      )
+    let applied = @shell.Cmd(
+      "kubectl",
+      ["--kubeconfig", kubeconfig, "apply", "-f", "-"],
+      stdin=Text(text),
+    ).output()
+    applied.check()
+    println(applied.stdout())
+  }
+  println(
+    "Applied the named management-node dispatcher profile; live business acceptance is still required.",
+  )
+}

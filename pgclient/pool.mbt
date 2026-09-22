@@ -16,7 +16,7 @@
 /// error type may not be widened to the runtime's own error. Failures are
 /// still `PgError` values and are caught by matching the sub-error:
 ///
-/// ```moonbit
+/// ```moonbit nocheck
 /// try pool.execute("SELECT 1") catch {
 ///   @postgres.PgError::QueryRejected(message) => ..
 ///   @postgres.PgError::ConnectionUnavailable(message) => ..
@@ -235,7 +235,7 @@ pub async fn PgConnection::transaction(
   if committed {
     let _ = self.execute("COMMIT")
   } else {
-    ignore(self.execute("ROLLBACK")) catch {
+    try ignore(self.execute("ROLLBACK")) catch {
       _ => ()
     } noraise {
       _ => ()

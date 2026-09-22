@@ -234,14 +234,14 @@ async test "active sessions are capped by eviction and use cannot extend past ex
   assert_eq(ninth.session.account_id, "account-capped")
   let views = store.sessions_for_account("account-capped")
   let active = views
-    .filter(view => view.revoked_unix_ms is None && view.expires_unix_ms > now + 10L)
+    .filter(view => {
+      view.revoked_unix_ms is None && view.expires_unix_ms > now + 10L
+    })
     .length()
   assert_true(active <= 8)
   // The least recently used session is the one that yielded, so the newest
   // sign-in always has a working credential.
-  guard views
-    .iter()
-    .find_first(view => view.session_id == first_session_id)
+  guard views.iter().find_first(view => view.session_id == first_session_id)
     is Some(first) else {
     fail("first session disappeared")
   }

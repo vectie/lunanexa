@@ -1,5 +1,5 @@
 ///|
-test "offline upload projection and operator actor are server-owned" {
+test "offline upload projection does not disclose private authority" {
   let grant : @offline.EvidenceUploadGrant = {
     grant_id: "grant-safe-view",
     idempotency_key: "secret-idempotency-key",
@@ -21,11 +21,4 @@ test "offline upload projection and operator actor are server-owned" {
   assert_false(encoded.contains("object://"))
   assert_false(encoded.contains("spoofed-customer"))
   assert_false(encoded.contains("secret-idempotency-key"))
-  assert_eq(offline_operator_actor(Map([])), "platform-operator")
-  let untrusted_proxy_headers = offline_operator_actor({
-    "ssl-client-verify": "SUCCESS",
-    "ssl-client-subject-dn": "CN=operator-7,O=LunaNexa",
-    "X-LunaNexa-Subject": "spoofed-operator",
-  })
-  assert_eq(untrusted_proxy_headers, "platform-operator")
 }

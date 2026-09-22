@@ -1,0 +1,35 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/x/crypto",
+}
+
+///|
+fn browser_build_root(workspace : Bool) -> String {
+  "_build/browser-compiled/js/release/build" + (if workspace { "/vectie/lunanexa" } else { "" })
+}
+
+///|
+async fn main {
+  assert_eq(browser_build_root(true), "_build/browser-compiled/js/release/build/vectie/lunanexa")
+  assert_eq(browser_build_root(false), "_build/browser-compiled/js/release/build")
+  guard @env.args() is [_, repo, output] else {
+    fail("usage: verify-browser-bundle-output.mbtx REPO_ROOT OUTPUT_ROOT")
+  }
+  let root = repo + "/" + browser_build_root(@fs.exists(repo + "/moon.work"))
+  for (package_name, surface, filename) in [
+    ("console", "console", "console.js"),
+    ("enterprise", "enterprise", "enterprise.js"),
+    ("workbench", "workbench", "workbench.js"),
+    ("installer-ui", "installer", "installer-ui.js"),
+  ] {
+    let source = @fs.read_file(root + "/cmd/" + package_name + "/" + filename).binary()
+    let packaged = @fs.read_file(output + "/" + surface + "/" + filename).binary()
+    let digest = @crypto.bytes_to_hex_string(@crypto.sha256(source.to_fixedarray()))
+    assert_eq(digest, @crypto.bytes_to_hex_string(@crypto.sha256(packaged.to_fixedarray())))
+    assert_true(@fs.read_file(output + "/" + surface + "/index.html").text().contains("?v=" + digest))
+    println(surface + " verified source/bundle/html SHA-256 " + digest)
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "request_id": "technical-docx-runtime-qualification-20260922",
+  "artifact_id": "technical-docx-runtime-qualification-20260922-pdf",
+  "expected_object_ref": "object://technical-qualification/20260922/undertaking.pdf",
+  "media_type": "application/pdf",
+  "byte_count": "10825525",
+  "sha256": "sha256:65e70f452ad7dd7029acaf6edde0fad1b4175741209a82c168d3f45d8cf7b543",
+  "worker_receipt": "moonleaf:300d0cb1c82f3d6781c048247a1c33afdc27ef509f28cbf30f966cf61a1f6e8d",
+  "verified": true,
+  "active_content_detected": false,
+  "moonleaf_verified": true,
+  "render_verified": true,
+  "formula_error_count": 0,
+  "visual_evidence_sha256": "sha256:2e1012e44af3f571b49894bd2385b9d17465f4100a9e20d155f6c07dbe06ecea",
+  "completed_unix_ms": "1790072834589"
+}

@@ -387,9 +387,7 @@ test "a shelved evaluation still requires verification and is recorded as absent
     verified_unix_ms: 1L,
     verifier: "modelstore-manifest:modelstore://owner/repo",
   })
-  try
-    ignore(registry.approve("model.text", "v-shelved", 1000L))
-  catch {
+  try ignore(registry.approve("model.text", "v-shelved", 1000L)) catch {
     @registry.RegistryError::EvaluationNotPassed(_) => ()
     _ => fail("wrong refusal: a missing evaluation was not the reason")
   } noraise {
@@ -398,7 +396,10 @@ test "a shelved evaluation still requires verification and is recorded as absent
 
   // Shelved: approvable from Verified, and the receipt says no evaluation ran.
   let approved = registry.approve(
-    "model.text", "v-shelved", 1000L, require_evaluation=false,
+    "model.text",
+    "v-shelved",
+    1000L,
+    require_evaluation=false,
   )
   assert_eq(approved.state, Approved)
   let receipt = registry.promote(
@@ -429,7 +430,14 @@ test "a shelved evaluation does not admit an unverified artifact" {
     expires_unix_ms: None,
   })
   try
-    ignore(registry.approve("model.text", "v-unverified", 1000L, require_evaluation=false))
+    ignore(
+      registry.approve(
+        "model.text",
+        "v-unverified",
+        1000L,
+        require_evaluation=false,
+      ),
+    )
   catch {
     @registry.RegistryError::ArtifactNotVerified(_) => ()
     _ => fail("wrong refusal: verification was not the reason")

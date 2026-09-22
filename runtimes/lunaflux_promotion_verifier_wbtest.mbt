@@ -33,7 +33,11 @@ fn sign_verifier_test_receipt(
 ) -> LunaFluxSignedEvidenceApproval {
   let material = receipt.canonical_signing_bytes(candidate_manifest_digest)
   let signature = @crypto.bytes_to_hex_string(
-    @crypto.hmac(@crypto.SHA256::new(), secret.exact_view(), material.exact_view()),
+    @crypto.hmac(
+      @crypto.SHA256::new(),
+      secret.exact_view(),
+      material.exact_view(),
+    ),
   )
   { ..receipt, signature, }
 }
@@ -107,7 +111,10 @@ test "verifier HMAC matches the approved crypto primitive" {
     secret.exact_view(),
     material.exact_view(),
   )
-  let actual = verifier_hmac_sha256(secret.exact_view().to_fixedarray(), material)
+  let actual = verifier_hmac_sha256(
+    secret.exact_view().to_fixedarray(),
+    material,
+  )
   assert_true(fixed_sha256_equal(expected, actual))
   expected.fill(0)
   actual.fill(0)
@@ -285,7 +292,9 @@ test "verifier policy and secret admission are exact" {
   } noraise {
     _ => fail("short verifier key was admitted")
   }
-  try LunaFluxPromotionVerifier::new(policy, Bytes::make(32, 0).exact_view()) catch {
+  try
+    LunaFluxPromotionVerifier::new(policy, Bytes::make(32, 0).exact_view())
+  catch {
     InvalidPromotionVerifierSecret => ()
     _ => fail("zero verifier key returned the wrong error")
   } noraise {

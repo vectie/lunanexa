@@ -41,12 +41,8 @@ async fn relay_direction(
 /// make progress. The two sockets stay owned by the caller.
 async fn relay(client : @socket.Tcp, target : @socket.Tcp) -> Unit {
   @async.with_task_group() <| group => {
-    group.spawn_bg() <| () => {
-      relay_direction(client, target)
-    }
-    group.spawn_bg() <| () => {
-      relay_direction(target, client)
-    }
+    group.spawn_bg() <| () => { relay_direction(client, target) }
+    group.spawn_bg() <| () => { relay_direction(target, client) }
   }
 }
 
@@ -56,9 +52,7 @@ async fn serve_connection(
   target_host : String,
   target_port : Int,
 ) -> Unit {
-  let target = try
-    @socket.Tcp::connect_to_host(target_host, port=target_port)
-  catch {
+  let target = @socket.Tcp::connect_to_host(target_host, port=target_port) catch {
     err => {
       // A raw TCP relay has no protocol of its own to report the failure on,
       // so the agent would only see a closed connection. Keep the reason.

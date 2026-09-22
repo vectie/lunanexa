@@ -19,7 +19,8 @@ fn snapshot_schema_version(value : Json) -> Double? {
   Some(version)
 }
 
-///| Snapshot v1 predates `local_directory`. Normalize the decoded document
+///|
+/// Snapshot v1 predates `local_directory`. Normalize the decoded document
 /// instead of failing the read, so an upgrade keeps every existing import.
 fn migrate_snapshot(value : Json) -> Json {
   guard value is Object(fields) &&
@@ -174,7 +175,8 @@ pub async fn FileImportStore::create(
   self.create_record(request, license, "", now_unix_ms)
 }
 
-///| Register a revision the operator already placed inside the managed model
+///|
+/// Register a revision the operator already placed inside the managed model
 /// store. The worker still has to prove every file against ModelScope before
 /// the import becomes `Verified`; nothing here is trusted on assertion.
 ///
@@ -203,9 +205,7 @@ pub async fn FileImportStore::create_local(
       !@fs.exists("\{model_root}/\{record.local_directory}")
     None => false
   }
-  self.create_record(
-    request, license, local_directory, now_unix_ms, supersede~,
-  )
+  self.create_record(request, license, local_directory, now_unix_ms, supersede~)
 }
 
 ///|

@@ -1,0 +1,20 @@
+{
+  "schema": "lunanexa.offline-contract-assets-provision.v1",
+  "observed_date": "2026-09-22",
+  "namespace": "lunanexa",
+  "pvc": "lunanexa-offline-contract-assets",
+  "pvc_uid": "a9f29e89-090d-4339-94ff-37741625ebdb",
+  "node": "ubuntu",
+  "storage_class": "local-path",
+  "access_mode": "ReadWriteOnce",
+  "capacity": "128Mi",
+  "phase": "Bound",
+  "expected_mount_path": "/usr/share/lunanexa/assets/contracts",
+  "controller_read_only_mount_required": true,
+  "sha256_manifest": "contract-assets-sha256.txt",
+  "files_verified": 14,
+  "all_sha256sum_checks_passed_inside_production_namespace": true,
+  "original_versions_retained": true,
+  "temporary_populator_deleted": true,
+  "publication_is_legal_approval": false
+}

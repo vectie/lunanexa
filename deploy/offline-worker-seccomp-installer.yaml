@@ -1,0 +1,26 @@
+# One-shot management-node installation. Populate this ConfigMap from the
+# reviewed profile derived by scripts/derive-offline-worker-seccomp.mbtx first.
+# Delete this pod after its successful installation; retain the host profile.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lunanexa-offline-worker-seccomp-installer
+  namespace: lunanexa-runtime-qualification
+spec:
+  restartPolicy: Never
+  nodeSelector: {kubernetes.io/hostname: ubuntu}
+  automountServiceAccountToken: false
+  containers:
+    - name: install
+      image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/offline-runtime@sha256:54fa371d1dbc32c2490aa6dd97bc4909af5c1295b853f99cf105184aee7086ce
+      imagePullPolicy: IfNotPresent
+      command: [/usr/bin/install, -D, -m, '0644', /source/offline-worker.json, /profiles/lunanexa/offline-worker.json]
+      securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+      volumeMounts:
+        - {name: source, mountPath: /source, readOnly: true}
+        - {name: profiles, mountPath: /profiles}
+  volumes:
+    - name: source
+      configMap: {name: lunanexa-offline-worker-seccomp}
+    - name: profiles
+      hostPath: {path: /var/lib/kubelet/seccomp, type: DirectoryOrCreate}

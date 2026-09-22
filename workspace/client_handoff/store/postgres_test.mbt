@@ -37,7 +37,9 @@ async test "PostgreSQL handoffs recover redemption quota and revocation through 
   }
   let recovered_database = @database.PostgresDatabase::open(url)
   defer recovered_database.close()
-  let recovered = @store.ClientHandoffStore::open_postgres(recovered_database, issuer)
+  let recovered = @store.ClientHandoffStore::open_postgres(
+    recovered_database, issuer,
+  )
   assert_eq(recovered.snapshot(), before)
   assert_eq(recovered.snapshot().credentials[0].consumed_requests, 1L)
   try recovered.redeem(issued.handoff_code, "desktop-client", 100004L) catch {

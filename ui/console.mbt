@@ -319,12 +319,12 @@ pub extend RuntimeProfileDraft with Eq::{not_equal, equal}
 
 ///|
 pub fn empty_model_license_draft() -> ModelLicenseDraft {
-  { model_id: "", version: "", license_id: "", evidence_ref: "" }
+  { model_id: "", version: "", license_id: "", evidence_ref: "", }
 }
 
 ///|
 pub fn empty_model_alias_draft() -> ModelAliasDraft {
-  { model_id: "", version: "", alias_name: "" }
+  { model_id: "", version: "", alias_name: "", }
 }
 
 ///|
@@ -1045,7 +1045,10 @@ pub fn template_field_id(field : TemplateField) -> String {
 }
 
 ///|
-pub fn template_field_value(draft : TemplateDraft, field : TemplateField) -> String {
+pub fn template_field_value(
+  draft : TemplateDraft,
+  field : TemplateField,
+) -> String {
   match field {
     TemplateId => draft.template_id
     TemplateVersion => draft.version
@@ -1080,9 +1083,7 @@ pub fn template_field_value(draft : TemplateDraft, field : TemplateField) -> Str
 /// One `Int` field of a template as the operator typed it. Only the server's
 /// own bound decides: the console never rounds or clamps a submitted number.
 pub fn template_int_field(value : String, maximum~ : Int) -> Int? {
-  let parsed = @string.parse_int(value.trim()) catch {
-    _ => return None
-  }
+  let parsed = @string.parse_int(value.trim()) catch { _ => return None }
   if parsed < 1 || parsed > maximum {
     None
   } else {
@@ -1094,9 +1095,7 @@ pub fn template_int_field(value : String, maximum~ : Int) -> Int? {
 /// One `Int64` field. The contracts marshal it as a JSON string, so it is parsed
 /// here and re-encoded by the type the request body is built from.
 pub fn template_int64_field(value : String, maximum~ : Int64) -> Int64? {
-  let parsed = @string.parse_int64(value.trim()) catch {
-    _ => return None
-  }
+  let parsed = @string.parse_int64(value.trim()) catch { _ => return None }
   if parsed < 1L || parsed > maximum {
     None
   } else {
@@ -1111,7 +1110,7 @@ pub fn template_int64_field(value : String, maximum~ : Int64) -> Int64? {
 pub fn template_identifier_list(
   value : String,
   maximum~ : Int,
-  identifier_length~ : Int = 256,
+  identifier_length? : Int = 256,
 ) -> Array[String]? {
   if value.trim() == "" {
     return Some([])
@@ -1227,45 +1226,27 @@ pub fn template_readiness_path_valid(value : String) -> Bool {
 fn template_text_acceptable(field : TemplateField, value : String) -> Bool {
   match field {
     TemplateId =>
-      @contracts.valid_identifier(
-        value.trim().to_owned(),
-        maximum_length=128,
-      )
+      @contracts.valid_identifier(value.trim().to_owned(), maximum_length=128)
     TemplateVersion =>
-      @contracts.valid_identifier(
-        value.trim().to_owned(),
-        maximum_length=128,
-      )
+      @contracts.valid_identifier(value.trim().to_owned(), maximum_length=128)
     TemplateDisplayName => value.trim() != "" && value.length() <= 256
     TemplateDescription => value.length() <= 2048
     TemplateModelSelector =>
-      @contracts.valid_identifier(
-        value.trim().to_owned(),
-        maximum_length=128,
-      )
+      @contracts.valid_identifier(value.trim().to_owned(), maximum_length=128)
     TemplateArtifactUri => template_artifact_reference_valid(value)
     TemplateArtifactDigest =>
       @contracts.valid_sha256_digest(value.trim().to_owned())
     TemplateArtifactSignatureRef => template_signature_reference_valid(value)
     TemplateRuntimeName => template_runtime_name_valid(value)
     TemplateRuntimeVersion =>
-      @contracts.valid_identifier(
-        value.trim().to_owned(),
-        maximum_length=128,
-      )
+      @contracts.valid_identifier(value.trim().to_owned(), maximum_length=128)
     TemplateRuntimeImageDigest =>
       @contracts.valid_sha256_digest(value.trim().to_owned())
     TemplateRuntimeArchitectures =>
-      template_identifier_list(
-        value,
-        maximum=64,
-        identifier_length=128,
-      ) is Some(_)
+      template_identifier_list(value, maximum=64, identifier_length=128)
+      is Some(_)
     TemplateArchitecture =>
-      @contracts.valid_identifier(
-        value.trim().to_owned(),
-        maximum_length=128,
-      )
+      @contracts.valid_identifier(value.trim().to_owned(), maximum_length=128)
     TemplateReadinessPath => template_readiness_path_valid(value)
     TemplateConsentReceipt => value.trim().length() <= 256
     TemplateSecretRefs => template_identifier_list(value, maximum=64) is Some(_)
@@ -1282,9 +1263,8 @@ fn template_field_acceptable(
   let value = template_field_value(draft, spec.field)
   match spec.kind {
     FreeText => template_text_acceptable(spec.field, value)
-    Count(maximum) => template_int_field(value, maximum=maximum) is Some(_)
-    ByteCount(maximum) =>
-      template_int64_field(value, maximum=maximum) is Some(_)
+    Count(maximum) => template_int_field(value, maximum~) is Some(_)
+    ByteCount(maximum) => template_int64_field(value, maximum~) is Some(_)
   }
 }
 
@@ -1313,11 +1293,12 @@ pub fn template_draft_valid(draft : TemplateDraft) -> Bool {
       return false
     }
   }
-  let architectures = match template_identifier_list(
-    draft.runtime_architectures,
-    maximum=64,
-    identifier_length=128,
-  ) {
+  let architectures = match
+    template_identifier_list(
+      draft.runtime_architectures,
+      maximum=64,
+      identifier_length=128,
+    ) {
     Some(values) => values
     None => return false
   }
@@ -1353,8 +1334,8 @@ pub fn known_runtimes(state : ConsoleState) -> Array[@contracts.RuntimeSpec] {
   }
   for template in state.catalog_templates {
     if !runtimes.any(existing => {
-      runtime_key(existing) == runtime_key(template.runtime)
-    }) {
+        runtime_key(existing) == runtime_key(template.runtime)
+      }) {
       runtimes.push(template.runtime)
     }
   }
@@ -2222,7 +2203,7 @@ pub fn default_state() -> ConsoleState {
     deployments: [],
     catalog_templates: [],
     service_deployments: [],
-    requests: { count: 0, p95_ms: 0, throughput_per_second: 0, errors: 0 },
+    requests: { count: 0, p95_ms: 0, throughput_per_second: 0, errors: 0, },
     request_details: [],
     stream_events: [],
     benchmark_evidence: [],
@@ -2303,7 +2284,7 @@ pub fn default_state() -> ConsoleState {
     },
     model_adopted_imports: [],
     model_local_directories: [],
-    model_local_draft: { directory: "", repository: "", revision: "master" },
+    model_local_draft: { directory: "", repository: "", revision: "master", },
     model_license_draft: empty_model_license_draft(),
     model_alias_draft: empty_model_alias_draft(),
     runtime_draft: default_runtime_draft(),
@@ -2358,7 +2339,7 @@ pub fn demo_state() -> ConsoleState {
     order_ref: "order-demo-2026-001",
     preceding_packet_ref: None,
     active_forms: contract_manifest.forms.map(form => form.form),
-    values: [{ field_id: "lessee.name", value: "Northstar Research" }],
+    values: [{ field_id: "lessee.name", value: "Northstar Research", }],
     assignments: [
       {
         field_id: "lessee.name",
@@ -2388,9 +2369,9 @@ pub fn demo_state() -> ConsoleState {
     idempotency_key: "contract-packet-effective-demo-key",
     order_ref: "order-demo-2026-000",
     values: [
-      { field_id: "lessee.name", value: "Northstar Research" },
-      { field_id: "lease.start_date", value: "2026-08-01" },
-      { field_id: "lease.end_date", value: "2027-07-31" },
+      { field_id: "lessee.name", value: "Northstar Research", },
+      { field_id: "lease.start_date", value: "2026-08-01", },
+      { field_id: "lease.end_date", value: "2027-07-31", },
     ],
     values_sha256: Some(
       "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -2505,58 +2486,31 @@ pub fn demo_state() -> ConsoleState {
   ]
   let models : Array[ModelRow] = [
     demo_model_row(
-      "lunanexa.text.general",
-      "v3",
-      "text.default",
-      "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "lunanexa.text.general", "v3", "text.default", "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     ),
     demo_model_row(
-      "lunanexa.text.fast",
-      "v2",
-      "text.fast",
-      "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "lunanexa.text.fast", "v2", "text.fast", "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     ),
     demo_model_row(
-      "lunanexa.text.reasoning",
-      "v1",
-      "text.reasoning",
-      "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "lunanexa.text.reasoning", "v1", "text.reasoning", "sha256:3333333333333333333333333333333333333333333333333333333333333333",
     ),
     demo_model_row(
-      "lunanexa.code.assist",
-      "v4",
-      "code.assist",
-      "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "lunanexa.code.assist", "v4", "code.assist", "sha256:4444444444444444444444444444444444444444444444444444444444444444",
     ),
     demo_model_row(
-      "lunanexa.embedding.multilingual",
-      "v2",
-      "embedding.multilingual",
-      "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "lunanexa.embedding.multilingual", "v2", "embedding.multilingual", "sha256:5555555555555555555555555555555555555555555555555555555555555555",
     ),
     demo_model_row(
-      "lunanexa.embedding.base",
-      "v1",
-      "embedding.default",
-      "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "lunanexa.embedding.base", "v1", "embedding.default", "sha256:6666666666666666666666666666666666666666666666666666666666666666",
     ),
     demo_model_row(
-      "lunanexa.vision.general",
-      "v2",
-      "vision.default",
-      "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "lunanexa.vision.general", "v2", "vision.default", "sha256:7777777777777777777777777777777777777777777777777777777777777777",
     ),
     demo_model_row(
-      "lunanexa.rerank.base",
-      "v1",
-      "rerank.default",
-      "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "lunanexa.rerank.base", "v1", "rerank.default", "sha256:8888888888888888888888888888888888888888888888888888888888888888",
     ),
     demo_model_row(
-      "lunanexa.speech.transcribe",
-      "v2",
-      "speech.transcribe",
-      "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "lunanexa.speech.transcribe", "v2", "speech.transcribe", "sha256:9999999999999999999999999999999999999999999999999999999999999999",
     ),
   ]
   let templates : Array[@deployment.ModelServiceTemplate] = [
@@ -2647,7 +2601,7 @@ pub fn demo_state() -> ConsoleState {
     version: @contracts.contract_version,
     idempotency_key: "demo:text-service:1",
     deployment_id: "text-service",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 86400000L,
@@ -2719,7 +2673,12 @@ pub fn demo_state() -> ConsoleState {
     catalog_templates: templates,
     registered_runtimes: runtimes,
     service_deployments: [service_operation],
-    requests: { count: 1842, p95_ms: 142, throughput_per_second: 38, errors: 3 },
+    requests: {
+      count: 1842,
+      p95_ms: 142,
+      throughput_per_second: 38,
+      errors: 3,
+    },
     request_details: [
       {
         timestamp_unix_ms: 1786500320000L,
@@ -4422,9 +4381,9 @@ fn access_existing_authority(
       tenants.push(lease.workspace)
     }
   }
-  let account = state.accounts.iter().find_first(value => {
-    value.account_id == account_id
-  })
+  let account = state.accounts
+    .iter()
+    .find_first(value => value.account_id == account_id)
   let known = match (account, tenants.length()) {
     (None, 0) =>
       localized(
@@ -7573,30 +7532,21 @@ fn model_candidate_actions(
       type_="button",
       class="secondary-button",
       disabled=!offered,
-      on_click=command(
-        emit,
-        VerifyModelArtifact(model.model_id, model.version),
-      ),
+      on_click=command(emit, VerifyModelArtifact(model.model_id, model.version)),
       localized(locale, "Verify artifact", "验证制品"),
     ),
     @html.button(
       type_="button",
       class="secondary-button",
       disabled=!offered,
-      on_click=command(
-        emit,
-        ApproveModelVersion(model.model_id, model.version),
-      ),
+      on_click=command(emit, ApproveModelVersion(model.model_id, model.version)),
       localized(locale, "Approve", "批准"),
     ),
     @html.button(
       type_="button",
       class="secondary-button",
       disabled=!offered,
-      on_click=command(
-        emit,
-        BeginAliasPromotion(model.model_id, model.version),
-      ),
+      on_click=command(emit, BeginAliasPromotion(model.model_id, model.version)),
       localized(locale, "Promote alias…", "提升别名…"),
     ),
     if model.alias_name == "—" {
@@ -7652,8 +7602,7 @@ fn model_license_form_row(
             @html.p(
               class="field-help",
               localized(
-                locale,
-                "Records an accepted licence for this exact model version. Artifact verification, evaluation, and explicit approval remain separate gates.",
+                locale, "Records an accepted licence for this exact model version. Artifact verification, evaluation, and explicit approval remain separate gates.",
                 "为这一精确模型版本记录已接受的许可证。制品验证、评测与明确批准仍是独立的安全门。",
               ),
             ),
@@ -7673,7 +7622,11 @@ fn model_license_form_row(
                   attrs=@html.Attrs::build()
                     .aria_describedby("model-license-id-help")
                     .aria_invalid(
-                      if license_invalid { "true" } else { "false" },
+                      if license_invalid {
+                        "true"
+                      } else {
+                        "false"
+                      },
                     ),
                   on_input=text_command(emit, value => {
                     LicenseRecordIdChanged(value)
@@ -7687,8 +7640,7 @@ fn model_license_form_row(
                     "field-help"
                   },
                   localized(
-                    locale,
-                    "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                    locale, "Stable letters, numbers, dots, colons, hyphens, or underscores.",
                     "使用稳定的字母、数字、点、冒号、连字符或下划线。",
                   ),
                 ),
@@ -7697,9 +7649,7 @@ fn model_license_form_row(
                 @html.label(
                   for_="model-license-evidence",
                   localized(
-                    locale,
-                    "Licence evidence citation",
-                    "许可证证据引用",
+                    locale, "Licence evidence citation", "许可证证据引用",
                   ),
                 ),
                 @html.input(
@@ -7711,7 +7661,11 @@ fn model_license_form_row(
                   attrs=@html.Attrs::build()
                     .aria_describedby("model-license-evidence-help")
                     .aria_invalid(
-                      if evidence_missing { "true" } else { "false" },
+                      if evidence_missing {
+                        "true"
+                      } else {
+                        "false"
+                      },
                     ),
                   on_input=text_command(emit, value => {
                     LicenseEvidenceChanged(value)
@@ -7725,8 +7679,7 @@ fn model_license_form_row(
                     "field-help"
                   },
                   localized(
-                    locale,
-                    "Free-form operator citation taken from the model's declared licence; no path or digest is invented here.",
+                    locale, "Free-form operator citation taken from the model's declared licence; no path or digest is invented here.",
                     "自由填写的运维引用，取自模型声明的许可证；此处不会虚构路径或摘要。",
                   ),
                 ),
@@ -7787,8 +7740,7 @@ fn model_alias_form_row(
             @html.p(
               class="field-help",
               localized(
-                locale,
-                "Publishes a Canary alias for the approved version. A version the registry has not approved is refused, and that refusal is shown here.",
+                locale, "Publishes a Canary alias for the approved version. A version the registry has not approved is refused, and that refusal is shown here.",
                 "为已批准版本发布 Canary 别名。注册表尚未批准的版本会被拒绝，拒绝原因会显示在此处。",
               ),
             ),
@@ -7818,8 +7770,7 @@ fn model_alias_form_row(
                     "field-help"
                   },
                   localized(
-                    locale,
-                    "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                    locale, "Stable letters, numbers, dots, colons, hyphens, or underscores.",
                     "使用稳定的字母、数字、点、冒号、连字符或下划线。",
                   ),
                 ),
@@ -7892,7 +7843,9 @@ pub fn QuickTopology::label(
   match self {
     SingleMachine => @i18n.copy(locale, "One machine", "单机")
     Cx7Pair =>
-      @i18n.copy(locale, "CX7 pair (two machines)", "CX7 双机对（两台机器）")
+      @i18n.copy(
+        locale, "CX7 pair (two machines)", "CX7 双机对（两台机器）",
+      )
   }
 }
 
@@ -7931,20 +7884,22 @@ pub fn template_flag_value(draft : TemplateDraft, flag : TemplateFlag) -> Bool {
 }
 
 ///|
-pub fn template_flag_label(locale : @i18n.Locale, flag : TemplateFlag) -> String {
+pub fn template_flag_label(
+  locale : @i18n.Locale,
+  flag : TemplateFlag,
+) -> String {
   match flag {
     RuntimeMultiNode =>
       localized(locale, "Runtime supports multi-node", "运行时支持多机")
     CaptureForEvaluation =>
       localized(
-        locale,
-        "Capture payloads for evaluation",
-        "为评测采集载荷",
+        locale, "Capture payloads for evaluation", "为评测采集载荷",
       )
     AllowCache => localized(locale, "Allow cache", "允许缓存")
     AllowTrainingReuse =>
       localized(locale, "Allow training reuse", "允许训练复用")
-    AutomaticPromotion => localized(locale, "Automatic promotion", "自动提升")
+    AutomaticPromotion =>
+      localized(locale, "Automatic promotion", "自动提升")
     AutomaticRollback => localized(locale, "Automatic rollback", "自动回滚")
   }
 }
@@ -7956,32 +7911,32 @@ pub fn template_draft_with_text(
   value : String,
 ) -> TemplateDraft {
   match field {
-    TemplateId => { ..draft, template_id: value }
-    TemplateVersion => { ..draft, version: value }
-    TemplateDisplayName => { ..draft, display_name: value }
-    TemplateDescription => { ..draft, description: value }
-    TemplateModelSelector => { ..draft, model_selector: value }
-    TemplateArtifactUri => { ..draft, artifact_uri: value }
-    TemplateArtifactDigest => { ..draft, artifact_digest: value }
-    TemplateArtifactSizeBytes => { ..draft, artifact_size_bytes: value }
-    TemplateArtifactSignatureRef => { ..draft, artifact_signature_ref: value }
-    TemplateRuntimeName => { ..draft, runtime_name: value }
-    TemplateRuntimeVersion => { ..draft, runtime_version: value }
-    TemplateRuntimeImageDigest => { ..draft, runtime_image_digest: value }
-    TemplateRuntimeArchitectures => { ..draft, runtime_architectures: value }
-    TemplateArchitecture => { ..draft, architecture: value }
-    TemplateAcceleratorCount => { ..draft, accelerator_count: value }
-    TemplateAcceleratorMemoryMib => { ..draft, accelerator_memory_mib: value }
-    TemplateCpuMillis => { ..draft, cpu_millis: value }
-    TemplateMemoryMib => { ..draft, memory_mib: value }
-    TemplateReadinessPath => { ..draft, readiness_path: value }
-    TemplateHealthIntervalMs => { ..draft, health_interval_ms: value }
-    TemplateFailureThreshold => { ..draft, failure_threshold: value }
-    TemplateTerminationGraceMs => { ..draft, termination_grace_ms: value }
-    TemplateConsentReceipt => { ..draft, evaluation_consent_receipt: value }
-    TemplateSecretRefs => { ..draft, secret_refs: value }
-    TemplateCanaryReplicas => { ..draft, canary_replicas: value }
-    TemplateReadinessTimeoutMs => { ..draft, readiness_timeout_ms: value }
+    TemplateId => { ..draft, template_id: value, }
+    TemplateVersion => { ..draft, version: value, }
+    TemplateDisplayName => { ..draft, display_name: value, }
+    TemplateDescription => { ..draft, description: value, }
+    TemplateModelSelector => { ..draft, model_selector: value, }
+    TemplateArtifactUri => { ..draft, artifact_uri: value, }
+    TemplateArtifactDigest => { ..draft, artifact_digest: value, }
+    TemplateArtifactSizeBytes => { ..draft, artifact_size_bytes: value, }
+    TemplateArtifactSignatureRef => { ..draft, artifact_signature_ref: value, }
+    TemplateRuntimeName => { ..draft, runtime_name: value, }
+    TemplateRuntimeVersion => { ..draft, runtime_version: value, }
+    TemplateRuntimeImageDigest => { ..draft, runtime_image_digest: value, }
+    TemplateRuntimeArchitectures => { ..draft, runtime_architectures: value, }
+    TemplateArchitecture => { ..draft, architecture: value, }
+    TemplateAcceleratorCount => { ..draft, accelerator_count: value, }
+    TemplateAcceleratorMemoryMib => { ..draft, accelerator_memory_mib: value, }
+    TemplateCpuMillis => { ..draft, cpu_millis: value, }
+    TemplateMemoryMib => { ..draft, memory_mib: value, }
+    TemplateReadinessPath => { ..draft, readiness_path: value, }
+    TemplateHealthIntervalMs => { ..draft, health_interval_ms: value, }
+    TemplateFailureThreshold => { ..draft, failure_threshold: value, }
+    TemplateTerminationGraceMs => { ..draft, termination_grace_ms: value, }
+    TemplateConsentReceipt => { ..draft, evaluation_consent_receipt: value, }
+    TemplateSecretRefs => { ..draft, secret_refs: value, }
+    TemplateCanaryReplicas => { ..draft, canary_replicas: value, }
+    TemplateReadinessTimeoutMs => { ..draft, readiness_timeout_ms: value, }
   }
 }
 
@@ -7996,10 +7951,10 @@ pub fn template_draft_with_flag(
   value : Bool,
 ) -> TemplateDraft {
   match flag {
-    RuntimeMultiNode => { ..draft, runtime_multi_node: value }
+    RuntimeMultiNode => { ..draft, runtime_multi_node: value, }
     CaptureForEvaluation =>
       if value {
-        { ..draft, capture_for_evaluation: true }
+        { ..draft, capture_for_evaluation: true, }
       } else {
         {
           ..draft,
@@ -8008,10 +7963,10 @@ pub fn template_draft_with_flag(
           allow_training_reuse: false,
         }
       }
-    AllowCache => { ..draft, allow_cache: value }
-    AllowTrainingReuse => { ..draft, allow_training_reuse: value }
-    AutomaticPromotion => { ..draft, automatic_promotion: value }
-    AutomaticRollback => { ..draft, automatic_rollback: value }
+    AllowCache => { ..draft, allow_cache: value, }
+    AllowTrainingReuse => { ..draft, allow_training_reuse: value, }
+    AutomaticPromotion => { ..draft, automatic_promotion: value, }
+    AutomaticRollback => { ..draft, automatic_rollback: value, }
   }
 }
 
@@ -8052,8 +8007,8 @@ fn template_select_group(
   @html.div(class="field-group", [
     @html.label(for_=id, localized(locale, label_en, label_zh)),
     @html.select(
-      id=id,
-      on_change=on_change,
+      id~,
+      on_change~,
       attrs=@html.Attrs::build().aria_describedby("\{id}-help"),
       options,
     ),
@@ -8095,14 +8050,14 @@ fn template_field_group(
     // planner's, so it is enforced by the rule below rather than by the
     // browser, which would answer in the wrong language.
     @html.input(
-      id=id,
+      id~,
       input_type=Text,
       inputmode=if spec.kind is FreeText { "text" } else { "numeric" },
       required=!spec.optional,
       placeholder=spec.placeholder,
-      value=value,
-      attrs=attrs,
-      on_input=on_input,
+      value~,
+      attrs~,
+      on_input~,
     ),
     @html.p(
       id="\{id}-help",
@@ -8122,26 +8077,26 @@ fn template_flag_row(
   draft : TemplateDraft,
   flags : Array[TemplateFlag],
 ) -> @rabbita.Html {
-  @html.div(class="runtime-profile-flags", [
-    for flag in flags => {
-      let capture_only = flag == AllowCache || flag == AllowTrainingReuse
-      @html.label(
-        class="runtime-profile-flag",
-        for_=template_flag_id(flag),
-        [
+  @html.div(
+    class="runtime-profile-flags",
+    [
+      for flag in flags => {
+        let capture_only = flag == AllowCache || flag == AllowTrainingReuse
+        @html.label(class="runtime-profile-flag", for_=template_flag_id(flag), [
           @html.input(
             input_type=Checkbox,
             id=template_flag_id(flag),
             checked=template_flag_value(draft, flag),
-            attrs=@html.Attrs::build()
-              .disabled(capture_only && !draft.capture_for_evaluation),
+            attrs=@html.Attrs::build().disabled(
+              capture_only && !draft.capture_for_evaluation,
+            ),
             on_change=text_command(emit, _ => TemplateFlagToggled(flag)),
           ),
           @html.span(template_flag_label(state.locale, flag)),
-        ],
-      )
-    }
-  ])
+        ])
+      }
+    ],
+  )
 }
 
 ///|
@@ -8160,9 +8115,11 @@ fn template_registration_form(
   let draft = state.template_draft
   let valid = template_draft_valid(draft)
   let runtimes = known_runtimes(state)
-  let selected_runtime = runtimes.iter().find_first(runtime => {
-    runtime_key(runtime) == "\{draft.runtime_name}@\{draft.runtime_version}"
-  })
+  let selected_runtime = runtimes
+    .iter()
+    .find_first(runtime => {
+      runtime_key(runtime) == "\{draft.runtime_name}@\{draft.runtime_version}"
+    })
   let model_options : Array[@rabbita.Html] = [
     @html.option(
       value="",
@@ -8184,7 +8141,9 @@ fn template_registration_form(
     @html.option(
       value="",
       selected=draft.runtime_name == "",
-      localized(locale, "Select a registered runtime", "选择已注册运行时"),
+      localized(
+        locale, "Select a registered runtime", "选择已注册运行时",
+      ),
     ),
   ]
   for runtime in runtimes {
@@ -8255,19 +8214,20 @@ fn template_registration_form(
     ]
     match section {
       TemplateRuntime =>
-        body.push(
-          template_flag_row(state, emit, draft, [RuntimeMultiNode]),
-        )
+        body.push(template_flag_row(state, emit, draft, [RuntimeMultiNode]))
       TemplateDataPolicy =>
         body.push(
           template_flag_row(state, emit, draft, [
-            CaptureForEvaluation, AllowCache, AllowTrainingReuse,
+            CaptureForEvaluation,
+            AllowCache,
+            AllowTrainingReuse,
           ]),
         )
       TemplateRollout =>
         body.push(
           template_flag_row(state, emit, draft, [
-            AutomaticPromotion, AutomaticRollback,
+            AutomaticPromotion,
+            AutomaticRollback,
           ]),
         )
       _ => ()
@@ -8281,9 +8241,7 @@ fn template_registration_form(
     @html.legend(
       id="template-registration-title",
       localized(
-        locale,
-        "Start from a registered model and runtime",
-        "从已注册的模型与运行时开始",
+        locale, "Start from a registered model and runtime", "从已注册的模型与运行时开始",
       ),
     ),
     @html.div(class="model-onboarding-grid", [
@@ -8316,14 +8274,12 @@ fn template_registration_form(
         class="secondary",
         if valid {
           localized(
-            locale,
-            "The receipt and signature are the control plane's own; the caller submits neither.",
+            locale, "The receipt and signature are the control plane's own; the caller submits neither.",
             "回执与签名由控制平面生成；调用方两者都不提交。",
           )
         } else {
           localized(
-            locale,
-            "Submittable when every field matches its rule, the accelerator architecture appears in the runtime architectures, and the capability is one the runtime serves.",
+            locale, "Submittable when every field matches its rule, the accelerator architecture appears in the runtime architectures, and the capability is one the runtime serves.",
             "当每个字段符合其规则、加速器架构出现在运行时架构中，且能力为运行时实际提供的能力时，方可提交。",
           )
         },
@@ -8355,8 +8311,7 @@ fn template_registration_form(
     @html.p(
       class="section-copy",
       localized(
-        locale,
-        "Registers one immutable model-service template. The control plane signs it, so registration alone deploys nothing: the model, the runtime, the licence and the hardware are still checked before any workload is placed.",
+        locale, "Registers one immutable model-service template. The control plane signs it, so registration alone deploys nothing: the model, the runtime, the licence and the hardware are still checked before any workload is placed.",
         "注册一个不可变的模型服务模板。控制平面会对其签名，因此仅注册不会部署任何内容：在放置任何工作负载之前，仍会检查模型、运行时、许可证与硬件。",
       ),
     ),
@@ -8525,9 +8480,7 @@ fn catalog_view(
           ),
           @html.select(
             id="quick-topology",
-            on_change=text_command(emit, value => {
-              QuickTopologyChanged(value)
-            }),
+            on_change=text_command(emit, value => QuickTopologyChanged(value)),
             [
               for choice in [SingleMachine, Cx7Pair] => {
                 @html.option(
@@ -8550,7 +8503,11 @@ fn catalog_view(
         @html.div(class="fixed-capacity", [
           @html.div(
             class="fixed-capacity-mark",
-            if state.quick_topology == Cx7Pair { "2" } else { "1" },
+            if state.quick_topology == Cx7Pair {
+              "2"
+            } else {
+              "1"
+            },
           ),
           @html.div([
             @html.strong(
@@ -9716,8 +9673,7 @@ fn runtime_registration_form(
   let locale = state.locale
   let draft = state.runtime_draft
   let valid = runtime_profile_draft_valid(draft)
-  let name_invalid = draft.name != "" &&
-    !runtime_profile_name_valid(draft.name)
+  let name_invalid = draft.name != "" && !runtime_profile_name_valid(draft.name)
   let version_invalid = draft.version != "" &&
     !@contracts.valid_identifier(
       draft.version.trim().to_owned(),
@@ -9738,7 +9694,9 @@ fn runtime_registration_form(
           localized(locale, "Runtime profiles", "运行时配置"),
         ),
         @html.h3(
-          localized(locale, "Register a runtime profile", "注册运行时配置"),
+          localized(
+            locale, "Register a runtime profile", "注册运行时配置",
+          ),
         ),
       ]),
       @html.span(
@@ -9749,8 +9707,7 @@ fn runtime_registration_form(
     @html.p(
       class="section-copy",
       localized(
-        locale,
-        "Registers one immutable runtime image for the registry to admit. A profile is deployable only after its image digest is verified, so registration alone grants no workload.",
+        locale, "Registers one immutable runtime image for the registry to admit. A profile is deployable only after its image digest is verified, so registration alone grants no workload.",
         "登记一个供注册表接纳的不可变运行时镜像。只有在镜像摘要通过验证后配置才可部署，因此仅登记不会授予任何工作负载。",
       ),
     ),
@@ -9763,9 +9720,7 @@ fn runtime_registration_form(
           @html.legend(
             id="runtime-profile-title",
             localized(
-              locale,
-              "Runtime identity and placement",
-              "运行时身份与放置",
+              locale, "Runtime identity and placement", "运行时身份与放置",
             ),
           ),
           @html.div(class="model-onboarding-grid", [
@@ -9794,8 +9749,7 @@ fn runtime_registration_form(
                   "field-help"
                 },
                 localized(
-                  locale,
-                  "Up to 256 characters with no '@', no spaces, and no '..'.",
+                  locale, "Up to 256 characters with no '@', no spaces, and no '..'.",
                   "最多 256 个字符，不能包含 '@'、空格或 '..'。",
                 ),
               ),
@@ -9827,8 +9781,7 @@ fn runtime_registration_form(
                   "field-help"
                 },
                 localized(
-                  locale,
-                  "Stable letters, numbers, dots, colons, hyphens, or underscores.",
+                  locale, "Stable letters, numbers, dots, colons, hyphens, or underscores.",
                   "使用稳定的字母、数字、点、冒号、连字符或下划线。",
                 ),
               ),
@@ -9836,7 +9789,9 @@ fn runtime_registration_form(
             @html.div(class="field-group", [
               @html.label(
                 for_="runtime-image-digest",
-                localized(locale, "Runtime image digest", "运行时镜像摘要"),
+                localized(
+                  locale, "Runtime image digest", "运行时镜像摘要",
+                ),
               ),
               @html.input(
                 id="runtime-image-digest",
@@ -9860,8 +9815,7 @@ fn runtime_registration_form(
                   "field-help"
                 },
                 localized(
-                  locale,
-                  "Exactly sha256: followed by 64 hexadecimal characters.",
+                  locale, "Exactly sha256: followed by 64 hexadecimal characters.",
                   "必须为 sha256: 加 64 个十六进制字符。",
                 ),
               ),
@@ -9881,7 +9835,11 @@ fn runtime_registration_form(
                 attrs=@html.Attrs::build()
                   .aria_describedby("runtime-architecture-help")
                   .aria_invalid(
-                    if architecture_invalid { "true" } else { "false" },
+                    if architecture_invalid {
+                      "true"
+                    } else {
+                      "false"
+                    },
                   ),
                 on_input=text_command(emit, value => {
                   RuntimeArchitectureChanged(value)
@@ -9895,9 +9853,7 @@ fn runtime_registration_form(
                   "field-help"
                 },
                 localized(
-                  locale,
-                  "The deployment's admitted accelerator profile.",
-                  "部署所允许的加速器配置。",
+                  locale, "The deployment's admitted accelerator profile.", "部署所允许的加速器配置。",
                 ),
               ),
             ]),
@@ -9924,21 +9880,17 @@ fn runtime_registration_form(
             ]),
           ]),
           @html.div(class="runtime-profile-flags", [
-            @html.label(
-              class="runtime-profile-flag",
-              for_="runtime-batching",
-              [
-                @html.input(
-                  input_type=Checkbox,
-                  id="runtime-batching",
-                  checked=draft.supports_batching,
-                  on_change=text_command(emit, _ => RuntimeBatchingToggled),
-                ),
-                @html.span(
-                  localized(locale, "Supports batching", "支持批处理"),
-                ),
-              ],
-            ),
+            @html.label(class="runtime-profile-flag", for_="runtime-batching", [
+              @html.input(
+                input_type=Checkbox,
+                id="runtime-batching",
+                checked=draft.supports_batching,
+                on_change=text_command(emit, _ => RuntimeBatchingToggled),
+              ),
+              @html.span(
+                localized(locale, "Supports batching", "支持批处理"),
+              ),
+            ]),
             @html.label(
               class="runtime-profile-flag",
               for_="runtime-multi-node",
@@ -9959,8 +9911,7 @@ fn runtime_registration_form(
             @html.span(
               class="secondary",
               localized(
-                locale,
-                "Registration does not verify the image; the registry records the digest an operator cited.",
+                locale, "Registration does not verify the image; the registry records the digest an operator cited.",
                 "登记不会验证镜像；注册表只记录运维人员引用的摘要。",
               ),
             ),
@@ -11837,7 +11788,7 @@ fn console_view(
     CostCenters => cost_centers_view(state)
     Agreements => agreements_view(state, emit)
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale }
+      let commerce = { ..state.offline_commerce, locale: state.locale, }
       let page = match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -11849,7 +11800,7 @@ fn console_view(
       @html.div([offline_commerce_lifecycle_graph(state), page])
     }
     ContractDocuments => {
-      let documents = { ..state.contract_documents, locale: state.locale }
+      let documents = { ..state.contract_documents, locale: state.locale, }
       match emit {
         Some(send) =>
           @contract_documents.interactive_view(

@@ -144,7 +144,8 @@ fn source_manifest(
   manifest.to_json().stringify(indent=2)
 }
 
-///| The manifest is the artifact: its digest names the revision, and every
+///|
+/// The manifest is the artifact: its digest names the revision, and every
 /// consumer enumerates exactly the files it lists.
 async fn write_source_manifest(directory : String, text : String) -> String {
   @fs.write_file(
@@ -513,7 +514,8 @@ async fn entry_size(path : String) -> Int64 {
   }
 }
 
-///| Bounded tree measurement: enough for an operator to recognise a directory,
+///|
+/// Bounded tree measurement: enough for an operator to recognise a directory,
 /// cheap enough that listing the store root stays a fast read.
 async fn measure_tree(root : String, depth : Int) -> (Int, Int64) {
   if depth > 6 {
@@ -544,18 +546,19 @@ async fn measure_tree(root : String, depth : Int) -> (Int, Int64) {
   (files, bytes)
 }
 
-///| A revision root is the directory that directly holds a model's entry
+///|
+/// A revision root is the directory that directly holds a model's entry
 /// point. A deeper layout (a diffusers tree, a ComfyUI asset split) belongs to
 /// the root above it, so the walk stops as soon as it finds one.
 async fn is_model_root(path : String) -> Bool {
-  if @fs.exists("\{path}/config.json") ||
-    @fs.exists("\{path}/model_index.json") {
+  if @fs.exists("\{path}/config.json") || @fs.exists("\{path}/model_index.json") {
     return true
   }
   read_directory(path).any(name => name.has_suffix(".gguf"))
 }
 
-///| Where the adapter writes what it downloaded. That area is already in the
+///|
+/// Where the adapter writes what it downloaded. That area is already in the
 /// plane as imports, so it is not offered as a directory to register.
 let managed_download_prefix : String = "models/modelscope"
 
@@ -565,7 +568,8 @@ let model_root_search_depth : Int = 4
 ///|
 let model_root_search_limit : Int = 256
 
-///| Find every revision root under the store. Hidden directories count: a
+///|
+/// Find every revision root under the store. Hidden directories count: a
 /// leading dot is how these staging areas were named, and skipping them hid
 /// roughly 700 GB of real checkpoints from the operator entirely.
 async fn collect_model_roots(
@@ -574,12 +578,15 @@ async fn collect_model_roots(
   depth : Int,
   found : Array[String],
 ) -> Unit {
-  if depth > model_root_search_depth || found.length() >= model_root_search_limit {
+  if depth > model_root_search_depth ||
+    found.length() >= model_root_search_limit {
     return
   }
   let path = if relative == "" { root } else { "\{root}/\{relative}" }
   for name in read_directory(path) {
-    if name == "_build" || name == ".git" || name == "receipts" ||
+    if name == "_build" ||
+      name == ".git" ||
+      name == "receipts" ||
       name == "sources" {
       continue
     }
@@ -612,7 +619,8 @@ async fn collect_model_roots(
   }
 }
 
-///| Directories the operator can register. Size and file count are advisory;
+///|
+/// Directories the operator can register. Size and file count are advisory;
 /// the revision is only believed after ModelScope confirms it.
 async fn local_directory_listing(
   store : @modelsource.FileImportStore,
@@ -632,7 +640,10 @@ async fn local_directory_listing(
     let (files, bytes) = measure_tree("\{model_root}/\{relative}", 0)
     entries.push(
       @modelsource.local_directory_entry(
-        relative, files, bytes, registered.get(relative).unwrap_or(false),
+        relative,
+        files,
+        bytes,
+        registered.get(relative).unwrap_or(false),
       ),
     )
   }
@@ -730,7 +741,7 @@ async fn serve(
             raise @modelsource.ModelSourceError::UpstreamRejected
           }
           let created = store.create_local(
-            { model_id: input.model_id, revision: input.revision },
+            { model_id: input.model_id, revision: input.revision, },
             detail.license,
             input.directory,
             model_root,

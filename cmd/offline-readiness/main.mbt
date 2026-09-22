@@ -224,7 +224,7 @@ async fn write_readiness_document(
 async fn sign_readiness_evidence_from_arguments(args : Array[String]) -> Unit {
   let input_path = required_argument(args, "--input")
   let output_path = required_argument(args, "--output")
-  let secret = required_argument(args, "--secret")
+  let secret = readiness_secret_argument(args, @env.get_env_var)
   let issued_unix_ms = int64_argument(args, "--issued-unix-ms", @async.now())
   let expires_unix_ms = issued_unix_ms +
     int64_argument(args, "--validity-ms", default_readiness_validity_ms)
@@ -247,10 +247,38 @@ async fn sign_readiness_evidence_from_arguments(args : Array[String]) -> Unit {
 }
 
 ///|
+/// Keep deployment signing material out of process arguments. Explicit legacy
+/// --secret remains supported; ambiguous sources are refused.
+fn readiness_secret_argument(
+  args : Array[String],
+  lookup : (String) -> String?,
+) -> String raise {
+  match
+    (argument_value(args, "--secret"), argument_value(args, "--secret-env")) {
+    (Some(_), Some(_)) => fail("choose one signing secret source")
+    (Some(value), None) => value
+    (None, Some(name)) => {
+      guard name != "" &&
+        name.all(c => c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '_') else {
+        fail("invalid signing secret environment variable name")
+      }
+      guard lookup(name) is Some(value) && value != "" else {
+        fail("signing secret environment variable is missing or empty")
+      }
+      value
+    }
+    (None, None) => fail("provide --secret-env NAME or --secret VALUE")
+  }
+}
+
+///|
 async fn main {
   let args = @env.args()
   if args.contains("--help") || args.contains("-h") {
     println(readiness_usage)
+    println(
+      "\nProduction alternative: replace --secret VALUE with --secret-env ENV_NAME to read the signing secret from the environment. Do not supply both.",
+    )
     return
   }
   sign_readiness_evidence_from_arguments(args)

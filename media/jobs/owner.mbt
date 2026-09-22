@@ -5,6 +5,7 @@
 ///|
 pub extend Owner with ToJson::{to_json}
 
+///|
 pub impl ToJson for Owner with fn to_json(self) {
   let fields : Map[String, Json] = {
     "tenant_ref": self.tenant_ref.to_json(),

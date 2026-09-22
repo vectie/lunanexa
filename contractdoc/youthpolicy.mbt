@@ -70,7 +70,11 @@ fn field(
 pub fn manifest_for_template_id(
   template_id : String,
 ) -> ContractTemplateManifest {
-  let known = [youthpolicy_remote_lease_manifest(), undertaking_manifest()]
+  let known = [
+    youthpolicy_remote_lease_manifest(),
+    undertaking_manifest(),
+    undertaking_ofl_manifest(),
+  ]
   for manifest in known {
     if manifest.template_id == template_id {
       return manifest

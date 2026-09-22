@@ -102,7 +102,8 @@ fn runtime_environment(
   // the assignment was signed for are pinned through the variable the GPU
   // runtime reads. Without this, a pod would get whatever GPU the kubelet
   // happened to pick on that node.
-  if settings.device_plugin_resource is Some(_) && assignment.devices.length() > 0 {
+  if settings.device_plugin_resource is Some(_) &&
+    assignment.devices.length() > 0 {
     result.push({
       "name": "NVIDIA_VISIBLE_DEVICES",
       "value": assignment.devices.join(",").to_json(),

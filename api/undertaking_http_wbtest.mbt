@@ -49,6 +49,7 @@ fn undertaking_test_order() -> @offline.CommercialOrder {
     artifact_ids: ["signed-a", "payment-a"],
     entitlement_ref: None,
     requested_undertaking_term: None,
+    technical_acceptance_waiver: None,
     state: UnderReconciliation,
     generation: 1L,
     created_unix_ms: 1000L,
@@ -158,7 +159,8 @@ async fn undertaking_test_snapshot(
 test "undertaking fixed tariffs reject discounts extra taxes currencies and duration mismatch" {
   let base = undertaking_test_order()
   let quote = base.quote.unwrap()
-  for case in [
+  for
+    case in [
       ("day", 1L, 4900L),
       ("week", 7L, 32200L),
       ("month", 30L, 129000L),
@@ -328,7 +330,8 @@ async test "undertaking API submits approves persists and revokes with its prepa
   let packet = undertaking_test_packet()
   ignore(documents.create_packet(packet, "subject-a"))
   let portal = @portal_store.FilePortalStore::open("\{dir}/portal.json")
-  for case in [
+  for
+    case in [
       ("subject-a", "tenant-a", "org-a"),
       ("subject-b", "tenant-b", "org-b"),
     ] {

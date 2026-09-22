@@ -2,7 +2,7 @@
 pub let contract_version : String = "lunanexa.offline-commerce.v1"
 
 ///|
-pub let snapshot_schema_version : String = "lunanexa.offline-commerce.snapshot.v5"
+pub let snapshot_schema_version : String = "lunanexa.offline-commerce.snapshot.v6"
 
 ///|
 pub(all) suberror OfflineCommerceError {
@@ -838,6 +838,9 @@ pub extend OfflineAuthorityWorkBatch with FromJson::{from_json}
 
 ///|
 pub(all) struct ArtifactGenerationResult {
+  /// Actual independently rasterized page count; absent legacy results cannot
+  /// complete the contract-document bridge.
+  page_count : Int?
   request_id : String
   artifact_id : String
   expected_object_ref : String
@@ -1038,6 +1041,7 @@ pub(all) struct CommercialOrder {
   /// records it, the operator's tariff picker defaults to it, and the quote the
   /// operator freezes is what actually prices the order.
   requested_undertaking_term : String?
+  technical_acceptance_waiver : TechnicalAcceptanceWaiver?
   state : OfflineOrderState
   generation : Int64
   created_unix_ms : Int64
@@ -1064,6 +1068,7 @@ pub(all) struct OfflineCommerceSnapshot {
   orders : Array[CommercialOrder]
   artifacts : Array[DocumentArtifact]
   generation_requests : Array[ArtifactGenerationRequest]
+  generation_plans : Map[String, String]
   upload_grants : Array[EvidenceUploadGrant]
   upload_callbacks : Array[EvidenceUploadCallback]
   reviews : Array[EvidenceReview]

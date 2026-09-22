@@ -1,0 +1,12 @@
+{
+  "schema": "lunanexa.offline-coursebook-deployment.v1",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/coursebook@sha256:968a862f893cdd40bb90af3a714a90a30e02e91b95cbdf01473650179ff08d67",
+  "registry_verified_tls_head_http": 200,
+  "registry_exact_digest": true,
+  "deployment": "lunanexa-coursebook-public-gateway",
+  "rollout_complete": true,
+  "scope": "Update coursebook-evidence.json with current API source SHA and actual PDF evidence wording; reuse existing other static files",
+  "nodeport_http": 200,
+  "evidence_sha256": "8e70a1ded0500b718b0c8e45208d0f914bd84abe9674681ed6cfb949a80dee46",
+  "source_validation": "35/35 coursebook tests passed, reported by root"
+}

@@ -11,10 +11,7 @@ test "local directories are validated as store-relative keys" {
   assert_false(@modelsource.valid_local_directory("stepfun/.."))
   assert_false(@modelsource.valid_local_directory("step fun"))
   assert_false(@modelsource.valid_local_directory("stepfun//weights"))
-  assert_eq(
-    @modelsource.local_artifact_uri("stepfun"),
-    "modelstore://stepfun",
-  )
+  assert_eq(@modelsource.local_artifact_uri("stepfun"), "modelstore://stepfun")
   let escape_rejected = try {
     ignore(@modelsource.local_artifact_uri("../stepfun"))
     false
@@ -44,7 +41,9 @@ fn legacy_snapshot() -> String {
         "files_completed": Json::number(11.0),
         "bytes_total": Json::string("2171355326"),
         "bytes_completed": Json::string("2171355326"),
-        "manifest_digest": Json::string("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        "manifest_digest": Json::string(
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
         "artifact_uri": Json::string("modelstore://modelscope/ms-legacy"),
         "license": Json::string("apache-2.0"),
         "error_code": Json::string(""),
@@ -62,7 +61,7 @@ async test "a local revision is verified before it is believed" {
   let path = "\{directory}/imports.json"
   let store = @modelsource.FileImportStore::open(path)
   let created = store.create_local(
-    { model_id: "stepfun-ai/Step-3.5-Flash", revision: "master" },
+    { model_id: "stepfun-ai/Step-3.5-Flash", revision: "master", },
     "apache-2.0",
     "stepfun",
     directory,
@@ -81,7 +80,7 @@ async test "a local revision is verified before it is believed" {
   let rejected = try {
     ignore(
       store.create_local(
-        { model_id: "stepfun-ai/Step-3.5-Flash", revision: "main" },
+        { model_id: "stepfun-ai/Step-3.5-Flash", revision: "main", },
         "apache-2.0",
         "../escape",
         directory,
@@ -118,9 +117,7 @@ async test "a version 1 snapshot keeps its imports when the schema grows" {
   assert_eq(restored.bytes_completed, 2171355326L)
 
   // The upgrade is written back as the current schema.
-  assert_true(
-    @fs.read_file(path).text().contains("\"schema_version\":2"),
-  )
+  assert_true(@fs.read_file(path).text().contains("\"schema_version\":2"))
 }
 
 ///|

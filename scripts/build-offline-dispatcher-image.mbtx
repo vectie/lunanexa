@@ -1,0 +1,39 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+}
+
+///| Run on Linux of the target architecture. Native MoonBit never cross-builds
+/// these binaries implicitly. Build inputs stay visible and secret-free.
+async fn main {
+  guard @env.args() is [_, output, kubectl_binary, image_tag, base_image] else {
+    fail("Usage: build-offline-dispatcher-image.mbtx NEW_CONTEXT_DIR REVIEWED_KUBECTL IMAGE_TAG DIGEST_PINNED_UBUNTU_BASE")
+  }
+  if !base_image.contains("@sha256:") {
+    fail("A digest-pinned Ubuntu-compatible base image is required")
+  }
+  let platform = @shell.Cmd("uname", ["-s"]).output()
+  platform.check()
+  if platform.stdout().trim() != "Linux" {
+    fail("Build this image on target-architecture Linux; refusing Mach-O binaries")
+  }
+  let workspace = @fs.read_file("moon.work").text()
+  if !workspace.contains("moonleaf") {
+    fail("moon.work must select the exact updated local MoonLeaf source")
+  }
+  @shell.Cmd("moon", ["build", "--target", "native", "--release", "cmd/offline-dispatcher", "cmd/offline-artifact-worker", "cmd/offline-pdf-renderer"]).run()
+  @fs.mkdir(output, permission=0o700)
+  for name in ["offline-dispatcher", "offline-artifact-worker", "offline-pdf-renderer"] {
+    @fs.write_file(output + "/" + name,
+      @fs.read_file("_build/native/release/build/vectie/lunanexa/cmd/" + name + "/" + name + ".exe").binary(),
+      create_mode=CreateNew, permission=0o755)
+  }
+  @fs.write_file(output + "/kubectl", @fs.read_file(kubectl_binary).binary(), create_mode=CreateNew, permission=0o755)
+  @fs.write_file(output + "/Containerfile", @fs.read_file("images/Containerfile.offline-dispatcher").binary(), create_mode=CreateNew, permission=0o600)
+  @shell.Cmd("docker", ["build", "--build-arg", "OFFLINE_BASE_IMAGE=" + base_image,
+    "-f", output + "/Containerfile", "-t", image_tag, output]).run()
+  @shell.Cmd("docker", ["image", "inspect", image_tag, "--format", "{{.Id}} {{.Architecture}} {{json .RepoDigests}}"] ).run()
+  println("Built local image only. Push to reviewed registry, record its digest and SBOM, then set both dispatcher and Job image fields to that digest.")
+}

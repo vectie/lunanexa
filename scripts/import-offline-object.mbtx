@@ -1,0 +1,32 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+async fn main {
+  guard @env.args() is [_, private_dir, kubeconfig, source, reference, media] else {fail("Usage: import-offline-object.mbtx PRIVATE_DIR KUBECONFIG SOURCE OBJECT_REF MEDIA")}
+  let k = ["--kubeconfig",kubeconfig,"-n","lunanexa"]
+  let found = @shell.Cmd("kubectl",[..k,"get","pods","-l","app=lunanexa-offline-transfer","-o","jsonpath={.items[0].metadata.name}"]).output()
+  found.check()
+  let pod = found.stdout()
+  let encoded = @shell.Cmd("kubectl",[..k,"get","secret","lunanexa-offline-transfer","-o","jsonpath={.data.LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN}"]).output()
+  encoded.check()
+  @fs.write_file(private_dir+"/adapter-token.base64",encoded.stdout(),permission=0o600)
+  let decoded = @shell.Cmd("base64",["--decode",private_dir+"/adapter-token.base64"]).output()
+  decoded.check()
+  let sum = @shell.Cmd("sha256sum",[source]).output()
+  sum.check()
+  let sha = sum.stdout().split(" ").next().unwrap().to_owned()
+  let config = "header = \"Authorization: Bearer "+decoded.stdout()+"\"\ncacert = \"/trust/ca.crt\"\nconnect-timeout = 10\nmax-time = 240\nsilent\nshow-error\nfail-with-body\n"
+  @fs.write_file(private_dir+"/adapter-curl.conf",config,permission=0o600)
+  @shell.Cmd("kubectl",[..k,"cp",private_dir+"/adapter-curl.conf",pod+":/tmp/import-curl.conf","-c","adapter"]).run()
+  @shell.Cmd("kubectl",[..k,"cp",source,pod+":/tmp/import-source","-c","adapter"]).run()
+  let endpoint = "https://lunanexa-offline-transfer.lunanexa.svc:8443"
+  let response = @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","curl","--config","/tmp/import-curl.conf","-X","POST","-H","content-type: "+media,"-H","x-lunanexa-object-ref: "+reference,"-H","x-lunanexa-sha256: sha256:"+sha,"--data-binary","@/tmp/import-source",endpoint+"/internal/v1/objects/write"]).output()
+  println(response.stdout())
+  response.check()
+  let read : Json = {"object_ref":reference,"maximum_byte_count":"67108864"}
+  let check = @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","curl","--config","/tmp/import-curl.conf","-X","POST","-H","content-type: application/json","--data",read.stringify(),"-o","/tmp/import-readback",endpoint+"/internal/v1/objects/read"]).output()
+  check.check()
+  let read_hash = @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","sha256sum","/tmp/import-readback"]).output()
+  read_hash.check()
+  guard read_hash.stdout().has_prefix(sha) else {fail("S3 readback digest mismatch")}
+  @shell.Cmd("kubectl",[..k,"exec",pod,"-c","adapter","--","rm","/tmp/import-curl.conf","/tmp/import-source","/tmp/import-readback"]).run()
+  println("Verified scanned S3 write/readback "+reference+" SHA256 "+sha)
+}

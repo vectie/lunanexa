@@ -1,0 +1,22 @@
+{
+  "date": "2026-09-22",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-control@sha256:ec18ed94a93176b41b8de1e2b0f8920ee4ef98a12434cb9a9d6fb4abf8eb01df",
+  "binary_sha256": "aa1341de76b4c9cfe246d677b20a7e82d7cd7bf82291dccd37d813a1dbf5d552",
+  "bridge_source_sha256": "a19ef1ff6977515678baa6665ab6412eefbb8bf4f310c9a10ad3e99519b08707",
+  "source": "Frozen working tree including new untracked runtime packages; not claimed as a clean tagged release",
+  "native_build": "release -O2 successful",
+  "pod": "lunanexa-control-748cb78df7-wlp2f",
+  "ready_containers": "4/4",
+  "initial_control_restart_count": 1,
+  "initial_control_failure": "DatabaseError.ConnectionUnavailable; automatic restart subsequently became Ready",
+  "read_only_post_failure_diagnostics": {"postgres_restarts":0,"postgres_connections":14,"postgres_max_connections":100,"postgres_cpu_millicores":117,"postgres_memory_mib":252,"concurrent_postgres_fatal_or_error_logs_observed":false,"control_restarts_still":1,"ordinary_leader_contention_is_not_this_error":true,"precise_initial_connection_cause":"Unavailable from retained terse exception; no database settings changed"},
+  "sidecar_restart_count": 0,
+  "registry_tls_head_http": 200,
+  "registry_digest_matches": true,
+  "readiness_evaluated_unix_ms": "1790075209135",
+  "all_ten_capabilities_verified": true,
+  "entitlement_authority_evidence": "docs/evidence/workspace-authority-oidc-production-20260922.json",
+  "remaining_blocker_codes": ["ReadinessEntitlementDispatcherSuccessStale"],
+  "existing_scope_ca_and_sidecars_preserved": true,
+  "actual_moonedit_acceptance_is_separate": true
+}

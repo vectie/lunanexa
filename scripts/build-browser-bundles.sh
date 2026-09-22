@@ -5,19 +5,26 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 output_root=${1:-"$repo_root/_build/browser-dist"}
 
 cd "$repo_root"
-moon build cmd/console cmd/enterprise cmd/workbench cmd/installer-ui --target js --release
+moon build cmd/console cmd/enterprise cmd/workbench cmd/installer-ui --target js --release --target-dir _build/browser-compiled
+
+# Workspace builds are module-qualified. Never package stale standalone output
+# left behind before moon.work was enabled.
+browser_build_root=_build/browser-compiled/js/release/build
+if test -f moon.work; then
+  browser_build_root=$browser_build_root/vectie/lunanexa
+fi
 
 mkdir -p "$output_root/console" "$output_root/enterprise" "$output_root/workbench" "$output_root/installer" "$output_root/assets/contracts/youthpolicy/v1" "$output_root/assets/fonts/private"
 cp cmd/console/index.html "$output_root/console/index.html"
 cp assets/platform-logo.png "$output_root/assets/platform-logo.png"
 cp assets/platform-logo-light.png "$output_root/assets/platform-logo-light.png"
-cp _build/js/release/build/cmd/console/console.js "$output_root/console/console.js"
+cp "$browser_build_root/cmd/console/console.js" "$output_root/console/console.js"
 cp cmd/enterprise/index.html "$output_root/enterprise/index.html"
-cp _build/js/release/build/cmd/enterprise/enterprise.js "$output_root/enterprise/enterprise.js"
+cp "$browser_build_root/cmd/enterprise/enterprise.js" "$output_root/enterprise/enterprise.js"
 cp cmd/workbench/index.html "$output_root/workbench/index.html"
-cp _build/js/release/build/cmd/workbench/workbench.js "$output_root/workbench/workbench.js"
+cp "$browser_build_root/cmd/workbench/workbench.js" "$output_root/workbench/workbench.js"
 cp cmd/installer-ui/index.html "$output_root/installer/index.html"
-cp _build/js/release/build/cmd/installer-ui/installer-ui.js "$output_root/installer/installer-ui.js"
+cp "$browser_build_root/cmd/installer-ui/installer-ui.js" "$output_root/installer/installer-ui.js"
 
 asset_digest() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -56,12 +63,12 @@ render_asset_version "$output_root/installer/index.html" \
 cp assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json "$output_root/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json"
 mkdir -p "$output_root/assets/contracts/youthpolicy/undertaking-v1"
 cp assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json "$output_root/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json"
+mkdir -p "$output_root/assets/contracts/youthpolicy/undertaking-ofl-v2"
+cp assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json "$output_root/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json"
 cp assets/fonts/contract-fonts.css "$output_root/assets/fonts/contract-fonts.css"
-for font in FangSong_GB2312.ttf FZXiaoBiaoSong-B05S.ttf SimHei.ttf; do
-  if [ -f "assets/fonts/private/$font" ]; then
-    cp "assets/fonts/private/$font" "$output_root/assets/fonts/private/$font"
-  fi
-done
+moon run scripts/copy-open-contract-font-assets.mbtx -- "$repo_root" "$output_root"
+moon run scripts/copy-private-contract-font-assets.mbtx -- "$repo_root" "$output_root"
+moon run scripts/verify-browser-bundle-output.mbtx -- "$repo_root" "$output_root"
 
 test -s "$output_root/console/index.html"
 test -s "$output_root/console/console.js"
@@ -73,6 +80,7 @@ test -s "$output_root/installer/index.html"
 test -s "$output_root/installer/installer-ui.js"
 test -s "$output_root/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json"
 test -s "$output_root/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json"
+test -s "$output_root/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json"
 test -s "$output_root/assets/fonts/contract-fonts.css"
 
 printf '%s\n' "browser bundles ready at $output_root"

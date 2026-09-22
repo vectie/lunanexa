@@ -59,8 +59,8 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
     packet.packet_id,
     packet.revision,
     [
-      { field_id: "lessee.name", value: "数据库验收单位" },
-      { field_id: "undertaking.signed_date", value: "2026-09-16" },
+      { field_id: "lessee.name", value: "数据库验收单位", },
+      { field_id: "undertaking.signed_date", value: "2026-09-16", },
     ],
     CustomerMessenger,
     packet.subject_ref,
@@ -81,7 +81,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
         manifest,
         packet.packet_id,
         updated.revision,
-        [{ field_id: "lessee.name", value: "must-not-persist" }],
+        [{ field_id: "lessee.name", value: "must-not-persist", }],
         CustomerMessenger,
         packet.subject_ref,
         "postgres-acceptance",
@@ -111,7 +111,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
     manifest,
     packet.packet_id,
     updated.revision,
-    [{ field_id: "lessee.name", value: "retry-persisted" }],
+    [{ field_id: "lessee.name", value: "retry-persisted", }],
     CustomerMessenger,
     packet.subject_ref,
     "postgres-acceptance",
@@ -119,7 +119,9 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
   )
   assert_eq(retry.revision, updated.revision + 1L)
   assert_eq(
-    @store.ContractDocumentStore::open_postgres(successor).packet(packet.packet_id),
+    @store.ContractDocumentStore::open_postgres(successor).packet(
+      packet.packet_id,
+    ),
     Some(retry),
   )
 }

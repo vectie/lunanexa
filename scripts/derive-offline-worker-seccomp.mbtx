@@ -1,0 +1,70 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, kubeconfig, container_id, output] else {
+    fail(
+      "usage: derive-offline-worker-seccomp.mbtx KUBECONFIG ACTUAL_RUNTIMEDEFAULT_CONTAINER_ID NEW_OUTPUT",
+    )
+  }
+  let result = @shell.Cmd("kubectl", [
+    "--kubeconfig", kubeconfig, "-n", "lunanexa-runtime-qualification", "exec", "offline-production-builder",
+    "--", "/host/k3s", "ctr", "-n", "k8s.io", "containers", "info", container_id,
+  ]).output()
+  result.check()
+  guard @json.parse(result.stdout())
+    is { "Spec": { "linux": { "seccomp": Object(profile), .. }, .. }, .. } else {
+    fail("actual runtime OCI spec has no seccomp profile")
+  }
+  guard profile.get("defaultAction") == Some("SCMP_ACT_ERRNO".to_json()) &&
+    profile.get("syscalls") is Some(Array(rules)) else {
+    fail("expected runtime default deny-by-default profile")
+  }
+  @fs.write_file(
+    output + ".runtime-default.json",
+    profile.to_json().stringify(indent=2),
+    create_mode=CreateNew,
+    permission=0o644,
+  )
+  let retained : Array[Json] = []
+  for rule in rules {
+    guard rule is Object(fields) && fields.get("names") is Some(Array(names)) else {
+      fail("unsupported runtime syscall rule")
+    }
+    let filtered = names.filter(name => {
+      name != "socket".to_json() &&
+      name != "socketpair".to_json() &&
+      name != "socketcall".to_json()
+    })
+    if !filtered.is_empty() {
+      let revised = fields.copy()
+      revised["names"] = filtered.to_json()
+      retained.push(revised.to_json())
+    }
+  }
+  // Preserve all other RuntimeDefault rules. Socket access is narrowed to
+  // AF_UNIX only; INET/INET6/PACKET/NETLINK and compat socketcall fail closed.
+  retained.push({
+    "names": ["socket", "socketpair"],
+    "action": "SCMP_ACT_ALLOW",
+    "args": [{ "index": 0, "value": 1, "op": "SCMP_CMP_EQ" }],
+  })
+  let secured = profile.copy()
+  secured["syscalls"] = retained.to_json()
+  @fs.write_file(
+    output,
+    secured.to_json().stringify(indent=2),
+    create_mode=CreateNew,
+    permission=0o644,
+  )
+  println(
+    "Derived worker-only AF_UNIX profile from actual deny-by-default RuntimeDefault; no other syscall was broadened.",
+  )
+}

@@ -1,0 +1,106 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/json",
+}
+
+///|
+fn field(value : Json, key : String) -> Json raise {
+  guard value is Object(fields) && fields.get(key) is Some(found) else {
+    fail("missing evidence field " + key)
+  }
+  found
+}
+
+///|
+async fn main {
+  let before = @json.parse(
+    @fs.read_file(
+      "/tmp/offline-acceptance-progress-packet-generate-response.json",
+    ).text(),
+  )
+  let retried = @json.parse(
+    @fs.read_file("/tmp/offline-acceptance-moonedit-generate-retry.json").text(),
+  )
+  let current = @json.parse(
+    @fs.read_file("/tmp/offline-acceptance-moonedit-current.json").text(),
+  )
+  let snapshot = @json.parse(
+    @fs.read_file("/tmp/offline-acceptance-moonedit-commerce.json").text(),
+  )
+  guard current is Array(packets) && packets.length() == 1 else {
+    fail("unexpected technical packet set")
+  }
+  let packet = packets[0]
+  guard field(before, "state") == "GenerationRequested" &&
+    field(before, "revision") == "5" &&
+    before == retried &&
+    field(packet, "state") == "Generated" &&
+    field(packet, "revision") == "6" &&
+    field(before, "values_sha256") == field(packet, "values_sha256") &&
+    field(packet, "packet_id") == "technical-acceptance-ofl-packet-20260922" &&
+    field(packet, "artifacts") is Array(artifacts) &&
+    artifacts.length() == 2 &&
+    field(snapshot, "artifacts") is Array(stored) &&
+    field(snapshot, "generation_requests") is Array(requests) &&
+    field(snapshot, "work_claims") is Array(claims) &&
+    field(snapshot, "generation_plans") == ({} : Json) else {
+    fail("MoonEdit revision, replay or projection proof mismatch")
+  }
+  let artifact_ids = artifacts.map(a => field(a, "artifact_id"))
+  let bound_requests = requests.filter(r => {
+    artifact_ids.contains(field(r, "artifact_id"))
+  })
+  let bound_artifacts = stored.filter(a => {
+    artifact_ids.contains(field(a, "artifact_id"))
+  })
+  let work_ids = bound_requests.map(r => {
+    guard field(r, "request_id") is String(id) else { fail("request id") }
+    ("artifact:" + id : String).to_json()
+  })
+  let bound_claims = claims.filter(c => work_ids.contains(field(c, "work_id")))
+  guard bound_requests.length() == 2 &&
+    bound_artifacts.length() == 2 &&
+    bound_claims.length() == 2 &&
+    bound_claims.all(c => field(c, "completed_unix_ms") is String(_)) &&
+    artifacts.all(a => {
+      field(a, "page_count") == 4 &&
+      field(a, "render_evidence_sha256") ==
+      "sha256:2e1012e44af3f571b49894bd2385b9d17465f4100a9e20d155f6c07dbe06ecea"
+    }) &&
+    bound_artifacts.all(a => {
+      field(a, "generation_state") == "ArtifactGenerated" &&
+      field(a, "scan_state") == "ScanPassed"
+    }) else {
+    fail("actual paired completion proof incomplete")
+  }
+  let evidence : Json = {
+    "schema": "lunanexa.moonedit-production-bridge.v1",
+    "scope": "technical acceptance only; non-commercial, not signed, no payment or entitlement claim",
+    "controller_image_sha256": "ec18ed94a93176b41b8de1e2b0f8920ee4ef98a12434cb9a9d6fb4abf8eb01df",
+    "worker_image_sha256": "ec1d28986b5ee034ec7125f88ecb82ad4b9b96580ae6cac8763183a6a16aaff4",
+    "entrypoint": "authenticated purchaser MoonEdit :generate; no manually queued artifact requests",
+    "confirmed_values_sha256": field(packet, "values_sha256"),
+    "packet_id": field(packet, "packet_id"),
+    "order_id": field(packet, "order_ref"),
+    "source_template_sha256": field(packet, "template_sha256"),
+    "requested_revision": field(before, "revision"),
+    "generated_revision": field(packet, "revision"),
+    "state": field(packet, "state"),
+    "exact_click_retry_unchanged": true,
+    "private_generation_plan_projection_empty": true,
+    "generated_unix_ms": field(packet, "updated_unix_ms"),
+    "packet_artifacts": artifacts.to_json(),
+    "stored_artifacts": bound_artifacts.to_json(),
+    "generation_requests": bound_requests.to_json(),
+    "completed_claims": bound_claims.to_json(),
+  }
+  @fs.write_file(
+    "docs/evidence/offline-ofl-v2-20260922/moonedit-production-bridge.json",
+    evidence.stringify(indent=2) + "\n",
+  )
+  println(
+    "Retained real MoonEdit pair, exact retry, actual page counts, scanned objects and completed dispatcher claims; no credentials retained",
+  )
+}

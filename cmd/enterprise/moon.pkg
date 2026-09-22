@@ -11,7 +11,6 @@ import {
   "vectie/lunanexa/portal",
   "vectie/lunanexa/ui/enterprise" @enterprise_ui,
   "vectie/lunanexa/ui/i18n",
-  "vectie/lunanexa/ui/machine_access",
   "vectie/lunanexa/ui/offline_commerce",
   "vectie/lunanexa/ui/contract_documents",
   "moonbit-community/rabbita",
@@ -20,7 +19,6 @@ import {
   "moonbit-community/rabbita/sub",
   "moonbitlang/core/json",
   "moonbitlang/core/encoding/utf8",
-  "moonbitlang/core/string",
   "moonbitlang/x/crypto",
 }
 

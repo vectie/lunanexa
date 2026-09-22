@@ -454,6 +454,7 @@ pub fn ModelRegistry::model(
 }
 
 ///|
+
 ///|
 /// `require_evaluation = false` is the shelved-evaluation policy: a verified
 /// model may be approved without a benchmark behind it. It is deliberately a

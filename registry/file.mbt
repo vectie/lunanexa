@@ -238,7 +238,13 @@ pub async fn FileRegistry::promote(
   let require_evaluation = self.require_evaluation
   self.update(registry => {
     registry.promote(
-      alias_name, model_id, version, stage, actor, now_unix_ms, require_evaluation~,
+      alias_name,
+      model_id,
+      version,
+      stage,
+      actor,
+      now_unix_ms,
+      require_evaluation~,
     )
   })
 }

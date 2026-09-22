@@ -287,6 +287,7 @@ pub fn BrowserSessionView::to_repr(Self) -> @debug.Repr
 pub(all) struct ComputeLeaseRow {
   lease_id : String
   user_id : String
+  subject_ref : String
   workspace : String
   resource : String
   started_at : String

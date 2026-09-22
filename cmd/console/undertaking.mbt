@@ -43,7 +43,10 @@ fn undertaking_quote(
     } else {
       order.expires_unix_ms
     },
-    terms_digest: @contractdoc.undertaking_manifest().sha256,
+    terms_digest: match order.quote {
+      Some(previous) => previous.terms_digest
+      None => @contractdoc.undertaking_ofl_manifest().sha256
+    },
     created_unix_ms: now,
   }
 }

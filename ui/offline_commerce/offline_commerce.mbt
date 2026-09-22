@@ -212,6 +212,7 @@ pub fn demo_state(
     artifact_ids: ["artifact-contract-executed"],
     entitlement_ref: None,
     requested_undertaking_term: None,
+    technical_acceptance_waiver: None,
     state: if operator {
       UnderReconciliation
     } else {
@@ -338,9 +339,7 @@ pub fn OfflineCommerceState::update(
 /// confirmation shows the amount only when it can be computed from what is on
 /// screen, so it never quotes a total the operator did not type.
 fn quantity_for_display(quantity : String) -> Int64? {
-  let parsed = @string.parse_int64(quantity.trim()) catch {
-    _ => return None
-  }
+  let parsed = @string.parse_int64(quantity.trim()) catch { _ => return None }
   if parsed < 1L {
     None
   } else {
@@ -359,7 +358,10 @@ fn confirmation_for_action(
       // operator to freeze an amount the screen never stated.
       let term_code = term.trim().to_owned()
       let total = match
-        (@offline.undertaking_term_tier(term_code), quantity_for_display(quantity)) {
+        (
+          @offline.undertaking_term_tier(term_code),
+          quantity_for_display(quantity),
+        ) {
         (Some(tier), Some(count)) => Some(tier.minor_units * count)
         _ => None
       }

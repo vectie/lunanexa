@@ -1,0 +1,59 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+}
+
+///|
+/// Static contract only: deliberately does not read credentials or build images.
+async fn main {
+  let exclusions = @fs.read_file(".dockerignore").text().split("\n").to_array()
+  for
+    path in [
+      "/moon.work", "/deploy/cluster/credentials.json", "/assets/fonts/private",
+      "/_build/browser-dist/assets/fonts/private", "/docs/evidence", "/deploy/offline-transfer/probe-fonts.test-only.json",
+      "/deploy/offline-transfer/verification-pod.yaml", "/deploy/offline-transfer/verification.moon.work",
+      "/.env", "/.env.*",
+    ] {
+    assert_true(exclusions.contains(path))
+  }
+  for forbidden in ["/assets", "/assets/contracts", "/assets/fonts/open"] {
+    assert_false(exclusions.contains(forbidden))
+  }
+  let dockerfile = @fs.read_file("images/Containerfile.control").text()
+  assert_true(
+    dockerfile.contains(
+      "COPY --from=moonleaf_source moon.mod moon.pkg *.mbt README.mbt.md /moonleaf/",
+    ),
+  )
+  for
+    source_package in ["docx", "opc", "pptx", "render", "scene", "xlsx", "xml"] {
+    assert_true(
+      dockerfile.contains(
+        "COPY --from=moonleaf_source \{source_package}/ /moonleaf/\{source_package}/",
+      ),
+    )
+  }
+  assert_false(dockerfile.contains("COPY --from=moonleaf_source . "))
+  assert_true(
+    dockerfile.contains("COPY images/control.moon.work /src/moon.work"),
+  )
+  assert_true(
+    dockerfile.contains(
+      "/src/_build/native/release/build/vectie/lunanexa/cmd/control/control.exe",
+    ),
+  )
+  let workspace = @fs.read_file("images/control.moon.work").text()
+  assert_true(workspace.contains("\"../moonleaf\""))
+  assert_true(workspace.contains("\".\""))
+  let caller = @fs.read_file("scripts/deploy/build-management-images.sh").text()
+  assert_true(caller.contains("docker buildx build --load"))
+  assert_true(
+    caller.contains(
+      "--build-context \"moonleaf_source=${LUNANEXA_MOONLEAF_SOURCE:-$repository_root/../moonleaf}\"",
+    ),
+  )
+  println(
+    "PASS: sensitive exclusions, source allowlist, workspace paths and actual caller contract (no image build performed)",
+  )
+}

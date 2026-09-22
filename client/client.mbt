@@ -261,7 +261,13 @@ pub fn FixtureTransport::cancelled_workload(self : FixtureTransport) -> String? 
 }
 
 ///|
-pub extend FixtureTransport with ProviderTransport::{invoke, discover, health, stream, cancel}
+pub extend FixtureTransport with ProviderTransport::{
+  invoke,
+  discover,
+  health,
+  stream,
+  cancel,
+}
 
 ///|
 pub impl ProviderTransport for FixtureTransport with fn invoke(
@@ -422,7 +428,13 @@ fn transport_failure() -> ClientError {
 }
 
 ///|
-pub extend HttpTransport with ProviderTransport::{invoke, discover, health, stream, cancel}
+pub extend HttpTransport with ProviderTransport::{
+  invoke,
+  discover,
+  health,
+  stream,
+  cancel,
+}
 
 ///|
 pub impl ProviderTransport for HttpTransport with fn invoke(self, config, body) {

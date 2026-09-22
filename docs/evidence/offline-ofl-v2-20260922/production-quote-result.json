@@ -1,0 +1,16 @@
+{
+  "request_id": "technical-runtime-qualification-20260922",
+  "artifact_id": "technical-runtime-qualification-20260922-quote",
+  "expected_object_ref": "object://technical-qualification/20260922/quote.xlsx",
+  "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "byte_count": "2587",
+  "sha256": "sha256:c044202b042e94ad0ee4cb7b87a1ebedb3ecc9c46e68e70d08bbdf8453f4c6eb",
+  "worker_receipt": "moonleaf:9827d94ea31bf9cceb007e0814cc05200c36f7a1054c6e4de3ae70872919f121",
+  "verified": true,
+  "active_content_detected": false,
+  "moonleaf_verified": true,
+  "render_verified": true,
+  "formula_error_count": 0,
+  "visual_evidence_sha256": "sha256:16416637da40f25ac797116ad1154c4dcbc5abf4b36da2491b35e7ca0928d878",
+  "completed_unix_ms": "1790072684902"
+}

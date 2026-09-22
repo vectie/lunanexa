@@ -1,0 +1,112 @@
+# Optional deployment-owned S3 backend. Use an existing approved S3 service
+# instead if available. This single-replica profile is not an HA claim.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-offline-object-store
+  namespace: lunanexa
+spec:
+  selector: {app: lunanexa-offline-object-store}
+  ports:
+    - {name: s3, port: 8443, targetPort: 8443}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: lunanexa-offline-object-store
+  namespace: lunanexa
+spec:
+  serviceName: lunanexa-offline-object-store
+  replicas: 1
+  selector:
+    matchLabels: {app: lunanexa-offline-object-store}
+  template:
+    metadata:
+      labels: {app: lunanexa-offline-object-store}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: s3
+          image: ${OFFLINE_OBJECT_STORE_IMAGE_DIGEST}
+          command: [/usr/local/bin/weed]
+          args:
+            - server
+            - -dir=/data
+            - -ip=127.0.0.1
+            - -ip.bind=127.0.0.1
+            - -filer
+            - -filer.encryptVolumeData
+            - -s3
+            - -s3.config=/credentials/iam.json
+            - -s3.allowDeleteBucketNotEmpty=false
+            - -s3.port=8333
+            - -volume.max=32
+            - -master.volumeSizeLimitMB=1024
+            - -master.telemetry=false
+            - -s3.encryptVolumeData
+            - -s3.iam=false
+            - -s3.port.iceberg=0
+            - -s3.port.lance=0
+          ports:
+            - {name: s3-internal, containerPort: 8333}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: "500m", memory: "512Mi"}
+            limits: {cpu: "2", memory: "2Gi"}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: temporary, mountPath: /tmp}
+            - {name: credentials, mountPath: /credentials, readOnly: true}
+        - name: private-tls
+          image: ${OFFLINE_OBJECT_STORE_IMAGE_DIGEST}
+          command: [nginx, -c, /config/nginx.conf, -g, "daemon off;"]
+          ports: [{name: s3, containerPort: 8443}]
+          readinessProbe: {tcpSocket: {port: s3}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 20m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          volumeMounts:
+            - {name: tls-config, mountPath: /config, readOnly: true}
+            - {name: tls, mountPath: /tls, readOnly: true}
+            - {name: tls-temporary, mountPath: /tmp}
+      volumes:
+        - name: temporary
+          emptyDir: {sizeLimit: 512Mi}
+        - name: credentials
+          secret: {secretName: lunanexa-offline-object-store-iam, defaultMode: 0440}
+        - name: tls
+          secret: {secretName: lunanexa-offline-object-store-tls, defaultMode: 0440}
+        - name: tls-config
+          configMap: {name: lunanexa-offline-object-store-tls}
+        - name: tls-temporary
+          emptyDir: {sizeLimit: 128Mi}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 40Gi}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-offline-object-store-private
+  namespace: lunanexa
+spec:
+  podSelector:
+    matchLabels: {app: lunanexa-offline-object-store}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: lunanexa-offline-transfer}
+      ports:
+        - {protocol: TCP, port: 8443}

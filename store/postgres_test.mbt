@@ -26,9 +26,7 @@ fn test_database_url() -> String? raise {
 
 ///|
 async test "core control state restores from PostgreSQL under leadership fencing" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   let standby = @database.PostgresDatabase::open(url)
   let migrated = @store.MemoryStore::new()

@@ -1,0 +1,23 @@
+{
+  "schema": "lunanexa.offline-font-provision.v1",
+  "observed_date": "2026-09-22",
+  "namespace": "lunanexa",
+  "pvc": "lunanexa-offline-approved-fonts",
+  "pvc_uid": "b6d20e14-e577-40f6-9b57-745ff721df53",
+  "node": "ubuntu",
+  "storage_class": "local-path",
+  "access_mode": "ReadWriteOnce",
+  "capacity": "128Mi",
+  "phase": "Bound",
+  "owner_uid": 65532,
+  "owner_gid": 65532,
+  "file_mode": "0444",
+  "runtime_mount_read_only_required": true,
+  "runtime_mount_path": "/fonts",
+  "font": {"filename": "NotoSansSC-Regular.ttf", "byte_count": 10596308, "sha256": "c7763f454946833081cc90e73186615f8e1189de9c5e5a5a8752871fd79fddbc"},
+  "license": {"filename": "OFL.txt", "byte_count": 4301, "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"},
+  "manifest": {"filename": "manifest.json", "byte_count": 328, "sha256": "9a022142b3e7a7aa078ced948b81c95ac9cc133cd54a1cb658840ede4711db71"},
+  "all_bytes_verified_inside_production_namespace": true,
+  "legacy_private_fonts_present": false,
+  "production_renderer_job_execution_attested": false
+}

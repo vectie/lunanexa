@@ -1,0 +1,169 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn call(
+  verb : String,
+  path : String,
+  payload : Json,
+  tag : String,
+  customer? : Bool = false,
+) -> Json {
+  let body = "/tmp/offline-acceptance-progress-" + tag + "-request.json"
+  let output = "/tmp/offline-acceptance-progress-" + tag + "-response.json"
+  @fs.write_file(body, payload.stringify(), permission=0o600)
+  @shell.Cmd("env", [
+    "LUNANEXA_ACCEPTANCE_USE_SMOKE=" + (if customer { "1" } else { "0" }),
+    "moon",
+    "run",
+    "scripts/offline-acceptance-api.mbtx",
+    "--",
+    verb,
+    path,
+    body,
+    output,
+  ]).run()
+  let response = @json.parse(@fs.read_file(output).text())
+  if response is { "error": _, .. } || response is { "code": _, .. } {
+    println(response.stringify(indent=2))
+    fail("API blocked at " + tag + "; no later side effects attempted")
+  }
+  response
+}
+
+///|
+fn revision(value : Json) -> Json raise {
+  guard value is { "revision": found, .. } else {
+    fail("packet revision missing")
+  }
+  found
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] && (phase == "quote" || phase == "documents") else {
+    fail("usage: offline-acceptance-progress.mbtx quote|documents")
+  }
+  let order = "technical-acceptance-ofl-order-20260922"
+  let organization = "technical-acceptance-ofl-20260922"
+  let terms = "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117"
+  if phase == "quote" {
+    let quoted = call(
+      "POST",
+      "/v1/offline-commerce/operator/quotes",
+      @json.parse(@fs.read_file("/tmp/offline-acceptance-quote.json").text()),
+      "quote",
+    )
+    guard quoted is { "generation": generation, .. } else {
+      fail("quote generation missing")
+    }
+    ignore(
+      call(
+        "POST",
+        "/v1/offline-commerce/operator/begin",
+        { "order_id": order, "expected_generation": generation },
+        "begin",
+      ),
+    )
+    ignore(
+      call(
+        "POST",
+        "/v1/offline-commerce/operator/generation-requests",
+        {
+          "request_id": "technical-acceptance-ofl-quote-request-20260922",
+          "order_id": order,
+          "organization_id": organization,
+          "artifact_id": "technical-acceptance-ofl-quote-artifact-20260922",
+          "kind": "QuoteScheduleXlsx",
+          "template_id": "offline-quote-v1",
+          "template_version": "1",
+          "locale": "zh-CN",
+          "expected_object_ref": "s3://lunanexa-offline-commerce/technical-acceptance/20260922/quote.xlsx",
+          "input_snapshot_sha256": terms,
+          "requested_by": "technical-acceptance-operator",
+          "requested_unix_ms": @async.now().to_json(),
+        },
+        "quote-generation",
+      ),
+    )
+    println(
+      "Real controller quote work queued; no payment/signature/fulfillment submitted",
+    )
+    return
+  }
+  let packet_id = "technical-acceptance-ofl-packet-20260922"
+  let packet = call(
+    "POST",
+    "/v1/contract-documents/self",
+    {
+      "template_id": "youthpolicy-device-undertaking-ofl-v2",
+      "packet_id": packet_id,
+      "idempotency_key": packet_id,
+      "order_ref": order,
+      "active_forms": ["MasterLease"],
+    },
+    "packet",
+    customer=true,
+  )
+  let customer_path = "/v1/contract-documents/self/" + packet_id
+  let filled = call(
+    "PUT",
+    customer_path + ":information",
+    {
+      "expected_revision": revision(packet),
+      "changes": [
+        {
+          "field_id": "lessee.name",
+          "value": "技术验收样例（非商业订单，未签署）",
+        },
+        { "field_id": "undertaking.signed_date", "value": "2026-09-22" },
+      ],
+    },
+    "customer-fields",
+    customer=true,
+  )
+  let prepared = call(
+    "PUT",
+    "/v1/contract-documents/operator/packets/" + packet_id + ":information",
+    {
+      "expected_revision": revision(filled),
+      "changes": [
+        { "field_id": "lease.start_date", "value": "2026-09-22" },
+        { "field_id": "lease.end_date", "value": "2026-09-23" },
+        { "field_id": "lease.total_rent", "value": "49.00" },
+      ],
+    },
+    "operator-fields",
+  )
+  let confirmed = call(
+    "POST",
+    customer_path + ":confirm",
+    { "expected_revision": revision(prepared) },
+    "confirm-fields",
+    customer=true,
+  )
+  guard confirmed is { "values_sha256": digest, .. } else {
+    fail("confirmation digest missing")
+  }
+  ignore(
+    call(
+      "POST",
+      customer_path + ":generate",
+      {
+        "expected_revision": revision(confirmed),
+        "expected_values_sha256": digest,
+      },
+      "packet-generate",
+      customer=true,
+    ),
+  )
+  println(
+    "MoonEdit requested generation; controller must enqueue the frozen pair automatically. Confirmation is not legal signature or execution",
+  )
+}

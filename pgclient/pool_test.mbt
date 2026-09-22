@@ -37,9 +37,7 @@ fn test_database_url() -> String? {
 
 ///|
 async test "pooled statements overlap instead of serialising" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=2)
   // Two statements that each sleep 400 ms. Serialised they need at least
   // 800 ms; overlapping on two workers needs a little over 400 ms. The bound
@@ -56,9 +54,7 @@ async test "pooled statements overlap instead of serialising" {
 
 ///|
 async test "a rejected statement raises instead of returning rows" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=1)
   let rejected = try {
     ignore(pool.execute("SELECT * FROM lunanexa.relation_that_does_not_exist"))
@@ -78,24 +74,22 @@ async test "a rejected statement raises instead of returning rows" {
 
 ///|
 async test "parameters round-trip and NULL is preserved" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=1)
   let result = pool.execute(
     "SELECT $1::text AS echoed, $2::text IS NULL AS absent",
     parameters=[Some("value"), None],
   )
   assert_eq(result.value(0, 0), Some("value"))
-  assert_true(result.value(0, 1) == Some("t") || result.value(0, 1) == Some("true"))
+  assert_true(
+    result.value(0, 1) == Some("t") || result.value(0, 1) == Some("true"),
+  )
   pool.close()
 }
 
 ///|
 async test "a lease keeps statements on one connection" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=3)
   let connection = pool.acquire()
   // A session-scoped advisory lock is only observable from the connection that
@@ -112,14 +106,14 @@ async test "a lease keeps statements on one connection" {
 
 ///|
 async test "a transaction rolls back when the body raises" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=1)
   let connection = pool.acquire()
   let failed = try {
     connection.transaction(inner => {
-      ignore(inner.execute("CREATE TEMP TABLE lunanexa_rollback_probe (id int)"))
+      ignore(
+        inner.execute("CREATE TEMP TABLE lunanexa_rollback_probe (id int)"),
+      )
       ignore(inner.execute("INSERT INTO lunanexa_rollback_probe VALUES (1)"))
       raise @pgclient.PgError::InvalidArgument("deliberate failure")
     })
@@ -139,9 +133,7 @@ async test "a transaction rolls back when the body raises" {
 
 ///|
 async test "the pool serves more concurrent statements than it has workers" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=2)
   let started = @async.now()
   @async.with_task_group(group => {
@@ -159,9 +151,7 @@ async test "the pool serves more concurrent statements than it has workers" {
 
 ///|
 async test "consecutive statements on one lease report their own results" {
-  guard test_url() is Some(url) else {
-    return
-  }
+  guard test_url() is Some(url) else { return }
   let pool = @pgclient.PgPool::connect(url, workers=1)
   let connection = pool.acquire()
   let lock = connection.execute(
@@ -179,19 +169,15 @@ async test "consecutive statements on one lease report their own results" {
     None => "<none>"
   }
   println("probe second=" + shown_second)
-  let third = connection.execute(
-    "SELECT $1::text",
-    parameters=[Some("three")],
-  )
+  let third = connection.execute("SELECT $1::text", parameters=[Some("three")])
   let shown_third = match third.value(0, 0) {
     Some(value) => value
     None => "<none>"
   }
   println("probe third=" + shown_third)
-  let _ = connection.execute(
-    "SELECT pg_advisory_unlock($1::bigint)",
-    parameters=[Some("5496452340495695181")],
-  )
+  let _ = connection.execute("SELECT pg_advisory_unlock($1::bigint)", parameters=[
+    Some("5496452340495695181"),
+  ])
   connection.release()
   pool.close()
 }

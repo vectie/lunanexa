@@ -1,0 +1,36 @@
+# Disposable dependency-validation pod. No production data or credentials.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: offline-transfer-verify-20260922
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tools
+  namespace: offline-transfer-verify-20260922
+spec:
+  nodeName: ubuntu
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: tools
+      image: dockerproxy.net/library/postgres@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "14400"]
+      securityContext: {runAsUser: 0}
+      resources:
+        requests: {cpu: "250m", memory: "512Mi"}
+        limits: {cpu: "2", memory: "2Gi"}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: verification-ingress-only
+  namespace: offline-transfer-verify-20260922
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}

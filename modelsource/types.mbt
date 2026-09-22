@@ -270,7 +270,8 @@ pub fn local_directory_entry(
   })
 }
 
-///| The one artifact-URI form LunaNexa serves from its own managed store: the
+///|
+/// The one artifact-URI form LunaNexa serves from its own managed store: the
 /// path segment is the key inside `LUNANEXA_MODEL_STORE_ROOT`.
 pub fn local_artifact_uri(directory : String) -> String raise ModelSourceError {
   if !valid_local_directory(directory) {

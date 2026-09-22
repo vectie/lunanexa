@@ -5,11 +5,25 @@
 **/._*
 .agents
 .codex
+# Local workspace selection is replaced by the controller's reviewed manifest.
+/moon.work
+# Git ignore rules do not protect Docker build contexts.
+/deploy/cluster/credentials.json
+/assets/fonts/private
+/docs/evidence
+/deploy/offline-transfer/probe-fonts.test-only.json
+/deploy/offline-transfer/verification-pod.yaml
+/deploy/offline-transfer/verification.moon.work
+/.env
+/.env.*
+!/.env.example
 .repos
 .moonserve-staging
 _build/*
 !_build/browser-dist
 !_build/browser-dist/**
+# Do not leak legacy private fonts from an older browser bundle either.
+/_build/browser-dist/assets/fonts/private
 _artifacts/*
 !_artifacts/moon-linux-amd64
 !_artifacts/moon-linux-amd64/**

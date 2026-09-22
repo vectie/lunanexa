@@ -11,6 +11,7 @@ priv struct AppModel {
   session_expires_unix_ms : Int64?
   machine_clock_generation : Int64
   contract_preview_generation : Int64
+  contract_poll_generation : Int64
   portal : @enterprise_ui.EnterpriseState
   /// The customer sign-in and registration draft. The password stays in memory
   /// only: it is sent to the same-origin gateway and never written to a URL or
@@ -392,6 +393,13 @@ priv enum AppMessage {
   LogoutCompleted(Int64)
   Portal(@enterprise_ui.EnterpriseMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
+  ContractPollDue(Int64, String, Int)
+  ContractPollResult(
+    Int64,
+    String,
+    Int,
+    Result[Array[@contractdoc.ContractPacket], String]
+  )
   Outcome(Outcome)
 }
 
@@ -540,9 +548,11 @@ extern "js" fn contract_preview_delay_promise(
 
 ///|
 /// Loads only the checked, field-free MoonLeaf scene shipped with demo assets.
-extern "js" fn demo_contract_preview_promise(undertaking : Bool) -> @js.Promise =
-  #| async undertaking => {
-  #|   const path = undertaking ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
+extern "js" fn demo_contract_preview_promise(
+  template_id : String,
+) -> @js.Promise =
+  #| async templateId => {
+  #|   const path = templateId === "youthpolicy-device-undertaking-ofl-v2" ? "/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json" : templateId === "youthpolicy-device-undertaking-v1" ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
   #|   const response = await fetch(path, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
@@ -557,6 +567,7 @@ extern "js" fn demo_contract_preview_promise(undertaking : Bool) -> @js.Promise 
   #| }
 
 ///|
+
 ///|
 /// A fresh opaque identifier.
 ///
@@ -585,6 +596,7 @@ extern "js" fn random_identifier(prefix : String) -> String =
   #|   const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
   #|   return `${prefix}-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   #| }
+
 ///| The short-lived handoff code is placed only in a URL fragment. Browsers do
 
 ///| not send fragments to HTTP servers, and the receiving client removes it
@@ -769,8 +781,9 @@ extern "js" fn download_file_promise(
   maximum_byte_count : Int64,
   expected_sha256 : String,
   filename : String,
+  digest_bytes : (Bytes) -> String,
 ) -> @js.Promise =
-  #| async (url, sessionToken, maximumByteCount, expectedSha256, filename) => {
+  #| async (url, sessionToken, maximumByteCount, expectedSha256, filename, digestBytes) => {
   #|   const headers = { "Authorization": `Bearer ${sessionToken}` };
   #|   const organization = globalThis.LUNANEXA_ACTIVE_ORGANIZATION || "";
   #|   if (organization) headers["X-LunaNexa-Organization"] = organization;
@@ -784,8 +797,7 @@ extern "js" fn download_file_promise(
   #|   if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
   #|   const bytes = await response.arrayBuffer();
   #|   if (BigInt(bytes.byteLength) > maximumByteCount) throw new Error("Downloaded file exceeds its authorized size");
-  #|   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  #|   const actual = `sha256:${Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+  #|   const actual = digestBytes(new Uint8Array(bytes));
   #|   if (actual !== expectedSha256) throw new Error("Downloaded file digest does not match the verified artifact");
   #|   const link = document.createElement("a");
   #|   const objectUrl = URL.createObjectURL(new Blob([bytes]));
@@ -2311,6 +2323,7 @@ async fn request_and_download_offline_artifact(
     transfer.maximum_byte_count,
     expected_sha256,
     artifact_id,
+    offline_download_digest,
   ).wait()
   value.cast()
 }
@@ -2458,9 +2471,7 @@ fn bootstrap_command(
 
 ///|
 fn gateway_auth_error_code(body : String) -> String {
-  try {
-    (@json.from_json(@json.parse(body)) : GatewayAuthError).error
-  } catch {
+  (@json.from_json(@json.parse(body)) : GatewayAuthError).error catch {
     _ => ""
   }
 }
@@ -2477,61 +2488,52 @@ fn gateway_auth_refusal(
   match gateway_auth_error_code(outcome.body) {
     "email-taken" =>
       portal_copy(
-        locale,
-        "That address already has an account. Sign in instead, or use another address.",
+        locale, "That address already has an account. Sign in instead, or use another address.",
         "该邮箱已注册。请直接登录，或改用其他邮箱。",
       )
     "password-rejected" =>
       portal_copy(
-        locale,
-        "The identity provider rejected this password. It must be at least 12 characters and contain an uppercase letter, a lowercase letter, a digit and a symbol, and must not contain your address or username.",
+        locale, "The identity provider rejected this password. It must be at least 12 characters and contain an uppercase letter, a lowercase letter, a digit and a symbol, and must not contain your address or username.",
         "身份提供商拒绝了该密码。密码至少 12 位，且需包含大写字母、小写字母、数字和符号，并且不能包含邮箱或用户名。",
       )
     "registration-unavailable" =>
       portal_copy(
-        locale,
-        "Self-registration is not available on this deployment yet. Ask a platform administrator to create the account.",
+        locale, "Self-registration is not available on this deployment yet. Ask a platform administrator to create the account.",
         "当前部署尚未开放自助注册。请联系平台管理员创建账户。",
       )
     "invalid-registration-request" =>
       portal_copy(
-        locale,
-        "The registration form was incomplete. A valid email address, a display name and a password are all required.",
+        locale, "The registration form was incomplete. A valid email address, a display name and a password are all required.",
         "注册信息不完整。邮箱、名称和密码都必须填写。",
       )
     "invalid-credentials" =>
       portal_copy(
-        locale,
-        "The address or password was not accepted. Check both and try again.",
+        locale, "The address or password was not accepted. Check both and try again.",
         "邮箱或密码不正确，请检查后重试。",
       )
     "identity-rejected" =>
       portal_copy(
-        locale,
-        "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
+        locale, "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
         "登录成功，但该身份暂时不可用。请联系平台管理员启用账户。",
       )
     "identity-provider-unavailable" =>
       portal_copy(
-        locale,
-        "The identity provider is unavailable. Try again shortly.",
-        "身份提供商当前不可用，请稍后重试。",
+        locale, "The identity provider is unavailable. Try again shortly.", "身份提供商当前不可用，请稍后重试。",
       )
     "too-many-attempts" =>
       portal_copy(
-        locale,
-        "Too many failed attempts from this address. Wait five minutes and try again.",
+        locale, "Too many failed attempts from this address. Wait five minutes and try again.",
         "此地址的失败尝试过多，请等待五分钟后再试。",
       )
     _ =>
       if registering {
         portal_copy(
-          locale,
-          "The gateway refused the registration.",
-          "网关拒绝了本次注册。",
+          locale, "The gateway refused the registration.", "网关拒绝了本次注册。",
         )
       } else {
-        portal_copy(locale, "The gateway refused the sign-in.", "网关拒绝了本次登录。")
+        portal_copy(
+          locale, "The gateway refused the sign-in.", "网关拒绝了本次登录。",
+        )
       }
   }
 }
@@ -3218,9 +3220,7 @@ async fn demo_contract_preview(
   guard model.portal.contract_documents.current_manifest() is Some(manifest) else {
     fail("contract manifest unavailable")
   }
-  let text : String = demo_contract_preview_promise(
-      @contractdoc.is_undertaking_template(manifest.template_id),
-    )
+  let text : String = demo_contract_preview_promise(manifest.template_id)
     .wait()
     .cast()
   let template : @contractdoc.ContractPreviewTemplate = @json.from_json(
@@ -3549,7 +3549,7 @@ fn contract_approval_nudge_command(
 }
 
 ///|
-fn schedule_contract_preview(
+fn schedule_contract_preview_only(
   model : AppModel,
   documents : @contract_documents.ContractDocumentsState,
   delay_ms : Int,
@@ -3628,6 +3628,7 @@ fn signed_out_model(model : AppModel) -> AppModel {
     session_expires_unix_ms: None,
     machine_clock_generation: model.machine_clock_generation + 1L,
     contract_preview_generation: model.contract_preview_generation + 1L,
+    contract_poll_generation: model.contract_poll_generation + 1L,
     portal: {
       ..@enterprise_ui.default_state(current_unix_ms()),
       locale,
@@ -3654,10 +3655,22 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
+    ContractPollDue(generation, packet_id, remaining) =>
+      if contract_poll_active(model, generation, packet_id) && remaining > 0 {
+        (
+          model,
+          contract_poll_request(model, generation, packet_id, remaining, emit),
+        )
+      } else {
+        (model, @rabbita.none)
+      }
+    ContractPollResult(generation, packet_id, remaining, result) =>
+      apply_contract_poll(model, generation, packet_id, remaining, result, emit)
     EndpointChanged(value) => ({ ..model, endpoint: value, }, @rabbita.none)
     TokenChanged(value) => ({ ..model, token: value, }, @rabbita.none)
     SubjectChanged(value) => ({ ..model, subject_ref: value, }, @rabbita.none)
-    LoginEmailChanged(value) => ({ ..model, login_email: value, }, @rabbita.none)
+    LoginEmailChanged(value) =>
+      ({ ..model, login_email: value, }, @rabbita.none)
     LoginPasswordChanged(value) =>
       ({ ..model, login_password: value, }, @rabbita.none)
     RegisterDisplayNameChanged(value) =>
@@ -3669,7 +3682,7 @@ fn update(
         ..model,
         registering: !model.registering,
         login_password: "",
-        portal: { ..model.portal, error_message: None, success_message: None },
+        portal: { ..model.portal, error_message: None, success_message: None, },
       }
       (next, @rabbita.none)
     }
@@ -3680,7 +3693,11 @@ fn update(
         let next = {
           ..model,
           connecting: true,
-          portal: { ..model.portal, error_message: None, success_message: None },
+          portal: {
+            ..model.portal,
+            error_message: None,
+            success_message: None,
+          },
         }
         (next, gateway_auth_command(next, emit))
       }
@@ -3693,7 +3710,11 @@ fn update(
         let next = {
           ..model,
           connecting: true,
-          portal: { ..model.portal, error_message: None, success_message: None },
+          portal: {
+            ..model.portal,
+            error_message: None,
+            success_message: None,
+          },
         }
         (next, gateway_auth_command(next, emit))
       }
@@ -3800,7 +3821,11 @@ fn update(
     }
     Portal(Navigate(route)) => {
       let portal = model.portal.update(Navigate(route))
-      let next = { ..model, portal, }
+      let next = {
+        ..model,
+        portal,
+        contract_poll_generation: model.contract_poll_generation + 1L,
+      }
       match route {
         ContractDocuments =>
           schedule_contract_preview(next, portal.contract_documents, 0, emit)
@@ -3826,7 +3851,11 @@ fn update(
       let portal = model.portal.update(
         SelfService(SelectOrganization(organization_id)),
       )
-      let next = { ..model, portal, }
+      let next = {
+        ..model,
+        portal,
+        contract_poll_generation: model.contract_poll_generation + 1L,
+      }
       match @enterprise_ui.selected_organization_header(portal) {
         Some(selected) if !model.demo_mode => {
           commit_enterprise_organization(selected)
@@ -4867,6 +4896,15 @@ fn update(
     Portal(ContractDocuments(message)) if message is SaveInformation(_, _, _) ||
       message is CreatePacket(_, _) ||
       message is ConfirmAction(_) => {
+      if model.portal.contract_documents.loading {
+        return (model, @rabbita.none)
+      }
+      if message is ConfirmAction(RequestGeneration(packet_id, _, _)) &&
+        model.portal.contract_documents.packets.any(packet => {
+          packet.packet_id == packet_id && packet.state == GenerationRequested
+        }) {
+        return (model, @rabbita.none)
+      }
       let next = model.portal.update(ContractDocuments(message))
       if model.demo_mode {
         (
@@ -5457,6 +5495,16 @@ fn update(
             ..model.portal.contract_documents,
             manifest: contract_manifest.get(0),
             available_manifests: contract_manifest,
+            creation_template_id: if model.portal.contract_documents.creation_template_id ==
+              "" &&
+              contract_manifest.any(item => {
+                item.template_id ==
+                @contractdoc.undertaking_ofl_manifest().template_id
+              }) {
+              @contractdoc.undertaking_ofl_manifest().template_id
+            } else {
+              model.portal.contract_documents.creation_template_id
+            },
             available_orders: orders.map(order => {
               (
                 order.order_id,
@@ -5510,11 +5558,16 @@ fn update(
           error_message: None,
         },
       }
+      let (next, poll) = match selected_contract {
+        Some(packet) => start_contract_poll(next, packet, emit)
+        None => (next, @rabbita.none)
+      }
       (
         next,
         @rabbita.batch([
           machine_clock_command(next, emit),
           machine_commerce_command(next, emit),
+          poll,
         ]),
       )
     }
@@ -5663,39 +5716,37 @@ fn update(
         model.portal.contract_documents.packets,
         packet,
       )
-      (
-        {
-          ..model,
-          portal: {
-            ..model.portal,
-            contract_documents: {
-              ..model.portal.contract_documents,
-              packets,
-              selected_packet_id: Some(packet.packet_id),
-              selected_form: packet.active_forms.get(0),
-              draft_values: if model.portal.contract_documents.selected_packet_id ==
-                Some(packet.packet_id) {
-                merge_contract_draft(
-                  model.portal.contract_documents.draft_values,
-                  packet,
-                )
-              } else {
-                packet.values.copy()
-              },
-              loading: false,
-              success_message: Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Contract packet updated.",
-                  "合同资料包已更新。",
-                ),
-              ),
-              error_message: None,
+      let next = {
+        ..model,
+        portal: {
+          ..model.portal,
+          contract_documents: {
+            ..model.portal.contract_documents,
+            packets,
+            selected_packet_id: Some(packet.packet_id),
+            selected_form: packet.active_forms.get(0),
+            draft_values: if model.portal.contract_documents.selected_packet_id ==
+              Some(packet.packet_id) {
+              merge_contract_draft(
+                model.portal.contract_documents.draft_values,
+                packet,
+              )
+            } else {
+              packet.values.copy()
             },
+            loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Contract packet updated.",
+                "合同资料包已更新。",
+              ),
+            ),
+            error_message: None,
           },
         },
-        @rabbita.none,
-      )
+      }
+      start_contract_poll(next, packet, emit)
     }
     Outcome(ContractApprovalNudged) =>
       (
@@ -6162,8 +6213,10 @@ fn app_view(
                     model.connecting ||
                     model.login_email.trim() == "" ||
                     model.login_password == "" ||
-                    (model.registering &&
-                      model.register_display_name.trim() == ""),
+                    (
+                      model.registering &&
+                      model.register_display_name.trim() == ""
+                    ),
                   if model.connecting {
                     portal_copy(locale, "Connecting…", "正在连接…")
                   } else if model.registering {
@@ -6177,9 +6230,13 @@ fn app_view(
                   disabled=model.connecting,
                   on_click=emit(ToggleRegistration),
                   if model.registering {
-                    portal_copy(locale, "I already have an account", "我已有账户，去登录")
+                    portal_copy(
+                      locale, "I already have an account", "我已有账户，去登录",
+                    )
                   } else {
-                    portal_copy(locale, "Register a new account", "注册新账户")
+                    portal_copy(
+                      locale, "Register a new account", "注册新账户",
+                    )
                   },
                 ),
               ]),
@@ -6187,7 +6244,9 @@ fn app_view(
           ),
           @html.div(
             class="login-divider",
-            portal_copy(locale, "or use organization sign-in", "或使用组织账户登录"),
+            portal_copy(
+              locale, "or use organization sign-in", "或使用组织账户登录",
+            ),
           ),
           @html.a(
             class="sso-start",
@@ -6225,8 +6284,7 @@ fn app_view(
                 "公共明文 HTTP 已禁止账户登录。请使用受保护的本机地址，或先部署 TLS。",
               ),
             )
-          } else if model.endpoint.has_prefix("http://") &&
-            !development_allowed {
+          } else if model.endpoint.has_prefix("http://") && !development_allowed {
             @html.p(
               class="development-warning",
               portal_copy(
@@ -6400,6 +6458,7 @@ fn main {
       session_expires_unix_ms: None,
       machine_clock_generation: 0L,
       contract_preview_generation: 0L,
+      contract_poll_generation: 0L,
       portal: if is_demo {
         {
           ..@enterprise_ui.demo_state(),

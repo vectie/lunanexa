@@ -24,7 +24,8 @@ if [ -n "${LUNANEXA_BUILD_HTTPS_PROXY:-}" ]; then
 else
   set --
 fi
-docker build --platform linux/amd64 \
+docker buildx build --load --platform linux/amd64 \
+  --build-context "moonleaf_source=${LUNANEXA_MOONLEAF_SOURCE:-$repository_root/../moonleaf}" \
   --network host \
   "$@" \
   --file images/Containerfile.control \

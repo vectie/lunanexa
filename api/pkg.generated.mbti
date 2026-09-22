@@ -58,6 +58,7 @@ pub fn ApiMethod::not_equal(Self, Self) -> Bool
 pub fn ApiMethod::to_repr(Self) -> @debug.Repr
 
 pub struct ApiService {
+  offline_template_approvals : Array[OfflineTemplateApproval]?
   media : MediaService?
   global_settings : @settings.GlobalAdminSettings
   store : @vectie/lunanexa/store.FileStore
@@ -123,6 +124,7 @@ pub struct ApiService {
   commercial_provider_environment : String?
   commercial_provider_action_origin : String?
   artifact_worker_callback_token : String?
+  technical_acceptance_authorization : @offline.TechnicalAcceptanceAuthorization?
   artifact_scanner_callback_token : String?
   entitlement_authority_callback_token : String?
   offline_transfer_adapter_endpoint : String?
@@ -202,6 +204,7 @@ pub fn ApiService::with_observability_store(Self, @observability.ObservabilitySt
 pub fn ApiService::with_offline_artifact_callback_tokens(Self, String, String) -> Self
 pub fn ApiService::with_offline_commerce_capabilities(Self, Array[@offline.OfflineCommerceCapabilityEvidence], Int64) -> Self
 pub fn ApiService::with_offline_commerce_store(Self, @vectie/lunanexa/commercial/offline/store.OfflineCommerceStore) -> Self
+pub fn ApiService::with_offline_template_approvals(Self, Array[OfflineTemplateApproval]) -> Self raise
 pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -> Self raise
 pub fn ApiService::with_open_registration_trial(Self, Int64, Int64, Array[String]) -> Self raise Failure
 pub fn ApiService::with_operator_tokens(Self, Array[(String, String)]) -> Self
@@ -215,6 +218,7 @@ pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
 pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
+pub fn ApiService::with_technical_acceptance_authorization(Self, @offline.TechnicalAcceptanceAuthorization) -> Self raise Failure
 pub fn ApiService::with_technical_store(Self, @vectie/lunanexa/technical/store.TechnicalStore) -> Self
 pub fn ApiService::with_workspace_directory(Self, @directory.FileWorkspaceDirectory, Bool) -> Self
 
@@ -311,6 +315,15 @@ pub fn OfflineArtifactView::from_json(Json, @json.JsonPath) -> Self raise @json.
 pub fn OfflineArtifactView::not_equal(Self, Self) -> Bool
 pub fn OfflineArtifactView::to_json(Self) -> Json
 pub fn OfflineArtifactView::to_repr(Self) -> @debug.Repr
+
+pub(all) struct OfflineTemplateApproval {
+  template_id : String
+  version : String
+  locale : String
+  sha256 : String
+  approval_ref : String
+} derive(@json.FromJson)
+pub fn OfflineTemplateApproval::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 pub(all) struct OfflineUploadTransferView {
   evidence : @offline.OfflineUploadGrantView

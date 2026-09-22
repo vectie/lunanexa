@@ -1,0 +1,19 @@
+{
+  "date": "2026-09-22",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-control@sha256:2cbe16f912014c9def2f14dd39d6c1aaedbcff5037deef6583c03635170eab0a",
+  "compiled_binary_mtime": "2026-09-22T18:36:06+08:00",
+  "single_rollout_ready_containers": "4/4",
+  "existing_sidecars_preserved": true,
+  "existing_registry_ca_mount_preserved": true,
+  "combined_private_and_registry_ca_configmap": "lunanexa-offline-combined-ca",
+  "transfer_secret_ref": "lunanexa-offline-transfer",
+  "approved_template_scope": "docs/evidence/offline-ofl-v2-20260922/operator-approval.md",
+  "readiness_evaluated_unix_ms": "1790073873898",
+  "readiness_all_ten_capabilities_configured_and_verified": true,
+  "readiness_status": "OfflineCommerceAdaptersPending",
+  "remaining_blocker_codes": ["ReadinessArtifactDispatcherSuccessStale", "ReadinessEntitlementDispatcherSuccessStale"],
+  "controller_registry_push_tls_verified": true,
+  "web_registry_push_tls_verified": true,
+  "web_registry_digest": "sha256:c5755070a5603fd1bd620aa4e1a32defe78724aeb5a7a6c210b4cc942d9bb9db",
+  "full_commercial_flow_claimed_complete": false
+}

@@ -9,12 +9,9 @@ pub let traditional_contract_route_available : Bool = false
 ///|
 /// The disabled contract route is still shown once, with its reason, so the menu
 /// does not silently lose an option the customer was told about.
-fn contract_route_unavailable_copy(
-  locale : @i18n.Locale,
-) -> String {
+fn contract_route_unavailable_copy(locale : @i18n.Locale) -> String {
   copy(
-    locale,
-    "Traditional rental contract · bilateral execution (temporarily unavailable)",
+    locale, "Traditional rental contract · bilateral execution (temporarily unavailable)",
     "传统租赁合同 · 双方签署（暂未开放）",
   )
 }
@@ -77,7 +74,22 @@ fn undertaking_creation(
         @html.option(
           value=manifest.template_id,
           selected=template_id == manifest.template_id,
-          if @contractdoc.is_undertaking_template(manifest.template_id) {
+          if manifest.template_id == "youthpolicy-device-undertaking-ofl-v2" {
+            copy(
+              state.locale,
+              "Equipment undertaking · open-font edition · Party A approval",
+              "设备使用承诺函 · 开源字体新版 · 甲方审批",
+            )
+          } else if manifest.template_id == "youthpolicy-device-undertaking-v1" &&
+            state.available_manifests.any(item => {
+              item.template_id == "youthpolicy-device-undertaking-ofl-v2"
+            }) {
+            copy(
+              state.locale,
+              "Equipment undertaking · original edition · existing orders",
+              "设备使用承诺函 · 原版 · 历史订单",
+            )
+          } else if @contractdoc.is_undertaking_template(manifest.template_id) {
             copy(
               state.locale,
               "Equipment undertaking · Party A approval",

@@ -1,0 +1,49 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root] else {
+    fail("usage: check-offline-document-policy.mbtx REPO_ROOT")
+  }
+  for
+    file in [
+      "docs/OFFLINE_COMMERCE.md", "deploy/offline-pdf-pipeline-job.yaml", "deploy/offline-readiness/README.md",
+      "docs-site/coursebook.json", "docs-site/coursebook.zh-CN.json",
+    ] {
+    let text = @fs.read_file(root + "/" + file).text()
+    for
+      removed in [
+        "approved bilingual legal DOCX", "Approved bilingual legal templates", "获准的双语法律模板",
+        "bilingual fonts",
+      ] {
+      guard !text.contains(removed) else {
+        fail("withdrawn bilingual prerequisite remains in " + file)
+      }
+    }
+  }
+  let policy = @fs.read_file(root + "/docs/OFFLINE_COMMERCE.md").text()
+  for
+    retained in [
+      "immutable source/fillable hashes", "preserved terms/fields", "versioned scope",
+      "attributable approval source", "font licensing", "visual-render acceptance",
+    ] {
+    guard policy.contains(retained) else {
+      fail("required document safeguard missing: " + retained)
+    }
+  }
+  let history = @fs.read_file(
+    root + "/docs/UNDERTAKING_TWO_SIDED_RECONCILIATION_20260922.md",
+  ).text()
+  guard history.contains("后续政策更正（2026-09-22）") &&
+    history.contains("历史判断") else {
+    fail("historical report lacks correction notice")
+  }
+  println(
+    "No bilingual launch prerequisite; version/hash/wording/approval/font/visual safeguards retained; historical correction present",
+  )
+}

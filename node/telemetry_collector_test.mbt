@@ -25,7 +25,9 @@ test "nvidia-smi parser accepts unified-memory rows without memory counters" {
   assert_eq(snapshot.maximum_temperature_celsius, 39.0)
   assert_eq(snapshot.power_watts, 3.95)
   try
-    @node.parse_nvidia_smi_csv("0, N/A, N/A, 39, 3.95\n12, 1024, 8192, 42, 55.5\n")
+    @node.parse_nvidia_smi_csv(
+      "0, N/A, N/A, 39, 3.95\n12, 1024, 8192, 42, 55.5\n",
+    )
     |> ignore
   catch {
     @node.TelemetryCollectorError::MalformedSample(_) => ()

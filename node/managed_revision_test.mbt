@@ -20,17 +20,11 @@ fn revision_assignment(
 
 ///|
 fn revision_file(path : String, content : String) -> (String, String, Int64) {
-  (
-    path,
-    content,
-    @utf8.encode(content).length().to_int64(),
-  )
+  (path, content, @utf8.encode(content).length().to_int64())
 }
 
 ///|
-fn revision_manifest(
-  files : Array[(String, String, Int64)],
-) -> String {
+fn revision_manifest(files : Array[(String, String, Int64)]) -> String {
   let entries : Array[Json] = []
   for file in files {
     entries.push(
@@ -93,12 +87,15 @@ async test "a managed revision is fetched file by file and refuses a drifted tre
         let manifest_key = "/stepfun/\{@contracts.model_store_manifest_name}"
         if key == manifest_key {
           connection.send_response(200, "OK")
-          connection.write_string(if corrupt.val { "\{manifest} " } else { manifest })
+          connection.write_string(
+            if corrupt.val {
+              "\{manifest} "
+            } else {
+              manifest
+            },
+          )
         } else {
-          match
-            files.iter().find_first(file => {
-              key == "/stepfun/\{file.0}"
-            }) {
+          match files.iter().find_first(file => key == "/stepfun/\{file.0}") {
             Some(file) => {
               connection.send_response(200, "OK")
               connection.write_string(

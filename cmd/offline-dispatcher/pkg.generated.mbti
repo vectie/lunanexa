@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/cmd/offline-dispatcher"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Config
+
+// Type aliases
+
+// Traits

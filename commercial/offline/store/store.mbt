@@ -12,6 +12,7 @@ pub struct OfflineCommerceStore {
   mut order_keys : Map[String, String]
   mut artifacts : Map[String, @offline.DocumentArtifact]
   mut generation_requests : Map[String, @offline.ArtifactGenerationRequest]
+  mut generation_plans : Map[String, String]
   mut upload_grants : Map[String, @offline.EvidenceUploadGrant]
   mut upload_keys : Map[String, String]
   mut upload_callbacks : Map[String, @offline.EvidenceUploadCallback]
@@ -102,6 +103,19 @@ fn decode_snapshot(
       error =>
         raise InvalidInput("invalid offline-commerce snapshot: \{Repr(error)}")
     }
+  } else if schema == "lunanexa.offline-commerce.snapshot.v5" {
+    guard parsed is Object(fields) else {
+      raise InvalidInput("invalid v5 snapshot")
+    }
+    let upgraded = fields.copy()
+    upgraded["schema_version"] = @offline.snapshot_schema_version.to_json()
+    upgraded["generation_plans"] = ({} : Map[String, String]).to_json()
+    @json.from_json(upgraded.to_json()) catch {
+      error =>
+        raise InvalidInput(
+          "invalid v5 offline-commerce snapshot: \{Repr(error)}",
+        )
+    }
   } else if schema == "lunanexa.offline-commerce.snapshot.v4" {
     let legacy : OfflineCommerceSnapshotV4 = @json.from_json(parsed) catch {
       error =>
@@ -115,6 +129,7 @@ fn decode_snapshot(
       orders: legacy.orders,
       artifacts: legacy.artifacts,
       generation_requests: legacy.generation_requests,
+      generation_plans: {},
       upload_grants: legacy.upload_grants,
       upload_callbacks: legacy.upload_callbacks,
       reviews: legacy.reviews,
@@ -139,6 +154,7 @@ fn decode_snapshot(
       orders: legacy.orders,
       artifacts: legacy.artifacts,
       generation_requests: legacy.generation_requests,
+      generation_plans: {},
       upload_grants: legacy.upload_grants,
       upload_callbacks: legacy.upload_callbacks,
       reviews: legacy.reviews,
@@ -163,6 +179,7 @@ fn decode_snapshot(
       orders: legacy.orders,
       artifacts: legacy.artifacts,
       generation_requests: legacy.generation_requests,
+      generation_plans: {},
       upload_grants: legacy.upload_grants,
       upload_callbacks: legacy.upload_callbacks,
       reviews: legacy.reviews,
@@ -187,6 +204,7 @@ fn decode_snapshot(
       orders: legacy.orders,
       artifacts: legacy.artifacts,
       generation_requests: legacy.generation_requests,
+      generation_plans: {},
       upload_grants: legacy.upload_grants,
       upload_callbacks: legacy.upload_callbacks,
       reviews: legacy.reviews,
@@ -269,6 +287,7 @@ fn OfflineCommerceStore::empty(
     order_keys: Map([]),
     artifacts: Map([]),
     generation_requests: Map([]),
+    generation_plans: Map([]),
     upload_grants: Map([]),
     upload_keys: Map([]),
     upload_callbacks: Map([]),
@@ -301,6 +320,7 @@ fn OfflineCommerceStore::snapshot_unlocked(
     orders: sorted_values(self.orders),
     artifacts: sorted_values(self.artifacts),
     generation_requests: sorted_values(self.generation_requests),
+    generation_plans: self.generation_plans.copy(),
     upload_grants: sorted_values(self.upload_grants),
     upload_callbacks: sorted_values(self.upload_callbacks),
     reviews: sorted_values(self.reviews),
@@ -348,6 +368,18 @@ fn OfflineCommerceStore::restore(
   }
   for order in snapshot.orders {
     @offline.validate_order(order)
+    if order.technical_acceptance_waiver is Some(w) &&
+      self.orders
+      .values()
+      .any(other => {
+        other.technical_acceptance_waiver is Some(prior) &&
+        (
+          prior.waiver_id == w.waiver_id ||
+          prior.authority_target_ref == w.authority_target_ref
+        )
+      }) {
+      raise InvalidInput("duplicate technical waiver or workspace target")
+    }
     let key = scoped_key(order.organization_id, order.idempotency_key)
     if self.orders.contains(order.order_id) || self.order_keys.contains(key) {
       raise InvalidInput("duplicate commercial order")
@@ -379,6 +411,19 @@ fn OfflineCommerceStore::restore(
     self.upload_grants[grant.grant_id] = grant
     self.upload_keys[key] = grant.grant_id
   }
+  for request_id, encoded in snapshot.generation_plans {
+    if !self.generation_requests.contains(request_id) ||
+      encoded.length() > 4194304 {
+      raise InvalidInput("invalid frozen generation plan binding")
+    }
+    let plan = @json.parse(encoded) catch {
+      _ => raise InvalidInput("invalid frozen generation plan")
+    }
+    guard plan is Object(_) else {
+      raise InvalidInput("frozen generation plan is not an object")
+    }
+    self.generation_plans[request_id] = encoded
+  }
   for callback in snapshot.upload_callbacks {
     if self.upload_callbacks.contains(callback.callback_id) ||
       !self.upload_grants.contains(callback.grant_id) {
@@ -398,6 +443,25 @@ fn OfflineCommerceStore::restore(
     if self.entitlement_activations.contains(activation.activation_id) ||
       !self.orders.contains(activation.order_id) {
       raise InvalidInput("invalid entitlement activation")
+    }
+    let owner = self.orders[activation.order_id]
+    if owner.technical_acceptance_waiver is Some(w) &&
+      (
+        activation.kind != WorkspaceLease ||
+        activation.authority_target_ref != w.authority_target_ref ||
+        activation.organization_id != owner.organization_id ||
+        activation.purchaser_subject_ref != owner.purchaser_subject_ref
+      ) {
+      raise InvalidInput("technical activation snapshot binding mismatch")
+    }
+    if self.orders
+      .values()
+      .any(other => {
+        other.order_id != owner.order_id &&
+        other.technical_acceptance_waiver is Some(w) &&
+        w.authority_target_ref == activation.authority_target_ref
+      }) {
+      raise InvalidInput("snapshot reuses reserved technical workspace")
     }
     self.entitlement_activations[activation.activation_id] = activation
   }
@@ -504,33 +568,33 @@ pub async fn OfflineCommerceStore::open(path : String) -> OfflineCommerceStore {
 }
 
 ///|
+async fn load_offline_snapshot(
+  database : @database.PostgresDatabase,
+) -> String? {
+  let versions = [
+    @offline.snapshot_schema_version, "lunanexa.offline-commerce.snapshot.v5", "lunanexa.offline-commerce.snapshot.v4",
+    "lunanexa.offline-commerce.snapshot.v3", "lunanexa.offline-commerce.snapshot.v2",
+    "lunanexa.offline-commerce.snapshot.v1",
+  ]
+  for version in versions {
+    try database.load_snapshot("offline_commerce", version) catch {
+      @database.DatabaseError::UnsupportedSnapshot(_) => continue
+      error => raise error
+    } noraise {
+      value => return value
+    }
+  }
+  raise @offline.OfflineCommerceError::InvalidInput(
+    "unsupported persisted offline snapshot",
+  )
+}
+
+///|
 pub async fn OfflineCommerceStore::open_postgres(
   database : @database.PostgresDatabase,
 ) -> OfflineCommerceStore {
   let store = OfflineCommerceStore::empty(OfflinePostgres(database))
-  let payload = try
-    database.load_snapshot("offline_commerce", @offline.snapshot_schema_version)
-  catch {
-    @database.DatabaseError::UnsupportedSnapshot(_) =>
-      database.load_snapshot(
-        "offline_commerce", "lunanexa.offline-commerce.snapshot.v3",
-      ) catch {
-        @database.DatabaseError::UnsupportedSnapshot(_) =>
-          database.load_snapshot(
-            "offline_commerce", "lunanexa.offline-commerce.snapshot.v2",
-          ) catch {
-            @database.DatabaseError::UnsupportedSnapshot(_) =>
-              database.load_snapshot(
-                "offline_commerce", "lunanexa.offline-commerce.snapshot.v1",
-              )
-            error => raise error
-          }
-        error => raise error
-      }
-    error => raise error
-  } noraise {
-    value => value
-  }
+  let payload = load_offline_snapshot(database)
   match payload {
     Some(payload) => {
       let snapshot = decode_snapshot(payload)
@@ -719,6 +783,7 @@ pub async fn OfflineCommerceStore::create_order(
 ) -> @offline.CommercialOrder {
   @offline.validate_order(order)
   if order.state != Draft ||
+    order.technical_acceptance_waiver is Some(_) ||
     order.quote is Some(_) ||
     order.artifact_ids.length() != 0 ||
     order.entitlement_ref is Some(_) {
@@ -809,14 +874,24 @@ pub async fn OfflineCommerceStore::begin_offline_execution(
 pub async fn OfflineCommerceStore::request_generation(
   self : OfflineCommerceStore,
   request : @offline.ArtifactGenerationRequest,
+  contract_binding? : Json,
 ) -> @offline.ArtifactGenerationRequest {
   self.mutex.acquire()
   defer self.mutex.release()
   let before = self.generation_requests.copy()
   let before_claims = self.work_claims.copy()
+  let before_plans = self.generation_plans.copy()
   errdefer {
     self.generation_requests = before
     self.work_claims = before_claims
+    self.generation_plans = before_plans
+  }
+  if contract_binding is Some(binding) {
+    guard binding is Object(_) && binding.stringify().length() <= 1048576 else {
+      raise @offline.OfflineCommerceError::InvalidInput(
+        "invalid contract generation binding",
+      )
+    }
   }
   self.validate_generation_request_unlocked(request)
   let order = self.require_order_unlocked(request.order_id)
@@ -827,7 +902,18 @@ pub async fn OfflineCommerceStore::request_generation(
     )
   }
   match self.generation_requests.get(request.request_id) {
-    Some(existing) if existing == request => return existing
+    Some(existing) if existing == request => {
+      if contract_binding is Some(binding) {
+        guard self.generation_plans.get(request.request_id) is Some(encoded) &&
+          @json.parse(encoded) is { "contract_binding": stored, .. } &&
+          stored == binding else {
+          raise @offline.OfflineCommerceError::IdempotencyConflict(
+            request.request_id,
+          )
+        }
+      }
+      return existing
+    }
     Some(_) =>
       raise @offline.OfflineCommerceError::IdempotencyConflict(
         request.request_id,
@@ -838,6 +924,10 @@ pub async fn OfflineCommerceStore::request_generation(
     raise @offline.OfflineCommerceError::AlreadyExists(request.artifact_id)
   }
   self.generation_requests[request.request_id] = request
+  if contract_binding is Some(binding) {
+    self.generation_plans[request.request_id] = (
+      { "contract_binding": binding } : Json).stringify()
+  }
   self.work_claims[artifact_work_id(request.request_id)] = {
     work_id: artifact_work_id(request.request_id),
     worker_kind: ArtifactDispatcher,
@@ -862,11 +952,13 @@ pub async fn OfflineCommerceStore::complete_generation(
   let before_orders = self.orders.copy()
   let before_claims = self.work_claims.copy()
   let before_health = self.worker_health
+  let before_plans = self.generation_plans.copy()
   errdefer {
     self.artifacts = before_artifacts
     self.orders = before_orders
     self.work_claims = before_claims
     self.worker_health = before_health
+    self.generation_plans = before_plans
   }
   guard self.generation_requests.get(result.request_id) is Some(request) else {
     raise @offline.OfflineCommerceError::NotFound("generation request")
@@ -881,6 +973,13 @@ pub async fn OfflineCommerceStore::complete_generation(
     )
   }
   if claim.completed_unix_ms is Some(completed_unix_ms) {
+    if self.generation_plans.get(request.request_id) is Some(encoded) &&
+      @json.parse(encoded) is { "completed_result": prior, .. } &&
+      prior != result.to_json() {
+      raise @offline.OfflineCommerceError::IdempotencyConflict(
+        result.request_id,
+      )
+    }
     guard self.artifacts.get(request.artifact_id) is Some(existing) &&
       result.verified &&
       !result.active_content_detected &&
@@ -927,6 +1026,13 @@ pub async fn OfflineCommerceStore::complete_generation(
       "OOXML artifact did not pass MoonLeaf reopen verification",
     )
   }
+  if self.generation_plans.get(request.request_id) is Some(encoded) &&
+    @json.parse(encoded) is { "contract_binding": _, .. } &&
+    !result.page_count.map_or(false, count => count > 0 && count <= 1000) {
+    raise @offline.OfflineCommerceError::ArtifactUnavailable(
+      "contract result lacks actual page count",
+    )
+  }
   if request.kind == QuoteScheduleXlsx && result.formula_error_count != 0 {
     raise @offline.OfflineCommerceError::ArtifactUnavailable(
       "XLSX artifact contains formula errors",
@@ -962,6 +1068,17 @@ pub async fn OfflineCommerceStore::complete_generation(
     None => ()
   }
   self.artifacts[artifact.artifact_id] = artifact
+  let retained : Json = match self.generation_plans.get(request.request_id) {
+    Some(encoded) => @json.parse(encoded)
+    None => ({} : Json)
+  }
+  guard retained is Object(plan_fields) else {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "invalid retained generation proof",
+    )
+  }
+  plan_fields["completed_result"] = result.to_json()
+  self.generation_plans[request.request_id] = plan_fields.to_json().stringify()
   self.orders[order.order_id] = with_artifact_id(
     order,
     artifact.artifact_id,
@@ -970,6 +1087,26 @@ pub async fn OfflineCommerceStore::complete_generation(
   self.work_claims[claim.work_id] = {
     ..claim,
     completed_unix_ms: Some(result.completed_unix_ms),
+  }
+  // Adding a verified sibling artifact is not a change in commercial intent.
+  // Carry only this transaction's still-current sibling artifact claims over
+  // the resulting order revision. Cancellation, expiry and other transitions
+  // never enter this path, and stale claims are never revived.
+  let updated_generation = self.orders[order.order_id].generation
+  for sibling in sorted_values(self.generation_requests) {
+    if sibling.order_id != order.order_id {
+      continue
+    }
+    let sibling_key = artifact_work_id(sibling.request_id)
+    if self.work_claims.get(sibling_key) is Some(pending) &&
+      pending.worker_kind == ArtifactDispatcher &&
+      pending.completed_unix_ms is None &&
+      pending.expected_order_generation == order.generation {
+      self.work_claims[sibling_key] = {
+        ..pending,
+        expected_order_generation: updated_generation,
+      }
+    }
   }
   self.worker_health = {
     ..self.worker_health,
@@ -1296,6 +1433,17 @@ pub async fn OfflineCommerceStore::fulfill(
   }
   let order = self.require_order_unlocked(order_id)
   @offline.validate_activation(activation)
+  if self.orders
+    .values()
+    .any(other => {
+      other.order_id != order_id &&
+      other.technical_acceptance_waiver is Some(w) &&
+      activation.authority_target_ref == w.authority_target_ref
+    }) {
+    raise @offline.OfflineCommerceError::InvalidInput(
+      "technical workspace cannot be reused by another order",
+    )
+  }
   if activation.order_id != order.order_id ||
     activation.organization_id != order.organization_id ||
     activation.purchaser_subject_ref != order.purchaser_subject_ref ||
@@ -1323,8 +1471,10 @@ pub async fn OfflineCommerceStore::fulfill(
   }
   let accepted = self.accepted_evidence_unlocked(order)
   let missing = @offline.required_evidence(order.policy).filter(kind => {
-    !accepted.contains(kind)
+    !accepted.contains(kind) &&
+    !@offline.technical_requirement_satisfied(order, kind)
   })
+  @offline.validate_technical_activation(order, activation, now_unix_ms)
   if missing.length() > 0 {
     raise @offline.OfflineCommerceError::EvidenceMissing(missing)
   }
@@ -1343,6 +1493,14 @@ pub async fn OfflineCommerceStore::complete_activation(
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
   defer self.mutex.release()
+  self.complete_activation_unlocked(completed)
+}
+
+///|
+async fn OfflineCommerceStore::complete_activation_unlocked(
+  self : OfflineCommerceStore,
+  completed : @offline.EntitlementActivation,
+) -> @offline.CommercialOrder {
   let before_orders = self.orders.copy()
   let before_activations = self.entitlement_activations.copy()
   let before_claims = self.work_claims.copy()
@@ -1558,6 +1716,14 @@ pub async fn OfflineCommerceStore::complete_reversal(
 ) -> @offline.CommercialOrder {
   self.mutex.acquire()
   defer self.mutex.release()
+  self.complete_reversal_unlocked(completed)
+}
+
+///|
+async fn OfflineCommerceStore::complete_reversal_unlocked(
+  self : OfflineCommerceStore,
+  completed : @offline.CommercialReversal,
+) -> @offline.CommercialOrder {
   let before_orders = self.orders.copy()
   let before_reversals = self.reversals.copy()
   let before_claims = self.work_claims.copy()
@@ -1814,6 +1980,20 @@ pub async fn OfflineCommerceStore::consume_transfer_session(
   }
   guard self.transfer_sessions.get(session_id) is Some(session) else {
     raise @offline.OfflineCommerceError::NotFound("transfer session")
+  }
+  // A delivery acknowledgement may be lost after commit. Replaying the exact
+  // authenticated receipt acknowledges the existing consumption; it does not
+  // reissue a browser capability or perform another byte transfer.
+  if session.state == TransferConsumed {
+    guard constant_time_string_equal(session.session_token_sha256, token_sha256) &&
+      self.transfer_evidence.get(session_id) is Some(evidence) &&
+      evidence.media_type == media_type &&
+      evidence.byte_count == byte_count &&
+      evidence.sha256 == sha256 &&
+      evidence.provider_receipt == provider_receipt else {
+      raise @offline.OfflineCommerceError::Unauthorized
+    }
+    return session
   }
   if session.state != TransferIssued ||
     !constant_time_string_equal(session.session_token_sha256, token_sha256) ||

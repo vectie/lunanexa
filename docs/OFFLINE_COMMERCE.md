@@ -261,10 +261,50 @@ office-suite fidelity, or jurisdiction-specific retention policy.
 
 ## Production readiness gates
 
+The production controller always installs the exact approval scope from
+`LUNANEXA_OFFLINE_APPROVED_TEMPLATES_JSON`: an array of `template_id`, `version`,
+`locale`, `sha256` (the registered source bytes), and attributable `approval_ref`.
+An absent or empty scope denies new commercial begin/generation operations.
+Generation and dispatcher plans recheck all four bindings; approving the Chinese
+OFL v2 template does not approve the old private-font template. Existing records
+remain readable and cancellable. A quotation is neither an executed agreement
+nor a declaration that any other template has been approved. Private-cloud
+workspace access is outside this gate.
+
+Document-generation work may contain several artifacts for one immutable order.
+Publishing one verified artifact atomically advances only still-current sibling
+artifact claims to the new order revision; it does not reset attempt limits,
+retry clocks or completed receipts. Cancellation, expiry, commercial transitions
+and already-stale claims remain fenced. A document plan resolves an explicit
+agreement reference first; an unbound order requires exactly one matching
+generation-requested packet with full tenant, organization, purchaser, order,
+template-version and source/fillable digest bindings. It never picks the newest
+unrelated packet or silently replaces an explicit binding.
+
+MoonEdit's purchaser `:generate` action now bridges directly into the durable
+offline queue. It freezes the complete confirmed packet (revision, value digest,
+source digest and scoped identities) before issuing deterministic DOCX/PDF work
+IDs. Retried clicks recover that same pair. If a cross-store write fails after
+the packet becomes `GenerationRequested`, controller reconciliation resumes the
+enqueue; it does not invent a second revision or require manual operator jobs.
+Frozen field values and callback proofs stay in the private durable generation
+plan and are removed from the operator snapshot projection.
+
+Each real worker result persists its actual rasterized `page_count` and visual
+evidence digest alongside the stored artifact. Both objects must pass verification,
+refer to the same frozen packet and agree on page count/render evidence before
+the document packet becomes `Generated`. Legacy callbacks without page counts
+cannot complete this bridge. If the final packet write fails, both object proofs
+remain durable and reconciliation completes the packet after restart. None of
+these transitions records signature, payment, legal execution or entitlement.
+Existing generated legacy packets remain readable; attempting to re-render an
+unapproved old template reports its missing deployment scope explicitly.
+
 Before enabling this workflow on the real management node, configure and prove:
 
-- approved bilingual legal DOCX templates with immutable hashes and named legal
-  owner;
+- approved legal DOCX templates for the deployment's explicitly supported
+  locale(s), with immutable source/fillable hashes, preserved terms/fields,
+  versioned scope and an attributable approval source;
 - S3-compatible object storage with tenant-isolated prefixes, retention,
   versioning, encryption, and short-lived multipart upload grants;
 - malware/active-content scanning with signed callbacks and ZIP-bomb limits;
@@ -274,6 +314,13 @@ Before enabling this workflow on the real management node, configure and prove:
 - XLSX formula recalculation, error scan, and rendered-sheet inspection;
 - mTLS or signed callback identities separate from human operator authority.
 
+The platform owner explicitly withdrew the bilingual-template prerequisite on
+2026-09-22. A Chinese-only template is not blocked for lacking an English copy.
+This removes an erroneous language requirement, not approval, font licensing,
+content integrity or visual-render acceptance. An approval recorded from the
+authenticated platform owner's current deployment instruction is platform
+approval, not a fabricated named lawyer or third-party legal certification.
+
 `deploy/offline-pdf-pipeline-job.yaml` defines the required sequential
 MoonLeaf-prepare → MoonLeaf-render/attest → LunaNexa-finalize boundary. The
 finalizer accepts binary PDFs without UTF-8 decoding, checks the PDF header,
@@ -282,12 +329,14 @@ requires a signed `moonleaf.render-evidence.v1` receipt and page-image evidence,
 and binds both to the exact prepared DOCX digest. An external dispatcher must poll the protected
 work route, provision one PVC per job, stage inputs, upload verified outputs,
 post the terminal callback, and delete the PVC after acknowledgement; Job TTL
-does not delete PVCs. Its renderer image is deliberately a deployment
-placeholder: MoonLeaf does not yet include a qualified renderer image,
-bilingual production fonts, or a retained real legal-template visual baseline.
-Therefore `PdfRenderer` and `CjkFonts` must remain pending until deployment
-owners supply and retain those MoonLeaf proofs. Another office engine is not
-accepted as equivalent evidence.
+does not delete PVCs. Native MoonLeaf rendering and the new OFL-v2 undertaking's
+four-page visual baseline now exist, with a real isolated Linux worker/render/
+scanned-S3/callback-recovery run. See `docs/evidence/offline-ofl-v2-20260922/README.md`.
+That technical proof is scoped to exact template/font hashes; it is not an
+attestation for an unbuilt image, an unexecuted production Job, legacy private
+fonts or unapproved legal/locale variants. Production capability evidence must
+bind the deployed image and read-only assets to the corresponding actual
+rehearsal. Another office engine is not accepted as equivalent renderer evidence.
 
 Both artifact Job templates are selected by a dedicated default-deny
 NetworkPolicy with empty ingress and egress. They consume only their per-job

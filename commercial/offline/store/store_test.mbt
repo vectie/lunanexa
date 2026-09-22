@@ -100,6 +100,7 @@ fn order(
     artifact_ids: [],
     entitlement_ref: None,
     requested_undertaking_term: None,
+    technical_acceptance_waiver: None,
     state: Draft,
     generation: 1L,
     created_unix_ms: 1000L,
@@ -200,6 +201,7 @@ async fn ready_for_upload(
       render_verified: true,
       formula_error_count: 0,
       visual_evidence_sha256: digest_b,
+      page_count: None,
       completed_unix_ms: 1500L,
     }),
   )
@@ -743,7 +745,7 @@ async test "pending sagas cannot be cancelled and transfer sessions are one-time
     session.issued_unix_ms + 1L,
   )
   assert_eq(consumed.state, TransferConsumed)
-  ignore(
+  assert_eq(
     reopened.consume_transfer_session(
       session.session_id,
       digest_a,
@@ -751,11 +753,25 @@ async test "pending sagas cannot be cancelled and transfer sessions are one-time
       100L,
       "sha256:" + "c".repeat(64),
       "provider-transfer-a",
-      session.issued_unix_ms + 2L,
+      session.expires_unix_ms + 1000L,
     ),
-  ) catch {
+    consumed,
+  )
+  try
+    reopened.consume_transfer_session(
+      session.session_id,
+      digest_a,
+      "application/pdf",
+      101L,
+      "sha256:" + "c".repeat(64),
+      "provider-transfer-a",
+      session.issued_unix_ms + 2L,
+    )
+  catch {
     @offline.OfflineCommerceError::Unauthorized => ()
     _ => fail("transfer replay was not rejected")
+  } noraise {
+    _ => fail("changed transfer replay was accepted")
   }
 
   let uploaded = reopened.complete_upload(callback(grant))
@@ -865,6 +881,7 @@ async test "generation result is bound to request and forbids active content" {
       render_verified: true,
       formula_error_count: 0,
       visual_evidence_sha256: digest_a,
+      page_count: None,
       completed_unix_ms: 1500L,
     }),
   ) catch {
@@ -886,6 +903,7 @@ async test "generation result is bound to request and forbids active content" {
       render_verified: true,
       formula_error_count: 0,
       visual_evidence_sha256: digest_a,
+      page_count: None,
       completed_unix_ms: 1500L,
     }),
   ) catch {
@@ -1007,6 +1025,7 @@ async test "delayed generation result cannot mutate a changed order" {
       render_verified: true,
       formula_error_count: 0,
       visual_evidence_sha256: digest_a,
+      page_count: None,
       completed_unix_ms: 1500L,
     }),
   ) catch {

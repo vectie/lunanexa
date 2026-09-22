@@ -700,8 +700,9 @@ async fn main {
   // anything; the default is to require it, and an approval granted without it
   // is visible in every promotion receipt it produces.
   let require_model_evaluation = @env.get_env_var(
-    "LUNANEXA_REQUIRE_MODEL_EVALUATION",
-  ).unwrap_or("1") == "1"
+      "LUNANEXA_REQUIRE_MODEL_EVALUATION",
+    ).unwrap_or("1") ==
+    "1"
   let runtime_endpoint = required_environment("LUNANEXA_RUNTIME_ENDPOINT")
   let mut runtime = @runtimes.OpenAiTextRuntime::new(
     runtime_endpoint,
@@ -748,11 +749,13 @@ async fn main {
   let registry = match management_database {
     Some(database) =>
       @registry.FileRegistry::open_postgres(
-        database, require_evaluation=require_model_evaluation,
+        database,
+        require_evaluation=require_model_evaluation,
       )
     None =>
       @registry.FileRegistry::open(
-        registry_path, require_evaluation=require_model_evaluation,
+        registry_path,
+        require_evaluation=require_model_evaluation,
       )
   }
   let enrollment = match management_database {
@@ -1480,6 +1483,26 @@ async fn main {
         tokens.1,
       )
     None => diagnostic_service
+  }
+  let template_approvals : Array[@api.OfflineTemplateApproval] = match
+    @env.get_env_var("LUNANEXA_OFFLINE_APPROVED_TEMPLATES_JSON") {
+    Some(value) if value != "" => {
+      guard value.length() <= 65536 else {
+        fail("template approval scope exceeds bound")
+      }
+      @json.from_json(@json.parse(value))
+    }
+    _ => []
+  }
+  let base_service = base_service.with_offline_template_approvals(
+    template_approvals,
+  )
+  let base_service = match
+    technical_acceptance_authorization(
+      @env.get_env_var("LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON"),
+    ) {
+    Some(scope) => base_service.with_technical_acceptance_authorization(scope)
+    None => base_service
   }
   let readiness_service = base_service.with_offline_commerce_capabilities(
     offline_readiness.0,

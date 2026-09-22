@@ -1,0 +1,76 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/x/crypto",
+}
+
+///|
+fn digest(bytes : Bytes) -> String {
+  @crypto.bytes_to_hex_string(@crypto.sha256(bytes.to_fixedarray()))
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, fonttools] else {
+    fail(
+      "usage: install-open-contract-fonts.mbtx REPO_ROOT FONTTOOLS_4.60.2_EXECUTABLE",
+    )
+  }
+  let version = @shell.Cmd(fonttools, ["ttx", "--version"]).output()
+  version.check()
+  guard version.stdout().contains("4.60.2") else {
+    fail("fonttools 4.60.2 required for reproducible static font")
+  }
+  let source = "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans"
+  let cache = repo + "/artifacts/open-font-build"
+  let output = repo + "/assets/fonts/open/noto-sans-sc"
+  if !@fs.exists(cache) {
+    @fs.mkdir(cache, recursive=true)
+  }
+  if !@fs.exists(output) {
+    @fs.mkdir(output, recursive=true)
+  }
+  for
+    (url, filename, expected) in [
+      (
+        source + "/Variable/TTF/Subset/NotoSansSC-VF.ttf",
+        cache + "/NotoSansSC-VF.ttf",
+        "d68bafcb48a2707749396aa12bbbd833cb70401f3a9a689fd2902c7e0d295964",
+      ),
+      (
+        source + "/LICENSE",
+        output + "/OFL.txt",
+        "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      ),
+    ] {
+    let fetched = @shell.Cmd("curl", [
+      "--fail", "--location", "--retry", "3", "--max-time", "180", "--output", filename,
+      url,
+    ]).output()
+    fetched.check()
+    guard digest(@fs.read_file(filename).binary()) == expected else {
+      fail("official font source digest mismatch")
+    }
+  }
+  let built = @shell.Cmd(fonttools, [
+    "varLib.instancer",
+    cache + "/NotoSansSC-VF.ttf",
+    "wght=400",
+    "--static",
+    "--update-name-table",
+    "--no-recalc-timestamp",
+    "--output",
+    output + "/NotoSansSC-Regular.ttf",
+  ]).output()
+  built.check()
+  guard digest(@fs.read_file(output + "/NotoSansSC-Regular.ttf").binary()) ==
+    "c7763f454946833081cc90e73186615f8e1189de9c5e5a5a8752871fd79fddbc" else {
+    fail("static font differs from qualified build")
+  }
+  println(
+    "Installed genuine Noto Sans SC OFL1.1; verified official source, license and reproducible static font",
+  )
+}

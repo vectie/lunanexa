@@ -1,0 +1,35 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/x/crypto",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, destination] else {
+    fail(
+      "usage: copy-open-contract-font-assets.mbtx REPO_ROOT BROWSER_OUTPUT_ROOT",
+    )
+  }
+  let source = repo + "/assets/fonts/open/noto-sans-sc"
+  let output = destination + "/assets/fonts/open/noto-sans-sc"
+  let font = @fs.read_file(source + "/NotoSansSC-Regular.ttf").binary()
+  guard @crypto.bytes_to_hex_string(@crypto.sha256(font.to_fixedarray())) ==
+    "c7763f454946833081cc90e73186615f8e1189de9c5e5a5a8752871fd79fddbc" else {
+    fail(
+      "OFL font missing or wrong version; run install-open-contract-fonts.mbtx",
+    )
+  }
+  if !@fs.exists(output) {
+    @fs.mkdir(output, recursive=true)
+  }
+  for name in ["NotoSansSC-Regular.ttf", "OFL.txt", "font-config.json"] {
+    @fs.write_file(
+      output + "/" + name,
+      @fs.read_file(source + "/" + name).binary(),
+      create_mode=CreateOrTruncate,
+    )
+  }
+}

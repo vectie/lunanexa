@@ -1,4 +1,19 @@
 ///|
+test "browser transfer paths stay same-origin without exposing private adapter host" {
+  let endpoint = "https://private-adapter/v1/offline-transfers"
+  assert_true(
+    safe_offline_transfer_url(endpoint, "/v1/offline-transfers/transfer-123"),
+  )
+  for
+    path in [
+      "//attacker/v1/offline-transfers/id", "/v1/offline-transfers/../private", "/v1/offline-transfers/%2e%2e",
+      "/v1/offline-transfers/id?token=secret", "/v1/offline-transfers/..", "/v1/offline-transfers/id#fragment",
+    ] {
+    assert_false(safe_offline_transfer_url(endpoint, path))
+  }
+}
+
+///|
 priv enum OfflineTransferAdapterTestMode {
   TransferSuccess
   TransferRedirect
@@ -76,6 +91,7 @@ async fn exercise_offline_transfer_adapter(
       maximum_byte_count: 1000L,
       expected_sha256: None,
       expires_unix_ms: 2000L,
+      upload_grant_id: None,
     }
     let accepted = try {
       let receipt = @async.with_timeout(250, () => {
@@ -164,6 +180,7 @@ async fn transfer_store_fixture(
     artifact_ids: [],
     entitlement_ref: None,
     requested_undertaking_term: None,
+    technical_acceptance_waiver: None,
     state: PendingEvidenceUpload,
     generation: 4L,
     created_unix_ms: now,
@@ -192,6 +209,7 @@ async fn transfer_store_fixture(
     orders: [order],
     artifacts: [],
     generation_requests: [],
+    generation_plans: {},
     upload_grants: [grant],
     upload_callbacks: [],
     reviews: [],
@@ -340,7 +358,7 @@ async test "opaque transfer survives restart and consumes exactly once" {
         { "Authorization": "Bearer \{adapter_token}" },
         body,
       ).status,
-      403,
+      200,
     )
   }
   @fs.rmdir(directory, recursive=true)

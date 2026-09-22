@@ -1,0 +1,21 @@
+{
+  "schema": "lunanexa.offline-runtime-image.v1",
+  "date": "2026-09-22",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/offline-runtime@sha256:ec1d28986b5ee034ec7125f88ecb82ad4b9b96580ae6cac8763183a6a16aaff4",
+  "scope": "Append only the dispatcher and artifact-worker binaries carrying real page_count; runtime dependencies unchanged from r2",
+  "binary_sha256": {
+    "offline-dispatcher": "d6397d2da03e84228f03c8975a88f3ac2663b7aef0dd1b4e00cb9a88f2ef4672",
+    "offline-artifact-worker": "b3581fb5758d6ec9de7997a494a0ec73121fcd62c76e929af911c88796bc6427"
+  },
+  "runtime_package_versions": {
+    "ca-certificates": "20250419~deb12u1",
+    "clamav": "1.4.3+dfsg-1~deb12u2",
+    "curl": "7.88.1-10+deb12u15",
+    "nginx-light": "1.22.1-9+deb12u10",
+    "openssl": "3.0.20-1~deb12u2",
+    "poppler-utils": "22.12.0-2+deb12u3",
+    "qpdf": "11.3.0-1+deb12u1",
+    "unzip": "6.0-28+deb12u1"
+  },
+  "deployment_acceptance_is_separate": true
+}

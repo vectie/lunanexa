@@ -1003,6 +1003,29 @@ emulation. Bundle the allowlisted Cosign binary in production controller and
 node images. Sign each image, publish it to the private registry, and record its
 full digest.
 
+The controller source build requires Docker Buildx/BuildKit and a reviewed
+MoonLeaf checkout containing the native renderer changes. It does not silently
+fall back to the older package version in `moon.mod`. From the LunaNexa root:
+
+```sh
+docker buildx build --load --platform linux/amd64 \
+  --build-context moonleaf_source=../moonleaf \
+  --file images/Containerfile.control --tag lunanexa/control:reviewed .
+```
+
+The existing toolchain staging and runtime-base prerequisites still apply.
+`scripts/deploy/build-management-images.sh` passes this context automatically;
+set `LUNANEXA_MOONLEAF_SOURCE` to select a different reviewed checkout. Record both
+Git revisions in build provenance. The container uses `images/control.moon.work`
+with `/src` and `/moonleaf`, not the caller's local `moon.work`. Local credentials,
+private fonts and test evidence are excluded from the default context; OFL
+licenses/configuration and contract templates remain included. The sibling
+context is copied through an explicit source-directory allowlist.
+
+Run `moon run scripts/check-control-build-context.mbtx` for the static packaging
+contract checks. These checks do not execute Docker or establish image-build or
+runtime acceptance. No new MoonLeaf registry package is published by this flow.
+
 The files in `deploy/` intentionally contain values such as
 `${CONTROLLER_IMAGE_DIGEST}` and `registry.invalid`. They are templates and
 must not be applied until a reviewed overlay has replaced every placeholder

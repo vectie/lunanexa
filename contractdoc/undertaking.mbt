@@ -2,7 +2,8 @@
 /// The approved attachment is a distinct source document, not a renamed
 /// bilateral contract. Admission metadata does not add clauses to its text.
 pub fn is_undertaking_template(template_id : String) -> Bool {
-  template_id == "youthpolicy-device-undertaking-v1"
+  template_id == "youthpolicy-device-undertaking-v1" ||
+  template_id == "youthpolicy-device-undertaking-ofl-v2"
 }
 
 ///|

@@ -1,0 +1,8 @@
+# The weed binary is taken from SeaweedFS 4.47 linux_amd64.tar.gz.
+# Verify archive SHA-256 before extraction:
+# 31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY --chmod=0555 weed /usr/local/bin/weed
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/weed"]

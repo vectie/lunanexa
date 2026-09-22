@@ -312,6 +312,7 @@ pub struct CommercialStore {
   mut grants : Map[String, RoleGrant]
 }
 pub fn CommercialStore::accept_clickwrap(Self, ClickwrapAcceptance) -> IdempotencyResult raise CommercialError
+pub fn CommercialStore::activate_offline_commitment(Self, String, String, String, Int64) -> CapacityCommitment raise CommercialError
 pub fn CommercialStore::add_budget(Self, Budget) -> Unit raise CommercialError
 pub fn CommercialStore::add_commitment(Self, CapacityCommitment) -> Unit raise CommercialError
 pub fn CommercialStore::add_cost_center(Self, CostCenter) -> Unit raise CommercialError
@@ -339,6 +340,7 @@ pub fn CommercialStore::record_identity_verification(Self, String, String) -> Or
 pub fn CommercialStore::register_agreement_template(Self, AgreementTemplate) -> Unit raise CommercialError
 pub fn CommercialStore::remaining_capacity(Self, String) -> Int64 raise CommercialError
 pub fn CommercialStore::replace_from_durable_snapshot(Self, CommercialDurableSnapshot) -> Unit raise CommercialError
+pub fn CommercialStore::revoke_offline_commitment(Self, String, String) -> CapacityCommitment raise CommercialError
 pub fn CommercialStore::set_template_state(Self, String, String, AgreementTemplateState) -> AgreementTemplate raise CommercialError
 pub fn CommercialStore::snapshot(Self, String) -> CommercialSnapshot raise CommercialError
 pub fn CommercialStore::summary(Self, String, String, Int, Int64) -> CommercialSummary raise CommercialError

@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: lunanexa-offline-restore-verification, namespace: lunanexa}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 5Gi}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-offline-restore-verification, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-offline-restore-verification}}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lunanexa-offline-restore-verification
+  namespace: lunanexa
+  labels: {app: lunanexa-offline-restore-verification}
+spec:
+  nodeSelector: {kubernetes.io/hostname: ubuntu}
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext: {runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+  containers:
+    - name: verifier
+      image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/offline-runtime@sha256:54fa371d1dbc32c2490aa6dd97bc4909af5c1295b853f99cf105184aee7086ce
+      command: [sleep, "3600"]
+      securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+      resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "2", memory: 2Gi}}
+      volumeMounts:
+        - {name: production, mountPath: /source, readOnly: true}
+        - {name: restored, mountPath: /restore}
+        - {name: temporary, mountPath: /tmp}
+        - {name: iam, mountPath: /credentials, readOnly: true}
+        - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+  volumes:
+    - name: production
+      persistentVolumeClaim: {claimName: data-lunanexa-offline-object-store-0, readOnly: true}
+    - name: restored
+      persistentVolumeClaim: {claimName: lunanexa-offline-restore-verification}
+    - name: temporary
+      emptyDir: {sizeLimit: 2Gi}
+    - name: iam
+      secret: {secretName: lunanexa-offline-object-store-iam, defaultMode: 0440}
+    - name: bootstrap
+      secret: {secretName: lunanexa-offline-s3-bootstrap, defaultMode: 0440}

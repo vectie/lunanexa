@@ -1,0 +1,39 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+async fn main {
+  guard @env.args() is [_, stage, private_dir, kubeconfig] else { fail("Usage: configure-offline-production.mbtx STAGE PRIVATE_DIR KUBECONFIG") }
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let bundle = @shell.Cmd("kubectl", [..k, "get", "secret", "lunanexa-registry-ca-bundle", "-o", "jsonpath={.data.ca-certificates\\.crt}"]).output()
+  bundle.check()
+  guard bundle.stdout().length() > 0 else { fail("Missing existing registry trust bundle") }
+  @fs.write_file(private_dir + "/registry-ca.base64", bundle.stdout(), permission=0o600)
+  let decoded = @shell.Cmd("base64", ["--decode", private_dir + "/registry-ca.base64"]).output()
+  decoded.check()
+  let ca = @fs.read_file(private_dir + "/ca.crt").text()
+  @fs.write_file(private_dir + "/combined-ca.crt", decoded.stdout() + "\n" + ca, permission=0o600)
+  let cm : Json = {"apiVersion":"v1", "kind":"ConfigMap", "metadata":{"name":"lunanexa-offline-combined-ca", "namespace":"lunanexa"}, "data":{"ca.crt":decoded.stdout() + "\n" + ca}}
+  @fs.write_file(private_dir + "/combined-ca.json", cm.stringify(), permission=0o600)
+  @shell.Cmd("kubectl", [..k, "apply", "-f", private_dir + "/combined-ca.json"]).run()
+  let existing = @shell.Cmd("kubectl", [..k, "get", "secret", "lunanexa-offline-transfer", "-o", "jsonpath={.data.LUNANEXA_OFFLINE_TRANSFER_SESSION_SECRET}"]).output()
+  existing.check()
+  if existing.stdout() == "" {
+    let secret = @shell.Cmd("openssl", ["rand", "-hex", "32"]).output()
+    secret.check()
+    let patch : Json = {"stringData": {"LUNANEXA_OFFLINE_TRANSFER_SESSION_SECRET": secret.stdout().trim().to_owned()}}
+    @fs.write_file(private_dir + "/session-patch.json", patch.stringify(), permission=0o600)
+    @shell.Cmd("kubectl", [..k, "patch", "secret", "lunanexa-offline-transfer", "--type=merge", "--patch-file=" + private_dir + "/session-patch.json"]).run()
+  }
+  let image = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/offline-runtime@sha256:54fa371d1dbc32c2490aa6dd97bc4909af5c1295b853f99cf105184aee7086ce"
+  for name in ["production-services.yaml", "object-store.yaml", "deployment.yaml"] {
+    let source = @fs.read_file(stage + "/" + name).text()
+    let rendered = source.split("${OFFLINE_TRANSFER_IMAGE_DIGEST}").collect().join(image).split("${OFFLINE_OBJECT_STORE_IMAGE_DIGEST}").collect().join(image)
+    @fs.write_file(stage + "/rendered-" + name, rendered)
+    @shell.Cmd("kubectl", [..k, "apply", "-f", stage + "/rendered-" + name]).run()
+  }
+}

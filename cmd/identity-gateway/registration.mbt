@@ -65,7 +65,9 @@ priv struct AdminTokenResponse {
 /// cannot inspect. It goes to stderr: this process buffers stdout, so a line
 /// written there can sit unread for as long as the buffer takes to fill.
 fn registration_stage_failed(stage : String, detail : String) -> Unit {
-  eprintln("[identity-gateway] customer registration failed at \{stage}: \{detail}")
+  eprintln(
+    "[identity-gateway] customer registration failed at \{stage}: \{detail}",
+  )
 }
 
 ///|
@@ -73,8 +75,7 @@ fn registration_stage_failed(stage : String, detail : String) -> Unit {
 fn registration_failure_response(error : RegistrationError) -> (Int, String) {
   match error {
     RegistrationError::EmailTaken => (409, "email-taken")
-    RegistrationError::PasswordRejected =>
-      (400, "password-rejected")
+    RegistrationError::PasswordRejected => (400, "password-rejected")
     RegistrationError::RegistrationUnavailable =>
       (503, "registration-unavailable")
   }
@@ -141,7 +142,7 @@ async fn registration_post(
   body : String,
   authorization : String,
   content_type : String,
-) -> (@http.Response, String) raise {
+) -> (@http.Response, String) {
   let (origin, path) = endpoint_origin_and_path(url, true)
   let client = @http.Client(origin, trust=oidc_trust(config))
   defer client.close()
@@ -164,7 +165,9 @@ async fn registration_admin_token(
 ) -> String raise RegistrationError {
   guard config.registration_client_id is Some(client_id) &&
     config.registration_client_secret is Some(secret) else {
-    registration_stage_failed("admin-token", "the service account is not configured")
+    registration_stage_failed(
+      "admin-token", "the service account is not configured",
+    )
     raise RegistrationError::RegistrationUnavailable
   }
   let url = registration_endpoint(
@@ -189,9 +192,7 @@ async fn registration_admin_token(
     }
   }
   guard response.code == 200 else {
-    registration_stage_failed(
-      "admin-token-status", "HTTP \{response.code}",
-    )
+    registration_stage_failed("admin-token-status", "HTTP \{response.code}")
     raise RegistrationError::RegistrationUnavailable
   }
   let token : AdminTokenResponse = @json.from_json(@json.parse(body)) catch {

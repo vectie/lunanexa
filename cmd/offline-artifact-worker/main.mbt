@@ -312,14 +312,19 @@ fn validate_job(job : OfflineArtifactJob) -> Unit raise Failure {
     !@offline.valid_sha256(job.request.input_snapshot_sha256) {
     raise Failure("artifact job contract is invalid")
   }
-  if job.output_filename == job.template_filename ||
-    job.prepared_filename == job.template_filename ||
-    job.prepared_filename == job.output_filename ||
-    job.result_filename == job.output_filename ||
-    job.result_filename == job.template_filename ||
-    job.render_manifest_filename == job.output_filename ||
-    job.render_manifest_filename == job.result_filename {
-    raise Failure("artifact job staging filenames must be distinct")
+  let seen : Map[String, Unit] = Map([])
+  for
+    filename in [
+      job.template_filename,
+      job.prepared_filename,
+      job.output_filename,
+      job.result_filename,
+      job.render_manifest_filename,
+    ] {
+    if !safe_filename(filename) || seen.contains(filename) {
+      raise Failure("artifact job staging filenames must be safe and distinct")
+    }
+    seen[filename] = ()
   }
   match job.request.kind {
     EditableContractDocx => {
@@ -581,6 +586,7 @@ async fn run_job(
     render_verified: true,
     formula_error_count: 0,
     visual_evidence_sha256,
+    page_count: Some(render_evidence.page_or_sheet_count),
     completed_unix_ms: now_unix_ms,
   }
   write_text_atomic(result_path, result.to_json().stringify(indent=2))

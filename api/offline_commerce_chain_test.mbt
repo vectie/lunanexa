@@ -281,7 +281,7 @@ async test "offline commerce chain fails closed until every deployment proof exi
     locale: "zh-CN",
     expected_object_ref: "s3://orders/order-unproven/contract.pdf",
     input_snapshot_sha256: "sha256:" + "a".repeat(64),
-    requested_by: "platform-operator",
+    requested_by: "operator",
     requested_unix_ms: @async.now(),
   }
   let gated_generation = bare.handle(
@@ -557,6 +557,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     // the route derives it and the durable request keeps the derived value.
     let operator_with_ingress = {
       "Authorization": "Bearer operator-token",
+      "X-LunaNexa-Subject": "spoofed-operator-subject",
       "ssl-client-verify": "SUCCESS",
       "ssl-client-subject-dn": "CN=legal-reviewer,O=LunaNexa",
     }
@@ -582,7 +583,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     )
     assert_eq(pending.length(), 1)
     assert_eq(pending[0].request_id, generation.request_id)
-    assert_eq(pending[0].requested_by, "platform-operator")
+    assert_eq(pending[0].requested_by, "operator")
     let after_claim = chain_snapshot(service)
     assert_true(
       after_claim.worker_health.artifact_dispatcher_heartbeat_unix_ms.unwrap() >
@@ -607,6 +608,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       render_verified: true,
       formula_error_count: 0,
       visual_evidence_sha256: digest_a,
+      page_count: None,
       completed_unix_ms: pending[0].requested_unix_ms + 1L,
     }
     let forged_results : Array[@offline.ArtifactGenerationResult] = [
@@ -792,10 +794,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     assert_eq(approval_review.status, 200)
     let after_approval_review = chain_snapshot(service)
     assert_eq(after_approval_review.reviews.length(), 1)
-    assert_eq(
-      after_approval_review.reviews[0].reviewer_ref,
-      "platform-operator",
-    )
+    assert_eq(after_approval_review.reviews[0].reviewer_ref, "operator")
     assert_eq(
       chain_order(after_approval_review, order_id).state,
       PendingOfflineExecution,
@@ -906,7 +905,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         tenant_ref: "tenant-a",
         organization_id: "org-a",
         project_id: "project-chain",
-        purchaser_subject_ref: "platform-operator",
+        purchaser_subject_ref: "operator",
         selected_service_code: "exclusive-dgx",
         selected_sla_code: "standard",
         policy: {
@@ -921,6 +920,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         artifact_ids: [],
         entitlement_ref: None,
         requested_undertaking_term: None,
+        technical_acceptance_waiver: None,
         state: Draft,
         generation: 1L,
         created_unix_ms: now,
@@ -928,7 +928,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         expires_unix_ms: now + 7200000L,
       }).order_id,
       offline_test_quote("chain-sod", now),
-      "platform-operator",
+      "operator",
       now,
     )
     ignore(
@@ -943,7 +943,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       idempotency_key: "upload-chain-sod",
       order_id: "order-chain-sod",
       organization_id: "org-a",
-      subject_ref: "platform-operator",
+      subject_ref: "operator",
       artifact_id: "evidence-chain-sod",
       kind: ExecutedContractScan,
       revision: 1,
@@ -968,7 +968,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       verified: true,
       completed_unix_ms: now + 1L,
     })
-    assert_eq(sod_artifact.submitted_by, "platform-operator")
+    assert_eq(sod_artifact.submitted_by, "operator")
     let self_review_body : Json = {
       "review_id": "review-chain-sod",
       "order_id": "order-chain-sod",
@@ -1125,7 +1125,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         chain_transfer_adapter(),
         upload_completion_body.stringify(),
       ).status,
-      403,
+      200,
     )
 
     // 14. The purchaser receives a one-time, digest-bound download capability
@@ -1208,7 +1208,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         purchaser,
         download_intent.stringify(),
       ).status,
-      503,
+      409,
     )
     assert_eq(chain_snapshot(service).transfer_sessions.length(), 6)
 

@@ -149,8 +149,13 @@ fn extended_resource_name(value : String) -> Bool {
   domain.split(".").all(label => dns_label(label.to_owned())) &&
   resource != "" &&
   resource.length() <= 63 &&
-  resource
-  .all(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_') &&
+  resource.all(c => {
+    (c >= 'a' && c <= 'z') ||
+    (c >= '0' && c <= '9') ||
+    c == '-' ||
+    c == '.' ||
+    c == '_'
+  }) &&
   !resource.has_prefix("-") &&
   !resource.has_suffix("-")
 }
@@ -209,16 +214,12 @@ pub fn render_runtime(
       settings.controller_namespace is None
     ) ||
     !settings.controller_addresses.all(private_address) ||
-    (
-      settings.controller_namespace is Some(name) && !dns_label(name)
-    ) ||
+    (settings.controller_namespace is Some(name) && !dns_label(name)) ||
     (
       settings.device_plugin_resource is Some(resource) &&
       !extended_resource_name(resource)
     ) ||
-    (
-      settings.runtime_class_name is Some(name) && !dns_label(name)
-    ) ||
+    (settings.runtime_class_name is Some(name) && !dns_label(name)) ||
     !dns_label(assignment.assignment_id) ||
     assignment.signature == "" ||
     assignment.generation < 0L ||
@@ -331,7 +332,8 @@ pub fn render_runtime(
     "cpu": canonical_cpu_quantity(assignment.resources.cpu_millis).to_json(),
     "memory": canonical_memory_quantity(assignment.resources.memory_mib).to_json(),
   }
-  if device_plugin is Some(resource) && assignment.resources.accelerator_count > 0 {
+  if device_plugin is Some(resource) &&
+    assignment.resources.accelerator_count > 0 {
     // The device plugin allocates by count of an extended resource, which is
     // the only thing the scheduler can see. `devices` still decides which
     // physical GPUs the container may open, through NVIDIA_VISIBLE_DEVICES.
@@ -491,7 +493,8 @@ pub fn render_runtime(
     match pod {
       Object(root) =>
         match root.get("spec") {
-          Some(Object(spec)) => spec["runtimeClassName"] = runtime_class.to_json()
+          Some(Object(spec)) =>
+            spec["runtimeClassName"] = runtime_class.to_json()
           _ => raise InvalidResource
         }
       _ => raise InvalidResource
@@ -548,5 +551,5 @@ pub fn render_runtime(
       "egress": egress_rules.to_json(),
     },
   }
-  { name, pod, claim_template, network_policy }
+  { name, pod, claim_template, network_policy, }
 }

@@ -2,45 +2,45 @@
   "capabilities": [
     {
       "capability": "ApprovedLegalTemplates",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-ofl-v2-20260922/operator-approval.md"
     },
     {
       "capability": "ObjectStorage",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-transfer-production-20260922.json:s3"
     },
     {
       "capability": "MalwareScanner",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-transfer-production-20260922.json:scanner"
     },
     {
       "capability": "OoxmlWorker",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-dispatcher-production-20260922.json"
     },
     {
       "capability": "PdfRenderer",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-ofl-v2-20260922/production-docx-render.json"
     },
     {
       "capability": "SpreadsheetFormulaEngine",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-ofl-v2-20260922/production-quote-result.json"
     },
     {
       "capability": "CjkFonts",
-      "configured": false,
-      "verified": false,
-      "evidence_ref": null
+      "configured": true,
+      "verified": true,
+      "evidence_ref": "docs/evidence/offline-ofl-v2-20260922/README.md"
     },
     {
       "capability": "MachineCallbackIdentity",
@@ -52,7 +52,7 @@
       "capability": "EntitlementAuthority",
       "configured": true,
       "verified": true,
-      "evidence_ref": "lunanexa-control-credentials/entitlement-authority-callback-token-20260922-64B"
+      "evidence_ref": "docs/evidence/workspace-authority-oidc-production-20260922.json:sha256:65472dc307c6158d6843ac032e07b87a17e4d4405227f1621729e251fa575b86"
     },
     {
       "capability": "FinanceLegalPolicy",

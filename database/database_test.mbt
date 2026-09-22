@@ -34,11 +34,10 @@ fn test_database_url() -> String? {
     }
   }
 }
+
 ///|
 async test "related opaque snapshots commit and restore as one database operation" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   database.save_opaque_snapshots([
     ("commercial", "commercial-test-v1", "{\"revision\":1}"),
@@ -59,9 +58,7 @@ async test "related opaque snapshots commit and restore as one database operatio
 
 ///|
 async test "production account and client handoff snapshots are allowlisted" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   database.save_opaque_snapshot(
     "accounts", "account-test-v1", "{\"accounts\":[],\"sessions\":[]}",
@@ -82,9 +79,7 @@ async test "production account and client handoff snapshots are allowlisted" {
 
 ///|
 async test "failed PostgreSQL batch rolls back and releases its mutex" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   defer database.close()
   database.save_opaque_snapshot(
@@ -116,9 +111,7 @@ async test "failed PostgreSQL batch rolls back and releases its mutex" {
 
 ///|
 async test "PostgreSQL leadership is exclusive and transfers after connection close" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let first = @database.PostgresDatabase::open(url)
   let second = @database.PostgresDatabase::open(url)
   defer second.close()

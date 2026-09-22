@@ -233,7 +233,8 @@ fn legacy_file(value : Json) -> ModelScopeFile raise ModelSourceError {
   { path, revision, sha256: sha256.to_lower(), size, lfs, }
 }
 
-///| ModelScope lists directories alongside files in a recursive listing. A
+///|
+/// ModelScope lists directories alongside files in a recursive listing. A
 /// directory carries no content digest, so it is not a file and must be
 /// dropped before anything tries to hash or download it.
 fn decode_tree_files(

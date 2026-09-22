@@ -93,6 +93,7 @@ pub fn validate_quote(
 pub fn validate_order(
   order : CommercialOrder,
 ) -> Unit raise OfflineCommerceError {
+  validate_technical_waiver(order)
   if !valid_id(order.order_id) ||
     !valid_id(order.idempotency_key) ||
     !valid_id(order.tenant_ref) ||

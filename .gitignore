@@ -26,5 +26,9 @@
 /assets/fonts/private/*
 !/assets/fonts/private/README.md
 
+# Reproducible OFL fonts are downloaded at build/deploy time, not stored in Git.
+/assets/fonts/open/**/*.ttf
+/assets/fonts/open/**/*.otf
+
 # One-click cluster deployment reads its sudo passwords from here; never commit them.
 deploy/cluster/credentials.json

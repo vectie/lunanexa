@@ -287,6 +287,38 @@ fn preview_packet(
   if changes.length() == 0 {
     return packet
   }
+  if packet.state
+    is (GenerationRequested
+    | Generated
+    | GenerationFailed
+    | Effective
+    | Closed
+    | Superseded) {
+    // The UI sends its role-scoped current values when opening a preview, even
+    // for a frozen packet. These are a read, not a request to edit legal bytes.
+    guard packet.template_id == manifest.template_id &&
+      packet.template_version == manifest.template_version &&
+      packet.template_sha256 == manifest.sha256 &&
+      changes.length() <= 256 else {
+      raise InvalidDraft("frozen preview template or field count mismatch")
+    }
+    let seen : Map[String, Unit] = Map([])
+    for change in changes {
+      guard manifest.field(change.field_id) is Some(definition) &&
+        packet.active_forms.contains(definition.form) &&
+        definition.owner == actor &&
+        definition.owner.can_edit(actor) &&
+        definition.collection_policy != CompleteOffline &&
+        !seen.contains(change.field_id) &&
+        packet.value(change.field_id).unwrap_or("") == change.value else {
+        raise InvalidDraft(
+          "a frozen preview cannot change fields or their authority",
+        )
+      }
+      seen[change.field_id] = ()
+    }
+    return packet
+  }
   packet.update_information(
     manifest,
     packet.revision,

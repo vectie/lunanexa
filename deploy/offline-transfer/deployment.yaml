@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lunanexa-offline-transfer-state
+  namespace: lunanexa
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 2Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-offline-transfer
+  namespace: lunanexa
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: lunanexa-offline-transfer}
+  template:
+    metadata:
+      labels: {app: lunanexa-offline-transfer}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: adapter
+          image: ${OFFLINE_TRANSFER_IMAGE_DIGEST}
+          ports:
+            - containerPort: 8096
+          envFrom:
+            - configMapRef: {name: lunanexa-offline-transfer}
+          env:
+            - name: LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN
+              valueFrom: {secretKeyRef: {name: lunanexa-offline-transfer, key: LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN}}
+            - name: LUNANEXA_ARTIFACT_SCANNER_CALLBACK_TOKEN
+              valueFrom: {secretKeyRef: {name: lunanexa-offline-transfer, key: LUNANEXA_ARTIFACT_SCANNER_CALLBACK_TOKEN}}
+            - {name: LUNANEXA_OFFLINE_TRANSFER_STATE_ROOT, value: /state}
+            - {name: AWS_SHARED_CREDENTIALS_FILE, value: /credentials/credentials}
+            - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
+            - {name: AWS_CA_BUNDLE, value: /trust/ca.crt}
+            - {name: SSL_CERT_FILE, value: /trust/ca.crt}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits: {cpu: "2", memory: "2Gi"}
+          livenessProbe:
+            exec: {command: [curl, --fail, --silent, http://127.0.0.1:8096/healthz]}
+          readinessProbe:
+            exec: {command: [clamscan, --official-db-only=yes, --fail-if-cvd-older-than=3, --no-summary, /etc/os-release]}
+            timeoutSeconds: 30
+            periodSeconds: 60
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: temporary, mountPath: /tmp}
+            - {name: credentials, mountPath: /credentials, readOnly: true}
+            - {name: signatures, mountPath: /var/lib/clamav, readOnly: true}
+            - {name: trust, mountPath: /trust, readOnly: true}
+        - name: private-tls
+          image: ${OFFLINE_TRANSFER_IMAGE_DIGEST}
+          command: [nginx, -c, /config/nginx.conf, -g, "daemon off;"]
+          ports: [{containerPort: 8443}]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 20m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          volumeMounts:
+            - {name: tls-config, mountPath: /config, readOnly: true}
+            - {name: tls, mountPath: /tls, readOnly: true}
+            - {name: tls-temporary, mountPath: /tmp}
+      volumes:
+        - name: state
+          persistentVolumeClaim: {claimName: lunanexa-offline-transfer-state}
+        - name: temporary
+          emptyDir: {sizeLimit: 512Mi}
+        - name: credentials
+          secret: {secretName: lunanexa-offline-s3, defaultMode: 0440}
+        - name: signatures
+          persistentVolumeClaim: {claimName: lunanexa-clamav-signatures}
+        - name: trust
+          configMap: {name: lunanexa-offline-ca}
+        - name: tls-config
+          configMap: {name: lunanexa-offline-transfer-tls}
+        - name: tls
+          secret: {secretName: lunanexa-offline-transfer-tls, defaultMode: 0440}
+        - name: tls-temporary
+          emptyDir: {sizeLimit: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunanexa-offline-transfer
+  namespace: lunanexa
+spec:
+  selector: {app: lunanexa-offline-transfer}
+  ports:
+    - {name: https, port: 8443, targetPort: 8443}

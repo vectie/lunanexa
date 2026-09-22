@@ -121,6 +121,9 @@ async fn ApiService::offline_readiness(
     now_unix_ms,
   )
   let blockers = readiness.blocker_codes.copy()
+  if self.offline_template_scope_gate(None) is Some(_) {
+    blockers.push("ReadinessTemplateApprovalScopeMissing")
+  }
   if self.offline_commerce_capabilities_expires_unix_ms <= now_unix_ms {
     blockers.push("ReadinessEvidenceExpired")
   }
@@ -156,6 +159,38 @@ async fn ApiService::offline_readiness(
   }
 }
 
+///|
+/// Admission follows the dependencies of this operation, not all platform
+/// diagnostics. In particular, a past business success cannot be a prerequisite
+/// for creating the first job. Terminal authority remains enforced by the store.
+fn offline_blocker_applies(
+  code : String,
+  required : Array[@offline.OfflineCommerceCapability],
+) -> Bool {
+  let artifact = required.contains(@offline.OoxmlWorker) ||
+    required.contains(@offline.PdfRenderer)
+  let entitlement = required.contains(@offline.EntitlementAuthority)
+  match code {
+    "ReadinessTemplateApprovalScopeMissing" =>
+      artifact || required.contains(@offline.ApprovedLegalTemplates)
+    "ReadinessArtifactDispatcherSuccessStale"
+    | "ReadinessEntitlementDispatcherSuccessStale"
+    | "ReadinessOfflineWorkRetryExhausted" => false
+    "ReadinessArtifactDispatcherHeartbeatStale"
+    | "ReadinessArtifactWorkerCallbackUnavailable" => artifact
+    "ReadinessEntitlementDispatcherHeartbeatStale"
+    | "ReadinessEntitlementAuthorityCallbackUnavailable"
+    | "ReadinessOfflineReconcilerDegraded" => entitlement
+    "ReadinessArtifactScannerCallbackUnavailable" =>
+      required.contains(@offline.MalwareScanner)
+    "ReadinessTransferAdapterUnavailable" =>
+      required.contains(@offline.ObjectStorage)
+    _ =>
+      code.has_prefix("Readiness") ||
+      required.any(capability => readiness_blocker(capability) == code)
+  }
+}
+
 ///| Returns a typed fail-closed 503 for a side effect whose externally verified
 
 ///|
@@ -167,8 +202,7 @@ async fn ApiService::offline_readiness_gate(
 ) -> HttpReply? {
   let readiness = self.offline_readiness(now_unix_ms)
   let blockers = readiness.blocker_codes.filter(code => {
-    code.has_prefix("Readiness") ||
-    required.any(capability => readiness_blocker(capability) == code)
+    offline_blocker_applies(code, required)
   })
   if blockers.length() == 0 {
     None
@@ -216,6 +250,7 @@ priv struct OfflineTransferAdapterIntent {
   maximum_byte_count : Int64
   expected_sha256 : String?
   expires_unix_ms : Int64
+  upload_grant_id : String?
 } derive(ToJson)
 
 ///|
@@ -357,6 +392,23 @@ fn offline_transfer_token_sha256(token : String) -> String {
 ///|
 /// to an authenticated browser.
 fn safe_offline_transfer_url(endpoint : String, url : String) -> Bool {
+  // A same-origin public ingress can serve browser transfers while the
+  // controller talks to a private TLS adapter. Never expose an internal host
+  // to the browser or require an outer website certificate for this mapping.
+  if url.has_prefix("/v1/offline-transfers/") {
+    let id = url["/v1/offline-transfers/".length():].to_owned()
+    return id.length() > 0 &&
+      id.length() <= 256 &&
+      id != "." &&
+      id != ".." &&
+      id.all(c => {
+        c.is_ascii_alphabetic() ||
+        c.is_ascii_digit() ||
+        c == '-' ||
+        c == '_' ||
+        c == '.'
+      })
+  }
   url.length() <= 1024 &&
   url.has_prefix("\{endpoint}/") &&
   !url.contains("?") &&
@@ -428,6 +480,7 @@ async fn ApiService::issue_offline_transfer(
   issued_unix_ms : Int64,
   expires_unix_ms : Int64,
   operator_scope? : (String, String),
+  upload_grant_id? : String,
 ) -> @offline.OfflineTransferGrant {
   guard self.offline_transfer_adapter_endpoint is Some(endpoint) &&
     self.offline_transfer_adapter_token is Some(adapter_token) &&
@@ -507,6 +560,7 @@ async fn ApiService::issue_offline_transfer(
       maximum_byte_count,
       expected_sha256,
       expires_unix_ms: effective_expires_unix_ms,
+      upload_grant_id,
     })
   })
   if receipt.session_id != session_id ||
@@ -581,6 +635,9 @@ fn offline_error_reply(error : Error) -> HttpReply {
 
 ///|
 fn offline_operator_audit_action(path : String) -> String {
+  if path == "/v1/offline-commerce/operator/technical-acceptance-waivers" {
+    return "offline.technical-waiver.authorize"
+  }
   if path.contains("templates") {
     "offline.template.register"
   } else if path.contains("quotes") {
@@ -598,11 +655,6 @@ fn offline_operator_audit_action(path : String) -> String {
   } else {
     "offline.order.transition"
   }
-}
-
-///|
-fn offline_operator_actor(headers : Map[String, String]) -> String {
-  trusted_workspace_subject(headers, false).unwrap_or("platform-operator")
 }
 
 ///|
@@ -698,6 +750,7 @@ async fn ApiService::reconcile_offline_commerce_pass(
   guard self.offline_commerce_store is Some(store) else { return }
   let started = @async.now()
   let changed = store.expire_orders(now_unix_ms)
+  self.reconcile_offline_contract_packets()
   let expired_transfers = store.expire_transfer_sessions(now_unix_ms)
   self.refresh_offline_commerce_notifications(now_unix_ms)
   let snapshot = store.snapshot()
@@ -824,6 +877,15 @@ async fn ApiService::handle_offline_commerce(
   let request_now = @async.now()
   ignore(store.expire_orders(request_now))
   ignore(store.expire_transfer_sessions(request_now))
+  if path == "/v1/offline-commerce/operator/generation-plan" {
+    return self.offline_generation_plan(verb, headers, body)
+  }
+  if path == "/v1/offline-commerce/operator/dispatcher-heartbeat" {
+    return self.offline_dispatcher_heartbeat(verb, headers, body)
+  }
+  if path == "/v1/offline-commerce/operator/entitlement-execute" {
+    return self.execute_offline_entitlement(verb, headers, body)
+  }
   if path == "/v1/offline-commerce/operator/generation-results" {
     // Readiness gates initiation only. Results for already-issued work remain
     // reconcilable after deployment evidence expires.
@@ -845,9 +907,11 @@ async fn ApiService::handle_offline_commerce(
         400, "InvalidRequest", "invalid verified generation result", false,
       )
     }
-    let reply = try
-      json_reply(201, store.complete_generation(action.result).to_json())
-    catch {
+    let reply = try {
+      let artifact = store.complete_generation(action.result)
+      self.reconcile_offline_contract_packets()
+      json_reply(201, artifact.to_json())
+    } catch {
       error => offline_error_reply(error)
     } noraise {
       value => value
@@ -1124,17 +1188,18 @@ async fn ApiService::handle_offline_commerce(
     return self.operator_artifact_download(store, artifact_id, headers, body)
   }
   if path.has_prefix("/v1/offline-commerce/operator/") {
-    if !self.operator_authorized(headers) {
+    guard self.operator_identity(headers) is Some(actor_ref) else {
       return api_error(
         401, "Unauthenticated", "valid operator authority is required", false,
       )
     }
-    let actor_ref = offline_operator_actor(headers)
     let server_now = @async.now()
     let reply = try {
       match (verb, path) {
+        (Post, "/v1/offline-commerce/operator/technical-acceptance-waivers") =>
+          self.authorize_technical_waiver(headers, body)
         (Get, "/v1/offline-commerce/operator/snapshot") =>
-          json_reply(200, store.snapshot().to_json())
+          json_reply(200, offline_operator_snapshot(store.snapshot()))
         (Get, "/v1/offline-commerce/operator/readiness") =>
           json_reply(200, self.offline_readiness(server_now).to_json())
         (Post, "/v1/offline-commerce/operator/templates") => {
@@ -1173,6 +1238,9 @@ async fn ApiService::handle_offline_commerce(
           )
         }
         (Post, "/v1/offline-commerce/operator/begin") => {
+          if self.offline_template_scope_gate(None) is Some(denied) {
+            return denied
+          }
           guard self.offline_readiness_gate(
               [ApprovedLegalTemplates, FinanceLegalPolicy],
               server_now,
@@ -1210,6 +1278,21 @@ async fn ApiService::handle_offline_commerce(
             return api_error(
               400, "InvalidRequest", "invalid document generation request", false,
             )
+          }
+          let template = store.snapshot().templates
+            .iter()
+            .find_first(t => {
+              t.template_id == request.template_id &&
+              t.version == request.template_version
+            })
+          if self.offline_template_approvals is Some(_) && template is None {
+            return api_error(
+              503, "TemplateApprovalScopeMissing", "registered approved template required",
+              false,
+            )
+          }
+          if self.offline_template_scope_gate(template) is Some(denied) {
+            return denied
           }
           let required : Array[@offline.OfflineCommerceCapability] = match
             request.kind {
@@ -1331,6 +1414,12 @@ async fn ApiService::handle_offline_commerce(
             requested_by: actor_ref,
             requested_unix_ms: server_now,
             completed_unix_ms: None,
+          }
+          if !self.technical_activation_allowed(current, activation, server_now) {
+            return api_error(
+              409, "TechnicalAuthorityRequired", "technical authorization expired or identity/target changed",
+              false,
+            )
           }
           json_reply(
             202,
@@ -1499,8 +1588,7 @@ async fn ApiService::handle_offline_commerce(
       if intent.requested_undertaking_term is Some(term) &&
         @offline.undertaking_term_tier(term) is None {
         return api_error(
-          400, "InvalidTerm", "requested undertaking term is not a fixed tier",
-          false,
+          400, "InvalidTerm", "requested undertaking term is not a fixed tier", false,
         )
       }
       let created = try
@@ -1519,6 +1607,7 @@ async fn ApiService::handle_offline_commerce(
           artifact_ids: [],
           entitlement_ref: None,
           requested_undertaking_term: intent.requested_undertaking_term,
+          technical_acceptance_waiver: None,
           state: Draft,
           generation: 1L,
           created_unix_ms: now,
@@ -1597,13 +1686,18 @@ async fn ApiService::handle_offline_commerce(
           None,
           grant.created_unix_ms,
           grant.expires_unix_ms.min(grant.created_unix_ms + 900000L),
+          upload_grant_id=grant.grant_id,
         )
       catch {
-        _ =>
-          return api_error(
-            503, "OfflineTransferAdapterUnavailable", "upload transfer could not be issued",
-            true,
-          )
+        error =>
+          if is_offline_domain_error(error) {
+            return offline_error_reply(error)
+          } else {
+            return api_error(
+              503, "OfflineTransferAdapterUnavailable", "upload transfer could not be issued",
+              true,
+            )
+          }
       } noraise {
         value => value
       }
@@ -1727,11 +1821,15 @@ async fn ApiService::handle_offline_commerce(
           now + 300000L,
         )
       catch {
-        _ =>
-          return api_error(
-            503, "OfflineTransferAdapterUnavailable", "download transfer could not be issued",
-            true,
-          )
+        error =>
+          if is_offline_domain_error(error) {
+            return offline_error_reply(error)
+          } else {
+            return api_error(
+              503, "OfflineTransferAdapterUnavailable", "download transfer could not be issued",
+              true,
+            )
+          }
       } noraise {
         value => value
       }
