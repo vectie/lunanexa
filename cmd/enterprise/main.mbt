@@ -2185,6 +2185,7 @@ async fn redeem_machine_credential(
 ///|
 async fn create_offline_order(model : AppModel) -> @offline.CommercialOrder {
   let commerce = model.portal.offline_commerce
+  let requested_term = commerce.undertaking_term.trim().to_owned()
   let intent : OfflineOrderIntent = {
     order_id: random_identifier("offline-order"),
     idempotency_key: random_identifier("offline-order-create"),
@@ -2193,8 +2194,8 @@ async fn create_offline_order(model : AppModel) -> @offline.CommercialOrder {
     selected_sla_code: commerce.sla_code.trim().to_owned(),
     expires_unix_ms: current_unix_ms() + 2592000000L,
     requested_undertaking_term: match
-      @offline.undertaking_term_tier(commerce.undertaking_term.trim()) {
-      Some(_) => Some(commerce.undertaking_term.trim())
+      @offline.undertaking_term_tier(requested_term) {
+      Some(_) => Some(requested_term)
       None => None
     },
   }
