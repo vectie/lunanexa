@@ -3037,3 +3037,36 @@ curl -s "$CONTROL/v1/offline-commerce/operator/readiness" -H "Authorization: Bea
 测试：`moon test --target native --deny-warn` **946/946**
 （在这个提交之前是**编译不过**）；`moon check --target native --deny-warn` 干净；
 `commercial/offline` js 检查通过；`ui/offline_commerce` + `cmd/console` + `cmd/enterprise` js 105/105。
+### 12.22 就绪状态现在能在产品里看到了（原来是看不到的）
+
+§12.21 做完之后有一个问题：**运营人员没法在控制台里看到这 12 条 blocker**。
+`GET /v1/offline-commerce/operator/readiness` 一直在返回状态、十项闸门和 blocker 列表，
+但 `cmd/console` **从来不请求这个路径**（`grep -rn "operator/readiness" cmd/console/ ui/` 空）。
+所以"到底卡在哪"这个问题，产品自己答不了 —— 你这次也是问了才知道。
+
+现在 `Offline commerce` 路由上有一个只读面板（浏览器实测，2026-09-22）：
+
+- 状态：`Adapters pending` + `OfflineCommerceAdaptersPending`，并说明
+  "Initiating actions are refused with 503 OfflineCommerceNotReady until every gate passes."
+- 十项闸门逐项：7 项 `· Configured · Verified`，3 项 `✓ Configured ✓ Verified`
+  并显示各自的 `evidence_ref`（就是 §12.21 里那三条）
+- 12 条 blocker code **原文照列**，不翻译 —— 它们是运维要 grep 的东西，
+  也是 `docs/OFFLINE_COMMERCE.md` 里的术语
+
+两处刻意的决定：
+
+- **blocker code 不翻译**。翻成中文反而对不上文档和日志。
+- **`capabilities` 为空时给的是解释而不是空清单**：那是"没有配置签名文档"这个真实状态，
+  面板会点名 `cmd/offline-readiness`。
+
+面板只在运营侧渲染（企业门户共用同一个视图函数，而 `evidence_ref` 是内部信息）。
+面板上**没有任何能改动就绪状态的东西** —— 文档由 `cmd/offline-readiness` 在外部签，
+面板自己也这么写着。
+
+测试：`ui/offline_commerce` js/native 各 19/19（新增 5 条），`cmd/console` js 63/63，
+`moon check --target native --deny-warn` 绿。
+
+镜像：`lunanexa-web:20260922-r9`
+（registry digest `sha256:2d5831c6a528f6676b6c585eb206a8d953a497c5a16bb6e6ba8623a8170554d8`）。
+实测确认线上的 `console.js` 里带 `offline-readiness-panel`，且 4174 入口与 Pod 服务的
+bundle 摘要一致（`b0ea7bb1…`），不是旧包。
