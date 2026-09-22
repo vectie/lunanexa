@@ -1056,6 +1056,17 @@ test "the registration form asks for a display name the sign-in form does not" {
   })
   assert_true(html.contains("portal-login-email"))
   assert_false(html.contains("portal-register-name"))
+  // Without a deployment opt-in the page still renders the form, but says why
+  // it cannot be used yet instead of leaving a dead button unexplained.
+  let blocked = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(
+      app_view(
+        { ..gateway_auth_test_model(), endpoint: "http://106.39.18.146:5002" },
+        emit,
+      ),
+    )
+  })
+  assert_true(blocked.contains("blocked on public plain HTTP"))
   let registering = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(
       app_view({ ..gateway_auth_test_model(), registering: true }, emit),

@@ -438,11 +438,39 @@ bash deploy/acceptance/install-comfyui-templates.sh
 | `ls \| xargs -n1 basename` | 中文名带空格，拆成 `16:9）.json` | shell glob：`for f in dir/*.json; do basename "$f"; done` |
 | `for x in $list` / `sudo -S` 抢 stdin | 文件名碎裂 / `apply -f -` 报 no objects | `while IFS= read -r`；清单落临时文件 |
 | 重启 H3 前不查队列 | 打断正在跑的视频任务 | 脚本已硬闸；手工操作也要先看 `/queue` |
-| 上报里的 `progress` 字段 | 完成前恒为 0（旧版行为） | 现在随去噪上升、**封顶 80**；看 pod 日志 `n/7 s/it` |
+| 上报里的 `progress` 字段 | 完成前恒为 0（旧版行为） | 现在随去噪上升、**封顶 80**；看 pod 日志 `n/7 it/s` |
+| 用 registry 里的名字做 `--image` 构建后在 Deployment 里按 digest 引用 | pod 卡 `CreateContainerError`：`failed to check if this is a checkpoint image … image "docker.io/<annotation>": not found`。kubelet 先按 config digest 反查镜像，再拿清单注解里的名字去 containerd 找，那个名字不存在就起不来 | pull 回来之后再补一个 kubelet 要的那个别名：`ctr images tag --force <REF> docker.io/<annotation>:<tag>`。§5.1 的脚本已内置这一步 |
+| hostNetwork 单副本直接 `rollout restart` | 新 pod 永远 `Pending`：`didn't have free ports for the requested pod ports` | 先 `scale --replicas=0`，等旧 pod 消失，再 `--replicas=1`（`operator-4173-proxy` 就是这种） |
+| 把 `LUNANEXA_OIDC_ADMIN_ORIGIN` 指向 provider 的 service 名 | `/auth/register` 一律 503，日志里是 `admin-token-transport: Connection refused`；启动时不报错，所以极易误判成代码问题 | provider 的 pod 只接受自己 edge 的连接（NetworkPolicy）。admin origin 必须是 §5.1 里那个 identity internal edge，并在那里加一个 `POST`-only 的 `/admin/realms/<realm>/users` location |
+| 用 `println` 给网关加诊断 | 日志里永远看不到（stdout 有缓冲，进程不退出就不刷） | 用 `eprintln`（stderr 立即落盘）。既有的 `println` 同理，别指望它 |
+| 只写空 `requiredActions: []` 就建 Keycloak 用户 | 建号成功，但立刻登录报 `400 invalid_grant / "Account is not fully set up"` —— realm 的默认 required action 会覆盖空列表 | realm 侧也清掉：`update authentication/required-actions/CONFIGURE_TOTP -r <realm> -s defaultAction=false` |
+| 浏览器 bundle 重新构建后没渲染 HTTP opt-in | 页面能开，但每个输入框和按钮都是灰的，看起来像"没反应" | 构建后跑 `scripts/deploy/render-public-http-origin.py --dist _build/browser-dist --origin <page>=<origin>`；每个页面的 meta 必须等于**它自己的** origin |
+| `cp -a` 把 bundle 拷进 hostPath 给 nginx 用 | 403 Forbidden：`_build` 的权限是 `760`，nginx 用户读不到 | 拷完 `chmod -R a+rX`，目录 755、文件 644 |
+| 只在镜像里更新 bundle，忘了 hostPath 的那份 | 一半页面是新的，另一半还是旧的 | 5002 的 `/enterprise/` 由 hostPath `~/portal-dist` 提供（见 §11），两处都要更新 |
 
 ---
 
-## 10. 一次完整上线的顺序
+## 11. 浏览器 UI 的落点（2026-09-22 实测）
+
+同一套 bundle 在这台机器上有**三条**不同的投放路径，改 UI 时三条都要想到：
+
+| 入口 | 谁在服务 | 更新方式 |
+| --- | --- | --- |
+| `http://<host>:4174/console/` | `operator-4173-proxy`（hostNetwork nginx）→ `lunanexa-console:8080`（`moon/lunanexa-web` 镜像） | 重建 + push web 镜像，`set image deploy/lunanexa-console`，再按上表的 hostNetwork 规则重启 proxy |
+| `http://<host>:5002/enterprise/` | 同一个 proxy 的 5002 server，`root /srv/portal` → **hostPath `~/portal-dist`** | 直接把新的 `enterprise/`、`assets/` 覆盖过去并修权限；不经过镜像 |
+| `http://<host>:5003/console/`（经身份网关） | `lunanexa-identity-gateway` 代理到 `lunanexa-console:8080` | 同第一条 |
+
+另外两条与 4174 有关、容易漏的：
+
+- `location /auth/` 在 4174 上原本指向**控制面**（带一个静态 bearer）。统一登录后它必须指向
+  **身份网关**，并把 `Host`/`Origin` 改写成 operator host（`106.39.18.146:5003`）——
+  网关把一个会话绑定在**一个**配置的 host 上，而 4174 不是它。
+- 5002 的 `/` 原本对没有 OIDC cookie 的访客 302 到 `/enterprise/?demo=1`，也就是**默认进演示态**，
+  真实门户的注册/登录表单永远看不到。已改成直接 302 到 `/enterprise/`；`?demo=1` 仍可用。
+
+---
+
+## 12. 一次完整上线的顺序
 
 按依赖排，不要跳：
 
@@ -454,7 +482,9 @@ bash deploy/acceptance/install-comfyui-templates.sh
 4. 控制台镜像（§6）—— 若改了 UI
 5. H3 服务端补丁（§7）—— 若改了 vllm_omni 侧的补丁
 6. ComfyUI 节点补丁与模板（§8）
-7. 逐项验证：节点 2/2、`/v1/telemetry` 里有预期指标、控制台 bundle sha 一致、
+7. 身份网关镜像（§5.1）—— 若改了 `/auth/*` 路由或网关配置；**它和 §5 是两条不同的链**
+8. 浏览器 UI（§11）—— 若改了 UI；**三条投放路径都要更新**
+9. 逐项验证：节点 2/2、`/v1/telemetry` 里有预期指标、控制台 bundle sha 一致、
    模板能被 `/api/workflow_templates` 列出
 ```
 

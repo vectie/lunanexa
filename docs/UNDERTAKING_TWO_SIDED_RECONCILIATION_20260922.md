@@ -1779,6 +1779,41 @@ lunanexa-enterprise:  OK  azp=lunanexa-enterprise  user=recon-operator@lunanexa.
 
 这两条我会在实现时一并做，**但"明文凭据"这件事本身是你已经拍板的取舍**，我按你的决定执行。
 
+### 11.5 已实现并已在真实集群验证（2026-09-22）
+
+11.3 那张表全部落地并上线，逐项都有实测证据：
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 网关 `POST /auth/password` | 已上线 | 新镜像 `acceptance/identity-gateway@sha256:09f25011…`；`cmd/identity-gateway` 单测 30/30 |
+| 操作员账户 | 已建 | Keycloak 里 **`wlc`**（`registrationEmailAsUsername` 已关，所以用户名不再是邮箱）；控制面账户 `account-fe3ed0627ed85ce6e51cf621` 角色 `[PlatformOperator]` |
+| 控制台登录门 | 已上线 | 浏览器实测：填 `wlc` / `Wlc123!@1234fsc` → `POST /auth/password 200` → 控制台渲染（`Account session active`、节点 4/4） |
+| 门户登录门 | 已上线 | 浏览器实测：同账户 → `/auth/password 200` → 门户渲染 |
+| 门户自助注册 | 已上线 | 浏览器实测：填邮箱/名称/密码 → `POST /auth/register 201` → 门户渲染（试用租户、`Your trial is ready`） |
+| 企业侧账户自动开通 | 已验证 | 注册后控制面出现该邮箱的账户，角色 `[EnterpriseUser]`，状态 Active |
+
+顺带确认的三条边界：
+
+- **操作员主机拒绝注册**：`POST /auth/register` 带 operator 受众 → `403 registration-audience-rejected`。
+- **重复邮箱** → `409 email-taken`；**弱密码** → `400 password-rejected`（判定权在 Keycloak 的 realm 口令策略，网关不自己定规则）。
+- **静态操作员令牌已按设计退役**：一旦出现带 `PlatformOperator` 的账户，
+  `LUNANEXA_RETIRE_BOOTSTRAP_OPERATOR_TOKEN` 就会让静态令牌失效——
+  实测 `/v1/accounts` 用静态令牌返回 401 `valid operator authority is required`，
+  用 `wlc` 的会话返回 200。**这不是故障，是预期**，但它意味着统一登录必须先可用。
+
+### 11.6 与本次一起改掉的部署侧前提（不改这些，前端一直是灰的）
+
+- **4174 的 `/auth/` 原本指向控制面**（带一个静态 bearer），统一登录后必须指向身份网关，
+  并把 `Host`/`Origin` 改写成 operator host（`106.39.18.146:5003`）。
+- **`lunanexa-public-http-origin` meta 是空字符串**。没有它，`endpoint_allowed` 在公网明文下一律为 false，
+  于是每个输入框和按钮都是 `disabled`——现象就是"登录页什么都没反应"。
+  新增 `scripts/deploy/render-public-http-origin.py` 在构建 bundle 后把它渲染成**各页面自己的** origin。
+- **门户 landing 默认进演示态**（无 cookie 时 302 到 `/enterprise/?demo=1`），真实注册/登录表单永远看不到。
+  已改为直接 302 到 `/enterprise/`。
+- **企业侧登录门原本只认 loopback**（`hostname === "localhost" || "127.0.0.1"`），
+  所以它在 `http://106.39.18.146:5002` 上永远不可用。已改为与控制台同一条
+  `ui/browser_transport` 策略；开发令牌回退仍保持 loopback-only。
+
 ## 8. 未验证
 
 - 真实 OIDC 登录与首次登录建账户/受限体验。
