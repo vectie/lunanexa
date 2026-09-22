@@ -1946,8 +1946,8 @@ and requested compute lease as one resumable package"，分 4 步：
 | 4 | 管理侧确认、执行 | ⛔ 不可达 | 同上 |
 | 5 | 进入线下流程 | ⛔ 不可达 | 同上 |
 | 6 | 重新上传录入登记 | ⛔ 不可达 | 同上 |
-| 7 | 开通权限 | ✅ 通（走另一条路） | 承诺函那条路不可达；但 `Users & access → Create WebIDE access` 独立可用（§12.10） |
-| 8 | 企业侧得到权限 | ⚠️ 一半 | 企业侧"我有什么权限"的显示是完整的（§12.10）；但"新开通后拿到权限"没验证到，因为第 7 步用的是合成身份 |
+| 7 | 开通权限 | ✅ 通（**真实身份**，§12.17） | 承诺函那条路不可达；但 `Users & access → Create WebIDE access` 独立可用，§12.10 用合成身份走过，§12.17 用真身份又走了一遍（`…:enable → 200`） |
+| 8 | 企业侧得到权限 | ⛔ **实际上没拿到** | 管理侧显示 `Ready`，但企业侧**一点变化都没有**——原因是开通落到了客户会话解析不到的租户上（堵点 J，§12.17） |
 
 **堵点总表（按严重度）**
 
@@ -1962,9 +1962,12 @@ and requested compute lease as one resumable package"，分 4 步：
 | G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | ✅ 已修并验证（见 §12.15） |
 | H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄，且抄错会静默给别人开通账户 | 中 | ✅ 已修并验证（见 §12.16） |
 | I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
+| J | 开通权限时 `Organization` / `Tenant` 是**手填自由文本**，而客户门户用的是他自注册时的那一套（`trial-org-…` / `trial-tenant-…`）。填不一样，开通照样 `200`、管理侧照样显示 `Ready`，但**落在客户会话解析不到的租户上**，企业侧完全看不到 | **严重**（挡死第 8 步） | ⛔ **未修**（§12.17 有完整证据与两种改法） |
 
 **修掉的四个（A–D）都在关键路径上**：不修 A，企业侧连订单都建不出来；不修 B，任何失败都表现为"按钮坏了"；
 不修 C，后面所有前端修复都到不了浏览器；不修 D，登录九次之后整条链连入口都没有。
+F、G、H、I 是走查中撞到的体验/可核对性缺陷，也都修了。**E 和 J 是仅剩的两个开着的**：
+E 是设计上的生产闸门（要真实签名），J 是两侧租户标识对不上的结构问题。
 
 ### 12.1 走查步骤与结果（截至本轮结束）
 
@@ -2322,6 +2325,11 @@ Approved models: 17 · Previous connections: 0 · Access remains lease-bound
 需要说清的是这**不等于**"开通无效"：本次能对照的两个账号都有试用，
 **部署上没有"没有试用的账号"可做对照**，所以无法区分是
 （a）授权包对客户视图确实没有影响，还是（b）有影响但被试用权益盖住了。
+
+> **这个边界已经在 §12.17 解掉了。** 结论是 (a) 的加强版：**不是被盖住，是两套租户**。
+> 管理侧开通时把这个人绑到了操作员手填的 `tenant-recon-h`，而客户会话解析的是
+> 他自助注册时的 `trial-tenant-…`；管理侧 `Leases` 页能同时看到两条租约，企业侧只看得到一条。
+> 所以第 8 步在 §12.0 里已经从"⚠️ 一半"改成 **⛔ 实际上没拿到**（堵点 J）。
 要判死这一点，需要一个**不带试用**的账号做第三个对照。
 
 ### 12.12 要解锁第 3–6 步，具体需要做什么（可执行清单）
@@ -2541,3 +2549,115 @@ throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response
 （`801fc44116c9a8a68646f127f4310ea946ade6d2aa0c18803b42767893db4b8a`，本次没动企业侧源码）。
 浏览器侧做了硬刷新（`Network.setCacheDisabled` + `Page.reload ignoreCache`）后再测，
 确认跑的不是旧 bundle。
+### 12.17 第 7→8 步用**真实身份**走通管理侧，企业侧却毫无变化：堵点 J
+
+§12.10 用合成 subject 走通了第 7 步，但第 8 步只能打"⚠️ 一半"，因为**合成身份没法登录企业侧**。
+这一节换成一个**真人**：通过企业门户 UI 自助注册一个新账号，拿到它在 Keycloak 里的真 subject，
+再回到管理侧把这个人开通。两侧都看得到，所以第 8 步能真正判定了。
+
+**结论：管理侧显示"全部完成"，企业侧一点变化都没有。开通落到了一个客户会话解析不到的租户上。**
+
+#### 走的过程（全部在浏览器里按，没有用命令行驱动）
+
+| # | 侧 | 按下的东西 / 填的值 | 结果 |
+|---|---|---|---|
+| 1 | 企业 | `Log out` → `Register a new account` → 邮箱 `recon-h-1790053838@example.test` / 名称 `Recon H Enterprise` / 密码 → `Create account` | ✅ 门户渲染，`Account & API keys` 显示 `account-a409fbcfca89d44f3b16bdf1` / `subject-a409fbcfca89d44f3b16bdf1` |
+| 2 | （诊断读） | 从 Keycloak 管理 API 取这个人的原始 subject | `97716b94-fc9e-4cc3-9f0e-3d613537b07c` |
+| 3 | （本地核对） | 用同一份规范材料算指纹 | `a409fbcfca89d44f3b16bdf1` —— 与第 1 步门户自己算出来的**完全一致** |
+| 4 | 管理 | `Users & access` → `Create WebIDE access` 填 `Display name` / `Work email` / `Organization=organization-recon-h` / `Tenant=tenant-recon-h`，展开 `Identity provider details` 填 issuer + 上面那个真 subject | 预览显示 **`Derives subject-a409fbcfca89d44f3b16bdf1 · account-a409fbcfca89d44f3b16bdf1`**（§12.16 的修复在这里第一次用于真值） |
+| 5 | 管理 | `Identity verified` → `Prepare access` | ✅ notice：`WebIDE access was prepared. The next incomplete milestone is shown below.`；卡片 `ReadyToEnable`，四个 `✓` + `· WebIDE next` |
+| 6 | 管理 | 该卡片上的 `Enable WebIDE` | ✅ `POST /v1/onboarding/access-packages/account-a409fbcfca89d44f3b16bdf1:enable → 200`；卡片 `ReadyToEnable → Ready`，五个 `✓`，`Ready for WebIDE` |
+| 7 | 企业 | 硬刷新门户 → `Account & API keys` | ❌ **与第 1 步逐字相同**：`Organization = trial-org-a409fbcfca89d44f3b16bdf1`、`Tenant = trial-tenant-a409fbcfca89d44f3b16bdf1`、角色仍只有 `Enterprise user` |
+| 8 | 企业 | `WebIDE` 页 | `Your access is ready. Open the selected WebIDE to continue.` —— 但**这句在第 6 步之前就已经是这样**，是试用给的，不是这次开通给的 |
+
+管理侧那张卡片的完整文本（第 6 步之后）：
+
+```
+Recon H Enterprise  recon-h-1790053838@example.test
+organization-recon-h · tenant-recon-h  Ready
+✓ Identity complete  ✓ Organization complete  ✓ MasterLease complete
+✓ Workspace & models complete  ✓ WebIDE complete  Ready for WebIDE
+```
+
+#### 决定性证据：同一个人的**两个**租户，管理侧都看得见，企业侧只看得到其中一个
+
+管理侧 `Leases` 页，同一个 subject `trial-user-a409fbcfca89d44f3b16bdf1` 名下**两条** Active 租约：
+
+| 租约 | 租户 | 规格 | 来源 |
+|---|---|---|---|
+| `lease-a409fbcfca89d44f3b16bdf1` | **`tenant-recon-h`** | Text generation · 2 concurrent | 本次开通（第 5/6 步） |
+| `trial-lease-a409fbcfca89d44f3b16bdf1` | **`trial-tenant-a409fbcfca89d44f3b16bdf1`** | Text generation · 1 concurrent | 自助注册送的试用 |
+
+企业侧 `Account & API keys` 只显示 `trial-tenant-a409fbcfca89d44f3b16bdf1`。
+
+#### 代码上为什么必然如此
+
+企业侧"WebIDE 是否就绪"读的是**门户会员（portal membership）的租户**，不是开通包的租户：
+
+```moonbit
+// api/client_handoff_http.mbt:257  —— GET /v1/portal/self/clients
+let workspace_ready = match self.workspace_directory {
+  Some(directory) =>
+    try {
+      ignore(
+        directory.authorize_subject_for_tenant(
+          subject_ref,
+          portal_view.membership.tenant_ref,   // ← 客户的会员租户
+          Developer,
+          now,
+        ),
+      )
+      true
+    } catch { _ => false }
+  None => false
+}
+```
+
+而开通包建的是一套**另一个租户**的会员和租约，租户名来自操作员在表单里手打的
+`#access-tenant`（`api/access_onboarding_http.mbt` 的 `WebIDEAccessPackageIntent.tenant_ref`
+只做 `@contracts.valid_identifier` 格式校验，**不校验它跟这个人的既有会员是否一致**）。
+
+自助注册那边用的是另一套名字（`api/account_http.mbt:305`）：
+
+```moonbit
+organization_id: "trial-org-\{fingerprint}",
+tenant_ref:      "trial-tenant-\{fingerprint}",
+```
+
+于是同一个人的名下出现两个租户，而客户的会话永远解析到试用那一个。
+
+#### 为什么这是一个**堵点**而不是"操作员填错了"
+
+- `Organization` / `Tenant` 是**自由文本输入框**，页面上**没有任何地方**告诉操作员
+  这个人现在在哪个租户上——平台明明知道（账户列表里就有），只是没显示；
+- 填错**不会报错**：`200`、五个 `✓`、`Ready for WebIDE`。管理侧的反馈是"成功了"；
+- 企业侧的反馈是"什么都没发生"，而且**没有任何一处**把这两件事联系起来；
+- 所以第 8 步不是"没验证"，是**照现在这样做就是做不到** —— 除非操作员事先从别处问到客户的租户名，
+  而这正是堵点 H 的同一类问题：**手填身份字段 + 平台不给出可核对的既有值**。
+
+#### 两种改法（都**没有**实施，需要你定）
+
+1. **把既有值显示出来**（与 §12.16 同构、改动小、不改策略）：操作员填完 issuer + subject 后，
+   控制台按派生出的 `account-<指纹>` 在账户列表里查这一行，把这个人的
+   `Display name / Email / Organization / Tenant` 显示在 `Organization` / `Tenant` 输入框下面，
+   让操作员**照着填**而不是**猜着填**。填不一致时仍然是允许的（有些场景确实要开新租户），
+   但至少不一致是**看得见**的。
+2. **不让手填**：`Organization` / `Tenant` 改成从该 subject 的既有会员里**选**，
+   只有显式勾"为新租户开通"才允许输入新值。这要动开通接口的入参语义和一条新的校验
+   （"开通包的租户必须等于或显式新建于该 subject 的既有会员"），是设计决策。
+
+我倾向第 1 种（先让不一致可见），但**没有替你选**——因为"允不允许给同一个人开第二个租户"
+是产品策略，不是 bug。
+
+#### 本次实测做了什么、没做什么（如实）
+
+- 用的是**真身份**（Keycloak 里真存在、真能登录企业门户的账号），不是合成 subject。
+  所以 §12.11 里"合成身份没法验证第 8 步"的那个缺口已经补上了。
+- 顺带把 §12.11 的**边界**也解掉了：当时怀疑"是不是被试用权益盖住了"，现在可以确定
+  **不是盖住，是两套租户**——证据是管理侧能看到两条租约、企业侧只看得到其中一条。
+- **没有**清理这次开通留下的记录（`access-account-a409fbcfca89d44f3b16bdf1` 这个包、
+  以及 `tenant-recon-h` 上那条租约）。留着是**故意的**：它就是本节的证据，
+  而且删掉它反而会让"管理侧显示成功、企业侧没反应"这件事变成不可复现。
+  要清理的话：管理侧 `Users & access` 里对该包做 revoke，再在 `Leases` 页释放那条租约。
+- **没有**修 J（见上面的两种改法）。所以第 8 步在报告里记的是 **⛔ 实际上没拿到**，
+  不是"通了"，也不是"没验证"。
