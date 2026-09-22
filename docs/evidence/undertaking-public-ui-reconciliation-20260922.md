@@ -313,7 +313,11 @@ These tests do not establish completion of the nine-step public UI journey.
     Its isolated rerun passed. Replaced the timing assumption with a bounded
     wait for running=1/queued=1 and held the fixture runtime until status checks
     complete; concurrency and queue-time assertions are unchanged. The complete
-    suite is rerun after this test fix; do not treat the initial gate as green.
+    native suite after this fix passed **1151/1151**. Native deny-warning check,
+    interface generation and formatting passed. Commit `243bd3f` also built
+    `cmd/webide-gateway` successfully as Linux native release in the isolated
+    management-node source workspace. Image packaging, deployment, public
+    catalog configuration and customer UI launch are still outstanding.
 
 - Added exact order/company/tenant/purchaser/quote binding and an unsigned,
   unpaid technical-test projection on both portals; ordinary commercial policy
