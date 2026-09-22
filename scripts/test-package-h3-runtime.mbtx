@@ -1,0 +1,149 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn hash(path : String) -> String {
+  let output = @shell.Cmd("sha256sum", [path]).output()
+  output.check()
+  output.stdout().split(" ").next().unwrap().to_owned()
+}
+
+///|
+async fn write_blob(root : String, name : String, content : Json) -> Json {
+  let path = root + "/" + name
+  @fs.write_file(path, content.stringify(), create_mode=CreateNew)
+  let digest = hash(path)
+  let file = @fs.open(path, mode=ReadOnly)
+  let size = file.size()
+  file.close()
+  @fs.rename(path, root + "/blobs/sha256/" + digest)
+  { "digest": "sha256:" + digest, "size": Json::number(size.to_double()) }
+}
+
+///|
+async fn main {
+  let root = @fs.tmpdir(prefix="lunanexa-h3-package-test-")
+  defer @fs.rmdir(root, recursive=true)
+  @fs.mkdir(root + "/base/blobs/sha256", recursive=true)
+  let runtime : Json = {
+    "Entrypoint": ["vllm"],
+    "Cmd": ["serve"],
+    "User": "1000",
+    "WorkingDir": "/workspace",
+  }
+  let config = write_blob(root + "/base", "config", {
+    "architecture": "arm64",
+    "os": "linux",
+    "config": runtime,
+    "rootfs": { "type": "layers", "diff_ids": [] },
+  })
+  let manifest = write_blob(root + "/base", "manifest", {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": config,
+    "layers": [],
+  })
+  @fs.write_file(
+    root + "/base/index.json",
+    ({ "schemaVersion": 2, "manifests": [manifest] } : Json).stringify(),
+    create_mode=CreateNew,
+  )
+  @fs.write_file(
+    root + "/base/oci-layout",
+    "{\"imageLayoutVersion\":\"1.0.0\"}",
+    create_mode=CreateNew,
+  )
+  @shell.Cmd("tar", [
+    "-C",
+    root + "/base",
+    "-cf",
+    root + "/base.tar",
+    "index.json",
+    "oci-layout",
+    "blobs",
+  ]).run()
+  @fs.mkdir(root + "/patches")
+  for
+    name in [
+      "minimax_h3_transformer.py", "serving_video.py", "progress_bar.py", "api_server.py",
+    ] {
+    @fs.write_file(
+      root + "/patches/" + name,
+      "# fixture code only\n",
+      create_mode=CreateNew,
+    )
+  }
+  guard manifest is { "digest": String(base_hash), .. } else {
+    fail("missing hash")
+  }
+  for attempt in ["one", "two"] {
+    @shell.Cmd("moon", [
+      "run",
+      "scripts/package-h3-runtime.mbtx",
+      root + "/base.tar",
+      base_hash,
+      root + "/patches",
+      root + "/" + attempt,
+      "test/h3:fixture",
+    ]).run()
+  }
+  let receipt = @json.parse(
+    @fs.read_file(root + "/one/package-receipt.json").text(),
+  )
+  assert_eq(
+    receipt,
+    @json.parse(@fs.read_file(root + "/two/package-receipt.json").text()),
+  )
+  guard receipt is { "manifest": String(final_hash), .. } else {
+    fail("missing result")
+  }
+  let final_manifest = @json.parse(
+    @fs.read_file(root + "/one/blobs/sha256/" + final_hash[7:].to_owned()).text(),
+  )
+  guard final_manifest
+    is { "config": { "digest": String(config_hash), .. }, "layers": [_], .. } else {
+    fail("expected exactly one thin layer")
+  }
+  let final_config = @json.parse(
+    @fs.read_file(root + "/one/blobs/sha256/" + config_hash[7:].to_owned()).text(),
+  )
+  guard final_config
+    is { "config": actual_runtime, "architecture": "arm64", .. } else {
+    fail("invalid config")
+  }
+  assert_eq(actual_runtime, runtime)
+  let listing = @shell.Cmd("tar", ["-tf", root + "/one/patch-layer.tar"]).output()
+  listing.check()
+  assert_true(
+    listing.stdout().contains("vllm_omni/entrypoints/openai/api_server.py"),
+  )
+  assert_false(listing.stdout().contains("safetensors"))
+  @fs.write_file(
+    root + "/patches/token",
+    "test-unwanted-input",
+    create_mode=CreateNew,
+  )
+  let rejected = @shell.Cmd("moon", [
+    "run",
+    "scripts/package-h3-runtime.mbtx",
+    root + "/base.tar",
+    base_hash,
+    root + "/patches",
+    root + "/rejected",
+    "test/h3:fixture",
+  ]).output()
+  try rejected.check() catch {
+    _ => ()
+  } noraise {
+    _ => fail("unexpected input accepted")
+  }
+  assert_false(@fs.exists(root + "/rejected.oci.tar"))
+  println(
+    "H3 package fixture passed: deterministic manifest, preserved runtime config, code-only layer, unexpected-file rejection",
+  )
+}

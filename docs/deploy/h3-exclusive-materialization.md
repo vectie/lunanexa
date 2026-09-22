@@ -24,6 +24,20 @@ needs a separately published canonical manifest with stripped component prefix,
 its own computed digest, and explicit registry admission. The full-manifest
 alternative downloads about 498 GB and is not a sensible silent migration.
 
+`scripts/prepare-model-component.mbtx SOURCE_MANIFEST COMPONENT NEW_OUTPUT`
+now derives that component manifest without copying weights. It retains the
+upstream model/revision and per-file hashes, strips only the selected directory
+prefix, and refuses to overwrite an existing output. Run its `--self-test` for
+component selection, byte accounting and path checks. Derived from the exact
+source manifest above on 2026-09-23:
+
+- FL2VA: `sha256:c21d65b05fbc8b8c3906196f8e4495fb086f5d7f90103b4580751f25b8f1c6f6`.
+- Ref2VA: `sha256:35943f5f54661a6e244ec6900c90e2d117520fad904fd896f939ab9841e88c6b`.
+
+These are metadata derivations, not new verification of weight contents or
+registry admission. Place an admitted manifest at the corresponding component
+source root; normal node materialization must still verify each transferred file.
+
 The live model-source Deployment is on management `ubuntu`, mounts host
 `/data/models`, and serves port 8090 (`lunanexa-model-source` ClusterIP
 `10.43.10.20`). This observation does not establish a direct data-node source.

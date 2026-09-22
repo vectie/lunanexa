@@ -1,0 +1,107 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/crypto",
+}
+
+///|
+struct SourceFile {
+  path : String
+  sha256 : String
+  size : Int64
+} derive(FromJson, ToJson)
+
+///|
+struct SourceManifest {
+  schema_version : String
+  model_id : String
+  observed_revision : String
+  files : Array[SourceFile]
+} derive(FromJson, ToJson)
+
+///|
+fn component_manifest(source : SourceManifest, component : String) -> SourceManifest raise {
+  guard source.schema_version == "lunanexa.modelsource.verified.v1" &&
+    source.model_id != "" && source.observed_revision != "" &&
+    component != "" && component != "." && component != ".." &&
+    !component.contains("/") && !component.contains("\\") else {
+    fail("expected a verified source manifest and one component directory name")
+  }
+  let files : Array[SourceFile] = []
+  let paths : Map[String, Bool] = Map([])
+  let prefix = component + "/"
+  for file in source.files {
+    if !file.path.has_prefix(prefix) { continue }
+    let path = file.path[prefix.length():].to_owned()
+    guard path != "" && !path.contains("\\") &&
+      !path.split("/").any(part => part == ".." || part == "." || part == "") &&
+      !paths.contains(path) && file.size >= 0L && file.sha256.length() == 64 &&
+      file.sha256.iter().all(ch => ch is ('0'..='9' | 'a'..='f')) else {
+      fail("invalid or duplicate component file: " + path)
+    }
+    paths[path] = true
+    files.push({ ..file, path })
+  }
+  guard !files.is_empty() else { fail("component has no files") }
+  { ..source, files }
+}
+
+///|
+fn digest(bytes : Bytes) -> String {
+  "sha256:" + @crypto.bytes_to_hex_string(@crypto.sha256(bytes.to_fixedarray()))
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  if args is [_, "--self-test"] {
+    let source : SourceManifest = {
+      schema_version: "lunanexa.modelsource.verified.v1",
+      model_id: "MiniMax/MiniMax-H3", observed_revision: "revision-1",
+      files: [
+        { path: "FL2VA/config.json", sha256: "a".repeat(64), size: 17L },
+        { path: "FL2VA/weights/model.safetensors", sha256: "b".repeat(64), size: 25L },
+        { path: "Ref2VA/model.safetensors", sha256: "c".repeat(64), size: 99L },
+      ],
+    }
+    let result = component_manifest(source, "FL2VA")
+    assert_eq(result.files.length(), 2)
+    assert_eq(result.files[0].path, "config.json")
+    assert_eq(result.files[1].path, "weights/model.safetensors")
+    assert_eq(result.files[1].sha256, source.files[1].sha256)
+    assert_eq(result.files.fold(init=0L, (n, file) => n + file.size), 42L)
+    assert_eq(result.observed_revision, source.observed_revision)
+    for component in ["missing", "../FL2VA", ""] {
+      try component_manifest(source, component) catch { _ => () } noraise {
+        _ => fail("expected invalid component rejection")
+      }
+    }
+    let invalid_path = { ..source, files: [{ ..source.files[0], path: "FL2VA/../secret" }] }
+    try component_manifest(invalid_path, "FL2VA") catch { _ => () } noraise {
+      _ => fail("expected path rejection")
+    }
+    println("component manifest tests passed")
+    return
+  }
+  guard args is [_, source_path, component, output] else {
+    fail("Usage: prepare-model-component.mbtx SOURCE_MANIFEST COMPONENT NEW_OUTPUT_MANIFEST | --self-test")
+  }
+  let source_bytes = @fs.read_file(source_path).binary()
+  let source : SourceManifest = @json.from_json(@json.parse(@utf8.decode(source_bytes)))
+  let result = component_manifest(source, component)
+  let bytes = @utf8.encode(ToJson::to_json(result).stringify(indent=2) + "\n")
+  // This derives metadata only: node materialization still verifies file bytes.
+  // CreateNew prevents replacing an already admitted manifest in place.
+  @fs.write_file(output, bytes, create_mode=CreateNew)
+  println(({
+    "source_manifest_digest": digest(source_bytes),
+    "component": component,
+    "manifest_digest": digest(bytes),
+    "file_count": result.files.length(),
+    "size_bytes": result.files.fold(init=0L, (total, file) => total + file.size).to_json(),
+    "file_contents_verified_this_run": false,
+  } : Json).stringify(indent=2))
+}
