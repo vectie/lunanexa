@@ -515,7 +515,15 @@ pub fn ContractDocumentsState::preview_request(
           value.packet_id,
           value.revision,
           form,
-          editable_draft_values(self, manifest),
+          if contract_packet_capabilities(value, self.actor_owner).contains(
+              SaveInformation,
+            ) {
+            editable_draft_values(self, manifest)
+          } else {
+            // A frozen packet is a read of recorded values, never a replay of
+            // the browser's potentially stale editable draft.
+            []
+          },
         ),
       )
     None => None

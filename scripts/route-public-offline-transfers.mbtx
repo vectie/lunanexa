@@ -1,0 +1,63 @@
+import {
+  "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell",
+  "moonbitlang/core/env", "moonbitlang/core/json",
+}
+
+async fn main {
+  guard @env.args() is [_, kubeconfig, private_dir] else {
+    fail("Usage: route-public-offline-transfers.mbtx KUBECONFIG NEW_PRIVATE_BACKUP_DIR")
+  }
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let cm = @shell.Cmd("kubectl", [..k, "get", "configmap", "operator-4173-proxy", "-o", "json"]).output()
+  cm.check()
+  let dep = @shell.Cmd("kubectl", [..k, "get", "deployment", "operator-4173-proxy", "-o", "json"]).output()
+  dep.check()
+  guard @json.parse(cm.stdout()) is { "data": { "nginx.conf": String(config), .. }, .. } else { fail("Missing nginx configuration") }
+  guard !config.contains("/v1/offline-transfers/") else { fail("Transfer routing already exists; inspect before changing") }
+  let marker = "location /v1/ {"
+  let count = config.split(marker).count() - 1
+  guard count == 2 else { fail("Expected exactly two public API locations, found \{count}") }
+  let location =
+    #|location ~ ^/v1/offline-transfers/[A-Za-z0-9_-]+$ {
+    #|  limit_except GET PUT { deny all; }
+    #|  client_max_body_size 64m;
+    #|  proxy_pass https://lunanexa-offline-transfer.lunanexa.svc:8443;
+    #|  proxy_ssl_verify on;
+    #|  proxy_ssl_trusted_certificate /etc/lunanexa/offline-ca/ca.crt;
+    #|  proxy_ssl_server_name on;
+    #|  proxy_ssl_name lunanexa-offline-transfer.lunanexa.svc;
+    #|  proxy_set_header Host lunanexa-offline-transfer.lunanexa.svc;
+    #|  proxy_set_header Authorization $http_authorization;
+    #|  proxy_http_version 1.1;
+    #|  proxy_buffering off;
+    #|  proxy_request_buffering off;
+    #|  proxy_read_timeout 180s;
+    #|  access_log off;
+    #|}
+    #|
+  let updated = config.split(marker).collect().join(location + marker)
+  @fs.mkdir(private_dir, permission=0o700)
+  @fs.write_file(private_dir + "/config-before.json", cm.stdout(), create_mode=CreateNew, permission=0o600)
+  @fs.write_file(private_dir + "/deployment-before.json", dep.stdout(), create_mode=CreateNew, permission=0o600)
+  let config_patch : Json = { "data": { "nginx.conf": updated } }
+  // This host-network singleton cannot bind its ports in a surge replica.
+  let deployment_patch : Json = {"spec":{"strategy":{"type":"Recreate","rollingUpdate":Json::null()},"template":{"spec":{"containers":[{"name":"proxy","volumeMounts":[{"name":"offline-ca","mountPath":"/etc/lunanexa/offline-ca","readOnly":true}]}],"volumes":[{"name":"offline-ca","configMap":{"name":"lunanexa-offline-ca"}}]}}}}
+  @fs.write_file(private_dir + "/config-patch.json", config_patch.stringify(), create_mode=CreateNew, permission=0o600)
+  @fs.write_file(private_dir + "/deployment-patch.json", deployment_patch.stringify(), create_mode=CreateNew, permission=0o600)
+  // Mount trust first. Existing configuration remains valid throughout rollout.
+  @shell.Cmd("kubectl", [..k, "patch", "deployment", "operator-4173-proxy", "--type=strategic", "--patch-file=" + private_dir + "/deployment-patch.json"]).run()
+  @shell.Cmd("kubectl", [..k, "rollout", "status", "deployment/operator-4173-proxy", "--timeout=120s"]).run()
+  @shell.Cmd("kubectl", [..k, "patch", "configmap", "operator-4173-proxy", "--type=merge", "--patch-file=" + private_dir + "/config-patch.json"]).run()
+  for _attempt in 0..<40 {
+    let mounted = @shell.Cmd("kubectl", [..k, "exec", "deployment/operator-4173-proxy", "--", "cat", "/etc/nginx/custom/nginx.conf"]).output()
+    mounted.check()
+    if mounted.stdout() == updated {
+      @shell.Cmd("kubectl", [..k, "exec", "deployment/operator-4173-proxy", "--", "nginx", "-t", "-c", "/etc/nginx/custom/nginx.conf"]).run()
+      @shell.Cmd("kubectl", [..k, "exec", "deployment/operator-4173-proxy", "--", "nginx", "-s", "reload", "-c", "/etc/nginx/custom/nginx.conf"]).run()
+      println("Two public transfer routes repaired; per-transfer bearer authority and upstream TLS verification preserved")
+      return
+    }
+    @async.sleep(3000)
+  }
+  fail("Updated mount not observed; running proxy was not reloaded")
+}
