@@ -6,7 +6,9 @@ new packet is revision 6. Submission requires a signed scan. The owner explicitl
 extended the technical exemption to this order; a scoped UI path has been
 implemented and deployed. After explicit user confirmation, the 45-minute
 workspace permission was prepared, waived and activated through the public UI;
-both sides show test access active until 2026-09-22T16:00:09Z. The actual WebIDE
+both sides showed test access active until 2026-09-22T16:00:09Z. After that deadline,
+both order pages show access revoked and the enterprise launch button is disabled.
+No extension was made. The actual WebIDE
 launch HTTP 400 was fixed and deployed, but the resulting launch points to
 127.0.0.1:4188 and fails from the public browser. A reachable shared MoonDesk
 does not yet prove tenant-bound credential/workspace isolation. IaaS/MaaS are not passed.
@@ -336,6 +338,18 @@ These tests do not establish completion of the nine-step public UI journey.
     Corrected serialization and added an explicit controller HTTP launch-origin
     allowlist; provider API URLs retain their existing transport restrictions.
     New catalog tests pass, but the new controller is not deployed yet.
+47. After 2026-09-22T16:00:09Z, Operator `刷新` shows b0cc `Revoked` /
+    `访问权限已撤销`. Enterprise reload → `WebIDE`: launch button disabled;
+    `订单与材料`: same revoked state, generation 10, same cutoff, unsigned/unpaid
+    classification retained. This is actual automatic-expiry evidence, not an
+    operator revocation action. No fresh access was granted.
+48. Expiry exposed two misleading messages: WebIDE said waiting for initial
+    operator activation, and a revoked order promised a future notification.
+    Changed inactive-workspace copy to distinguish no active access from initial
+    provisioning, and terminal-order copy to say a new request is needed.
+    Enterprise JS 39/39 and offline-commerce JS 22/22 pass; these copy changes
+    are not yet published. Controller/catalog native gate passed 1152/1152.
+    Updated Linux controller release build remains in progress separately.
 
 - Added exact order/company/tenant/purchaser/quote binding and an unsigned,
   unpaid technical-test projection on both portals; ordinary commercial policy

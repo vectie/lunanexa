@@ -1,4 +1,30 @@
 ///|
+test "inactive workspace does not claim a prepared lease is waiting for activation" {
+  let demo = @enterprise.demo_state()
+  guard demo.desktop_client is Some(client) else { fail("missing demo client") }
+  let inactive = {
+    ..client,
+    ready: false,
+    workspace_ready: false,
+    blocker_codes: ["ActiveWorkspaceLeaseRequired"],
+  }
+  let state = {
+    ..demo,
+    route: DesktopIde,
+    desktop_client: Some(inactive),
+    desktop_clients: [inactive],
+  }
+  let english = @enterprise.render(state)
+  assert_true(english.contains("expired, or revoked"))
+  assert_false(english.contains("Waiting for operator enablement"))
+  let chinese = @enterprise.render(
+    state.update(LocaleChanged(ChineseSimplified)),
+  )
+  assert_true(chinese.contains("已到期或已撤销"))
+  assert_false(chinese.contains("等待运维人员启用"))
+}
+
+///|
 test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   let demo = @enterprise.demo_state()
   guard demo.desktop_client is Some(desktop) else {
