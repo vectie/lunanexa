@@ -1,8 +1,10 @@
 # Public UI undertaking reconciliation — in progress
 
-Latest checkpoint: the user completed test-account registration successfully.
-An ordinary trial session is now available. Company onboarding, not password
-entry, is the current acceptance blocker; the nine-step chain is not complete.
+Latest checkpoint: test account, company, one-day order, quote and undertaking
+DOCX/PDF generation succeeded through the public UI. The new packet is revision
+6. Submission now requires a signed scan; the owner-authorized technical waiver
+has no visible UI path. No real signing, payment, approval or access was asserted.
+The nine-step chain is not complete.
 
 Scope: enterprise `http://106.39.18.146:5002/enterprise/` and Operator
 `http://106.39.18.146:4174/console/`. Business actions and acceptance use the
@@ -55,9 +57,9 @@ No agreement, signature, payment, upload or permission grant was submitted.
 
 | Required step | Evidence / status |
 |---|---|
-| Register customer company | Not reached; ordinary test account registration not submitted |
-| Select start time and term | Not reached for a new order |
-| Generate undertaking | Existing sample preview only, not new-order acceptance |
+| Register customer company | Passed: new test company visible in both sides; identity verification still pending |
+| Select start time and term | Partial UX: customer selects one day; operator enters proposed 2026-09-23 to 2026-09-24; amount 49 CNY matches |
+| Generate undertaking | Passed at UI level: new packet revision 6, four-page preview and verified DOCX/PDF download buttons; downloads not yet inspected |
 | Manager confirms and executes | Not tested |
 | Offline process technical waiver | Owner authorization exists; no new-order waiver applied |
 | Reupload/register | Not tested |
@@ -187,3 +189,25 @@ These tests do not establish completion of the nine-step public UI journey.
 23. Enterprise `刷新`: same revision 3; `审阅并确认` → `确认资料` locks draft fields
     at revision 4 (not execution/signature). `生成原格式 DOCX + PDF` → `申请生成`:
     revision 5, generating, fields read-only. Final artifact outcome still pending.
+24. Subsequent enterprise refresh confirms `DOCX 与 PDF 已生成`, revision 6;
+    `下载已验证 DOCX` and `下载已验证 PDF` present and timeline records generation.
+    This supersedes item 23's pending observation. Downloads not yet inspected.
+25. Clicked `提交承诺函审批`: dialog requires a scanned signed document and signing
+    date; no eligible scan and final submit disabled. Did not upload an unsigned
+    document as execution evidence. Clicked `返回`, preserving both browser tabs.
+    **Remaining blocker:** expose the explicitly approved technical acceptance
+    waiver through UI, retaining non-commercial provenance and limited authority.
+    Real commercial submissions must continue requiring actual evidence.
+
+## Outstanding acceptance work
+
+- Verify both-side generated file downloads and final PDF contents.
+- Add/use an explicit UI technical-waiver path, then test submission, management
+  decision, entitlement provisioning and customer launch without forged evidence.
+- Verify fresh real organization identity provider separately from technical
+  acceptance; the current provider-unavailable state is truthful, not passed.
+- Improve generated-job error/status visibility in the independent offline
+  materials view; a submitted request is not proof of an artifact.
+- Remove stale success notices and explain order-expiry versus service dates;
+  the draft order expires after 30 days although the selected service lasts one day.
+- Verify public UI selection retention after refresh (regression test is passing).
