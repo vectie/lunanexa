@@ -21,6 +21,11 @@ pub fn bounded_metric_with_settings(
     return false
   }
   match sample.metric {
+    "artifact_preparation_stage" => sample.value >= 1.0 && sample.value <= 4.0
+    "artifact_cache_hit" => sample.value == 0.0 || sample.value == 1.0
+    "artifact_bytes_present"
+    | "artifact_bytes_total"
+    | "artifact_transfer_bytes" => sample.value <= 1125899906842624.0
     "accelerator_memory_total_mib"
     | "accelerator_memory_free_mib"
     | "accelerator_memory_used_mib"

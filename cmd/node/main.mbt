@@ -523,10 +523,54 @@ async fn materialize_while_heartbeating(
     })
     for ;; {
       send_heartbeat(base, node_id, token, inventory, agent)
-      match task.try_wait() {
+      let result = {
+        errdefer send_artifact_progress(
+          base,
+          node_id,
+          token,
+          materializer,
+          assignment.deployment_id,
+        )
+        task.try_wait()
+      }
+      send_artifact_progress(
+        base,
+        node_id,
+        token,
+        materializer,
+        assignment.deployment_id,
+      )
+      match result {
         Some(artifact) => return artifact
         None => @async.sleep(heartbeat_interval_ms)
       }
+    }
+  }
+}
+
+///|
+async fn send_artifact_progress(
+  base : String,
+  node_id : String,
+  token : String,
+  materializer : @node_agent.ArtifactMaterializer,
+  deployment_id : String,
+) -> Unit {
+  for
+    sample in materializer.preparation_samples(
+      node_id,
+      deployment_id,
+      @async.now(),
+    ) {
+    try {
+      let (response, _) = @http.put(
+        endpoint(base, "/v1/telemetry"),
+        sample.to_json(),
+        headers=node_headers(node_id, token),
+      )
+      log_bad_response("PUT", "/v1/telemetry", response.code)
+    } catch {
+      _ => ()
     }
   }
 }
@@ -635,7 +679,23 @@ async fn reconcile_once(
   for digest in supervisor.retained_artifact_digests() {
     retained.push(digest)
   }
-  materializer.prune_unassigned(retained)
+  materializer.prune_unassigned(
+    retained,
+    idle_retention_ms=@env.get_env_var("LUNANEXA_MODEL_CACHE_IDLE_MS")
+      .map(value => @string.parse_int64(value))
+      .unwrap_or(604800000L),
+    high_watermark_bytes=@env.get_env_var("LUNANEXA_MODEL_CACHE_HIGH_BYTES")
+      .map(value => @string.parse_int64(value))
+      .unwrap_or(1099511627776L),
+    low_watermark_bytes=@env.get_env_var("LUNANEXA_MODEL_CACHE_LOW_BYTES")
+      .map(value => @string.parse_int64(value))
+      .unwrap_or(824633720832L),
+    pinned_digests=@env.get_env_var("LUNANEXA_MODEL_CACHE_PINNED_DIGESTS")
+      .map(value => {
+        value.split(",").map(item => item.trim().to_owned()).to_array()
+      })
+      .unwrap_or([]),
+  )
   persist_agent(state_path, agent)
   send_heartbeat(base, node_id, token, inventory, agent)
   let timestamp_unix_ms = @async.now()

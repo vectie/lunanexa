@@ -1,0 +1,65 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+// Read metadata only. This does not certify source bytes or grant model rights.
+
+///|
+async fn main {
+  guard @env.args() is [_, path] else {
+    fail("Usage: inspect-model-manifest.mbtx MANIFEST")
+  }
+  let manifest = @json.parse(@fs.read_file(path).text())
+  guard manifest
+    is {
+      "schema_version": "lunanexa.modelsource.verified.v1",
+      "model_id": String(model),
+      "observed_revision": String(revision),
+      "files": Array(files),
+      ..
+    } else {
+    fail("Expected verified model-source manifest schema")
+  }
+  let totals : Map[String, Int64] = Map([])
+  let counts : Map[String, Int] = Map([])
+  let mut total = 0L
+  for file in files {
+    guard file
+      is {
+        "path": String(name),
+        "size": String(size),
+        "sha256": String(hash),
+        ..
+      } &&
+      hash.length() == 64 else {
+      fail("Invalid manifest file metadata")
+    }
+    let component = name.split("/").next().unwrap().to_owned()
+    let bytes = @string.parse_int64(size)
+    total += bytes
+    totals[component] = totals.get_or_default(component, 0L) + bytes
+    counts[component] = counts.get_or_default(component, 0) + 1
+  }
+  let report : Json = {
+    "model_id": model,
+    "observed_revision": revision,
+    "file_count": files.length(),
+    "total_bytes": total.to_json(),
+    "components": [
+      for component, bytes in totals => {
+        {
+          "component": component,
+          "bytes": bytes.to_json(),
+          "file_count": counts[component],
+        }
+      }
+    ],
+    "file_contents_verified": false,
+  }
+  println(report.stringify(indent=2))
+}
