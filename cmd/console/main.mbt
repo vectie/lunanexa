@@ -8996,7 +8996,8 @@ fn app_view(
       [
         @html.summary([
           @html.span(
-            class=if model.credential != "" && model.audit_credential != "" {
+            class=if deployment_console_open() ||
+              (model.credential != "" && model.audit_credential != "") {
               "connection-state connection-state-ready"
             } else {
               "connection-state connection-state-needed"
@@ -9004,6 +9005,12 @@ fn app_view(
             if model.credential.has_prefix("lnxs_") {
               console_copy(
                 locale, "Account session active", "账户会话有效",
+              )
+            } else if deployment_console_open() {
+              console_copy(
+                locale,
+                "Deployment open — the same-origin proxy attaches operator authority",
+                "部署已开放 —— 同源代理会附加运维权限",
               )
             } else if model.credential != "" && model.audit_credential != "" {
               console_copy(
