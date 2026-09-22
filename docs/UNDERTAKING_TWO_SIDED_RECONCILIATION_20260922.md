@@ -2249,3 +2249,53 @@ POST /v1/portal/self/machine-quotes  →  403
 `Account state: Active`、角色 `Enterprise user`、`Organization` / `Tenant` / `Subject`（都可复制）、
 以及 `Browser sessions` 列表。也就是说"我到底有什么权限"在企业侧是看得清的。
 承诺函链开通后的权限会长什么样，本轮无法验证（链没走到）。
+
+### 12.11 用**真实身份**开通权限：管理侧记下了，企业侧看不出来
+
+12.10 用的是合成 subject，所以第 8 步没法验证。这一节换成**真实身份**：把
+`tier-1790051168@example.test` 在 Keycloak 里的真实 subject
+（`db28abc9-ed6c-4478-8852-b325d97c8e4b`，就是 §12.10 堵点 H 里说的"得去 Keycloak 抄"的那个值）
+填进 `Provider subject`，再走一遍：
+
+| # | 侧 | 按下 | 结果 |
+|---|---|---|---|
+| 1 | 管理 | `Prepare access` | 201，包状态 `ReadyToEnable`，`✓ Identity` `✓ Organization` `✓ MasterLease` `✓ Workspace & models`，只剩 `· WebIDE next` |
+| 2 | 管理 | `Enable WebIDE` | **"WebIDE access is enabled."**，状态 `Ready`，五个里程碑全 `✓` |
+
+管理侧这一步是**扎实的**：真实身份、真实授权、每步都有反馈。
+
+**但企业侧没有任何变化。** 拿一个**从未开通过**的账号做对照
+（`chain-1790049130@example.test`，同样自助注册、同样有试用），两边的 `WebIDE` 页逐行对比：
+
+```
+diff 之后只剩三处不同，全部是账号自己的标识：
+  subject-f1af5bc2… · trial-org-f1af5bc2…        ← 开通过的账号
+  subject-13a398e9… · trial-org-13a398e9…        ← 从未开通的账号
+```
+
+其余**逐字相同**，包括：
+
+```
+SECURE WEBIDE HANDOFF
+Continue your leased workspace in MoonDesk / MoonCode
+Your access is ready. Open the selected WebIDE to continue.
+[Open MoonDesk / MoonCode]
+Your access journey
+1 Signed in        Your identity and Developer membership are verified.
+2 MasterLease      Contract is effective.
+3 Workspace access Developer lease is active.
+4 Approved models  17 个模型
+5 Open WebIDE      One click opens MoonDesk / MoonCode with a 120-second single-use handoff.
+Approved models: 17 · Previous connections: 0 · Access remains lease-bound
+```
+
+**结论：这一步两侧没有对上。** 管理侧确实记下了授权（平台自己的计数从
+`22 users · 26 grants` 走到 `24 users · 28 grants`，里程碑也逐项推进），
+但企业侧那块 `WebIDE` 页是由**企业侧自己的 membership / lease / 模型读取**渲染的，
+而试用本来就已经给了 Developer 成员资格和 lease —— 所以"管理侧刚给你开了权限"这件事
+**在客户界面上没有任何痕迹**。
+
+需要说清的是这**不等于**"开通无效"：本次能对照的两个账号都有试用，
+**部署上没有"没有试用的账号"可做对照**，所以无法区分是
+（a）授权包对客户视图确实没有影响，还是（b）有影响但被试用权益盖住了。
+要判死这一点，需要一个**不带试用**的账号做第三个对照。
