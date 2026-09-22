@@ -4,7 +4,9 @@ Latest checkpoint: test account, company, one-day order, quote and undertaking
 DOCX/PDF generation and verified downloads succeeded through the public UI. The
 new packet is revision 6. Submission requires a signed scan. The owner explicitly
 extended the technical exemption to this order; a scoped UI path has been
-implemented and is being deployed, but no live waiver or access was asserted.
+implemented and deployed, but no live waiver or access was asserted. The public
+operator reached the precise 45-minute permission confirmation; authorization
+for that actual resource grant is pending.
 The nine-step chain is not complete.
 
 Scope: enterprise `http://106.39.18.146:5002/enterprise/` and Operator
@@ -227,6 +229,37 @@ These tests do not establish completion of the nine-step public UI journey.
     no longer grant was issued and no proxy token was impersonated as a person.
 
 ## Outstanding acceptance work
+
+30. Published controller 68885cb as
+    `sha256:ee0a068ef7d9a63d2accb9fc4ea40a05c1edab33595ddb6c5dc0580537ee2bc6`
+    with exact b0cc order binding; the deployment admission window ends at
+    2026-09-22T17:10:36Z. This does not create any business waiver or resource.
+    Published console/enterprise 16476ce as
+    `sha256:07beb9af37b3590d24971f3be88720fdc26f408825ef47bfa17a21d49fe4528e`.
+    All three deployment rollouts succeeded; GPU model deployments unchanged.
+31. Public Operator reload → expand controller connection → `以个人管理员账户登录`
+    → existing wlc sign-in → `账户会话有效`. Four nodes still report heartbeats.
+    No account was elevated or created. Enterprise reload required sign-in again;
+    existing test credentials worked and selected company remained correct.
+32. `线下商务` → exact b0cc order (generation 5 after document artifacts completed)
+    → `准备限时工作区（最多 45 分钟）`. The confirmation correctly describes an
+    existing customer's Developer grant plus requested workspace, no exclusive
+    machine, no activation/signature/payment. Asked for the actual scoped grant
+    and later activation confirmation; did not press the final button. `返回`
+    leaves the order unchanged while read-only/download acceptance continues.
+33. Found management packet lacked download buttons. Added both and a real
+    command handler; fetch fresh artifact metadata rather than depending on
+    visiting the commerce page first. Replaced HTTPS-only WebCrypto dependency
+    with MoonBit SHA-256. Console/contract UI tests 100/100 passed. Public
+    Operator `合同资料` → test tenant → same revision-6 packet →
+    `下载已验证 PDF` produced `已下载核验摘要的原件，请阅读内容后再审核。`.
+    DOCX was also clicked, but its identical persistent notice is insufficient
+    independent evidence of a second completion; repeated-action feedback needs
+    clearer freshness. Neither file is represented as signed.
+34. Current readiness projection truthfully shows
+    `ReadinessOfflineWorkRetryExhausted`. It was not disabled or counted passed.
+    Investigate the relevant durable job before asserting all live fulfillment
+    gates or the complete nine-step flow are healthy.
 
 ### Scoped implementation checkpoint (68885cb)
 
