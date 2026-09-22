@@ -41,6 +41,7 @@ fn safe_client_url(
   value : String,
   allow_custom_scheme : Bool,
   allow_query : Bool,
+  allowed_http_origins? : Array[String] = [],
 ) -> Bool {
   if value == "" ||
     value.length() > 2048 ||
@@ -76,14 +77,24 @@ fn safe_client_url(
     !authority.all(valid_authority_character) {
     return false
   }
-  secure || loopback_authority(authority)
+  secure ||
+  loopback_authority(authority) ||
+  allowed_http_origins.contains("http://" + authority)
 }
 
 ///|
-pub fn valid_client_launch_config(config : ClientLaunchConfig) -> Bool {
+pub fn valid_client_launch_config(
+  config : ClientLaunchConfig,
+  allowed_http_launch_origins? : Array[String] = [],
+) -> Bool {
   @contracts.valid_identifier(config.client_id) &&
   valid_text(config.display_name, 128) &&
-  safe_client_url(config.launch_uri, true, true) &&
+  safe_client_url(
+    config.launch_uri,
+    true,
+    true,
+    allowed_http_origins=allowed_http_launch_origins,
+  ) &&
   safe_client_url(config.public_api_base_url, false, false) &&
   config.handoff_lifetime_ms >= 30000L &&
   config.handoff_lifetime_ms <= 300000L &&
@@ -94,10 +105,15 @@ pub fn valid_client_launch_config(config : ClientLaunchConfig) -> Bool {
 ///|
 /// A deployment-owned WebIDE catalog. IDs must be unique; clients never supply
 /// their own launch or provider URLs when requesting a handoff.
-pub fn valid_client_launch_catalog(configs : Array[ClientLaunchConfig]) -> Bool {
+pub fn valid_client_launch_catalog(
+  configs : Array[ClientLaunchConfig],
+  allowed_http_launch_origins? : Array[String] = [],
+) -> Bool {
   configs.length() > 0 &&
   configs.length() <= 32 &&
-  configs.all(valid_client_launch_config) &&
+  configs.all(config => {
+    valid_client_launch_config(config, allowed_http_launch_origins~)
+  }) &&
   configs.all(config => {
     configs.filter(other => other.client_id == config.client_id).length() == 1
   })

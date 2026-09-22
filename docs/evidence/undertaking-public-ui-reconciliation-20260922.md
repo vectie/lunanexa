@@ -318,6 +318,24 @@ These tests do not establish completion of the nine-step public UI journey.
     `cmd/webide-gateway` successfully as Linux native release in the isolated
     management-node source workspace. Image packaging, deployment, public
     catalog configuration and customer UI launch are still outstanding.
+44. Packaged/pushed gateway r4 at
+    `sha256:49d2b62d4696e44c986dba42e786a0117fe74d7fc989090792051da26cb82bfc`.
+    Fixed Docker-to-OCI media types and non-root layer directory permissions
+    found during actual registry/runtime verification. Gateway rollout is ready.
+    Its origin is now public port 5000 with explicit HTTP opt-in. The service
+    still points to the old shared instance; no customer launch is passed.
+45. Discovered the internal TLS controller router forwarded through historical
+    host ports 5888 → 5880, not the current service. Updated that router to
+    `lunanexa-control.lunanexa.svc.cluster.local:8080`. Model gateway route is
+    unchanged and still needs integration verification with current credentials.
+46. Catalog deployment initially failed controller startup because the script
+    encoded Int64 fields as JSON numbers. Stopped the deployment script and
+    removed the new catalog override; confirmed controller rollout recovered.
+    The public service was not switched. Private backups are under
+    `/home/HwHiAiUser/offline-production-build.TT3wLN/public-comfyui-backup-r2`.
+    Corrected serialization and added an explicit controller HTTP launch-origin
+    allowlist; provider API URLs retain their existing transport restrictions.
+    New catalog tests pass, but the new controller is not deployed yet.
 
 - Added exact order/company/tenant/purchaser/quote binding and an unsigned,
   unpaid technical-test projection on both portals; ordinary commercial policy

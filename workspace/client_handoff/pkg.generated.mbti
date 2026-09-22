@@ -11,9 +11,9 @@ pub let contract_version : String
 
 pub let snapshot_schema_version : String
 
-pub fn valid_client_launch_catalog(Array[ClientLaunchConfig]) -> Bool
+pub fn valid_client_launch_catalog(Array[ClientLaunchConfig], allowed_http_launch_origins? : Array[String]) -> Bool
 
-pub fn valid_client_launch_config(ClientLaunchConfig) -> Bool
+pub fn valid_client_launch_config(ClientLaunchConfig, allowed_http_launch_origins? : Array[String]) -> Bool
 
 pub fn validate_issue_intent(ClientHandoffIssueIntent, Int64) -> Unit raise ClientHandoffError
 

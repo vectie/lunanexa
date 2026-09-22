@@ -1,0 +1,85 @@
+import {
+  "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell",
+  "moonbitlang/core/env", "moonbitlang/core/json", "moonbitlang/core/string",
+}
+
+async fn kubectl(k : String, args : Array[String]) -> String {
+  let result = @shell.Cmd("kubectl", ["--kubeconfig", k, ..args]).output()
+  result.check()
+  result.stdout()
+}
+
+fn value(env : Array[Json], name : String) -> String raise {
+  for entry in env {
+    if entry is { "name": String(key), "value": String(value), .. } && key == name {
+      return value
+    }
+  }
+  fail("Missing literal client setting: " + name)
+}
+
+async fn main {
+  guard @env.args() is [_, k, backup, image] &&
+    image.has_prefix("lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:") else {
+    fail("Usage: deploy-public-comfyui.mbtx KUBECONFIG NEW_PRIVATE_BACKUP PINNED_IMAGE")
+  }
+  @fs.mkdir(backup, permission=0o700)
+  let ns = "aigc-acceptance-20260915"
+  let targets = [
+    (ns, "deployment", "webide-gateway"),
+    (ns, "service", "comfyui-public"),
+    (ns, "configmap", "internal-gateway-routes"),
+    ("lunanexa", "deployment", "lunanexa-control"),
+  ]
+  let saved : Map[String, Json] = Map([])
+  for target in targets {
+    let (namespace_name, kind, name) = target
+    let raw = kubectl(k, ["-n", namespace_name, "get", kind, name, "-o", "json"])
+    @fs.write_file(backup + "/" + name + ".json", raw, create_mode=CreateNew, permission=0o600)
+    saved[name] = @json.parse(raw)
+  }
+  guard saved["lunanexa-control"] is { "spec": { "template": { "spec": { "containers": Array(containers), .. }, .. }, .. }, .. } &&
+    containers.iter().find_first(container => container is { "name": "control", .. }) is Some({ "env": Array(env), .. }) else {
+    fail("Missing controller environment")
+  }
+  guard !env.any(entry => entry is { "name": "LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON", .. }) else {
+    fail("An existing catalog needs explicit merge review")
+  }
+  let catalog : Json = [
+    {
+      "client_id": value(env, "LUNANEXA_CLIENT_ID"),
+      "display_name": value(env, "LUNANEXA_CLIENT_DISPLAY_NAME"),
+      "launch_uri": value(env, "LUNANEXA_CLIENT_LAUNCH_URI"),
+      "public_api_base_url": value(env, "LUNANEXA_PUBLIC_API_BASE_URL"),
+      "handoff_lifetime_ms": "120000", "maximum_requests": "100000",
+    },
+    {
+      "client_id": "comfyui", "display_name": "ComfyUI",
+      "launch_uri": "http://106.39.18.146:5000/connect",
+      "public_api_base_url": "https://moongate.aigc-acceptance-20260915.svc.cluster.local:5883/v1",
+      "handoff_lifetime_ms": "120000", "maximum_requests": "100000",
+    },
+  ]
+  guard saved["internal-gateway-routes"] is { "data": { "routes.yaml": String(routes), .. }, .. } &&
+    (routes.contains("http://192.168.2.175:5888") || routes.contains("http://lunanexa-control.lunanexa.svc.cluster.local:8080")) else { fail("Unexpected controller route") }
+  let route_patch : Json = { "data": { "routes.yaml": routes.replace(
+    old="http://192.168.2.175:5888", new="http://lunanexa-control.lunanexa.svc.cluster.local:8080",
+  ) } }
+  ignore(kubectl(k, ["-n", ns, "patch", "configmap", "internal-gateway-routes", "--type=merge", "-p", route_patch.stringify()]))
+  ignore(kubectl(k, ["-n", ns, "set", "env", "deployment/webide-gateway",
+    "LUNANEXA_WEBIDE_PUBLIC_ORIGIN=http://106.39.18.146:5000",
+    "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP=true"]))
+  guard saved["webide-gateway"] is { "spec": { "template": { "spec": { "containers": [{ "name": String(container), .. }], .. }, .. }, .. }, .. } else { fail("Unexpected gateway containers") }
+  ignore(kubectl(k, ["-n", ns, "set", "image", "deployment/webide-gateway", container + "=" + image]))
+  ignore(kubectl(k, ["-n", ns, "rollout", "status", "deployment/webide-gateway", "--timeout=120s"]))
+  ignore(kubectl(k, ["-n", "lunanexa", "set", "env", "deployment/lunanexa-control", "--containers=control", "LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON=" + catalog.stringify(),
+    "LUNANEXA_CLIENT_HTTP_LAUNCH_ORIGINS_JSON=[\"http://106.39.18.146:5000\"]"]))
+  ignore(kubectl(k, ["-n", "lunanexa", "rollout", "status", "deployment/lunanexa-control", "--timeout=120s"]))
+  // Publish only once the two running components accept the new catalog.
+  let public_patch : Json = { "spec": {
+    "selector": { "app": null, "app.kubernetes.io/name": "lunanexa-webide-gateway" },
+    "ports": [{ "name": "http-ui-5000", "port": 5000, "protocol": "TCP", "targetPort": 8082, "nodePort": 30918 }],
+  } }
+  ignore(kubectl(k, ["-n", ns, "patch", "service", "comfyui-public", "--type=merge", "-p", public_patch.stringify()]))
+  println("Public ComfyUI gateway and catalog configured; browser acceptance still required.")
+}
