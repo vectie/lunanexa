@@ -3070,3 +3070,91 @@ curl -s "$CONTROL/v1/offline-commerce/operator/readiness" -H "Authorization: Bea
 （registry digest `sha256:2d5831c6a528f6676b6c585eb206a8d953a497c5a16bb6e6ba8623a8170554d8`）。
 实测确认线上的 `console.js` 里带 `offline-readiness-panel`，且 4174 入口与 Pod 服务的
 bundle 摘要一致（`b0ea7bb1…`），不是旧包。
+### 12.23 下游流程已经端到端验证过了 —— 不需要假装跑通，假装也验证不到
+
+你问：能不能把三组放一边、假装跑通、先把后面的流程验证了。答案是**能验证，但"假装跑通"这条路验证不到东西**，
+原因不是原则问题，是**那三组就是干活的那部分**：
+
+- 闸门挡的是 `Readiness*` 前缀的 blocker，而那些**只有真实适配器能清掉**
+  （传输适配器三元组、两个 dispatcher 的心跳与成功回执）；
+- 就算把十项全标成 verified、把传输适配器指向占位地址，把闸门打开，流程也会**停在"已请求生成"**：
+  没有 dispatcher 就没有东西来认领工作，没有 worker 就没有产物，没有对象存储与扫描器就上不了传。
+  也就是说，假装跑通买到的是**三次状态跳转，然后卡住** —— 而且比闸门拦住更难查，
+  因为闸门至少会明确说"未就绪"。
+
+**而且仓库自己提供了做这件事的正确机制。** `commercial/offline/store/store.mbt` 的
+`record_worker_acceptance` 文档注释原话：
+
+> Production API code normally derives this from terminal callbacks;
+> **acceptance tests may seed the same durable proof explicitly.**
+
+所以正确做法是**在验收测试里种下这份持久证明**，而不是在生产集群上伪造一份就绪文档。
+
+#### 做了什么：整条链的端到端验收测试
+
+`api/offline_commerce_chain_test.mbt`（1254 行，2 条测试，91 处断言）。两条测试：
+
+1. **闸门关着时整条链失败关闭**：没有就绪文档时冻结报价返回 `503 OfflineCommerceNotReady` 带 blocker code；
+   而且 blocker 是**按路由过滤**的 —— `quotes` 报模板与财务闸门、`generation-requests` 报 OOXML/PDF/字体闸门，
+   两边**不互相串报**。
+2. **整条链走通**：模板 → 报价（含被拒的算术漂移）→ begin → 生成请求 → dispatcher 认领 → 终态回执
+   （含被拒的伪造摘要与主动内容）→ 释放包（评审前拒绝、评审后通过）→ 五份上传授权 → 上传回调
+   （含被拒的字节数/媒体类型/摘要/外部对象引用）→ 评审（含职责分离与被拒的伪造摘要）→ 履约 →
+   entitlement 激活 saga（含被篡改的 authority target 与幂等重放）→ transfer 消费 → 采购方下载。
+
+   每一步都断言**两侧投影**，并且检查采购方投影**不泄露**：无对象引用、无 worker 回执、无 subject/幂等权限。
+
+**这比"假装跑通"覆盖得多**：假装跑通连"评审之后"都到不了，而上面把评审、释放、上传、履约、
+激活、transfer、下载全部走完了。
+
+#### 这次走查捞出来的两个真 bug（**只报告，没有修**）
+
+**① 线下商务的运营方 actor 永远是常量 `platform-operator`，mTLS 派生是死代码。**
+`api/offline_commercial_http.mbt:605`：
+
+```moonbit
+fn offline_operator_actor(headers : Map[String, String]) -> String {
+  trusted_workspace_subject(headers, false).unwrap_or("platform-operator")
+}
+```
+
+而 `api/workspace_http.mbt:12-14` 第一件事就是 `if !allow_asserted_subject { return None }` ——
+**在检查 `ssl-client-verify` 之前就返回了**。所以传 `false` 不只是"不信任断言的 header"，
+而是**连 mTLS 一起关掉**。
+
+后果：`docs/OFFLINE_COMMERCE.md` 写的"Quote, generation, and review actors are derived from verified
+ingress mTLS; token-only profiles use `platform-operator`"**没有生效** —— 报价、生成、评审永远记在
+`platform-operator` 名下，**没有按人归责**；而 store 的职责分离控制对真实提交者**结构上不可能触发**
+（常量永远不等于门户里的 subject，所以测试里那条 SoD 断言只能用 store 直接种一个提交者叫
+`platform-operator` 的订单来构造）。
+
+证据：测试把 `POST /operator/generation-requests` 带上 `ssl-client-verify: SUCCESS` 与
+`ssl-client-subject-dn: CN=legal-reviewer,O=LunaNexa` 发出去，body 里还塞了
+`requested_by: "body-supplied-identity"`，持久记录里的 `requested_by` 是 `"platform-operator"`。
+
+**这是唯一一个把 flag 写死的调用点**，其余（`api/server.mbt:3406`、`api/portal_http.mbt:144`、
+`api/workspace_http.mbt:82/294`）都是把配置值传进去的。
+
+**没有替你改**，因为它改的是**法律记录的归责对象**，而且会让职责分离**开始真的生效** ——
+如果你的入口给所有人用同一张客户端证书，改完之后评审和提交会是同一个 DN，SoD 会把评审挡住。
+这取决于你的入口配置，得你定。
+
+**② 重放的下载请求被报成"适配器故障"。**
+`api/offline_commercial_http.mbt:1729`（下载）与 `:1601`（上传授权）都是
+`catch { _ => api_error(503, "OfflineTransferAdapterUnavailable", …) }`，
+把**所有**错误都吞成 503。已消费的 session 抛的是 `IdempotencyConflict`，那是客户端重放，不是部署故障；
+而 `offline_error_reply`（同文件 `:531`）**已经**把它映射成 `409 IdempotencyConflict`，
+只是这两个站点没走它。
+
+修法是**选择性 catch**（幂等冲突走 `offline_error_reply`，真正的适配器不可达才保留 503），
+不是简单换成 `offline_error_reply` —— 后者会把真实的适配器故障降级成 `400`，丢掉"可重试"这个信号。
+**也留给你点头**，因为它会改变前端拿到的状态码与文案。
+
+#### 顺带记一个流程约束（不是 bug）
+
+**五份上传授权必须在第一次被接受的回调之前全部申请。** `grant_upload` 只接受
+`PendingEvidenceUpload | NeedsCorrection | PendingInternalApproval`，而第一次被接受的回调会把订单推进到
+`UnderReconciliation` —— 之后就申请不到授权了。这与文档描述的旅程一致，但**产品里没有任何地方
+告诉用户"要一次性把授权都申请了"**。
+
+测试：`api` 138/138 native（新增 2 条）、全仓 **953/953**、`moon check --target native --deny-warn` 绿。
