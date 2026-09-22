@@ -2400,6 +2400,12 @@ fn merge_console_group_read(
         offline_commerce: {
           ..payload.offline_commerce,
           locale: current.locale,
+          selected_order_id: match current.offline_commerce.selected_order_id {
+            Some(id) if payload.offline_commerce.orders.any(order => {
+                order.order_id == id
+              }) => Some(id)
+            _ => payload.offline_commerce.selected_order_id
+          },
           operator_actor_ref: current.offline_commerce.operator_actor_ref,
           quote_minor_units: current.offline_commerce.quote_minor_units,
           terms_digest: current.offline_commerce.terms_digest,

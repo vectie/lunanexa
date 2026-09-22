@@ -164,3 +164,26 @@ These tests do not establish completion of the nine-step public UI journey.
 16. Latest regression: 70 JS tests (38 UI + 32 browser), 1142 native tests passed;
     native deny-warning check passed. Temporary image-builder pod deleted;
     rollback image and private deployment backups retained.
+17. Enterprise refresh confirms PendingInternalApproval, generation 3. Customer
+    can upload internal approval, identity, signed agreement, payment and invoice;
+    none uploaded. Operator document-generation request reported submitted but
+    did not expose a resulting artifact or failed-job reason. Not counted passed.
+18. Enterprise `合同表单` → OFL v2 undertaking → select new order → `准备文档`
+    returned HTTP 400. A native API regression reproduced the exact cause:
+    explicit JSON null for `preceding_packet_ref` fails derived decoding. Fixed
+    frontend to omit the absent optional field; no backend policy bypass.
+19. Fixed management commerce refresh to retain the selected order if it still
+    exists, with a fallback only when removed. Added both regression cases;
+    console JS tests 68/68 pass with warnings denied.
+20. Deployed r8 image `sha256:b05329faf0aea13fb1287acc7446c41f7fb8b40cbd46e951e41053b0ee56f086`.
+    Repeated `准备文档` in the public enterprise UI: success, packet
+    `contract-1bd438a8-de6c-418f-aaac-3ebd6da48c8a`, revision 1. Native contract
+    API tests now 12/12 pass, including the previously failing decode regression.
+21. Enterprise entered clearly non-real test company and proposed date 2026-09-22,
+    `保存资料`: revision 2 and four-page MoonLeaf preview. No signature or stamp.
+22. Operator `合同资料` → selected test tenant → same packet/revision 2 visible.
+    Entered draft start 2026-09-23, end 2026-09-24, total 49.00 → `保存资料`:
+    revision 3, AwaitingConfirmation. These are proposed values, not activation.
+23. Enterprise `刷新`: same revision 3; `审阅并确认` → `确认资料` locks draft fields
+    at revision 4 (not execution/signature). `生成原格式 DOCX + PDF` → `申请生成`:
+    revision 5, generating, fields read-only. Final artifact outcome still pending.
