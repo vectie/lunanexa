@@ -4,9 +4,12 @@ Latest checkpoint: test account, company, one-day order, quote and undertaking
 DOCX/PDF generation and verified downloads succeeded through the public UI. The
 new packet is revision 6. Submission requires a signed scan. The owner explicitly
 extended the technical exemption to this order; a scoped UI path has been
-implemented and deployed, but no live waiver or access was asserted. The public
-operator reached the precise 45-minute permission confirmation; authorization
-for that actual resource grant is pending.
+implemented and deployed. After explicit user confirmation, the 45-minute
+workspace permission was prepared, waived and activated through the public UI;
+both sides show test access active until 2026-09-22T16:00:09Z. The actual WebIDE
+launch HTTP 400 was fixed and deployed, but the resulting launch points to
+127.0.0.1:4188 and fails from the public browser. A reachable shared MoonDesk
+does not yet prove tenant-bound credential/workspace isolation. IaaS/MaaS are not passed.
 The nine-step chain is not complete.
 
 Scope: enterprise `http://106.39.18.146:5002/enterprise/` and Operator
@@ -63,11 +66,11 @@ No agreement, signature, payment, upload or permission grant was submitted.
 | Register customer company | Passed: new test company visible in both sides; identity verification still pending |
 | Select start time and term | Partial UX: customer selects one day; operator enters proposed 2026-09-23 to 2026-09-24; amount 49 CNY matches |
 | Generate undertaking | Passed at UI level: new packet revision 6, four-page preview and verified DOCX/PDF download buttons; downloads not yet inspected |
-| Manager confirms and executes | Not tested |
-| Offline process technical waiver | Owner authorization exists; no new-order waiver applied |
-| Reupload/register | Not tested |
-| Provision access | Not tested |
-| Customer receives permissions | Not tested |
+| Manager confirms and executes | Passed for scoped technical path, not commercial approval |
+| Offline process technical waiver | Recorded through named operator UI; unsigned/unpaid |
+| Reupload/register | Real signed scan intentionally not fabricated; upload path not fully tested |
+| Provision access | Workspace activated through UI plus dispatcher, expiry 16:00:09Z |
+| Customer receives permissions | Both sides show test resources active; WebIDE reports access ready |
 | Launch IaaS/PaaS/MaaS | Not tested for the new customer |
 
 ## Local regression verification
@@ -263,6 +266,37 @@ These tests do not establish completion of the nine-step public UI journey.
 
 ### Scoped implementation checkpoint (68885cb)
 
+35. User confirmed the actual Developer workspace grant/activation. Operator
+    `准备限时工作区` → `根据此证据确认`: prepared, not active. Automatically bound
+    `technical-lease-8ed55f17c16a17288af78aa04b56c5d5ba2989d4b709a02a3308df76843da4df`
+    and the corresponding `technical-grant-` reference. `审阅本订单测试豁免` →
+    confirm: unsigned/unpaid waiver recorded, expiry 2026-09-22T16:00:09Z.
+36. Operator fulfillment button → reviewed generation 6 → confirm: pending
+    activation. Enterprise `订单与材料` → `刷新` shows `测试资源已开通`; Operator
+    `刷新` then shows the same active classification and expiry. No exclusive
+    machine was assigned, no real contract/payment/invoice was asserted.
+37. Enterprise `WebIDE` shows ready and active Developer lease, but incorrectly
+    says `合同已生效`. Click `打开 MoonDesk / MoonCode`: failure notice. Public
+    ingress confirms POST client-handoffs returned 400. Source sends JSON null
+    for absent shared-workspace order; changed to omit it, added regression and
+    corrected false contract/technical-activation copy. 92 related JS tests
+    passed; commit 0d30815 was subsequently deployed. This is not launch success.
+38. Console/enterprise r12 image
+    `sha256:cd3762e1439a5f3290c5629dfdebf1a382bb651bad68dd506a3dea002a89c608`
+    rolled out successfully. Enterprise reload → `WebIDE` now correctly says
+    policy/admission satisfied, not signed/paid. `打开 MoonDesk / MoonCode`
+    now issues a handoff but navigates to `http://127.0.0.1:4188/?mode=mooncode`;
+    the browser refuses the connection. No handoff secret is retained here.
+39. Opened public MoonDesk port 5001 read-only: UI loads. Source inspection shows
+    handoff installs a provider into the daemon's server workspace home; merely
+    replacing the launch URL could overwrite shared provider credentials rather
+    than bind the test tenant. No credentials were handed to this shared instance
+    and no launch configuration was changed without an isolation implementation.
+    Reopened enterprise in a fresh tab after the failed redirect; account and
+    selected organization recovered. Actual WebIDE use remains blocked.
+40. Removed the temporary `offline-production-builder` pod after successful
+    image publication/rollout. Published images, backups and user data retained.
+
 - Added exact order/company/tenant/purchaser/quote binding and an unsigned,
   unpaid technical-test projection on both portals; ordinary commercial policy
   remains unchanged. Preparation reuses the durable onboarding saga and limits
@@ -277,8 +311,9 @@ These tests do not establish completion of the nine-step public UI journey.
   workspace relocates only the MoonLeaf member path, preserving exact source.
 
 - Verify final downloaded PDF contents and the management-side download.
-- Add/use an explicit UI technical-waiver path, then test submission, management
-  decision, entitlement provisioning and customer launch without forged evidence.
+- Technical-waiver review and workspace activation passed on both sides. Finish
+  tenant-bound public workspace delivery and actual customer launch, then test
+  model inference; do not equate a handoff link with a working service.
 - Verify fresh real organization identity provider separately from technical
   acceptance; the current provider-unavailable state is truthful, not passed.
 - Improve generated-job error/status visibility in the independent offline
