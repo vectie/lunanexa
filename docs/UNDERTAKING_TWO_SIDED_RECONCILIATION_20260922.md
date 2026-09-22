@@ -2176,3 +2176,40 @@ POST /v1/portal/self/machine-quotes  →  403
 
 测试：`commercial/offline` 2/2、`ui/offline_commerce` 13/13、`cmd/enterprise` 28/28、
 `cmd/console` 63/63、`api` 136/136。
+
+### 12.10 第 7 步（开通权限）走通了，走的是另一条不经过 offline commerce 的路
+
+承诺函那条链第 7 步被就绪闸门挡住（§12.4），但"开通权限"本身在管理侧有一条**独立且可用**的路：
+`Users & access` → `GUIDED SETUP / Create WebIDE access`。
+
+**按下的东西与反馈**：
+
+| # | 侧 | 按下/填写 | 结果 |
+|---|---|---|---|
+| 1 | 管理 | 填 `Display name` / `Work email` / `Organization` / `Tenant` / `Provider subject`，点 `Identity verified` | `Prepare access` 由灰变亮 |
+| 2 | 管理 | `Prepare access` | **`POST /v1/onboarding/access-packages 201`**，提示 **"WebIDE access was prepared. The next incomplete milestone is shown below."** |
+| 3 | 管理 | 观察包卡片 | 一次点击把**四个里程碑**做完：`✓ Identity complete` `✓ Organization complete` `✓ MasterLease complete` `✓ Workspace & models complete`，只剩 `· WebIDE next`；状态 `ReadyToEnable` |
+| 4 | 管理 | `Enable WebIDE` | 提示 **"WebIDE access is enabled."**，状态 `ReadyToEnable → Ready`，五个里程碑全部 `✓` |
+
+这一步的**反馈质量是本次走查里最好的一段**：一句"下一步未完成的里程碑在下面"直接把注意力指到该点的地方，
+里程碑用 `✓ complete / · next` 区分，每次动作都有 notice。用户数/授权数也从 `22 users · 26 grants` 变成
+`24 users · 28 grants`，计数跟着动。
+
+**堵点 H（中等，但会挡住真实使用）**：`Provider subject` 这个字段
+
+- 标签只有四个字 `Provider subject / 提供商主体`，**没有任何说明文字**（`ui/console.mbt:4642`），
+  而且是 `type=password`，输入时看不见；
+- 它要的是**身份提供商的原始 subject**（Keycloak 的用户 UUID）。而 LunaNexa 的任何界面都不显示这个值 ——
+  `Users & access` 的用户表里显示的是 `subject-f1af5bc2d95ea4ad7e415d77` 这种**派生指纹**，
+  企业侧 `Account & API keys` 显示的也是同一个指纹；
+- 所以操作员要给一个"平台里已经存在的人"开通权限时，**必须去 Keycloak 自己的管理台把这个 UUID 抄出来**。
+
+本次走查用的是**合成 subject**（`9f8e7d6c-…`）：包能建、里程碑能推进、状态能变 `Ready`，
+但**没有真人能用这个身份登录**，所以"企业侧得到权限"这一步**没法对它验证** ——
+而这恰好说明了这个字段为什么必须填真值。
+
+**第 8 步在企业侧的显示（已核对，是完整的）**：`Account & API keys` 页给出
+`AUTHENTICATED ACCOUNT / Identity & membership`：Active membership、账号名、邮箱、`Account ID`、
+`Account state: Active`、角色 `Enterprise user`、`Organization` / `Tenant` / `Subject`（都可复制）、
+以及 `Browser sessions` 列表。也就是说"我到底有什么权限"在企业侧是看得清的。
+承诺函链开通后的权限会长什么样，本轮无法验证（链没走到）。
