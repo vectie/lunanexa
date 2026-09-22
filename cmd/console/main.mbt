@@ -8777,6 +8777,8 @@ fn update_live(
           )
       }
     }
+    Console(ContractDocuments(DownloadDocument(artifact_id))) =>
+      (model, operator_evidence_download_command(model, artifact_id, emit))
     Console(ContractDocuments(CopyPublicIdentifier(value))) =>
       (
         model,
