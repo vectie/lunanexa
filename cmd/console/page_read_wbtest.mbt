@@ -1,5 +1,35 @@
 ///|
 #warnings("-alert_unstable")
+test "commerce refresh preserves the selected order instead of selecting history" {
+  let demo = @offline_commerce.demo_state(English, OperatorCommerce)
+  let selected = { ..demo.orders[0], order_id: "selected-order", }
+  let current = {
+    ..@ui.default_state(),
+    offline_commerce: { ..demo, selected_order_id: Some(selected.order_id), },
+  }
+  let payload : CommerceReadPayload = {
+    cost_centers: [],
+    agreements: [],
+    qualified_services: [],
+    enterprise_lease_requests: [],
+    offline_commerce: {
+      ..demo,
+      orders: [demo.orders[0], selected],
+      selected_order_id: Some(demo.orders[0].order_id),
+    },
+    node_lease_holders: [],
+  }
+  let merged = merge_console_group_read(current, GroupCommerce(payload))
+  assert_eq(merged.offline_commerce.selected_order_id, Some(selected.order_id))
+  let removed = merge_console_group_read(
+    current,
+    GroupCommerce({ ..payload, offline_commerce: demo, }),
+  )
+  assert_eq(removed.offline_commerce.selected_order_id, demo.selected_order_id)
+}
+
+///|
+#warnings("-alert_unstable")
 test "deferred page loading and errors never masquerade as empty leases" {
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let initial = deferred_read_test_model(Leases)

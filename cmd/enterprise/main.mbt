@@ -3417,7 +3417,6 @@ fn contract_packet_command(
             "idempotency_key": random_identifier("contract-create"),
             "template_id": template_id,
             "order_ref": order_ref,
-            "preceding_packet_ref": Json::null(),
             "active_forms": ["MasterLease"],
           }
           @json.from_json(

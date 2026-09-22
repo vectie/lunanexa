@@ -1710,3 +1710,17 @@ async test "contract expiry reconciler auto-closes past the grace period once" {
   assert_eq(notifications.records_for_operators(scan_now).length(), 1)
   assert_eq(documents.packet("packet-grace").unwrap().state, Effective)
 }
+
+///|
+test "browser undertaking creation intent omits absent predecessor" {
+  let body : Json = {
+    "packet_id": "contract-test-ui",
+    "idempotency_key": "contract-create-test-ui",
+    "template_id": "youthpolicy-device-undertaking-ofl-v2",
+    "order_ref": "offline-order-test-ui",
+    "active_forms": ["MasterLease"],
+  }
+  let intent : ContractPacketIntent = @json.from_json(body)
+  assert_eq(intent.preceding_packet_ref, None)
+  assert_eq(intent.active_forms, [@contractdoc.MasterLease])
+}
