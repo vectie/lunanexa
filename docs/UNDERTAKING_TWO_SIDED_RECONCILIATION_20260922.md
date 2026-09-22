@@ -1938,9 +1938,10 @@ and requested compute lease as one resumable package"，分 4 步：
 上传 → 履约 → 激活 → transfer → 下载），两侧投影每一步都核过。
 
 **所以八步要分两列看**：一列是**真实集群上纯 UI**（目标里那条约束），
-一列是**闸门打开后**（§12.23 的验收测试证明的）。
+一列是**闸门打开后**。右列必须读准：它证明的是**服务端状态机与两侧投影**，
+**不是**两个 UI 的渲染、提醒和实时性 —— 那三件**没有验证**，见 §12.24。
 
-| 步 | 内容 | 真实集群 · 纯 UI | 闸门打开后（§12.23 已证） |
+| 步 | 内容 | 真实集群 · 纯 UI | 闸门打开后（**服务端**已证，§12.23） |
 |---|---|---|---|
 | 1 | 用户一方注册企业 | ✅ 通（门户自助注册，§12.17 用了真账号） | ✅ 通 |
 | 2 | 选择时间、租期 | ⚠️ **一半**：档位选择通（两侧共用一份档位表，§12.9），但管理侧"按承诺函价目报价"被 503 挡住（§12.4） | ✅ 通（报价冻结走通，含被拒的算术漂移） |
@@ -1955,8 +1956,18 @@ and requested compute lease as one resumable package"，分 4 步：
 offline commerce，**没有**覆盖 access package 那条路。第 8 步卡在堵点 J
 （开通落到客户会话解析不到的租户上，根因见 §12.19），那是个产品决定，不是闸门问题。
 
+**右列没有覆盖的三件事**（目标里明确要求的"两侧显示正确、都有反馈"，以及你问的"实时"）：
+
+| 目标要求 | 右列是否覆盖 | 实际情况 |
+|---|---|---|
+| 两侧状态正确 | ✅ 覆盖（服务端投影） | 每步都断言 `GET /operator/snapshot` 与 `GET /self/orders` |
+| 两侧**界面显示**正确 | ❌ **未验证** | 验收测试一次浏览器都没驱动；只断言 JSON |
+| 每步**都有反馈/提醒** | ❌ **未验证**（且部分状态本来就不发） | 链式测试没有一条提醒断言；且 11 个状态发提醒、`Draft`/`PendingInternalApproval`/`PendingOfflineExecution` **不发** |
+| **实时** | ❌ **不成立** | 没有推送。控制台只有集群视图 5 秒轮询（只重取 `/v1/nodes`、`/v1/telemetry`），企业门户完全不轮询 |
+
 **所以现在挡住整条八步链的只剩两样**：① 就绪闸门后面那三组缺失的实物（§12.20/§12.21，你已说在等），
-② 堵点 J 的根因（§12.19，要你定产品语义）。
+② 堵点 J 的根因（§12.19，要你定产品语义）。**另外还有第三件**：右列那三件（UI 渲染、提醒、实时）
+本身就没验证过，§12.24 记了为什么以及怎么补。
 
 **堵点总表（按严重度）**
 
@@ -3167,3 +3178,63 @@ ingress mTLS; token-only profiles use `platform-operator`"**没有生效** —�
 告诉用户"要一次性把授权都申请了"**。
 
 测试：`api` 138/138 native（新增 2 条）、全仓 **953/953**、`moon check --target native --deny-warn` 绿。
+### 12.24 右列没验证的三件事：UI 显示、提醒、实时（如实）
+
+§12.23 说的是"整条链端到端验证过了"，容易被读成"两个界面也走过了、提醒也都到了、而且是实时的"。
+**都不是。** 这里把界限写清楚，因为它正是目标里那句"verify each step's status/progress display
+on BOTH sides is correct and has feedback"。
+
+#### 1. 两侧 —— 只验了服务端投影，**界面渲染一次都没驱动过**
+
+验收测试断言的是 `GET /v1/offline-commerce/operator/snapshot`（管理侧）与
+`GET /v1/offline-commerce/self/orders`（企业侧）这两份 **JSON**。整个过程**没有打开过浏览器**。
+
+所以"管理侧的 `Offline commerce` 页会不会把这些状态画对"、"企业侧 `Orders & documents` 页
+会不会画对"，**是未验证的**。§12.1/§12.10/§12.17 那些浏览器实测只覆盖了闸门**之前**的部分
+（注册、选档位、开通权限）和几个缺陷修复，没有覆盖闸门之后的第 3–6 步。
+
+#### 2. 提醒 —— 子系统有、按状态发，但**链式测试一条提醒断言都没有**
+
+`api/offline_commercial_http.mbt:635` 的 `refresh_offline_commerce_notifications` 会给采购方
+按状态入队提醒。实测它覆盖的状态是：
+
+| 发提醒 | 不发提醒 |
+|---|---|
+| `Quoted`、`PendingEvidenceUpload`、`UnderReconciliation`、`NeedsCorrection`、`Fulfilled`、`FulfillmentPending`、`ReversalPending`、`ReversalManualIntervention`、`Revoked`、`Cancelled`、`Expired` | `Draft`、**`PendingInternalApproval`**、**`PendingOfflineExecution`** |
+
+两点值得注意：
+
+- **第 4 步（管理侧确认、执行）客户侧收不到任何提醒** —— 那两个状态恰好都不发。
+  这是"客户不知道甲方开始执行了"。是设计还是遗漏，**需要你定**（内部审批不该通知客户是合理的，
+  但 `PendingOfflineExecution` 意味着甲方已开始线下执行，客户大概率该知道）。
+- 链式测试里 `notification` 只出现 **3 次，全是构造 store**，**没有任何断言**。
+  唯一覆盖提醒的既有测试是 `offline lifecycle reconciliation emits safe deduplicated customer notices`
+  （`api/offline_commercial_http_test.mbt:859`），它只测**对账通知的安全去重**，不测逐状态投递。
+
+#### 3. 实时 —— **不成立**
+
+没有推送通道：`text/event-stream` 只在 workbench 的流式输出（`cmd/console/main.mbt:557`）
+和安装器里用，**与订单状态无关**。实际机制是：
+
+| 侧 | 机制 | 实测 |
+|---|---|---|
+| 管理侧控制台 | 有一个 5 秒轮询，但**只重取 `/v1/nodes` 与 `/v1/telemetry`**（集群视图） | `cmd/console/main.mbt:4012` `cluster_poll_request_command` |
+| 管理侧其余视图（含 `Offline commerce`） | 靠**导航或动作**触发重新拉取 | 无定时器 |
+| 企业侧门户 | **完全不轮询** | `cmd/enterprise/main.mbt` 里 `setTimeout` 只用于 BigInt 延时与 CSV blob 回收 |
+
+**所以管理侧改了状态，企业侧要等它自己重新拉取才看得到。** 这不是"实时"，
+而是"下次取数时一致"。要真的实时，得加推送（SSE/WebSocket）或给企业门户加轮询 ——
+这是产品决定，不是缺陷修复。
+
+#### 要把这三件补上，需要什么
+
+| 要补的 | 前提 | 怎么补 |
+|---|---|---|
+| UI 渲染 | **闸门必须在真实集群上打开**（也就是你说的那三组实物） | 用 §12.1 那套浏览器驱动，按 §12.23 的路线在两侧各按一遍，逐步记录按钮与网络调用；两侧各截图 |
+| 提醒 | 同上 | 每步之后读企业侧通知列表，核对 §12.24 那张表里该发的发了、不该发的没发 |
+| 实时 | 无（这是设计问题） | 先决定要不要推送；不加推送就把"需手动刷新"写进产品文案 |
+
+**在闸门打开之前，这三件里只有 UI 渲染能部分地离线验证**（用真实状态机渲染视图做断言级测试），
+提醒投递和实时性都必须对着跑起来的系统测。
+
+**这里没有把没做的事说成做了。** 右列的 ✅ 只覆盖服务端状态机与两侧投影。
