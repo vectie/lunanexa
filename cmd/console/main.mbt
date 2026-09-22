@@ -207,6 +207,15 @@ priv struct GatewayBrowserSession {
 } derive(FromJson)
 
 ///|
+/// What the gateway's username/password route answered. The status is kept
+/// apart from the body so a rejected login can be reported without echoing
+/// anything the gateway did not deliberately send.
+priv struct PasswordLoginOutcome {
+  status : Int
+  body : String
+} derive(FromJson)
+
+///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
 
@@ -413,6 +422,29 @@ extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
   #|     redirect: "error"
   #|   });
   #|   if (!response.ok && response.status !== 401) throw new Error(`gateway logout HTTP ${response.status}`);
+  #| }
+
+///|
+/// Submit the operator's username and password to the same-origin gateway.
+/// The audience is fixed by the caller, so the page cannot ask for the
+/// customer portal's audience from the operator page.
+extern "js" fn password_login_promise(
+  username : String,
+  password : String,
+  audience : String,
+) -> @js.Promise =
+  #| async (username, password, audience) => {
+  #|   if (!username || !password) return JSON.stringify({ status: 0, body: "" });
+  #|   const response = await fetch("/auth/password", {
+  #|     method: "POST",
+  #|     headers: { "Accept": "application/json", "Content-Type": "application/json" },
+  #|     credentials: "same-origin",
+  #|     cache: "no-store",
+  #|     redirect: "error",
+  #|     body: JSON.stringify({ username, password, audience })
+  #|   });
+  #|   const text = await response.text();
+  #|   return JSON.stringify({ status: response.status, body: text.slice(0, 4096) });
   #| }
 
 ///|
@@ -2384,6 +2416,10 @@ priv struct AppModel {
   contract_preview_generation : Int64
   model_import_poll_generation : Int64
   cluster_poll_generation : Int64
+  /// The operator login draft. The password stays in memory only: it is sent
+  /// to the same-origin gateway and never written to a URL or browser storage.
+  login_username : String
+  login_password : String
 } derive(Eq)
 
 ///|
@@ -2396,6 +2432,10 @@ priv enum AppMessage {
   InferenceCredentialChanged(String)
   InferenceSubjectChanged(String)
   CommercialOrganizationChanged(String)
+  LoginUsernameChanged(String)
+  LoginPasswordChanged(String)
+  OperatorLoginSubmitted
+  OperatorLoginRefused(@i18n.Locale, String)
   Connect
   Logout
   SessionLogoutFinished
@@ -3227,6 +3267,115 @@ fn gateway_session_bootstrap_command(
 }
 
 ///|
+/// The gateway's refusal body. Its `error` code is the only thing the browser
+/// is told, so the copy below is driven by that code and never by upstream text.
+priv struct PasswordLoginError {
+  error : String
+} derive(FromJson)
+
+///|
+fn password_login_error_code(body : String) -> String {
+  try {
+    (@json.from_json(@json.parse(body)) : PasswordLoginError).error
+  } catch {
+    _ => ""
+  }
+}
+
+///|
+fn password_login_refusal(
+  locale : @i18n.Locale,
+  outcome : PasswordLoginOutcome,
+) -> String {
+  match password_login_error_code(outcome.body) {
+    "invalid-credentials" =>
+      console_copy(
+        locale,
+        "The username or password was not accepted. Check both and try again.",
+        "用户名或密码不正确，请检查后重试。",
+      )
+    "identity-rejected" =>
+      console_copy(
+        locale,
+        "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
+        "登录成功，但该身份暂时不可用。请联系平台管理员启用账户。",
+      )
+    "identity-provider-unavailable" =>
+      console_copy(
+        locale,
+        "The identity provider is unavailable. Try again shortly.",
+        "身份提供商当前不可用，请稍后重试。",
+      )
+    "too-many-attempts" =>
+      console_copy(
+        locale,
+        "Too many failed attempts from this address. Wait five minutes and try again.",
+        "此地址的失败尝试过多，请等待五分钟后再试。",
+      )
+    _ =>
+      console_copy(
+        locale,
+        "The gateway refused the sign-in.",
+        "网关拒绝了本次登录。",
+      )
+  }
+}
+
+///|
+/// Exchange the operator's username and password for a gateway session. The
+/// gateway is the only party that sees the identity provider's client secret;
+/// what comes back is the same session document the OIDC callback produces, so
+/// the rest of the console cannot tell the two paths apart.
+fn operator_login_command(
+  locale : @i18n.Locale,
+  username : String,
+  password : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(message => emit(message), async fn() noraise {
+    try {
+      let text : String = password_login_promise(
+        username,
+        password,
+        "operator",
+      ).wait().cast()
+      let outcome : PasswordLoginOutcome = @json.from_json(@json.parse(text))
+      if outcome.status != 200 {
+        OperatorLoginRefused(locale, password_login_refusal(locale, outcome))
+      } else {
+        let session : GatewayBrowserSession = @json.from_json(
+          @json.parse(outcome.body),
+        )
+        if session.session_token.has_prefix("lnxs_") &&
+          session.csrf_token.trim() != "" &&
+          session.expires_unix_ms > current_unix_ms() {
+          GatewaySessionLoaded(session)
+        } else {
+          OperatorLoginRefused(
+            locale,
+            console_copy(
+              locale,
+              "The gateway accepted the sign-in but the session it returned is unusable.",
+              "网关已接受登录，但返回的会话不可用。",
+            ),
+          )
+        }
+      }
+    } catch {
+      _ =>
+        OperatorLoginRefused(
+          locale,
+          console_copy(
+            locale,
+            "The identity gateway could not be reached.",
+            "无法连接身份网关。",
+          ),
+        )
+    }
+  })
+}
+
+///|
 fn model_imports_active(imports : Array[@ui.ModelImportRow]) -> Bool {
   imports.any(value => value.state == Queued || value.state == Downloading)
 }
@@ -3867,6 +4016,9 @@ fn update_live(
         credential: session.session_token,
         audit_credential: session.session_token,
         csrf_token: session.csrf_token,
+        // The session replaces the password, so the draft is dropped as soon
+        // as it has served its purpose.
+        login_password: "",
         console: {
           ..model.console,
           loading: true,
@@ -3877,6 +4029,43 @@ fn update_live(
       (next, load_command(next, emit))
     }
     GatewaySessionUnavailable => (model, @rabbita.none)
+    LoginUsernameChanged(value) => ({ ..model, login_username: value }, @rabbita.none)
+    LoginPasswordChanged(value) => ({ ..model, login_password: value }, @rabbita.none)
+    OperatorLoginSubmitted => {
+      if !operator_login_draft_complete(model) {
+        return (model, @rabbita.none)
+      }
+      let next = {
+        ..model,
+        console: {
+          ..model.console,
+          loading: true,
+          error_message: None,
+          success_message: None,
+        },
+      }
+      (next, operator_login_command(model.console.locale, model.login_username, model.login_password, emit))
+    }
+    OperatorLoginRefused(dispatched_locale, message) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            loading: false,
+            error_message: Some(
+              locale_fenced_notice(
+                model.console.locale,
+                dispatched_locale,
+                message,
+                "Sign-in failed.",
+                "登录失败。",
+              ),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
     AccountSessionChanged(value) =>
       (
         {
@@ -8991,6 +9180,12 @@ fn app_view(
 }
 
 ///|
+/// The gateway needs both halves, so the form stays inert until they are there.
+fn operator_login_draft_complete(model : AppModel) -> Bool {
+  model.login_username.trim() != "" && model.login_password != ""
+}
+
+///|
 fn login_transport_allowed(endpoint : String) -> Bool {
   @browser_transport.endpoint_allowed(endpoint)
 }
@@ -9132,74 +9327,91 @@ fn login_view(
             )
           None => @html.nothing
         },
-        @html.div(class="login-form", [
-          if transport_allowed {
-            @html.a(
-              href="/auth/oidc/start?audience=operator",
-              class="login-sso-link",
-              console_copy(
-                locale, "Continue with organization sign-in", "使用组织账户继续",
+        @html.form(
+          class="login-form",
+          on_submit=emit(OperatorLoginSubmitted),
+          [
+            @html.div(class="login-field", [
+              @html.label(
+                for_="login-username",
+                console_copy(locale, "Username", "用户名"),
               ),
-            )
-          } else {
-            @html.span(
-              class="login-sso-link",
-              attrs=@html.Attrs::build().aria_disabled("true"),
-              console_copy(
-                locale, "Organization sign-in requires HTTPS", "组织登录需要 HTTPS",
+              @html.input(
+                id="login-username",
+                value=model.login_username,
+                auto_complete=On,
+                maxlength=320,
+                attrs=@html.Attrs::build()
+                  .disabled(!transport_allowed)
+                  .aria_describedby("login-credentials-help"),
+                on_input=emit.map(value => LoginUsernameChanged(value)),
               ),
-            )
-          },
-          @html.div(
-            class="login-divider",
+            ]),
+            @html.div(class="login-field", [
+              @html.label(
+                for_="login-password",
+                console_copy(locale, "Password", "密码"),
+              ),
+              @html.input(
+                id="login-password",
+                input_type=Password,
+                value=model.login_password,
+                auto_complete=On,
+                maxlength=256,
+                attrs=@html.Attrs::build().disabled(!transport_allowed),
+                on_input=emit.map(value => LoginPasswordChanged(value)),
+              ),
+              @html.span(
+                id="login-credentials-help",
+                class="login-help",
+                console_copy(
+                  locale, "The gateway checks these against the identity provider and returns a short-lived lnxs_ session. The console never sees the password or the provider's client secret.",
+                  "网关用这两个字段向身份提供商换取短期 lnxs_ 会话。控制台不会接触密码，也接触不到提供商的客户端密钥。",
+                ),
+              ),
+            ]),
+            @html.div(class="login-actions", [
+              @html.span(
+                console_copy(
+                  locale, "The console appears only after a successful authenticated load.",
+                  "仅在身份验证并成功加载后显示控制台。",
+                ),
+              ),
+              @html.button(
+                type_="submit",
+                disabled=!transport_allowed ||
+                  !operator_login_draft_complete(model) ||
+                  model.console.loading,
+                if model.console.loading {
+                  console_copy(locale, "Signing in…", "正在登录…")
+                } else {
+                  console_copy(locale, "Sign in", "登录")
+                },
+              ),
+            ]),
+          ],
+        ),
+        @html.div(
+          class="login-divider",
+          console_copy(locale, "or use organization sign-in", "或使用组织账户登录"),
+        ),
+        if transport_allowed {
+          @html.a(
+            href="/auth/oidc/start?audience=operator",
+            class="login-sso-link",
             console_copy(
-              locale, "or use an issued session", "或使用已签发会话",
+              locale, "Continue with organization sign-in", "使用组织账户继续",
             ),
-          ),
-          @html.div(class="login-field", [
-            @html.label(
-              for_="login-account-session",
-              console_copy(locale, "Account session", "账户会话"),
+          )
+        } else {
+          @html.span(
+            class="login-sso-link",
+            attrs=@html.Attrs::build().aria_disabled("true"),
+            console_copy(
+              locale, "Organization sign-in requires HTTPS", "组织登录需要 HTTPS",
             ),
-            @html.input(
-              id="login-account-session",
-              input_type=Password,
-              value=model.credential,
-              auto_complete=Off,
-              attrs=@html.Attrs::build()
-                .disabled(!transport_allowed)
-                .aria_describedby("login-account-session-help"),
-              on_input=emit.map(value => AccountSessionChanged(value)),
-            ),
-            @html.span(
-              id="login-account-session-help",
-              class="login-help",
-              console_copy(
-                locale, "Use the short-lived lnxs_ session issued after organization sign-in. One PlatformOperator session authorizes both operations and audit reads.",
-                "使用组织登录后签发的短期 lnxs_ 会话。一个 PlatformOperator 会话同时授权运维操作和审计读取。",
-              ),
-            ),
-          ]),
-          @html.div(class="login-actions", [
-            @html.span(
-              console_copy(
-                locale, "The console appears only after a successful authenticated load.",
-                "仅在身份验证并成功加载后显示控制台。",
-              ),
-            ),
-            @html.button(
-              type_="button",
-              disabled=!transport_allowed ||
-                !model.credential.has_prefix("lnxs_") ||
-                model.console.loading,
-              on_click=emit(Connect),
-              if model.console.loading {
-                console_copy(locale, "Signing in…", "正在登录…")
-              } else {
-                console_copy(locale, "Sign in", "登录")
-              },
-            ),
-          ]),
+          )
+        },
           if localhost_dev_fallback_allowed(model.endpoint) {
             @html.details(class="login-dev-fallback", [
               @html.summary(
@@ -9275,7 +9487,6 @@ fn login_view(
           } else {
             @html.nothing
           },
-        ]),
       ]),
     ]),
   ])
@@ -9323,6 +9534,8 @@ fn main {
     contract_preview_generation: 0L,
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
+    login_username: "",
+    login_password: "",
   }
   @rabbita.new(fn() {
     let (model, emit) = @rabbita.create_state_with_init(
