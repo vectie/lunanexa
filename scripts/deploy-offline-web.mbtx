@@ -1,10 +1,10 @@
 import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env" }
 async fn main {
-  guard @env.args() is [_, kubeconfig, private_dir, image, revision] else { fail("Usage: deploy-offline-web.mbtx KUBECONFIG PRIVATE_DIR PINNED_IMAGE REVISION") }
+  guard @env.args() is [_, kubeconfig, private_dir, image, revision, ..flags] && (flags is [] || flags is ["--console-only"]) else { fail("Usage: deploy-offline-web.mbtx KUBECONFIG PRIVATE_DIR PINNED_IMAGE REVISION [--console-only]") }
   let coursebook = image.has_prefix("lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/coursebook@sha256:")
   guard (coursebook || image.has_prefix("lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:")) && revision.all(c => c is ('a'..='z' | '0'..='9' | '-')) && !revision.is_empty() else { fail("Invalid pinned image or revision") }
   let k=["--kubeconfig",kubeconfig,"-n","lunanexa"]
-  let targets=if coursebook { [("lunanexa-coursebook-public-gateway","gateway")] } else { [("lunanexa-console","console"),("lunanexa-enterprise","enterprise"),("lunanexa-workbench","workbench")] }
+  let targets=if coursebook { [("lunanexa-coursebook-public-gateway","gateway")] } else if flags is ["--console-only"] { [("lunanexa-console","console")] } else { [("lunanexa-console","console"),("lunanexa-enterprise","enterprise"),("lunanexa-workbench","workbench")] }
   for target in targets {
     let (deployment, _) = target
     let before=@shell.Cmd("kubectl",[..k,"get","deployment",deployment,"-o","json"]).output()
