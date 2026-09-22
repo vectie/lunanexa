@@ -197,6 +197,10 @@ test "undertaking evidence picker excludes scans older than current generation" 
   assert_false(html.contains("STALE SCAN"))
   assert_true(html.contains("CURRENT SCAN"))
   assert_true(html.contains("Download verified DOCX"))
+  let operator = { ..state, actor_owner: ManagerOperator, }
+  assert_true(
+    @contract_documents.render(operator).contains("Download verified DOCX"),
+  )
 }
 
 ///|

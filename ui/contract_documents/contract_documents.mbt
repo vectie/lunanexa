@@ -1780,7 +1780,6 @@ fn packet_editor(
       state_guidance(state.locale, packet, state.actor_owner),
     ),
     if @contractdoc.is_undertaking_template(packet.template_id) &&
-      state.actor_owner == CustomerMessenger &&
       !packet.artifacts.is_empty() {
       @html.div(
         class="contract-actions",

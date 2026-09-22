@@ -19,6 +19,7 @@ import {
   "moonbit-community/rabbita/js",
   "moonbitlang/core/json",
   "moonbitlang/core/string",
+  "moonbitlang/x/crypto",
 }
 
 supported_targets = "js"

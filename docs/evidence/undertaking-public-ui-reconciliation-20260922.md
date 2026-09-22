@@ -1,9 +1,10 @@
 # Public UI undertaking reconciliation — in progress
 
 Latest checkpoint: test account, company, one-day order, quote and undertaking
-DOCX/PDF generation succeeded through the public UI. The new packet is revision
-6. Submission now requires a signed scan; the owner-authorized technical waiver
-has no visible UI path. No real signing, payment, approval or access was asserted.
+DOCX/PDF generation and verified downloads succeeded through the public UI. The
+new packet is revision 6. Submission requires a signed scan. The owner explicitly
+extended the technical exemption to this order; a scoped UI path has been
+implemented and is being deployed, but no live waiver or access was asserted.
 The nine-step chain is not complete.
 
 Scope: enterprise `http://106.39.18.146:5002/enterprise/` and Operator
@@ -226,6 +227,21 @@ These tests do not establish completion of the nine-step public UI journey.
     no longer grant was issued and no proxy token was impersonated as a person.
 
 ## Outstanding acceptance work
+
+### Scoped implementation checkpoint (68885cb)
+
+- Added exact order/company/tenant/purchaser/quote binding and an unsigned,
+  unpaid technical-test projection on both portals; ordinary commercial policy
+  remains unchanged. Preparation reuses the durable onboarding saga and limits
+  the new workspace to 45 minutes. Repeated preparation cannot extend its term.
+- Added a personal administrator sign-in entry alongside public open mode;
+  sensitive test authorization still rejects the anonymous/static proxy token.
+- Native 1149/1149; console JS 69/69; commerce UI JS 21/21; enterprise JS 32/32.
+  Clean tracked-source isolation/public-response heuristics passed. The initial
+  working-tree scan traversed a nested third-party cache and failed; no checker
+  rule was weakened. Automated passing results do not prove live activation.
+- Build uses committed LunaNexa 68885cb and MoonLeaf 066efc2. The isolated Linux
+  workspace relocates only the MoonLeaf member path, preserving exact source.
 
 - Verify final downloaded PDF contents and the management-side download.
 - Add/use an explicit UI technical-waiver path, then test submission, management

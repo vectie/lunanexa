@@ -14,16 +14,16 @@ extern "js" fn operator_download_file(
   limit : Int64,
   digest : String,
   filename : String,
+  digest_bytes : (Bytes) -> String,
 ) -> @js.Promise =
-  #| async (path, token, limit, digest, filename) => {
+  #| async (path, token, limit, digest, filename, digestBytes) => {
   #|   const target = new URL(path, window.location.href);
   #|   if (target.origin !== window.location.origin || target.username || target.password) throw new Error("Evidence transfer must use the configured same-origin ingress");
   #|   const response = await fetch(target, { headers: { Authorization: `Bearer ${token}` }, credentials: "omit", redirect: "error", cache: "no-store" });
   #|   if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
   #|   const bytes = await response.arrayBuffer();
   #|   if (BigInt(bytes.byteLength) > limit) throw new Error("File exceeds authorized size");
-  #|   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  #|   const actual = `sha256:${Array.from(hash, b => b.toString(16).padStart(2, "0")).join("")}`;
+  #|   const actual = digestBytes(new Uint8Array(bytes));
   #|   if (actual !== digest) throw new Error("Evidence digest mismatch");
   #|   const url = URL.createObjectURL(new Blob([bytes]));
   #|   try { const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); }
@@ -53,15 +53,23 @@ async fn download_operator_evidence(
   model : AppModel,
   artifact_id : String,
 ) -> Unit {
-  guard selected_offline_artifact(model.console.offline_commerce, artifact_id)
+  // Contract documents can be opened before the separate commerce page.
+  // Resolve fresh, authenticated artifact metadata rather than a page cache.
+  let response = request(
+    "GET",
+    model.endpoint,
+    "/v1/offline-commerce/operator/snapshot",
+    model.credential,
+  )
+  let snapshot : @offline.OfflineCommerceSnapshot = @json.from_json(
+    @json.parse(response),
+  )
+  guard snapshot.artifacts.iter().find_first(a => a.artifact_id == artifact_id)
     is Some(artifact) &&
     artifact.scan_state == ScanPassed else {
     fail("Evidence is unavailable or not scan-passed")
   }
-  guard selected_offline_order(
-      model.console.offline_commerce,
-      artifact.order_id,
-    )
+  guard snapshot.orders.iter().find_first(o => o.order_id == artifact.order_id)
     is Some(order) else {
     fail("Evidence order is unavailable")
   }
@@ -97,7 +105,13 @@ async fn download_operator_evidence(
     grant.maximum_byte_count,
     artifact.sha256,
     artifact_id + suffix,
+    operator_download_digest,
   ).wait()
+}
+
+///|
+fn operator_download_digest(bytes : Bytes) -> String {
+  "sha256:" + @crypto.bytes_to_hex_string(@crypto.sha256(bytes.to_fixedarray()))
 }
 
 ///|
