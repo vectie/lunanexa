@@ -296,6 +296,24 @@ These tests do not establish completion of the nine-step public UI journey.
     selected organization recovered. Actual WebIDE use remains blocked.
 40. Removed the temporary `offline-production-builder` pod after successful
     image publication/rollout. Published images, backups and user data retained.
+41. Fresh public enterprise tab restored the selected test company; `WebIDE`
+    still offers only MoonDesk / MoonCode. Deployment inspection confirms no
+    `LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON` is configured. The existing isolated
+    ComfyUI gateway is ready, but its declared origin remains
+    `http://127.0.0.1:5875`; it is not yet a working public customer entry.
+42. Added explicit deployment-only IPv4 HTTP opt-in for the owner's requested
+    no-outer-TLS acceptance environment. HTTPS remains the default. New tests
+    prove wrong Host/Origin rejection, same-port exact origin, one-time challenge
+    consumption and HttpOnly/SameSite cookies. Twelve bridge tests pass. This
+    change is not yet deployed and does not count as public launch acceptance.
+    `docs/deploy/webide-public-http-acceptance.md` records plaintext/cross-port
+    cookie risks and required ingress/catalog/isolation acceptance.
+43. Full native phase gate initially returned 1150/1151: the runtime-queue test
+    sampled at a fixed 25 ms and observed zero running requests under load.
+    Its isolated rerun passed. Replaced the timing assumption with a bounded
+    wait for running=1/queued=1 and held the fixture runtime until status checks
+    complete; concurrency and queue-time assertions are unchanged. The complete
+    suite is rerun after this test fix; do not treat the initial gate as green.
 
 - Added exact order/company/tenant/purchaser/quote binding and an unsigned,
   unpaid technical-test projection on both portals; ordinary commercial policy

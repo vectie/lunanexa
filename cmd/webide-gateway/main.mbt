@@ -40,6 +40,10 @@ async fn main {
         errdefer println("WebIDE launch failed at workspace provisioning")
         host.provision(id, grant)
       },
+      allow_insecure_public_http=@env.get_env_var(
+          "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP",
+        ) ==
+        Some("true"),
     )
     let server = @http.Server(
       @socket.Addr::parse(required("LUNANEXA_WEBIDE_BIND")),
