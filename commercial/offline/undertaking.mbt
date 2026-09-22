@@ -20,6 +20,12 @@ pub extend UndertakingTermTier with Debug::{to_repr}
 pub extend UndertakingTermTier with Eq::{not_equal, equal}
 
 ///|
+pub extend UndertakingTermTier with ToJson::{to_json}
+
+///|
+pub extend UndertakingTermTier with FromJson::{from_json}
+
+///|
 /// The undertaking's tiers, shortest first. This is the single definition both
 /// sides render: `ui/offline_commerce` builds the operator's tariff picker from
 /// it, and the enterprise portal builds the customer's term picker from it.

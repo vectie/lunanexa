@@ -21,7 +21,9 @@ fn readiness_capabilities() -> Array[@offline.OfflineCommerceCapabilityEvidence]
 }
 
 ///|
-fn readiness_document_json(document : OfflineReadinessEvidenceDocument) -> Json {
+fn readiness_document_json(
+  document : @offline.OfflineReadinessEvidenceDocument,
+) -> Json {
   {
     "schema_version": document.schema_version,
     "issued_unix_ms": document.issued_unix_ms.to_json(),
@@ -65,8 +67,8 @@ async test "signed offline readiness document is bounded and fail closed" {
   let root = @fs.realpath(@fs.tmpdir(prefix="lunanexa-readiness-"))
   let path = "\{root}/readiness.json"
   let secret = "offline-readiness-test-secret-at-least-32-bytes"
-  let unsigned : OfflineReadinessEvidenceDocument = {
-    schema_version: "lunanexa.offline-commerce-readiness.v1",
+  let unsigned : @offline.OfflineReadinessEvidenceDocument = {
+    schema_version: @offline.offline_readiness_schema_version,
     issued_unix_ms: now - 1L,
     expires_unix_ms: now + 600000L,
     capabilities: readiness_capabilities(),
@@ -74,11 +76,23 @@ async test "signed offline readiness document is bounded and fail closed" {
   }
   let signed = {
     ..unsigned,
-    signature: offline_readiness_signature(unsigned, secret),
+    signature: @offline.offline_readiness_signature(unsigned, secret),
   }
   @fs.write_file(
     path,
     readiness_document_json(signed).stringify(),
+    create_mode=CreateOrTruncate,
+    permission=0o600,
+  )
+  assert_eq(
+    load_offline_readiness_evidence(Some(path), Some(secret), now),
+    (signed.capabilities, signed.expires_unix_ms),
+  )
+  // The signing tool writes `to_json().stringify(indent=2)`. The loader must
+  // accept that exact encoding, not only the hand-built fixture above.
+  @fs.write_file(
+    path,
+    signed.to_json().stringify(indent=2),
     create_mode=CreateOrTruncate,
     permission=0o600,
   )
@@ -123,7 +137,7 @@ async test "signed offline readiness document is bounded and fail closed" {
   }
   let ambiguous = {
     ..ambiguous,
-    signature: offline_readiness_signature(ambiguous, secret),
+    signature: @offline.offline_readiness_signature(ambiguous, secret),
   }
   @fs.write_file(
     path,

@@ -49,6 +49,7 @@ async test "offline commerce PostgreSQL restart preserves state and rolls back c
     agreement_ref: None,
     artifact_ids: [],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state: Draft,
     generation: 1L,
     created_unix_ms: now,

@@ -221,36 +221,6 @@ fn model_source_adapter_configuration(
 }
 
 ///|
-priv struct OfflineReadinessEvidenceDocument {
-  schema_version : String
-  issued_unix_ms : Int64
-  expires_unix_ms : Int64
-  capabilities : Array[@offline.OfflineCommerceCapabilityEvidence]
-  signature : String
-} derive(FromJson)
-
-///|
-fn offline_readiness_material(
-  document : OfflineReadinessEvidenceDocument,
-) -> String {
-  "lunanexa.offline-commerce-readiness.v1|\{document.issued_unix_ms}|\{document.expires_unix_ms}|\{document.capabilities.to_json().stringify()}"
-}
-
-///|
-fn offline_readiness_signature(
-  document : OfflineReadinessEvidenceDocument,
-  secret : String,
-) -> String {
-  @crypto.bytes_to_hex_string(
-    @crypto.hmac(
-      @crypto.SHA256::new(),
-      @utf8.encode(secret).exact_view(),
-      @utf8.encode(offline_readiness_material(document)).exact_view(),
-    ),
-  )
-}
-
-///|
 fn constant_time_equal(left : String, right : String) -> Bool {
   if left.length() != right.length() {
     return false
@@ -295,21 +265,22 @@ async fn load_offline_readiness_evidence(
       if bytes.length() == 0 || bytes.length() > 65536 {
         raise Failure::Failure("offline readiness evidence size is invalid")
       }
-      let document : OfflineReadinessEvidenceDocument = @json.from_json(
+      let document : @offline.OfflineReadinessEvidenceDocument = @json.from_json(
         @json.parse(@utf8.decode(bytes)),
       ) catch {
         _ =>
           raise Failure::Failure("offline readiness evidence is invalid JSON")
       }
-      if document.schema_version != "lunanexa.offline-commerce-readiness.v1" ||
+      if document.schema_version != @offline.offline_readiness_schema_version ||
         document.issued_unix_ms <= 0L ||
         document.issued_unix_ms > now_unix_ms ||
         document.expires_unix_ms <= now_unix_ms ||
-        document.expires_unix_ms > document.issued_unix_ms + 2678400000L ||
+        document.expires_unix_ms >
+        document.issued_unix_ms + @offline.offline_readiness_maximum_validity_ms ||
         document.signature.length() != 64 ||
         !constant_time_equal(
           document.signature,
-          offline_readiness_signature(document, secret),
+          @offline.offline_readiness_signature(document, secret),
         ) {
         raise Failure::Failure(
           "offline readiness evidence signature or validity window is invalid",
