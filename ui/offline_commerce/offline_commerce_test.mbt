@@ -328,3 +328,34 @@ test "opening an order adopts the tier the customer asked for" {
   let ignored = { ..base, orders: [unknown] }.update(SelectOrder(unknown.order_id))
   assert_eq(ignored.undertaking_term, "month")
 }
+
+///|
+test "the undertaking quote confirmation states the amount it freezes" {
+  // The dialog asks the operator to freeze an immutable price, so it has to
+  // name the price. It used to show only the term and the device count.
+  let state = {
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    orders: [offline_order(Draft)],
+  }
+  let html = @offline_commerce.render(
+    state.update(
+      BeginConfirmation(
+        QuoteUndertakingOrder("order-2026-001", "week", "2"),
+      ),
+    ),
+  )
+  assert_true(html.contains("Freeze this immutable quote?"))
+  // 322 CNY per device × 2 devices.
+  assert_true(html.contains("CNY 644"))
+  // A device count that is not a number leaves the amount out rather than
+  // stating a total nobody typed.
+  let unparsable = @offline_commerce.render(
+    state.update(
+      BeginConfirmation(
+        QuoteUndertakingOrder("order-2026-001", "week", "two"),
+      ),
+    ),
+  )
+  assert_true(unparsable.contains("week × two"))
+  assert_false(unparsable.contains("week × two · CNY"))
+}

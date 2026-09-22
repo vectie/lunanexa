@@ -324,16 +324,49 @@ pub fn OfflineCommerceState::update(
 }
 
 ///|
+/// The device count as a number, or None when the field does not hold one. The
+/// confirmation shows the amount only when it can be computed from what is on
+/// screen, so it never quotes a total the operator did not type.
+fn quantity_for_display(quantity : String) -> Int64? {
+  let parsed = @string.parse_int64(quantity.trim()) catch {
+    _ => return None
+  }
+  if parsed < 1L {
+    None
+  } else {
+    Some(parsed)
+  }
+}
+
+///|
 fn confirmation_for_action(
   action : OfflineCommerceConsequentialAction,
 ) -> OfflineCommerceConfirmation {
   match action {
-    QuoteUndertakingOrder(order_id, term, quantity) =>
+    QuoteUndertakingOrder(order_id, term, quantity) => {
+      // "Freeze this immutable quote" is a price-bearing action, so the dialog
+      // has to show the price. It used to say only `week × 1`, which asked the
+      // operator to freeze an amount the screen never stated.
+      let term_code = term.trim().to_owned()
+      let total = match
+        (@offline.undertaking_term_tier(term_code), quantity_for_display(quantity)) {
+        (Some(tier), Some(count)) => Some(tier.minor_units * count)
+        _ => None
+      }
+      let amount = match total {
+        Some(value) => (value / 100L).to_string()
+        None => ""
+      }
       {
         action,
         title: "Fixed undertaking tariff",
-        evidence: "\{order_id} · \{term} × \{quantity}",
+        evidence: if total is Some(_) {
+          "\{order_id} · \{term} × \{quantity} · CNY \{amount}"
+        } else {
+          "\{order_id} · \{term} × \{quantity}"
+        },
       }
+    }
     QuoteOrder(order_id, digest, price, actor) =>
       {
         action,
