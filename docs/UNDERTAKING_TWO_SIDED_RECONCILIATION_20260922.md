@@ -1958,7 +1958,7 @@ and requested compute lease as one resumable package"，分 4 步：
 | C | 门户 `index.html` 被浏览器缓存，**bundle 更新到不了用户**（本轮实际撞上） | 严重 | ✅ 已修并验证（§12.2） |
 | D | **同一账户第 9 次登录（不登出）就被完全锁死**，控制台和门户同时进不去，且没有任何 UI 能撤销那些会话 | 严重 | ✅ 已修并验证（§12.3） |
 | E | **整条承诺函链的闸门**：`/v1/offline-commerce/operator/quotes → 503 OfflineCommerceNotReady`，17 条 blocker code，能力集为空 | **决定性** | ❌ **不修**：这是 `docs/OFFLINE_COMMERCE.md` 要求的状态，伪造签名就绪证明等于删掉闸门（§12.4） |
-| F | 试用租户被给了**永远只能 403** 的动作（`Review price`），提示却是"重试" | 中 | 未修（§12.7） |
+| F | 试用租户被给了**永远只能 403** 的动作（`Review price`），提示却是"重试" | 中 | ✅ 已修并验证（见 §12.14） |
 | G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | 未修（§12.7） |
 | H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄 | 中 | 未修（§12.10） |
 | I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
@@ -2374,3 +2374,43 @@ offline-order-d916b5b4-… · quarter × 1 · CNY 3600
 顺带确认共享档位仍然生效：这个订单是客户按 `quarter` 申请的，运营侧打开时下拉就在 `quarter`。
 
 测试：`ui/offline_commerce` 14/14、`cmd/console` 63/63、`cmd/enterprise` 28/28。
+
+### 12.14 堵点 F 已修：根因是门户的传输层把 HTTP 状态码丢掉了
+
+**根因**（不是 `friendly_failure` 的问题，也不是控制面的问题）：
+
+`cmd/enterprise/main.mbt` 的 `request_promise` 原来这样抛错：
+
+```js
+if (!response.ok) {
+  let message = `HTTP ${response.status}`;
+  try { message = JSON.parse(text)?.error?.message || message; } catch (_) {}
+  throw new Error(message);        // ← 有 error.message 时，状态码被整条替换掉
+}
+```
+
+只要响应体带 `error.message`，抛出的字符串就**只剩那句话**，`HTTP 403` 没了。
+于是 `friendly_failure` 按 `raw.contains("403")` 分类时**永远匹配不上**，落到兜底分支
+"操作失败，请刷新后重试" —— 而这恰恰是一个**重试永远不会成功**的权限拒绝。
+
+**怎么证明是这里而不是分类函数**：把同一个按钮的请求用 CDP `Network.setBlockedURLs` 掐断，
+提示变成 **"The connection did not complete. Check your network and refresh status before retrying"**
+—— 说明分类函数工作正常（`fetch` 那条分支命中了），丢的是**抛出字符串里的状态码**。
+
+**修法**：状态码保留在消息里，上游原文也保留。
+
+```js
+let detail = "";
+try { detail = JSON.parse(text)?.error?.message || ""; } catch (_) {}
+throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+```
+
+**浏览器实测（同一个按钮，同一个 403 `MachineOrderAccessDenied`）**：
+
+| | 提示 |
+|---|---|
+| 改之前 | `Operation: The action failed. Refresh and retry; if it persists, contact your operator with the action and time. Sensitive technical details are hidden.` |
+| 改之后 | **`Operation: This account lacks permission for this action. Check the selected organization and ask its administrator.`** |
+
+顺带核对了另外两个前端：**控制台早就是对的**（`HTTP ${response.status}: ${detail}`），
+所以这个缺陷只在企业门户这一侧。测试：`ui/enterprise` 37/37、`cmd/enterprise` 28/28。
