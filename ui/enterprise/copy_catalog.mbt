@@ -402,6 +402,7 @@ priv enum EnterpriseCopyMessage {
   RentalPeriod
   Hours
   HoursAllowed
+  LongerThanThisOfferingAllows
   ApprovedModel
   NoApprovedModelIsAvailableFor
   OnlyCatalogApprovedModelsCanBe
@@ -1451,6 +1452,11 @@ fn enterprise_copy(
     RentalPeriod => @i18n.copy(locale, "Rental period", "租用周期")
     Hours => @i18n.copy(locale, "24 hours", "24 小时")
     HoursAllowed => @i18n.copy(locale, "hours allowed", "小时可选")
+    LongerThanThisOfferingAllows =>
+      @i18n.copy(
+        locale, "hours is longer than this offering allows. Pick a shorter period, or ask an operator for a longer order.",
+        "小时超出本规格上限。请选择更短的周期，或联系运营方下单更长租期。",
+      )
     ApprovedModel => @i18n.copy(locale, "Approved model", "已批准模型")
     NoApprovedModelIsAvailableFor =>
       @i18n.copy(
