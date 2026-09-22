@@ -69,7 +69,9 @@ test "customer workflow is clear bilingual and hides internal object authority" 
   })
   assert_true(chinese.contains("订单与线下材料"))
   assert_true(chinese.contains("上传已盖章合同扫描件"))
-  assert_true(chinese.contains("履约核验清单"))
+  assert_true(chinese.contains("履约要求"))
+  assert_true(chinese.contains("并非已完成的核验"))
+  assert_false(chinese.contains("<span>✓</span>"))
 }
 
 ///|

@@ -1,0 +1,52 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+async fn main {
+  guard @env.args() is [_, kubeconfig, private_dir] else {
+    fail("Usage: route-enterprise-browser-service.mbtx KUBECONFIG PRIVATE_BACKUP_DIR")
+  }
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let result = @shell.Cmd("kubectl", [..k, "get", "configmap", "operator-4173-proxy", "-o", "json"]).output()
+  result.check()
+  guard @json.parse(result.stdout()) is { "data": { "nginx.conf": String(config), .. }, .. } else { fail("Missing configuration") }
+  let parts = config.split("server { listen 127.0.0.1:5002;").collect()
+  guard parts.length() == 2 else { fail("Expected one enterprise server") }
+  let suffix = parts[1].to_owned()
+  guard suffix.contains("proxy_set_header Authorization $http_authorization;") && !suffix.contains("proxy_set_header Authorization $lunanexa_authorization;") else {
+    fail("Enterprise authentication boundary must already preserve caller authority")
+  }
+  let replacements = [
+    ("location = /enterprise/index.html { root /srv/portal; add_header Cache-Control \"no-store\" always; }", "location = /enterprise/index.html { proxy_pass http://lunanexa-enterprise:8080; add_header Cache-Control \"no-store\" always; }"),
+    ("location /enterprise/ { root /srv/portal; try_files $uri $uri/ /enterprise/index.html; }", "location /enterprise/ { proxy_pass http://lunanexa-enterprise:8080; add_header Cache-Control \"no-store\" always; }"),
+  ]
+  let mut updated_suffix = suffix
+  for (old, replacement) in replacements {
+    guard updated_suffix.split(old).count() == 2 else { fail("Enterprise static rule differs; inspect before changing") }
+    updated_suffix = updated_suffix.split(old).collect().join(replacement)
+  }
+  let updated = parts[0].to_owned() + "server { listen 127.0.0.1:5002;" + updated_suffix
+  @fs.write_file(private_dir + "/operator-proxy-before-enterprise-service.json", result.stdout(), create_mode=CreateNew, permission=0o600)
+  let path = private_dir + "/operator-proxy-enterprise-service-patch.json"
+  let patch : Json = { "data": { "nginx.conf": updated } }
+  @fs.write_file(path, patch.stringify(), create_mode=CreateNew, permission=0o600)
+  @shell.Cmd("kubectl", [..k, "patch", "configmap", "operator-4173-proxy", "--type=merge", "--patch-file=" + path]).run()
+  // Compare privately, without printing a configuration containing credentials.
+  for attempt in 0..<40 {
+    let mounted = @shell.Cmd("kubectl", [..k, "exec", "deployment/operator-4173-proxy", "--", "cat", "/etc/nginx/custom/nginx.conf"]).output()
+    mounted.check()
+    if mounted.stdout() == updated {
+      @shell.Cmd("kubectl", [..k, "exec", "deployment/operator-4173-proxy", "--", "nginx", "-t", "-c", "/etc/nginx/custom/nginx.conf"]).run()
+      @shell.Cmd("kubectl", [..k, "exec", "deployment/operator-4173-proxy", "--", "nginx", "-s", "reload", "-c", "/etc/nginx/custom/nginx.conf"]).run()
+      println("Enterprise HTML/JS now use the deployed service; authorization and asset routes unchanged")
+      return
+    }
+    ignore(attempt)
+    @async.sleep(3000)
+  }
+  fail("Configuration propagation not observed; proxy was not reloaded")
+}

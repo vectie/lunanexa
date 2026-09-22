@@ -1,0 +1,80 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+async fn digest(path : String) -> String {
+  let result = @shell.Cmd("sha256sum", [path]).output()
+  result.check()
+  result.stdout().split(" ").next().unwrap().to_owned()
+}
+
+async fn bytes(path : String) -> Int {
+  let result = @shell.Cmd("stat", ["-c", "%s", path]).output()
+  result.check()
+  @string.parse_int(result.stdout().trim())
+}
+
+async fn write_blob(root : String, name : String, value : Json) -> (String, Int) {
+  let path = root + "/" + name
+  @fs.write_file(path, value.stringify(), create_mode=CreateNew)
+  let hash = digest(path)
+  let size = bytes(path)
+  @fs.rename(path, root + "/blobs/sha256/" + hash)
+  (hash, size)
+}
+
+async fn main {
+  guard @env.args() is [_, base, dist, output, image, ..sites] else {
+    fail("Usage: package-browser-layer.mbtx EXPORTED_BASE_OCI_TAR BROWSER_DIST NEW_OUTPUT_DIR IMAGE [console enterprise]")
+  }
+  let sites = if sites.is_empty() { ["console"] } else { sites.to_owned() }
+  guard sites.all(site => site == "console" || site == "enterprise") else {
+    fail("Only console and enterprise browser assets may be replaced")
+  }
+  // A new directory prevents overwriting either rollback material or a prior build.
+  @fs.mkdir(output, permission=0o700)
+  @shell.Cmd("tar", ["-xf", base, "-C", output]).run()
+  let index = @json.parse(@fs.read_file(output + "/index.json").text())
+  guard index is { "manifests": [{ "digest": String(manifest_digest), .. }], .. } else {
+    fail("Expected a single-platform exported image")
+  }
+  let manifest = @json.parse(@fs.read_file(output + "/blobs/sha256/" + manifest_digest.strip_prefix("sha256:").unwrap().to_owned()).text())
+  guard manifest is Object(manifest_fields) && manifest is {
+    "config": { "digest": String(config_digest), .. }, "layers": Array(layers), ..
+  } else { fail("Invalid base manifest") }
+  let config = @json.parse(@fs.read_file(output + "/blobs/sha256/" + config_digest.strip_prefix("sha256:").unwrap().to_owned()).text())
+  guard config is { "rootfs": Object(rootfs), .. } && rootfs.get("diff_ids") is Some(Array(diff_ids)) else {
+    fail("Invalid base rootfs")
+  }
+  let staging = output + "/layer/usr/share/nginx/html"
+  @fs.mkdir(staging, recursive=true)
+  // Replace only explicitly selected sites; retain fonts, previews and other apps.
+  for site in sites {
+    @shell.Cmd("cp", ["-r", dist + "/" + site, staging + "/" + site]).run()
+  }
+  let layer = output + "/console.tar"
+  @shell.Cmd("tar", ["--owner=0", "--group=0", "--mode=u+rwX,go+rX", "-C", output + "/layer", "-cf", layer, "usr"]).run()
+  let diff = digest(layer)
+  @shell.Cmd("gzip", ["-n", "-k", layer]).run()
+  let compressed = layer + ".gz"
+  let hash = digest(compressed)
+  let size = bytes(compressed)
+  @fs.rename(compressed, output + "/blobs/sha256/" + hash)
+  layers.push({ "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "digest": "sha256:" + hash, "size": size })
+  diff_ids.push(Json::string("sha256:" + diff))
+  let (new_config, config_size) = write_blob(output, "new-config.json", config)
+  manifest_fields["config"] = { "mediaType": "application/vnd.oci.image.config.v1+json", "digest": "sha256:" + new_config, "size": config_size }
+  let (new_manifest, manifest_size) = write_blob(output, "new-manifest.json", manifest)
+  let new_index : Json = { "schemaVersion": 2, "manifests": [{
+    "mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": "sha256:" + new_manifest, "size": manifest_size,
+    "annotations": { "org.opencontainers.image.ref.name": image }, "platform": { "architecture": "amd64", "os": "linux" }
+  }] }
+  @fs.write_file(output + "/index.json", new_index.stringify())
+  @shell.Cmd("tar", ["-C", output, "-cf", output + ".oci.tar", "oci-layout", "index.json", "blobs"]).run()
+  println(image + "@sha256:" + new_manifest)
+}

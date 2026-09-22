@@ -743,6 +743,16 @@ fn readiness_panel(state : OfflineCommerceState) -> @rabbita.Html {
 }
 
 ///|
+fn order_expiry_label(locale : @i18n.Locale, unix_ms : Int64) -> String {
+  if unix_ms <= 0L {
+    return copy(locale, "Not set", "未设置")
+  }
+  @time.unix(unix_ms / 1000L, zone=@time.utc_zone).to_string() catch {
+    _ => copy(locale, "Invalid expiry time", "到期时间无效")
+  }
+}
+
+///|
 fn policy_items(
   locale : @i18n.Locale,
   policy : @offline.FulfillmentPolicy,
@@ -768,7 +778,7 @@ fn policy_items(
   ]
   values.map(value => {
     @html.li(class=if value.1 { "is-required" } else { "is-optional" }, [
-      @html.span(if value.1 { "✓" } else { "—" }),
+      @html.span(if value.1 { "•" } else { "—" }),
       @html.span(value.0),
       @html.small(
         if value.1 {
@@ -1386,7 +1396,7 @@ fn order_detail(
           ]),
           @html.div([
             @html.dt(copy(state.locale, "Expires", "到期时间")),
-            @html.dd(order.expires_unix_ms.to_string()),
+            @html.dd(order_expiry_label(state.locale, order.expires_unix_ms)),
           ]),
           @html.div([
             @html.dt(copy(state.locale, "Generation", "状态版本")),
@@ -1395,8 +1405,14 @@ fn order_detail(
         ]),
       ]),
       @html.section(class="offline-panel", [
-        @html.h3(
-          copy(state.locale, "Fulfillment checklist", "履约核验清单"),
+        @html.h3(copy(state.locale, "Fulfillment requirements", "履约要求")),
+        @html.p(
+          class="field-help",
+          copy(
+            state.locale,
+            "These are order requirements, not completed checks. Review evidence and the order status to confirm progress.",
+            "以下为订单要求，并非已完成的核验。实际进度请查看凭证审核结果和订单状态。",
+          ),
         ),
         @html.ul(
           class="offline-policy-list",

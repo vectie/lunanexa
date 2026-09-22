@@ -520,11 +520,49 @@ test "node management exposes expandable telemetry and exclusive lease evidence"
   assert_true(html.contains("42%"))
   assert_true(html.contains("CPU utilization"))
   assert_true(html.contains("25%"))
-  assert_true(html.contains("free (measured)"))
+  assert_true(html.contains("available ·"))
   assert_true(html.contains("org-1 · user-1"))
-  assert_true(html.contains("One lease · one machine"))
+  assert_false(html.contains("One lease · one machine"))
+  assert_false(html.contains("Placement model"))
   assert_true(html.contains("Last heartbeat · Just now"))
   assert_true(html.contains("<progress"))
+}
+
+///|
+test "Spark unified memory and fractional sensors are rendered without inventing VRAM" {
+  let state = console_state(Nodes)
+  let node = {
+    ..state.nodes[0],
+    architecture: "nvidia-sm121",
+    total_memory_mib: 124608,
+    used_memory_mib: 110788,
+    free_memory_mib: 13820,
+    cpu_per_mille: 3,
+    power_watts: 11.46,
+  }
+  let html = @ui.render({ ..state, nodes: [node], confirmation: None, })
+  assert_true(html.contains("Unified memory"))
+  assert_true(html.contains("121.7 GiB"))
+  assert_true(html.contains("13.5 GiB"))
+  assert_true(html.contains("CPU/GPU shared pool"))
+  assert_true(html.contains("0.3%"))
+  assert_true(html.contains("11.46 W"))
+  assert_false(html.contains("N/A"))
+  let missing = @ui.render({
+    ..state,
+    nodes: [
+      {
+        ..node,
+        utilization_per_mille: -1,
+        temperature_celsius: -1,
+        power_watts: -1.0,
+      },
+    ],
+    confirmation: None,
+  })
+  assert_true(missing.contains("Unavailable / stale"))
+  assert_false(missing.contains("-1 °C"))
+  assert_false(missing.contains("-1 W"))
 }
 
 ///|
@@ -1171,7 +1209,7 @@ test "overview distinguishes healthy, attention, and awaiting telemetry states" 
   let awaiting = @ui.render({ ..@ui.default_state(), confirmation: None, })
   assert_true(attention.contains("Cluster needs attention"))
   assert_true(attention.contains("Review required"))
-  assert_true(healthy.contains("Cluster operational"))
+  assert_true(healthy.contains("Node heartbeats healthy"))
   assert_true(healthy.contains("No active incidents"))
   assert_true(awaiting.contains("Awaiting cluster telemetry"))
   assert_true(awaiting.contains("Connect the controller and enroll a node"))

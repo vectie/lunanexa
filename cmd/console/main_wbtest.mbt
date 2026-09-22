@@ -1469,6 +1469,40 @@ fn node_row_telemetry(
 }
 
 ///|
+test "node sensors reject expired future and workload-scoped samples" {
+  let fresh = node_row_sample("node-1", "accelerator_power_watts", 11.46)
+  let samples = [
+    fresh,
+    { ..fresh, value: 900.0, timestamp_unix_ms: current_unix_ms() - 60001L, },
+    { ..fresh, value: 800.0, timestamp_unix_ms: current_unix_ms() + 60000L, },
+    { ..fresh, value: 700.0, deployment_id: "workload-1", },
+  ]
+  assert_eq(
+    latest_node_sensor_value(samples, "node-1", fresh.metric),
+    Some(11.46),
+  )
+  assert_eq(latest_node_metric([], "node-1", fresh.metric), -1)
+  assert_eq(
+    latest_node_sensor_value(
+      [{ ..fresh, timestamp_unix_ms: current_unix_ms() - 60001L, }],
+      "node-1",
+      fresh.metric,
+    ),
+    None,
+  )
+  let row = build_node_rows(
+      [node_row_heartbeat("node-1", declared_memory_mib=124608)],
+      node_row_telemetry(samples),
+      None,
+      English,
+    )[0]
+  assert_eq(row.power_watts, 11.46)
+  assert_eq(row.temperature_celsius, -1)
+  assert_eq(row.utilization_per_mille, -1)
+  assert_true(row.active_assignment.contains("not machine idle"))
+}
+
+///|
 test "node rows prefer measured host memory over the declared inventory" {
   let node_id = "node-1"
   let rows = build_node_rows(
@@ -2045,15 +2079,15 @@ test "the alerts group replaces only the notification projections" {
   assert_eq(merged.console.audit[0].receipt, "audit:core")
   assert_eq(merged.console.route, Alerts)
   assert_eq(merged.console_read_groups.length(), 1)
-  // A later core reload preserves the merged alert list and its counter.
+  // A later core reload refreshes the alert evidence rather than preserving stale counts.
   let (reloaded, _) = update_live(
     merged,
     Outcome(Loaded({ ..@ui.default_state(), route: Alerts, loading: false, })),
     emit,
   )
-  assert_eq(reloaded.console.notifications.length(), 2)
-  assert_eq(reloaded.console.notification_deliveries.length(), 1)
-  assert_eq(reloaded.console.overview.alerts, 1)
+  assert_eq(reloaded.console.notifications.length(), 0)
+  assert_eq(reloaded.console.notification_deliveries.length(), 0)
+  assert_eq(reloaded.console.overview.alerts, 0)
 }
 
 ///|
@@ -2133,7 +2167,7 @@ test "the models group replaces only the model-import list" {
     emit,
   )
   assert_eq(reloaded.console.model_imports.length(), 1)
-  assert_eq(reloaded.console.notifications.length(), 1)
+  assert_eq(reloaded.console.notifications.length(), 0)
 }
 
 ///|

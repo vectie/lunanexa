@@ -1,0 +1,25 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+async fn main {
+  guard @env.args() is [_, kubeconfig, private_dir] else {
+    fail("Usage: restrict-operator-open-boundary.mbtx KUBECONFIG PRIVATE_BACKUP_DIR")
+  }
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let result = @shell.Cmd("kubectl", [..k, "get", "configmap", "operator-4173-proxy", "-o", "json"]).output()
+  result.check()
+  guard @json.parse(result.stdout()) is { "data": { "nginx.conf": String(config), .. }, .. } else { fail("Missing proxy configuration") }
+  let marker = "server { listen 127.0.0.1:5002;"
+  let parts = config.split(marker).to_array()
+  guard parts.length() == 2 else { fail("Expected exactly one enterprise server block") }
+  let rule = "proxy_set_header Authorization $lunanexa_authorization;"
+  let suffix = parts[1].to_owned()
+  if !suffix.contains(rule) { println("Enterprise operator fallback already absent"); return }
+  guard suffix.split(rule).count() == 2 else { fail("Ambiguous enterprise authorization rule") }
+  @fs.write_file(private_dir + "/operator-proxy-before-enterprise-boundary.json", result.stdout(), create_mode=CreateNew, permission=0o600)
+  let updated = parts[0].to_owned() + marker + suffix.split(rule).collect().join("proxy_set_header Authorization $http_authorization;")
+  let patch : Json = { "data": { "nginx.conf": updated } }
+  let path = private_dir + "/operator-proxy-enterprise-boundary-patch.json"
+  @fs.write_file(path, patch.stringify(), create_mode=CreateNew, permission=0o600)
+  @shell.Cmd("kubectl", [..k, "patch", "configmap", "operator-4173-proxy", "--type=merge", "--patch-file=" + path]).run()
+  println("Enterprise now preserves the caller's authority; Operator block unchanged. Reload the proxy after configuration propagation.")
+}
