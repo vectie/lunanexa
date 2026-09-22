@@ -359,3 +359,151 @@ test "the undertaking quote confirmation states the amount it freezes" {
   assert_true(unparsable.contains("week × two"))
   assert_false(unparsable.contains("week × two · CNY"))
 }
+
+///|
+/// The ten gates the readiness document must carry, in the order the control
+/// plane evaluates them.
+fn readiness_gate_set(
+  configured : Bool,
+  verified : Bool,
+) -> Array[@offline.OfflineCommerceCapabilityEvidence] {
+  let capabilities : Array[@offline.OfflineCommerceCapability] = [
+    ApprovedLegalTemplates,
+    ObjectStorage,
+    MalwareScanner,
+    OoxmlWorker,
+    PdfRenderer,
+    SpreadsheetFormulaEngine,
+    CjkFonts,
+    MachineCallbackIdentity,
+    EntitlementAuthority,
+    FinanceLegalPolicy,
+  ]
+  capabilities.map(capability => {
+    capability,
+    configured,
+    verified,
+    evidence_ref: if configured && verified {
+      Some("evidence/readiness-\{Repr(capability)}")
+    } else {
+      None
+    },
+  })
+}
+
+///|
+test "the readiness panel lists every gate and every blocker code verbatim" {
+  let html = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    readiness_status: OfflineCommerceAdaptersPending,
+    readiness_capabilities: readiness_gate_set(false, false),
+    readiness_blocker_codes: [
+      "ApprovedLegalTemplatesPending", "ReadinessTransferAdapterUnavailable",
+    ],
+  })
+  assert_true(html.contains("Offline commerce readiness"))
+  assert_true(html.contains("OfflineCommerceAdaptersPending"))
+  assert_true(html.contains("Adapters pending"))
+  // The refusal an operator will actually meet is stated plainly.
+  assert_true(html.contains("503 OfflineCommerceNotReady"))
+  for
+    capability in [
+      "ApprovedLegalTemplates", "ObjectStorage", "MalwareScanner", "OoxmlWorker",
+      "PdfRenderer", "SpreadsheetFormulaEngine", "CjkFonts", "MachineCallbackIdentity",
+      "EntitlementAuthority", "FinanceLegalPolicy",
+    ] {
+    assert_true(html.contains(capability))
+  }
+  // Both facts are stated for every gate, not only the combined verdict.
+  assert_true(html.contains("· Configured"))
+  assert_true(html.contains("· Verified"))
+  assert_true(html.contains("class=\"offline-readiness-capabilities\""))
+  // Blocker codes are shown exactly as the API spells them.
+  assert_true(html.contains("ApprovedLegalTemplatesPending"))
+  assert_true(html.contains("ReadinessTransferAdapterUnavailable"))
+}
+
+///|
+test "a fully verified readiness document renders ready without blockers" {
+  let html = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    readiness_status: OfflineCommerceReady,
+    readiness_capabilities: readiness_gate_set(true, true),
+    readiness_blocker_codes: [],
+  })
+  assert_true(html.contains("OfflineCommerceReady"))
+  assert_true(html.contains("✓ Configured"))
+  assert_true(html.contains("✓ Verified"))
+  assert_true(html.contains("No blocker codes are recorded."))
+  assert_false(html.contains("OfflineCommerceAdaptersPending"))
+  assert_false(html.contains("503 OfflineCommerceNotReady"))
+  assert_false(html.contains("ReadinessTransferAdapterUnavailable"))
+}
+
+///|
+test "an empty capability set is an explicit empty state not a checklist" {
+  let html = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    readiness_status: OfflineCommerceAdaptersPending,
+    readiness_capabilities: [],
+    readiness_blocker_codes: ["ReadinessCapabilitySetInvalid"],
+  })
+  assert_true(html.contains("No signed readiness document is configured"))
+  assert_true(html.contains("cmd/offline-readiness"))
+  // The empty state replaces the checklist rather than leaving a blank list.
+  assert_false(html.contains("class=\"offline-readiness-capabilities\""))
+  assert_true(html.contains("ReadinessCapabilitySetInvalid"))
+  let chinese = @offline_commerce.render({
+    ..@offline_commerce.default_state(ChineseSimplified, OperatorCommerce),
+    readiness_capabilities: [],
+    readiness_blocker_codes: ["ReadinessCapabilitySetInvalid"],
+  })
+  assert_true(chinese.contains("未配置已签名的就绪文档"))
+  assert_true(chinese.contains("阻塞代码"))
+  assert_true(chinese.contains("503 OfflineCommerceNotReady"))
+}
+
+///|
+test "evidence references are shown when retained and never rendered as null" {
+  let html = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    readiness_status: OfflineCommerceAdaptersPending,
+    readiness_capabilities: [
+      {
+        capability: MachineCallbackIdentity,
+        configured: true,
+        verified: true,
+        evidence_ref: Some(
+          "lunanexa-control-credentials/callback-identities-20260922-3x64B-distinct-from-human",
+        ),
+      },
+      {
+        capability: ApprovedLegalTemplates,
+        configured: false,
+        verified: false,
+        evidence_ref: None,
+      },
+    ],
+    readiness_blocker_codes: ["ApprovedLegalTemplatesPending"],
+  })
+  assert_true(
+    html.contains(
+      "lunanexa-control-credentials/callback-identities-20260922-3x64B-distinct-from-human",
+    ),
+  )
+  // A gate with no retained reference contributes no placeholder at all.
+  assert_false(html.contains("null"))
+  assert_true(html.contains("✓"))
+  assert_true(html.contains("·"))
+}
+
+///|
+test "the readiness panel stays operator-only" {
+  let html = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, CustomerCommerce),
+    readiness_status: OfflineCommerceReady,
+    readiness_capabilities: readiness_gate_set(true, true),
+  })
+  assert_false(html.contains("Offline commerce readiness"))
+  assert_false(html.contains("OfflineCommerceReady"))
+}

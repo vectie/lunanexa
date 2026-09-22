@@ -715,11 +715,13 @@ fn console_read_group_paths(
       if commercial_organization == "" {
         [
           "/v1/portal/operator/snapshot", "/v1/offline-commerce/operator/snapshot",
+          "/v1/offline-commerce/operator/readiness",
         ]
       } else {
         [
           "/v1/portal/operator/snapshot",
           "/v1/offline-commerce/operator/snapshot",
+          "/v1/offline-commerce/operator/readiness",
           "/v1/commercial/organizations/\{commercial_organization}/snapshot",
           "/v1/commercial/organizations/\{commercial_organization}/integrations",
         ]
@@ -2041,6 +2043,14 @@ async fn load_console_commerce_reads(
       request("GET", endpoint, "/v1/offline-commerce/operator/snapshot", token),
     ),
   )
+  // The production-readiness document is signed out of band and read-only.
+  // Like the snapshot above it is fail-loud: a failed read must surface rather
+  // than masquerade as "no readiness document is configured".
+  let offline_readiness : @offline.OfflineCommerceReadiness = @json.from_json(
+    parse_console_json(
+      request("GET", endpoint, "/v1/offline-commerce/operator/readiness", token),
+    ),
+  )
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -2224,6 +2234,9 @@ async fn load_console_commerce_reads(
       } else {
         None
       },
+      readiness_status: offline_readiness.status,
+      readiness_capabilities: offline_readiness.capabilities,
+      readiness_blocker_codes: offline_readiness.blocker_codes,
     },
     node_lease_holders: portal_node_lease_holders(portal_snapshot),
   }

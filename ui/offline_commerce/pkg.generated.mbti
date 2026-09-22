@@ -18,6 +18,8 @@ pub fn interactive_view(OfflineCommerceState, @cmd.Emit[OfflineCommerceMessage])
 
 pub fn render(OfflineCommerceState) -> String
 
+pub fn undertaking_tier_label(@i18n.Locale, @offline.UndertakingTermTier) -> String
+
 pub fn view(OfflineCommerceState) -> @html.Html
 
 // Errors
@@ -119,6 +121,9 @@ pub(all) struct OfflineCommerceState {
   loading : Bool
   success_message : String?
   error_message : String?
+  readiness_status : @offline.OfflineCommerceReadinessStatus
+  readiness_capabilities : Array[@offline.OfflineCommerceCapabilityEvidence]
+  readiness_blocker_codes : Array[String]
 } derive(Eq)
 pub fn OfflineCommerceState::equal(Self, Self) -> Bool
 pub fn OfflineCommerceState::not_equal(Self, Self) -> Bool

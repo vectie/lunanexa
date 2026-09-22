@@ -32,6 +32,13 @@ pub(all) struct OfflineCommerceState {
   loading : Bool
   success_message : String?
   error_message : String?
+  /// Read-only projection of `/v1/offline-commerce/operator/readiness`. It is
+  /// signed out of band by `cmd/offline-readiness`; nothing in this package
+  /// writes it. An empty `readiness_capabilities` is the real "no signed
+  /// document is configured" state, not a loading failure.
+  readiness_status : @offline.OfflineCommerceReadinessStatus
+  readiness_capabilities : Array[@offline.OfflineCommerceCapabilityEvidence]
+  readiness_blocker_codes : Array[String]
 } derive(Eq)
 
 ///|
@@ -149,6 +156,9 @@ pub fn default_state(
     loading: false,
     success_message: None,
     error_message: None,
+    readiness_status: OfflineCommerceAdaptersPending,
+    readiness_capabilities: [],
+    readiness_blocker_codes: [],
   }
 }
 
@@ -546,6 +556,188 @@ fn review_label(
         copy(locale, "Replacement required", "需要重新上传")
     }
   }
+}
+
+///|
+/// The ten production gates, named once. The raw capability identifier stays
+/// visible beside the label because that is what the readiness document and
+/// `docs/OFFLINE_COMMERCE.md` call it.
+fn capability_label(
+  locale : @i18n.Locale,
+  capability : @offline.OfflineCommerceCapability,
+) -> String {
+  match capability {
+    ApprovedLegalTemplates =>
+      copy(locale, "Approved legal templates", "已批准法律模板")
+    ObjectStorage => copy(locale, "Object storage", "对象存储")
+    MalwareScanner => copy(locale, "Malware scanner", "恶意软件扫描")
+    OoxmlWorker => copy(locale, "OOXML worker", "OOXML 处理服务")
+    PdfRenderer => copy(locale, "PDF renderer", "PDF 渲染服务")
+    SpreadsheetFormulaEngine =>
+      copy(locale, "Spreadsheet formula engine", "表格公式引擎")
+    CjkFonts => copy(locale, "CJK fonts", "中日韩字体")
+    MachineCallbackIdentity =>
+      copy(locale, "Machine callback identity", "机器回调身份")
+    EntitlementAuthority =>
+      copy(locale, "Entitlement authority", "权益授权方")
+    FinanceLegalPolicy =>
+      copy(locale, "Finance and legal policy", "财务与法务策略")
+  }
+}
+
+///|
+/// One `✓`/`·` fact, matching the milestone idiom the access-package cards
+/// already use.
+fn readiness_fact(
+  locale : @i18n.Locale,
+  english : String,
+  chinese : String,
+  present : Bool,
+) -> @rabbita.Html {
+  let mark = if present { "✓" } else { "·" }
+  @html.span(
+    class=if present { "is-present" } else { "is-absent" },
+    "\{mark} \{copy(locale, english, chinese)}",
+  )
+}
+
+///|
+fn readiness_capability(
+  state : OfflineCommerceState,
+  evidence : @offline.OfflineCommerceCapabilityEvidence,
+) -> @rabbita.Html {
+  let locale = state.locale
+  let complete = evidence.configured && evidence.verified
+  @html.li(class=if complete { "complete" } else { "pending" }, [
+    @html.span(class="offline-readiness-mark", [
+      @html.span(if complete { "✓" } else { "·" }),
+      @html.span(
+        class="sr-only",
+        if complete {
+          copy(locale, "complete", "已完成")
+        } else {
+          copy(locale, "pending", "待完成")
+        },
+      ),
+    ]),
+    @html.span(class="offline-readiness-capability", [
+      @html.strong(capability_label(locale, evidence.capability)),
+      @html.small(class="mono", "\{Repr(evidence.capability)}"),
+    ]),
+    @html.span(class="offline-readiness-facts", [
+      readiness_fact(locale, "Configured", "已配置", evidence.configured),
+      readiness_fact(locale, "Verified", "已验证", evidence.verified),
+    ]),
+    match evidence.evidence_ref {
+      Some(reference) =>
+        @html.code(class="offline-readiness-evidence", reference)
+      None => @html.nothing
+    },
+  ])
+}
+
+///|
+/// Read-only production-readiness panel for the operator's offline-commerce
+/// route. It renders exactly what
+/// `GET /v1/offline-commerce/operator/readiness` reports: the status, the ten
+/// capability gates, and the blocker codes verbatim. It offers no control that
+/// could change readiness.
+fn readiness_panel(state : OfflineCommerceState) -> @rabbita.Html {
+  let locale = state.locale
+  let ready = state.readiness_status == OfflineCommerceReady
+  @html.section(class="offline-readiness-panel", [
+    @html.div(class="section-heading", [
+      @html.div([
+        @html.p(
+          class="eyebrow",
+          copy(locale, "PRODUCTION READINESS", "生产就绪状态"),
+        ),
+        @html.h3(
+          copy(locale, "Offline commerce readiness", "线下商务生产就绪"),
+        ),
+        @html.p(
+          class="section-copy",
+          copy(
+            locale, "Read-only projection of the signed readiness document. It is produced out of band by cmd/offline-readiness; nothing on this page changes it.",
+            "已签名就绪文档的只读投影。该文档由 cmd/offline-readiness 在外部生成，本页面不会更改它。",
+          ),
+        ),
+      ]),
+      @html.div(class="offline-readiness-status", [
+        @html.span(
+          class="status-pill",
+          if ready {
+            copy(locale, "Ready", "已就绪")
+          } else {
+            copy(locale, "Adapters pending", "适配器待就绪")
+          },
+        ),
+        @html.code("\{Repr(state.readiness_status)}"),
+      ]),
+    ]),
+    @html.p(
+      class="field-help",
+      if ready {
+        copy(
+          locale, "Every capability gate is configured and verified. Offline commerce actions are accepted.",
+          "所有能力闸门均已配置并验证。线下商务操作可被接受。",
+        )
+      } else {
+        copy(
+          locale, "Initiating actions are refused with 503 OfflineCommerceNotReady until every gate passes.",
+          "在全部闸门通过之前，发起类操作将被拒绝，返回 503 OfflineCommerceNotReady。",
+        )
+      },
+    ),
+    if state.readiness_capabilities.length() == 0 {
+      // An empty capability set is the control plane reporting that no signed
+      // document exists, so it gets an explanation instead of an empty list.
+      @html.div(class="empty-state", [
+        @html.h4(
+          copy(
+            locale, "No signed readiness document is configured", "未配置已签名的就绪文档",
+          ),
+        ),
+        @html.p(
+          copy(
+            locale, "The ten capability gates stay pending and offline commerce refuses to start until an operator signs a document with cmd/offline-readiness.",
+            "在运营人员使用 cmd/offline-readiness 签署文档之前，十项能力闸门将保持待就绪，线下商务不会启动。",
+          ),
+        ),
+      ])
+    } else {
+      @html.ol(
+        class="offline-readiness-capabilities",
+        [
+          for evidence in state.readiness_capabilities => {
+            readiness_capability(state, evidence)
+          }
+        ],
+      )
+    },
+    @html.div(class="offline-readiness-blockers-section", [
+      @html.h4(copy(locale, "Blocker codes", "阻塞代码")),
+      if state.readiness_blocker_codes.length() == 0 {
+        @html.p(
+          class="field-help",
+          copy(
+            locale, "No blocker codes are recorded.", "未记录任何阻塞代码。",
+          ),
+        )
+      } else {
+        // Shown verbatim: these are the codes an operator greps for and the
+        // ones `docs/OFFLINE_COMMERCE.md` documents.
+        @html.ul(
+          class="offline-readiness-blockers",
+          [
+            for code in state.readiness_blocker_codes => {
+              @html.li([@html.code(code)])
+            }
+          ],
+        )
+      },
+    ]),
+  ])
 }
 
 ///|
@@ -1513,6 +1705,7 @@ fn offline_view(
 ) -> @rabbita.Html {
   let stylesheet =
     #|.offline-commerce-workspace{display:grid;gap:1.1rem}.offline-order-layout{display:grid;grid-template-columns:minmax(13rem,.28fr) minmax(0,1fr);gap:1rem}.offline-order-list{display:grid;align-content:start;gap:.45rem}.offline-order-item{min-height:4.5rem;padding:.75rem;border:1px solid var(--line,#d5dee4);border-radius:.6rem;background:transparent;color:inherit;text-align:left;display:grid;gap:.15rem;cursor:pointer}.offline-order-item.is-active{border-color:var(--mint,#35bd8d);background:rgba(53,189,141,.08)}.offline-order-item span,.offline-order-item small,.offline-action-note{color:var(--muted,#80949c)}.offline-detail-stack{display:grid;gap:1rem}.offline-order-hero,.offline-card-heading,.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}.offline-order-hero h2,.offline-card-heading h4,.section-heading h2,.section-heading h3{margin:.1rem 0}.offline-commerce-steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem;padding:0;list-style:none}.offline-commerce-steps li{display:grid;gap:.25rem;color:var(--muted,#80949c)}.offline-commerce-steps li span{width:2rem;height:2rem;border:1px solid var(--line,#d5dee4);border-radius:50%;display:grid;place-items:center}.offline-commerce-steps .is-current span,.offline-commerce-steps .is-complete span{border-color:var(--mint,#35bd8d);color:var(--mint,#168363)}.offline-two-column,.offline-artifact-grid,.offline-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.offline-panel,.offline-artifact-card,.offline-create-form{padding:1rem;border:1px solid var(--line,#d5dee4);border-radius:.7rem;background:var(--panel,#fff)}.offline-panel dl>div,.offline-artifact-facts>div{display:flex;justify-content:space-between;gap:.5rem;padding:.35rem 0}.offline-panel dd,.offline-artifact-facts dd{margin:0;overflow-wrap:anywhere}.offline-policy-list{display:grid;gap:.4rem;padding:0;list-style:none}.offline-policy-list li{display:grid;grid-template-columns:auto 1fr;column-gap:.5rem}.offline-policy-list small{grid-column:2;color:var(--muted,#80949c)}.offline-actions,.review-actions,.offline-confirmation-actions{display:flex;align-items:flex-end;flex-wrap:wrap;gap:.55rem}.offline-field{display:grid;gap:.3rem;min-width:12rem}.offline-field input{min-height:2.75rem;padding:.6rem .7rem;border:1px solid var(--line,#d5dee4);border-radius:.45rem;background:var(--bg,#fff);color:inherit}.offline-confirmation{position:sticky;bottom:1rem;margin-left:auto;max-width:42rem;padding:1rem;border:1px solid var(--amber,#b88300);border-radius:.7rem;background:var(--panel,#fff);box-shadow:0 1rem 3rem rgba(0,0,0,.25);z-index:5}.offline-confirmation code{display:block;padding:.65rem;margin:.6rem 0;border-radius:.4rem;background:rgba(128,148,156,.12);overflow-wrap:anywhere}.offline-confirmation-actions{justify-content:flex-end}.empty-state{padding:1rem;border:1px dashed var(--line,#d5dee4);border-radius:.7rem}@media(max-width:70rem){.offline-commerce-steps{grid-template-columns:repeat(3,minmax(0,1fr))}.offline-order-layout{grid-template-columns:1fr}.offline-order-list{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:40rem){.offline-order-list,.offline-commerce-steps,.offline-two-column,.offline-artifact-grid,.offline-form-grid{grid-template-columns:1fr}.offline-order-hero,.section-heading{flex-direction:column}.offline-confirmation{position:relative;bottom:auto}.offline-confirmation-actions{display:grid}}@media(prefers-reduced-motion:reduce){.offline-commerce-workspace *{transition:none!important;animation:none!important}}
+    #|.offline-readiness-panel{display:grid;gap:.75rem;padding:1rem;border:1px solid var(--line,#d5dee4);border-radius:.7rem;background:var(--panel,#fff)}.offline-readiness-status{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem}.offline-readiness-status code{padding:.2rem .45rem;border-radius:.35rem;background:rgba(128,148,156,.12);font-size:.72rem;overflow-wrap:anywhere}.offline-readiness-capabilities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;padding:0;list-style:none}.offline-readiness-capabilities li{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.5rem;align-items:baseline;padding:.5rem .6rem;border:1px solid var(--line,#d5dee4);border-radius:.5rem;color:var(--muted,#80949c)}.offline-readiness-capabilities li.complete{border-color:color-mix(in srgb,var(--mint,#35bd8d) 32%,var(--line,#d5dee4));background:rgba(53,189,141,.08);color:var(--mint,#168363)}.offline-readiness-mark{font-weight:800}.offline-readiness-capability{display:grid;min-width:0}.offline-readiness-capability small{color:var(--muted,#80949c);overflow-wrap:anywhere}.offline-readiness-facts{grid-column:2;display:flex;flex-wrap:wrap;gap:.5rem;font-size:.68rem}.offline-readiness-facts .is-present{color:var(--mint,#168363)}.offline-readiness-evidence{grid-column:2;padding:.2rem .4rem;border-radius:.35rem;background:rgba(128,148,156,.12);color:var(--muted,#80949c);font-size:.68rem;overflow-wrap:anywhere}.offline-readiness-blockers{display:grid;gap:.3rem;padding:0;list-style:none}.offline-readiness-blockers code{display:inline-block;padding:.2rem .4rem;border-radius:.35rem;background:rgba(128,148,156,.12)}@media(max-width:40rem){.offline-readiness-capabilities{grid-template-columns:1fr}}
   let selected : @offline.CommercialOrder? = match state.selected_order_id {
     Some(id) =>
       match state.orders.iter().find_first(order => order.order_id == id) {
@@ -1588,6 +1781,13 @@ fn offline_view(
         attrs=@html.Attrs::build().role("status").aria_live("polite"),
         copy(state.locale, "Working…", "正在处理…"),
       )
+    } else {
+      @html.nothing
+    },
+    // Readiness is an operator concern: the enterprise portal renders the same
+    // view for customers, who must not see internal adapter evidence.
+    if state.audience == OperatorCommerce {
+      readiness_panel(state)
     } else {
       @html.nothing
     },
