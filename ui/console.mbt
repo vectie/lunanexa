@@ -31,13 +31,14 @@ pub(all) struct NodeRow {
   /// Whether the memory figures came from a measurement. False means the total
   /// falls back to the declared inventory and must not be presented as memory.
   memory_measured : Bool
+  /// Negative means no fresh node-level sensor reading; never render as zero.
   utilization_per_mille : Int
   cpu_per_mille : Int
   /// False when the node reported no host CPU sample, so an absent rate is not
   /// rendered as an idle 0%.
   cpu_measured : Bool
   temperature_celsius : Int
-  power_watts : Int
+  power_watts : Double
   workloads : Int
   lease_holder : String
   active_assignment : String
@@ -3060,7 +3061,9 @@ fn generated_time_label(locale : @i18n.Locale, value : String) -> String {
 
 ///|
 fn architecture_label(locale : @i18n.Locale, value : String) -> String {
-  if locale.is_chinese() && value == "unreported" {
+  if value == "nvidia-sm121" || value == "nvidia-gb10" {
+    "NVIDIA GB10 · DGX Spark"
+  } else if locale.is_chinese() && value == "unreported" {
     "未上报"
   } else {
     value
@@ -3229,8 +3232,8 @@ fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
       )
     Leases =>
       localized(
-        locale, "Time-bounded exclusive-node leases: one tenant, one user, one machine.",
-        "管理有时限的独占节点租约：一个租户、一个用户、一台机器。",
+        locale, "Manage exclusive machine access and workspace capacity separately.",
+        "分别管理独占机器访问与工作区容量授权。",
       )
     CostCenters =>
       localized(
@@ -3482,7 +3485,8 @@ fn overview_view(
       @html.div(
         class=if state.overview.total_nodes == 0 {
           "health-panel health-panel-unknown"
-        } else if state.overview.alerts == 0 {
+        } else if state.overview.alerts == 0 &&
+          state.overview.active_nodes == state.overview.total_nodes {
           "health-panel health-panel-ok"
         } else {
           "health-panel health-panel-warning"
@@ -3506,11 +3510,12 @@ fn overview_view(
                   "Awaiting cluster telemetry",
                   "等待集群遥测",
                 )
-              } else if state.overview.alerts == 0 {
+              } else if state.overview.alerts == 0 &&
+                state.overview.active_nodes == state.overview.total_nodes {
                 localized(
                   state.locale,
-                  "Cluster operational",
-                  "集群运行正常",
+                  "Node heartbeats healthy",
+                  "节点心跳正常",
                 )
               } else {
                 localized(
@@ -3529,11 +3534,17 @@ fn overview_view(
                 "Connect the controller and enroll a node to establish live cluster posture.",
                 "连接控制器并注册节点，以建立实时集群状态。",
               )
+            } else if state.overview.active_nodes < state.overview.total_nodes {
+              localized(
+                state.locale,
+                "Some nodes are not active; inspect node heartbeat and maintenance status.",
+                "部分节点未处于活跃状态，请检查心跳与维护状态。",
+              )
             } else if state.overview.alerts == 0 {
               localized(
                 state.locale,
-                "All reported services are within their expected operating state.",
-                "所有已上报服务均处于预期运行状态。",
+                "Node heartbeat and reported alerts only; this does not verify model inference or service availability.",
+                "此状态仅代表节点心跳和已上报告警，不代表模型推理与业务服务已验收。",
               )
             } else {
               localized(
@@ -3558,7 +3569,7 @@ fn overview_view(
             ]),
             @html.div([
               @html.dt(
-                localized(state.locale, "Serving models", "服务中模型"),
+                localized(state.locale, "Approved models", "已批准模型"),
               ),
               @html.dd(state.overview.active_models.to_string()),
             ]),
@@ -3578,14 +3589,18 @@ fn overview_view(
         ),
         @html.p(
           class="activity-value",
-          state.overview.recent_changes.to_string(),
+          if state.overview.recent_changes < 0 {
+            localized(state.locale, "Not loaded", "尚未加载")
+          } else {
+            state.overview.recent_changes.to_string()
+          },
         ),
         @html.p(
           class="activity-label",
           localized(
             state.locale,
-            "recent control-plane changes",
-            "项近期控制平面变更",
+            "Loaded audit records (up to 20); open Audit for history.",
+            "已加载审计记录（最多 20 条）；完整记录请打开审计页。",
           ),
         ),
         @html.div(class="activity-divider", ""),
@@ -3608,7 +3623,11 @@ fn overview_view(
         if state.overview.total_nodes == 0 {
           localized(state.locale, "Telemetry unavailable", "遥测不可用")
         } else {
-          localized(state.locale, "Ready for placement", "可用于放置")
+          localized(
+            state.locale,
+            "Active heartbeat · placement requires preflight",
+            "心跳活跃 · 放置仍需预检",
+          )
         },
         if state.overview.total_nodes == 0 {
           "neutral"
@@ -3619,12 +3638,12 @@ fn overview_view(
         },
       ),
       stat(
-        localized(state.locale, "Active models", "服务中模型"),
+        localized(state.locale, "Approved models", "已批准模型"),
         state.overview.active_models.to_string(),
         localized(
           state.locale,
-          "Approved and serving",
-          "已批准并提供服务",
+          "Registry approval · not running instances",
+          "注册表批准数 · 并非运行实例数",
         ),
         "neutral",
       ),
@@ -5670,7 +5689,16 @@ fn nodes_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("nodes-title"), [
-    cluster_topology(state),
+    @html.details(class="topology-disclosure", [
+      @html.summary(
+        localized(
+          state.locale,
+          "Cluster topology and trust boundaries",
+          "集群拓扑与信任边界",
+        ),
+      ),
+      cluster_topology(state),
+    ]),
     @html.div(class="section-heading", [
       @html.div([
         @html.h2(
@@ -5812,8 +5840,8 @@ fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
                 @html.span(
                   localized(
                     state.locale,
-                    "Authenticated browser session",
-                    "已认证浏览器会话",
+                    "Authorized management entry",
+                    "已授权管理入口",
                   ),
                 ),
               ]),
@@ -5829,7 +5857,7 @@ fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
             @html.div(
               class="graph-edge graph-edge-https",
               attrs=@html.Attrs::build().aria_hidden("true"),
-              @html.span("HTTPS"),
+              @html.span("API"),
             ),
             @html.div(class="graph-management-stack", [
               @html.div(class="graph-node graph-control-node", [
@@ -5993,8 +6021,8 @@ fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
             @html.dd(
               localized(
                 state.locale,
-                "Authenticated HTTPS · operator commands and read models",
-                "认证 HTTPS · 运维命令与读取模型",
+                "Management API · transport security depends on the entry deployment",
+                "管理 API · 传输安全取决于入口部署配置",
               ),
             ),
           ]),
@@ -6045,6 +6073,12 @@ fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
+fn memory_gib(mib : Int) -> String {
+  let tenths = (mib.to_int64() * 10L + 512L) / 1024L
+  "\{tenths / 10L}.\{tenths % 10L} GiB"
+}
+
+///|
 fn node_item(
   locale : @i18n.Locale,
   node : NodeRow,
@@ -6065,6 +6099,18 @@ fn node_item(
     max=100,
   )
   let cpu_percent = (node.cpu_per_mille / 10).clamp(min=0, max=100)
+  let unified = node.architecture.contains("sm121") ||
+    node.architecture.contains("gb10")
+  let memory_label = if unified {
+    localized(locale, "Unified memory", "统一内存")
+  } else {
+    localized(locale, "Memory", "内存")
+  }
+  let gpu_text = if node.utilization_per_mille < 0 {
+    localized(locale, "Unavailable / stale", "未上报／已过期")
+  } else {
+    "\{node.utilization_per_mille / 10}.\{node.utilization_per_mille % 10}%"
+  }
   let memory_percent = if node.total_memory_mib > 0 {
     (node.used_memory_mib * 100 / node.total_memory_mib).clamp(min=0, max=100)
   } else {
@@ -6084,15 +6130,19 @@ fn node_item(
         node_state_badge(locale, node.state),
       ]),
       @html.div(class="node-summary-cell node-memory-summary", [
-        @html.span(localized(locale, "Memory", "内存")),
+        @html.span(memory_label),
         if node.memory_measured {
-          @html.strong("\{node.free_memory_mib} MiB")
+          @html.strong(memory_gib(node.free_memory_mib))
         } else {
           @html.strong(localized(locale, "Not reported", "未上报"))
         },
         if node.memory_measured {
           @html.small(
-            localized(locale, "free (measured)", "可用（实测）"),
+            localized(
+              locale,
+              "available · \{memory_gib(node.total_memory_mib)} total",
+              "可用 · 总计 \{memory_gib(node.total_memory_mib)}",
+            ),
           )
         } else {
           @html.small(
@@ -6104,7 +6154,7 @@ fn node_item(
       ]),
       @html.div(class="node-summary-cell", [
         @html.span(localized(locale, "GPU utilization", "GPU 利用率")),
-        @html.strong("\{utilization_percent}%"),
+        @html.strong(gpu_text),
       ]),
       @html.div(class="node-summary-cell node-lease-summary", [
         @html.span(localized(locale, "Exclusive lease", "独占租约")),
@@ -6136,17 +6186,21 @@ fn node_item(
       @html.div(class="node-metrics", [
         @html.div(class="node-metric", [
           @html.span(localized(locale, "GPU utilization", "GPU 利用率")),
-          @html.strong("\{utilization_percent}%"),
-          @html.progress(
-            value=utilization_percent,
-            max=100,
-            "\{utilization_percent}%",
-          ),
+          @html.strong(gpu_text),
+          if node.utilization_per_mille >= 0 {
+            @html.progress(
+              value=utilization_percent,
+              max=100,
+              "\{utilization_percent}%",
+            )
+          } else {
+            @html.nothing
+          },
         ]),
         @html.div(class="node-metric", [
-          @html.span(localized(locale, "Memory used", "已用内存")),
+          @html.span(memory_label + localized(locale, " · used", " · 已用")),
           if node.memory_measured {
-            @html.strong("\{node.used_memory_mib} MiB")
+            @html.strong(memory_gib(node.used_memory_mib))
           } else {
             @html.strong(localized(locale, "Not reported", "未上报"))
           },
@@ -6159,8 +6213,8 @@ fn node_item(
             @html.small(
               localized(
                 locale,
-                "\{node.total_memory_mib} MiB total",
-                "总计 \{node.total_memory_mib} MiB",
+                "Total \{memory_gib(node.total_memory_mib)} · available \{memory_gib(node.free_memory_mib)}",
+                "总计 \{memory_gib(node.total_memory_mib)} · 可用 \{memory_gib(node.free_memory_mib)}",
               ),
             )
           } else {
@@ -6170,11 +6224,22 @@ fn node_item(
               ),
             )
           },
+          if unified {
+            @html.small(
+              localized(
+                locale, "CPU/GPU shared pool · system MemAvailable", "CPU/GPU 共享 · 系统 MemAvailable 实测",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
         ]),
         @html.div(class="node-metric", [
           @html.span(localized(locale, "CPU utilization", "CPU 利用率")),
           if node.cpu_measured {
-            @html.strong("\{cpu_percent}%")
+            @html.strong(
+              "\{node.cpu_per_mille / 10}.\{node.cpu_per_mille % 10}%",
+            )
           } else {
             @html.strong(localized(locale, "Not reported", "未上报"))
           },
@@ -6186,7 +6251,13 @@ fn node_item(
         ]),
         @html.div(class="node-metric", [
           @html.span(localized(locale, "Temperature", "温度")),
-          @html.strong("\{node.temperature_celsius} °C"),
+          @html.strong(
+            if node.temperature_celsius < 0 {
+              localized(locale, "Unavailable / stale", "未上报／已过期")
+            } else {
+              "\{node.temperature_celsius} °C"
+            },
+          ),
           @html.small(
             localized(
               locale, "Maximum observed sensor", "已观测传感器最大值",
@@ -6195,7 +6266,13 @@ fn node_item(
         ]),
         @html.div(class="node-metric", [
           @html.span(localized(locale, "Power draw", "功耗")),
-          @html.strong("\{node.power_watts} W"),
+          @html.strong(
+            if node.power_watts < 0.0 {
+              localized(locale, "Unavailable / stale", "未上报／已过期")
+            } else {
+              "\{node.power_watts} W"
+            },
+          ),
           @html.small(
             localized(
               locale, "Node-reported GPU aggregate", "节点上报 GPU 汇总",
@@ -6213,16 +6290,12 @@ fn node_item(
           @html.dd(class="mono", active_assignment),
         ]),
         @html.div([
-          @html.dt(localized(locale, "Running services", "运行服务")),
-          @html.dd(node.workloads.to_string()),
-        ]),
-        @html.div([
-          @html.dt(localized(locale, "Placement model", "放置模型")),
-          @html.dd(
+          @html.dt(
             localized(
-              locale, "One lease · one machine", "一个租约 · 一台机器",
+              locale, "Controller-managed deployments", "控制器托管部署",
             ),
           ),
+          @html.dd(node.workloads.to_string()),
         ]),
       ]),
       @html.div(class="node-detail-actions", [
@@ -11578,7 +11651,13 @@ fn console_styles() -> String {
     #|.node-detail { padding: 1rem; border-top: 1px solid var(--line); background: var(--surface-subtle); }
     #|.node-detail-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
     #|.node-detail-heading h3 { margin: 0; }
-    #|.node-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; }
+    #|.node-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .65rem; }
+    #|.node-identity > strong { overflow-wrap: anywhere; }
+    #|.node-metric { min-width: 0; overflow-wrap: anywhere; }
+    #|.node-summary-cell > small { overflow-wrap: anywhere; }
+    #|.topology-disclosure { margin-bottom: 1rem; }
+    #|.topology-disclosure > summary { min-height: 44px; padding: .7rem 1rem; cursor: pointer; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); font-weight: 650; }
+    #|.readiness-item { overflow-wrap: anywhere; }
     #|.node-metric { display: grid; gap: .35rem; min-height: 7.2rem; padding: .8rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); }
     #|.node-metric > span { color: var(--muted); font-size: .68rem; font-weight: 680; }
     #|.node-metric > strong { font-size: 1.35rem; letter-spacing: -.035em; }
@@ -11779,6 +11858,7 @@ fn console_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
   alerts_window : AlertsWindow,
   now_unix_ms : Int64,
+  page_read_state : PageReadState,
 ) -> @rabbita.Html {
   let content = match state.route {
     Overview => overview_view(state, emit)
@@ -11987,7 +12067,42 @@ fn console_view(
             )
           None => @html.nothing
         },
-        content,
+        match page_read_state {
+          Ready => content
+          Loading =>
+            @html.p(
+              class="loading-state",
+              attrs=@html.Attrs::build()
+                .role("status")
+                .aria_live("polite")
+                .aria_busy("true"),
+              localized(
+                state.locale,
+                "Loading this page’s records…",
+                "正在加载此页面的数据…",
+              ),
+            )
+          Failed =>
+            @html.div(
+              class="error-state",
+              attrs=@html.Attrs::build().role("alert"),
+              [
+                @html.p(
+                  localized(
+                    state.locale,
+                    "This page’s records could not be loaded. This does not mean there are no records.",
+                    "此页面的数据未能加载，不代表没有记录。",
+                  ),
+                ),
+                @html.button(
+                  type_="button",
+                  disabled=state.loading,
+                  on_click=command(emit, Refresh),
+                  localized(state.locale, "Retry loading", "重新加载"),
+                ),
+              ],
+            )
+        },
         confirmation_view(state.locale, state.confirmation, emit),
       ]),
     ]),
@@ -11996,7 +12111,14 @@ fn console_view(
 
 ///|
 pub fn view(state : ConsoleState) -> @rabbita.Html {
-  console_view(state, None, AllAlerts, 0L)
+  console_view(state, None, AllAlerts, 0L, Ready)
+}
+
+///|
+pub(all) enum PageReadState {
+  Ready
+  Loading
+  Failed
 }
 
 ///|
@@ -12005,8 +12127,9 @@ pub fn interactive_view(
   emit : @rabbita.Emit[ConsoleMessage],
   alerts_window? : AlertsWindow = AllAlerts,
   now_unix_ms? : Int64 = 0L,
+  page_read_state? : PageReadState = Ready,
 ) -> @rabbita.Html {
-  console_view(state, Some(emit), alerts_window, now_unix_ms)
+  console_view(state, Some(emit), alerts_window, now_unix_ms, page_read_state)
 }
 
 ///|

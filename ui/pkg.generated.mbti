@@ -52,7 +52,7 @@ pub fn group_alerts_by_day(Array[NotificationRow]) -> Array[(String, Array[Notif
 
 pub fn group_models_by_model_id(Array[ModelRow]) -> Array[(String, Array[ModelRow])]
 
-pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage], alerts_window? : AlertsWindow, now_unix_ms? : Int64) -> @html.Html
+pub fn interactive_view(ConsoleState, @cmd.Emit[ConsoleMessage], alerts_window? : AlertsWindow, now_unix_ms? : Int64, page_read_state? : PageReadState) -> @html.Html
 
 pub fn known_runtimes(ConsoleState) -> Array[@contracts.RuntimeSpec]
 
@@ -743,7 +743,7 @@ pub(all) struct NodeRow {
   cpu_per_mille : Int
   cpu_measured : Bool
   temperature_celsius : Int
-  power_watts : Int
+  power_watts : Double
   workloads : Int
   lease_holder : String
   active_assignment : String
@@ -863,6 +863,12 @@ pub fn OverviewMetrics::from_json(Json, @json.JsonPath) -> Self raise @json.Json
 pub fn OverviewMetrics::not_equal(Self, Self) -> Bool
 pub fn OverviewMetrics::to_json(Self) -> Json
 pub fn OverviewMetrics::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageReadState {
+  Ready
+  Loading
+  Failed
+}
 
 pub(all) struct PolicySummary {
   quota_count : Int

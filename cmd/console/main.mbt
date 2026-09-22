@@ -844,14 +844,27 @@ fn latest_node_metric_value(
   node_id : String,
   metric : String,
 ) -> Int? {
+  latest_node_sensor_value(samples, node_id, metric).map(value => value.to_int())
+}
+
+///|
+fn latest_node_sensor_value(
+  samples : Array[@contracts.TelemetrySample],
+  node_id : String,
+  metric : String,
+) -> Double? {
   let mut latest_timestamp = 0L
-  let mut value : Int? = None
+  let mut value : Double? = None
+  let now = current_unix_ms()
   for sample in samples {
     if sample.node_id == node_id &&
+      sample.deployment_id == "" &&
       sample.metric == metric &&
+      sample.timestamp_unix_ms <= now + 5000L &&
+      now - sample.timestamp_unix_ms < node_heartbeat_stale_ms &&
       sample.timestamp_unix_ms >= latest_timestamp {
       latest_timestamp = sample.timestamp_unix_ms
-      value = Some(sample.value.to_int())
+      value = Some(sample.value)
     }
   }
   value
@@ -863,7 +876,7 @@ fn latest_node_metric(
   node_id : String,
   metric : String,
 ) -> Int {
-  latest_node_metric_value(samples, node_id, metric).unwrap_or(0)
+  latest_node_metric_value(samples, node_id, metric).unwrap_or(-1)
 }
 
 ///|
@@ -901,7 +914,12 @@ fn portal_lease_holder(
           return "\{request.submission.organization_id} · \{request.submission.unix_username}"
         }
       }
-    None => ()
+    None =>
+      return if locale.is_chinese() {
+        "尚未读取租约"
+      } else {
+        "Lease not loaded"
+      }
   }
   if locale.is_chinese() {
     "未分配"
@@ -994,11 +1012,11 @@ fn build_node_rows(
           heartbeat.node_id,
           "accelerator_temperature_celsius",
         ),
-        power_watts: latest_node_metric(
+        power_watts: latest_node_sensor_value(
           telemetry.samples,
           heartbeat.node_id,
           "accelerator_power_watts",
-        ),
+        ).unwrap_or(-1.0),
         workloads: heartbeat.running_deployments.length(),
         lease_holder: portal_lease_holder(
           locale,
@@ -1007,9 +1025,9 @@ fn build_node_rows(
         ),
         active_assignment: if assignments == "" {
           if locale.is_chinese() {
-            "空闲"
+            "无控制器托管部署（不代表机器空闲）"
           } else {
-            "Idle"
+            "No controller-managed deployments (not machine idle)"
           }
         } else {
           assignments
@@ -1346,6 +1364,8 @@ async fn load_console(
     }
   ]
   let active_nodes = nodes.count_if(node => node.state == Active)
+  // The overview claims an alert count, so it must actually read the evidence.
+  let alerts = load_console_alerts_reads(endpoint, token)
   // Accounts, trial statistics, access packages, workspace users, access
   // grants, compute leases, and exclusive node leases are built by the access
   // read group; deployments and service deployments are built by the deployment
@@ -1359,11 +1379,10 @@ async fn load_console(
       total_nodes: heartbeats.length(),
       active_models: models.count_if(model => model.state == Approved),
       queue_depth: scheduler.queued_count.unwrap_or(scheduler.active.length()),
-      // The alert list is the alerts read group, so the core load has no open
-      // count to report. The landing badge stays at zero until that group is
-      // merged; every core reload then preserves the merged count.
-      alerts: 0,
-      recent_changes: 0,
+      alerts: alerts.notifications.count_if(record => {
+        record.lifecycle != Resolved
+      }),
+      recent_changes: -1,
     },
     nodes,
     models,
@@ -1399,8 +1418,8 @@ async fn load_console(
       ],
     },
     audit: [],
-    notifications: [],
-    notification_deliveries: [],
+    notifications: alerts.notifications,
+    notification_deliveries: alerts.notification_deliveries,
     // Owned by the access read group.
     accounts: [],
     trial_summary: None,
@@ -1485,10 +1504,8 @@ async fn load_console(
 /// The read group a route depends on. Routes that are served completely by the
 /// core read set have none.
 ///
-/// Deliberately unmapped: `Overview`. The landing page must not pay for the
-/// alert list, so its alert tile and topbar badge read zero until the operator
-/// opens `Alerts` (which maps to `AlertsReads` and is the only route that
-/// does).
+/// Overview reads alert evidence in the core load; Alerts additionally refreshes
+/// its own list when opened. A missing request must never imply zero alerts.
 fn console_read_group_for_route(route : @ui.OperatorRoute) -> ConsoleReadGroup? {
   match route {
     Alerts => Some(AlertsReads)
@@ -2569,11 +2586,15 @@ fn merge_loaded_console(
     },
     overview: {
       ..loaded.overview,
-      alerts: current.overview.alerts,
-      recent_changes: current.overview.recent_changes,
+      alerts: loaded.overview.alerts,
+      recent_changes: if current.operator_authenticated {
+        current.overview.recent_changes
+      } else {
+        loaded.overview.recent_changes
+      },
     },
-    notifications: current.notifications,
-    notification_deliveries: current.notification_deliveries,
+    notifications: loaded.notifications,
+    notification_deliveries: loaded.notification_deliveries,
     accounts: current.accounts,
     trial_summary: current.trial_summary,
     access_packages: current.access_packages,
@@ -5184,8 +5205,8 @@ fn update_live(
       }
     }
     Outcome(DeferredReadFailed(group)) => {
-      // A page-scoped read failure stays quiet: the page keeps its empty state,
-      // the operator keeps their session, and the next visit retries.
+      // Preserve the session, but never present failed reads as empty records.
+      // The absent group projects to a visible retry state on the current page.
       let groups = model.console_read_groups.copy()
       groups.remove(group)
       ({ ..model, console_read_groups: groups, }, @rabbita.none)
@@ -8979,7 +9000,7 @@ fn app_view(
   // moment any background read reports an authentication failure, even though
   // the gateway is still attaching operator authority to each request.
   if !model.demo_mode && !model.console.operator_authenticated {
-    if model.console.loading {
+    if model.console.loading || deployment_console_open() {
       // Progress while the first read is in flight. The reason is carried
       // through so a read that fails does not leave an unexplained spinner.
       return console_loading_view(
@@ -9223,8 +9244,25 @@ fn app_view(
       emit.map(message => Console(message)),
       alerts_window=model.alerts_window,
       now_unix_ms=current_unix_ms(),
+      page_read_state=console_page_read_state(model),
     ),
   ])
+}
+
+///|
+fn console_page_read_state(model : AppModel) -> @ui.PageReadState {
+  if model.demo_mode {
+    return Ready
+  }
+  match console_read_group_for_route(model.console.route) {
+    None => Ready
+    Some(group) =>
+      match model.console_read_groups.get(group) {
+        Some(true) => Ready
+        Some(false) => Loading
+        None => if model.console.loading { Loading } else { Failed }
+      }
+  }
 }
 
 ///|
@@ -9572,6 +9610,7 @@ fn main {
       {
         ..@ui.default_state(),
         locale,
+        loading: open_mode,
         offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
       }
     },
