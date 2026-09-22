@@ -1998,11 +1998,98 @@ and requested compute lease as one resumable package"，分 4 步：
    `identity-session-unavailable`，但运维日志里现在有 `HTTP 400 {"code":"AccountRejected"}`，
    不用再去猜 relay / provider / 数据库。
 
-### 12.4 本轮仍未验证 / 未做
+### 12.4 决定性卡点：整条承诺函链在**第 2 步**就被一道**设计上的生产闸门**挡住
 
-- 第 4–10 步（选租期冻结报价 → 拉起承诺函 → 管理侧批准 → 登记签署证据 → 开通权限 → 企业侧拿到权限）
-  **尚未走**。承诺函文件能否真正生成、管理侧批准后企业侧是否真的拿到权限，都还没有实测。
-- 承诺函的价目在 UI 上是否与 §10 的 49/322/1290/3600/13870 一致，本轮只确认了下拉选项的文案。
+管理侧 `Offline commerce` 页，选中企业侧刚建的那张 `Draft` 订单，把租期选成
+`7 days · 322`，点 `Quote undertaking tariff` → 弹出确认框：
+
+```
+CONSEQUENTIAL ACTION
+Freeze this immutable quote?
+The price, validity window, terms digest, service, and SLA become immutable for this quote revision.
+offline-order-0f50a176-… · week × 1
+[Go back]  [Confirm with this evidence]
+```
+
+点 `Confirm with this evidence` → **`POST /v1/offline-commerce/operator/quotes 503`**，
+控制台提示：
+
+> Unable to complete the operation: Offline commercial action failed:
+> **verified offline-commerce deployment capabilities are required**
+
+企业侧同一时刻的表现（`Contract forms` 页）是**正确的、诚实的**：
+
+> **No eligible new order is available. Ask Party A to confirm the fixed tariff, or reopen the existing packet below; revisions do not need a second order.**
+
+也就是说：企业侧那条承诺函只能挂在**已经有承诺函报价的订单**上（`undertaking_order_refs`），
+而报价正是上一步被 503 拒掉的动作。所以链条断在这里：
+
+| 步 | 状态 |
+|---|---|
+| 1 注册企业 | ✅ 通 |
+| 2 选择租期 / 冻结报价 | ❌ `503 OfflineCommerceNotReady` |
+| 3 拉起承诺函 | ⛔ 不可达（没有已报价的订单可挂） |
+| 4 管理侧确认执行 | ⛔ 不可达 |
+| 5 进入线下流程 | ⛔ 不可达 |
+| 6 重新上传录入登记 | ⛔ 不可达 |
+| 7 开通权限 | ⛔ 不可达 |
+| 8 企业侧得到权限 | ⛔ 不可达 |
+
+**闸门是什么**：`GET /v1/offline-commerce/operator/readiness`（管理侧会话读，200）：
+
+```json
+{"status":"OfflineCommerceAdaptersPending","capabilities":[],
+ "blocker_codes":["ReadinessCapabilitySetInvalid","ApprovedLegalTemplatesPending",
+ "ObjectStoragePending","MalwareScannerPending","OoxmlWorkerPending",
+ "MoonLeafPdfRendererPending","SpreadsheetFormulaEnginePending","CjkFontsPending",
+ "MachineCallbackIdentityPending","EntitlementAuthorityPending",
+ "FinanceLegalPolicyPending","ReadinessEvidenceExpired",
+ "ReadinessTransferAdapterUnavailable",
+ "ReadinessArtifactDispatcherHeartbeatStale","ReadinessArtifactDispatcherSuccessStale",
+ "ReadinessEntitlementDispatcherHeartbeatStale","ReadinessEntitlementDispatcherSuccessStale"]}
+```
+
+**这不是 bug，是设计**，而且仓库文档写得很明确：
+
+- `docs/OFFLINE_COMMERCE.md`：「Deployment readiness is supplied only through the signed,
+  bounded JSON file at `LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH`, verified with
+  `LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET`. … **Omitting both variables is supported
+  and intentionally reports `OfflineCommerceAdaptersPending`** … Initiating side-effect
+  routes return `503 OfflineCommerceNotReady` with blocker codes.」
+- 同一文档的 Production readiness gates 一节列出必须先证明的十项（双语法律模板 + 不可变哈希、
+  S3 兼容对象存储与租户隔离、恶意内容扫描、文档 worker 固定镜像、MoonLeaf DOCX→PDF 渲染与
+  逐页视觉回归、XLSX 公式重算、与人类运维权限分离的签名回调身份 …），并总结：
+  「**Until these gates pass, readiness must show `OfflineCommerceAdaptersPending`;
+  the platform may demonstrate state transitions locally but must not represent the generated
+  packet or uploaded evidence as legally executed or financially settled.**」
+- 本集群里 `lunanexa-offline-commerce-readiness` 这个 Secret 的内容就是字面量 `pending`
+  （`scripts/deploy/generate-management-secrets.sh:47` 就是这么写的），
+  而且**全集群没有任何一个 Pod 挂载 `LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH`**。
+
+**所以我不会去伪造那份签名就绪证明**：它存在的意义正是阻止一个半配置的部署签发有法律效力的文件，
+伪造它就等于把这道闸门本身删掉。要走通第 2–7 步，需要**运维/法务/财务先真实证明那十项能力**
+（并让 artifact / entitlement 两个 dispatcher 跑起来、留下心跳与成功回执），再签出就绪文档。
+
+### 12.5 这一步两侧的显示/反馈是否合格
+
+| 观察点 | 结论 |
+|---|---|
+| 管理侧点了确认后有没有反馈 | ✅ 有：顶部 notice 明确写"Unable to complete the operation: …"，`Working…` 也出现过 |
+| 反馈里有没有**可操作**的信息 | ❌ 没有。真正的 17 条 blocker code 在 503 响应体里，**UI 一个字都没显示**，操作员无法知道缺什么 |
+| 操作员能不能**事先**看到这条流水线没就绪 | ⚠️ 部分能：Overview 的 `Production acceptance gate` 卡片里列了 "Offline commerce pipeline · Action required"，但那张卡片**没有链接/按钮可以展开**，看不到具体缺哪几项 |
+| 企业侧在被挡住时说了什么 | ✅ 说得很对：指出应由甲方确认固定档位报价；没有假造出可选的订单 |
+| 企业侧那条路线选择器 | ✅ 正确：承诺函可选，传统合同显示为 `Traditional rental contract · bilateral execution (temporarily unavailable)` 且不可选（§11.6 的开关生效） |
+| 价目是否与 §10 一致 | ✅ 下拉选项原文：`1 day · 49 / 7 days · 322 / 30 days · 1290 / 90 days · 3600 / 365 days · 13870` |
+
+### 12.6 本轮仍未验证 / 未做
+
+- 第 3–7 步（承诺函生成、管理侧批准、登记签署证据、开通权限）**在当前部署上不可达**，原因见 §12.4。
+  要在真实节点上走完，需要先满足那十项生产闸门并签出就绪文档——这是运维/法务的决定，不是代码问题。
+- 承诺函 DOCX/PDF 到底能不能生成、生成物是否分页正确、扫描件上传与复核，都没有实测。
+- 第 8 步（企业侧拿到权限）**还有一条不经过 offline commerce 的路**：
+  管理侧 `Users & access` 的 `GUIDED SETUP / Create WebIDE access`（§9.4），
+  以及企业侧 `Get started` 的服务选择。这条**本轮没走**，是下一步。
 - 管理侧 `Offline commerce` 的租期选择是**运营侧**动作（`operator_actions`），
   不是企业侧动作；也就是说"用户选择时间/租期"在当前实现里是**甲方确认固定档位报价**，
   企业侧只能提需求。这一点与原任务描述的顺序不同，需要确认是否即为预期。
+- 确认框里只写 `week × 1`，**不显示金额**；"冻结不可变报价"这种动作不显示价格，是个体验缺口。
