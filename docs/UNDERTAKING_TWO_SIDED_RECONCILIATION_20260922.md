@@ -1962,12 +1962,13 @@ and requested compute lease as one resumable package"，分 4 步：
 | G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | ✅ 已修并验证（见 §12.15） |
 | H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄，且抄错会静默给别人开通账户 | 中 | ✅ 已修并验证（见 §12.16） |
 | I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
-| J | 开通权限时 `Organization` / `Tenant` 是**手填自由文本**，而客户门户用的是他自注册时的那一套（`trial-org-…` / `trial-tenant-…`）。填不一样，开通照样 `200`、管理侧照样显示 `Ready`，但**落在客户会话解析不到的租户上**，企业侧完全看不到 | **严重**（挡死第 8 步） | ⛔ **未修**（§12.17 有完整证据与两种改法） |
+| J | 开通权限时 `Organization` / `Tenant` 是**手填自由文本**，而客户门户用的是他自注册时的那一套（`trial-org-…` / `trial-tenant-…`）。填不一样，开通照样 `200`、管理侧照样显示 `Ready`，但**落在客户会话解析不到的租户上**，企业侧完全看不到 | **严重**（挡死第 8 步） | ✅ **不一致已可见并验证**（§12.18）；"允不允许给同一个人开第二个租户"是产品策略，**没替你定** |
 
 **修掉的四个（A–D）都在关键路径上**：不修 A，企业侧连订单都建不出来；不修 B，任何失败都表现为"按钮坏了"；
 不修 C，后面所有前端修复都到不了浏览器；不修 D，登录九次之后整条链连入口都没有。
-F、G、H、I 是走查中撞到的体验/可核对性缺陷，也都修了。**E 和 J 是仅剩的两个开着的**：
-E 是设计上的生产闸门（要真实签名），J 是两侧租户标识对不上的结构问题。
+F、G、H、I 是走查中撞到的体验/可核对性缺陷，也都修了。**J 已经让不一致变得可见**
+（§12.18），但"允不允许给同一个人开第二个租户"这条策略**留给你定**。
+**只剩 E 是真正开着的**：它是设计上的生产闸门，要真实签名，不是代码问题。
 
 ### 12.1 走查步骤与结果（截至本轮结束）
 
@@ -2661,3 +2662,65 @@ tenant_ref:      "trial-tenant-\{fingerprint}",
   要清理的话：管理侧 `Users & access` 里对该包做 revoke，再在 `Leases` 页释放那条租约。
 - **没有**修 J（见上面的两种改法）。所以第 8 步在报告里记的是 **⛔ 实际上没拿到**，
   不是"通了"，也不是"没验证"。
+### 12.18 堵点 J：把"租户填得不一样"从静默变成可见（已实测）
+
+§12.17 里两种改法，选的是**第 1 种**：不禁止，只显示。理由写在 §12.17——
+"允不允许给同一个人开第二个租户"是产品策略；而且禁止手填会让"确实要开新租户"的场景无路可走。
+所以这次只做**信息**：把平台已经知道的、这个 subject 名下的租户列出来，让操作员**照着填**而不是**猜着填**。
+
+**改了三个地方**
+
+1. `ui/console.mbt` 的 `ComputeLeaseRow` 增加 `subject_ref`。
+   这个字段本来就在控制台已经拉取的 workspace 快照里（`WorkspaceLease.subject_ref`），
+   只是构造行的时候被丢掉了（`cmd/console/main.mbt`），所以**不需要新接口、不需要新请求**。
+
+2. 新增 `access_existing_authority(...)`，渲染在 `Organization` / `Tenant` 两个输入框下面，
+   并给 `#access-tenant` 补上 `aria-describedby`。三种状态：
+
+   | 状态 | 页面上实际出现的那一行 |
+   |---|---|
+   | 身份详情还没填 | `Fill in Identity provider details first; LunaNexa then lists the tenants this subject already holds, so you can reuse the customer's own tenant instead of inventing one.` |
+   | 这个 subject 平台里没有 | `LunaNexa holds no account or workspace lease for this subject yet. The organization and tenant below are the ones the package will create.` |
+   | 这个 subject 已经存在 | `This subject already exists: <姓名> · <邮箱> · <subject 引用>. Tenants it already holds: <租户列表>. The customer's own sign-in resolves its tenant from its existing membership, so a package opened on a different tenant will not be visible to them.` |
+
+3. 同一 subject 的多条租约**去重**，别人的租约不会被算进来（有测试钉住）。
+
+**真实集群实测（2026-09-22，浏览器，非命令行）**
+
+拿 §12.17 那个真账号（`recon-h-1790053838@example.test`，subject
+`97716b94-fc9e-4cc3-9f0e-3d613537b07c`）复测，页面当场显示：
+
+```
+This subject already exists: Recon H Enterprise · recon-h-1790053838@example.test
+· subject-a409fbcfca89d44f3b16bdf1. Tenants it already holds:
+tenant-recon-h, trial-tenant-a409fbcfca89d44f3b16bdf1.
+The customer's own sign-in resolves its tenant from its existing membership,
+so a package opened on a different tenant will not be visible to them.
+```
+
+**两个租户都在列表里**——包括客户自己会解析到的那一个（`trial-tenant-a409fbcfca89d44f3b16bdf1`）。
+也就是说 §12.17 里那个"管理侧显示成功、企业侧没反应"的坑，现在**在按下 `Prepare access` 之前**
+就摆在操作员眼前了。同一页面上，`Provider subject` 下面是 §12.16 的派生引用，
+`Tenant` 下面是这里的既有租户——两个手填的身份字段都有了可核对的锚点。
+
+也复测了另外两种状态：清空身份详情 → 回到"先填身份详情"那句；填一个平台里不存在的
+subject → `LunaNexa holds no account or workspace lease for this subject yet.`
+
+**没做的部分（如实）**
+
+- **没有**禁止给同一个人开第二个租户，也**没有**改成从既有租户里选。那是策略决定（§12.17 的第 2 种改法）。
+- **没有**让企业侧显示"管理侧给你开了什么"。§12.17 记的那个"企业侧毫无变化"依然成立——
+  这次只是让操作员**在开之前**知道会这样，没有改变"开在别的租户上客户就看不到"这个事实。
+- §12.17 里那次开通留下的包和租约仍然没清理，它们是证据。
+
+**测试与部署**
+
+| 目标 | 结果 |
+|---|---|
+| `ui`（js） | 89/89（3 条新增：既有租户列出并去重、未知 subject、未填 subject） |
+| `ui/enterprise` + `ui/offline_commerce` + `cmd/console` + `cmd/enterprise`（js） | 143/143 |
+| `ui` + `account` + `account/identity` + `api`（native） | 240/240 |
+
+镜像：`lunanexa-web:20260922-r8`
+（registry digest `sha256:e160b51963a39f7e66ac029acb51b6c2d370fd62a44b740d5241e1908cbe27c4`），
+`lunanexa-console` 已 rollout；浏览器硬刷新后再测。
