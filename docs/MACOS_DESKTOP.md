@@ -30,6 +30,17 @@ on the receiving Mac, not distributed inside the image. This profile is locally
 ad-hoc signed, not Apple-notarized. Network/UI acceptance on the target LAN is
 separate from native unit tests, signature and image-integrity checks.
 
+An explicitly authorized private distribution may use
+`--private-password-stdin` on the builder, with terminal echo disabled or a
+protected input pipe. It reads the password from stdin (never a command-line
+argument) and places it in a signed bundle resource under ignored build output.
+On first launch, only when no Keychain item exists, the app imports that
+resource into Keychain. A denied or locked Keychain does not use the fallback.
+This is intentionally **recoverable credential distribution**, not encryption:
+anyone holding the private DMG can extract the administrator password. Never
+publish the private image or commit its contents. Ordinary builds contain no
+credential and use a separate staging directory.
+
 LunaNexa ships two Mac desktop shells built with Lepusa:
 
 - **LunaNexa Operator** opens the Rabbita operator console at `/console/`.
