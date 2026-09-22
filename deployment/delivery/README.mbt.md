@@ -16,6 +16,11 @@ The controller drives one stage at a time:
   selected model/runtime, not a Kubernetes Running condition. Text uses a small
   inference probe. Media requires loaded health plus the expected provider model
   identity; that readiness probe does not substitute for actual video generation.
+- Model deliveries start one independent replica per reserved node. This does
+  not combine node memory or imply tensor-parallel inference. The current
+  approved template contract does not select a distributed topology. Each
+  replica has a persisted assignment/node/generation and preparation, response,
+  and termination observations. Aggregate readiness waits for every replica.
 - `StartingWorkspace`: restore the persistent volume, configure the selected
   model/workflow, then report a successful workspace/terminal response.
 - `Ready`: publish access through the tenant-bound public gateway.
@@ -36,6 +41,15 @@ authorization cache. Stopping does not erase workspace volumes or public model
 caches. `WorkloadsStopped` requires actual adapter termination evidence, after
 which the controller separately asks the scheduler to release its reservation.
 If other services still claim that reservation, their claims must remain.
+Each model claim is released only after matching node-authenticated termination
+evidence for its assignment generation. One replica exiting never releases a
+second replica's claim. Media requests may choose a least-busy replica of the
+same approved profile; idempotent retries remain bound to the original runtime.
+
+Older v1 snapshots without `model_replicas` remain readable. Pending legacy
+operations preserve their original first assignment placement while adding the
+remaining independent replicas. Already-ready legacy operations are not
+silently resized during upgrade.
 
 File snapshots are an atomic local fallback. Production uses PostgreSQL domain
 `exclusive_deliveries`, schema `lunanexa.exclusive-deliveries.v1`, under the

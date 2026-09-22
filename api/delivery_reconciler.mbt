@@ -4,6 +4,69 @@ fn delivery_assignment_id(operation : @delivery.Operation) -> String {
 }
 
 ///|
+fn delivery_replica_id(operation : @delivery.Operation, index : Int) -> String {
+  if index == 0 {
+    delivery_assignment_id(operation)
+  } else {
+    "\{operation.operation_id}-model-\{index}"
+  }
+}
+
+///|
+fn delivery_model_claim(operation : @delivery.Operation, id : String) -> Bool {
+  for index in 0..<operation.node_ids.length() {
+    if delivery_replica_id(operation, index) == id {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn delivery_replica_record(
+  operation : @delivery.Operation,
+  assignment : @contracts.DesiredAssignment,
+) -> @delivery.ModelReplica {
+  match
+    operation.model_replicas
+    .unwrap_or([])
+    .iter()
+    .find_first(replica => replica.assignment_id == assignment.assignment_id) {
+    Some(replica) if replica.generation == assignment.generation => replica
+    previous =>
+      {
+        assignment_id: assignment.assignment_id,
+        node_id: assignment.node_id,
+        generation: assignment.generation,
+        prepared: previous.map_or(
+          operation.stage == LoadingModel &&
+          assignment.assignment_id == delivery_assignment_id(operation),
+          value => value.prepared,
+        ),
+        ready: false,
+        stopped: false,
+      }
+  }
+}
+
+///|
+fn delivery_replica_terminated(
+  operation : @delivery.Operation,
+  replica : @delivery.ModelReplica,
+  records : Array[@media_jobs.AcceptedTermination],
+) -> Bool {
+  replica.stopped ||
+  records.any(record => {
+    record.node_id == replica.node_id &&
+    record.evidence.assignment_id == replica.assignment_id &&
+    record.evidence.deployment_id == operation.operation_id &&
+    record.evidence.generation == replica.generation &&
+    record.evidence.observed_unix_ms >=
+    operation.stop_requested_at_ms.unwrap_or(operation.updated_at_ms)
+  })
+}
+
+///|
 async fn ApiService::append_delivery_media_bindings(
   self : ApiService,
   bindings : Array[MediaBinding],
@@ -23,35 +86,40 @@ async fn ApiService::append_delivery_media_bindings(
       scheduler.node_reservation(id) is Some(reservation) &&
       reservation.state == Reserved &&
       reservation.request.tenant_ref == operation.intent.tenant_id &&
-      reservation.request.expires_unix_ms > now &&
-      self.store.assignment(delivery_assignment_id(operation))
-      is Some(assignment) &&
-      self.delivery_runtime_observed(assignment, now) else {
+      reservation.request.expires_unix_ms > now else {
       continue
     }
-    for template in templates {
-      if template.template_id != operation.intent.template_id ||
-        template.template_version != operation.intent.template_version ||
-        template.node_id != assignment.node_id {
+    for
+      assignment in self.store
+      .assignments()
+      .filter(value => value.deployment_id == operation.operation_id) {
+      if !self.delivery_runtime_observed(assignment, now) {
         continue
       }
-      // Dynamic customer deployments never reuse a fixed shared-service origin.
-      guard template.runtime_route is Some(policy) else { continue }
-      for heartbeat in heartbeats {
-        if heartbeat.node_id != assignment.node_id {
+      for template in templates {
+        if template.template_id != operation.intent.template_id ||
+          template.template_version != operation.intent.template_version ||
+          template.node_id != assignment.node_id {
           continue
         }
-        for endpoint in heartbeat.runtime_endpoints.unwrap_or([]) {
-          if endpoint.matches(assignment, now) && policy.allows(endpoint) {
-            bindings.push({
-              deployment_id: operation.operation_id,
-              deployment_generation: assignment.generation,
-              node_id: assignment.node_id,
-              origin: "http://\{endpoint.address}:\{endpoint.port}",
-              bearer: template.bearer,
-              profile: template.profile,
-              instance_id: Some(endpoint.instance_id),
-            })
+        // Dynamic customer deployments never reuse a fixed shared-service origin.
+        guard template.runtime_route is Some(policy) else { continue }
+        for heartbeat in heartbeats {
+          if heartbeat.node_id != assignment.node_id {
+            continue
+          }
+          for endpoint in heartbeat.runtime_endpoints.unwrap_or([]) {
+            if endpoint.matches(assignment, now) && policy.allows(endpoint) {
+              bindings.push({
+                deployment_id: operation.operation_id,
+                deployment_generation: assignment.generation,
+                node_id: assignment.node_id,
+                origin: "http://\{endpoint.address}:\{endpoint.port}",
+                bearer: template.bearer,
+                profile: template.profile,
+                instance_id: Some(endpoint.instance_id),
+              })
+            }
           }
         }
       }
@@ -88,6 +156,7 @@ async fn ApiService::prepare_delivery_assignment(
   self : ApiService,
   operation : @delivery.Operation,
   template : @deployment.ModelServiceTemplate,
+  index : Int,
 ) -> @contracts.DesiredAssignment {
   guard operation.reservation_id is Some(reserved_id) else {
     raise Failure("delivery reservation unavailable")
@@ -97,7 +166,7 @@ async fn ApiService::prepare_delivery_assignment(
     defer self.resource_mutex.release()
     self.ensure_reservation_nodes(reserved_id)
   }
-  let id = delivery_assignment_id(operation)
+  let id = delivery_replica_id(operation, index)
   let existing = self.store.assignment(id)
   if existing is Some(existing) &&
     existing.controller_epoch == self.store.controller_epoch() {
@@ -113,6 +182,7 @@ async fn ApiService::prepare_delivery_assignment(
       ..previous,
       controller_epoch: self.store.controller_epoch(),
       generation: previous.generation + 1L,
+      reservation: None,
       signature: "",
     }
     self.publish_planned_assignment(
@@ -123,6 +193,25 @@ async fn ApiService::prepare_delivery_assignment(
     return self.store.assignment(id).unwrap()
   }
   let now = @async.now()
+  // Preserve legacy first-replica placement; subsequent replicas use remaining
+  // nodes in reservation order. Cache locality only selects the initial head.
+  let preferred = @scheduler.cached_reserved_nodes(
+    self.store.heartbeats(),
+    operation.node_ids,
+    template.artifact.digest,
+    now,
+    self.global_settings.control_timing.heartbeat_timeout_ms,
+  )
+  let first_node = self.store
+    .assignment(delivery_assignment_id(operation))
+    .map(value => value.node_id)
+    .unwrap_or(preferred.get(0).unwrap_or(operation.node_ids[0]))
+  let ordered_nodes = [first_node]
+  for node in operation.node_ids {
+    if node != first_node {
+      ordered_nodes.push(node)
+    }
+  }
   let context : @deployment.PlanningContext = {
     registry: registry_evidence(
       registry.snapshot(),
@@ -131,7 +220,7 @@ async fn ApiService::prepare_delivery_assignment(
     ),
     nodes: self.store
     .heartbeats()
-    .filter(heartbeat => operation.node_ids.contains(heartbeat.node_id))
+    .filter(heartbeat => ordered_nodes[index] == heartbeat.node_id)
     .map(heartbeat => {
       management_node(
         heartbeat,
@@ -141,8 +230,8 @@ async fn ApiService::prepare_delivery_assignment(
     }),
     available_secret_refs: self.available_secret_refs,
   }
-  // The order may hold several nodes. This template starts one model replica
-  // within that set; distributed templates require their topology-specific plan.
+  // Each reserved node runs an independent replica. This is not tensor parallel
+  // inference: the template contract does not pin a distributed topology.
   let plan = @deployment.preflight(
     [template],
     {
@@ -167,7 +256,12 @@ async fn ApiService::prepare_delivery_assignment(
   let planned = @deployment.desired_assignments(
       plan,
       self.store.controller_epoch(),
-      1L,
+      operation.model_replicas
+      .unwrap_or([])
+      .iter()
+      .find_first(replica => replica.assignment_id == id)
+      .map(value => value.generation + 1L)
+      .unwrap_or(1L),
       now,
     )[0]
   let assignment = {
@@ -284,8 +378,8 @@ async fn ApiService::delivery_model_ready(
   let result = self.runtime.invoke_at(
     {
       version: @contracts.contract_version,
-      idempotency_key: "\{operation.operation_id}-readiness",
-      workload_id: "\{operation.operation_id}-readiness",
+      idempotency_key: "\{assignment.assignment_id}-\{assignment.generation}-readiness",
+      workload_id: "\{assignment.assignment_id}-readiness",
       tenant_ref: operation.intent.tenant_id,
       credential_scope: "delivery-readiness",
       capability: TextGenerate,
@@ -370,13 +464,14 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       )
     }
     if operation.stage == Stopping {
-      if self.store.assignment(delivery_assignment_id(operation))
-        is Some(assignment) &&
-        operation.model_assignment_generation != Some(assignment.generation) {
+      for
+        assignment in self.store
+        .assignments()
+        .filter(value => value.deployment_id == operation.operation_id) {
         operation = deliveries.observe(
           operation.operation_id,
           operation.generation,
-          ModelAssignmentPublished(generation=assignment.generation),
+          ModelReplicaObserved(delivery_replica_record(operation, assignment)),
           now,
         )
       }
@@ -396,43 +491,75 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       let workspace_claimed = reservation.map_or(false, value => {
         value.services.any(service => {
           service.service_id.has_prefix(operation.operation_id) &&
-          service.service_id != delivery_assignment_id(operation)
+          !delivery_model_claim(operation, service.service_id)
         })
       })
-      let model_claimed = reservation.map_or(false, value => {
-        value.services.any(service => {
-          service.service_id == delivery_assignment_id(operation)
-        })
-      })
-      let model_stopped = if !model_claimed {
-        true
-      } else {
-        match self.media {
-          None => false
-          Some(media) =>
-            media.jobs.snapshot().terminations
+      // A legacy snapshot may have removed desired state before restart. Recover
+      // its original single replica from the retained scheduler claim.
+      if operation.model_replicas is None && reservation is Some(value) {
+        for claim in value.services {
+          if claim.service_id == delivery_assignment_id(operation) &&
+            operation.model_assignment_generation is Some(generation) {
+            operation = deliveries.observe(
+              operation.operation_id,
+              operation.generation,
+              ModelReplicaObserved({
+                assignment_id: claim.service_id,
+                node_id: claim.node_id,
+                generation,
+                prepared: false,
+                ready: false,
+                stopped: false,
+              }),
+              now,
+            )
+          }
+        }
+      }
+      let mut model_stopped = true
+      let terminations = match self.media {
+        Some(media) => media.jobs.snapshot().terminations.unwrap_or([])
+        None => []
+      }
+      for replica in operation.model_replicas.unwrap_or([]) {
+        let confirmed = delivery_replica_terminated(
+          operation, replica, terminations,
+        )
+        if confirmed {
+          if operation.reservation_id is Some(id) {
+            scheduler.confirm_node_service_stopped(
+              id,
+              replica.assignment_id,
+              now,
+            )
+          }
+          if !replica.stopped {
+            operation = deliveries.observe(
+              operation.operation_id,
+              operation.generation,
+              ModelReplicaObserved({ ..replica, stopped: true, }),
+              now,
+            )
+          }
+        } else {
+          model_stopped = false
+        }
+      }
+      // Unknown retained claims are never silently treated as stopped.
+      if reservation is Some(value) {
+        if value.services.any(claim => {
+            delivery_model_claim(operation, claim.service_id) &&
+            !operation.model_replicas
             .unwrap_or([])
-            .any(record => {
-              record.evidence.assignment_id == delivery_assignment_id(operation) &&
-              record.evidence.deployment_id == operation.operation_id &&
-              operation.model_assignment_generation ==
-              Some(record.evidence.generation) &&
-              record.evidence.observed_unix_ms >=
-              operation.stop_requested_at_ms.unwrap_or(operation.updated_at_ms)
-            })
+            .any(replica => replica.assignment_id == claim.service_id)
+          }) {
+          model_stopped = false
         }
       }
       if stopped &&
         model_stopped &&
         operation.workspace_id is None &&
         !workspace_claimed {
-        if operation.reservation_id is Some(id) {
-          scheduler.confirm_node_service_stopped(
-            id,
-            delivery_assignment_id(operation),
-            now,
-          )
-        }
         ignore(
           deliveries.observe(
             operation.operation_id,
@@ -456,60 +583,69 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       continue
     }
     try {
-      let assignment = self.prepare_delivery_assignment(operation, template)
-      if operation.model_assignment_generation != Some(assignment.generation) {
-        operation = deliveries.observe(
-          operation.operation_id,
-          operation.generation,
-          ModelAssignmentPublished(generation=assignment.generation),
-          now,
+      let assignments : Array[@contracts.DesiredAssignment] = []
+      for index in 0..<operation.node_ids.length() {
+        let assignment = self.prepare_delivery_assignment(
+          operation, template, index,
         )
+        let replica = delivery_replica_record(operation, assignment)
+        if !operation.model_replicas.unwrap_or([]).contains(replica) {
+          operation = deliveries.observe(
+            operation.operation_id,
+            operation.generation,
+            ModelReplicaObserved(replica),
+            now,
+          )
+        }
+        assignments.push(assignment)
       }
       if operation.stage == PreparingModel {
-        let stage = delivery_metric(
-          self,
-          operation,
-          assignment.node_id,
-          "artifact_preparation_stage",
-          0L,
-        )
-        if delivery_metric(
+        let mut all_prepared = true
+        let mut all_cached = true
+        let mut present = 0L
+        let mut total = 0L
+        let mut total_known = true
+        for assignment in assignments {
+          let stage = delivery_metric(
             self,
             operation,
             assignment.node_id,
             "artifact_preparation_stage",
-            operation.updated_at_ms,
-          ) ==
-          Some(4.0) {
-          ignore(
-            deliveries.observe(
+            0L,
+          )
+          if stage == Some(4.0) {
+            operation = deliveries.observe(
               operation.operation_id,
               operation.generation,
               Failure(code="ModelPreparationFailed"),
               now,
-            ),
-          )
-          continue
-        }
-        if stage == Some(3.0) {
-          operation = deliveries.observe(
-            operation.operation_id,
-            operation.generation,
-            ModelPrepared(
-              digest=assignment.artifact.digest,
-              cache_hit=delivery_metric(
-                  self,
-                  operation,
-                  assignment.node_id,
-                  "artifact_cache_hit",
-                  0L,
-                ) ==
-                Some(1.0),
-            ),
-            now,
-          )
-        } else {
-          let present = delivery_metric(
+            )
+            break
+          }
+          if stage == Some(3.0) {
+            let replica = delivery_replica_record(operation, assignment)
+            if !replica.prepared {
+              operation = deliveries.observe(
+                operation.operation_id,
+                operation.generation,
+                ModelReplicaObserved({ ..replica, prepared: true, }),
+                now,
+              )
+            }
+            all_cached = all_cached &&
+              delivery_metric(
+                self,
+                operation,
+                assignment.node_id,
+                "artifact_cache_hit",
+                0L,
+              ) ==
+              Some(1.0)
+          } else {
+            all_prepared = false
+            all_cached = false
+          }
+          present += delivery_metric(
               self,
               operation,
               assignment.node_id,
@@ -518,36 +654,83 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
             )
             .unwrap_or(0.0)
             .to_int64()
-          let total = delivery_metric(
-            self,
-            operation,
-            assignment.node_id,
-            "artifact_bytes_total",
-            0L,
-          ).map(value => value.to_int64())
+          match
+            delivery_metric(
+              self,
+              operation,
+              assignment.node_id,
+              "artifact_bytes_total",
+              0L,
+            ) {
+            Some(value) => total += value.to_int64()
+            None => total_known = false
+          }
+        }
+        if operation.stage == Failed {
+          continue
+        }
+        if all_prepared {
+          operation = deliveries.observe(
+            operation.operation_id,
+            operation.generation,
+            ModelPrepared(digest=template.artifact.digest, cache_hit=all_cached),
+            now,
+          )
+        } else {
+          let total_bytes = if total_known { Some(total) } else { None }
           if operation.transferred_bytes != present ||
-            operation.total_bytes != total {
-            ignore(
-              deliveries.observe(
-                operation.operation_id,
-                operation.generation,
-                TransferProgress(transferred_bytes=present, total_bytes=total),
-                now,
-              ),
+            operation.total_bytes != total_bytes {
+            operation = deliveries.observe(
+              operation.operation_id,
+              operation.generation,
+              TransferProgress(transferred_bytes=present, total_bytes~),
+              now,
             )
           }
           continue
         }
       }
+      if operation.stage == LoadingModel {
+        for assignment in assignments {
+          let mut replica = delivery_replica_record(operation, assignment)
+          if !replica.prepared &&
+            delivery_metric(
+              self,
+              operation,
+              assignment.node_id,
+              "artifact_preparation_stage",
+              0L,
+            ) ==
+            Some(3.0) {
+            replica = { ..replica, prepared: true, }
+            operation = deliveries.observe(
+              operation.operation_id,
+              operation.generation,
+              ModelReplicaObserved(replica),
+              @async.now(),
+            )
+          }
+          if replica.prepared &&
+            !replica.ready &&
+            self.delivery_model_ready(operation, template, assignment) {
+            operation = deliveries.observe(
+              operation.operation_id,
+              operation.generation,
+              ModelReplicaObserved({ ..replica, ready: true, }),
+              @async.now(),
+            )
+          }
+        }
+      }
       if operation.stage == LoadingModel &&
-        self.delivery_model_ready(operation, template, assignment) {
+        operation.model_replicas.unwrap_or([]).all(replica => replica.ready) {
         ignore(
           deliveries.observe(
             operation.operation_id,
             operation.generation,
             ModelResponded(
               service_id=operation.operation_id,
-              digest=assignment.artifact.digest,
+              digest=template.artifact.digest,
             ),
             @async.now(),
           ),

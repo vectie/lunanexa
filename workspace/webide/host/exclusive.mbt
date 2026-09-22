@@ -143,6 +143,7 @@ pub async fn WorkspaceHost::stop(self : WorkspaceHost, id : String) -> Unit {
   defer lock.release()
   self.scale_down(name)
   if self.require_exclusive {
+    self.release_storage(id)
     self.report_delivery_stopped(id)
   }
 }

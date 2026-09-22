@@ -1,0 +1,22 @@
+{
+  "release": "v4.13.1",
+  "commit": "d1b043ffd67318fa71b4b3d4508707882cf92fdc",
+  "server": "192.168.2.175",
+  "export_path": "/data/lunanexa-workspaces",
+  "controller_node": "ubuntu",
+  "nodes": [
+    {"name": "ubuntu", "ip": "192.168.2.175"},
+    {"name": "spark-25e2-3d35c8fd", "ip": "192.168.2.176"},
+    {"name": "spark-3782-feee26eb", "ip": "192.168.2.177"},
+    {"name": "spark-57f5-98a504ed", "ip": "192.168.2.178"},
+    {"name": "spark-368c-0f2ee8b2", "ip": "192.168.2.179"}
+  ],
+  "images": [
+    {"name":"nfsplugin","tag":"v4.13.1","digest":"sha256:c1ab25922c8ec4d7f1744c272f28a89898bd020152e3942592c022410b544948"},
+    {"name":"csi-provisioner","tag":"v6.1.0","digest":"sha256:e5900dc98b0d02f317ea9572f3824983c47a2fb5d5fe2b160aedf1b99c14c9e4"},
+    {"name":"csi-resizer","tag":"v2.0.0","digest":"sha256:4a95d94e57ad82f6977cd8d4fdcfcfc0b83f02d990e4e7715b688c20970a906d"},
+    {"name":"csi-snapshotter","tag":"v8.4.0","digest":"sha256:c7e0a3718832b6197ce8b29fefb3fed3d84f4fbcdf08f4606140dbec2566501d"},
+    {"name":"livenessprobe","tag":"v2.17.0","digest":"sha256:9b75b9ade162136291d5e8f13a1dfc3dec71ee61419b1bfc112e0796ff8a6aa9"},
+    {"name":"csi-node-driver-registrar","tag":"v2.15.0","digest":"sha256:11f199f6bec47403b03cb49c79a41f445884b213b382582a60710b8c6fdc316a"}
+  ]
+}

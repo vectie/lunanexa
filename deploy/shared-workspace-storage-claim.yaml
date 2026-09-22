@@ -1,0 +1,14 @@
+# Example only: gateway creates one PVC in each authorized workspace namespace.
+# Do not mount the NFS export root or reuse this PVC for another tenant.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-home
+  namespace: lunanexa-workspace-example
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: lunanexa-workspaces-rwx
+  resources:
+    requests:
+      storage: 20Gi

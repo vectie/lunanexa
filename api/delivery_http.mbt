@@ -96,6 +96,26 @@ fn delivery_view(operation : @delivery.Operation) -> Json {
     "template_id": operation.intent.template_id,
     "template_version": operation.intent.template_version,
     "node_count": operation.intent.node_count.to_json(),
+    "model_replica_progress": match operation.model_replicas {
+      None => Json::null()
+      Some(replicas) =>
+        {
+          "topology": "independent_replicas",
+          "observed": replicas.length().to_json(),
+          "prepared": replicas
+          .filter(replica => replica.prepared)
+          .length()
+          .to_json(),
+          "ready": replicas
+          .filter(replica => replica.ready && !replica.stopped)
+          .length()
+          .to_json(),
+          "stopped": replicas
+          .filter(replica => replica.stopped)
+          .length()
+          .to_json(),
+        }
+    },
     "stage": operation.stage.to_json(),
     "generation": operation.generation.to_json(),
     "cache_hit": operation.cache_hit,

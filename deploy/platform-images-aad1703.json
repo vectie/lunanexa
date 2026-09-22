@@ -1,0 +1,56 @@
+[
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-control",
+    "container": "control",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-control@sha256:5b80b2dc4b73f9e9936a2d553ed6fb0496109fce9448b174a0cc0319997ffd3a"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-console",
+    "container": "console",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:6b38c7ce3394b9d06c36bbc41d0f0bf3cb5e42db72eebe84101d9655951bd62f"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-enterprise",
+    "container": "enterprise",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:6b38c7ce3394b9d06c36bbc41d0f0bf3cb5e42db72eebe84101d9655951bd62f"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-workbench",
+    "container": "workbench",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:6b38c7ce3394b9d06c36bbc41d0f0bf3cb5e42db72eebe84101d9655951bd62f"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-node-agent-spark-25e2-3d35c8fd",
+    "container": "node-agent",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-node-agent-spark-3782-feee26eb",
+    "container": "node-agent",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-node-agent-spark-57f5-98a504ed",
+    "container": "node-agent",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
+  },
+  {
+    "namespace_name": "lunanexa",
+    "deployment": "lunanexa-node-agent-spark-368c-0f2ee8b2",
+    "container": "node-agent",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
+  },
+  {
+    "namespace_name": "aigc-acceptance-20260915",
+    "deployment": "webide-gateway",
+    "container": "gateway",
+    "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:6a4db6d362d656a97bccc154a9f3045afad526997392df5513a066db6590d3fc"
+  }
+]

@@ -17,6 +17,152 @@ fn intent(kind : @delivery.DeliveryKind) -> @delivery.Intent {
 }
 
 ///|
+async test "replicas persist independently and all must prepare respond and stop" {
+  let directory = @fs.tmpdir(prefix="delivery-replicas-")
+  defer (@fs.rmdir(directory, recursive=true) catch { _ => () })
+  let path = "\{directory}/operations.json"
+  let store = @delivery.DeliveryStore::open(path)
+  let mut operation = store.create(intent(ModelApi), 1L)
+  operation = store.observe(
+    operation.operation_id,
+    operation.generation,
+    Reserved(reservation_id="r", node_ids=["spark-a", "spark-b"]),
+    2L,
+  )
+  let first : @delivery.ModelReplica = {
+    assignment_id: "first",
+    node_id: "spark-a",
+    generation: 1L,
+    prepared: true,
+    ready: false,
+    stopped: false,
+  }
+  let second : @delivery.ModelReplica = {
+    ..first,
+    assignment_id: "second",
+    node_id: "spark-b",
+    prepared: false,
+  }
+  operation = store.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved(first),
+    3L,
+  )
+  operation = store.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved(second),
+    4L,
+  )
+  try
+    store.observe(
+      operation.operation_id,
+      operation.generation,
+      ModelPrepared(digest="sha256:approved-version", cache_hit=true),
+      5L,
+    )
+  catch {
+    @delivery.DeliveryError::UnexpectedObservation => ()
+    err => raise err
+  } noraise {
+    _ => fail("partial preparation advanced")
+  }
+  operation = store.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved({ ..second, prepared: true, }),
+    6L,
+  )
+  operation = store.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelPrepared(digest="sha256:approved-version", cache_hit=true),
+    7L,
+  )
+  operation = store.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved({ ..first, ready: true, }),
+    8L,
+  )
+  let reopened = @delivery.DeliveryStore::open(path)
+  assert_eq(reopened.operation(operation.operation_id), Some(operation))
+  try
+    reopened.observe(
+      operation.operation_id,
+      operation.generation,
+      ModelResponded(service_id="service", digest="sha256:approved-version"),
+      9L,
+    )
+  catch {
+    @delivery.DeliveryError::UnexpectedObservation => ()
+    err => raise err
+  } noraise {
+    _ => fail("partial response advanced")
+  }
+  operation = reopened.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved({ ..second, prepared: true, ready: true, }),
+    10L,
+  )
+  operation = reopened.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelResponded(service_id="service", digest="sha256:approved-version"),
+    11L,
+  )
+  assert_eq(operation.stage, Ready)
+  operation = reopened.stop(operation.operation_id, operation.generation, 12L)
+  operation = reopened.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved({ ..first, ready: true, stopped: true, }),
+    13L,
+  )
+  try
+    reopened.observe(
+      operation.operation_id,
+      operation.generation,
+      WorkloadsStopped,
+      14L,
+    )
+  catch {
+    @delivery.DeliveryError::UnexpectedObservation => ()
+    err => raise err
+  } noraise {
+    _ => fail("partial stop released operation")
+  }
+  operation = reopened.observe(
+    operation.operation_id,
+    operation.generation,
+    ModelReplicaObserved({
+      ..second,
+      prepared: true,
+      ready: true,
+      stopped: true,
+    }),
+    15L,
+  )
+  operation = reopened.observe(
+    operation.operation_id,
+    operation.generation,
+    WorkloadsStopped,
+    16L,
+  )
+  assert_eq(operation.stage, Stopped)
+  // v1 snapshots written before per-replica tracking remain readable.
+  let legacy = operation.to_json()
+  if legacy is Object(fields) {
+    fields.remove("model_replicas")
+  }
+  let restored : @delivery.Operation = @json.from_json(legacy)
+  assert_eq(restored.model_replicas, None)
+  assert_eq(restored.operation_id, operation.operation_id)
+}
+
+///|
 async test "one click survives restart and requires model response before workspace readiness" {
   let directory = @fs.tmpdir(prefix="delivery-")
   defer (@fs.rmdir(directory, recursive=true) catch { _ => () })

@@ -394,6 +394,18 @@ pub async fn Bridge::handle(
       reply(connection, 413, "Workspace request exceeds its size limit.")
     BridgeError::CapacityExceeded =>
       reply(connection, 429, "Workspace capacity is temporarily full.")
+    BridgeError::StorageBusy =>
+      reply(
+        connection, 409, "Your saved workspace is open in another delivery. Stop that workspace before opening this one.",
+      )
+    BridgeError::StorageMigrationRequired =>
+      reply(
+        connection, 409, "Your saved workspace requires a storage migration before it can open on this node or storage profile. Ask your administrator to migrate it; your files have not been replaced.",
+      )
+    BridgeError::StorageNotConfigured =>
+      reply(
+        connection, 503, "Shared workspace storage is not installed for this deployment. Ask your administrator to configure the shared storage profile before retrying.",
+      )
     BridgeError::AuthorityUnavailable =>
       reply(
         connection, 503, "Workspace authorization is temporarily unavailable. Retry shortly.",

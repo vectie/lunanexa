@@ -7,6 +7,7 @@ fn host_config() -> HostConfig {
     comfyui_image: "registry.test/comfyui@sha256:" + "a".repeat(64),
     model_proxy_image: "registry.test/proxy@sha256:" + "b".repeat(64),
     storage_class: "local-path",
+    storage_access_mode: None,
     storage_gib: 10,
     cpu_millis: 1000,
     memory_mib: 2048,

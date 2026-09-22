@@ -10,6 +10,8 @@ import {
 }
 
 // Values
+pub fn cached_reserved_nodes(Array[@contracts.NodeHeartbeat], Array[String], String, Int64, Int64) -> Array[String]
+
 pub fn forecast(Array[NodeSnapshot], Int) -> CapacityForecast
 
 pub fn place(Array[NodeSnapshot], PlacementRequirements, ScorePolicy) -> PlacementDecision

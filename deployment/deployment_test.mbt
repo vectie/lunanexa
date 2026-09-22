@@ -177,6 +177,29 @@ test "dedicated preflight is pinned to the controller-reserved node" {
   assert_true(plan.executable)
   assert_eq(plan.replicas.length(), 1)
   assert_eq(plan.replicas[0].node_id, "node-b")
+  let context : @deployment.PlanningContext = {
+    registry: [evidence],
+    nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"], }],
+    available_secret_refs: ["runtime-token"],
+  }
+  assert_eq(
+    @deployment.preflight([catalog], intent(), context, preferred_node_ids=[
+      "node-b",
+    ]).replicas[0].node_id,
+    "node-b",
+  )
+  assert_eq(
+    @deployment.preflight(
+      [catalog],
+      intent(),
+      {
+        ..context,
+        nodes: [node_a, { ..node_a, node_id: "node-b", state: Unreachable, }],
+      },
+      preferred_node_ids=["node-b", "foreign-node"],
+    ).replicas[0].node_id,
+    "node-a",
+  )
 }
 
 ///|

@@ -37,6 +37,28 @@ pub(all) struct Intent {
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
+pub(all) struct ModelReplica {
+  assignment_id : String
+  node_id : String
+  generation : Int64
+  prepared : Bool
+  ready : Bool
+  stopped : Bool
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend ModelReplica with Debug::{to_repr}
+
+///|
+pub extend ModelReplica with Eq::{equal, not_equal}
+
+///|
+pub extend ModelReplica with ToJson::{to_json}
+
+///|
+pub extend ModelReplica with @json.FromJson::{from_json}
+
+///|
 pub(all) struct Operation {
   operation_id : String
   intent : Intent
@@ -50,6 +72,7 @@ pub(all) struct Operation {
   total_bytes : Int64?
   model_service_id : String?
   model_assignment_generation : Int64?
+  model_replicas : Array[ModelReplica]?
   workspace_id : String?
   failure_code : String?
   stop_requested_at_ms : Int64?
@@ -67,6 +90,7 @@ pub(all) enum Observation {
   ModelPrepared(digest~ : String, cache_hit~ : Bool)
   ModelResponded(service_id~ : String, digest~ : String)
   ModelAssignmentPublished(generation~ : Int64)
+  ModelReplicaObserved(ModelReplica)
   WorkspaceResponded(workspace_id~ : String)
   WorkspaceStarting(workspace_id~ : String)
   WorkspaceStopped

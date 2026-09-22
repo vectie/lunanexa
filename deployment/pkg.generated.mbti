@@ -12,7 +12,7 @@ pub fn desired_assignments(DeploymentPlan, Int64, Int64, Int64) -> Array[@contra
 
 pub fn operation_transition_allowed(DeploymentOperationState, DeploymentOperationState) -> Bool
 
-pub fn preflight(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContext) -> DeploymentPlan
+pub fn preflight(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContext, preferred_node_ids? : Array[String]) -> DeploymentPlan
 
 pub fn preflight_on_node(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContext, String) -> DeploymentPlan
 

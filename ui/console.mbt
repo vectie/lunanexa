@@ -3440,18 +3440,6 @@ fn readiness_item(
 }
 
 ///|
-fn deployment_ready(state : ConsoleState) -> Bool {
-  state.production_readiness.ready &&
-  state.production_readiness.blocker_codes.length() == 0 &&
-  state.production_readiness.error is None &&
-  state.overview.total_nodes == 4 &&
-  state.overview.active_nodes == 4 &&
-  state.overview.alerts == 0 &&
-  state.overview.active_models > 0 &&
-  state.catalog_templates.length() > 0
-}
-
-///|
 fn readiness_blocker_label(locale : @i18n.Locale, code : String) -> String {
   match code {
     "NotificationDeliveryNotReady" =>
@@ -3690,37 +3678,28 @@ fn overview_view(
           ),
           @html.h2(
             id="deployment-readiness-title",
-            if deployment_ready(state) {
-              localized(
-                state.locale,
-                "Ready for one-click deployment",
-                "已可一键部署",
-              )
-            } else {
-              localized(
-                state.locale,
-                "Deployment prerequisites remain",
-                "仍有部署前提未满足",
-              )
-            },
+            localized(
+              state.locale,
+              "Choose a service template",
+              "选择服务模板",
+            ),
           ),
           @html.p(
             class="section-copy",
             localized(
               state.locale,
-              "This live gate mirrors the final operator checks in the deployment guide. The controller still performs the authoritative preflight on click.",
-              "此实时检查对应部署指南中的最终运维检查。点击后控制器仍会执行权威预检。",
+              "Browse the catalog and review a deployment plan. Opening the catalog does not start a service; the controller checks authorization and model/resource readiness before deployment.",
+              "先浏览目录并查看部署计划。打开目录不会启动服务；实际部署前，控制器仍会检查授权、模型和资源条件。",
             ),
           ),
           @html.button(
             type_="button",
             class="primary-button readiness-action",
-            disabled=!deployment_ready(state),
             on_click=command(emit, Navigate(Catalog)),
             localized(
               state.locale,
-              "Open one-click deployment",
-              "打开一键部署",
+              "Open service catalog",
+              "打开服务目录",
             ),
           ),
         ]),
@@ -3728,11 +3707,13 @@ fn overview_view(
           readiness_item(
             state.locale,
             state.production_readiness.ready &&
-            state.production_readiness.blocker_codes.length() == 0,
+            state.production_readiness.blocker_codes.length() == 0 &&
+            state.production_readiness.error is None &&
+            !state.production_readiness.loading,
             localized(
               state.locale,
-              "Production acceptance gate",
-              "生产验收检查",
+              "Platform-wide production acceptance (separate from catalog access)",
+              "平台整体生产验收（不限制浏览目录）",
             ),
             if state.production_readiness.loading {
               localized(
@@ -3752,11 +3733,17 @@ fn overview_view(
                   state.production_readiness.blocker_codes
                   .map(code => readiness_blocker_label(state.locale, code))
                   .join(" · ")
-                None =>
+                None if state.production_readiness.ready =>
                   localized(
                     state.locale,
                     "All central blockers cleared",
                     "所有中央阻塞项均已清除",
+                  )
+                None =>
+                  localized(
+                    state.locale,
+                    "Production acceptance not yet confirmed",
+                    "尚未确认生产验收通过",
                   )
               }
             },

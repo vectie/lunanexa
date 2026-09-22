@@ -1,0 +1,214 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+struct Target {
+  namespace_name : String
+  deployment : String
+  container : String
+  image : String
+} derive(ToJson, FromJson)
+
+///|
+async fn kubectl(k : String, args : Array[String]) -> String {
+  let result = @shell.Cmd("kubectl", ["--kubeconfig", k, ..args]).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+fn image_of(raw : String, container : String) -> String raise {
+  guard @json.parse(raw)
+    is {
+      "spec": {
+        "template": { "spec": { "containers": Array(containers), .. }, .. },
+        ..
+      },
+      ..
+    } else {
+    fail("Missing deployment containers")
+  }
+  for item in containers {
+    if item is { "name": String(name), "image": String(image), .. } &&
+      name == container {
+      return image
+    }
+  }
+  fail("Missing target container: " + container)
+}
+
+///|
+fn validate(target : Target) -> Unit raise {
+  let allowed = match
+    (target.namespace_name, target.deployment, target.container) {
+    ("lunanexa", "lunanexa-control", "control") => true
+    ("lunanexa", "lunanexa-console", "console") => true
+    ("lunanexa", "lunanexa-enterprise", "enterprise") => true
+    ("lunanexa", "lunanexa-workbench", "workbench") => true
+    (
+      "lunanexa",
+      "lunanexa-node-agent-spark-25e2-3d35c8fd"
+      | "lunanexa-node-agent-spark-3782-feee26eb"
+      | "lunanexa-node-agent-spark-57f5-98a504ed"
+      | "lunanexa-node-agent-spark-368c-0f2ee8b2",
+      "node-agent",
+    ) => true
+    ("aigc-acceptance-20260915", "webide-gateway", "gateway") => true
+    _ => false
+  }
+  guard allowed &&
+    target.image.has_prefix(
+      "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/",
+    ) &&
+    target.image.contains("@sha256:") else {
+    fail("Target outside platform rollout scope or unpinned image")
+  }
+}
+
+///|
+async fn main {
+  if @env.args() is [_, "--self-test"] {
+    let fixture : Json = {
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              { "name": "sidecar", "image": "untouched" },
+              { "name": "control", "image": "original" },
+            ],
+          },
+        },
+      },
+    }
+    assert_eq(image_of(fixture.stringify(), "control"), "original")
+    let excluded : Target = {
+      namespace_name: "lunanexa",
+      deployment: "minimaxh3-fl2va",
+      container: "runtime",
+      image: "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/h3-runtime@sha256:abc",
+    }
+    let rejected = try {
+      validate(excluded)
+      false
+    } catch {
+      _ => true
+    }
+    assert_true(rejected)
+    println(
+      "Named-container selection and model-workload exclusion passed; no kubectl calls",
+    )
+    return
+  }
+  guard @env.args() is [_, mode, k, backup, plan] &&
+    (mode == "snapshot" || mode == "apply" || mode == "rollback") else {
+    fail(
+      "Usage: rollout-platform-images.mbtx snapshot|apply|rollback KUBECONFIG PRIVATE_BACKUP REVIEWED_PLAN_JSON",
+    )
+  }
+  let targets : Array[Target] = @json.from_json(
+    @json.parse(@fs.read_file(plan).text()),
+  )
+  guard !targets.is_empty() else { fail("Empty plan") }
+  let seen : Map[String, Bool] = Map([])
+  for target in targets {
+    validate(target)
+    guard !seen.contains(target.deployment) else {
+      fail("Duplicate deployment")
+    }
+    seen[target.deployment] = true
+  }
+  if mode == "snapshot" {
+    @fs.mkdir(backup, permission=0o700)
+    @fs.write_file(
+      backup + "/plan.json",
+      targets.to_json().stringify(indent=2),
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    for target in targets {
+      let raw = kubectl(k, [
+        "-n",
+        target.namespace_name,
+        "get",
+        "deployment",
+        target.deployment,
+        "-o",
+        "json",
+      ])
+      let old = image_of(raw, target.container)
+      @fs.write_file(
+        backup + "/" + target.deployment + ".json",
+        raw,
+        create_mode=CreateNew,
+        permission=0o600,
+      )
+      println(target.deployment + " " + target.container + " " + old)
+    }
+    println("Private snapshots saved. No live mutations.")
+    return
+  }
+  guard @fs.read_file(backup + "/plan.json").text() ==
+    targets.to_json().stringify(indent=2) else {
+    fail("Plan differs from snapshot; create a new reviewed snapshot")
+  }
+  // Preflight all targets before changing any. Never overwrite later unrelated image changes.
+  for target in targets {
+    let old = image_of(
+      @fs.read_file(backup + "/" + target.deployment + ".json").text(),
+      target.container,
+    )
+    let current = image_of(
+      kubectl(k, [
+        "-n",
+        target.namespace_name,
+        "get",
+        "deployment",
+        target.deployment,
+        "-o",
+        "json",
+      ]),
+      target.container,
+    )
+    guard current == old || current == target.image else {
+      fail("Image drift: " + target.deployment)
+    }
+  }
+  for target in targets {
+    let image = if mode == "rollback" {
+      image_of(
+        @fs.read_file(backup + "/" + target.deployment + ".json").text(),
+        target.container,
+      )
+    } else {
+      target.image
+    }
+    ignore(
+      kubectl(k, [
+        "-n",
+        target.namespace_name,
+        "set",
+        "image",
+        "deployment/" + target.deployment,
+        target.container + "=" + image,
+      ]),
+    )
+    ignore(
+      kubectl(k, [
+        "-n",
+        target.namespace_name,
+        "rollout",
+        "status",
+        "deployment/" + target.deployment,
+        "--timeout=300s",
+      ]),
+    )
+    println(mode + " complete: " + target.deployment)
+  }
+  // Rollback restores only named images, not old environment, replicas, grants or service selectors.
+}

@@ -122,7 +122,11 @@ async test "reserved assignment publication rejects shared and foreign owners bu
   let directory = @fs.tmpdir(prefix="delivery-publication-")
   defer @fs.rmdir(directory, recursive=true)
   let now = @async.now()
-  let template = machine_dedicated_template()
+  let template = {
+    ..machine_dedicated_template(),
+    approval_receipt: "approved-fixture",
+    signature: "signed-fixture",
+  }
   let registry = machine_dedicated_registry(
     "\{directory}/registry.json",
     template,
@@ -141,14 +145,14 @@ async test "reserved assignment publication rejects shared and foreign owners bu
         organization_id: "org-a",
         authority_ref: "admin-grant",
         lease_id: "lease-a",
-        node_ids: ["node-a"],
+        node_ids: ["node-a", "node-b"],
         starts_unix_ms: now - 1L,
         expires_unix_ms: now + 60000L,
         memory_mib_per_node: 100000,
         gpu_memory_mib_per_node: 90000,
         max_concurrency_per_node: 4,
       },
-      ["node-a"],
+      ["node-a", "node-b"],
       now,
     ),
   )
@@ -173,23 +177,31 @@ async test "reserved assignment publication rejects shared and foreign owners bu
         guard body is Some(Array(ops)) && ops[1] is { "value": value, .. } else {
           fail("invalid taint patch")
         }
-        taints["current"] = value
+        taints[path] = value
       }
       (
         200,
         {
-          "metadata": { "name": "spark-a", "resourceVersion": "1" },
-          "spec": { "taints": taints.get("current").unwrap_or([]) },
+          "metadata": {
+            "name": if path.has_suffix("spark-b") {
+              "spark-b"
+            } else {
+              "spark-a"
+            },
+            "resourceVersion": "1",
+          },
+          "spec": { "taints": taints.get(path).unwrap_or([]) },
         },
       )
     },
     "workspaces",
     [],
   )
-  let service = { ..base, scheduler: Some(scheduler), }.with_reservation_host(
-    host,
-    { "node-a": "spark-a" },
-  )
+  let service = {
+    ..base,
+    scheduler: Some(scheduler),
+    available_secret_refs: ["runtime-token"],
+  }.with_reservation_host(host, { "node-a": "spark-a", "node-b": "spark-b" })
   let assignment : @contracts.DesiredAssignment = {
     assignment_id: "delivery-model",
     deployment_id: "delivery-a",
@@ -255,7 +267,7 @@ async test "reserved assignment publication rejects shared and foreign owners bu
     published.reservation,
     Some({ reservation_id: "reservation-a", tenant_ref: "tenant-a", }),
   )
-  assert_true(taints.contains("current"))
+  assert_true(taints.length() > 0)
   try
     service.publish_planned_assignment(
       { ..assignment, reservation: published.reservation, },
@@ -268,4 +280,122 @@ async test "reserved assignment publication rejects shared and foreign owners bu
   } noraise {
     _ => fail("caller-controlled reservation metadata accepted")
   }
+  // Exercise real planner/signing/claim publication, not a mocked success.
+  for node_id in ["node-a", "node-b"] {
+    durable.put_heartbeat({
+      ..customer_machine_test_heartbeat(now),
+      node_id,
+      controller_epoch: durable.controller_epoch(),
+      inventory: {
+        node_id,
+        agent_version: "test",
+        os_release: "test",
+        runtime_names: ["text-runtime"],
+        accelerators: [
+          {
+            device_id: "gpu-0",
+            architecture: "nvidia-gb10",
+            memory_total_mib: 8192,
+            memory_free_mib: 8192,
+            healthy: true,
+          },
+        ],
+        labels: { "lunanexa.data-classes": "Internal" },
+        taints: [],
+      },
+    })
+  }
+  let deliveries = @delivery.DeliveryStore::open("\{directory}/deliveries.json")
+  let created = deliveries.create(
+    {
+      tenant_id: "tenant-a",
+      organization_id: "org-a",
+      project_id: "project-a",
+      authorization_ref: "admin-grant",
+      lease_id: "lease-a",
+      idempotency_key: "replicas",
+      kind: ModelApi,
+      template_id: template.template_id,
+      template_version: template.version,
+      model_digest: Some(template.artifact.digest),
+      node_count: 2,
+      expires_at_ms: now + 30000L,
+    },
+    now,
+  )
+  let operation = deliveries.observe(
+    created.operation_id,
+    created.generation,
+    Reserved(reservation_id="reservation-a", node_ids=["node-a", "node-b"]),
+    now,
+  )
+  let first = service.prepare_delivery_assignment(operation, template, 0)
+  let second = service.prepare_delivery_assignment(operation, template, 1)
+  assert_eq(first.node_id, "node-a")
+  assert_eq(second.node_id, "node-b")
+  assert_false(first.assignment_id == second.assignment_id)
+  assert_eq(first.group, None)
+  assert_eq(second.group, None)
+  assert_eq(first.deployment_id, second.deployment_id)
+  assert_eq(service.prepare_delivery_assignment(operation, template, 1), second)
+  let claims = scheduler.node_reservation("reservation-a").unwrap().services
+  assert_true(
+    claims.any(claim => {
+      claim.service_id == first.assignment_id && claim.node_id == "node-a"
+    }),
+  )
+  assert_true(
+    claims.any(claim => {
+      claim.service_id == second.assignment_id && claim.node_id == "node-b"
+    }),
+  )
+  let stopping = deliveries.stop(
+    operation.operation_id,
+    operation.generation,
+    now,
+  )
+  let replica = delivery_replica_record(operation, first)
+  let evidence : @media_jobs.AcceptedTermination = {
+    node_id: first.node_id,
+    evidence: {
+      original_assignment: Some(first),
+      assignment_id: first.assignment_id,
+      deployment_id: first.deployment_id,
+      generation: first.generation,
+      controller_epoch: first.controller_epoch,
+      instance_id: "first-runtime",
+      artifact_digest: first.artifact.digest,
+      image_digest: first.runtime.image_digest,
+      observed_unix_ms: now,
+    },
+  }
+  assert_true(delivery_replica_terminated(stopping, replica, [evidence]))
+  assert_false(
+    delivery_replica_terminated(
+      stopping,
+      delivery_replica_record(operation, second),
+      [evidence],
+    ),
+  )
+  assert_false(
+    delivery_replica_terminated(stopping, replica, [
+      { ..evidence, node_id: "node-b", },
+    ]),
+  )
+  assert_false(
+    delivery_replica_terminated(stopping, replica, [
+      {
+        ..evidence,
+        evidence: { ..evidence.evidence, generation: first.generation + 1L, },
+      },
+    ]),
+  )
+  assert_false(
+    delivery_replica_terminated(stopping, replica, [
+      {
+        ..evidence,
+        evidence: { ..evidence.evidence, observed_unix_ms: now - 1L, },
+      },
+    ]),
+  )
 }

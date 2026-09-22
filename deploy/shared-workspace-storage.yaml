@@ -1,0 +1,23 @@
+# Four-Spark acceptance profile. The server installer creates only this export.
+# PVC namespaces/names are controller-owned; users cannot create arbitrary PVs.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: lunanexa-workspaces-rwx
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.2.175
+  share: /data/lunanexa-workspaces
+  subDir: ${pvc.metadata.namespace}/${pvc.metadata.name}/${pv.metadata.name}
+  mountPermissions: "0770"
+  onDelete: retain
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+allowVolumeExpansion: false
+mountOptions:
+  - nfsvers=4.1
+  - hard
+  - timeo=600
+  - retrans=2
+  - nosuid
+  - nodev

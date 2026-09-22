@@ -463,6 +463,7 @@ async fn send_heartbeat(
   token : String,
   inventory : @contracts.NodeInventory,
   agent : @node_agent.NodeAgent,
+  materializer : @node_agent.ArtifactMaterializer,
 ) -> Unit {
   let runtime_endpoints = agent.runtime_endpoints(@async.now())
   let measured_inventory = @node_agent.collect_linux_host_resources().inventory(
@@ -480,7 +481,7 @@ async fn send_heartbeat(
     state: agent.state(),
     observed_generation: agent.observed_generation(),
     controller_epoch: agent.controller_epoch(),
-    inventory: measured_inventory,
+    inventory: materializer.cache_inventory(measured_inventory),
     running_deployments: agent.running_deployments(),
     runtime_endpoints: if runtime_endpoints.is_empty() {
       None
@@ -522,7 +523,7 @@ async fn materialize_while_heartbeating(
       materializer.materialize(assignment, artifact_verifier)
     })
     for ;; {
-      send_heartbeat(base, node_id, token, inventory, agent)
+      send_heartbeat(base, node_id, token, inventory, agent, materializer)
       let result = {
         errdefer send_artifact_progress(
           base,
@@ -697,7 +698,7 @@ async fn reconcile_once(
       .unwrap_or([]),
   )
   persist_agent(state_path, agent)
-  send_heartbeat(base, node_id, token, inventory, agent)
+  send_heartbeat(base, node_id, token, inventory, agent, materializer)
   let timestamp_unix_ms = @async.now()
   let samples : Array[@contracts.TelemetrySample] = []
   let sensor_binary = @env.get_env_var("LUNANEXA_NVIDIA_SMI_BINARY").unwrap_or(

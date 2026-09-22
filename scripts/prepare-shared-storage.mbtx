@@ -1,0 +1,428 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+struct ImagePin {
+  name : String
+  tag : String
+  digest : String
+} derive(FromJson)
+
+///|
+struct NodeTarget {
+  name : String
+  ip : String
+} derive(FromJson)
+
+///|
+struct Profile {
+  release : String
+  commit : String
+  server : String
+  export_path : String
+  controller_node : String
+  nodes : Array[NodeTarget]
+  images : Array[ImagePin]
+} derive(FromJson)
+
+///|
+async fn run(program : String, args : Array[String]) -> String {
+  let output = @shell.Cmd(program, args).output()
+  if output.stderr() != "" {
+    println(output.stderr())
+  }
+  output.check()
+  output.stdout()
+}
+
+///|
+async fn platform_digest(
+  output_dir : String,
+  name : String,
+  arch : String,
+) -> String {
+  let value = @json.parse(
+    @fs.read_file(output_dir + "/" + name + ".index.json").text(),
+  )
+  guard value is { "manifests": Array(platforms), .. } else {
+    fail("Missing image index")
+  }
+  for item in platforms {
+    if item
+      is {
+        "digest": String(digest),
+        "platform": { "architecture": String(actual), "os": "linux", .. },
+        ..
+      } &&
+      actual == arch {
+      return digest
+    }
+  }
+  fail("Missing Linux platform " + name + "/" + arch)
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, mode, output_dir, .. extra] &&
+    (
+      mode == "prepare" ||
+      mode == "cache-images" ||
+      mode == "import-images" ||
+      mode == "install-server" ||
+      mode == "install-driver"
+    ) else {
+    fail(
+      "Usage: prepare-shared-storage.mbtx prepare|cache-images|import-images|install-server|install-driver OUTPUT_DIR [CRANE_BINARY|CONTAINERD_SOCKET|KUBECONFIG]",
+    )
+  }
+  let profile_text = @fs.read_file(
+    "deploy/shared-workspace-storage-profile.json",
+  ).text()
+  let profile : Profile = @json.from_json(@json.parse(profile_text))
+  // This script is intentionally a named deployment profile, not arbitrary root export automation.
+  if profile.export_path != "/data/lunanexa-workspaces" ||
+    profile.server != "192.168.2.175" ||
+    profile.commit != "d1b043ffd67318fa71b4b3d4508707882cf92fdc" {
+    fail("Review the deployment profile before changing its host/export/source")
+  }
+  if mode == "prepare" {
+    @fs.mkdir(output_dir, permission=0o700)
+    @fs.write_file(
+      output_dir + "/profile.json",
+      profile_text,
+      create_mode=CreateNew,
+    )
+    for pin in profile.images {
+      let reference = "registry.k8s.io/sig-storage/\{pin.name}@\{pin.digest}"
+      let manifest = run("curl", [
+        "-fsSL",
+        "--retry",
+        "2",
+        "--max-time",
+        "60",
+        "-H",
+        "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
+        "https://registry.k8s.io/v2/sig-storage/\{pin.name}/manifests/\{pin.digest}",
+      ])
+      let value = @json.parse(manifest)
+      guard value is { "manifests": Array(platforms), .. } &&
+        platforms.any(item => {
+          item
+          is { "platform": { "architecture": "amd64", "os": "linux", .. }, .. }
+        }) &&
+        platforms.any(item => {
+          item
+          is { "platform": { "architecture": "arm64", "os": "linux", .. }, .. }
+        }) else {
+        fail("Missing Linux amd64/arm64: " + reference)
+      }
+      @fs.write_file(
+        output_dir + "/" + pin.name + ".index.json",
+        manifest,
+        create_mode=CreateNew,
+      )
+      println("Verified platform index " + reference)
+    }
+    for
+      name in [
+        "rbac-csi-nfs.yaml", "csi-nfs-driverinfo.yaml", "csi-nfs-controller.yaml",
+        "csi-nfs-node.yaml",
+      ] {
+      let mut manifest = run("curl", [
+        "-fsSL",
+        "--retry",
+        "2",
+        "--max-time",
+        "60",
+        "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/\{profile.commit}/deploy/\{profile.release}/\{name}",
+      ])
+      for pin in profile.images {
+        manifest = manifest.replace(
+          old="registry.k8s.io/sig-storage/\{pin.name}:\{pin.tag}",
+          new="registry.k8s.io/sig-storage/\{pin.name}@\{pin.digest}",
+        )
+      }
+      if name == "csi-nfs-controller.yaml" {
+        manifest = manifest.replace(
+          old="        kubernetes.io/os: linux",
+          new="        kubernetes.io/os: linux\n        kubernetes.io/hostname: \{profile.controller_node}",
+        )
+        // This workspace profile does not install snapshot CRDs/controller.
+        let sections = manifest
+          .split("        - name: csi-snapshotter\n")
+          .to_array()
+        guard sections is [before, after] else {
+          fail("Upstream snapshot sidecar layout changed")
+        }
+        let remainder = after
+          .split("        - name: liveness-probe\n")
+          .to_array()
+        guard remainder is [_, tail] else {
+          fail("Upstream liveness sidecar layout changed")
+        }
+        manifest = before.to_owned() +
+          "        - name: liveness-probe\n" +
+          tail.to_owned()
+      }
+      if name == "csi-nfs-node.yaml" {
+        manifest = manifest.replace(
+          old="        kubernetes.io/os: linux",
+          new="        kubernetes.io/os: linux\n        lunanexa.io/shared-workspace-storage: \"true\"",
+        )
+      }
+      if name == "csi-nfs-node.yaml" {
+        for arch in ["amd64", "arm64"] {
+          let mut specific = manifest
+            .replace(
+              old="name: csi-nfs-node\n",
+              new="name: csi-nfs-node-" + arch + "\n",
+            )
+            .replace_all(
+              old="app: csi-nfs-node\n",
+              new="app: csi-nfs-node-" + arch + "\n",
+            )
+            .replace(
+              old="        kubernetes.io/os: linux",
+              new="        kubernetes.io/os: linux\n        kubernetes.io/arch: " +
+                arch,
+            )
+          for pin in profile.images {
+            specific = specific.replace(
+              old=pin.digest,
+              new=platform_digest(output_dir, pin.name, arch),
+            )
+          }
+          @fs.write_file(
+            output_dir + "/csi-nfs-node-" + arch + ".yaml",
+            specific,
+            create_mode=CreateNew,
+          )
+        }
+      } else {
+        if name == "csi-nfs-controller.yaml" {
+          for pin in profile.images {
+            manifest = manifest.replace(
+              old=pin.digest,
+              new=platform_digest(output_dir, pin.name, "amd64"),
+            )
+          }
+        }
+        @fs.write_file(output_dir + "/" + name, manifest, create_mode=CreateNew)
+      }
+    }
+    @fs.write_file(
+      output_dir + "/storageclass.yaml",
+      @fs.read_file("deploy/shared-workspace-storage.yaml"),
+      create_mode=CreateNew,
+    )
+    let exports = profile.export_path +
+      " " +
+      profile.nodes
+      .map(node => {
+        node.ip +
+        "(rw,sync,all_squash,anonuid=1000,anongid=1000,no_subtree_check,sec=sys)"
+      })
+      .join(" ") +
+      "\n"
+    @fs.write_file(
+      output_dir + "/lunanexa-workspaces.exports",
+      exports,
+      create_mode=CreateNew,
+    )
+    println(
+      "Prepared pinned upstream driver, storage class, and restricted export; nothing installed.",
+    )
+    return
+  }
+  if mode == "cache-images" || mode == "import-images" {
+    let local_arch = if mode == "import-images" {
+      match run("uname", ["-m"]).trim().to_owned() {
+        "x86_64" => "amd64"
+        "aarch64" => "arm64"
+        _ => fail("Import runs on a target Linux amd64/arm64 node")
+      }
+    } else {
+      ""
+    }
+    for pin in profile.images {
+      if pin.name == "csi-snapshotter" {
+        continue
+      }
+      for arch in ["amd64", "arm64"] {
+        // Controller sidecars only run on management, not the ARM compute nodes.
+        if arch == "arm64" &&
+          !(pin.name == "nfsplugin" ||
+          pin.name == "livenessprobe" ||
+          pin.name == "csi-node-driver-registrar") {
+          continue
+        }
+        let archive = output_dir + "/" + pin.name + "-" + arch + ".oci.tar"
+        let digest = platform_digest(output_dir, pin.name, arch)
+        let reference = "registry.k8s.io/sig-storage/\{pin.name}@\{digest}"
+        if mode == "import-images" {
+          if arch != local_arch {
+            continue
+          }
+          guard extra is [socket] else {
+            fail("import-images requires the target containerd socket path")
+          }
+          ignore(
+            run("ctr", [
+              "--address",
+              socket,
+              "--namespace",
+              "k8s.io",
+              "images",
+              "import",
+              "--digests",
+              "--base-name",
+              "registry.k8s.io/sig-storage/" + pin.name,
+              "--platform",
+              "linux/" + arch,
+              archive,
+            ]),
+          )
+          println("Imported " + reference)
+        } else {
+          if @fs.exists(archive) {
+            fail(
+              "Archive exists; verify it before choosing another output: " +
+              archive,
+            )
+          }
+          if extra is [crane] {
+            let layout = archive + ".layout"
+            ignore(
+              run(crane, [
+                "pull", "--format=oci", "--annotate-ref", reference, layout,
+              ]),
+            )
+            ignore(run("tar", ["-C", layout, "-cf", archive, "."]))
+          } else {
+            ignore(
+              run("skopeo", [
+                "copy",
+                "--preserve-digests",
+                "docker://" + reference,
+                "oci-archive:" + archive + ":" + reference,
+              ]),
+            )
+          }
+          println("Cached " + reference + " -> " + archive)
+        }
+      }
+    }
+    println(
+      if mode == "cache-images" {
+        "Linux OCI archives cached; no cluster mutation."
+      } else {
+        "Local containerd images imported; no workloads deployed."
+      },
+    )
+    return
+  }
+  if mode == "install-server" {
+    if run("id", ["-u"]).trim() != "0" {
+      fail(
+        "Run install-server as root on management; do not put a password in arguments",
+      )
+    }
+    if !run("hostname", ["-I"]).split(" ").contains(profile.server) {
+      fail("Not the selected management host")
+    }
+    ignore(run("findmnt", ["--mountpoint", "/data"]))
+    // Use the administrator's existing apt mirror configuration; never rewrite package sources.
+    ignore(run("apt-get", ["update"]))
+    ignore(
+      run("apt-get", [
+        "install", "-y", "--no-install-recommends", "nfs-kernel-server", "nfs-common",
+      ]),
+    )
+    if !@fs.exists(profile.export_path) {
+      ignore(
+        run("install", [
+          "-d",
+          "-m",
+          "0770",
+          "-o",
+          "1000",
+          "-g",
+          "1000",
+          profile.export_path,
+        ]),
+      )
+    } else if run("stat", ["-c", "%u:%g:%a", profile.export_path]).trim() !=
+      "1000:1000:770" {
+      fail(
+        "Existing export ownership differs; inspect it before changing permissions",
+      )
+    }
+    ignore(run("install", ["-d", "-m", "0755", "/etc/exports.d"]))
+    let target = "/etc/exports.d/lunanexa-workspaces.exports"
+    let exports = @fs.read_file(output_dir + "/lunanexa-workspaces.exports").text()
+    if @fs.exists(target) {
+      if @fs.read_file(target).text() != exports {
+        fail(
+          "Existing export configuration differs; preserve/review it before replacement",
+        )
+      }
+    } else {
+      @fs.write_file(target, exports, create_mode=CreateNew, permission=0o644)
+    }
+    ignore(run("systemctl", ["enable", "--now", "nfs-kernel-server"]))
+    ignore(run("exportfs", ["-ra"]))
+    println(run("exportfs", ["-v"]))
+    return
+  }
+  guard extra is [kubeconfig] else {
+    fail("install-driver requires an explicit kubeconfig")
+  }
+  for node in profile.nodes {
+    ignore(
+      run("kubectl", [
+        "--kubeconfig",
+        kubeconfig,
+        "label",
+        "node",
+        node.name,
+        "lunanexa.io/shared-workspace-storage=true",
+        "--overwrite",
+      ]),
+    )
+  }
+  for
+    name in [
+      "rbac-csi-nfs.yaml", "csi-nfs-driverinfo.yaml", "csi-nfs-controller.yaml",
+      "csi-nfs-node-amd64.yaml", "csi-nfs-node-arm64.yaml", "storageclass.yaml",
+    ] {
+    ignore(
+      run("kubectl", [
+        "--kubeconfig",
+        kubeconfig,
+        "apply",
+        "-f",
+        output_dir + "/" + name,
+      ]),
+    )
+  }
+  for
+    resource in [
+      "deployment/csi-nfs-controller", "daemonset/csi-nfs-node-amd64", "daemonset/csi-nfs-node-arm64",
+    ] {
+    ignore(
+      run("kubectl", [
+        "--kubeconfig", kubeconfig, "-n", "kube-system", "rollout", "status", resource,
+        "--timeout=180s",
+      ]),
+    )
+  }
+  println(
+    "Driver installed; cross-node write/reopen and tenant isolation acceptance are still required.",
+  )
+}

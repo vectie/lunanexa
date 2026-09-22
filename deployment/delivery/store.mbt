@@ -122,6 +122,7 @@ pub async fn DeliveryStore::create(
     total_bytes: None,
     model_service_id: None,
     model_assignment_generation: None,
+    model_replicas: None,
     workspace_id: None,
     failure_code: None,
     stop_requested_at_ms: None,

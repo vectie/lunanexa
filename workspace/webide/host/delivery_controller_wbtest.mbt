@@ -185,6 +185,9 @@ async test "exclusive callbacks claim budget before launch and report stop only 
     observation_token: "fixture-token",
     locks: {},
     kubernetes_override: Some((verb, path, _body) => {
+      if path.contains("/persistentvolumeclaims?") {
+        return (200, { "items": [] })
+      }
       if path.contains("/deployments?") {
         return (
           200,
@@ -274,6 +277,17 @@ async test "exclusive launch persists non-runnable recovery secret before starti
     observation_token: "fixture-token",
     locks: {},
     kubernetes_override: Some((verb, path, body) => {
+      if path.contains("/persistentvolumeclaims?") {
+        return (200, { "items": [] })
+      }
+      if path.contains("/persistentvolumeclaims/") {
+        if body is Some(Object(fields)) &&
+          fields.get("metadata") is Some(Object(meta)) {
+          meta["resourceVersion"] = "1"
+          return (200, body.unwrap())
+        }
+        return (200, {})
+      }
       if verb == Patch {
         assert_true(path.contains("/secrets/"))
         events.push("secret-persisted")

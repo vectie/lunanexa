@@ -6,6 +6,8 @@ pub(all) struct HostConfig {
   comfyui_image : String
   model_proxy_image : String
   storage_class : String
+  /// Explicit deployment profile; legacy/local volumes default to RWO.
+  storage_access_mode : String?
   storage_gib : Int
   cpu_millis : Int
   memory_mib : Int
@@ -140,6 +142,15 @@ pub fn WorkspaceHost::new(
   observation_token? : String = "",
 ) -> WorkspaceHost raise HostError {
   if require_exclusive && observation_token == "" {
+    raise InvalidConfiguration
+  }
+  if config.storage_access_mode is Some(mode) &&
+    mode != "ReadWriteOnce" &&
+    mode != "ReadWriteMany" {
+    raise InvalidConfiguration
+  }
+  if config.storage_class == "local-path" &&
+    config.storage_access_mode == Some("ReadWriteMany") {
     raise InvalidConfiguration
   }
   if !dns_label(config.namespace_name) ||

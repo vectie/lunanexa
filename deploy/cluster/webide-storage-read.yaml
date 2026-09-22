@@ -1,0 +1,29 @@
+# Read-only supplement to the existing namespaced gateway Role.
+# Observed gateway account: aigc-acceptance-20260915/webide-gateway.
+# Change the subject for another installation; change the allowed StorageClass
+# name only together with the deployment-owned HostConfig storage profile.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lunanexa-webide-storage-read
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    resourceNames: ["lunanexa-workspaces-rwx"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lunanexa-webide-storage-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lunanexa-webide-storage-read
+subjects:
+  - kind: ServiceAccount
+    name: webide-gateway
+    namespace: aigc-acceptance-20260915
