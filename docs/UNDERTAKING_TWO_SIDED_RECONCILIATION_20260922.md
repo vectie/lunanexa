@@ -1960,7 +1960,7 @@ and requested compute lease as one resumable package"，分 4 步：
 | E | **整条承诺函链的闸门**：`/v1/offline-commerce/operator/quotes → 503 OfflineCommerceNotReady`，17 条 blocker code，能力集为空 | **决定性** | ❌ **不修**：这是 `docs/OFFLINE_COMMERCE.md` 要求的状态，伪造签名就绪证明等于删掉闸门（§12.4） |
 | F | 试用租户被给了**永远只能 403** 的动作（`Review price`），提示却是"重试" | 中 | ✅ 已修并验证（见 §12.14） |
 | G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | ✅ 已修并验证（见 §12.15） |
-| H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄 | 中 | 未修（§12.10） |
+| H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄，且抄错会静默给别人开通账户 | 中 | ✅ 已修并验证（见 §12.16） |
 | I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
 
 **修掉的四个（A–D）都在关键路径上**：不修 A，企业侧连订单都建不出来；不修 B，任何失败都表现为"按钮坏了"；
@@ -2162,6 +2162,10 @@ POST /v1/portal/self/machine-quotes  →  403
 
 ### 12.8 本轮仍未验证 / 未做
 
+> 本节是**当时那一轮的快照**。其中"确认框不显示金额"已由 §12.13 修掉，
+> "第 8 步没走"已由 §12.10 补上，"`Provider subject` 无法核对"已由 §12.16 修掉。
+> 仍然成立的只有：第 3–6 步被生产闸门挡住（§12.4），以及租期选择权在运营侧这一点。
+
 - 第 3–7 步（承诺函生成、管理侧批准、登记签署证据、开通权限）**在当前部署上不可达**，原因见 §12.4。
   要在真实节点上走完，需要先满足那十项生产闸门并签出就绪文档——这是运维/法务的决定，不是代码问题。
 - 承诺函 DOCX/PDF 到底能不能生成、生成物是否分页正确、扫描件上传与复核，都没有实测。
@@ -2232,7 +2236,7 @@ POST /v1/portal/self/machine-quotes  →  403
 里程碑用 `✓ complete / · next` 区分，每次动作都有 notice。用户数/授权数也从 `22 users · 26 grants` 变成
 `24 users · 28 grants`，计数跟着动。
 
-**堵点 H（中等，但会挡住真实使用）**：`Provider subject` 这个字段
+**堵点 H（中等，但会挡住真实使用）：`Provider subject` 这个字段 —— 已在 §12.16 修掉并实测**
 
 - 标签只有四个字 `Provider subject / 提供商主体`，**没有任何说明文字**（`ui/console.mbt:4642`），
   而且是 `type=password`，输入时看不见；
@@ -2241,21 +2245,22 @@ POST /v1/portal/self/machine-quotes  →  403
   企业侧 `Account & API keys` 显示的也是同一个指纹；
 - 所以操作员要给一个"平台里已经存在的人"开通权限时，**必须去 Keycloak 自己的管理台把这个 UUID 抄出来**。
 
-  **这一条不是加一句文案就能修的**，试过之后如实记下两种改法（都需要动结构）：
+  **这一条不是加一句文案就能修的**，当时如实记下两种改法（都需要动结构）：
 
   1. 让 `identity_subject_digest` 在 js 目标可用。它现在在 `account` 包里，而
      `account` 是 `supported_targets = "native"`（里面有 Postgres / 文件存储），
      `ui` 是 `js+native`，所以**控制台算不出这个摘要**（实测报
      `Selected backend 'js' is incompatible … 'vectie/lunanexa/ui' requires 'vectie/lunanexa/account'`）。
      把它挪到一个 `js+native` 的小包，控制台就能**边输入边显示派生引用**，
-     操作员可以拿它跟账户列表里的 `Subject` 核对之后再提交。
+     操作员可以拿它跟账户列表里的 `Subject` 核对之后再提交。 ← **最终走的就是这条**（§12.16）
   2. 更彻底：开通权限时**从账户列表里选人**，而不是让操作员重新输入原始 subject。
      这需要 API 接受 `subject_ref` —— 现在它只收 `identity_subject`，并自己算摘要校验
-     （`api/access_onboarding_http.mbt:103`），所以这条要动接口。
+     （`api/access_onboarding_http.mbt:103`），所以这条要动接口。**没做**：它要改开通接口的入参语义，
+     而第 1 条已经能把"抄错人"这件事变成可见的，收益足够。
 
-本次走查用的是**合成 subject**（`9f8e7d6c-…`）：包能建、里程碑能推进、状态能变 `Ready`，
+本次走查当时用的是**合成 subject**（`9f8e7d6c-…`）：包能建、里程碑能推进、状态能变 `Ready`，
 但**没有真人能用这个身份登录**，所以"企业侧得到权限"这一步**没法对它验证** ——
-而这恰好说明了这个字段为什么必须填真值。
+而这恰好说明了这个字段为什么必须填真值。（§12.16 的实测改用了真值。）
 
 **第 8 步在企业侧的显示（已核对，是完整的）**：`Account & API keys` 页给出
 `AUTHENTICATED ACCOUNT / Identity & membership`：Active membership、账号名、邮箱、`Account ID`、
@@ -2431,3 +2436,108 @@ throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response
 与 `offering.maximum_duration_hours` 现场算出，不在文案里写死。
 
 测试：`ui/enterprise` 38/38、`cmd/enterprise` 28/28、`cmd/console` 63/63。
+### 12.16 堵点 H 已修：`Provider subject` 现在当场显示它会派生成谁
+
+**问题的实质不是"缺一句说明"，是"抄错了没人知道"。**
+`Provider subject` 收的是身份提供商的原始 subject（Keycloak 的用户 UUID），
+而 LunaNexa 所有界面显示的都是**派生指纹**（`subject-…`）。
+两者之间没有任何可见的联系，所以：
+
+- 操作员必须去 Keycloak 管理台抄 UUID；
+- 抄错（抄了另一个人的、或者粘贴时多带一个空格）时，平台**照样建出一个账户**，
+  只是建到了别人的 `account-<指纹>` 上 —— 界面上没有任何一处会因此显得不对。
+
+**改法（走的是 §12.10 里记的第 1 条）**
+
+1. 新增 `account/identity` 包（`supported_targets = "js+native"`，只依赖
+   `moonbitlang/x/crypto` + `moonbitlang/core/encoding/utf8`），
+   把**规范材料**和派生放进同一处：
+
+   ```
+   subject_material(issuer, subject) = "lunanexa.external-identity.v1\n{issuer}\n{subject}"
+   subject_digest     → "sha256:<64 hex>"        （存进 identity_subject_sha256 的那个值）
+   subject_fingerprint→ 前 24 个 hex             （所有 subject-… / account-… 的后缀）
+   subject_reference  → "subject-<fingerprint>"
+   account_identifier → "account-<fingerprint>"
+   ```
+
+2. 原来的三处各自切片，现在**全部委托到这一处**，所以"外部身份哈希成什么"只有一
+   个定义：
+
+   | 位置 | 改之前 | 改之后 |
+   |---|---|---|
+   | `account/store.mbt:24` `identity_subject_digest` | 自己拼材料、自己哈希 | 委托 `@identity.subject_digest`（公开 API 不变） |
+   | `account/store.mbt:745` `register_with_invitation` | `external_digest[7:31]` | 委托 `@identity.subject_fingerprint` |
+   | `account/store.mbt:870` `register_open` | `external_digest[7:31]` | 同上 |
+   | `api/access_onboarding_http.mbt:34` `webide_access_package_fingerprint` | `digest[7:31]` | 同上 |
+
+3. `ui` 加依赖 `vectie/lunanexa/account/identity`（**不再需要** `ui → account`，
+   所以 `account` 保持 native-only 不用动），在**两个**填 subject 的地方渲染派生结果：
+
+   - `Users & access → Create WebIDE access → Identity provider details`（`#access-provider-subject`）
+   - `Users & access → Advanced: create account only`（`#account-provider-subject`）
+
+   空值时给说明，有值时给结果：
+
+   | 状态 | 页面上实际出现的那一行 |
+   |---|---|
+   | 空 | `Paste the provider's own subject (the id the provider issued), not the derived reference. LunaNexa derives the account reference below; nothing leaves the browser until you submit.` |
+   | 填了真值 | `Derives subject-fe3ed0627ed85ce6e51cf621 · account-fe3ed0627ed85ce6e51cf621 — check it against the Subject column below before you submit.` |
+
+   `aria-describedby` 也补上了，两个输入框以前连提示都没有。
+
+4. **哈希取的是"提交时的原文"，不做 trim。** 这一条是刻意的：
+   如果在这里顺手 trim，粘贴时多带的空格会被**悄悄修掉**，页面显示"对得上"，
+   而控制面存下去的是另一个身份 —— 正是这个预览要防的事。
+   所以多一个空格会显示成**对不上的指纹**，操作员当场就能看出来。
+   （`ui/console_identity_wbtest.mbt` 里专门有一条测试钉住这个行为。）
+
+**顺带修掉的一处错文案**：账户表单原来的提示是
+`Submitted once for hashing; neither the provider subject nor its digest appears in account views.`
+—— 对完整摘要成立，但对**平台到处都显示的那个派生引用**完全不成立，
+等于把操作员往"不用核对"的方向推。现在两个表单共用同一段预览文案。
+
+**真实集群实测（2026-09-22，浏览器，非命令行）**
+
+用真值走了一遍操作员的实际动作：从 Keycloak 管理台取 `wlc` 的 subject
+（`30101bc7-bac5-4b1e-b747-8239044367f8`，与账户记录里的 issuer
+`https://106.39.18.146:5006/realms/lunanexa` 配对）。
+
+| | 值 |
+|---|---|
+| 账户列表里 `Platform Operator / wlc@lunanexa.local` 的 `Subject` 列 | `subject-fe3ed0627ed85ce6e51cf621` |
+| 把上面那个原始 subject 填进 `Provider subject` 后，页面当场显示 | **`Derives subject-fe3ed0627ed85ce6e51cf621 · account-fe3ed0627ed85ce6e51cf621`** |
+| 两者是否一致 | **一致** |
+| 清空输入框 | 变回上面那段说明文案 |
+
+`Advanced: create account only` 面板同样填真值，同样得到
+`Derives subject-fe3ed0627ed85ce6e51cf621 · …`，且旧文案
+（`neither the provider subject nor its digest appears in account views`）在页面上已不存在。
+
+**这一步的意义**：操作员现在**不需要离开产品**就能确认"我抄的这个 UUID 就是列表里那个人"。
+派生的正确性也不靠人眼——`account/identity` 里有一条**golden 哈希**测试钉住规范材料，
+`ui` 里有一条测试断言预览值等于 `@identity.subject_reference(...)`，
+即控制台显示的值和账户存储落下去的值是同一个函数算出来的。
+
+**没做的部分（如实）**
+
+- 没有改成"从账户列表里选人"（§12.10 的第 2 条）。它要改开通接口的入参语义，
+  而第 1 条已经把"抄错人"从静默变成可见，收益足够，风险小得多。
+- 第 3–6 步依然被 offline commerce 的生产闸门挡着（§12.4），与本节无关。
+  所以**没有**借着这次改动把任何东西说成"已签署/已结算"。
+
+**测试与部署**
+
+| 目标 | 结果 |
+|---|---|
+| `account/identity`（js / native） | 4/4 · 4/4 |
+| `ui`（js） | 86/86（含 4 条新增的预览测试） |
+| `ui` + `account` + `api`（native） | 237/237 |
+| `ui/enterprise` + `ui/offline_commerce` + `cmd/console` + `cmd/enterprise`（js） | 143/143 |
+
+镜像：`lunanexa-web:20260922-r7`
+（registry digest `sha256:904a82a690b7c38fdb57ed9f6f58fc34c33ea9996b6102d74eca5fb13d46c128`），
+`lunanexa-console` 已 rollout；门户目录同步后 `enterprise.js` 摘要未变
+（`801fc44116c9a8a68646f127f4310ea946ade6d2aa0c18803b42767893db4b8a`，本次没动企业侧源码）。
+浏览器侧做了硬刷新（`Network.setCacheDisabled` + `Page.reload ignoreCache`）后再测，
+确认跑的不是旧 bundle。
