@@ -1,6 +1,7 @@
 import {
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/ui/i18n",
+  "moonbitlang/core/string",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",
 }
