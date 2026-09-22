@@ -1,0 +1,37 @@
+# Strategic merge patch ONLY; do not apply as a full Deployment.
+# Create lunanexa-reservation-host-spark ConfigMap from reservation-host-spark.json first.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-control
+  namespace: lunanexa
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: control
+          env:
+            - name: LUNANEXA_RESERVATION_HOST_JSON
+              value: null
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-reservation-host-spark
+                  key: config.json
+          volumeMounts:
+            - name: reservation-host-api
+              mountPath: /var/run/lunanexa/reservation-host
+              readOnly: true
+      volumes:
+        - name: reservation-host-api
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
