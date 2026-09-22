@@ -142,6 +142,7 @@ pub struct ArtifactMaterializer {
   allow_http_loopback : Bool
   s3_sigv4 : S3SigV4Configuration?
   verified : Map[String, Bool]
+  progress : Map[String, ArtifactPreparationProgress]
 }
 
 ///|
@@ -295,6 +296,7 @@ pub async fn ArtifactMaterializer::open(
     allow_http_loopback,
     s3_sigv4: None,
     verified: Map([]),
+    progress: Map([]),
   }
 }
 
@@ -552,6 +554,9 @@ async fn ArtifactMaterializer::download(
       }
       offset = partial_size
     } else if expected_size_bytes > 0L && partial_size == expected_size_bytes {
+      if self.progress.get(assignment.deployment_id) is Some(progress) {
+        progress.completed_file_bytes += partial_size
+      }
       return (partial_digest, partial_size)
     } else {
       remove_if_present(partial_path)
@@ -595,6 +600,15 @@ async fn ArtifactMaterializer::download(
   )
   defer file.close()
   let mut size = offset
+  let model_payload = !object_key.has_suffix(
+      @contracts.model_store_manifest_name,
+    ) &&
+    !partial_path.has_suffix(".sig.partial")
+  let progress = self.progress.get(assignment.deployment_id)
+  if model_payload && progress is Some(value) {
+    value.stage = 2
+    value.current_file_bytes = offset
+  }
   while stream.read_some(max_len=self.io_chunk_bytes) is Some(chunk) {
     size += chunk.length().to_int64()
     if size > maximum_size_bytes ||
@@ -603,10 +617,18 @@ async fn ArtifactMaterializer::download(
     }
     digest.update(chunk)
     file.write(chunk)
+    if model_payload && progress is Some(value) {
+      value.current_file_bytes = size
+      value.transferred_bytes += chunk.length().to_int64()
+    }
   }
   file.sync()
   if expected_size_bytes > 0L && size != expected_size_bytes {
     raise ArtifactSizeMismatch
+  }
+  if model_payload && progress is Some(value) {
+    value.completed_file_bytes += size
+    value.current_file_bytes = 0L
   }
   ("sha256:\{@crypto.bytes_to_hex_string(digest.finalize())}", size)
 }
@@ -749,7 +771,10 @@ async fn ArtifactMaterializer::materialize_revision(
         quarantine_if_present(root)
       }
     } noraise {
-      cached => return cached
+      cached => {
+        self.mark_cache_hit(assignment.deployment_id)
+        return cached
+      }
     }
   }
   let manifest_key = "\{directory}/\{@contracts.model_store_manifest_name}"
@@ -900,6 +925,31 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
   assignment : @contracts.DesiredAssignment,
   verifier : V,
 ) -> MaterializedArtifact {
+  self.progress[assignment.deployment_id] = {
+    stage: 1,
+    cache_hit: false,
+    total_bytes: assignment.artifact.size_bytes,
+    completed_file_bytes: 0L,
+    current_file_bytes: 0L,
+    transferred_bytes: 0L,
+  }
+  errdefer {
+    self.progress[assignment.deployment_id].stage = 4
+  }
+  let artifact = self.materialize_inner(assignment, verifier)
+  let progress = self.progress[assignment.deployment_id]
+  progress.stage = 3
+  progress.completed_file_bytes = artifact.size_bytes
+  progress.current_file_bytes = 0L
+  artifact
+}
+
+///|
+async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize_inner(
+  self : ArtifactMaterializer,
+  assignment : @contracts.DesiredAssignment,
+  verifier : V,
+) -> MaterializedArtifact {
   let artifact = assignment.artifact
   if !assignment.network.allow_artifact_store {
     raise ArtifactStoreDenied
@@ -921,6 +971,7 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
     @fs.exists(artifact_path) &&
     @fs.exists(signature_path) &&
     @fs.exists(ready_path) {
+    self.mark_cache_hit(assignment.deployment_id)
     return {
       digest: artifact.digest,
       host_path: artifact_path,
@@ -937,7 +988,10 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
         quarantine_if_present(ready_path)
       }
     } noraise {
-      cached => return cached
+      cached => {
+        self.mark_cache_hit(assignment.deployment_id)
+        return cached
+      }
     }
   }
   let artifact_partial = "\{artifact_path}.partial"
@@ -997,23 +1051,76 @@ pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(
 }
 
 ///|
+/// Keep idle public model cache independently of workload lifetime. Watermarks
+/// are a deployment-selected byte budget for this cache, not total disk size.
+/// Desired, supervisor-retained and pinned digests are never eviction candidates.
 pub async fn ArtifactMaterializer::prune_unassigned(
   self : ArtifactMaterializer,
   desired_digests : Array[String],
+  now_unix_ms? : Int64 = @async.now(),
+  idle_retention_ms? : Int64 = 604800000L,
+  high_watermark_bytes? : Int64 = 1099511627776L,
+  low_watermark_bytes? : Int64 = 824633720832L,
+  pinned_digests? : Array[String] = [],
 ) -> Unit {
-  let desired_hex = [ for digest in desired_digests => digest_hex(digest) ]
+  if idle_retention_ms < 0L ||
+    low_watermark_bytes < 0L ||
+    high_watermark_bytes < low_watermark_bytes {
+    raise Failure::Failure("invalid model cache retention budget")
+  }
+  let retained = desired_digests + pinned_digests
+  let groups : Map[String, Array[String]] = Map([])
   for entry in @fs.readdir(self.cache_root, include_hidden=true) {
-    let keep = desired_hex.any(hex => entry.has_prefix("\{hex}."))
-    if !keep {
-      remove_if_present("\{self.cache_root}/\{entry}")
+    if entry.has_suffix(".last-used") || entry.has_suffix(".last-used.partial") {
+      continue
+    }
+    // Only materializer-owned digest entries belong to this collector.
+    if entry.length() > 65 && entry[64] == '.' {
+      let hex = entry[:64].to_owned()
+      if hex.all(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+        let files = groups.get_or_default(hex, [])
+        files.push(entry)
+        groups[hex] = files
+      }
     }
   }
-  let stale = [
-    for digest, _ in self.verified if !desired_digests.any(value => {
-      value == digest
-    }) => digest
-  ]
-  for digest in stale {
-    ignore(self.verified.remove(digest))
+  let candidates : Array[(String, Int64, Int64)] = []
+  let mut total = 0L
+  for hex, entries in groups {
+    let marker = "\{self.cache_root}/\{hex}.last-used"
+    let in_use = retained.contains("sha256:\{hex}")
+    let last_used = if in_use || !@fs.exists(marker) {
+      @fs.write_file(
+        "\{marker}.partial",
+        now_unix_ms.to_string(),
+        create_mode=CreateOrTruncate,
+      )
+      @fs.rename("\{marker}.partial", marker, replace=true)
+      now_unix_ms
+    } else {
+      @string.parse_int64(@fs.read_file(marker).text())
+    }
+    let mut size = 0L
+    for entry in entries {
+      size += cache_entry_size("\{self.cache_root}/\{entry}")
+    }
+    total += size
+    if !in_use {
+      candidates.push((hex, last_used, size))
+    }
+  }
+  candidates.sort_by((a, b) => a.1.compare(b.1))
+  let pressure = total > high_watermark_bytes
+  for (hex, last_used, size) in candidates {
+    if now_unix_ms - last_used >= idle_retention_ms ||
+      (pressure && total > low_watermark_bytes) {
+      for entry in groups[hex] {
+        remove_if_present("\{self.cache_root}/\{entry}")
+      }
+      remove_if_present("\{self.cache_root}/\{hex}.last-used")
+      remove_if_present("\{self.cache_root}/\{hex}.last-used.partial")
+      total -= size
+      ignore(self.verified.remove("sha256:\{hex}"))
+    }
   }
 }

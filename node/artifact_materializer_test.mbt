@@ -97,6 +97,39 @@ fn request_header(headers : Map[String, String], name : String) -> String? {
 }
 
 ///|
+async test "failed model preparation reports failure without readiness or full progress" {
+  let directory = @fs.tmpdir(prefix="lunanexa-progress-failure-")
+  defer @fs.rmdir(directory, recursive=true)
+  let materializer = @node.ArtifactMaterializer::open(
+    directory,
+    "http://127.0.0.1:1",
+    "artifact-token",
+    allow_http_loopback=true,
+  )
+  let assignment = materialization_assignment()
+  let denied = {
+    ..assignment,
+    network: { ..assignment.network, allow_artifact_store: false, },
+  }
+  try
+    materializer.materialize(denied, AcceptSignatureVerifier::{ calls: 0, })
+  catch {
+    _ => ()
+  } noraise {
+    _ => fail("denied model unexpectedly prepared")
+  }
+  let samples = materializer.preparation_samples(
+    "node-a",
+    assignment.deployment_id,
+    1000L,
+  )
+  assert_eq(samples[0].value, 4.0)
+  assert_eq(samples[1].value, 0.0)
+  assert_eq(samples[2].value, 0.0)
+  assert_eq(samples[4].value, 0.0)
+}
+
+///|
 async test "assigned node materializes verifies reuses and prunes its model" {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let request_count = Ref(0)
@@ -136,7 +169,20 @@ async test "assigned node materializes verifies reuses and prunes its model" {
     assert_eq(@fs.read_file(artifact.host_path()).text(), "artifact-bytes")
     assert_eq(request_count.val, 2)
     assert_eq(verifier.calls, 1)
+    let downloaded = materializer.preparation_samples(
+      "node-a", "deployment-materialize-1", 1000L,
+    )
+    assert_eq(downloaded[0].value, 3.0)
+    assert_eq(downloaded[1].value, 0.0)
+    assert_eq(downloaded[2].value, 14.0)
+    assert_eq(downloaded[3].value, 14.0)
+    assert_eq(downloaded[4].value, 14.0)
     ignore(materializer.materialize(materialization_assignment(), verifier))
+    let cached = materializer.preparation_samples(
+      "node-a", "deployment-materialize-1", 1001L,
+    )
+    assert_eq(cached[1].value, 1.0)
+    assert_eq(cached[4].value, 0.0)
     assert_eq(request_count.val, 2)
     assert_eq(verifier.calls, 1)
     let restarted = @node.ArtifactMaterializer::open(
@@ -149,7 +195,9 @@ async test "assigned node materializes verifies reuses and prunes its model" {
     ignore(restarted.materialize(materialization_assignment(), verifier))
     assert_eq(request_count.val, 2)
     assert_eq(verifier.calls, 2)
-    restarted.prune_unassigned([])
+    restarted.prune_unassigned([], now_unix_ms=1000L)
+    assert_true(@fs.exists(artifact.host_path()))
+    restarted.prune_unassigned([], now_unix_ms=604801001L)
     assert_false(@fs.exists(artifact.host_path()))
     @fs.rmdir(directory, recursive=true)
     server.close()
@@ -534,9 +582,13 @@ async test "cache pressure pruning preserves every file for an assigned digest" 
       sync=Full,
     )
   }
-  materializer.prune_unassigned(["sha256:\{assigned}"])
+  materializer.prune_unassigned(
+    ["sha256:\{assigned}"],
+    high_watermark_bytes=1L,
+    low_watermark_bytes=0L,
+  )
   let remaining = @fs.readdir("\{directory}/sha256")
-  assert_true(remaining.length() == 4)
+  assert_true(remaining.length() == 5)
   assert_true(remaining.all(value => value.has_prefix("\{assigned}.")))
   assert_false(remaining.any(value => value.has_prefix("\{stale}.")))
   @fs.rmdir(directory, recursive=true)

@@ -123,11 +123,15 @@ pub struct ArtifactMaterializer {
   allow_http_loopback : Bool
   s3_sigv4 : S3SigV4Configuration?
   verified : Map[String, Bool]
+  progress : Map[String, ArtifactPreparationProgress]
 }
 pub async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize(Self, @contracts.DesiredAssignment, V) -> MaterializedArtifact
 pub async fn ArtifactMaterializer::open(String, String, String, node_id? : String, maximum_artifact_size_bytes? : Int64, io_chunk_bytes? : Int, signature_maximum_bytes? : Int64, allow_http_loopback? : Bool) -> Self
 pub async fn ArtifactMaterializer::open_s3(String, String, String, String, String, String, String?, maximum_artifact_size_bytes? : Int64, io_chunk_bytes? : Int, signature_maximum_bytes? : Int64, allow_http_loopback? : Bool) -> Self
-pub async fn ArtifactMaterializer::prune_unassigned(Self, Array[String]) -> Unit
+pub fn ArtifactMaterializer::preparation_samples(Self, String, String, Int64) -> Array[@contracts.TelemetrySample]
+pub async fn ArtifactMaterializer::prune_unassigned(Self, Array[String], now_unix_ms? : Int64, idle_retention_ms? : Int64, high_watermark_bytes? : Int64, low_watermark_bytes? : Int64, pinned_digests? : Array[String]) -> Unit
+
+type ArtifactPreparationProgress
 
 pub(all) struct BootstrapToken {
   token_id : String
