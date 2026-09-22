@@ -31,8 +31,16 @@ Implementation phase gate: native check passed; 1149/1149 native tests,
 69/69 console, 21/21 offline-commerce UI and 32/32 enterprise JavaScript
 tests passed. These are automated checks, not live business acceptance.
 
-Approval recorded; implementation and UI controls are under acceptance. This
-document does not assert the live order has been waived or resources activated.
+The owner subsequently confirmed creation and activation of a maximum 45-minute
+Developer workspace for this exact customer/order, without platform-admin access
+or an exclusive machine. Public UI preparation, waiver review and fulfillment
+completed. Both portals display test access active with expiry
+**2026-09-22T16:00:09Z (2026-09-23 00:00:09 Asia/Shanghai)**.
+The workspace is
+`technical-lease-8ed55f17c16a17288af78aa04b56c5d5ba2989d4b709a02a3308df76843da4df`.
+Unsigned/unpaid/non-commercial classification is preserved. No lifetime extension
+was requested or applied. Actual WebIDE launch remains blocked by the deployed
+localhost destination; provisioning success does not prove service usability.
 All business acceptance actions must be performed through the public browser UI.
 See `undertaking-public-ui-reconciliation-20260922.md` for observed button actions
 and results; test counts alone are not live end-to-end evidence.
