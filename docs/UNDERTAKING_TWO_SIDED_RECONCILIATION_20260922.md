@@ -2336,25 +2336,38 @@ Approved models: 17 · Previous connections: 0 · Access remains lease-bound
 
 ### 12.12 要解锁第 3–6 步，具体需要做什么（可执行清单）
 
-这不是代码问题，是**运维/法务/财务要真实证明的东西**。`docs/OFFLINE_COMMERCE.md` 的
-Production readiness gates 一节列了十项，和 §12.4 里那 17 条 blocker code 一一对应：
+这不是代码问题，是**运维/法务/财务要真实证明的东西**。
+
+**「十项能力」是代码里钉死的十项**，不是文里的约数：`commercial/offline/types.mbt:78` 的
+`OfflineCommerceCapability` 枚举正好十个，`commercial/offline/readiness.mbt` 里
+`capabilities.length() != expected.length()` 会直接报 `ReadinessCapabilitySetInvalid`，
+而且**每一项必须恰好出现一次**（`ReadinessCapabilityDuplicate`），
+每项还要 `configured && verified` 且带一个合法的 `evidence_ref`：
+
+| # | 能力（枚举值） | 缺它时的 blocker code | 需要先真实具备的东西 |
+|---|---|---|---|
+| 1 | `ApprovedLegalTemplates` | `ApprovedLegalTemplatesPending` | 已批准的中英双语法律 DOCX 模板 + 不可变哈希 + 具名法务负责人 |
+| 2 | `ObjectStorage` | `ObjectStoragePending` | S3 兼容对象存储：租户隔离前缀、保留策略、版本、加密、短时 multipart 上传授权 |
+| 3 | `MalwareScanner` | `MalwareScannerPending` | 恶意/主动内容扫描，带签名回调与 ZIP 炸弹上限 |
+| 4 | `OoxmlWorker` | `OoxmlWorkerPending` | 管理面文档 worker，固定镜像摘要 + 只读模板挂载 |
+| 5 | `PdfRenderer` | `MoonLeafPdfRendererPending` | 确定性的 MoonLeaf DOCX→PDF 渲染 + **逐页图像视觉回归基线** |
+| 6 | `SpreadsheetFormulaEngine` | `SpreadsheetFormulaEnginePending` | XLSX 公式重算、错误扫描、渲染页检查 |
+| 7 | `CjkFonts` | `CjkFontsPending` | 随渲染器一起保留的中文生产字体证明 |
+| 8 | `MachineCallbackIdentity` | `MachineCallbackIdentityPending` | 与人类运维权限**分离**的 mTLS 或签名回调身份（≥32 字节，互不相同） |
+| 9 | `EntitlementAuthority` | `EntitlementAuthorityPending` | 第三套不可复用身份 `LUNANEXA_ENTITLEMENT_AUTHORITY_CALLBACK_TOKEN`：未确认前订单不算履约 |
+| 10 | `FinanceLegalPolicy` | `FinanceLegalPolicyPending` | 已批准的履约政策：先票/后票、退款、作废、取消、到期、权限撤销 |
+
+**上面十项之外，还有一组 blocker 不是"能力"，是"适配器/证据"**——签名文档写了十项也照样会报：
 
 | blocker code | 需要先真实具备的东西 |
 |---|---|
-| `ApprovedLegalTemplatesPending` | 已批准的中英双语法律 DOCX 模板 + 不可变哈希 + 具名法务负责人 |
-| `ObjectStoragePending` | S3 兼容对象存储：租户隔离前缀、保留策略、版本、加密、短时 multipart 上传授权 |
-| `MalwareScannerPending` | 恶意/主动内容扫描，带签名回调与 ZIP 炸弹上限 |
-| `OoxmlWorkerPending` | 管理面文档 worker，固定镜像摘要 + 只读模板挂载 |
-| `MoonLeafPdfRendererPending` | 确定性的 MoonLeaf DOCX→PDF 渲染 + **逐页图像视觉回归基线** |
-| `SpreadsheetFormulaEnginePending` | XLSX 公式重算、错误扫描、渲染页检查 |
-| `CjkFontsPending` | 随渲染器一起保留的中文生产字体证明 |
-| `MachineCallbackIdentityPending` | 与人类运维权限**分离**的 mTLS 或签名回调身份 |
-| `EntitlementAuthorityPending` | 权限授予/撤销的授权方（回调身份 + token） |
-| `FinanceLegalPolicyPending` | 已批准的履约政策：先票/后票、退款、作废、取消、到期、权限撤销 |
-| `ReadinessTransferAdapterUnavailable` | 传输适配器三元组（endpoint / token / session secret ≥32 字节） |
-| `ReadinessEvidenceExpired` + `ReadinessCapabilitySetInvalid` | 一份**签名**就绪文档：schema `lunanexa.offline-commerce-readiness.v1`、签发/失效窗口 ≤31 天、每个能力恰好一条、`evidence_ref` 唯一，用 HMAC-SHA256 签名 |
+| `ReadinessTransferAdapterUnavailable` | 传输适配器三元组（endpoint / token / session secret ≥32 字节），endpoint 非 loopback 时必须 HTTPS |
+| `ReadinessEvidenceExpired` / `ReadinessCapabilitySetInvalid` / `ReadinessCapabilityDuplicate` / `ReadinessEvidenceReferenceDuplicate` / `ReadinessEvaluationTimeInvalid` | 一份**签名**就绪文档：schema `lunanexa.offline-commerce-readiness.v1`、签发/失效窗口 ≤31 天、十项各恰好一条、`evidence_ref` 唯一且 ≤256 字符、用 HMAC-SHA256 签名 |
 | `ReadinessArtifactDispatcherHeartbeatStale` / `…SuccessStale` | artifact dispatcher 真的在轮询受保护的工作路由，并留下近期心跳与成功回执 |
 | `ReadinessEntitlementDispatcherHeartbeatStale` / `…SuccessStale` | entitlement dispatcher 同上 |
+
+文档的原话是：**"Signed evidence or a deployment boolean alone cannot make these adapters
+ready."** —— 所以这组不能靠文档糊过去，得有真在跑的东西。
 
 然后把 `LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH` 与 `…_SECRET` 挂到控制面容器上
 （**当前全集群没有任何 Pod 挂这两个变量**，Secret 内容就是字面量 `pending`）。
