@@ -2839,3 +2839,81 @@ subject → `LunaNexa holds no account or workspace lease for this subject yet.`
 | 看会员有几条 | 管理侧 operator 快照 `/v1/portal/operator/snapshot` 过滤这个 subject → 2 条 active |
 | 看商业组织在不在 | `/v1/commercial/organizations/<id>/snapshot` → 试用 200，开通包那个 409 |
 | 定位代码 | `api/self_service_organization_http.mbt:225`、`portal/store/file.mbt:268`、`cmd/enterprise/main.mbt:445`、`ui/enterprise/enterprise.mbt:1516` |
+### 12.20 十项能力的逐项现状：哪些已装、哪些是工程活、哪些要你签字
+
+§12.12 的清单回答了"要什么"，没回答"现在到哪了"。这一节把每一项对着**真实集群**核一遍。
+判据分两层，先说清楚这两层的区别，否则容易误判：
+
+- **十项能力本身，只有一个来源：那份签名就绪文档。**
+  `cmd/control/main.mbt:274` 的 `load_offline_readiness_evidence` 把文档里的 `capabilities`
+  原样交给 `offline_commerce_readiness`，`configured`/`verified`/`evidence_ref` 都是**文档里声明的**。
+  所以"装了"不等于"算数"——还得有人声明它，且声明要在有效窗口内。
+- **适配器那一组（三个回调身份、传输适配器、两个 dispatcher）走的是真实配置与心跳**，
+  文档写什么都不算数。文档原话：*"Signed evidence or a deployment boolean alone cannot make
+  these adapters ready."*
+
+集群实测（`GET /v1/offline-commerce/operator/readiness`）：`status: OfflineCommerceAdaptersPending`，
+`capabilities: []`，**17 条 blocker**。
+
+#### A. 已经装好的（实测：对应的 blocker 不在那 17 条里）
+
+| 项 | 证据 |
+|---|---|
+| 三个回调身份 token | `lunanexa-control-credentials` 里有 `artifact-worker-callback-token`、`artifact-scanner-callback-token`、`entitlement-authority-callback-token`，各 64 字节、互不相同。对应的 `ReadinessArtifactWorkerCallbackUnavailable` / `…Scanner…` / `…EntitlementAuthority…` **都没有出现** |
+| 就绪文档的挂载点 | volume `offline-readiness` → `/etc/lunanexa/offline-readiness` 已经挂在 control 容器上 |
+| 订单状态存储 | `LUNANEXA_OFFLINE_COMMERCE_PATH=/var/lib/lunanexa/offline-commerce.json`，`state` volume 挂在 `/var/lib/lunanexa` |
+
+也就是说 `MachineCallbackIdentity` 和 `EntitlementAuthority` 的**配置那一半是完成的**；
+没完成的是它们在文档里的**声明那一半**。
+
+#### B. 没装，但是纯工程/配置（不需要你签字，需要有东西）
+
+| # | 缺什么 | 实测现状 |
+|---|---|---|
+| 1 | `LUNANEXA_OFFLINE_COMMERCE_READINESS_PATH` + `…_SECRET` | **环境变量根本没挂**（只有 machine-readiness 那两个）。挂载点建了，Secret `lunanexa-offline-commerce-readiness` 里只有一个 key `pending`，内容就是字面量 `pending`。**这是十项声明的载体，不挂它，十项永远报 Pending** |
+| 2 | 传输适配器三元组 | Secret 里**没有** `offline-transfer-adapter-endpoint` / `…-token` / `offline-transfer-session-secret` 这三个 key（env 里是 `optional: True`）→ `ReadinessTransferAdapterUnavailable` |
+| 3 | artifact dispatcher | 全集群**没有任何**相关 Pod → `ReadinessArtifactDispatcherHeartbeatStale` + `…SuccessStale` |
+| 4 | entitlement dispatcher | 同上 → `ReadinessEntitlementDispatcherHeartbeatStale` + `…SuccessStale` |
+| 5 | 扫描器 / OOXML worker / XLSX 引擎 | 只有 Job 模板 `deploy/offline-artifact-worker-job.yaml`、`deploy/offline-pdf-pipeline-job.yaml`，镜像还是 `registry.invalid/lunanexa/control@${CONTROLLER_IMAGE_DIGEST}` 占位符 |
+| 6 | 对象存储 | 没有任何 S3 兼容存储配置 |
+| 7 | 一份签名就绪文档 | 仓库里**没有**示例文档，也**没有**生成/签名的脚本。`scripts/offline-commerce-manifest-test.sh` 是测试，不是生成器 |
+
+#### C. 必须由外部提供的（这里做不出来）
+
+| 项 | 为什么做不出来 |
+|---|---|
+| `CjkFonts` | `assets/fonts/private/README.md` 写明：字体二进制**故意不入库**，要从组织授权来源放进这个目录；脚本会校验内部 family 名与嵌入标志，**不允许用替代字体改名充数**。三个必需 face：`FangSong_GB2312.ttf`（仿宋_GB2312）、`FZXiaoBiaoSong-B05S.ttf`（方正小标宋简体）、`SimHei.ttf`（黑体）。当前目录里只有 `README.md` |
+| `PdfRenderer` | MoonLeaf 侧还没有合格的渲染器镜像。`deploy/offline-pdf-pipeline-job.yaml` 的注释原话：*"Keep PdfRenderer and CjkFonts pending until `MOONLEAF_RENDERER_IMAGE_DIGEST`, bilingual fonts, visual baselines, and retained MoonLeaf receipts have been approved and rehearsed. Another office engine is not an allowed substitute."* |
+| `ApprovedLegalTemplates` | 需要**具名法务负责人**批准中英双语模板 |
+| `FinanceLegalPolicy` | 需要批准的履约政策（先票/后票、退款、作废、取消、到期、权限撤销） |
+
+#### D. 需要**你**拍板的（这是"签字"的真实含义）
+
+先澄清一件事，免得找错东西：那份就绪文档的 `signature` 是 **HMAC-SHA256**，
+用 `LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET` 算出来的
+（`cmd/control/main.mbt:240` `offline_readiness_signature`）。
+**是机器签名，不是手写签名。** 所以没有任何一份文件需要你签名盖章。
+
+真正需要你的是**四项批准 + 一项背书**：
+
+| # | 需要你做什么 | 具体到哪一步 |
+|---|---|---|
+| 1 | **指定具名法务负责人并批准法律模板** | `ApprovedLegalTemplates` 的 `evidence_ref` 要指向这个批准 |
+| 2 | **批准履约政策** | `FinanceLegalPolicy`：先票/后票、退款、作废、取消、到期、权限撤销各自的规则 |
+| 3 | **接受 PDF 渲染的视觉基线** | `PdfRenderer` 要求"逐页图像视觉回归基线"，且是**真实法律模板**的基线——得有一个人认可渲染结果是对的 |
+| 4 | **定对象存储的保留期** | `ObjectStorage` 的安装是工程活，但"存多久、谁能读"是合规决定 |
+| 5 | **对整份文档背书** | 文档里十项各写 `configured: true` / `verified: true` + 唯一 `evidence_ref`，这是**责任声明**：写下去就等于说"这十项是真的" |
+
+第 1–4 项是**内容**批准，第 5 项是**形式**背书。除这五项之外，其余全是工程活（B 组）。
+
+#### E. 顺序建议（先做能做的）
+
+1. 先做 B 组里 1–4 项（挂 readiness 环境变量 + 传输适配器 + 两个 dispatcher），
+   这些不依赖任何批准，做完 `ReadinessTransferAdapterUnavailable` 和四条心跳 blocker 就会消失；
+2. 同时推进 C 组的字体与 MoonLeaf 渲染器镜像（这两条是硬阻塞，谁批准都绕不过）；
+3. 等你把 D 组 1–4 项的批准拿到，再生成并签那份文档（第 5 项），挂上去。
+   文档一旦生效，`capabilities` 就不再是 `[]`，十项 Pending 会一起消失。
+
+**注意**：第 1 步做完**不会**让链通。十项能力仍然会全报 Pending，因为载体文档还没挂。
+这是设计如此——`capabilities: []` 会同时报 `ReadinessCapabilitySetInvalid`
+和十个 `…Pending`，不给"只做一半就放行"留缝。
