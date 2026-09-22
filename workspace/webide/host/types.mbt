@@ -60,6 +60,8 @@ fn ModelProxyConfig::grant(self : ModelProxyConfig) -> @webide.Grant {
 ///|
 pub struct WorkspaceHost {
   config : HostConfig
+  require_exclusive : Bool
+  observation_token : String
   locks : Map[String, @async.Mutex]
   kubernetes_override : (async (@http.RequestMethod, String, Json?) -> (
     Int,
@@ -130,7 +132,14 @@ fn origin(value : String) -> Bool {
 }
 
 ///|
-pub fn WorkspaceHost::new(config : HostConfig) -> WorkspaceHost raise HostError {
+pub fn WorkspaceHost::new(
+  config : HostConfig,
+  require_exclusive? : Bool = false,
+  observation_token? : String = "",
+) -> WorkspaceHost raise HostError {
+  if require_exclusive && observation_token == "" {
+    raise InvalidConfiguration
+  }
   if !dns_label(config.namespace_name) ||
     !dns_label(config.controller_namespace) ||
     !dns_label(config.model_gateway_namespace) ||
@@ -156,7 +165,13 @@ pub fn WorkspaceHost::new(config : HostConfig) -> WorkspaceHost raise HostError 
     config.model_gateway_port > 65535 {
     raise InvalidConfiguration
   }
-  { config, locks: {}, kubernetes_override: None, }
+  {
+    config,
+    require_exclusive,
+    observation_token,
+    locks: {},
+    kubernetes_override: None,
+  }
 }
 
 ///|

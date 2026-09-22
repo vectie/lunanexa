@@ -78,6 +78,24 @@ async test "production account and client handoff snapshots are allowlisted" {
 }
 
 ///|
+async test "exclusive delivery snapshot survives database reopen" {
+  guard test_database_url() is Some(url) else { return }
+  let database = @database.PostgresDatabase::open(url)
+  database.save_opaque_snapshot(
+    "exclusive_deliveries", "lunanexa.exclusive-deliveries.v1", "{\"operations\":[]}",
+  )
+  database.close()
+  let reopened = @database.PostgresDatabase::open(url)
+  defer reopened.close()
+  assert_eq(
+    reopened.load_snapshot(
+      "exclusive_deliveries", "lunanexa.exclusive-deliveries.v1",
+    ),
+    Some("{\"operations\": []}"),
+  )
+}
+
+///|
 async test "failed PostgreSQL batch rolls back and releases its mutex" {
   guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)

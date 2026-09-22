@@ -12,7 +12,30 @@ async fn main {
     let config : @host.HostConfig = @json.from_json(
       @json.parse(@fs.read_file(required("LUNANEXA_WEBIDE_CONFIG_FILE")).text()),
     )
-    let host = @host.WorkspaceHost::new(config)
+    let require_exclusive = @env.get_env_var(
+        "LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE",
+      ) ==
+      Some("true")
+    let observation_token = if require_exclusive {
+      required("LUNANEXA_WEBIDE_OBSERVATION_TOKEN")
+    } else {
+      ""
+    }
+    let host = @host.WorkspaceHost::new(
+      config,
+      require_exclusive~,
+      observation_token~,
+    )
+    let container : @host.ExclusiveContainer? = match
+      @env.get_env_var("LUNANEXA_WEBIDE_CONTAINER_FILE") {
+      Some(path) => {
+        if !require_exclusive {
+          raise Failure("GPU workspace requires exclusive delivery")
+        }
+        Some(@json.from_json(@json.parse(@fs.read_file(path).text())))
+      }
+      None => None
+    }
     let client_id = required("LUNANEXA_WEBIDE_CLIENT_ID")
     let bridge = @webide.Bridge::new(
       {
@@ -38,7 +61,7 @@ async fn main {
       },
       (id, grant) => {
         errdefer println("WebIDE launch failed at workspace provisioning")
-        host.provision(id, grant)
+        host.provision(id, grant, container?)
       },
       allow_insecure_public_http=@env.get_env_var(
           "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP",

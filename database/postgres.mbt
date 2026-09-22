@@ -290,6 +290,7 @@ fn allowed_domain(domain : String) -> Bool {
   domain == "scheduler" ||
   domain == "telemetry" ||
   domain == "deployments" ||
+  domain == "exclusive_deliveries" ||
   domain == "access_onboarding" ||
   domain == "accounts" ||
   domain == "client_handoffs" ||

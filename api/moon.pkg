@@ -17,6 +17,7 @@ import {
   "vectie/lunanexa/media/runtime" @media_runtime,
   "vectie/lunanexa/machinecommerce/store" @machinecommerce_store,
   "vectie/lunanexa/deployment",
+  "vectie/lunanexa/deployment/delivery",
   "vectie/lunanexa/deployment/store" @deployment_store,
   "vectie/lunanexa/controller",
   "vectie/lunanexa/runtimes",

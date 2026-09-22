@@ -50,6 +50,7 @@ pub(all) struct SchedulerSnapshot {
   decisions : Array[PlacementDecision]
   queued_count : Int?
   running_count : Int?
+  node_reservations : Array[NodeReservation]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -92,6 +93,7 @@ pub struct FileScheduler {
   active : Map[String, ActiveAdmission]
   usage : Map[String, TenantUsage]
   decisions : Array[PlacementDecision]
+  node_reservations : Map[String, NodeReservation]
   mutex : @async.Mutex
 }
 
@@ -113,6 +115,7 @@ fn FileScheduler::snapshot_unlocked(self : FileScheduler) -> SchedulerSnapshot {
     running_count: Some(
       active.count_if(value => value.started_unix_ms is Some(_)),
     ),
+    node_reservations: Some([ for _, value in self.node_reservations => value ]),
   }
 }
 
@@ -135,6 +138,10 @@ fn FileScheduler::restore_unlocked(
   }
   self.decisions.clear()
   self.decisions.push_iter(snapshot.decisions.iter())
+  self.node_reservations.clear()
+  for value in snapshot.node_reservations.unwrap_or([]) {
+    self.node_reservations[value.request.reservation_id] = value
+  }
 }
 
 ///|
@@ -178,6 +185,7 @@ pub async fn FileScheduler::open(
     active: Map([]),
     usage: Map([]),
     decisions: [],
+    node_reservations: Map([]),
     mutex: Mutex(),
   }
   let mut pruned = false
@@ -192,6 +200,9 @@ pub async fn FileScheduler::open(
       raise InvalidSchedulerState("unsupported or invalid scheduler snapshot")
     }
     scheduler.capacity = snapshot.capacity
+    for value in snapshot.node_reservations.unwrap_or([]) {
+      scheduler.node_reservations[value.request.reservation_id] = value
+    }
     for quota in snapshot.quotas {
       scheduler.quotas[quota.tenant_ref] = quota
     }
@@ -247,6 +258,7 @@ pub async fn FileScheduler::open_postgres(
     active: Map([]),
     usage: Map([]),
     decisions: [],
+    node_reservations: Map([]),
     mutex: Mutex(),
   }
   let payload = database.load_snapshot("scheduler", "lunanexa.scheduler.v2")
@@ -260,6 +272,9 @@ pub async fn FileScheduler::open_postgres(
         raise InvalidSchedulerState("unsupported or invalid scheduler snapshot")
       }
       scheduler.capacity = snapshot.capacity
+      for value in snapshot.node_reservations.unwrap_or([]) {
+        scheduler.node_reservations[value.request.reservation_id] = value
+      }
       for quota in snapshot.quotas {
         scheduler.quotas[quota.tenant_ref] = quota
       }
@@ -455,9 +470,13 @@ pub async fn FileScheduler::place(
   requirements : PlacementRequirements,
   policy : ScorePolicy,
 ) -> PlacementDecision {
-  let decision = place(nodes, requirements, policy)
   self.mutex.acquire()
   defer self.mutex.release()
+  let decision = place(
+    nodes.filter(node => !self.node_held_unlocked(node.node_id)),
+    requirements,
+    policy,
+  )
   let previous = self.snapshot_unlocked()
   errdefer self.restore_unlocked(previous)
   self.decisions.push(decision)

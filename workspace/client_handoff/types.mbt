@@ -58,6 +58,7 @@ pub extend ClientHandoffIssueIntent with FromJson::{from_json}
 ///|
 /// Persisted one-time handoff. Neither the handoff code nor API secret is stored.
 pub(all) struct ClientHandoffRecord {
+  delivery_id : String?
   version : String
   handoff_id : String
   request_id : String
@@ -93,6 +94,7 @@ pub extend ClientHandoffRecord with FromJson::{from_json}
 ///|
 /// Credential created with the handoff and revealed only during redemption.
 pub(all) struct ClientCredential {
+  delivery_id : String?
   key_id : String
   handoff_id : String
   client_id : String

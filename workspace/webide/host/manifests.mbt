@@ -38,10 +38,15 @@ fn WorkspaceHost::resources(
   self : WorkspaceHost,
   id : String,
   grant : @webide.Grant,
+  placement? : ExclusivePlacement,
+  container? : ExclusiveContainer,
 ) -> Array[(String, Json)] raise HostError {
   let name = resource_name(id)
   let config = self.config
   let meta = metadata(name, config.namespace_name)
+  if meta is Object(fields) {
+    fields["annotations"] = { "lunanexa.io/workspace-id": id }
+  }
   let labels : Json = { "lunanexa.io/workspace": name }
   let trust_env : Array[Json] = match config.trusted_ca_config_map {
     Some(_) =>
@@ -245,6 +250,23 @@ fn WorkspaceHost::resources(
       },
     },
   }
+  if placement is Some(assigned) {
+    self.place_exclusive(deployment, grant, assigned, container)
+  } else if container is Some(_) {
+    raise InvalidConfiguration
+  }
+  let service = match container {
+    Some(runtime) => {
+      let value = service
+      if value is Object(root) && root.get("spec") is Some(Object(spec)) {
+        spec["ports"] = [
+          { "name": "workspace", "port": 8188, "targetPort": runtime.port },
+        ]
+      }
+      value
+    }
+    None => service
+  }
   // Only the authenticated gateway reaches ComfyUI. No peers, public internet,
   // Kubernetes API, node metadata or direct GPU endpoint egress is permitted.
   let network : Json = {
@@ -313,6 +335,24 @@ fn WorkspaceHost::resources(
         },
       ],
     },
+  }
+  if container is Some(runtime) &&
+    network is Object(root) &&
+    root.get("spec") is Some(Object(spec)) {
+    spec["ingress"] = [
+      {
+        "from": [
+          {
+            "podSelector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "lunanexa-webide-gateway",
+              },
+            },
+          },
+        ],
+        "ports": [{ "protocol": "TCP", "port": runtime.port }],
+      },
+    ]
   }
   let core = "/api/v1/namespaces/\{config.namespace_name}"
   let apps = "/apis/apps/v1/namespaces/\{config.namespace_name}"

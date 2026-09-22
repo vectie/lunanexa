@@ -49,11 +49,25 @@ pub async fn WorkspaceHost::provision(
   self : WorkspaceHost,
   id : String,
   grant : @webide.Grant,
+  placement? : ExclusivePlacement,
+  container? : ExclusiveContainer,
 ) -> @webide.Backend {
   if id != @webide.workspace_id(grant) || !self.authorize(grant) {
     raise HostError::ControllerRejected
   }
+  let placement = if self.require_exclusive {
+    guard self.delivery_placement(grant) is Some((resolved, _)) else {
+      raise HostError::ControllerRejected
+    }
+    Some(resolved)
+  } else {
+    placement
+  }
   let name = resource_name(id)
+  if self.require_exclusive {
+    self.report_delivery_starting(grant, container)
+  }
+  errdefer (if self.require_exclusive { self.stop(id) catch { _ => () } })
   {
     let lock = self.workspace_lock(name)
     lock.acquire()
@@ -65,7 +79,7 @@ pub async fn WorkspaceHost::provision(
     // Do not start a replacement while a prior writer is still terminating.
     let stopped = self.workspace_scaled_down(name)
     self.wait_for_workspace_pods(name, terminating_only=!stopped)
-    for entry in self.resources(id, grant) {
+    for entry in self.resources(id, grant, placement?, container?) {
       let (path, resource) = entry
       ignore(
         self.kubernetes(
@@ -113,7 +127,22 @@ pub async fn WorkspaceHost::provision(
     raise HostError::ControllerRejected
   }
   let hostname = "\{name}.\{self.config.namespace_name}.svc.cluster.local:8188"
-  { http_url: "http://\{hostname}", websocket_url: "ws://\{hostname}", }
+  let backend : @webide.Backend = {
+    http_url: "http://\{hostname}",
+    websocket_url: "ws://\{hostname}",
+  }
+  if self.require_exclusive {
+    self.report_delivery_ready(
+      grant,
+      backend,
+      if container is Some(_) {
+        "/"
+      } else {
+        "/system_stats"
+      },
+    )
+  }
+  backend
 }
 
 ///|
@@ -217,12 +246,46 @@ async fn WorkspaceHost::reconcile_page(
     }
     if !active {
       self.scale_down(name)
+      if self.require_exclusive {
+        let id = match grant {
+          Some(value) => @webide.workspace_id(value)
+          None =>
+            match current {
+              {
+                "metadata": {
+                  "annotations": {
+                    "lunanexa.io/workspace-id": String(value),
+                    ..
+                  },
+                  ..
+                },
+                ..
+              } => value
+              _ => raise HostError::WorkspaceUnavailable
+            }
+        }
+        if resource_name(id) != name {
+          raise HostError::ControllerRejected
+        }
+        self.report_delivery_stopped(id)
+      }
     }
   }
 }
 
 ///|
 async fn WorkspaceHost::scale_down(self : WorkspaceHost, name : String) -> Unit {
+  if self.require_exclusive {
+    let (_, deployments) = self.kubernetes(
+      Get,
+      "/apis/apps/v1/namespaces/\{self.config.namespace_name}/deployments?labelSelector=lunanexa.io%2Fworkspace%3D\{name}",
+      None,
+    )
+    if deployments is { "items": Array([]), .. } {
+      self.wait_for_workspace_pods(name, terminating_only=false)
+      return
+    }
+  }
   // Apply the scale subresource rather than replacing the full deployment.
   let scale : Json = {
     "apiVersion": "autoscaling/v1",

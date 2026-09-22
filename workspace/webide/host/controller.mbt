@@ -52,7 +52,7 @@ pub async fn WorkspaceHost::redeem(
       result.api_base_url != self.config.model_gateway_origin + "/v1" {
       raise HostError::ControllerRejected
     }
-    {
+    let grant : @webide.Grant = {
       client_id: result.client_id,
       api_secret: result.api_secret,
       tenant_ref: result.tenant_ref,
@@ -61,6 +61,21 @@ pub async fn WorkspaceHost::redeem(
       project_id: result.project_id,
       allowed_models: result.allowed_models,
       expires_unix_ms: result.expires_unix_ms,
+    }
+    if self.require_exclusive {
+      guard self.delivery_placement(grant) is Some((_, expiry)) else {
+        raise HostError::ControllerRejected
+      }
+      {
+        ..grant,
+        expires_unix_ms: if grant.expires_unix_ms < expiry {
+          grant.expires_unix_ms
+        } else {
+          expiry
+        },
+      }
+    } else {
+      grant
     }
   })
 }
@@ -97,5 +112,8 @@ pub async fn WorkspaceHost::authorize(
   self : WorkspaceHost,
   grant : @webide.Grant,
 ) -> Bool {
-  authorize_grant(self.config.controller_origin, grant)
+  if !authorize_grant(self.config.controller_origin, grant) {
+    return false
+  }
+  !self.require_exclusive || self.delivery_placement(grant) is Some(_)
 }

@@ -306,6 +306,8 @@ async test "partial provisioning resumes deterministically and stale reconciliat
   }
   let host : WorkspaceHost = {
     config,
+    require_exclusive: false,
+    observation_token: "",
     locks: {},
     kubernetes_override: Some((verb, path, body) => {
       requests.push(path)

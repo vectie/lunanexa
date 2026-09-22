@@ -188,6 +188,10 @@ async fn ApiService::api_key_check(
         let (_, order_denied) = self.dedicated_order_binding(
           preview, model, now,
         )
+        let (_, delivery_denied) = self.delivery_binding(preview)
+        if delivery_denied is Some(_) {
+          return KeyDenied
+        }
         if order_denied is Some(_) {
           return KeyDenied
         }
@@ -333,6 +337,10 @@ async fn ApiService::api_key_check(
         let (_, order_denied) = self.dedicated_order_binding(
           authority, model, now,
         )
+        let (_, delivery_denied) = self.delivery_binding(authority)
+        if delivery_denied is Some(_) {
+          return KeyDenied
+        }
         if order_denied is Some(_) {
           return KeyDenied
         }

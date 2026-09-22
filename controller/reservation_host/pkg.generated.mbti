@@ -1,0 +1,51 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/controller/reservation_host"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn authenticated_transport(String, String, String) -> (async (String, String, Json?) -> (Int, Json)) raise ReservationHostError
+
+// Errors
+pub(all) suberror ReservationHostError {
+  InvalidConfiguration
+  InvalidObservation
+  ApiUnavailable
+  NodeOccupied
+  ReservationConflict
+} derive(Eq, @debug.Debug)
+pub fn ReservationHostError::equal(Self, Self) -> Bool
+pub fn ReservationHostError::not_equal(Self, Self) -> Bool
+pub fn ReservationHostError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub(all) struct InfrastructurePod {
+  namespace_name : String
+  service_account : String
+  label_key : String
+  label_value : String
+}
+
+pub(all) enum ObservedState {
+  Exclusive
+  Released
+} derive(Eq, @debug.Debug)
+pub fn ObservedState::equal(Self, Self) -> Bool
+pub fn ObservedState::not_equal(Self, Self) -> Bool
+pub fn ObservedState::to_repr(Self) -> @debug.Repr
+
+pub struct ReservationHost {
+  transport : async (String, String, Json?) -> (Int, Json)
+  workload_namespace : String
+  infrastructure : Array[InfrastructurePod]
+}
+pub fn ReservationHost::new(async (String, String, Json?) -> (Int, Json), String, Array[InfrastructurePod]) -> Self raise ReservationHostError
+pub async fn ReservationHost::release(Self, String, String) -> ObservedState
+pub async fn ReservationHost::reserve(Self, String, String) -> ObservedState
+
+// Type aliases
+pub type Transport = async (String, String, Json?) -> (Int, Json)
+
+// Traits

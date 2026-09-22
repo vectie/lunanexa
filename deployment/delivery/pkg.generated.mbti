@@ -1,0 +1,142 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/deployment/delivery"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/database",
+}
+
+// Values
+
+// Errors
+pub(all) suberror DeliveryError {
+  InvalidIntent
+  IdempotencyConflict
+  NotFound
+  StaleGeneration
+  UnexpectedObservation
+  AuthorizationExpired
+  InvalidSnapshot
+} derive(Eq, @debug.Debug)
+pub fn DeliveryError::equal(Self, Self) -> Bool
+pub fn DeliveryError::not_equal(Self, Self) -> Bool
+pub fn DeliveryError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub(all) enum DeliveryKind {
+  GpuContainer
+  ModelApi
+  Workspace
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn DeliveryKind::equal(Self, Self) -> Bool
+pub fn DeliveryKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DeliveryKind::not_equal(Self, Self) -> Bool
+pub fn DeliveryKind::to_json(Self) -> Json
+pub fn DeliveryKind::to_repr(Self) -> @debug.Repr
+
+pub struct DeliveryStore {
+  persistence : Persistence
+  mut operations : Array[Operation]
+  mutex : @async.Mutex
+}
+pub async fn DeliveryStore::create(Self, Intent, Int64) -> Operation
+pub async fn DeliveryStore::expire_due(Self, Int64) -> Array[Operation]
+pub async fn DeliveryStore::observe(Self, String, Int64, Observation, Int64) -> Operation
+pub async fn DeliveryStore::open(String) -> Self
+pub async fn DeliveryStore::open_postgres(@database.PostgresDatabase) -> Self
+pub async fn DeliveryStore::operation(Self, String) -> Operation?
+pub async fn DeliveryStore::operations(Self) -> Array[Operation]
+pub async fn DeliveryStore::retry(Self, String, Int64, Int64) -> Operation
+pub async fn DeliveryStore::stop(Self, String, Int64, Int64) -> Operation
+
+pub(all) struct Intent {
+  tenant_id : String
+  organization_id : String
+  project_id : String
+  authorization_ref : String
+  lease_id : String
+  idempotency_key : String
+  kind : DeliveryKind
+  template_id : String
+  template_version : String
+  model_digest : String?
+  node_count : Int
+  expires_at_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Intent::equal(Self, Self) -> Bool
+pub fn Intent::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Intent::not_equal(Self, Self) -> Bool
+pub fn Intent::to_json(Self) -> Json
+pub fn Intent::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Observation {
+  Reserved(reservation_id~ : String, node_ids~ : Array[String])
+  TransferProgress(transferred_bytes~ : Int64, total_bytes~ : Int64?)
+  ModelPrepared(digest~ : String, cache_hit~ : Bool)
+  ModelResponded(service_id~ : String, digest~ : String)
+  ModelAssignmentPublished(generation~ : Int64)
+  WorkspaceResponded(workspace_id~ : String)
+  WorkspaceStarting(workspace_id~ : String)
+  WorkspaceStopped
+  ContainerResponded(instance_id~ : String)
+  WorkloadsStopped
+  Failure(code~ : String)
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Observation::equal(Self, Self) -> Bool
+pub fn Observation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Observation::not_equal(Self, Self) -> Bool
+pub fn Observation::to_json(Self) -> Json
+pub fn Observation::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Operation {
+  operation_id : String
+  intent : Intent
+  generation : Int64
+  stage : Stage
+  resume_stage : Stage
+  reservation_id : String?
+  node_ids : Array[String]
+  cache_hit : Bool
+  transferred_bytes : Int64
+  total_bytes : Int64?
+  model_service_id : String?
+  model_assignment_generation : Int64?
+  workspace_id : String?
+  failure_code : String?
+  stop_requested_at_ms : Int64?
+  updated_at_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Operation::equal(Self, Self) -> Bool
+pub fn Operation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Operation::not_equal(Self, Self) -> Bool
+pub fn Operation::to_json(Self) -> Json
+pub fn Operation::to_repr(Self) -> @debug.Repr
+
+type Persistence
+
+type Snapshot derive(ToJson, @json.FromJson)
+pub fn Snapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Snapshot::to_json(Self) -> Json
+
+pub(all) enum Stage {
+  Reserving
+  PreparingModel
+  LoadingModel
+  StartingWorkspace
+  Ready
+  Failed
+  Stopping
+  Stopped
+  Expired
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Stage::equal(Self, Self) -> Bool
+pub fn Stage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Stage::not_equal(Self, Self) -> Bool
+pub fn Stage::to_json(Self) -> Json
+pub fn Stage::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

@@ -17,6 +17,7 @@ priv struct PortalClientHandoffIntent {
   project_id : String
   allowed_models : Array[String]
   order_id : String?
+  delivery_id : String?
 } derive(FromJson)
 
 ///|
@@ -407,11 +408,47 @@ async fn ApiService::handle_client_handoff(
       } noraise {
         value => value
       }
+      let delivery = match intent.delivery_id {
+        None => None
+        Some(id) => {
+          guard self.delivery_store is Some(deliveries) &&
+            deliveries.operation(id) is Some(operation) &&
+            operation.intent.tenant_id == portal_view.membership.tenant_ref &&
+            operation.intent.organization_id ==
+            portal_view.membership.organization_id &&
+            operation.intent.project_id == intent.project_id &&
+            operation.intent.lease_id == workspace.lease.lease_id &&
+            operation.intent.kind == Workspace &&
+            (operation.stage == StartingWorkspace || operation.stage == Ready) &&
+            operation.intent.expires_at_ms > now &&
+            paid_order is None &&
+            self.deployment_store is Some(catalog) &&
+            catalog.template({
+              template_id: operation.intent.template_id,
+              version: operation.intent.template_version,
+            })
+            is Some(template) &&
+            intent.allowed_models == [template.model_selector] else {
+            return api_error(
+              409, "DeliveryUnavailable", "selected delivery is not ready for workspace launch",
+              true,
+            )
+          }
+          Some(operation)
+        }
+      }
       let credential_expiry = match paid_order {
         Some(order) =>
           (order.active_started_unix_ms.unwrap() +
           order.duration_seconds * 1000L).min(workspace.lease.expires_unix_ms)
-        None => workspace.lease.expires_unix_ms
+        None =>
+          match delivery {
+            Some(operation) =>
+              operation.intent.expires_at_ms.min(
+                workspace.lease.expires_unix_ms,
+              )
+            None => workspace.lease.expires_unix_ms
+          }
       }
       let requested_handoff_expiry = now + config.handoff_lifetime_ms
       let handoff_expiry = if requested_handoff_expiry < credential_expiry {
@@ -440,6 +477,7 @@ async fn ApiService::handle_client_handoff(
             maximum_requests: config.maximum_requests,
           },
           now,
+          delivery_id?=intent.delivery_id,
         )
       catch {
         error => return client_handoff_error_reply(error)

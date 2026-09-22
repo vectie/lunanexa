@@ -164,6 +164,7 @@ fn ClientHandoffStore::restore(
       record.api_key_id == credential.key_id &&
       record.client_id == credential.client_id &&
       record.tenant_ref == credential.tenant_ref &&
+      record.delivery_id == credential.delivery_id &&
       record.subject_ref == credential.subject_ref else {
       raise InvalidSnapshot("client credential does not match its handoff")
     }
@@ -277,7 +278,10 @@ fn ClientHandoffStore::api_secret(
   self : ClientHandoffStore,
   record : @handoff.ClientHandoffRecord,
 ) -> String {
-  "lnx_\{self.hmac_hex("lunanexa.client-handoff.api.v2|\{record.api_key_id}|\{record.handoff_id}|\{record.tenant_ref}|\{record.subject_ref}|\{record.organization_id.unwrap_or("legacy-unattributed")}|\{record.project_id.unwrap_or("legacy-unattributed")}|\{record.created_unix_ms}")}"
+  let binding = record.delivery_id
+    .map(value => "|delivery:\{value}")
+    .unwrap_or("")
+  "lnx_\{self.hmac_hex("lunanexa.client-handoff.api.v2|\{record.api_key_id}|\{record.handoff_id}|\{record.tenant_ref}|\{record.subject_ref}|\{record.organization_id.unwrap_or("legacy-unattributed")}|\{record.project_id.unwrap_or("legacy-unattributed")}|\{record.created_unix_ms}\{binding}")}"
 }
 
 ///|
@@ -322,8 +326,14 @@ pub async fn ClientHandoffStore::issue(
   self : ClientHandoffStore,
   intent : @handoff.ClientHandoffIssueIntent,
   now_unix_ms : Int64,
+  delivery_id? : String,
 ) -> @handoff.IssuedClientHandoff {
   @handoff.validate_issue_intent(intent, now_unix_ms)
+  if delivery_id is Some(value) && !@contracts.valid_identifier(value) {
+    raise @handoff.ClientHandoffError::InvalidInput(
+      "invalid delivery reference",
+    )
+  }
   self.mutex.acquire()
   defer self.mutex.release()
   let previous_handoffs = self.handoffs.copy()
@@ -334,6 +344,7 @@ pub async fn ClientHandoffStore::issue(
   }
   match self.by_request(intent.request_id) {
     Some(existing) if existing.client_id == intent.client_id &&
+      existing.delivery_id == delivery_id &&
       existing.tenant_ref == intent.tenant_ref &&
       existing.subject_ref == intent.subject_ref &&
       existing.organization_id == Some(intent.organization_id) &&
@@ -356,6 +367,7 @@ pub async fn ClientHandoffStore::issue(
   let api_key_id = "client-key-\{digest[32:]}"
   let code = self.handoff_code(intent, now_unix_ms)
   let record : @handoff.ClientHandoffRecord = {
+    delivery_id,
     version: @handoff.contract_version,
     handoff_id,
     request_id: intent.request_id,
@@ -377,6 +389,7 @@ pub async fn ClientHandoffStore::issue(
   }
   let secret = self.api_secret(record)
   let credential : @handoff.ClientCredential = {
+    delivery_id,
     key_id: api_key_id,
     handoff_id,
     client_id: intent.client_id,
@@ -445,7 +458,8 @@ pub async fn ClientHandoffStore::redeem(
   guard record.organization_id is Some(organization_id) &&
     record.project_id is Some(project_id) &&
     credential.organization_id == Some(organization_id) &&
-    credential.project_id == Some(project_id) else {
+    credential.project_id == Some(project_id) &&
+    credential.delivery_id == record.delivery_id else {
     raise @handoff.ClientHandoffError::Unauthorized
   }
   // Verify the deterministic secret before consuming the one-time record.
@@ -510,6 +524,7 @@ pub async fn ClientHandoffStore::authorize(
     raise @handoff.ClientHandoffError::Unauthorized
   }
   guard self.handoffs.get(current.handoff_id) is Some(record) &&
+    record.delivery_id == current.delivery_id &&
     record.redeemed_unix_ms is Some(_) &&
     record.revoked_unix_ms is None else {
     raise @handoff.ClientHandoffError::Unauthorized

@@ -1,0 +1,463 @@
+///|
+pub(all) struct DeliveryView {
+  operation_id : String
+  kind : String
+  template_id : String
+  template_version : String
+  node_count : Int
+  stage : String
+  generation : Int64
+  cache_hit : Bool
+  transferred_bytes : Int64
+  total_bytes : Int64?
+  failure_code : String?
+  expires_at_ms : Int64
+} derive(Eq, FromJson)
+
+///|
+pub(all) struct DeliveryReservationOption {
+  reservation_id : String
+  label : String
+  node_count : Int
+  expires_at_ms : Int64
+} derive(Eq, FromJson)
+
+///|
+pub(all) struct DeliveryTemplateOption {
+  template_id : String
+  template_version : String
+  kind : String
+  label : String
+  model_selector : String
+} derive(Eq, FromJson)
+
+///|
+pub(all) struct DeliveryOptions {
+  reservations : Array[DeliveryReservationOption]
+  templates : Array[DeliveryTemplateOption]
+} derive(Eq, FromJson)
+
+///|
+pub(all) struct DeliveryPanel {
+  operations : Array[DeliveryView]
+  options : DeliveryOptions
+  reservation_id : String
+  template_choice : String
+  idempotency_key : String
+  loading : Bool
+  loaded : Bool
+  error : String?
+  stop_confirmation : String?
+  poll_generation : Int64
+} derive(Eq)
+
+///|
+pub(all) enum DeliveryMessage {
+  Refresh
+  SelectReservation(String)
+  SelectTemplate(String)
+  Start
+  Retry(String)
+  RequestStop(String)
+  CancelStop
+  ConfirmStop(String)
+  OpenWorkspace(String)
+} derive(Eq)
+
+///|
+pub fn default_delivery_panel() -> DeliveryPanel {
+  {
+    operations: [],
+    options: { reservations: [], templates: [], },
+    reservation_id: "",
+    template_choice: "",
+    idempotency_key: "",
+    loading: false,
+    loaded: false,
+    error: None,
+    stop_confirmation: None,
+    poll_generation: 0L,
+  }
+}
+
+///|
+pub fn delivery_template_choice(option : DeliveryTemplateOption) -> String {
+  "\{option.kind}:\{option.template_id}:\{option.template_version}"
+}
+
+///|
+pub fn selected_delivery_template(
+  panel : DeliveryPanel,
+) -> DeliveryTemplateOption? {
+  panel.options.templates
+  .iter()
+  .find_first(option => {
+    delivery_template_choice(option) == panel.template_choice
+  })
+}
+
+///|
+pub fn delivery_start_available(panel : DeliveryPanel) -> Bool {
+  !panel.loading &&
+  selected_delivery_template(panel) is Some(_) &&
+  panel.options.reservations.any(option => {
+    option.reservation_id == panel.reservation_id
+  })
+}
+
+///|
+pub fn DeliveryPanel::update(
+  self : DeliveryPanel,
+  message : DeliveryMessage,
+) -> DeliveryPanel {
+  if self.loading {
+    return self
+  }
+  match message {
+    SelectReservation(value) =>
+      { ..self, reservation_id: value, idempotency_key: "", error: None, }
+    SelectTemplate(value) =>
+      { ..self, template_choice: value, idempotency_key: "", error: None, }
+    RequestStop(id) => { ..self, stop_confirmation: Some(id), }
+    CancelStop => { ..self, stop_confirmation: None, }
+    Refresh | Retry(_) | ConfirmStop(_) =>
+      {
+        ..self,
+        loading: true,
+        error: None,
+        poll_generation: self.poll_generation + 1L,
+      }
+    OpenWorkspace(_) => self
+    Start =>
+      if delivery_start_available(self) {
+        {
+          ..self,
+          loading: true,
+          error: None,
+          poll_generation: self.poll_generation + 1L,
+        }
+      } else {
+        self
+      }
+  }
+}
+
+///|
+fn delivery_stage_label(stage : String, locale : @i18n.Locale) -> String {
+  match stage {
+    "Reserving" => copy(locale, "Reserving resources", "资源预留中")
+    "PreparingModel" => copy(locale, "Preparing model", "模型准备中")
+    "LoadingModel" => copy(locale, "Loading model", "模型加载中")
+    "StartingWorkspace" =>
+      copy(locale, "Starting workspace", "工作区启动中")
+    "Ready" => copy(locale, "Ready to use", "可使用")
+    "Failed" =>
+      copy(locale, "Failed — retry available", "启动失败，可重试")
+    "Stopping" => copy(locale, "Stopping workloads", "工作负载停止中")
+    "Stopped" => copy(locale, "Stopped", "已停止")
+    "Expired" => copy(locale, "Expired", "已到期")
+    "Revoked" => copy(locale, "Revoked", "已撤销")
+    _ => copy(locale, "Refreshing service status", "等待服务状态更新")
+  }
+}
+
+///|
+fn delivery_kind_label(kind : String) -> String {
+  match kind {
+    "Workspace" => "PaaS"
+    "ModelApi" => "MaaS"
+    "GpuContainer" => "IaaS"
+    _ => kind
+  }
+}
+
+///|
+fn delivery_panel_view(
+  panel : DeliveryPanel,
+  locale : @i18n.Locale,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  @html.section(class="workflow-panel", [
+    @html.div(class="section-heading", [
+      @html.h2(copy(locale, "Exclusive services", "独占资源服务")),
+      @html.button(
+        type_="button",
+        class="quiet-button",
+        disabled=panel.loading,
+        on_click=command(emit, Delivery(Refresh)),
+        copy(locale, "Refresh status", "刷新状态"),
+      ),
+    ]),
+    @html.p(
+      copy(
+        locale, "Choose an authorized resource allocation and a published template. Your files are retained when a service stops.",
+        "选择已授权资源和已发布模板。停止服务不会删除您的工作文件。",
+      ),
+    ),
+    if panel.loading {
+      @html.p(
+        attrs=@html.Attrs::build().role("status").aria_live("polite"),
+        copy(locale, "Updating…", "正在更新…"),
+      )
+    } else {
+      @html.nothing
+    },
+    match panel.error {
+      Some(error) => @html.p(attrs=@html.Attrs::build().role("alert"), error)
+      None => @html.nothing
+    },
+    if panel.error is Some(_) && panel.options.reservations.is_empty() {
+      @html.nothing
+    } else if panel.loaded && panel.options.reservations.is_empty() {
+      @html.p(
+        class="empty",
+        copy(
+          locale, "No active exclusive resource authorization. Ask your administrator to authorize resources, or complete your machine order.",
+          "暂无有效的独占资源授权。请管理员授权资源，或完成机器订单。",
+        ),
+      )
+    } else if panel.loaded && panel.options.templates.is_empty() {
+      @html.p(
+        class="empty",
+        copy(
+          locale, "No published delivery template is available yet.", "尚无已发布的交付模板。",
+        ),
+      )
+    } else if panel.loaded {
+      @html.div(class="account-form", [
+        @html.div(class="field", [
+          @html.label(
+            for_="delivery-reservation",
+            copy(locale, "Authorized resources", "已授权资源"),
+          ),
+          @html.select(
+            id="delivery-reservation",
+            disabled=panel.loading,
+            on_change=text_command(emit, value => {
+              Delivery(SelectReservation(value))
+            }),
+            [
+              @html.option(
+                value="",
+                selected=panel.reservation_id == "",
+                copy(locale, "Choose resources", "选择资源"),
+              ),
+              ..panel.options.reservations.map(option => {
+                @html.option(
+                  value=option.reservation_id,
+                  selected=panel.reservation_id == option.reservation_id,
+                  "\{option.label} · \{option.node_count} " +
+                  copy(locale, "nodes", "台") +
+                  " · " +
+                  @contractdoc.format_unix_ms_utc(option.expires_at_ms),
+                )
+              }),
+            ],
+          ),
+        ]),
+        @html.div(class="field", [
+          @html.label(
+            for_="delivery-template",
+            copy(locale, "Service template", "服务模板"),
+          ),
+          @html.select(
+            id="delivery-template",
+            disabled=panel.loading,
+            on_change=text_command(emit, value => {
+              Delivery(SelectTemplate(value))
+            }),
+            [
+              @html.option(
+                value="",
+                selected=panel.template_choice == "",
+                copy(locale, "Choose a template", "选择模板"),
+              ),
+              ..panel.options.templates.map(option => {
+                @html.option(
+                  value=delivery_template_choice(option),
+                  selected=panel.template_choice ==
+                    delivery_template_choice(option),
+                  "\{delivery_kind_label(option.kind)} · \{option.label} · \{option.template_version}",
+                )
+              }),
+            ],
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=!delivery_start_available(panel),
+          on_click=command(emit, Delivery(Start)),
+          copy(locale, "Start service", "启动服务"),
+        ),
+      ])
+    } else {
+      @html.p(
+        class="empty",
+        copy(
+          locale, "Refresh to load your authorized services.", "刷新以加载已授权服务。",
+        ),
+      )
+    },
+    @html.div(
+      class="record-list",
+      panel.operations.map(operation => {
+        @html.article(class="record-card", [
+          @html.div(class="record-main", [
+            @html.h3(
+              "\{delivery_kind_label(operation.kind)} · \{operation.template_id} · \{operation.template_version}",
+            ),
+            @html.p(
+              attrs=@html.Attrs::build().role("status").aria_live("polite"),
+              delivery_stage_label(operation.stage, locale),
+            ),
+            @html.p(
+              "\{operation.node_count} " +
+              copy(locale, "exclusive nodes", "台独占节点"),
+            ),
+            @html.p(
+              copy(locale, "Expires: ", "到期时间：") +
+              @contractdoc.format_unix_ms_utc(operation.expires_at_ms),
+            ),
+            if operation.cache_hit {
+              @html.p(
+                copy(
+                  locale, "Using verified local model cache", "复用已验证本地模型缓存",
+                ),
+              )
+            } else if operation.transferred_bytes > 0L {
+              @html.p(
+                match operation.total_bytes {
+                  Some(total) =>
+                    "\{operation.transferred_bytes / 1048576L} / \{total / 1048576L} MiB"
+                  None =>
+                    "\{operation.transferred_bytes / 1048576L} MiB " +
+                    copy(locale, "transferred", "已传输")
+                },
+              )
+            } else {
+              @html.nothing
+            },
+            match operation.failure_code {
+              Some(code) =>
+                @html.p(
+                  copy(locale, "Failure code: ", "失败原因代码：") + code,
+                )
+              None => @html.nothing
+            },
+          ]),
+          @html.div(class="record-actions", [
+            if operation.kind == "Workspace" &&
+              (
+                operation.stage == "StartingWorkspace" ||
+                operation.stage == "Ready"
+              ) {
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=panel.loading,
+                on_click=command(
+                  emit,
+                  Delivery(OpenWorkspace(operation.operation_id)),
+                ),
+                if operation.stage == "StartingWorkspace" {
+                  copy(
+                    locale, "Open and start workspace", "打开并启动工作区",
+                  )
+                } else {
+                  copy(locale, "Open workspace", "打开工作区")
+                },
+              )
+            } else {
+              @html.nothing
+            },
+            if operation.stage == "Failed" {
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=panel.loading,
+                on_click=command(emit, Delivery(Retry(operation.operation_id))),
+                copy(locale, "Retry", "重试"),
+              )
+            } else {
+              @html.nothing
+            },
+            if operation.stage != "Stopped" &&
+              operation.stage != "Stopping" &&
+              operation.stage != "Expired" &&
+              operation.stage != "Revoked" {
+              @html.button(
+                type_="button",
+                class="quiet-button",
+                disabled=panel.loading,
+                on_click=command(
+                  emit,
+                  Delivery(RequestStop(operation.operation_id)),
+                ),
+                copy(locale, "Stop service", "停止服务"),
+              )
+            } else {
+              @html.nothing
+            },
+          ]),
+        ])
+      }),
+    ),
+    match panel.stop_confirmation {
+      Some(id) =>
+        @html.div(class="request-boundary", [
+          @html.p(
+            copy(
+              locale, "Stop this service? Running work will end; saved workspace files remain.",
+              "停止此服务？运行中的任务将结束，已保存的工作区文件保留。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="danger-button",
+            disabled=panel.loading,
+            on_click=command(emit, Delivery(ConfirmStop(id))),
+            copy(locale, "Confirm stop", "确认停止"),
+          ),
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            disabled=panel.loading,
+            on_click=command(emit, Delivery(CancelStop)),
+            copy(locale, "Cancel", "取消"),
+          ),
+        ])
+      None => @html.nothing
+    },
+  ])
+}
+
+///|
+pub extend DeliveryView with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryView with @json.FromJson::{from_json}
+
+///|
+pub extend DeliveryReservationOption with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryReservationOption with @json.FromJson::{from_json}
+
+///|
+pub extend DeliveryTemplateOption with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryTemplateOption with @json.FromJson::{from_json}
+
+///|
+pub extend DeliveryOptions with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryOptions with @json.FromJson::{from_json}
+
+///|
+pub extend DeliveryPanel with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryMessage with Eq::{equal, not_equal}
