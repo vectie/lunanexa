@@ -197,3 +197,52 @@ test "a refusal keeps its status so the copy can name the real problem" {
     ),
   )
 }
+
+///|
+test "a rental period outside the offering's allowance says so" {
+  // Review price simply went grey when the period exceeded what the offering
+  // allows, and on a trial that is the whole visible consequence of asking for
+  // a longer rental. The reason now names the number and the way forward.
+  let offering : @enterprise.SelfServiceOfferingView = {
+    offering_id: "offering-trial",
+    kind: BareGpu,
+    display_name: "DGX Spark (GB10) exclusive node",
+    gpu_sku: "nvidia-sm121",
+    accelerator_count: 1,
+    accelerator_memory_mib: 121000,
+    regions: ["cn-north-1"],
+    minimum_duration_hours: 1,
+    maximum_duration_hours: 24,
+    price_summary: "CNY 0.02 / second",
+    allowed_model_template_refs: [],
+    available: true,
+  }
+  let base = @enterprise.default_state(1000L)
+  let state = {
+    ..base,
+    route: SelfService,
+    self_service: {
+      ..@enterprise.default_self_service_state(),
+      step: Capacity,
+      selected_product: Some(BareGpu),
+      offerings: [offering],
+      selected_offering_id: "offering-trial",
+      project_id: "trial-project",
+      unix_username: "trialuser",
+      region: "cn-north-1",
+      duration_hours: 168,
+    },
+  }
+  let html = @enterprise.render(state)
+  assert_true(html.contains("168 hours is longer than this offering allows"))
+  assert_false(@enterprise.self_service_configuration_valid(state.self_service))
+  // The same state at a period inside the allowance says nothing extra.
+  let allowed = {
+    ..state,
+    self_service: { ..state.self_service, duration_hours: 24 },
+  }
+  assert_true(@enterprise.self_service_configuration_valid(allowed.self_service))
+  assert_false(
+    @enterprise.render(allowed).contains("is longer than this offering allows"),
+  )
+}
