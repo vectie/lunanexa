@@ -1,0 +1,24 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/http",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "vectie/lepusa/runtime/bundled",
+  "vectie/lepusa/runtime/macos",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
+
+options(
+  "native-stub": [ "credentials.m" ],
+  link: {
+    "native": {
+      "stub-cc-flags": "-fobjc-arc -fblocks",
+      "cc-link-flags": "-framework Cocoa -framework Security -framework WebKit",
+    },
+  },
+)
