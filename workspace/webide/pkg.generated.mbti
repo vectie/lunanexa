@@ -44,7 +44,7 @@ pub struct Bridge {
   mutex : @async.Mutex
 }
 pub async fn Bridge::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
-pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend) -> Self raise BridgeError
+pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool) -> Self raise BridgeError
 
 pub(all) struct BridgeConfig {
   client_id : String

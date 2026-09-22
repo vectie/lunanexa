@@ -1115,12 +1115,18 @@ async test "admitted work waits in a bounded runtime queue and reports queue tim
   let runtime_server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let running = [0]
   let peak_running = [0]
+  let release_runtime = [false]
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       runtime_server.run_forever() <| ((_request, body, connection) => {
         ignore(body.read_all())
         running[0] += 1
         peak_running[0] = peak_running[0].max(running[0])
+        @async.with_timeout(10000, () => {
+          while !release_runtime[0] {
+            @async.sleep(1)
+          }
+        })
         @async.sleep(100)
         connection.send_response(200, "OK", extra_headers={
           "Content-Type": "application/json",
@@ -1196,7 +1202,15 @@ async test "admitted work waits in a bounded runtime queue and reports queue tim
         .stringify(),
       )
     })
-    @async.sleep(25)
+    @async.with_timeout(5000, () => {
+      while true {
+        let snapshot = scheduler.snapshot()
+        if snapshot.running_count == Some(1) && snapshot.queued_count == Some(1) {
+          break
+        }
+        @async.sleep(1)
+      }
+    })
     let queued_snapshot = scheduler.snapshot()
     assert_eq(queued_snapshot.running_count, Some(1))
     assert_eq(queued_snapshot.queued_count, Some(1))
@@ -1226,6 +1240,7 @@ async test "admitted work waits in a bounded runtime queue and reports queue tim
     }
     assert_true(observed_states.any(state => state == Running))
     assert_true(observed_states.any(state => state == Queued))
+    release_runtime[0] = true
     let responses = [first.wait(), second.wait()]
     let decoded : Array[@contracts.WorkloadResponse] = []
     for response in responses {

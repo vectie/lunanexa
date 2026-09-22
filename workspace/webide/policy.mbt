@@ -6,10 +6,17 @@ fn valid_atom(value : String) -> Bool {
 }
 
 ///|
-fn valid_origin(value : String) -> Bool {
+fn valid_origin(
+  value : String,
+  allow_insecure_public_http? : Bool = false,
+) -> Bool {
   let prefix = if value.has_prefix("https://") {
     8
   } else if value.has_prefix("http://127.0.0.1:") {
+    7
+  } else if allow_insecure_public_http &&
+    value.has_prefix("http://") &&
+    explicit_ipv4_authority(value[7:].to_owned()) {
     7
   } else {
     return false
@@ -27,14 +34,49 @@ fn valid_origin(value : String) -> Bool {
 }
 
 ///|
+/// Temporary no-TLS deployments must name an exact IPv4 address and port.
+/// Do not accept wildcard binds, DNS aliases, credentials, paths or URL tricks.
+fn explicit_ipv4_authority(value : String) -> Bool {
+  guard value.split(":").to_array() is [host, port] else { return false }
+  let octets = host.split(".").to_array()
+  if octets.length() != 4 || host == "0.0.0.0" {
+    return false
+  }
+  for octet in octets {
+    if !bounded_decimal(octet.to_owned(), 255, allow_zero=true) {
+      return false
+    }
+  }
+  bounded_decimal(port.to_owned(), 65535, allow_zero=false)
+}
+
+///|
+fn bounded_decimal(value : String, maximum : Int, allow_zero~ : Bool) -> Bool {
+  if value.is_empty() ||
+    value.length() > 5 ||
+    (value.length() > 1 && value.has_prefix("0")) {
+    return false
+  }
+  let mut number = 0
+  for digit in value {
+    if digit < '0' || digit > '9' {
+      return false
+    }
+    number = number * 10 + digit.to_int() - 48
+  }
+  number <= maximum && (allow_zero || number > 0)
+}
+
+///|
 pub fn Bridge::new(
   config : BridgeConfig,
   redeem : async (String) -> Grant,
   authorize : async (Grant) -> Bool,
   provision : async (String, Grant) -> Backend,
+  allow_insecure_public_http? : Bool = false,
 ) -> Bridge raise BridgeError {
   if !valid_atom(config.client_id) ||
-    !valid_origin(config.public_origin) ||
+    !valid_origin(config.public_origin, allow_insecure_public_http~) ||
     config.maximum_sessions < 1 ||
     config.maximum_sessions > 10000 ||
     config.maximum_request_bytes < 1024 ||
