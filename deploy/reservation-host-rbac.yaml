@@ -1,0 +1,28 @@
+# Optional exclusive-node controller access. Render NAMESPACE before applying.
+# The control container needs an explicitly projected service-account token and
+# CA at the paths configured by LUNANEXA_RESERVATION_HOST_JSON. Keep token
+# automount disabled for application/runtime pods.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lunanexa-reservation-host
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, patch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lunanexa-reservation-host
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lunanexa-reservation-host
+subjects:
+  - kind: ServiceAccount
+    name: lunanexa-control
+    namespace: ${NAMESPACE}

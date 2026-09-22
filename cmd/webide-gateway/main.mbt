@@ -63,6 +63,7 @@ async fn main {
         errdefer println("WebIDE launch failed at workspace provisioning")
         host.provision(id, grant, container?)
       },
+      allow_model_free_workspace=require_exclusive && container is Some(_),
       allow_insecure_public_http=@env.get_env_var(
           "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP",
         ) ==

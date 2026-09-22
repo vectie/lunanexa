@@ -375,6 +375,12 @@ priv enum Outcome {
 
 ///|
 priv enum AppMessage {
+  DeliveryAccessIssued(
+    Int64,
+    String?,
+    Int64,
+    Result[@enterprise_ui.DeliveryApiAccess, String]
+  )
   DeliveriesLoaded(
     Int64,
     String?,
@@ -3865,6 +3871,22 @@ fn update(
       let next = { ..model, portal: { ..model.portal, deliveries, }, }
       (next, delivery_poll_command(next, emit))
     }
+    DeliveryAccessIssued(generation, organization, poll_generation, result) => {
+      if generation != model.session_generation ||
+        organization != model.portal.selected_organization_id ||
+        poll_generation != model.portal.deliveries.poll_generation ||
+        model.portal.route != DesktopIde {
+        return (model, @rabbita.none)
+      }
+      let panel = model.portal.deliveries
+      let deliveries = match result {
+        Ok(access) =>
+          { ..panel, loading: false, api_access: Some(access), error: None, }
+        Err(error) =>
+          { ..panel, loading: false, api_access: None, error: Some(error), }
+      }
+      ({ ..model, portal: { ..model.portal, deliveries, }, }, @rabbita.none)
+    }
     Portal(Delivery(message)) => {
       if model.portal.deliveries.loading {
         return (model, @rabbita.none)
@@ -3873,9 +3895,12 @@ fn update(
       match message {
         OpenWorkspace(id) if !model.demo_mode =>
           (next, delivery_workspace_command(next, id, emit))
+        IssueApiAccess(id) if !model.demo_mode =>
+          (next, delivery_api_access_command(next, id, emit))
         SelectReservation(_)
         | SelectTemplate(_)
         | RequestStop(_)
+        | DismissApiAccess
         | CancelStop => (next, @rabbita.none)
         _ if model.demo_mode => (model, @rabbita.none)
         Start if !@enterprise_ui.delivery_start_available(
@@ -3903,6 +3928,15 @@ fn update(
     }
     Portal(Navigate(route)) => {
       let portal = model.portal.update(Navigate(route))
+      let portal = {
+        ..portal,
+        deliveries: {
+          ..portal.deliveries,
+          api_access: None,
+          loading: false,
+          poll_generation: portal.deliveries.poll_generation + 1L,
+        },
+      }
       let next = {
         ..model,
         portal,

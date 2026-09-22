@@ -10,6 +10,56 @@ fn exclusive_fixture() -> ExclusivePlacement {
 }
 
 ///|
+test "delivery runtime identities isolate clients while same-client data survives renewal" {
+  let config = host_config()
+  let host = WorkspaceHost::new(config)
+  let base = proxy_config(config.controller_origin, config.model_gateway_origin).grant()
+  let comfy = {
+    ..base,
+    delivery_id: Some("delivery-comfy"),
+    client_id: "comfyui",
+  }
+  let terminal = {
+    ..base,
+    delivery_id: Some("delivery-terminal"),
+    client_id: "terminal",
+  }
+  let renewed = { ..comfy, delivery_id: Some("delivery-next"), }
+  assert_true(@webide.workspace_id(comfy) != @webide.workspace_id(terminal))
+  assert_true(@webide.workspace_id(comfy) != @webide.workspace_id(renewed))
+  assert_eq(@webide.workspace_id(comfy), @webide.workspace_id(comfy))
+  assert_true(
+    @webide.workspace_storage_id(comfy) !=
+    @webide.workspace_storage_id(terminal),
+  )
+  assert_eq(
+    @webide.workspace_storage_id(comfy),
+    @webide.workspace_storage_id(renewed),
+  )
+  assert_eq(@webide.workspace_storage_id(base), @webide.workspace_id(base))
+  let original_resources = host.resources(
+    @webide.workspace_id(comfy),
+    comfy,
+    placement=exclusive_fixture(),
+  )
+  let renewed_resources = host.resources(
+    @webide.workspace_id(renewed),
+    renewed,
+    placement=exclusive_fixture(),
+  )
+  assert_eq(original_resources[1], renewed_resources[1])
+  assert_true(original_resources[4].0 != renewed_resources[4].0)
+  let secret = original_resources[2].1
+  guard secret
+    is { "stringData": { "model-proxy.json": String(serialized), .. }, .. } else {
+    fail("missing recovery secret")
+  }
+  let restored : ModelProxyConfig = @json.from_json(@json.parse(serialized))
+  assert_eq(restored.delivery_id, Some("delivery-comfy"))
+  assert_eq(@webide.workspace_id(restored.grant()), @webide.workspace_id(comfy))
+}
+
+///|
 async test "stop drains only the selected workspace and does not delete persistence" {
   let config = host_config()
   let grant = proxy_config(
@@ -89,6 +139,7 @@ test "exclusive GPU terminal has persistent HOME and no host authority" {
     config.controller_origin,
     config.model_gateway_origin,
   ).grant()
+  let grant = { ..grant, allowed_models: [], }
   let runtime : ExclusiveContainer = {
     image: "registry.test/terminal@sha256:" + "c".repeat(64),
     command: ["/usr/bin/ttyd"],

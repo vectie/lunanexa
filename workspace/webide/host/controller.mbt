@@ -14,6 +14,7 @@ async fn limited(reader : &@io.Reader, limit : Int) -> Bytes {
 
 ///|
 priv struct Redeemed {
+  delivery_id : String?
   client_id : String
   api_secret : String
   api_base_url : String
@@ -53,6 +54,7 @@ pub async fn WorkspaceHost::redeem(
       raise HostError::ControllerRejected
     }
     let grant : @webide.Grant = {
+      delivery_id: result.delivery_id,
       client_id: result.client_id,
       api_secret: result.api_secret,
       tenant_ref: result.tenant_ref,
@@ -63,6 +65,9 @@ pub async fn WorkspaceHost::redeem(
       expires_unix_ms: result.expires_unix_ms,
     }
     if self.require_exclusive {
+      if grant.delivery_id is None {
+        raise HostError::ControllerRejected
+      }
       guard self.delivery_placement(grant) is Some((_, expiry)) else {
         raise HostError::ControllerRejected
       }

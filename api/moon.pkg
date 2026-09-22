@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/controller/reservation_host",
   "vectie/lunanexa/access",
   "vectie/lunanexa/account",
   "vectie/lunanexa/account/identity",

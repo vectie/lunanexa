@@ -49,6 +49,7 @@ fn group_assignment(
     lease_expires_unix_ms: 1900000000000L,
     controller_epoch: 1L,
     group,
+    reservation: None,
     signature: "",
   }
 }
@@ -85,5 +86,50 @@ test "an absent group is omitted from the wire form, not written as null" {
   assert_true(
     @node.assignment_signature(alone, secret) !=
     @node.assignment_signature(paired, secret),
+  )
+}
+
+///|
+test "reservation ownership is omitted for legacy assignments and authenticated when present" {
+  let legacy = group_assignment(None)
+  assert_false(legacy.to_json().stringify().contains("reservation"))
+  let decoded : @contracts.DesiredAssignment = @json.from_json(legacy.to_json())
+  assert_eq(decoded.reservation, None)
+  let secret = "reservation-signature-fixture"
+  assert_eq(
+    @node.assignment_signature(decoded, secret),
+    @node.assignment_signature(legacy, secret),
+  )
+  let owned = {
+    ..legacy,
+    reservation: Some({
+      reservation_id: "reservation-a",
+      tenant_ref: "tenant-a",
+    }),
+  }
+  let signed = {
+    ..owned,
+    signature: @node.assignment_signature(owned, secret),
+  }
+  let verifier = @node.SharedSecretAssignmentVerifier::new(secret)
+  assert_true(verifier.verify(signed))
+  assert_false(verifier.verify({ ..signed, reservation: None, }))
+  assert_false(
+    verifier.verify({
+      ..signed,
+      reservation: Some({
+        reservation_id: "reservation-b",
+        tenant_ref: "tenant-a",
+      }),
+    }),
+  )
+  assert_false(
+    verifier.verify({
+      ..signed,
+      reservation: Some({
+        reservation_id: "reservation-a",
+        tenant_ref: "tenant-b",
+      }),
+    }),
   )
 }

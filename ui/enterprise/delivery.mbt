@@ -29,12 +29,27 @@ pub(all) struct DeliveryTemplateOption {
   kind : String
   label : String
   model_selector : String
+  client_id : String?
 } derive(Eq, FromJson)
 
 ///|
 pub(all) struct DeliveryOptions {
   reservations : Array[DeliveryReservationOption]
   templates : Array[DeliveryTemplateOption]
+} derive(Eq, FromJson)
+
+///|
+/// Returned once by the delivery-bound access endpoint. Never persisted in
+/// browser storage or included in progress polling responses.
+pub(all) struct DeliveryApiAccess {
+  delivery_id : String
+  key_id : String
+  api_secret : String
+  model : String
+  base_url : String
+  expires_unix_ms : Int64
+  maximum_requests : Int64
+  one_time : Bool
 } derive(Eq, FromJson)
 
 ///|
@@ -49,6 +64,7 @@ pub(all) struct DeliveryPanel {
   error : String?
   stop_confirmation : String?
   poll_generation : Int64
+  api_access : DeliveryApiAccess?
 } derive(Eq)
 
 ///|
@@ -62,6 +78,8 @@ pub(all) enum DeliveryMessage {
   CancelStop
   ConfirmStop(String)
   OpenWorkspace(String)
+  IssueApiAccess(String)
+  DismissApiAccess
 } derive(Eq)
 
 ///|
@@ -77,6 +95,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
     error: None,
     stop_confirmation: None,
     poll_generation: 0L,
+    api_access: None,
   }
 }
 
@@ -106,6 +125,34 @@ pub fn delivery_start_available(panel : DeliveryPanel) -> Bool {
 }
 
 ///|
+/// Resolve only a published interactive delivery, including model-free GPU
+/// containers. The catalog owns the client mapping; the UI never guesses it.
+pub fn delivery_launch_template(
+  panel : DeliveryPanel,
+  operation_id : String,
+) -> DeliveryTemplateOption? {
+  guard panel.operations
+    .iter()
+    .find_first(operation => {
+      operation.operation_id == operation_id &&
+      (operation.kind == "Workspace" || operation.kind == "GpuContainer") &&
+      (operation.stage == "StartingWorkspace" || operation.stage == "Ready")
+    })
+    is Some(operation) else {
+    return None
+  }
+  panel.options.templates
+  .iter()
+  .find_first(template => {
+    template.template_id == operation.template_id &&
+    template.template_version == operation.template_version &&
+    template.kind == operation.kind &&
+    template.client_id.map_or(false, value => value != "") &&
+    (template.kind == "GpuContainer" || template.model_selector != "")
+  })
+}
+
+///|
 pub fn DeliveryPanel::update(
   self : DeliveryPanel,
   message : DeliveryMessage,
@@ -115,9 +162,21 @@ pub fn DeliveryPanel::update(
   }
   match message {
     SelectReservation(value) =>
-      { ..self, reservation_id: value, idempotency_key: "", error: None, }
+      {
+        ..self,
+        reservation_id: value,
+        idempotency_key: "",
+        error: None,
+        api_access: None,
+      }
     SelectTemplate(value) =>
-      { ..self, template_choice: value, idempotency_key: "", error: None, }
+      {
+        ..self,
+        template_choice: value,
+        idempotency_key: "",
+        error: None,
+        api_access: None,
+      }
     RequestStop(id) => { ..self, stop_confirmation: Some(id), }
     CancelStop => { ..self, stop_confirmation: None, }
     Refresh | Retry(_) | ConfirmStop(_) =>
@@ -128,6 +187,15 @@ pub fn DeliveryPanel::update(
         poll_generation: self.poll_generation + 1L,
       }
     OpenWorkspace(_) => self
+    IssueApiAccess(_) =>
+      {
+        ..self,
+        loading: true,
+        error: None,
+        api_access: None,
+        poll_generation: self.poll_generation + 1L,
+      }
+    DismissApiAccess => { ..self, api_access: None, }
     Start =>
       if delivery_start_available(self) {
         {
@@ -204,6 +272,56 @@ fn delivery_panel_view(
     },
     match panel.error {
       Some(error) => @html.p(attrs=@html.Attrs::build().role("alert"), error)
+      None => @html.nothing
+    },
+    match panel.api_access {
+      Some(access) =>
+        @html.section(class="api-key-panel", [
+          @html.h3(
+            copy(
+              locale, "Delivery API access — shown once", "交付 API 凭据 · 仅显示一次",
+            ),
+          ),
+          @html.p(
+            copy(
+              locale, "This key is bound to this exclusive model delivery. Save it now; closing this panel clears the displayed secret.",
+              "此密钥仅绑定本次独占模型交付。请立即保存；关闭后将清除页面中的密钥。",
+            ),
+          ),
+          @html.p(
+            copy(locale, "API base URL: ", "API 地址：") + access.base_url,
+          ),
+          @html.p(copy(locale, "Model: ", "模型：") + access.model),
+          @html.p(
+            copy(locale, "Expires: ", "到期时间：") +
+            @contractdoc.format_unix_ms_utc(access.expires_unix_ms),
+          ),
+          @html.p(
+            "\{access.maximum_requests} " +
+            copy(locale, "maximum requests", "次请求上限"),
+          ),
+          @html.pre(class="one-time-secret", access.api_secret),
+          @html.div(class="api-key-actions", [
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              on_click=command(emit, CopyDetail(access.api_secret)),
+              copy(locale, "Copy API key", "复制 API 密钥"),
+            ),
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              on_click=command(emit, CopyDetail(access.base_url)),
+              copy(locale, "Copy API address", "复制 API 地址"),
+            ),
+            @html.button(
+              type_="button",
+              class="primary-button",
+              on_click=command(emit, Delivery(DismissApiAccess)),
+              copy(locale, "Saved — close", "已保存，关闭"),
+            ),
+          ]),
+        ])
       None => @html.nothing
     },
     if panel.error is Some(_) && panel.options.reservations.is_empty() {
@@ -309,7 +427,12 @@ fn delivery_panel_view(
             ),
             @html.p(
               attrs=@html.Attrs::build().role("status").aria_live("polite"),
-              delivery_stage_label(operation.stage, locale),
+              if operation.kind == "GpuContainer" &&
+                operation.stage == "StartingWorkspace" {
+                copy(locale, "Starting GPU container", "GPU 容器启动中")
+              } else {
+                delivery_stage_label(operation.stage, locale)
+              },
             ),
             @html.p(
               "\{operation.node_count} " +
@@ -347,11 +470,24 @@ fn delivery_panel_view(
             },
           ]),
           @html.div(class="record-actions", [
-            if operation.kind == "Workspace" &&
-              (
-                operation.stage == "StartingWorkspace" ||
-                operation.stage == "Ready"
-              ) {
+            if operation.kind == "ModelApi" && operation.stage == "Ready" {
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=panel.loading || panel.api_access is Some(_),
+                on_click=command(
+                  emit,
+                  Delivery(IssueApiAccess(operation.operation_id)),
+                ),
+                copy(
+                  locale, "Create delivery API key", "创建交付 API 密钥",
+                ),
+              )
+            } else {
+              @html.nothing
+            },
+            if delivery_launch_template(panel, operation.operation_id)
+              is Some(_) {
               @html.button(
                 type_="button",
                 class="primary-button",
@@ -360,7 +496,15 @@ fn delivery_panel_view(
                   emit,
                   Delivery(OpenWorkspace(operation.operation_id)),
                 ),
-                if operation.stage == "StartingWorkspace" {
+                if operation.kind == "GpuContainer" {
+                  if operation.stage == "StartingWorkspace" {
+                    copy(
+                      locale, "Open and start terminal", "打开并启动终端",
+                    )
+                  } else {
+                    copy(locale, "Open terminal", "打开终端")
+                  }
+                } else if operation.stage == "StartingWorkspace" {
                   copy(
                     locale, "Open and start workspace", "打开并启动工作区",
                   )
@@ -461,3 +605,9 @@ pub extend DeliveryPanel with Eq::{equal, not_equal}
 
 ///|
 pub extend DeliveryMessage with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryApiAccess with Eq::{equal, not_equal}
+
+///|
+pub extend DeliveryApiAccess with @json.FromJson::{from_json}

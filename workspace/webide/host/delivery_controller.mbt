@@ -6,12 +6,18 @@ priv struct DeliveryPlacementResponse {
   project_id : String
   node_name : String
   expires_unix_ms : Int64
+  delivery_kind : String
+  container_image_digest : String?
+  container_cpu_millis : Int?
+  container_memory_mib : Int?
 } derive(FromJson)
 
 ///|
 async fn WorkspaceHost::delivery_placement(
   self : WorkspaceHost,
   grant : @webide.Grant,
+  container? : ExclusiveContainer,
+  validate_container? : Bool = false,
 ) -> (ExclusivePlacement, Int64)? {
   if grant.expires_unix_ms <= @async.now() {
     return None
@@ -33,6 +39,9 @@ async fn WorkspaceHost::delivery_placement(
     let result : DeliveryPlacementResponse = @json.from_json(
       @json.parse(@utf8.decode(bytes)),
     )
+    if validate_container && !delivery_profile_matches(result, container) {
+      return None
+    }
     if result.tenant_ref != grant.tenant_ref ||
       result.organization_id != grant.organization_id ||
       result.project_id != grant.project_id ||
@@ -55,6 +64,25 @@ async fn WorkspaceHost::delivery_placement(
     )
   }) catch {
     _ => raise @webide.BridgeError::AuthorityUnavailable
+  }
+}
+
+///|
+fn delivery_profile_matches(
+  placement : DeliveryPlacementResponse,
+  container : ExclusiveContainer?,
+) -> Bool {
+  match (placement.delivery_kind, container) {
+    ("Workspace", None) => true
+    ("GpuContainer", Some(runtime)) =>
+      runtime.gpu &&
+      pinned_image(runtime.image) &&
+      placement.container_image_digest.map_or(false, digest => {
+        runtime.image.has_suffix("@" + digest)
+      }) &&
+      placement.container_cpu_millis == Some(runtime.cpu_millis) &&
+      placement.container_memory_mib == Some(runtime.memory_mib)
+    _ => false
   }
 }
 

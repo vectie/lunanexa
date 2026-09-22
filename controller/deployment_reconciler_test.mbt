@@ -87,6 +87,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
     lease_expires_unix_ms: 100000L,
     controller_epoch: 1L,
     group: None,
+    reservation: None,
     signature: "signed",
   }
   let heartbeat : @contracts.NodeHeartbeat = {
@@ -262,6 +263,7 @@ test "a paired placement is ready only when both ranks are live" {
     lease_expires_unix_ms: 100000L,
     controller_epoch: 1L,
     group: Some(group),
+    reservation: None,
     signature: "signed",
   }
   let worker = {

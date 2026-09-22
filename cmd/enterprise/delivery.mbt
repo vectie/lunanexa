@@ -165,25 +165,13 @@ fn delivery_workspace_command(
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
     try {
-      guard model.portal.deliveries.operations
-        .iter()
-        .find_first(operation => {
-          operation.operation_id == operation_id &&
-          operation.kind == "Workspace" &&
-          (operation.stage == "StartingWorkspace" || operation.stage == "Ready")
-        })
-        is Some(operation) else {
-        raise Failure("workspace not ready to start")
-      }
-      guard model.portal.deliveries.options.templates
-        .iter()
-        .find_first(template => {
-          template.template_id == operation.template_id &&
-          template.template_version == operation.template_version &&
-          template.kind == "Workspace"
-        })
-        is Some(template) else {
-        raise Failure("template unavailable")
+      guard @enterprise_ui.delivery_launch_template(
+          model.portal.deliveries,
+          operation_id,
+        )
+        is Some(template) &&
+        template.client_id is Some(client_id) else {
+        raise Failure("interactive delivery unavailable")
       }
       let clients : Array[DesktopClientResponse] = @json.from_json(
         @json.parse(
@@ -196,7 +184,7 @@ fn delivery_workspace_command(
           ),
         ),
       )
-      guard clients.iter().find_first(client => client.client_id == "comfyui")
+      guard clients.iter().find_first(client => client.client_id == client_id)
         is Some(client) else {
         raise Failure("public workspace integration unavailable")
       }
@@ -204,7 +192,11 @@ fn delivery_workspace_command(
         "request_id": random_identifier("delivery-handoff"),
         "client_id": client.client_id,
         "project_id": model.portal.project_id,
-        "allowed_models": [template.model_selector].to_json(),
+        "allowed_models": (if template.kind == "GpuContainer" {
+          ([] : Array[String])
+        } else {
+          [template.model_selector]
+        }).to_json(),
         "delivery_id": operation_id,
       }
       let launch : DesktopClientHandoffLaunch = @json.from_json(
@@ -241,10 +233,69 @@ fn delivery_workspace_command(
           model.portal.locale,
           portal_copy(
             model.portal.locale,
-            "Unable to open this delivery's public workspace. Refresh service status and retry.",
-            "无法打开此交付的公网工作区。请刷新服务状态后重试。",
+            "Unable to open this delivery's public workspace or terminal. Refresh service status and retry.",
+            "无法打开此交付的公网工作区或终端。请刷新服务状态后重试。",
           ),
         )
     }
   })
+}
+
+///|
+fn delivery_api_access_command(
+  model : AppModel,
+  operation_id : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(
+    result => {
+      emit(
+        DeliveryAccessIssued(
+          model.session_generation,
+          model.portal.selected_organization_id,
+          model.portal.deliveries.poll_generation,
+          result,
+        ),
+      )
+    },
+    async fn() noraise {
+      try {
+        guard model.portal.deliveries.operations.any(operation => {
+          operation.operation_id == operation_id &&
+          operation.kind == "ModelApi" &&
+          operation.stage == "Ready"
+        }) else {
+          raise Failure("model delivery not ready")
+        }
+        let body : Json = { "request_id": random_identifier("delivery-key") }
+        let access : @enterprise_ui.DeliveryApiAccess = @json.from_json(
+          @json.parse(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/portal/self/deliveries/\{operation_id}/access-key",
+              model.token,
+              model.subject_ref,
+              body=body.stringify(),
+            ),
+          ),
+        )
+        if !access.one_time ||
+          access.delivery_id != operation_id ||
+          access.expires_unix_ms <= current_unix_ms() {
+          raise Failure("invalid delivery access response")
+        }
+        Ok(access)
+      } catch {
+        _ =>
+          Err(
+            portal_copy(
+              model.portal.locale,
+              "Unable to issue the delivery API key. Refresh the delivery status before trying again. A key is never automatically reissued.",
+              "无法签发交付 API 密钥。请刷新交付状态后重试；系统不会自动重复签发密钥。",
+            ),
+          )
+      }
+    },
+  )
 }

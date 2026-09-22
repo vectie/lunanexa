@@ -138,6 +138,9 @@ pub struct ApiService {
   response_cache_order : Array[String]
   audit_mutex : @async.Mutex
   resource_mutex : @async.Mutex
+  reservation_host : @reservation_host.ReservationHost?
+  gpu_container_offering : GpuContainerOffering?
+  reservation_node_names : Map[String, String]
   execution_slots : @async.Semaphore
 }
 
@@ -237,6 +240,9 @@ pub fn ApiService::new(
     response_cache_order: [],
     audit_mutex: Mutex(),
     resource_mutex: Mutex(),
+    reservation_host: None,
+    gpu_container_offering: None,
+    reservation_node_names: Map([]),
     execution_slots: Semaphore(128),
   }
 }
@@ -338,6 +344,9 @@ pub fn ApiService::with_registry(
     response_cache_order: [],
     audit_mutex: Mutex(),
     resource_mutex: Mutex(),
+    reservation_host: None,
+    gpu_container_offering: None,
+    reservation_node_names: Map([]),
     execution_slots: Semaphore(128),
   }
 }
@@ -440,6 +449,9 @@ pub fn ApiService::with_services(
     response_cache_order: [],
     audit_mutex: Mutex(),
     resource_mutex: Mutex(),
+    reservation_host: None,
+    gpu_container_offering: None,
+    reservation_node_names: Map([]),
     execution_slots: Semaphore(128),
   }
 }
@@ -544,6 +556,9 @@ pub fn ApiService::with_control_plane(
     response_cache_order: [],
     audit_mutex: Mutex(),
     resource_mutex: Mutex(),
+    reservation_host: None,
+    gpu_container_offering: None,
+    reservation_node_names: Map([]),
     execution_slots: Semaphore(128),
   }
 }

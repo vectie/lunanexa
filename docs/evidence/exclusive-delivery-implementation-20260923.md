@@ -22,32 +22,36 @@ grant, existing GPU task stop, or live service switch is implied by this file.
 - Enterprise and operator sites project the same operation. Enterprise polling,
   published template selection, retry and public handoff are connected to API
   routes. Operator reservations bind existing effective grants and leases.
-- The separate Kubernetes reservation host can preserve unrelated taints,
-  refuse foreign pods and observe removal after cleanup. Its transport and
-  state transitions have isolated tests; deployment/controller wiring remains
-  required before this can claim physical node exclusivity.
+- The Kubernetes reservation host now participates in the controller loop,
+  signed model publication and workspace startup. It preserves unrelated taints,
+  refuses foreign Pods and observes removal before scheduler release. Model
+  assignments carry signed owner metadata; runtime Pods use the matching label
+  and toleration. Actual cluster configuration/rollout is still required.
 
 ## Deliberately unproven / remaining work
 
-1. Wire the controller-owned Kubernetes reservation host and restricted RBAC
-   into reservation activation/release. Runtime manifests need corresponding
-   owner labels/tolerations; do not rely on GPU requests alone.
+1. Deploy the now-connected reservation host configuration and restricted RBAC,
+   projected controller token, explicit namespace/infrastructure allowlists and
+   node mappings; verify physical node fencing in the actual cluster.
 2. Publish component H3 manifests and approved digest-pinned patched runtime
    images. The existing whole-model manifest lists about 498 GB; do not silently
    replace a 144 GB component transfer with this full bundle.
 3. Configure actual node hostname mapping, gateway observation credential,
    public launch catalog and the exclusive gateway deployment. Test outside the
    current client's VPN path before claiming public port 5000 is repaired.
-4. Finish the dedicated GPU-container offering/catalog and browser terminal
-   image, package mirror egress, and user-approved read-only weight mounting.
+4. Deploy the now-implemented GPU-container offering/catalog with a verified
+   browser terminal image, package mirror egress, and user-approved read-only
+   weight mounting. Source support does not establish a runnable live offering.
 5. Multi-node reservations are atomic; the current model-service planner still
    launches one replica inside the set. Distributed topology and multi-service
    coverage need their own integration, not a claim inferred from node_count.
 6. Same-node PVC persistence exists. Cross-node recovery requires a shared
    storage profile or explicit data migration; local-path is not HA storage.
-7. A gateway process crash between startup claim and Kubernetes Secret creation
-   requires controller-driven cleanup/retry. Final reservation release must
-   wait for all model and workspace claims and actual stop evidence.
+7. Physically verify gateway restart and stop recovery. The gateway now persists
+   a recovery Secret before claiming startup capacity. Runtime identity includes
+   the delivery and client; retained volume identity includes the client but not
+   delivery, avoiding ComfyUI/terminal collisions. Cross-node data migration is
+   still required for node-local PVCs.
 8. H3 loaded-model health/discovery is readiness evidence, not proof of video
    generation. Actual generation/download, workflow/file reopen, IaaS terminal,
    MaaS invocation, tenant isolation and expiry still require the public UI
@@ -55,7 +59,7 @@ grant, existing GPU task stop, or live service switch is implied by this file.
 
 ## Validation scope
 
-Completed source gates:
+Completed source gates at commit `74e9c80` (before the next integration batch):
 
 - `moon info`, `moon fmt`, native `moon check --deny-warn` passed.
 - Full native suite: **1184/1184 passed**.
@@ -73,3 +77,39 @@ acceptance and do not close any remaining item listed above.
 The implementation uses the MoonBit project conventions, native first-party
 services, typed transitions and `.mbtx` metadata inspection. No new Python
 service, host Docker dependency or MoonSuite source dependency was introduced.
+
+## Subsequent integration batch
+
+The H3 patched ARM64 image has now been physically packaged and pushed to the
+internal registry. TLS-verified HEAD confirms manifest
+`sha256:b0bb860f5d369ff7e89e1e36fb91d416b15cbaad7f5b689f812f099f3a86529c`.
+See `../deploy/h3-patched-runtime-packaging.md` for the receipt and exact four
+code patches. This is not an H3 workload rollout or inference acceptance.
+
+Component manifest derivation ran against the real source metadata and produced
+separate 81-file FL2VA and Ref2VA manifests, each about 144 GB. The script's
+self-test passed. Per-file checksums were retained, not re-certified by rereading
+weights during metadata derivation. Registry/model admission remains required.
+
+GPU container offerings now come from deployment-owned pinned configuration;
+customers cannot select arbitrary images. Model-free terminal credentials may
+discover the gateway but cannot infer. ModelApi operations now issue their own
+delivery-bound keys rather than sending users to the shared API-key flow.
+Enterprise UI includes catalog-driven terminal launch and one-time MaaS key
+display. After the workspace identity/recovery changes, the batch gate passed:
+
+- `moon info`, `moon fmt`, native `moon check --deny-warn`.
+- Full native tests: **1197/1197 passed**.
+- Operator/enterprise and browser entry JavaScript tests: **239/239 passed**.
+- Release dependency/image/contract/secret/response checks, including **27**
+  isolation fixtures and **12** secret scanner fixtures.
+- GPU offering integration covers authenticated selection, model-free handoff,
+  persisted delivery binding on redemption, and revocation without a model
+  catalog. Workspace tests cover runtime/volume identity separation and a
+  persisted recovery marker before startup capacity is claimed.
+
+An initial integration run caught a missing authentication header in the new
+GPU test fixture; the fixture was corrected, its targeted test passed, and the
+full native suite was then rerun to the totals above. These tests use fixtures,
+not a newly authorized physical customer lease. No existing GPU workload or
+public frontend Deployment was switched by this batch.

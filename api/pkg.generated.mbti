@@ -13,6 +13,7 @@ import {
   "vectie/lunanexa/commercial/integrations",
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/controller/reservation_host",
   "vectie/lunanexa/database",
   "vectie/lunanexa/deployment/delivery",
   "vectie/lunanexa/machinecommerce",
@@ -145,6 +146,9 @@ pub struct ApiService {
   response_cache_order : Array[String]
   audit_mutex : @async.Mutex
   resource_mutex : @async.Mutex
+  reservation_host : @reservation_host.ReservationHost?
+  gpu_container_offering : GpuContainerOffering?
+  reservation_node_names : Map[String, String]
   execution_slots : @semaphore.Semaphore
 }
 pub async fn ApiService::activate_machine_order_settled_payment(Self, String, @machinecommerce.MachinePaymentSettlement, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
@@ -162,6 +166,7 @@ pub async fn ApiService::reconcile_machine_commerce(Self) -> Unit
 pub async fn ApiService::reconcile_media_jobs(Self) -> (Int, Int)
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
+pub async fn ApiService::reconcile_resource_reservations(Self) -> Unit
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
 pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
 pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int, Int64) -> Unit
@@ -195,6 +200,7 @@ pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney)
 pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
+pub fn ApiService::with_gpu_container_offering(Self, GpuContainerOffering) -> Self raise
 pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure
 pub fn ApiService::with_inference_rate_card(Self, @commercial.RateCard) -> Self raise Failure
 pub fn ApiService::with_lease_helper_receipt_secret(Self, String) -> Self raise Failure
@@ -219,6 +225,8 @@ pub fn ApiService::with_private_cloud_workspace_access(Self, Bool) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
 pub fn ApiService::with_reconciliation_only(Self, Bool) -> Self
 pub fn ApiService::with_registry(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_reservation_host(Self, @reservation_host.ReservationHost, Map[String, String]) -> Self
+pub fn ApiService::with_reservation_host_json(Self, String?) -> Self raise
 pub fn ApiService::with_retired_bootstrap_operator_token(Self, Bool) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
@@ -238,6 +246,18 @@ pub fn CancellationReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.
 pub fn CancellationReceipt::not_equal(Self, Self) -> Bool
 pub fn CancellationReceipt::to_json(Self) -> Json
 pub fn CancellationReceipt::to_repr(Self) -> @debug.Repr
+
+pub(all) struct GpuContainerOffering {
+  template_id : String
+  version : String
+  display_name : String
+  client_id : String
+  image_digest : String
+  cpu_millis : Int
+  memory_mib : Int
+} derive(ToJson, @json.FromJson)
+pub fn GpuContainerOffering::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn GpuContainerOffering::to_json(Self) -> Json
 
 pub(all) struct HttpReply {
   status : Int

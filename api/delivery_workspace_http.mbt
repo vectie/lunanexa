@@ -10,6 +10,26 @@ priv struct WorkspaceStoppedRequest {
 } derive(FromJson)
 
 ///|
+fn delivery_workspace_id(
+  authority : @access.ApiAuthorization,
+  client_id : String,
+  delivery_id : String,
+) -> String {
+  let identity = [
+      authority.tenant_ref,
+      authority.subject_ref,
+      authority.organization_id,
+      authority.project_id,
+      client_id,
+      delivery_id,
+    ]
+    .to_json()
+    .stringify()
+  "webide-" +
+  @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(identity)))
+}
+
+///|
 /// Internal gateway resolution uses the same live credential/lease checks as
 /// model access; knowing an operation or reservation identifier grants nothing.
 async fn ApiService::handle_workspace_delivery(
@@ -47,6 +67,8 @@ async fn ApiService::handle_workspace_delivery(
       } noraise {
         value => value
       }
+      self.resource_mutex.acquire()
+      defer self.resource_mutex.release()
       for operation in deliveries.operations() {
         if operation.workspace_id == Some(request.workspace_id) &&
           operation.stage == Stopping &&
@@ -102,6 +124,8 @@ async fn ApiService::handle_workspace_delivery(
   } noraise {
     value => value
   }
+  self.resource_mutex.acquire()
+  defer self.resource_mutex.release()
   let candidates = deliveries
     .operations()
     .filter(operation => {
@@ -130,16 +154,25 @@ async fn ApiService::handle_workspace_delivery(
     )
   }
   let operation = candidates[0]
-  let identity = [
-      authority.tenant_ref,
-      authority.subject_ref,
-      authority.organization_id,
-      authority.project_id,
-    ]
-    .to_json()
-    .stringify()
-  let workspace_id = "webide-" +
-    @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(identity)))
+  let container_offering = if operation.intent.kind == GpuContainer {
+    guard self.gpu_container_offering is Some(offering) &&
+      offering.template_id == operation.intent.template_id &&
+      offering.version == operation.intent.template_version &&
+      offering.client_id == credential.client_id else {
+      return api_error(
+        409, "ContainerOfferingUnavailable", "the selected GPU container offering is unavailable",
+        false,
+      )
+    }
+    Some(offering)
+  } else {
+    None
+  }
+  let workspace_id = delivery_workspace_id(
+    authority,
+    credential.client_id,
+    operation.operation_id,
+  )
   let expiry = if operation.intent.expires_at_ms <
     reservation.request.expires_unix_ms {
     operation.intent.expires_at_ms
@@ -147,15 +180,15 @@ async fn ApiService::handle_workspace_delivery(
     reservation.request.expires_unix_ms
   }
   if verb == Get && path == "/v1/workspace-delivery/placement" {
-    // Enrolled node identity is mapped to the Kubernetes hostname by inventory,
-    // never by accepting a hostname supplied by the browser or gateway.
-    guard self.store
-      .heartbeats()
-      .iter()
-      .find_first(value => value.node_id == node_id)
-      is Some(heartbeat) &&
-      heartbeat.inventory.labels.get("kubernetes.io/hostname")
-      is Some(node_name) else {
+    self.ensure_reservation_nodes(reservation_id) catch {
+      _ =>
+        return api_error(
+          409, "NodeReservationPending", "reserved nodes are not ready for exclusive workloads",
+          true,
+        )
+    }
+    // Use the same deployment-owned mapping as the node reservation adapter.
+    guard self.reservation_node_names.get(node_id) is Some(node_name) else {
       return api_error(
         409, "NodeMappingUnavailable", "workspace node mapping is not configured",
         true,
@@ -168,6 +201,16 @@ async fn ApiService::handle_workspace_delivery(
       "project_id": authority.project_id,
       "node_name": node_name,
       "expires_unix_ms": expiry.to_json(),
+      "delivery_kind": operation.intent.kind.to_json(),
+      "container_image_digest": container_offering
+      .map(value => value.image_digest)
+      .to_json(),
+      "container_cpu_millis": container_offering
+      .map(value => value.cpu_millis)
+      .to_json(),
+      "container_memory_mib": container_offering
+      .map(value => value.memory_mib)
+      .to_json(),
     })
   }
   if verb == Post && path == "/v1/workspace-delivery/ready" {
@@ -200,7 +243,18 @@ async fn ApiService::handle_workspace_delivery(
     } noraise {
       value => value
     }
+    if container_offering is Some(offering) &&
+      (
+        request.memory_mib != offering.memory_mib + 512 ||
+        request.gpu_memory_mib != offering.memory_mib
+      ) {
+      return api_error(
+        409, "ContainerProfileMismatch", "gateway resources do not match the selected GPU container offering",
+        false,
+      )
+    }
     try {
+      self.ensure_reservation_nodes(reservation_id)
       ignore(
         scheduler.claim_node_service(
           reservation_id,

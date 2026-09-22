@@ -205,7 +205,7 @@ async fn ApiService::handle_client_handoff(
         ),
       )
     })
-    return json_reply(200, {
+    let response : Json = {
       "version": @client_handoff.contract_version,
       "handoff_id": redeemed.handoff_id,
       "client_id": redeemed.client_id,
@@ -220,7 +220,16 @@ async fn ApiService::handle_client_handoff(
       "expires_unix_ms": redeemed.expires_unix_ms.to_json(),
       "maximum_requests": redeemed.maximum_requests.to_json(),
       "one_time": true,
-    })
+    }
+    if handoffs.snapshot().credentials
+      .iter()
+      .find_first(credential => credential.key_id == redeemed.api_key_id)
+      is Some(credential) &&
+      credential.delivery_id is Some(delivery_id) &&
+      response is Object(fields) {
+      fields["delivery_id"] = delivery_id.to_json()
+    }
+    return json_reply(200, response)
   }
   guard self.portal_store is Some(portal) &&
     self.portal_subject(headers, allow_asserted_subject) is Some(subject_ref) else {
@@ -280,14 +289,18 @@ async fn ApiService::handle_client_handoff(
       if !workspace_ready {
         blockers.push("ActiveWorkspaceLeaseRequired")
       }
-      if aliases.length() == 0 {
-        blockers.push("ApprovedModelRequired")
-      }
       let subject_handoffs = handoffs.views_for_subject(
         portal_view.membership.tenant_ref,
         subject_ref,
       )
       let views = configs.map(config => {
+        let model_required = !self.gpu_container_offering.map_or(false, offering => {
+          offering.client_id == config.client_id
+        })
+        let client_blockers = blockers.copy()
+        if model_required && aliases.is_empty() {
+          client_blockers.push("ApprovedModelRequired")
+        }
         (
           {
             "client_id": config.client_id,
@@ -298,8 +311,9 @@ async fn ApiService::handle_client_handoff(
             "contract_ready": contract_ready,
             "workspace_ready": workspace_ready,
             "models_ready": aliases.length() > 0,
-            "ready": blockers.length() == 0,
-            "blocker_codes": blockers.to_json(),
+            "model_required": model_required,
+            "ready": client_blockers.length() == 0,
+            "blocker_codes": client_blockers.to_json(),
             "approved_model_aliases": aliases.to_json(),
             "handoffs": subject_handoffs
             .filter(handoff => handoff.client_id == config.client_id)
@@ -316,7 +330,7 @@ async fn ApiService::handle_client_handoff(
       guard decode_portal_client_handoff(body) is Some(intent) &&
         configs.filter(config => config.client_id == intent.client_id).get(0)
         is Some(config) &&
-        intent.allowed_models.length() > 0 else {
+        (intent.allowed_models.length() > 0 || intent.delivery_id is Some(_)) else {
         return api_error(
           400, "InvalidRequest", "invalid client handoff intent", false,
         )
@@ -418,21 +432,39 @@ async fn ApiService::handle_client_handoff(
             portal_view.membership.organization_id &&
             operation.intent.project_id == intent.project_id &&
             operation.intent.lease_id == workspace.lease.lease_id &&
-            operation.intent.kind == Workspace &&
+            operation.intent.kind != ModelApi &&
             (operation.stage == StartingWorkspace || operation.stage == Ready) &&
             operation.intent.expires_at_ms > now &&
-            paid_order is None &&
-            self.deployment_store is Some(catalog) &&
-            catalog.template({
-              template_id: operation.intent.template_id,
-              version: operation.intent.template_version,
-            })
-            is Some(template) &&
-            intent.allowed_models == [template.model_selector] else {
+            paid_order is None else {
             return api_error(
               409, "DeliveryUnavailable", "selected delivery is not ready for workspace launch",
               true,
             )
+          }
+          if operation.intent.kind == GpuContainer {
+            guard self.gpu_container_offering is Some(offering) &&
+              offering.template_id == operation.intent.template_id &&
+              offering.version == operation.intent.template_version &&
+              intent.client_id == offering.client_id &&
+              intent.allowed_models.is_empty() else {
+              return api_error(
+                409, "ContainerClientRequired", "select this container offering's terminal client without model access",
+                false,
+              )
+            }
+          } else {
+            guard self.deployment_store is Some(catalog) &&
+              catalog.template({
+                template_id: operation.intent.template_id,
+                version: operation.intent.template_version,
+              })
+              is Some(template) &&
+              intent.allowed_models == [template.model_selector] else {
+              return api_error(
+                409, "DeliveryUnavailable", "workspace model scope does not match its template",
+                false,
+              )
+            }
           }
           Some(operation)
         }
@@ -478,6 +510,9 @@ async fn ApiService::handle_client_handoff(
           },
           now,
           delivery_id?=intent.delivery_id,
+          allow_model_free=delivery.map_or(false, operation => {
+            operation.intent.kind == GpuContainer
+          }),
         )
       catch {
         error => return client_handoff_error_reply(error)

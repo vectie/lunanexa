@@ -123,6 +123,7 @@ pub fn valid_client_launch_catalog(
 pub fn validate_issue_intent(
   intent : ClientHandoffIssueIntent,
   now_unix_ms : Int64,
+  allow_model_free? : Bool = false,
 ) -> Unit raise ClientHandoffError {
   if !@contracts.valid_identifier(intent.request_id) ||
     !@contracts.valid_identifier(intent.client_id) ||
@@ -131,7 +132,7 @@ pub fn validate_issue_intent(
     !@contracts.valid_identifier(intent.organization_id) ||
     !@contracts.valid_identifier(intent.project_id) ||
     !valid_text(intent.display_name, 128) ||
-    intent.allowed_models.length() == 0 ||
+    (intent.allowed_models.length() == 0 && !allow_model_free) ||
     intent.allowed_models.length() > 128 ||
     intent.allowed_models.any(model => !@contracts.valid_identifier(model)) ||
     intent.allowed_models.any(model => intent.allowed_models.count(model) != 1) ||

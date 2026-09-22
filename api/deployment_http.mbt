@@ -220,6 +220,11 @@ async fn ApiService::publish_planned_assignment(
   if self.assignment_signing_secret == "" {
     raise @deployment.DeploymentError::InvalidState("signer unavailable")
   }
+  if unsigned.reservation is Some(_) {
+    raise @deployment.DeploymentError::InvalidState(
+      "reservation ownership is controller-derived",
+    )
+  }
   guard self.registry is Some(registry) else {
     raise @deployment.DeploymentError::InvalidState("registry unavailable")
   }
@@ -262,6 +267,16 @@ async fn ApiService::publish_planned_assignment(
     raise @deployment.DeploymentError::InvalidState(
       "node is reserved for an exclusive lease",
     )
+  }
+  let unsigned = match (reservation_id, tenant_ref) {
+    (Some(id), Some(tenant)) => {
+      self.ensure_reservation_nodes(id)
+      {
+        ..unsigned,
+        reservation: Some({ reservation_id: id, tenant_ref: tenant, }),
+      }
+    }
+    _ => unsigned
   }
   let signed = {
     ..unsigned,

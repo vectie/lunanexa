@@ -327,8 +327,14 @@ pub async fn ClientHandoffStore::issue(
   intent : @handoff.ClientHandoffIssueIntent,
   now_unix_ms : Int64,
   delivery_id? : String,
+  allow_model_free? : Bool = false,
 ) -> @handoff.IssuedClientHandoff {
-  @handoff.validate_issue_intent(intent, now_unix_ms)
+  if allow_model_free && delivery_id is None {
+    raise @handoff.ClientHandoffError::InvalidInput(
+      "model-free credentials require a delivery",
+    )
+  }
+  @handoff.validate_issue_intent(intent, now_unix_ms, allow_model_free~)
   if delivery_id is Some(value) && !@contracts.valid_identifier(value) {
     raise @handoff.ClientHandoffError::InvalidInput(
       "invalid delivery reference",
@@ -500,9 +506,7 @@ pub async fn ClientHandoffStore::authorize(
   if secret.length() != 68 || !secret.has_prefix("lnx_") {
     raise @handoff.ClientHandoffError::Unauthorized
   }
-  // ApiKeyScope is intentionally accepted as a closed two-case authority:
-  // every desktop handoff grants both model discovery and inference.
-  ignore(scope)
+  // A terminal-only delivery permits gateway discovery, never inference.
   let secret_digest = digest_secret(secret)
   self.mutex.acquire()
   defer self.mutex.release()
@@ -530,6 +534,7 @@ pub async fn ClientHandoffStore::authorize(
     raise @handoff.ClientHandoffError::Unauthorized
   }
   if current.revoked_unix_ms is Some(_) ||
+    (scope == Inference && current.allowed_models.is_empty()) ||
     current.expires_unix_ms <= now_unix_ms ||
     model.map(value => !current.allowed_models.contains(value)).unwrap_or(false) {
     raise @handoff.ClientHandoffError::Unauthorized
