@@ -346,6 +346,19 @@ export LUNANEXA_SOURCE_TREE=$HOME/lunanexa-deploy-src
 cd "$LUNANEXA_SOURCE_TREE"
 
 bash scripts/build-browser-bundles.sh                 # 只需 moon；产出 _build/browser-dist (约 15M)
+
+# 把部署自己的两个 opt-in 渲染进去。**必须做**：bundle 里两个 meta 都是空的，
+# 不渲染的话明文 HTTP 下每个按钮都是灰的、控制台只会停在登录页。
+python3 scripts/deploy/render-public-http-origin.py \
+    --dist _build/browser-dist \
+    --origin console=http://106.39.18.146:4174 \
+    --origin enterprise=http://106.39.18.146:5002 \
+    --operator-open console=*
+#   --origin        = 该页面被服务的**精确** origin；明文 HTTP 下凭证只在这个 origin 上放行
+#   --operator-open = 该页面**跳过登录门**，由同源代理附加运维权限
+#                     `*` 表示"任何能加载这个页面的 origin 都算运维"——这是部署决定，不是默认值
+#                     源码里 meta 是空的，只有这个脚本会填它
+
 python3 scripts/deploy/build-web-image.py \
     --base  lunanexa-web:20260921 \
     --image lunanexa-web:20260922 \
@@ -362,6 +375,16 @@ sha256sum _build/browser-dist/console/console.js
 ```
 
 **两条不要忘**：
+
+- **免登录（`--operator-open`）需要代理那边同时具备三样东西**，少一样就退回登录页或 401：
+  1. 控制面有一个**非 bootstrap** 的运维令牌 —— `LUNANEXA_OPERATOR_TOKENS=console-proxy=<tok>`。
+     bootstrap 那个（`LUNANEXA_OPERATOR_TOKEN`）在**存在任何 `PlatformOperator` 账户之后会被作废**
+     （`ApiService::operator_identity` 的 `bootstrap_retired` 分支），所以一旦建了运维账户，
+     代理注入它就会 401 —— 这是"免登录突然坏掉"最常见的原因。
+  2. 代理的 `map $http_authorization` 要把**空 header** 和**控制台在 open 模式发的
+     `Bearer deployment-open` 标记**都映射成那个令牌；`default` 必须保留 `$http_authorization`，
+     否则真实会话（`lnxs_…`）会被顶掉，而伪造令牌也会被放行。
+  3. 控制面 `/v1/audit` 由代理单独注入审计令牌，控制台不需要浏览器持有审计凭据。
 
 - **不要 prune** html 根里 bundle 没有的文件。bundle 由 `build-browser-bundles.sh` 产出，
   但那个目录还装着**私有合同字体**（`assets/fonts/private/`，仓库里没有，是授权字体）和
