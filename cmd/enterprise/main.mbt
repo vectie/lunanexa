@@ -554,9 +554,34 @@ extern "js" fn demo_contract_preview_promise(undertaking : Bool) -> @js.Promise 
   #| }
 
 ///|
+///|
+/// A fresh opaque identifier.
+///
+/// `crypto.randomUUID` exists only in a secure context, so on this deployment's
+/// plain-HTTP pages it is `undefined` and calling it throws a `TypeError`. That
+/// exception is not a LunaNexa error: it escapes the command that raised it, and
+/// because the command runs inside the runtime's message drain it leaves the
+/// application unable to process any further message until the page is
+/// reloaded -- a silent freeze with no notice on screen.
+///
+/// The bytes come from `crypto.getRandomValues`, which is available without a
+/// secure context, and the fallback keeps the function total. An identifier only
+/// has to be unique; it must never be the reason a page stops working.
 extern "js" fn random_identifier(prefix : String) -> String =
-  #| prefix => `${prefix}-${crypto.randomUUID()}`
-
+  #| prefix => {
+  #|   const bytes = new Uint8Array(16);
+  #|   if (globalThis.crypto && typeof crypto.getRandomValues === "function") {
+  #|     crypto.getRandomValues(bytes);
+  #|   } else {
+  #|     for (let i = 0; i < bytes.length; i++) {
+  #|       bytes[i] = Math.floor(Math.random() * 256);
+  #|     }
+  #|   }
+  #|   bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  #|   bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  #|   const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  #|   return `${prefix}-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  #| }
 ///| The short-lived handoff code is placed only in a URL fragment. Browsers do
 
 ///| not send fragments to HTTP servers, and the receiving client removes it
