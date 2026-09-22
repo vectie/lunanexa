@@ -2135,3 +2135,44 @@ POST /v1/portal/self/machine-quotes  →  403
   不是企业侧动作；也就是说"用户选择时间/租期"在当前实现里是**甲方确认固定档位报价**，
   企业侧只能提需求。这一点与原任务描述的顺序不同，需要确认是否即为预期。
 - 确认框里只写 `week × 1`，**不显示金额**；"冻结不可变报价"这种动作不显示价格，是个体验缺口。
+
+### 12.9 按"两侧必须共享同一个租期档位选择"改掉的东西
+
+原先两边各有一套、而且对不上：
+
+- **运营侧**：`ui/offline_commerce` 里**硬编码**了五个 `<option>`（1 day 49 / 7 days 322 / …）；
+- **企业侧**：承诺函这条路**根本没有档位选择**，门户上唯一的租期选择是自服务向导里的
+  `24 hours / 7 days / 30 days`——那是按秒计价的另一条商务路线（§12.6）。
+
+于是企业侧无法提出一个运营侧能报的档位，链条在第 2 步就接不上。
+
+**改法**：
+
+1. **一处定义**。`commercial/offline/undertaking.mbt` 新增
+   `pub let undertaking_term_tiers : Array[UndertakingTermTier]`（unit / days / minor_units），
+   并让 `undertaking_tariff`、`undertaking_term_days`、`undertaking_quote_term` **都从它派生**，
+   不再各自重述那五个数字。
+2. **两侧都渲染它**。运营侧的价格下拉改成遍历这个列表；企业侧 `Orders & documents` 的
+   "配置新订单"表单**新增** `租赁档位 / Rental tier` 下拉，也遍历同一个列表。
+   档位的文案只有一处：`ui/offline_commerce.undertaking_tier_label`。
+3. **选择会传到对面**。`CommercialOrder` 新增 `requested_undertaking_term`，
+   由客户下单时带上（`OfflineOrderIntent.requested_undertaking_term`）。
+   它是**请求而不是价格**：报价仍由运营侧冻结，文件里写的仍是冻结后的报价。
+   未知档位直接 `400 InvalidTerm`，不落库。
+4. **运营侧默认跟随，并且说出来**。选中订单时价格下拉**自动切到客户申请的档位**，
+   旁边显示一句 `The customer asked for 90 days · 3600.`——如果运营侧要按别的档位报价，
+   那是一个**看得见的决定**，不再是悄悄换掉。
+
+**浏览器实测（两侧）**：
+
+| 侧 | 动作 | 结果 |
+|---|---|---|
+| 企业 | `Orders & documents` 打开订单表单 | 出现 `#offline-undertaking-term`，五个档位与运营侧**逐字相同**（`1 day · 49` … `365 days · 13870`），默认 `month` |
+| 企业 | 选 `90 days · 3600` → `Create draft order` | 201，出现 `offline-order-d916b5b4-…`（Draft），提示 "Draft order created…" |
+| 管理 | `Offline commerce` → 打开该订单 | 价格下拉**已经是 `quarter`**，并显示 `The customer asked for 90 days · 3600.` |
+
+（运营侧点报价仍然会被 §12.4 的就绪闸门 503 挡住，这一点没有变——档位统一解决的是
+"客户能不能提出一个运营侧可报的档位"，不是"能不能报价"。）
+
+测试：`commercial/offline` 2/2、`ui/offline_commerce` 13/13、`cmd/enterprise` 28/28、
+`cmd/console` 63/63、`api` 136/136。
