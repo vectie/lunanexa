@@ -1,0 +1,63 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, config, backup] else {
+    fail(
+      "Usage: pause-h3-for-acceptance.mbtx KUBECONFIG NEW_PRIVATE_BACKUP_DIRECTORY",
+    )
+  }
+  @fs.mkdir(backup, permission=0o700)
+  let originals : Array[(String, Int)] = []
+  for name in ["minimaxh3-fl2va", "minimaxh3-ref2va"] {
+    let snapshot = @shell.Cmd("kubectl", [
+      "--kubeconfig", config, "-n", "lunanexa", "get", "deployment", name, "-o",
+      "json",
+    ]).output()
+    snapshot.check()
+    let source = snapshot.stdout()
+    guard @json.parse(source)
+      is {
+        "metadata": { "name": String(actual), .. },
+        "spec": { "replicas": Number(replicas, ..), .. },
+        ..
+      } &&
+      actual == name else {
+      fail("unexpected deployment snapshot")
+    }
+    @fs.write_file(
+      backup + "/" + name + ".json",
+      source,
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    originals.push((name, replicas.to_int()))
+  }
+  // Preserve both originals before changing either service. Do not touch model
+  // directories, Services, unrelated Deployments or host-level GLM processes.
+  for (name, replicas) in originals {
+    let result = @shell.Cmd("kubectl", [
+      "--kubeconfig",
+      config,
+      "-n",
+      "lunanexa",
+      "scale",
+      "deployment",
+      name,
+      "--current-replicas=" + replicas.to_string(),
+      "--replicas=0",
+    ]).output()
+    result.check()
+    println(name + ": requested replicas 0; original " + replicas.to_string())
+  }
+  println(
+    "Backups saved; verify Pod termination before reusing GPUs. Restore the recorded replica counts, not an assumed count.",
+  )
+}
