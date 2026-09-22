@@ -171,3 +171,29 @@ test "platform announcement text is escaped and trial expiry explains conversion
   })
   assert_true(trial.contains("no automatic paid conversion"))
 }
+
+///|
+test "a refusal keeps its status so the copy can name the real problem" {
+  // The portal's transport used to replace the thrown message with the body's
+  // own text, which dropped the status. A permanent 403 then read as "the
+  // action failed, refresh and retry" -- advice that can never work.
+  let refusal = @enterprise.friendly_failure(
+    English,
+    "Operation",
+    "Unable to create the signed machine quote: Error(\"HTTP 403: lease requester role is required\")",
+  )
+  assert_true(refusal.contains("lacks permission"))
+  assert_false(refusal.contains("Refresh and retry"))
+  // The connection branch is unchanged.
+  assert_true(
+    @enterprise.friendly_failure(English, "Operation", "TypeError: Failed to fetch").contains(
+      "connection did not complete",
+    ),
+  )
+  // A status we do not classify still reads as a plain failure.
+  assert_true(
+    @enterprise.friendly_failure(English, "Operation", "HTTP 500: internal").contains(
+      "The action failed",
+    ),
+  )
+}

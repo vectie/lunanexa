@@ -632,9 +632,13 @@ extern "js" fn request_promise(
   #|   });
   #|   const text = await response.text();
   #|   if (!response.ok) {
-  #|     let message = `HTTP ${response.status}`;
-  #|     try { message = JSON.parse(text)?.error?.message || message; } catch (_) {}
-  #|     throw new Error(message);
+  #|     // The status stays in the message. Replacing it with the body's own text
+  #|     // read better and cost the only thing a caller can classify on: every
+  #|     // refusal -- a permanent 403 included -- arrived as an unclassifiable
+  #|     // string and was reported as "the action failed, retry".
+  #|     let detail = "";
+  #|     try { detail = JSON.parse(text)?.error?.message || ""; } catch (_) {}
+  #|     throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
   #|   }
   #|   return text;
   #| }
