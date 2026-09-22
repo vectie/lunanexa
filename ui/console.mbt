@@ -4790,6 +4790,24 @@ fn users_view(
             ),
             @html.button(
               type_="button",
+              class=if state.access_package_draft.lifetime_days == 0 {
+                "role-toggle selected"
+              } else {
+                "role-toggle"
+              },
+              disabled=state.loading,
+              attrs=@html.Attrs::build().aria_pressed(
+                if state.access_package_draft.lifetime_days == 0 {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=command(emit, AccessPackageLifetimeChanged(0)),
+              localized(state.locale, "1h test", "1 小时测试"),
+            ),
+            @html.button(
+              type_="button",
               class=if state.access_package_draft.lifetime_days == 7 {
                 "role-toggle selected"
               } else {

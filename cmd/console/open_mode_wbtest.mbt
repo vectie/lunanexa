@@ -40,3 +40,19 @@ test "only a declared open deployment skips the login gate" {
   )
   assert_false(with_console_metas("", () => deployment_console_open()))
 }
+
+///|
+#warnings("-alert_unstable")
+test "open deployment still offers explicit named operator login" {
+  assert_true(
+    with_console_metas("*", () => {
+      let model = deferred_read_test_model(Overview)
+      let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+      let (requested, _) = update_live(model, PersonalLoginRequested, emit)
+      let html = @rabbita.render_to_string(() => {
+        @rabbita.Val::constant(app_view(requested, emit))
+      })
+      requested.personal_login && html.contains("Operator login")
+    }),
+  )
+}

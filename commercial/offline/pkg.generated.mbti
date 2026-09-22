@@ -790,12 +790,26 @@ pub(all) struct TechnicalAcceptanceAuthorization {
   purchaser_subject_ref : String
   user_authorization_ref : String
   expires_unix_ms : Int64
+  order_binding : TechnicalAcceptanceOrderBinding?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn TechnicalAcceptanceAuthorization::equal(Self, Self) -> Bool
 pub fn TechnicalAcceptanceAuthorization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn TechnicalAcceptanceAuthorization::not_equal(Self, Self) -> Bool
 pub fn TechnicalAcceptanceAuthorization::to_json(Self) -> Json
 pub fn TechnicalAcceptanceAuthorization::to_repr(Self) -> @debug.Repr
+
+pub(all) struct TechnicalAcceptanceOrderBinding {
+  organization_id : String
+  tenant_ref : String
+  quote : ImmutableQuote
+  entitlement_kind : EntitlementKind
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TechnicalAcceptanceOrderBinding::equal(Self, Self) -> Bool
+pub fn TechnicalAcceptanceOrderBinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TechnicalAcceptanceOrderBinding::matches_order(Self, CommercialOrder) -> Bool
+pub fn TechnicalAcceptanceOrderBinding::not_equal(Self, Self) -> Bool
+pub fn TechnicalAcceptanceOrderBinding::to_json(Self) -> Json
+pub fn TechnicalAcceptanceOrderBinding::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TechnicalAcceptanceWaiver {
   waiver_id : String
@@ -819,7 +833,9 @@ pub(all) struct TechnicalAcceptanceWaiver {
   reason : String
   issued_unix_ms : Int64
   expires_unix_ms : Int64
+  order_binding : TechnicalAcceptanceOrderBinding?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TechnicalAcceptanceWaiver::entitlement_kind(Self) -> EntitlementKind
 pub fn TechnicalAcceptanceWaiver::equal(Self, Self) -> Bool
 pub fn TechnicalAcceptanceWaiver::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn TechnicalAcceptanceWaiver::not_equal(Self, Self) -> Bool

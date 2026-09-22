@@ -169,6 +169,7 @@ test "exclusive machine termination confirmation binds node user and generation"
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -227,6 +228,7 @@ test "locale switch is local and preserves operational session state" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let switched = switch_app_locale(model, ChineseSimplified)
@@ -317,6 +319,7 @@ test "model source search is edited independently from generic operations" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -401,6 +404,7 @@ test "verified S3 model adoption is validated, stateful, and route-bound" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -470,6 +474,7 @@ test "changing an operator credential clears authenticated UI authority" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -552,6 +557,7 @@ test "Simplified Chinese connection drawer localizes security copy" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -589,6 +595,7 @@ test "unauthenticated operator sees login gate instead of console shell" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -628,6 +635,7 @@ test "public plain HTTP renders login landing but blocks credential entry" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -667,6 +675,7 @@ test "remote HTTPS login offers OIDC and never renders static token fallback" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -704,6 +713,7 @@ test "one account session supplies operator and audit authority in memory" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -748,6 +758,7 @@ test "operator login needs both halves and drops the password once it is used" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "wlc",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -755,7 +766,7 @@ test "operator login needs both halves and drops the password once it is used" {
   let (unsubmitted, _) = update_live(model, OperatorLoginSubmitted, emit)
   assert_false(unsubmitted.console.loading)
   let (submitted, _) = update_live(
-    { ..model, login_password: "Wlc123!@1234fsc", },
+    { ..model, login_password: "synthetic-password-not-a-real-account", },
     OperatorLoginSubmitted,
     emit,
   )
@@ -773,7 +784,7 @@ test "operator login needs both halves and drops the password once it is used" {
     emit,
   )
   assert_false(refused.console.loading)
-  assert_eq(refused.login_password, "Wlc123!@1234fsc")
+  assert_eq(refused.login_password, "synthetic-password-not-a-real-account")
   assert_true(
     refused.console.error_message.unwrap().contains("username or password"),
   )
@@ -840,6 +851,7 @@ test "logout clears authorities and loaded operator state" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -873,6 +885,7 @@ test "demo mode presents a read-only cluster snapshot" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -902,6 +915,7 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -947,6 +961,7 @@ test "demo mode previews every destructive node operation without mutation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -985,6 +1000,7 @@ test "demo mode exercises one-click preflight without controller mutation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1026,6 +1042,7 @@ test "the topology picker submits the admitted CX7 pair for one replica" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1097,6 +1114,7 @@ test "navigation clears stale operation notices and confirmation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1126,6 +1144,7 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1216,6 +1235,7 @@ test "contract approval and governance controls route through the operator shell
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1317,6 +1337,7 @@ test "model import polling is generation fenced and logout invalidates it" {
     model_import_poll_generation: 7L,
     cluster_poll_generation: 7L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1389,6 +1410,7 @@ test "cluster poll refreshes nodes only for the live generation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 3L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1597,6 +1619,7 @@ test "cluster poll failure retries quietly and stops on authorization loss" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 5L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1744,6 +1767,7 @@ test "alert window selection is carried on the operator model" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -1782,6 +1806,7 @@ fn deferred_read_test_model(route : @ui.OperatorRoute) -> AppModel {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
 }
@@ -2713,6 +2738,7 @@ test "demo mode previews the onboarding and runtime controls without mutation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
@@ -3017,6 +3043,7 @@ test "demo mode previews the catalog template form without mutation" {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)

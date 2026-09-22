@@ -60,6 +60,8 @@ pub fn OfflineCommerceConfirmation::not_equal(Self, Self) -> Bool
 pub fn OfflineCommerceConfirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceConsequentialAction {
+  PrepareTechnicalWorkspace(String, Int64)
+  AuthorizeTechnicalOrder(String, Int64, String, String, String, Int64)
   QuoteOrder(String, String, String, String)
   QuoteUndertakingOrder(String, String, String)
   BeginOrder(String, Int64)
@@ -94,6 +96,8 @@ pub(all) enum OfflineCommerceMessage {
   UndertakingQuantityChanged(String)
   TermsDigestChanged(String)
   EntitlementChanged(String)
+  TechnicalGrantChanged(String)
+  TechnicalTargetChanged(String)
   Refresh
   ClearNotice
 } derive(Eq)
@@ -117,6 +121,9 @@ pub(all) struct OfflineCommerceState {
   undertaking_quantity : String
   terms_digest : String
   entitlement_ref : String
+  technical_authorization : @offline.TechnicalAcceptanceAuthorization?
+  technical_grant_id : String
+  technical_target_ref : String
   confirmation : OfflineCommerceConfirmation?
   loading : Bool
   success_message : String?

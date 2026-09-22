@@ -15,10 +15,29 @@ pub async fn OfflineCommerceStore::authorize_technical_acceptance(
     return order
   }
   guard order.technical_acceptance_waiver is None &&
-    order.state == Quoted &&
+    (
+      order.state == Quoted ||
+      (
+        waiver.order_binding is Some(_) &&
+        order.state == PendingInternalApproval
+      )
+    ) &&
     order.generation == expected_generation &&
     order.agreement_ref is None &&
-    order.artifact_ids.is_empty() &&
+    (
+      order.artifact_ids.is_empty() ||
+      (
+        waiver.order_binding is Some(_) &&
+        order.artifact_ids.all(id => {
+          self.artifacts.get(id) is Some(artifact) &&
+          (
+            artifact.kind == EditableContractDocx ||
+            artifact.kind == QuoteScheduleXlsx ||
+            artifact.kind == PrintReadyContractPdf
+          )
+        })
+      )
+    ) &&
     order.entitlement_ref is None else {
     raise @offline.OfflineCommerceError::InvalidInput(
       "technical waiver requires a separate untouched quoted order",
@@ -49,6 +68,16 @@ pub async fn OfflineCommerceStore::authorize_technical_acceptance(
     state: UnderReconciliation,
     generation: order.generation + 1L,
     updated_unix_ms: waiver.issued_unix_ms,
+    expires_unix_ms: if waiver.order_binding is Some(_) {
+      // A 30-day draft deadline must never become a 30-day test entitlement.
+      if order.expires_unix_ms < waiver.expires_unix_ms {
+        order.expires_unix_ms
+      } else {
+        waiver.expires_unix_ms
+      }
+    } else {
+      order.expires_unix_ms
+    },
   }
   @offline.validate_order(updated)
   self.orders[order_id] = updated

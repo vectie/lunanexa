@@ -77,6 +77,11 @@ async fn ApiService::offline_execution_undertaking_allowed(
   order_id : String,
   now : Int64,
 ) -> Bool {
+  if snapshot.orders.iter().find_first(o => o.order_id == order_id)
+    is Some(order) &&
+    order.technical_acceptance_waiver is Some(_) {
+    return self.technical_documentary_waiver_allowed(order, now)
+  }
   guard self.contract_document_store is Some(documents) else { return true }
   for packet in documents.snapshot().packets {
     if packet.order_ref != order_id ||
@@ -180,29 +185,11 @@ async fn ApiService::execute_offline_activation(
   if technical_invalid {
     // A crash may have activated the lease before committing completion.
     // Revoke only the exact bound authority before terminally rejecting.
-    guard order.technical_acceptance_waiver is Some(w) &&
-      request.kind == WorkspaceLease &&
-      request.authority_target_ref == w.authority_target_ref &&
-      self.workspace_directory is Some(directory) else {
+    guard self.compensate_technical_target(order, request, now) else {
       return api_error(
         409, "TechnicalTargetMismatch", "technical recovery target cannot be verified",
         false,
       )
-    }
-    if directory.snapshot(now).leases
-      .iter()
-      .find_first(l => l.lease_id == w.authority_target_ref)
-      is Some(lease) {
-      guard lease.tenant_ref == order.tenant_ref &&
-        lease.subject_ref == order.purchaser_subject_ref else {
-        return api_error(
-          409, "TechnicalTargetMismatch", "technical recovery target binding changed",
-          false,
-        )
-      }
-      if lease.state != Revoked && lease.state != Expired {
-        ignore(directory.revoke_lease(lease.lease_id, now))
-      }
     }
   }
   if now >= order.expires_unix_ms || technical_invalid {

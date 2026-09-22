@@ -56,6 +56,7 @@ fn technical_waiver_fixture(
     reason: "isolated technical verification only",
     issued_unix_ms: 1200L,
     expires_unix_ms: 100000L,
+    order_binding: None,
   }
 }
 
@@ -161,5 +162,106 @@ async test "technical waiver persists without fabricating evidence and rejects c
     _ => ()
   } noraise {
     _ => fail("malformed technical target restored")
+  }
+}
+
+///|
+async test "explicit quoted-order extension preserves unpaid quote and narrows term across all entitlement kinds" {
+  for
+    kind in [@offline.WorkspaceLease, CapacityCommitment, ExclusiveMachineLease] {
+    let dir = @fs.tmpdir(prefix="technical-extension-")
+    defer @fs.rmdir(dir, recursive=true)
+    let path = dir + "/state.json"
+    let store = @store.OfflineCommerceStore::open(path)
+    let draft = {
+      ..order(
+        "offline-order-extension",
+        policy=technical_order_fixture().policy,
+      ),
+      agreement_ref: None,
+      expires_unix_ms: 3000000000L,
+    }
+    ignore(store.create_order(draft))
+    let quoted = store.quote_order(draft.order_id, quote(), "operator", 1100L)
+    let begun = store.begin_offline_execution(
+      draft.order_id,
+      quoted.generation,
+      1150L,
+    )
+    assert_eq(begun.state, PendingInternalApproval)
+    let binding : @offline.TechnicalAcceptanceOrderBinding = {
+      organization_id: begun.organization_id,
+      tenant_ref: begun.tenant_ref,
+      quote: begun.quote.unwrap(),
+      entitlement_kind: kind,
+    }
+    let waiver = {
+      ..technical_waiver_fixture(begun),
+      order_binding: Some(binding),
+    }
+    let accepted = store.authorize_technical_acceptance(
+      begun.order_id,
+      begun.generation,
+      waiver,
+    )
+    assert_eq(accepted.quote, begun.quote)
+    assert_true(accepted.quote.unwrap().total.minor_units > 0L)
+    assert_eq(accepted.expires_unix_ms, waiver.expires_unix_ms)
+    assert_eq(accepted.agreement_ref, None)
+    assert_eq(store.snapshot().reviews.length(), 0)
+    assert_eq(accepted.artifact_ids.length(), 0)
+    let a = {
+      ..activation(accepted, 1300L),
+      kind,
+      authority_target_ref: waiver.authority_target_ref,
+    }
+    @offline.validate_technical_activation(accepted, a, 1300L)
+    for
+      wrong in [
+        @offline.WorkspaceLease,
+        CapacityCommitment,
+        ExclusiveMachineLease,
+      ] {
+      if wrong != kind {
+        try
+          @offline.validate_technical_activation(
+            accepted,
+            { ..a, kind: wrong, },
+            1300L,
+          )
+        catch {
+          _ => ()
+        } noraise {
+          _ => fail("extension widened entitlement kind")
+        }
+      }
+    }
+    let changed = {
+      ..waiver,
+      order_binding: Some({ ..binding, tenant_ref: "other-tenant", }),
+    }
+    try
+      @offline.validate_technical_waiver({
+        ..accepted,
+        technical_acceptance_waiver: Some(changed),
+      })
+    catch {
+      _ => ()
+    } noraise {
+      _ => fail("extension rebound tenant")
+    }
+    let pending = store.fulfill(
+      accepted.order_id,
+      accepted.generation,
+      a,
+      1300L,
+    )
+    assert_eq(pending.state, FulfillmentPending)
+    assert_eq(
+      @store.OfflineCommerceStore::open(path).order_for_operator(
+        accepted.order_id,
+      ),
+      pending,
+    )
   }
 }

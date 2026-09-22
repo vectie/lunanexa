@@ -175,6 +175,14 @@ priv struct AccessPackageIntent {
 } derive(ToJson)
 
 ///|
+priv struct TechnicalPreparedTarget {
+  order_id : String
+  authority_target_ref : String
+  grant_id : String
+  expires_unix_ms : Int64
+} derive(FromJson)
+
+///|
 extend AccessPackageIntent with ToJson::{to_json}
 
 ///|
@@ -2072,6 +2080,27 @@ async fn load_console_commerce_reads(
       request("GET", endpoint, "/v1/offline-commerce/operator/readiness", token),
     ),
   )
+  let technical_read = parse_console_json(
+    request(
+      "GET", endpoint, "/v1/offline-commerce/operator/technical-acceptance-authorization",
+      token,
+    ),
+  )
+  let technical_scopes : Array[@offline.TechnicalAcceptanceAuthorization] = match
+    technical_read {
+    { "authorizations": values, .. } => @json.from_json(values)
+    _ => fail("invalid technical authorization read model")
+  }
+  let prepared_targets : Array[TechnicalPreparedTarget] = match technical_read {
+    { "prepared_targets": values, .. } => @json.from_json(values)
+    _ => []
+  }
+  let prepared_target = prepared_targets
+    .iter()
+    .find_first(t => {
+      technical_scopes.any(s => s.order_id == t.order_id) &&
+      t.expires_unix_ms > current_unix_ms()
+    })
   let portal_snapshot : @portal.PortalSnapshot? = try
     Some(
       @json.from_json(
@@ -2231,6 +2260,11 @@ async fn load_console_commerce_reads(
     offline_commerce: {
       ..@offline_commerce.default_state(locale, OperatorCommerce),
       orders: offline_snapshot.orders,
+      technical_authorization: technical_scopes.get(0),
+      technical_target_ref: prepared_target.map_or("", t => {
+        t.authority_target_ref
+      }),
+      technical_grant_id: prepared_target.map_or("", t => t.grant_id),
       reversals: offline_snapshot.reversals,
       artifacts: [
         for value in offline_snapshot.artifacts => {
@@ -2488,6 +2522,7 @@ priv struct AppModel {
   /// The operator login draft. The password stays in memory only: it is sent
   /// to the same-origin gateway and never written to a URL or browser storage.
   login_username : String
+  personal_login : Bool
   login_password : String
 } derive(Eq)
 
@@ -2502,6 +2537,7 @@ priv enum AppMessage {
   InferenceSubjectChanged(String)
   CommercialOrganizationChanged(String)
   LoginUsernameChanged(String)
+  PersonalLoginRequested
   LoginPasswordChanged(String)
   OperatorLoginSubmitted
   OperatorLoginRefused(@i18n.Locale, String)
@@ -4069,6 +4105,7 @@ fn update_live(
         // The session replaces the password, so the draft is dropped as soon
         // as it has served its purpose.
         login_password: "",
+        personal_login: false,
         console: {
           ..model.console,
           loading: true,
@@ -4079,6 +4116,15 @@ fn update_live(
       (next, load_command(next, emit))
     }
     GatewaySessionUnavailable => (model, @rabbita.none)
+    PersonalLoginRequested =>
+      (
+        {
+          ..model,
+          personal_login: true,
+          console: { ..model.console, loading: false, error_message: None, },
+        },
+        @rabbita.none,
+      )
     LoginUsernameChanged(value) =>
       ({ ..model, login_username: value, }, @rabbita.none)
     LoginPasswordChanged(value) =>
@@ -4611,19 +4657,24 @@ fn update_live(
       )
     Console(SubmitAccessPackage) => {
       let draft = model.console.access_package_draft
-      let body = AccessPackageIntent::{
-          identity_issuer: draft.identity_issuer.trim().to_owned(),
-          identity_subject: draft.identity_subject,
-          display_name: draft.display_name.trim().to_owned(),
-          email: draft.email.trim().to_owned(),
-          organization_id: draft.organization_id.trim().to_owned(),
-          tenant_ref: draft.tenant_ref.trim().to_owned(),
-          template_id: "webide-developer",
-          lifetime_days: draft.lifetime_days,
-          identity_verified: draft.identity_verified,
+      let intent = AccessPackageIntent::{
+        identity_issuer: draft.identity_issuer.trim().to_owned(),
+        identity_subject: draft.identity_subject,
+        display_name: draft.display_name.trim().to_owned(),
+        email: draft.email.trim().to_owned(),
+        organization_id: draft.organization_id.trim().to_owned(),
+        tenant_ref: draft.tenant_ref.trim().to_owned(),
+        template_id: "webide-developer",
+        lifetime_days: draft.lifetime_days,
+        identity_verified: draft.identity_verified,
+      }.to_json()
+      let body = match intent {
+        Object(fields) if draft.lifetime_days == 0 => {
+          fields["lifetime_minutes"] = 60
+          Json::object(fields).stringify()
         }
-        .to_json()
-        .stringify()
+        _ => intent.stringify()
+      }
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           ignore(
@@ -8193,6 +8244,42 @@ fn update_live(
         .trim()
         .to_owned()
       let request_spec : OfflineActionRequest = match action {
+        PrepareTechnicalWorkspace(order_id, generation) =>
+          {
+            path: "/v1/offline-commerce/operator/technical-acceptance-targets",
+            body: (
+              { "order_id": order_id, "expected_generation": generation } : Json).stringify(),
+            english_success: "Limited workspace grant prepared; lease remains requested, not active.",
+            chinese_success: "限时工作区授权已准备；租约仍待开通，尚未激活。",
+          }
+        AuthorizeTechnicalOrder(
+          order_id,
+          generation,
+          target,
+          grant,
+          reference,
+          expires
+        ) => {
+          let value : Json = {
+            "order_id": order_id,
+            "expected_generation": generation,
+            "waiver_id": "technical-waiver-" + order_id,
+            "authority_target_ref": target,
+            "grant_id": grant,
+            "expires_unix_ms": expires,
+            "user_authorization_ref": reference,
+            "reason": "Unsigned, unpaid, non-commercial UI acceptance; existing grants and automatic expiry remain mandatory.",
+          }
+          if expires == 0L && value is Object(fields) {
+            fields.remove("expires_unix_ms")
+          }
+          {
+            path: "/v1/offline-commerce/operator/technical-acceptance-waivers",
+            body: value.stringify(),
+            english_success: "Limited test waiver recorded. Unsigned and unpaid; resources are not activated yet.",
+            chinese_success: "已记录限定测试豁免：未签署、未付款；资源尚未开通。",
+          }
+        }
         QuoteUndertakingOrder(order_id, term, quantity) => {
           guard selected_offline_order(model.console.offline_commerce, order_id)
             is Some(order) else {
@@ -8393,21 +8480,28 @@ fn update_live(
           }
         }
         FulfillVerifiedOrder(order_id, generation) => {
+          let waiver = selected_offline_order(
+            model.console.offline_commerce,
+            order_id,
+          ).bind(order => order.technical_acceptance_waiver)
           let value : OfflineFulfillmentAction = {
             order_id,
             expected_generation: generation,
             activation_id: random_identifier("offline-activation"),
             idempotency_key: random_identifier("offline-activate"),
-            entitlement_kind: ExclusiveMachineLease,
-            authority_target_ref: model.console.offline_commerce.entitlement_ref
-            .trim()
-            .to_owned(),
+            entitlement_kind: waiver.map_or(ExclusiveMachineLease, w => {
+              w.entitlement_kind()
+            }),
+            authority_target_ref: waiver.map_or(
+              model.console.offline_commerce.entitlement_ref.trim().to_owned(),
+              w => w.authority_target_ref,
+            ),
           }
           {
             path: "/v1/offline-commerce/operator/fulfillments",
             body: value.to_json().stringify(),
-            english_success: "All policy evidence passed; entitlement activation is pending authority confirmation.",
-            chinese_success: "全部策略凭证已通过；权益激活正在等待授权方确认。",
+            english_success: "Entitlement request accepted; activation is pending authority confirmation. A technical waiver does not imply payment or signing.",
+            chinese_success: "权益申请已受理，正在等待授权方确认；技术豁免不代表已付款或签署。",
           }
         }
         CancelOrder(order_id, generation) => {
@@ -9005,6 +9099,9 @@ fn app_view(
   // the login form. Without this the console falls back to the login view the
   // moment any background read reports an authentication failure, even though
   // the gateway is still attaching operator authority to each request.
+  if model.personal_login {
+    return login_view(model, emit)
+  }
   if !model.demo_mode && !model.console.operator_authenticated {
     if model.console.loading || deployment_console_open() {
       // Progress while the first read is in flight. The reason is carried
@@ -9197,6 +9294,18 @@ fn app_view(
             ),
           ]),
           @html.div(class="connection-actions", [
+            if !model.credential.has_prefix("lnxs_") {
+              @html.button(
+                type_="button",
+                class="primary-button",
+                on_click=emit(PersonalLoginRequested),
+                console_copy(
+                  locale, "Sign in as a named operator", "以个人管理员账户登录",
+                ),
+              )
+            } else {
+              @html.nothing
+            },
             @html.span(
               class="secondary",
               console_copy(
@@ -9626,6 +9735,7 @@ fn main {
     model_import_poll_generation: 0L,
     cluster_poll_generation: 0L,
     login_username: "",
+    personal_login: false,
     login_password: "",
   }
   @rabbita.new(fn() {

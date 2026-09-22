@@ -3,7 +3,13 @@ pub fn ApiService::with_technical_acceptance_authorization(
   self : ApiService,
   authorization : @offline.TechnicalAcceptanceAuthorization,
 ) -> ApiService raise Failure {
-  guard authorization.order_id.has_prefix("technical-acceptance-") &&
+  guard (
+      authorization.order_id.has_prefix("technical-acceptance-") ||
+      (
+        authorization.order_binding is Some(_) &&
+        authorization.order_id.has_prefix("offline-order-")
+      )
+    ) &&
     authorization.purchaser_subject_ref.has_prefix("subject-") &&
     !authorization.user_authorization_ref.is_empty() &&
     authorization.expires_unix_ms > 0L else {
@@ -24,6 +30,7 @@ fn ApiService::technical_scope_allows(
   scope.order_id == order.order_id &&
   scope.purchaser_subject_ref == order.purchaser_subject_ref &&
   scope.user_authorization_ref == reference &&
+  scope.order_binding.map_or(true, binding => binding.matches_order(order)) &&
   now < scope.expires_unix_ms &&
   expires <= scope.expires_unix_ms
 }
@@ -35,7 +42,7 @@ priv struct TechnicalWaiverIntent {
   waiver_id : String
   authority_target_ref : String
   grant_id : String
-  expires_unix_ms : Int64
+  expires_unix_ms : Int64?
   user_authorization_ref : String
   reason : String
 } derive(FromJson)
@@ -52,7 +59,14 @@ async fn ApiService::technical_identity(
   guard accounts.views().iter().find_first(a => a.subject_ref == subject)
     is Some(a) &&
     a.state == Active &&
-    a.email.has_prefix("technical-") &&
+    (
+      a.email.has_prefix("technical-") ||
+      (
+        self.technical_acceptance_authorization
+        is Some({ purchaser_subject_ref: bound, order_binding: Some(_), .. }) &&
+        bound == subject
+      )
+    ) &&
     a.identity_issuer.has_prefix("https://") &&
     !a.identity_receipt.is_empty() &&
     accounts
@@ -76,6 +90,7 @@ async fn ApiService::technical_workspace_bound(
   expires : Int64,
   now : Int64,
   allow_active : Bool,
+  kind? : @offline.EntitlementKind = WorkspaceLease,
 ) -> Bool {
   guard self.workspace_directory is Some(directory) else { return false }
   let s = directory.snapshot(now)
@@ -92,21 +107,49 @@ async fn ApiService::technical_workspace_bound(
       g.state == GrantActive &&
       g.starts_unix_ms <= now &&
       g.expires_unix_ms >= expires
-    }) &&
-    s.leases.any(l => {
-      l.lease_id == target &&
-      l.subject_ref == user.subject_ref &&
-      l.tenant_ref == order.tenant_ref &&
-      l.access == Developer &&
-      (l.state == Requested || (allow_active && l.state == Active)) &&
-      l.expires_unix_ms <= expires &&
-      l.expires_unix_ms <= order.expires_unix_ms &&
-      l.expires_unix_ms > now &&
-      l.expires_unix_ms - l.starts_unix_ms <= 3600000L
     }) else {
     return false
   }
-  true
+  match kind {
+    WorkspaceLease =>
+      s.leases.any(l => {
+        l.lease_id == target &&
+        l.subject_ref == user.subject_ref &&
+        l.tenant_ref == order.tenant_ref &&
+        l.access == Developer &&
+        (l.state == Requested || (allow_active && l.state == Active)) &&
+        l.expires_unix_ms <= expires &&
+        l.expires_unix_ms <= order.expires_unix_ms &&
+        l.expires_unix_ms > now &&
+        l.expires_unix_ms - l.starts_unix_ms <= 3600000L
+      })
+    ExclusiveMachineLease => {
+      guard self.exclusive_lease_store is Some(leases) &&
+        leases.lease(target) is Some(l) else {
+        return false
+      }
+      l.intent.subject_ref == user.subject_ref &&
+      (
+        l.state == Reserved ||
+        (allow_active && (l.state == Provisioning || l.state == Active))
+      ) &&
+      l.intent.expires_unix_ms > now &&
+      l.intent.expires_unix_ms <= expires &&
+      l.intent.expires_unix_ms <= order.expires_unix_ms &&
+      l.intent.expires_unix_ms - l.intent.starts_unix_ms <= 3600000L
+    }
+    CapacityCommitment =>
+      self.commercial_store.snapshot(order.organization_id).commitments.any(c => {
+        c.commitment_id == target &&
+        c.organization_id == order.organization_id &&
+        c.approved_by is Some(_) &&
+        (c.state == Approved || (allow_active && c.state == ActiveCommitment)) &&
+        c.effective_until_unix_ms > now &&
+        c.effective_until_unix_ms <= expires &&
+        c.effective_until_unix_ms <= order.expires_unix_ms &&
+        c.effective_until_unix_ms - c.effective_from_unix_ms <= 3600000L
+      })
+  }
 }
 
 ///|
@@ -117,6 +160,10 @@ async fn ApiService::technical_activation_allowed(
   now : Int64,
 ) -> Bool {
   guard order.technical_acceptance_waiver is Some(w) else { return true }
+  guard self.technical_acceptance_authorization is Some(scope) &&
+    scope.order_binding == w.order_binding else {
+    return false
+  }
   if !self.technical_scope_allows(
       order,
       w.user_authorization_ref,
@@ -141,6 +188,7 @@ async fn ApiService::technical_activation_allowed(
     w.expires_unix_ms,
     now,
     true,
+    kind=w.entitlement_kind(),
   )
 }
 
@@ -165,10 +213,29 @@ async fn ApiService::authorize_technical_waiver(
   }
   let now = @async.now()
   let order = store.order_for_operator(intent.order_id)
+  // UI callers bind to the existing target's expiry, not a new browser clock
+  // deadline. An exact retry must retain the original waiver lifetime.
+  let expires = match intent.expires_unix_ms {
+    Some(value) => value
+    None =>
+      match order.technical_acceptance_waiver {
+        Some(w) => w.expires_unix_ms
+        None =>
+          match
+            self.technical_target_expiry(order, intent.authority_target_ref) {
+            Some(value) => value
+            None =>
+              return api_error(
+                409, "TechnicalAuthorityRequired", "an existing approved resource target is required",
+                false,
+              )
+          }
+      }
+  }
   if !self.technical_scope_allows(
       order,
       intent.user_authorization_ref,
-      intent.expires_unix_ms,
+      expires,
       now,
     ) {
     return api_error(
@@ -182,7 +249,7 @@ async fn ApiService::authorize_technical_waiver(
     if w.waiver_id == intent.waiver_id &&
       w.authority_target_ref == intent.authority_target_ref &&
       w.grant_id == intent.grant_id &&
-      w.expires_unix_ms == intent.expires_unix_ms &&
+      w.expires_unix_ms == expires &&
       w.user_authorization_ref == intent.user_authorization_ref &&
       w.reason == intent.reason &&
       w.operator_account_id == operator.account.account_id {
@@ -199,9 +266,12 @@ async fn ApiService::authorize_technical_waiver(
       order,
       intent.authority_target_ref,
       intent.grant_id,
-      intent.expires_unix_ms,
+      expires,
       now,
       false,
+      kind=self.technical_acceptance_authorization.map_or(WorkspaceLease, scope => {
+        scope.order_binding.map_or(WorkspaceLease, b => b.entitlement_kind)
+      }),
     ) else {
     return api_error(
       409, "TechnicalAuthorityRequired", "actual OIDC identity and exact administrator-approved requested workspace are required",
@@ -229,7 +299,10 @@ async fn ApiService::authorize_technical_waiver(
     user_authorization_ref: intent.user_authorization_ref,
     reason: intent.reason,
     issued_unix_ms: now,
-    expires_unix_ms: intent.expires_unix_ms,
+    expires_unix_ms: expires,
+    order_binding: self.technical_acceptance_authorization.map_or(None, scope => {
+      scope.order_binding
+    }),
   }
   json_reply(
     201,

@@ -57,6 +57,7 @@ async test "technical waiver requires live operator session and actual purchaser
     purchaser_subject_ref: order.purchaser_subject_ref,
     user_authorization_ref: "explicit-user-authorization",
     expires_unix_ms: now + 60000L,
+    order_binding: None,
   })
   assert_true(
     scoped.technical_scope_allows(
@@ -162,4 +163,78 @@ async test "technical waiver requires live operator session and actual purchaser
     accounts.revoke_session(purchaser.session.session_id, "purchaser", now + 1L),
   )
   assert_true(service.technical_identity("purchaser", now + 2L) is None)
+}
+
+///|
+async test "extended authorization binds the exact ordinary order tenant quote and subject" {
+  let dir = @fs.tmpdir(prefix="technical-extension-scope-")
+  defer @fs.rmdir(dir, recursive=true)
+  let (service, store, _, _) = contract_bridge_fixture(dir)
+  let previous = store.snapshot().orders[0]
+  let order = { ..previous, order_id: "offline-order-explicit-test", }
+  let now = @async.now()
+  let binding : @offline.TechnicalAcceptanceOrderBinding = {
+    tenant_ref: order.tenant_ref,
+    organization_id: order.organization_id,
+    quote: order.quote.unwrap(),
+    entitlement_kind: WorkspaceLease,
+  }
+  let scope : @offline.TechnicalAcceptanceAuthorization = {
+    order_id: order.order_id,
+    purchaser_subject_ref: order.purchaser_subject_ref,
+    user_authorization_ref: "explicit-current-order-user-approval",
+    expires_unix_ms: now + 3600000L,
+    order_binding: Some(binding),
+  }
+  let scoped = service.with_technical_acceptance_authorization(scope)
+  assert_true(
+    scoped.technical_scope_allows(
+      order,
+      scope.user_authorization_ref,
+      now + 60000L,
+      now,
+    ),
+  )
+  for
+    changed in [
+      { ..order, order_id: "offline-order-other", },
+      { ..order, tenant_ref: "other-tenant", },
+      { ..order, organization_id: "other-org", },
+      { ..order, purchaser_subject_ref: "subject-other", },
+      { ..order, quote: None, },
+      { ..order, quote: Some({ ..binding.quote, version: "changed", }), },
+    ] {
+    assert_false(
+      scoped.technical_scope_allows(
+        changed,
+        scope.user_authorization_ref,
+        now + 60000L,
+        now,
+      ),
+    )
+  }
+  assert_false(
+    scoped.technical_scope_allows(
+      order,
+      "different-approval",
+      now + 60000L,
+      now,
+    ),
+  )
+  assert_false(
+    scoped.technical_scope_allows(
+      order,
+      scope.user_authorization_ref,
+      now + 3600001L,
+      now,
+    ),
+  )
+  assert_false(
+    scoped.technical_scope_allows(
+      order,
+      scope.user_authorization_ref,
+      now + 3600000L,
+      now + 3600000L,
+    ),
+  )
 }

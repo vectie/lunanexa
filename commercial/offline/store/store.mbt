@@ -447,7 +447,7 @@ fn OfflineCommerceStore::restore(
     let owner = self.orders[activation.order_id]
     if owner.technical_acceptance_waiver is Some(w) &&
       (
-        activation.kind != WorkspaceLease ||
+        activation.kind != w.entitlement_kind() ||
         activation.authority_target_ref != w.authority_target_ref ||
         activation.organization_id != owner.organization_id ||
         activation.purchaser_subject_ref != owner.purchaser_subject_ref

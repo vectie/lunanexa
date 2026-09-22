@@ -18,8 +18,22 @@ priv struct WebIdeAccessPackageIntent {
   tenant_ref : String
   template_id : String
   lifetime_days : Int
+  lifetime_minutes : Int?
   identity_verified : Bool
 } derive(FromJson)
+
+///|
+/// Legacy day-based callers remain unchanged. A sub-day preset is explicit;
+/// zero days by itself is never an unlimited or valid access lifetime.
+fn WebIdeAccessPackageIntent::duration_ms(
+  self : WebIdeAccessPackageIntent,
+) -> Int64 {
+  match (self.lifetime_days, self.lifetime_minutes) {
+    (0, Some(60)) => 3600000L
+    (days, None) if days > 0 && days <= 365 => days.to_int64() * 86400000L
+    _ => 0L
+  }
+}
 
 ///|
 fn decode_webide_access_package(body : String) -> WebIdeAccessPackageIntent? {
@@ -69,7 +83,7 @@ fn access_onboarding_intent(
     grant_id: "grant-\{fingerprint}",
     lease_id: "lease-\{fingerprint}",
     identity_receipt: "oidc-verified-\{fingerprint}",
-    expires_unix_ms: now + request.lifetime_days.to_int64() * 86400000L,
+    expires_unix_ms: now + request.duration_ms(),
   }
 }
 
@@ -77,8 +91,7 @@ fn access_onboarding_intent(
 fn valid_access_onboarding_request(intent : WebIdeAccessPackageIntent) -> Bool {
   intent.identity_verified &&
   intent.template_id == "webide-developer" &&
-  intent.lifetime_days > 0 &&
-  intent.lifetime_days <= 365 &&
+  intent.duration_ms() > 0L &&
   safe_identity_value(intent.identity_issuer, 512) &&
   safe_identity_value(intent.identity_subject, 1024) &&
   safe_identity_value(intent.display_name, 128) &&
@@ -108,8 +121,7 @@ fn same_access_onboarding_terms(
   intent.email == request.email &&
   intent.organization_id == request.organization_id &&
   intent.tenant_ref == request.tenant_ref &&
-  intent.expires_unix_ms - record.created_unix_ms ==
-  request.lifetime_days.to_int64() * 86400000L
+  intent.expires_unix_ms - record.created_unix_ms == request.duration_ms()
 }
 
 ///|
@@ -669,7 +681,7 @@ async fn ApiService::execute_webide_access_package(
             user_id,
             tenant_ref: intent.tenant_ref,
             access: Developer,
-            starts_unix_ms: now - 1000L,
+            starts_unix_ms: now,
             expires_unix_ms: expires,
             state: GrantActive,
             policy_receipt: "access-package-\{fingerprint}",
@@ -742,7 +754,7 @@ async fn ApiService::execute_webide_access_package(
                 },
               ],
             },
-            starts_unix_ms: now - 1000L,
+            starts_unix_ms: now,
             expires_unix_ms: expires,
             state: Requested,
             policy_receipt: "access-package-\{fingerprint}",
