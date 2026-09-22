@@ -624,7 +624,7 @@ fn enterprise_copy(
       @i18n.copy(locale, "Open lease requests", "待处理租用申请")
     OperatorReviewQueue =>
       @i18n.copy(locale, "Operator review queue", "运维审核队列")
-    ModelsEntitled => @i18n.copy(locale, "Models entitled", "可用模型")
+    ModelsEntitled => @i18n.copy(locale, "Catalog models", "目录模型")
     SharedCentralCatalog =>
       @i18n.copy(locale, "Shared central catalog", "中央共享目录")
     CurrentSpend => @i18n.copy(locale, "Current spend", "当前支出")
@@ -633,10 +633,13 @@ fn enterprise_copy(
     LeaseReadiness =>
       @i18n.copy(locale, "Lease readiness", "租用准备流程")
     EnterpriseVerified =>
-      @i18n.copy(locale, "Enterprise verified", "企业已验证")
+      @i18n.copy(
+        locale, "Register and verify your organization", "注册并核验企业",
+      )
     OrganizationMembershipAndSignerAuthorityRecorded =>
       @i18n.copy(
-        locale, "Organization membership and signer authority recorded.", "组织成员身份与签署权限已记录。",
+        locale, "Create or join a customer organization in self-service. Trial access is not enterprise verification.",
+        "请在自助开通中创建或加入企业；试用权限不代表企业已核验。",
       )
     ExecuteRequiredAgreements =>
       @i18n.copy(locale, "Execute required agreements", "签署必需协议")
@@ -1361,11 +1364,11 @@ fn enterprise_copy(
     CountryCode => @i18n.copy(locale, "Country code", "国家代码")
     RegistrationNumberOptional =>
       @i18n.copy(
-        locale, "Registration number (optional)", "注册号（可选）",
+        locale, "Registration number (companies: provide this or tax ID)", "注册号（企业须与税号至少填一项）",
       )
     TaxOrRegistrationIdOptional =>
       @i18n.copy(
-        locale, "Tax or registration ID (optional)", "税号或注册号（可选）",
+        locale, "Tax ID (companies: provide this or registration number)", "税号（企业须与注册号至少填一项）",
       )
     RegisteredAddress =>
       @i18n.copy(locale, "Registered address", "注册地址")

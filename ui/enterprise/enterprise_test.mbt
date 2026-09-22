@@ -297,6 +297,22 @@ test "free trial shows one clear action, limits, and no machine promise" {
   assert_true(overview.contains("100"))
   assert_true(overview.contains("text.qwen"))
   assert_true(overview.contains("never grants SSH or exclusive machine access"))
+  let onboarding = { ..state, trial: Some(trial), }.update(
+    SelfService(SelectProduct(BareGpu)),
+  )
+  assert_true(onboarding.self_service.step is Organization)
+  let onboarding_html = @enterprise.render(onboarding)
+  assert_true(onboarding_html.contains("Create a company or join one"))
+  assert_false(onboarding_html.contains("Organization ready"))
+  let expired_onboarding = {
+    ..state,
+    trial: Some({ ..trial, revoked_unix_ms: Some(1L), }),
+  }.update(SelfService(SelectProduct(DedicatedMaaS)))
+  assert_true(expired_onboarding.self_service.step is Organization)
+  let shared = { ..state, trial: Some(trial), }.update(
+    SelfService(SelectProduct(SharedMaaS)),
+  )
+  assert_true(shared.self_service.step is Capacity)
   let account = @enterprise.render({
     ..state,
     route: AccountAccess,
@@ -516,8 +532,19 @@ test "company form validation is bounded and requires legal contact facts" {
     registered_address: "100 Science Road, Beijing",
     billing_contact_name: "Alice Chen",
     billing_email: "alice@example.invalid",
+    registration_number: "TEST-ONLY-REGISTRATION",
   }
   assert_true(@enterprise.company_creation_valid(ready))
+  assert_false(
+    @enterprise.company_creation_valid({ ..ready, registration_number: "", }),
+  )
+  assert_true(
+    @enterprise.company_creation_valid({
+      ..ready,
+      registration_number: "",
+      subject_kind: "Individual",
+    }),
+  )
   assert_false(
     @enterprise.company_creation_valid({ ..ready, billing_email: "invalid", }),
   )
@@ -737,6 +764,9 @@ test "organization selection is explicit and drives the scoped request header" {
   )
   assert_eq(selected.project_id, "project-moonlab")
   assert_eq(selected.self_service.project_id, "project-moonlab")
+  assert_eq(selected.offline_commerce.project_id, "project-moonlab")
+  assert_eq(selected.offline_commerce.orders.length(), 0)
+  assert_eq(selected.offline_commerce.selected_order_id, None)
 }
 
 ///|

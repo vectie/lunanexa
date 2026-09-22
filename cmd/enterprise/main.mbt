@@ -5463,8 +5463,11 @@ fn update(
             None => desktop_client.get(0)
           },
           project_id: match active_trial {
-            Some(value) => value.project_id
-            None => model.portal.project_id
+            Some(value) if @enterprise_ui.selected_organization_header(
+                model.portal,
+              ) ==
+              Some(value.organization_id) => value.project_id
+            _ => model.portal.project_id
           },
           notifications,
           notification_preferences,
