@@ -1,0 +1,55 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kubectl(config : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", config, "-n", "lunanexa"] + args,
+  ).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, config, root] else {
+    fail(
+      "Usage: capture-h3-runtime-patches.mbtx KUBECONFIG NEW_PATCH_DIRECTORY",
+    )
+  }
+  @fs.mkdir(root, permission=0o700)
+  for
+    (map, filename) in [
+      ("minimaxh3-sm121-patch", "minimax_h3_transformer.py"),
+      ("minimaxh3-serving-video-patch", "serving_video.py"),
+      ("minimaxh3-progress-patch", "progress_bar.py"),
+    ] {
+    let value = @json.parse(
+      kubectl(config, ["get", "configmap", map, "-o", "json"]),
+    )
+    guard value is { "data": Object(data), .. } &&
+      data.get(filename) is Some(String(source)) else {
+      fail("Expected explicit runtime patch")
+    }
+    @fs.write_file(root + "/" + filename, source, create_mode=CreateNew)
+  }
+  let api_server = kubectl(config, [
+    "exec", "deploy/minimaxh3-fl2va", "--", "cat", "/usr/local/lib/python3.12/dist-packages/vllm_omni/entrypoints/openai/api_server.py",
+  ])
+  guard api_server.contains("_live_video_progress") &&
+    api_server.contains("min(80, round(100 * done / total))") else {
+    fail("Expected reviewed live progress implementation")
+  }
+  @fs.write_file(root + "/api_server.py", api_server, create_mode=CreateNew)
+  // Only the four explicit source files are read; no environment or secret data.
+  println(
+    "Captured four explicit H3 runtime Python sources; no deployment changes",
+  )
+}
