@@ -1961,7 +1961,7 @@ and requested compute lease as one resumable package"，分 4 步：
 | F | 试用租户被给了**永远只能 403** 的动作（`Review price`），提示却是"重试" | 中 | 未修（§12.7） |
 | G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | 未修（§12.7） |
 | H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄 | 中 | 未修（§12.10） |
-| I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | 未修（§12.7 附近） |
+| I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
 
 **修掉的四个（A–D）都在关键路径上**：不修 A，企业侧连订单都建不出来；不修 B，任何失败都表现为"按钮坏了"；
 不修 C，后面所有前端修复都到不了浏览器；不修 D，登录九次之后整条链连入口都没有。
@@ -2350,3 +2350,27 @@ Production readiness gates 一节列了十项，和 §12.4 里那 17 条 blocker
 在这之前，文档的原话是：**"the platform may demonstrate state transitions locally but must not
 represent the generated packet or uploaded evidence as legally executed or financially settled."**
 —— 也就是说，本报告没有把任何东西说成"已合法签署/已结算"，第 3–6 步保持"不可达"是**正确的状态**。
+
+### 12.13 堵点 I 已修：冻结报价的确认框现在说出金额
+
+原文案（点 `Quote undertaking tariff` 之后弹出的确认框）：
+
+```
+CONSEQUENTIAL ACTION
+Freeze this immutable quote?
+…
+offline-order-d916b5b4-… · quarter × 1          ← 只有档位和台数，没有价格
+[Go back]  [Confirm with this evidence]
+```
+
+这是个**价格动作**，而屏幕上从来没出现过价格。现在改成（浏览器实测）：
+
+```
+offline-order-d916b5b4-… · quarter × 1 · CNY 3600
+```
+
+金额用**同一份共享档位表**（§12.9 的 `undertaking_term_tiers`）乘以屏幕上填的台数算出来，
+不另外写死数字；台数不是数字时**不显示金额**，而不是显示一个没人填过的总额。
+顺带确认共享档位仍然生效：这个订单是客户按 `quarter` 申请的，运营侧打开时下拉就在 `quarter`。
+
+测试：`ui/offline_commerce` 14/14、`cmd/console` 63/63、`cmd/enterprise` 28/28。
