@@ -1,5 +1,9 @@
 # Public UI undertaking reconciliation — in progress
 
+Latest checkpoint: the user completed test-account registration successfully.
+An ordinary trial session is now available. Company onboarding, not password
+entry, is the current acceptance blocker; the nine-step chain is not complete.
+
 Scope: enterprise `http://106.39.18.146:5002/enterprise/` and Operator
 `http://106.39.18.146:4174/console/`. Business actions and acceptance use the
 browser UI only. The owner subsequently clarified that source fixes, tests and
@@ -107,3 +111,56 @@ These tests do not establish completion of the nine-step public UI journey.
   the identity-provider rejection with explicit minimum length, character-class
   and identity-content rules. This is a verified negative registration case,
   not a successful registration and not grounds to weaken password policy.
+
+## Resumed trial-account acceptance
+
+1. User completed registration; enterprise portal shows the named test user and
+   a bounded trial membership (100 requests, text.qwen, 24 hours).
+2. Clicked Chinese locale, `自助开通`, bare GPU `选择此服务`: incorrectly
+   skipped organization creation and opened capacity configuration.
+3. Clicked `账户与 API 密钥`: trial membership visible, no company creation.
+4. Clicked `订单与材料`: no orders; project/service/SLA require raw input and
+   draft creation is disabled without a project. No order was submitted.
+5. Returned to `自助开通`, clicked `返回`: trial organization incorrectly
+   displayed as `组织已就绪`; company form was unreachable.
+6. Fixed the shared UI predicate to distinguish trial membership from customer
+   membership, including expired/revoked trials. Shared MaaS retains its direct
+   trial path. Removed unconditional enterprise-verification wording and
+   clarified that catalog counts are not entitled-model counts.
+7. Regression results: enterprise UI 38/38 and enterprise browser controller
+   32/32 JS tests pass. No authority, contract or machine admission bypass added.
+8. Public r5 UI exposes the company form. Entered explicitly non-real technical
+   test entity and address, existing test email; left optional identifiers blank.
+   `创建公司` failed (HTTP 400). Backend requires at least one company registration
+   or tax identifier although both UI labels said optional. Fixed labels,
+   validation and legal-name/address maximum lengths; individual remains optional.
+9. Entered `TEST-ONLY-UI-20260922` as the clearly synthetic registration reference
+   and clicked `创建公司`. Success: organization
+   `organization-403efe8d5588af18406b8123f28a2d70`, pending verification. UI explicitly
+   reports provider unavailable and keeps prepaid machine ordering closed.
+10. Operator: `成本中心` → expand controller connection → enter this visible
+    organization ID → `刷新`. Final state confirms one Default cost center and
+    one project for the same organization. Initial transient read failure cleared;
+    this is not an empty organization.
+11. Enterprise `订单与材料` still required manual project ID despite the created
+    default project. Fixed organization switching to initialize its order draft
+    and clear previous organization order/artifact selection. Also stopped active
+    trial data overwriting the selected customer's project ID.
+12. Deployed r6 image `sha256:9819c8f536646b5b4be29f2270157747b45b9e3885fb89d4e3e3462b215e99e5`.
+    Public reload preserves the signed-in session and selected enterprise. Order
+    form now automatically shows its correct project. Selected `1 天 · 49 元`
+    and clicked `创建订单草稿`: success, generation 1, order
+    `offline-order-4e349988-6b8b-4f80-9492-9dab2b40b0cc`.
+13. Operator `线下商务` → `刷新` → this exact order: both sides agree on Draft,
+    project and generation 1. Tariff shows one day/49 CNY as selected by customer.
+    Clicked `按承诺函价目报价` → reviewed one day × one device/49 CNY → confirmation.
+    Order becomes Quoted, generation 2. No customer acceptance, payment or legal
+    execution was performed.
+14. Confirmed another friction point: management refresh after mutation switches
+    selection to the first historical order. Re-selected the exact new order
+    before proceeding; historical orders were not mutated.
+15. Clicked `启动流程` → reviewed generation 2 → confirmation: UI reports workflow
+    started. This requests internal review, not approval or resource activation.
+16. Latest regression: 70 JS tests (38 UI + 32 browser), 1142 native tests passed;
+    native deny-warning check passed. Temporary image-builder pod deleted;
+    rollback image and private deployment backups retained.

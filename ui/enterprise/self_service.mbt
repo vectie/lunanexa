@@ -435,13 +435,18 @@ fn SelfServiceState::update(
 ///|
 pub fn company_creation_valid(state : SelfServiceState) -> Bool {
   state.legal_name.trim() != "" &&
-  state.legal_name.length() <= 256 &&
+  state.legal_name.length() <= 240 &&
   state.display_name.trim() != "" &&
   state.display_name.length() <= 128 &&
   (state.subject_kind == "Company" || state.subject_kind == "Individual") &&
+  (
+    state.subject_kind == "Individual" ||
+    state.registration_number.trim() != "" ||
+    state.tax_identifier.trim() != ""
+  ) &&
   state.country_region.trim().length() == 2 &&
   state.registered_address.trim() != "" &&
-  state.registered_address.length() <= 512 &&
+  state.registered_address.length() <= 500 &&
   state.billing_contact_name.trim() != "" &&
   state.billing_contact_name.length() <= 128 &&
   state.billing_email.trim().contains("@") &&
@@ -669,12 +674,24 @@ fn self_service_progress(state : EnterpriseState) -> @rabbita.Html {
 }
 
 ///|
+fn has_customer_membership(state : EnterpriseState) -> Bool {
+  guard state.membership is Some(membership) && membership.active else {
+    return false
+  }
+  // Trial membership authorizes bounded shared inference, not a customer entity.
+  match state.trial {
+    Some(trial) if trial.organization_id == membership.organization_id => false
+    _ => true
+  }
+}
+
+///|
 fn organization_step(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   match state.membership {
-    Some(membership) if membership.active => {
+    Some(membership) if has_customer_membership(state) => {
       let selected = state.organizations
         .iter()
         .find_first(value => {

@@ -913,8 +913,7 @@ pub fn EnterpriseState::update(
       }
     SelfService(SelectProduct(product)) => {
       let selected = self.self_service.update(SelectProduct(product))
-      let organization_ready = self.membership is Some(membership) &&
-        membership.active
+      let organization_ready = has_customer_membership(self)
       {
         ..self,
         route: SelfService,
@@ -945,6 +944,13 @@ pub fn EnterpriseState::update(
             membership: Some(value.membership),
             selected_organization_id: Some(organization_id),
             project_id,
+            offline_commerce: {
+              ..self.offline_commerce,
+              project_id,
+              orders: [],
+              artifacts: [],
+              selected_order_id: None,
+            },
             self_service: {
               ..self.self_service,
               project_id,
@@ -1673,7 +1679,7 @@ fn overview_view(
     @html.section(class="workflow-panel", [
       @html.h2(enterprise_copy(state.locale, LeaseReadiness)),
       @html.ol(class="workflow-steps", [
-        @html.li(class="is-complete", [
+        @html.li(class="", [
           @html.span("1"),
           @html.div([
             @html.strong(enterprise_copy(state.locale, EnterpriseVerified)),
