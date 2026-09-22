@@ -34,6 +34,10 @@ META = re.compile(
     r'(<meta\s+name="lunanexa-public-http-origin"\s+content=")([^"]*)(")'
 )
 
+OPEN_META = re.compile(
+    r'(<meta\s+name="lunanexa-operator-open"\s+content=")([^"]*)(")'
+)
+
 
 def checked_origin(value):
     """An exact origin: scheme, host, optional port. No path, query or fragment."""
@@ -45,6 +49,39 @@ def checked_origin(value):
     if parts.path not in ("", "/") or parts.query or parts.fragment:
         raise ValueError("origin must not carry a path or parameters: %s" % value)
     return "%s://%s" % (parts.scheme, parts.netloc)
+
+
+def checked_open_value(value):
+    """`*` or an exact origin.
+
+    The console skips its login gate when this value matches the page origin,
+    and the same-origin proxy then attaches operator authority to every API
+    call. `*` therefore means "anyone who can reach this page is the operator",
+    which is a deployment decision, not a default -- the committed meta is empty
+    and this script is the only thing that fills it in.
+    """
+    if value == "*":
+        return value
+    return checked_origin(value)
+
+
+def render_open(dist, page, value):
+    path = os.path.join(dist, page, "index.html")
+    if not os.path.isfile(path):
+        raise SystemExit("no page at %s" % path)
+    with open(path, encoding="utf-8") as handle:
+        body = handle.read()
+    if not OPEN_META.search(body):
+        raise SystemExit(
+            "%s has no lunanexa-operator-open meta; the page cannot be opened "
+            "without a login" % path
+        )
+    body = OPEN_META.sub(
+        lambda match: match.group(1) + value + match.group(3), body, count=1
+    )
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(body)
+    print("opened %s as %s" % (path, value))
 
 
 def render(dist, page, origin):
@@ -74,9 +111,21 @@ def main():
         metavar="PAGE=ORIGIN",
         help="page directory and the exact origin it is served from",
     )
+    parser.add_argument(
+        "--operator-open",
+        action="append",
+        default=[],
+        metavar="PAGE=*|ORIGIN",
+        help=(
+            "page directory that skips its login gate; the same-origin proxy "
+            "then attaches operator authority. `*` accepts any origin that can "
+            "reach the page, which makes the page operator-authenticated for "
+            "everyone who can load it"
+        ),
+    )
     arguments = parser.parse_args()
-    if not arguments.origin:
-        sys.exit("no --origin given; nothing to render")
+    if not arguments.origin and not arguments.operator_open:
+        sys.exit("no --origin or --operator-open given; nothing to render")
     for entry in arguments.origin:
         page, separator, origin = entry.partition("=")
         if not separator or not page or not origin:
@@ -86,6 +135,15 @@ def main():
         except ValueError as error:
             sys.exit(str(error))
         render(arguments.dist, page, rendered)
+    for entry in arguments.operator_open:
+        page, separator, value = entry.partition("=")
+        if not separator or not page or not value:
+            sys.exit("--operator-open expects PAGE=*|ORIGIN, got %s" % entry)
+        try:
+            rendered = checked_open_value(value)
+        except ValueError as error:
+            sys.exit(str(error))
+        render_open(arguments.dist, page, rendered)
 
 
 if __name__ == "__main__":
