@@ -47,6 +47,7 @@ fn assignment() -> @contracts.DesiredAssignment {
     lease_expires_unix_ms: 20000L,
     controller_epoch: 1L,
     group: None,
+    reservation: None,
     signature: "valid-test-signature",
   }
 }

@@ -56,7 +56,8 @@ pub async fn WorkspaceHost::provision(
     raise HostError::ControllerRejected
   }
   let placement = if self.require_exclusive {
-    guard self.delivery_placement(grant) is Some((resolved, _)) else {
+    guard self.delivery_placement(grant, container?, validate_container=true)
+      is Some((resolved, _)) else {
       raise HostError::ControllerRejected
     }
     Some(resolved)
@@ -64,9 +65,6 @@ pub async fn WorkspaceHost::provision(
     placement
   }
   let name = resource_name(id)
-  if self.require_exclusive {
-    self.report_delivery_starting(grant, container)
-  }
   errdefer (if self.require_exclusive { self.stop(id) catch { _ => () } })
   {
     let lock = self.workspace_lock(name)
@@ -75,11 +73,29 @@ pub async fn WorkspaceHost::provision(
     if !self.authorize(grant) {
       raise HostError::ControllerRejected
     }
+    let resources = self.resources(id, grant, placement?, container?)
+    if self.require_exclusive {
+      // Persist recovery identity before claiming capacity. This Secret is not
+      // runnable; a restarted gateway can discover it even if launch died
+      // before a Deployment existed, and report observed cleanup on expiry.
+      for (path, resource) in resources {
+        if path.contains("/secrets/") {
+          ignore(
+            self.kubernetes(
+              Patch,
+              path + "?fieldManager=lunanexa-webide&force=false",
+              Some(resource),
+            ),
+          )
+        }
+      }
+      self.report_delivery_starting(grant, container)
+    }
     // Recreate controls rollouts, not a rapid scale-to-zero/scale-up cycle.
     // Do not start a replacement while a prior writer is still terminating.
     let stopped = self.workspace_scaled_down(name)
     self.wait_for_workspace_pods(name, terminating_only=!stopped)
-    for entry in self.resources(id, grant, placement?, container?) {
+    for entry in resources {
       let (path, resource) = entry
       ignore(
         self.kubernetes(

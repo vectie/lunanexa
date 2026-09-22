@@ -89,6 +89,14 @@ async fn ApiService::prepare_delivery_assignment(
   operation : @delivery.Operation,
   template : @deployment.ModelServiceTemplate,
 ) -> @contracts.DesiredAssignment {
+  guard operation.reservation_id is Some(reserved_id) else {
+    raise Failure("delivery reservation unavailable")
+  }
+  {
+    self.resource_mutex.acquire()
+    defer self.resource_mutex.release()
+    self.ensure_reservation_nodes(reserved_id)
+  }
   let id = delivery_assignment_id(operation)
   let existing = self.store.assignment(id)
   if existing is Some(existing) &&
@@ -305,8 +313,7 @@ async fn ApiService::delivery_model_ready(
 ///|
 pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
   guard self.delivery_store is Some(deliveries) &&
-    self.scheduler is Some(scheduler) &&
-    self.deployment_store is Some(catalog) else {
+    self.scheduler is Some(scheduler) else {
     return
   }
   ignore(deliveries.expire_due(@async.now()))
@@ -440,7 +447,8 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
     if operation.stage is (Failed | Ready | StartingWorkspace) {
       continue
     }
-    guard catalog.template({
+    guard self.deployment_store is Some(catalog) &&
+      catalog.template({
         template_id: operation.intent.template_id,
         version: operation.intent.template_version,
       })

@@ -98,6 +98,16 @@ pub fn AssignmentGroup::not_equal(Self, Self) -> Bool
 pub fn AssignmentGroup::to_json(Self) -> Json
 pub fn AssignmentGroup::to_repr(Self) -> @debug.Repr
 
+pub(all) struct AssignmentReservation {
+  reservation_id : String
+  tenant_ref : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn AssignmentReservation::equal(Self, Self) -> Bool
+pub fn AssignmentReservation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AssignmentReservation::not_equal(Self, Self) -> Bool
+pub fn AssignmentReservation::to_json(Self) -> Json
+pub fn AssignmentReservation::to_repr(Self) -> @debug.Repr
+
 pub(all) struct AuditEvent {
   sequence : Int64
   event_id : String
@@ -202,6 +212,7 @@ pub(all) struct DesiredAssignment {
   lease_expires_unix_ms : Int64
   controller_epoch : Int64
   group : AssignmentGroup?
+  reservation : AssignmentReservation?
   signature : String
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn DesiredAssignment::equal(Self, Self) -> Bool

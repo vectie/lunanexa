@@ -81,6 +81,7 @@ fn WorkspaceHost::place_exclusive(
     },
   ]
   if runtime is Some(container) {
+    pod["initContainers"] = []
     if !pinned_image(container.image) ||
       container.port < 1024 ||
       container.port > 65535 ||

@@ -74,6 +74,7 @@ pub fn Bridge::new(
   authorize : async (Grant) -> Bool,
   provision : async (String, Grant) -> Backend,
   allow_insecure_public_http? : Bool = false,
+  allow_model_free_workspace? : Bool = false,
 ) -> Bridge raise BridgeError {
   if !valid_atom(config.client_id) ||
     !valid_origin(config.public_origin, allow_insecure_public_http~) ||
@@ -90,6 +91,7 @@ pub fn Bridge::new(
     raise InvalidConfiguration
   }
   {
+    allow_model_free_workspace,
     config,
     redeem,
     authorize,
@@ -102,31 +104,57 @@ pub fn Bridge::new(
 }
 
 ///|
-/// Stable identity contains all four authority dimensions, encoded as JSON to
-/// prevent delimiter collisions. It reveals neither account nor model secrets.
+/// Runtime identity includes the authority dimensions plus client/delivery for
+/// bound sessions. JSON encoding avoids delimiter collisions; legacy IDs stay
+/// unchanged. It reveals neither account nor model secrets.
 pub fn workspace_id(grant : Grant) -> String {
   let identity = [
-      grant.tenant_ref,
-      grant.subject_ref,
-      grant.organization_id,
-      grant.project_id,
-    ]
-    .to_json()
-    .stringify()
+    grant.tenant_ref,
+    grant.subject_ref,
+    grant.organization_id,
+    grant.project_id,
+  ]
+  if grant.delivery_id is Some(delivery) {
+    identity.push(grant.client_id)
+    identity.push(delivery)
+  }
   "webide-" +
-  @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(identity)))
+  @crypto.bytes_to_hex_string(
+    @crypto.sha256(@utf8.encode(identity.to_json().stringify())),
+  )
+}
+
+///|
+/// Retain user data across deliveries of the same client without sharing an
+/// IaaS home with a ComfyUI workspace. Legacy identities remain unchanged.
+pub fn workspace_storage_id(grant : Grant) -> String {
+  if grant.delivery_id is None {
+    return workspace_id(grant)
+  }
+  let identity = [
+    grant.tenant_ref,
+    grant.subject_ref,
+    grant.organization_id,
+    grant.project_id,
+    grant.client_id,
+  ]
+  "webide-" +
+  @crypto.bytes_to_hex_string(
+    @crypto.sha256(@utf8.encode(identity.to_json().stringify())),
+  )
 }
 
 ///|
 fn Bridge::valid_grant(self : Bridge, grant : Grant, now : Int64) -> Bool {
   grant.client_id == self.config.client_id &&
+  grant.delivery_id.map_or(true, valid_atom) &&
   [grant.tenant_ref, grant.subject_ref, grant.organization_id, grant.project_id].all(
     valid_atom,
   ) &&
   grant.api_secret.length() >= 32 &&
   grant.api_secret.length() <= 4096 &&
   grant.api_secret.all(c => c >= '!' && c <= '~') &&
-  grant.allowed_models.length() > 0 &&
+  (self.allow_model_free_workspace || grant.allowed_models.length() > 0) &&
   grant.allowed_models.length() <= 128 &&
   grant.allowed_models.all(valid_atom) &&
   grant.expires_unix_ms > now

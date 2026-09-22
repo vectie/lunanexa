@@ -1,0 +1,18 @@
+{
+  "kubernetes_origin": "https://kubernetes.default.svc",
+  "token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+  "ca_file": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+  "workload_namespaces": ["lunanexa-runtime", "lunanexa-workspaces"],
+  "node_names": {
+    "enrolled-node-a": "actual-kubernetes-hostname-a",
+    "enrolled-node-b": "actual-kubernetes-hostname-b"
+  },
+  "infrastructure": [
+    {
+      "namespace_name": "monitoring",
+      "service_account": "node-exporter",
+      "label_key": "app.kubernetes.io/name",
+      "label_value": "node-exporter"
+    }
+  ]
+}

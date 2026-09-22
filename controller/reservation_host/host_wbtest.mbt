@@ -28,7 +28,10 @@ fn fixture() -> Fixture {
 }
 
 ///|
-fn Fixture::host(self : Fixture) -> ReservationHost raise {
+fn Fixture::host(
+  self : Fixture,
+  workload_namespaces? : Array[String],
+) -> ReservationHost raise {
   ReservationHost::new(
     (verb, path, body) => {
       if verb == "PATCH" {
@@ -75,7 +78,43 @@ fn Fixture::host(self : Fixture) -> ReservationHost raise {
         label_value: "node-exporter",
       },
     ],
+    workload_namespaces?,
   )
+}
+
+///|
+async test "explicit model and workspace namespace list preserves reservation ownership" {
+  let fixture = fixture()
+  fixture.pods = [
+    pod(
+      "models",
+      { "lunanexa.io/reservation": "reservation-a" },
+      "model",
+      "Running",
+    ),
+    pod(
+      "workspaces",
+      { "lunanexa.io/reservation": "reservation-a" },
+      "workspace",
+      "Running",
+    ),
+  ]
+  let host = fixture.host(workload_namespaces=["models", "workspaces"])
+  assert_eq(host.reserve("spark-a", "reservation-a"), Exclusive)
+  fixture.pods.push(
+    pod(
+      "unlisted",
+      { "lunanexa.io/reservation": "reservation-a" },
+      "model",
+      "Running",
+    ),
+  )
+  try host.reserve("spark-a", "reservation-a") catch {
+    ReservationHostError::NodeOccupied => ()
+    error => raise error
+  } noraise {
+    _ => fail("unlisted workload namespace admitted")
+  }
 }
 
 ///|

@@ -20,8 +20,31 @@ test "session capabilities use operating system entropy" {
 }
 
 ///|
+test "model-free terminal grants require explicit bridge profile" {
+  let make = (enabled : Bool) => {
+    Bridge::new(
+      test_config("http://127.0.0.1:8188"),
+      _ => test_grant("alice"),
+      _ => true,
+      (_, _) => {
+        http_url: "http://127.0.0.1:8189",
+        websocket_url: "ws://127.0.0.1:8189",
+      },
+      allow_model_free_workspace=enabled,
+    )
+  }
+  let grant = { ..test_grant("alice"), allowed_models: [], }
+  assert_false(make(false).valid_grant(grant, @async.now()))
+  assert_true(make(true).valid_grant(grant, @async.now()))
+  assert_false(
+    make(true).valid_grant({ ..grant, expires_unix_ms: 0L, }, @async.now()),
+  )
+}
+
+///|
 fn test_grant(subject : String) -> Grant {
   {
+    delivery_id: None,
     client_id: "comfyui",
     tenant_ref: "tenant-a",
     subject_ref: subject,

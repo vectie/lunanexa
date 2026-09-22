@@ -11,6 +11,8 @@ import {
 // Values
 pub fn workspace_id(Grant) -> String
 
+pub fn workspace_storage_id(Grant) -> String
+
 // Errors
 pub(all) suberror BridgeError {
   InvalidConfiguration
@@ -34,6 +36,7 @@ pub(all) struct Backend {
 }
 
 pub struct Bridge {
+  allow_model_free_workspace : Bool
   config : BridgeConfig
   redeem : async (String) -> Grant
   authorize : async (Grant) -> Bool
@@ -44,7 +47,7 @@ pub struct Bridge {
   mutex : @async.Mutex
 }
 pub async fn Bridge::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
-pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool) -> Self raise BridgeError
+pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool, allow_model_free_workspace? : Bool) -> Self raise BridgeError
 
 pub(all) struct BridgeConfig {
   client_id : String
@@ -60,6 +63,7 @@ pub fn BridgeConfig::not_equal(Self, Self) -> Bool
 pub fn BridgeConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Grant {
+  delivery_id : String?
   client_id : String
   tenant_ref : String
   subject_ref : String

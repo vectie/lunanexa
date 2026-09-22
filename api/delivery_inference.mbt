@@ -29,6 +29,10 @@ async fn ApiService::delivery_binding(
     scheduler.node_reservation(reservation_id) is Some(reservation) &&
     reservation.state == Reserved &&
     reservation.request.tenant_ref == authority.tenant_ref &&
+    reservation.request.organization_id == authority.organization_id &&
+    reservation.request.lease_id == operation.intent.lease_id &&
+    reservation.request.authority_ref == operation.intent.authorization_ref &&
+    reservation.request.starts_unix_ms <= @async.now() &&
     reservation.request.expires_unix_ms > @async.now() else {
     return (None, Some(denied))
   }
@@ -42,7 +46,8 @@ async fn ApiService::delivery_binding(
       Developer,
       @async.now(),
     )
-    authorization.lease.lease_id == operation.intent.lease_id
+    authorization.lease.lease_id == operation.intent.lease_id &&
+    authorization.access_grant.grant_id == operation.intent.authorization_ref
   } catch {
     _ => false
   }

@@ -163,7 +163,33 @@ async test "reserved assignment publication rejects shared and foreign owners bu
   let base = ApiService::with_registry(
     durable, registry, runtime, "operator", "inference", "node", "test",
   ).with_assignment_signing_secret("assignment-secret")
-  let service = { ..base, scheduler: Some(scheduler), }
+  let taints : Map[String, Json] = Map([])
+  let host = @reservation_host.ReservationHost::new(
+    (verb, path, body) => {
+      if path.has_prefix("/api/v1/pods?") {
+        return (200, { "items": [] })
+      }
+      if verb == "PATCH" {
+        guard body is Some(Array(ops)) && ops[1] is { "value": value, .. } else {
+          fail("invalid taint patch")
+        }
+        taints["current"] = value
+      }
+      (
+        200,
+        {
+          "metadata": { "name": "spark-a", "resourceVersion": "1" },
+          "spec": { "taints": taints.get("current").unwrap_or([]) },
+        },
+      )
+    },
+    "workspaces",
+    [],
+  )
+  let service = { ..base, scheduler: Some(scheduler), }.with_reservation_host(
+    host,
+    { "node-a": "spark-a" },
+  )
   let assignment : @contracts.DesiredAssignment = {
     assignment_id: "delivery-model",
     deployment_id: "delivery-a",
@@ -179,6 +205,7 @@ async test "reserved assignment publication rejects shared and foreign owners bu
     lease_expires_unix_ms: now + 30000L,
     controller_epoch: durable.controller_epoch(),
     group: None,
+    reservation: None,
     signature: "",
   }
   try service.publish_planned_assignment(assignment) catch {
@@ -223,4 +250,22 @@ async test "reserved assignment publication rejects shared and foreign owners bu
     .assignment(assignment.assignment_id)
     .map_or(false, value => value.signature != ""),
   )
+  let published = durable.assignment(assignment.assignment_id).unwrap()
+  assert_eq(
+    published.reservation,
+    Some({ reservation_id: "reservation-a", tenant_ref: "tenant-a", }),
+  )
+  assert_true(taints.contains("current"))
+  try
+    service.publish_planned_assignment(
+      { ..assignment, reservation: published.reservation, },
+      reservation_id="reservation-a",
+      tenant_ref="tenant-a",
+    )
+  catch {
+    @deployment.DeploymentError::InvalidState(_) => ()
+    error => raise error
+  } noraise {
+    _ => fail("caller-controlled reservation metadata accepted")
+  }
 }

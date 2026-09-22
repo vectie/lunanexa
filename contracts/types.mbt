@@ -660,6 +660,24 @@ pub extend AssignmentGroup with ToJson::{to_json}
 pub extend AssignmentGroup with FromJson::{from_json}
 
 ///|
+pub(all) struct AssignmentReservation {
+  reservation_id : String
+  tenant_ref : String
+} derive(Debug, Eq, ToJson, FromJson)
+
+///|
+pub extend AssignmentReservation with Debug::{to_repr}
+
+///|
+pub extend AssignmentReservation with Eq::{equal, not_equal}
+
+///|
+pub extend AssignmentReservation with ToJson::{to_json}
+
+///|
+pub extend AssignmentReservation with FromJson::{from_json}
+
+///|
 pub(all) struct DesiredAssignment {
   assignment_id : String
   deployment_id : String
@@ -678,6 +696,8 @@ pub(all) struct DesiredAssignment {
   /// Absent -- which is what every document written before pairs existed
   /// carries -- means one machine, and leaves the MAC material untouched.
   group : AssignmentGroup?
+  /// Controller-validated ownership; absent for legacy/shared assignments.
+  reservation : AssignmentReservation?
   signature : String
 } derive(Debug, Eq, ToJson, FromJson)
 

@@ -47,6 +47,7 @@ fn supervisor_assignment() -> @contracts.DesiredAssignment {
     lease_expires_unix_ms: 1900000000000L,
     controller_epoch: 1L,
     group: None,
+    reservation: None,
     signature: "signed",
   }
 }

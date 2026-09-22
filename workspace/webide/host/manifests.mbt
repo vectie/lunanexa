@@ -42,8 +42,12 @@ fn WorkspaceHost::resources(
   container? : ExclusiveContainer,
 ) -> Array[(String, Json)] raise HostError {
   let name = resource_name(id)
+  if container is None && grant.allowed_models.is_empty() {
+    raise ControllerRejected
+  }
   let config = self.config
   let meta = metadata(name, config.namespace_name)
+  let storage_name = resource_name(@webide.workspace_storage_id(grant))
   if meta is Object(fields) {
     fields["annotations"] = { "lunanexa.io/workspace-id": id }
   }
@@ -83,6 +87,7 @@ fn WorkspaceHost::resources(
     None => []
   }
   let proxy : ModelProxyConfig = {
+    delivery_id: grant.delivery_id,
     client_id: grant.client_id,
     tenant_ref: grant.tenant_ref,
     subject_ref: grant.subject_ref,
@@ -97,7 +102,7 @@ fn WorkspaceHost::resources(
   let persistence : Json = {
     "apiVersion": "v1",
     "kind": "PersistentVolumeClaim",
-    "metadata": meta,
+    "metadata": metadata(storage_name, config.namespace_name),
     "spec": {
       "accessModes": ["ReadWriteOnce"],
       "storageClassName": config.storage_class,
@@ -156,7 +161,7 @@ fn WorkspaceHost::resources(
                 { "name": "LUNANEXA_WEBIDE_INITIALIZE", "value": "/workspace" },
                 {
                   "name": "LUNANEXA_WEBIDE_INITIAL_MODEL",
-                  "value": grant.allowed_models[0],
+                  "value": grant.allowed_models.get(0).unwrap_or(""),
                 },
               ],
               "securityContext": security_context(),
@@ -237,7 +242,7 @@ fn WorkspaceHost::resources(
           "volumes": [
             {
               "name": "workspace",
-              "persistentVolumeClaim": { "claimName": name },
+              "persistentVolumeClaim": { "claimName": storage_name },
             },
             { "name": "tmp", "emptyDir": { "sizeLimit": "1Gi" } },
             {
@@ -361,7 +366,7 @@ fn WorkspaceHost::resources(
   // failures are recoverable by reapplying these deterministic resource names.
   [
     ("\{networks}/networkpolicies/\{name}", network),
-    ("\{core}/persistentvolumeclaims/\{name}", persistence),
+    ("\{core}/persistentvolumeclaims/\{storage_name}", persistence),
     ("\{core}/secrets/\{name}", secret),
     ("\{core}/services/\{name}", service),
     ("\{apps}/deployments/\{name}", deployment),

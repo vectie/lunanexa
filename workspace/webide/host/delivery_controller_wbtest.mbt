@@ -32,6 +32,7 @@ async test "exclusive gateway resolves scoped reservation and never falls back o
           connection.send_response(state["status"], "Fixture")
           let response : Json = {
             "reservation_id": "reservation-123",
+            "delivery_kind": "Workspace",
             "node_name": "spark-25e2",
             "tenant_ref": if state["wrong_tenant"] == 1 {
               "other"
@@ -65,6 +66,51 @@ async test "exclusive gateway resolves scoped reservation and never falls back o
       _ => fail("outage was treated as authority")
     }
   }
+}
+
+///|
+test "delivery profile matches exact published GPU container offering" {
+  let placement : DeliveryPlacementResponse = {
+    reservation_id: "reservation-a",
+    tenant_ref: "a",
+    organization_id: "a",
+    project_id: "a",
+    node_name: "spark-a",
+    expires_unix_ms: 1000L,
+    delivery_kind: "GpuContainer",
+    container_image_digest: Some("sha256:" + "c".repeat(64)),
+    container_cpu_millis: Some(4000),
+    container_memory_mib: Some(8192),
+  }
+  let runtime : ExclusiveContainer = {
+    image: "registry.test/terminal@sha256:" + "c".repeat(64),
+    command: ["ttyd"],
+    args: [],
+    port: 7681,
+    cpu_millis: 4000,
+    memory_mib: 8192,
+    gpu: true,
+  }
+  assert_true(delivery_profile_matches(placement, Some(runtime)))
+  assert_false(delivery_profile_matches(placement, None))
+  assert_false(
+    delivery_profile_matches(placement, Some({ ..runtime, gpu: false, })),
+  )
+  assert_false(
+    delivery_profile_matches(placement, Some({ ..runtime, memory_mib: 4096, })),
+  )
+  assert_false(
+    delivery_profile_matches(
+      placement,
+      Some({
+        ..runtime,
+        image: "registry.test/terminal@sha256:" + "d".repeat(64),
+      }),
+    ),
+  )
+  let workspace = { ..placement, delivery_kind: "Workspace", }
+  assert_true(delivery_profile_matches(workspace, None))
+  assert_false(delivery_profile_matches(workspace, Some(runtime)))
 }
 
 ///|
@@ -205,5 +251,103 @@ async test "exclusive callbacks claim budget before launch and report stop only 
     assert_eq(events, [
       "starting", "scaled-zero", "scaled-zero", "pods-gone", "stopped",
     ])
+  }
+}
+
+///|
+async test "exclusive launch persists non-runnable recovery secret before starting claim" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  defer server.close()
+  let config = { ..host_config(), controller_origin: "http://\{server.addr}", }
+  let grant = {
+    ..proxy_config(config.controller_origin, config.model_gateway_origin).grant(),
+    delivery_id: Some("delivery-recovery"),
+  }
+  let id = @webide.workspace_id(grant)
+  let name = resource_name(id)
+  let events : Array[String] = []
+  let secrets : Map[String, Json] = Map([])
+  let state = { "active": true }
+  let host : WorkspaceHost = {
+    config,
+    require_exclusive: true,
+    observation_token: "fixture-token",
+    locks: {},
+    kubernetes_override: Some((verb, path, body) => {
+      if verb == Patch {
+        assert_true(path.contains("/secrets/"))
+        events.push("secret-persisted")
+        secrets["stored"] = body.unwrap()
+        return (200, body.unwrap())
+      }
+      if path.contains("/secrets?") {
+        return (200, { "items": [{ "metadata": { "name": name } }] })
+      }
+      if path.contains("/secrets/") {
+        guard secrets["stored"]
+          is { "stringData": { "model-proxy.json": String(raw), .. }, .. } else {
+          fail("missing recovery secret")
+        }
+        return (
+          200,
+          {
+            "metadata": { "name": name },
+            "data": { "model-proxy.json": @base64.encode(@utf8.encode(raw)) },
+          },
+        )
+      }
+      assert_eq(verb, Get)
+      (200, { "items": [] })
+    }),
+  }
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true, () => {
+      server.run_forever((request, _body, connection) => {
+        let mut response = Json::empty_object()
+        let code = if request.path == "/v1/models" {
+          if state["active"] {
+            200
+          } else {
+            403
+          }
+        } else if request.path == "/v1/workspace-delivery/placement" {
+          response = {
+            "reservation_id": "reservation-123",
+            "node_name": "spark-25e2",
+            "delivery_kind": "Workspace",
+            "tenant_ref": grant.tenant_ref,
+            "organization_id": grant.organization_id,
+            "project_id": grant.project_id,
+            "expires_unix_ms": grant.expires_unix_ms,
+          }
+          200
+        } else if request.path == "/v1/workspace-delivery/starting" {
+          assert_true(secrets.contains("stored"))
+          assert_eq(events, ["secret-persisted"])
+          events.push("starting")
+          503
+        } else {
+          assert_eq(request.path, "/v1/workspace-delivery/stopped")
+          events.push("stopped")
+          200
+        }
+        connection.send_response(code, "Fixture")
+        connection.write_string(response.stringify())
+        connection.end_response()
+      })
+    })
+    try host.provision(id, grant) catch {
+      HostError::ControllerRejected => ()
+      _ => fail("unexpected launch error")
+    } noraise {
+      _ => fail("failed starting callback launched workspace")
+    }
+    assert_eq(events, ["secret-persisted", "starting", "stopped"])
+    state["active"] = false
+    // A replacement gateway reconstructs cleanup from persisted credentials,
+    // without the original in-memory launch or an existing Deployment.
+    let restarted = { ..host, locks: {}, }
+    restarted.reconcile()
+    assert_eq(events, ["secret-persisted", "starting", "stopped", "stopped"])
   }
 }

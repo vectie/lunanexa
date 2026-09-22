@@ -8,7 +8,10 @@ pub(all) struct InfrastructurePod {
   service_account : String
   label_key : String
   label_value : String
-}
+} derive(FromJson)
+
+///|
+pub extend InfrastructurePod with FromJson::{from_json}
 
 ///|
 pub(all) enum ObservedState {
@@ -40,7 +43,7 @@ pub extend ReservationHostError with Eq::{equal, not_equal}
 ///|
 pub struct ReservationHost {
   transport : Transport
-  workload_namespace : String
+  workload_namespaces : Array[String]
   infrastructure : Array[InfrastructurePod]
 }
 
@@ -49,18 +52,25 @@ pub fn ReservationHost::new(
   transport : Transport,
   workload_namespace : String,
   infrastructure : Array[InfrastructurePod],
+  workload_namespaces? : Array[String],
 ) -> ReservationHost raise ReservationHostError {
-  if !resource_name(workload_namespace) ||
+  let namespaces = workload_namespaces.unwrap_or([workload_namespace])
+  if namespaces.is_empty() ||
+    namespaces.any(value => !resource_name(value)) ||
     infrastructure.any(rule => {
       !resource_name(rule.namespace_name) ||
       !resource_name(rule.service_account) ||
       rule.label_key == "" ||
       rule.label_value == "" ||
-      rule.namespace_name == workload_namespace
+      namespaces.contains(rule.namespace_name)
     }) {
     raise InvalidConfiguration
   }
-  { transport, workload_namespace, infrastructure: infrastructure.copy(), }
+  {
+    transport,
+    workload_namespaces: namespaces.copy(),
+    infrastructure: infrastructure.copy(),
+  }
 }
 
 ///|
@@ -153,7 +163,7 @@ async fn ReservationHost::check_pods(
         },
         ..
       } &&
-      namespace_name == self.workload_namespace &&
+      self.workload_namespaces.contains(namespace_name) &&
       owner == reservation {
       continue
     }

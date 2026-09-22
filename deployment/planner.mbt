@@ -588,6 +588,7 @@ pub fn desired_assignments(
         lease_expires_unix_ms: now_unix_ms + plan.intent.lease_duration_ms,
         controller_epoch,
         group: replica.group,
+        reservation: None,
         signature: "",
       }
     }

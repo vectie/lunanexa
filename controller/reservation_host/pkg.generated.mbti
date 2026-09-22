@@ -3,6 +3,7 @@ package "vectie/lunanexa/controller/reservation_host"
 
 import {
   "moonbitlang/core/debug",
+  "moonbitlang/core/json",
 }
 
 // Values
@@ -26,7 +27,8 @@ pub(all) struct InfrastructurePod {
   service_account : String
   label_key : String
   label_value : String
-}
+} derive(@json.FromJson)
+pub fn InfrastructurePod::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 pub(all) enum ObservedState {
   Exclusive
@@ -38,10 +40,10 @@ pub fn ObservedState::to_repr(Self) -> @debug.Repr
 
 pub struct ReservationHost {
   transport : async (String, String, Json?) -> (Int, Json)
-  workload_namespace : String
+  workload_namespaces : Array[String]
   infrastructure : Array[InfrastructurePod]
 }
-pub fn ReservationHost::new(async (String, String, Json?) -> (Int, Json), String, Array[InfrastructurePod]) -> Self raise ReservationHostError
+pub fn ReservationHost::new(async (String, String, Json?) -> (Int, Json), String, Array[InfrastructurePod], workload_namespaces? : Array[String]) -> Self raise ReservationHostError
 pub async fn ReservationHost::release(Self, String, String) -> ObservedState
 pub async fn ReservationHost::reserve(Self, String, String) -> ObservedState
 

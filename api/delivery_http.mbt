@@ -1,4 +1,57 @@
 ///|
+/// Deployment-owned offering, paired with a pinned terminal gateway profile.
+/// Image selection never comes from a customer request.
+pub(all) struct GpuContainerOffering {
+  template_id : String
+  version : String
+  display_name : String
+  client_id : String
+  image_digest : String
+  cpu_millis : Int
+  memory_mib : Int
+} derive(FromJson, ToJson)
+
+///|
+pub extend GpuContainerOffering with FromJson::{from_json}
+
+///|
+pub extend GpuContainerOffering with ToJson::{to_json}
+
+///|
+pub fn ApiService::with_gpu_container_offering(
+  self : ApiService,
+  offering : GpuContainerOffering,
+) -> ApiService raise {
+  if !@contracts.valid_identifier(offering.template_id) ||
+    !@contracts.valid_identifier(offering.version) ||
+    !@contracts.valid_identifier(offering.client_id) ||
+    offering.display_name.is_empty() ||
+    !@contracts.valid_sha256_digest(offering.image_digest) ||
+    offering.cpu_millis < 100 ||
+    offering.memory_mib < 512 {
+    raise Failure("invalid deployment-owned GPU container offering")
+  }
+  { ..self, gpu_container_offering: Some(offering), }
+}
+
+///|
+fn ApiService::published_gpu_container_offering(
+  self : ApiService,
+) -> GpuContainerOffering? {
+  guard self.gpu_container_offering is Some(offering) else { return None }
+  if self.client_launch_config.map_or(false, config => {
+      config.client_id == offering.client_id
+    }) ||
+    self.additional_client_launch_configs.any(config => {
+      config.client_id == offering.client_id
+    }) {
+    Some(offering)
+  } else {
+    None
+  }
+}
+
+///|
 pub fn ApiService::with_delivery_store(
   self : ApiService,
   delivery_store : @delivery.DeliveryStore,
@@ -83,6 +136,11 @@ async fn ApiService::handle_delivery(
   body : String,
   allow_asserted_subject : Bool,
 ) -> HttpReply {
+  if path.has_suffix("/access-key") {
+    return self.handle_delivery_access_key(
+      verb, path, headers, body, allow_asserted_subject,
+    )
+  }
   guard self.delivery_store is Some(deliveries) &&
     self.scheduler is Some(scheduler) else {
     return api_error(
@@ -162,14 +220,13 @@ async fn ApiService::handle_delivery(
       value.request.starts_unix_ms <= now &&
       value.request.expires_unix_ms > now
     })
-  guard self.deployment_store is Some(catalog) else {
-    return api_error(
-      503, "CatalogUnavailable", "deployment catalog is unavailable", true,
-    )
+  let model_templates = match self.deployment_store {
+    Some(catalog) => catalog.templates()
+    None => []
   }
   if verb == Get && path == "/v1/portal/self/delivery-options" {
     let templates : Array[Json] = []
-    for template in catalog.templates() {
+    for template in model_templates {
       for kind in [@delivery.DeliveryKind::Workspace, ModelApi] {
         templates.push({
           "template_id": template.template_id,
@@ -177,8 +234,23 @@ async fn ApiService::handle_delivery(
           "kind": kind.to_json(),
           "label": template.display_name,
           "model_selector": template.model_selector,
+          "client_id": if kind == Workspace {
+            "comfyui"
+          } else {
+            ""
+          },
         })
       }
+    }
+    if self.published_gpu_container_offering() is Some(offering) {
+      templates.push({
+        "template_id": offering.template_id,
+        "template_version": offering.version,
+        "kind": @delivery.DeliveryKind::GpuContainer.to_json(),
+        "label": offering.display_name,
+        "model_selector": "",
+        "client_id": offering.client_id,
+      })
     }
     return json_reply(200, {
       "reservations": reservations
@@ -220,20 +292,36 @@ async fn ApiService::handle_delivery(
       .find_first(value => {
         value.request.reservation_id == request.reservation_id
       })
-      is Some(reservation) &&
-      catalog
-      .templates()
-      .iter()
-      .find_first(value => {
-        value.template_id == request.template_id &&
-        value.version == request.template_version
-      })
-      is Some(template) &&
-      request.kind != GpuContainer else {
+      is Some(reservation) else {
       return api_error(
         409, "SelectionUnavailable", "select an active resource grant and published template",
         false,
       )
+    }
+    let model_digest = if request.kind == GpuContainer {
+      guard self.published_gpu_container_offering() is Some(offering) &&
+        offering.template_id == request.template_id &&
+        offering.version == request.template_version &&
+        offering.memory_mib <= reservation.request.memory_mib_per_node else {
+        return api_error(
+          409, "SelectionUnavailable", "select a configured GPU container offering within the resource grant",
+          false,
+        )
+      }
+      None
+    } else {
+      guard model_templates
+        .iter()
+        .find_first(value => {
+          value.template_id == request.template_id &&
+          value.version == request.template_version
+        })
+        is Some(template) else {
+        return api_error(
+          409, "SelectionUnavailable", "select a published model template", false,
+        )
+      }
+      Some(template.artifact.digest)
     }
     let expiry = if authorization.lease.expires_unix_ms <
       reservation.request.expires_unix_ms {
@@ -251,9 +339,9 @@ async fn ApiService::handle_delivery(
           lease_id: authorization.lease.lease_id,
           idempotency_key: request.idempotency_key,
           kind: request.kind,
-          template_id: template.template_id,
-          template_version: template.version,
-          model_digest: Some(template.artifact.digest),
+          template_id: request.template_id,
+          template_version: request.template_version,
+          model_digest,
           node_count: reservation.request.node_ids.length(),
           expires_at_ms: expiry,
         },

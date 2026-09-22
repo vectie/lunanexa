@@ -273,6 +273,26 @@ pub fn render_runtime(
   )
   let name = "lunanexa-" + hash[:40].to_owned()
   let resource_metadata = metadata(settings, assignment, name)
+  let reservation_tolerations : Array[Json] = match assignment.reservation {
+    Some(owner) => {
+      if !dns_label(owner.reservation_id) || owner.tenant_ref == "" {
+        raise InvalidResource
+      }
+      if resource_metadata is Object(meta) &&
+        meta.get("labels") is Some(Object(labels)) {
+        labels["lunanexa.io/reservation"] = owner.reservation_id.to_json()
+      }
+      [
+        {
+          "key": "lunanexa.io/reservation",
+          "operator": "Equal",
+          "value": owner.reservation_id,
+          "effect": "NoSchedule",
+        },
+      ]
+    }
+    None => []
+  }
   let group = paired_group(settings, assignment)
   let paired = group is Some(_)
   // Two ways a cluster can hand a pod its GPUs, and they are mutually
@@ -404,6 +424,7 @@ pub fn render_runtime(
         },
       },
       "tolerations": [
+        ..reservation_tolerations,
         {
           "key": "lunanexa.io/role",
           "operator": "Equal",

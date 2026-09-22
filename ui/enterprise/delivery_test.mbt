@@ -8,6 +8,7 @@ test "delivery launch requires actual reservation and published template and pre
     kind: "Workspace",
     label: "H3 + ComfyUI",
     model_selector: "video.h3",
+    client_id: Some("comfyui"),
   }
   let panel = {
     ..empty,
@@ -116,4 +117,194 @@ test "expired delivery does not offer retry or stop" {
   assert_true(rendered.contains("Expired"))
   assert_false(rendered.contains(">Stop service<"))
   assert_false(rendered.contains(">Retry<"))
+}
+
+///|
+test "GPU terminal uses catalog client without requiring a model" {
+  let state = @enterprise.default_state(100L)
+  let template : @enterprise.DeliveryTemplateOption = {
+    template_id: "gpu-shell",
+    template_version: "1",
+    kind: "GpuContainer",
+    label: "GPU terminal",
+    model_selector: "",
+    client_id: Some("approved-terminal"),
+  }
+  let operation : @enterprise.DeliveryView = {
+    operation_id: "gpu-delivery",
+    kind: "GpuContainer",
+    template_id: "gpu-shell",
+    template_version: "1",
+    node_count: 1,
+    stage: "StartingWorkspace",
+    generation: 2L,
+    cache_hit: false,
+    transferred_bytes: 0L,
+    total_bytes: None,
+    failure_code: None,
+    expires_at_ms: 99999L,
+  }
+  let panel = {
+    ..state.deliveries,
+    loaded: true,
+    options: { reservations: [], templates: [template], },
+    operations: [operation],
+  }
+  assert_true(
+    @enterprise.delivery_launch_template(panel, "gpu-delivery") is Some(value) &&
+    value.client_id == Some("approved-terminal"),
+  )
+  let rendered = @enterprise.render({
+    ..state,
+    route: DesktopIde,
+    locale: English,
+    deliveries: panel,
+  })
+  assert_true(rendered.contains("Open and start terminal"))
+  assert_false(rendered.contains("Open and start workspace"))
+  assert_true(rendered.contains("Starting GPU container"))
+  let ready = { ..panel, operations: [{ ..operation, stage: "Ready", }], }
+  assert_true(
+    @enterprise.render({
+      ..state,
+      route: DesktopIde,
+      locale: English,
+      deliveries: ready,
+    }).contains("Open terminal"),
+  )
+  let missing = {
+    ..panel,
+    options: {
+      reservations: [],
+      templates: [{ ..template, client_id: None, }],
+    },
+  }
+  assert_true(
+    @enterprise.delivery_launch_template(missing, "gpu-delivery") is None,
+  )
+  let expired = { ..panel, operations: [{ ..operation, stage: "Expired", }], }
+  assert_true(
+    @enterprise.delivery_launch_template(expired, "gpu-delivery") is None,
+  )
+}
+
+///|
+test "model workspace and model API retain distinct launch requirements" {
+  let panel = @enterprise.default_delivery_panel()
+  let template : @enterprise.DeliveryTemplateOption = {
+    template_id: "h3",
+    template_version: "1",
+    kind: "Workspace",
+    label: "H3",
+    model_selector: "video.h3",
+    client_id: Some("creative-client"),
+  }
+  let operation : @enterprise.DeliveryView = {
+    operation_id: "workspace-delivery",
+    kind: "Workspace",
+    template_id: "h3",
+    template_version: "1",
+    node_count: 1,
+    stage: "StartingWorkspace",
+    generation: 2L,
+    cache_hit: false,
+    transferred_bytes: 0L,
+    total_bytes: None,
+    failure_code: None,
+    expires_at_ms: 99999L,
+  }
+  let configured = {
+    ..panel,
+    operations: [operation],
+    options: { reservations: [], templates: [template], },
+  }
+  assert_true(
+    @enterprise.delivery_launch_template(configured, operation.operation_id)
+    is Some(_),
+  )
+  let no_model = {
+    ..configured,
+    options: {
+      reservations: [],
+      templates: [{ ..template, model_selector: "", }],
+    },
+  }
+  assert_true(
+    @enterprise.delivery_launch_template(no_model, operation.operation_id)
+    is None,
+  )
+  let api = {
+    ..configured,
+    operations: [{ ..operation, kind: "ModelApi", stage: "Ready", }],
+  }
+  assert_true(
+    @enterprise.delivery_launch_template(api, operation.operation_id) is None,
+  )
+}
+
+///|
+test "ready MaaS exposes bound key creation and clears its one time secret" {
+  let state = @enterprise.default_state(100L)
+  let operation : @enterprise.DeliveryView = {
+    operation_id: "model-delivery",
+    kind: "ModelApi",
+    template_id: "text",
+    template_version: "1",
+    node_count: 1,
+    stage: "Ready",
+    generation: 4L,
+    cache_hit: true,
+    transferred_bytes: 0L,
+    total_bytes: None,
+    failure_code: None,
+    expires_at_ms: 99999L,
+  }
+  let panel = { ..state.deliveries, loaded: true, operations: [operation], }
+  let ready = @enterprise.render({
+    ..state,
+    route: DesktopIde,
+    locale: English,
+    deliveries: panel,
+  })
+  assert_true(ready.contains("Create delivery API key"))
+  assert_false(ready.contains("Open terminal"))
+  let access : @enterprise.DeliveryApiAccess = {
+    delivery_id: operation.operation_id,
+    key_id: "test-key",
+    api_secret: "test-only-once-not-a-real-secret",
+    model: "text.test",
+    base_url: "https://api.example.invalid",
+    expires_unix_ms: 99999L,
+    maximum_requests: 100L,
+    one_time: true,
+  }
+  let showing = { ..panel, api_access: Some(access), }
+  let shown = @enterprise.render({
+    ..state,
+    route: DesktopIde,
+    locale: English,
+    deliveries: showing,
+  })
+  assert_true(shown.contains("test-only-once-not-a-real-secret"))
+  assert_true(shown.contains("Copy API address"))
+  let cleared = showing.update(DismissApiAccess)
+  assert_true(cleared.api_access is None)
+  assert_false(
+    @enterprise.render({
+      ..state,
+      route: DesktopIde,
+      locale: English,
+      deliveries: cleared,
+    }).contains("test-only-once-not-a-real-secret"),
+  )
+  assert_true(showing.update(SelectReservation("another")).api_access is None)
+  let stopped = { ..panel, operations: [{ ..operation, stage: "Stopped", }], }
+  assert_false(
+    @enterprise.render({
+      ..state,
+      route: DesktopIde,
+      locale: English,
+      deliveries: stopped,
+    }).contains("Create delivery API key"),
+  )
 }

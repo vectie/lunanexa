@@ -24,6 +24,7 @@ fn host_config() -> HostConfig {
 ///|
 fn proxy_config(controller : String, gateway : String) -> ModelProxyConfig {
   {
+    delivery_id: None,
     client_id: "comfyui",
     tenant_ref: "tenant-a",
     subject_ref: "alice",

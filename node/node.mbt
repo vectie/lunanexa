@@ -339,6 +339,8 @@ pub fn assignment_signature(
   // so the v1 MAC material is byte-identical and a node running an older build
   // still authenticates one during a rolling update. `assignment_group_test`
   // pins that omission -- if it ever regresses, signatures change silently.
+  // Optional reservation ownership follows the same rule; when present every
+  // ownership field is authenticated and cannot be removed or reassigned.
   let key = @utf8.encode(secret)
   let material = @utf8.encode(
     "lunanexa.assignment-mac.v1|\{unsigned.to_json().stringify()}",

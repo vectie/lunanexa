@@ -18,6 +18,61 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
 }
 
 ///|
+test "reserved runtimes carry exact node ownership label and toleration" {
+  let base = runtime_assignment()
+  let legacy = @kubernetes.render_runtime(
+    runtime_settings(),
+    base,
+    "/var/lib/lunanexa/models/model",
+    base.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_false(legacy.pod.stringify().contains("lunanexa.io/reservation"))
+  let assignment = {
+    ..base,
+    reservation: Some({
+      reservation_id: "reservation-a",
+      tenant_ref: "tenant-a",
+    }),
+  }
+  let resources = @kubernetes.render_runtime(
+    runtime_settings(),
+    assignment,
+    "/var/lib/lunanexa/models/model",
+    assignment.artifact.digest,
+    5L,
+    1000L,
+  )
+  assert_true(
+    resources.pod
+    is {
+      "metadata": {
+        "labels": { "lunanexa.io/reservation": String("reservation-a"), .. },
+        ..
+      },
+      ..
+    },
+  )
+  guard resources.pod
+    is { "spec": { "tolerations": Array(tolerations), .. }, .. } else {
+    fail("missing tolerations")
+  }
+  assert_true(
+    tolerations.any(value => {
+      value
+      is {
+        "key": String("lunanexa.io/reservation"),
+        "operator": String("Equal"),
+        "value": String("reservation-a"),
+        "effect": String("NoSchedule"),
+        ..
+      }
+    }),
+  )
+}
+
+///|
 test "runtime quantities match Kubernetes canonical serialization" {
   let base = runtime_assignment()
   for
@@ -111,6 +166,7 @@ fn runtime_assignment() -> @contracts.DesiredAssignment {
     generation: 1L,
     controller_epoch: 1L,
     group: None,
+    reservation: None,
     lease_expires_unix_ms: 60000L,
     signature: "fixture-only-already-verified-by-caller",
   }

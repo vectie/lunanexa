@@ -21,6 +21,7 @@ pub extend BridgeConfig with Eq::{not_equal, equal}
 /// A secret-bearing result from the configured controller, never from a browser.
 /// Intentionally has no Debug/ToJson derivation.
 pub(all) struct Grant {
+  delivery_id : String?
   client_id : String
   tenant_ref : String
   subject_ref : String
@@ -69,6 +70,7 @@ struct AuthorizationFlight {
 
 ///|
 pub struct Bridge {
+  allow_model_free_workspace : Bool
   config : BridgeConfig
   redeem : async (String) -> Grant
   authorize : async (Grant) -> Bool

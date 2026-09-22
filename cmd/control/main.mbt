@@ -463,7 +463,9 @@ async fn run_access_onboarding_reconciler(service : @api.ApiService) -> Unit {
 ///|
 async fn run_delivery_reconciler(service : @api.ApiService) -> Unit {
   for ;; {
+    service.reconcile_resource_reservations()
     service.reconcile_deliveries()
+    service.reconcile_resource_reservations()
     @async.sleep(5000)
   }
 }
@@ -1380,6 +1382,9 @@ async fn main {
         "LUNANEXA_WEBIDE_OBSERVATION_TOKEN",
       ).unwrap_or(""),
     )
+    .with_reservation_host_json(
+      @env.get_env_var("LUNANEXA_RESERVATION_HOST_JSON"),
+    )
     .with_credential_handoff_store(credential_handoff_store)
     .with_client_handoff_store(
       client_handoff_store,
@@ -1458,6 +1463,14 @@ async fn main {
     })
     .with_provider_callback_secrets(configured_provider_callback_secrets)
     .with_global_admin_settings(global_settings)
+  let initial_service = match
+    @env.get_env_var("LUNANEXA_GPU_CONTAINER_OFFERING_JSON") {
+    Some(raw) =>
+      initial_service.with_gpu_container_offering(
+        @json.from_json(@json.parse(raw)),
+      )
+    None => initial_service
+  }
   let issuer_service = match credential_issuer_adapter_token {
     Some(token) => initial_service.with_credential_issuer_adapter_token(token)
     None => initial_service

@@ -25,6 +25,7 @@ pub extend HostConfig with FromJson::{from_json}
 ///|
 /// Never derive a printable instance: API secrets must not reach diagnostics.
 struct ModelProxyConfig {
+  delivery_id : String?
   client_id : String
   tenant_ref : String
   subject_ref : String
@@ -46,6 +47,7 @@ pub extend ModelProxyConfig with ToJson::{to_json}
 ///|
 fn ModelProxyConfig::grant(self : ModelProxyConfig) -> @webide.Grant {
   {
+    delivery_id: self.delivery_id,
     client_id: self.client_id,
     tenant_ref: self.tenant_ref,
     subject_ref: self.subject_ref,
