@@ -1962,13 +1962,14 @@ and requested compute lease as one resumable package"，分 4 步：
 | G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | ✅ 已修并验证（见 §12.15） |
 | H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄，且抄错会静默给别人开通账户 | 中 | ✅ 已修并验证（见 §12.16） |
 | I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
-| J | 开通权限时 `Organization` / `Tenant` 是**手填自由文本**，而客户门户用的是他自注册时的那一套（`trial-org-…` / `trial-tenant-…`）。填不一样，开通照样 `200`、管理侧照样显示 `Ready`，但**落在客户会话解析不到的租户上**，企业侧完全看不到 | **严重**（挡死第 8 步） | ✅ **不一致已可见并验证**（§12.18）；"允不允许给同一个人开第二个租户"是产品策略，**没替你定** |
+| J | 开通权限时 `Organization` / `Tenant` 是**手填自由文本**，而客户门户用的是他自注册时的那一套（`trial-org-…` / `trial-tenant-…`）。填不一样，开通照样 `200`、管理侧照样显示 `Ready`，但**落在客户会话解析不到的租户上**，企业侧完全看不到。根因（§12.19）：开通包建的"组织"**在商业平面里不存在**，所以客户端的组织列表里没有它，客户既看不到也切不过去 | **严重**（挡死第 8 步） | ⚠️ **绕行已可见并验证**（§12.18）；**根因未修**——补建商业组织 / 让它能被选中，都要你定产品语义（§12.19） |
 
 **修掉的四个（A–D）都在关键路径上**：不修 A，企业侧连订单都建不出来；不修 B，任何失败都表现为"按钮坏了"；
 不修 C，后面所有前端修复都到不了浏览器；不修 D，登录九次之后整条链连入口都没有。
-F、G、H、I 是走查中撞到的体验/可核对性缺陷，也都修了。**J 已经让不一致变得可见**
-（§12.18），但"允不允许给同一个人开第二个租户"这条策略**留给你定**。
-**只剩 E 是真正开着的**：它是设计上的生产闸门，要真实签名，不是代码问题。
+F、G、H、I 是走查中撞到的体验/可核对性缺陷，也都修了。**J 做了绕行**（§12.18：把既有租户
+列出来，让操作员照抄），但**根因没修**——§12.19 查明开通包建的组织在商业平面里不存在，
+所以客户既看不到也切不过去；补建组织或让它能被选中都要先定产品语义。
+**E 和 J 的根因是仅剩的两个开着的**：E 要真实签名（不是代码问题），J 要你定产品决定。
 
 ### 12.1 走查步骤与结果（截至本轮结束）
 
@@ -2593,6 +2594,9 @@ organization-recon-h · tenant-recon-h  Ready
 
 #### 代码上为什么必然如此
 
+> **这一小节后来往下挖了一层，机制比这里写的更具体：见 §12.19。**
+> 这里说的"客户的会员租户"是对的，但**为什么**解析到试用那一个，当时的解释还不完整。
+
 企业侧"WebIDE 是否就绪"读的是**门户会员（portal membership）的租户**，不是开通包的租户：
 
 ```moonbit
@@ -2724,3 +2728,101 @@ subject → `LunaNexa holds no account or workspace lease for this subject yet.`
 镜像：`lunanexa-web:20260922-r8`
 （registry digest `sha256:e160b51963a39f7e66ac029acb51b6c2d370fd62a44b740d5241e1908cbe27c4`），
 `lunanexa-console` 已 rollout；浏览器硬刷新后再测。
+### 12.19 堵点 J 的根因再往下一层：开通包建的"组织"在商业平面里不存在
+
+§12.17 说"客户的会话解析到试用那个租户"，但没回答**为什么**它不解析到开通包那个。
+再挖一层之后，机制是这样的——而且这一层比 §12.17 写的那一层更接近**缺陷**。
+
+#### 机制（四步，每一步都有实测或代码）
+
+1. **开通包只建了"门户会员"，没建"商业组织"。**
+   实测（管理侧 operator 快照）：这个 subject 名下**两条 active 会员**，
+   一条是开通包建的、一条是自助注册送的：
+
+   | membership_id | organization_id | tenant_ref |
+   |---|---|---|
+   | `membership-a409fbcfca89d44f3b16bdf1` | **`organization-recon-h`** | **`tenant-recon-h`** |
+   | `trial-membership-a409fbcfca89d44f3b16bdf1` | `trial-org-a409fbcfca89d44f3b16bdf1` | `trial-tenant-a409fbcfca89d44f3b16bdf1` |
+
+   但商业平面里**只有试用那个组织**：
+
+   | 请求 | 结果 |
+   |---|---|
+   | `GET /v1/commercial/organizations/trial-org-a409fbcfca89d44f3b16bdf1/snapshot` | **200**（组织在里面） |
+   | `GET /v1/commercial/organizations/organization-recon-h/snapshot` | **409 `CommercialRejected` · commercial snapshot is unavailable** |
+
+2. **客户端的"组织列表"只列商业平面里有的组织**，所以开通包那个被丢掉了：
+
+   ```moonbit
+   // api/self_service_organization_http.mbt:225  —— GET /v1/portal/self/organizations
+   for membership in memberships {
+     match commercial.organizations.iter().find_first(
+       organization => organization.organization_id == membership.organization_id,
+     ) {
+       Some(organization) => organizations.push(...)   // ← 商业平面里没有就跳过
+       None => ()
+     }
+   }
+   ```
+
+3. **客户手里只剩一个组织，于是被"钉住"。**
+   企业客户端把选中的组织写进 `localStorage["lunanexa.organization"]`
+   （`cmd/enterprise/main.mbt:445/454`），之后**每个**门户请求都带
+   `X-LunaNexa-Organization`。实测（浏览器，硬刷新后抓到的请求头）：
+
+   ```
+   GET /v1/portal/self/organizations   org=trial-org-a409fbcfca89d44f3b16bdf1
+   GET /v1/portal/self                 org=trial-org-a409fbcfca89d44f3b16bdf1
+   GET /v1/portal/self/api-keys        org=trial-org-a409fbcfca89d44f3b16bdf1
+   GET /v1/portal/self/clients         org=trial-org-a409fbcfca89d44f3b16bdf1
+   …（每一个都带同一个值）
+   ```
+
+   而且**没有切换入口**：顶栏那个组织下拉（`ui/enterprise/enterprise.mbt:1516`）
+   只在 `state.organizations.length() > 1` 时才渲染。实测页面上只有
+   `select#enterprise-locale`，**没有** `select#enterprise-organization` ——
+   也就是说客户**连手动切过去都做不到**，因为他只看得见一个组织。
+
+4. **于是 `portal_view.membership` 永远是试用那条**，
+   `workspace_ready` 就永远按 `trial-tenant-…` 算（§12.17 引的那段代码）。
+
+顺带说明一句：`FilePortalStore::self_view`（`portal/store/file.mbt:268`）在
+"一个 subject 有多条 active 会员且客户端**没有**指定组织"时是**失败关闭**的
+（`OrganizationSelectionRequired`）。这个设计本身是对的。真正的问题是第 1、2 步——
+**开通包能建出一条客户永远列不出来的会员**，所以"多组织"这条正确的保护路径根本没被触发。
+
+#### 这为什么更像缺陷而不是策略
+
+- 开通包自己的卡片写的是"一次点击把账户、会员、工作区档案、Developer 授权、
+  申请的算力租约**作为一个包**准备出来"。商业组织不在这个包里，而**没有它，
+  这个包在客户端就是不可见的**——客户既看不到，也切不过去。
+- 这不是"操作员填错了租户名"：就算他填的是**这个客户已经有的**组织名，
+  也会因为同样的原因（第 1 步没建商业组织）而…… 不，这一句要小心：
+  如果操作员填的是 `trial-org-a409fbcfca89d44f3b16bdf1`，
+  那个组织在商业平面里**是存在的**，第 2 步就不会丢，客户端也就会解析到它。
+  **所以 §12.18 那个"把既有租户列出来"的提示，恰好也是这个坑的绕行办法**：
+  照抄客户已有的组织名，包就会落在客户看得见的地方。
+
+#### 三种改法（都**没有**实施）
+
+1. **开通包补建商业组织**：在 `api/access_onboarding_http.mbt` 建会员时，
+   如果 `organization_id` 在商业平面里不存在，就一并建出来。
+   最彻底，但要定"用什么 display name / 法定主体 / 状态建"——自助注册那条路是要求
+   提交法定主体资料的（`create_self_service_organization`），开通包这条没有。
+   **这是产品决定。**
+2. **客户端组织列表也列出"只有会员、没有商业组织"的组织**，
+   让它至少能被选中。改动小，但会露出一个"半存在"的组织，语义上要解释清楚。
+3. **只做提示**（已做，§12.18）：把既有租户列出来，让操作员照抄。
+   不修根因，但把"静默失败"变成"按之前就看得见"。
+
+我做了 3，**没做 1 和 2**。1 需要你定组织怎么建，2 需要你定"半存在的组织"该不该露出来。
+
+#### 这次是怎么查到的（可复现）
+
+| 步骤 | 做法 |
+|---|---|
+| 看客户端到底发了什么 | CDP `Network.requestWillBeSent` 抓 `/v1/portal/*` 的请求头 |
+| 看组织列表有几条 | 检查 `select#enterprise-organization` 是否存在（只在 >1 时渲染）→ 不存在 |
+| 看会员有几条 | 管理侧 operator 快照 `/v1/portal/operator/snapshot` 过滤这个 subject → 2 条 active |
+| 看商业组织在不在 | `/v1/commercial/organizations/<id>/snapshot` → 试用 200，开通包那个 409 |
+| 定位代码 | `api/self_service_organization_http.mbt:225`、`portal/store/file.mbt:268`、`cmd/enterprise/main.mbt:445`、`ui/enterprise/enterprise.mbt:1516` |
