@@ -113,6 +113,9 @@ async fn issue_controller_session(
       config, identity, true, lifetime,
     )
     guard register_response.code == 201 else {
+      eprintln(
+        "[identity-gateway] account registration rejected: HTTP \{register_response.code} \{exchange_detail(register_body)}",
+      )
       raise Failure("LunaNexa account registration was rejected")
     }
     let registered : RegisteredControllerSession = @json.from_json(
@@ -120,6 +123,12 @@ async fn issue_controller_session(
     )
     registered.session
   } else {
+    // The browser only ever sees "identity-session-unavailable". Without this
+    // line the reason is nowhere: the control plane's status and code are the
+    // whole diagnosis, and stdout is buffered, so it has to be stderr.
+    eprintln(
+      "[identity-gateway] session exchange rejected: HTTP \{exchange_response.code} \{exchange_detail(exchange_body)}",
+    )
     raise Failure("LunaNexa session exchange was rejected")
   }
   guard issued.secret.has_prefix("lnxs_") &&
@@ -150,6 +159,18 @@ fn exchange_requires_registration(status : Int) -> Bool {
   // older deployments used 404. Registration remains separately signed and
   // will reject suspended or conflicting existing accounts.
   status == 401 || status == 404
+}
+
+///|
+/// The control plane's own error code, for the operator's log only. It never
+/// reaches the browser, and it is bounded so a hostile body cannot flood the log.
+fn exchange_detail(body : String) -> String {
+  let trimmed = body.trim()
+  if trimmed == "" {
+    "(empty body)"
+  } else {
+    trimmed[:trimmed.length().min(160)].to_owned()
+  }
 }
 
 ///|

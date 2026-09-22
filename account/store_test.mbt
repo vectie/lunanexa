@@ -186,7 +186,7 @@ async test "session listing and revoke-all expose no credential material" {
 }
 
 ///|
-async test "active sessions are capped and use cannot extend past expiry" {
+async test "active sessions are capped by eviction and use cannot extend past expiry" {
   let directory = @fs.tmpdir(prefix="lunanexa-account-cap-")
   let store = @account.AccountStore::open(
     "\{directory}/accounts.json",
@@ -206,6 +206,7 @@ async test "active sessions are capped and use cannot extend past expiry" {
   )
   let mut first_secret = ""
   let mut first_session_id = ""
+  let mut latest_secret = ""
   for index in 0..<8 {
     let issued = store.issue_session(
       "https://identity.example/realms/lunanexa",
@@ -218,36 +219,51 @@ async test "active sessions are capped and use cannot extend past expiry" {
       first_secret = issued.secret
       first_session_id = issued.session.session_id
     }
+    latest_secret = issued.secret
   }
-  try
-    store.issue_session(
-      "https://identity.example/realms/lunanexa",
-      "external-capped",
-      "assertion-capped-over-limit",
-      30000L,
-      now + 10L,
-    )
-  catch {
-    @account.AccountError::InvalidInput(_) => ()
-    _ => fail("unexpected active-session-cap error")
+  // The ninth sign-in is accepted. The cap bounds how many sessions exist, not
+  // whether the account may sign in: refusing here locked the account out of
+  // every entry point at once, with no route that could free a slot.
+  let ninth = store.issue_session(
+    "https://identity.example/realms/lunanexa",
+    "external-capped",
+    "assertion-capped-over-limit",
+    30000L,
+    now + 10L,
+  )
+  assert_eq(ninth.session.account_id, "account-capped")
+  let views = store.sessions_for_account("account-capped")
+  let active = views
+    .filter(view => view.revoked_unix_ms is None && view.expires_unix_ms > now + 10L)
+    .length()
+  assert_true(active <= 8)
+  // The least recently used session is the one that yielded, so the newest
+  // sign-in always has a working credential.
+  guard views
+    .iter()
+    .find_first(view => view.session_id == first_session_id)
+    is Some(first) else {
+    fail("first session disappeared")
+  }
+  assert_eq(first.revoked_unix_ms, Some(now + 10L))
+  assert_eq(first.last_used_unix_ms, now + 1L)
+  assert_true(first.last_used_unix_ms <= first.expires_unix_ms)
+  try store.authorize(first_secret, now + 11L) catch {
+    @account.AccountError::Unauthorized => ()
+    _ => fail("unexpected evicted-session error")
   } noraise {
-    _ => fail("ninth active session was issued")
+    _ => fail("evicted session was authorized")
   }
-  try store.authorize(first_secret, now + 30001L) catch {
+  ignore(store.authorize(ninth.secret, now + 11L))
+  ignore(store.authorize(latest_secret, now + 11L))
+  // Expiry is unchanged: a session that outlived its lifetime is not usable.
+  // The ninth session was issued at now + 10 with a 30000ms lifetime.
+  try store.authorize(ninth.secret, now + 30011L) catch {
     @account.AccountError::Unauthorized => ()
     _ => fail("unexpected expired-session error")
   } noraise {
     _ => fail("expired session was authorized")
   }
-  guard store
-    .sessions_for_account("account-capped")
-    .iter()
-    .find_first(session => session.session_id == first_session_id)
-    is Some(first) else {
-    fail("first session disappeared")
-  }
-  assert_eq(first.last_used_unix_ms, now + 1L)
-  assert_true(first.last_used_unix_ms <= first.expires_unix_ms)
   @fs.rmdir(directory, recursive=true)
 }
 
