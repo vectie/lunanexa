@@ -139,11 +139,22 @@ fn audience_matches(value : Json, client_id : String) -> Bool {
 }
 
 ///|
+/// When no nonce is bound (the direct-access grant has no authorization request
+/// to bind one to), the claim must be absent or empty; any other value means the
+/// token was minted for a different flow.
+fn expected_nonce_matches(actual : String?, expected : String?) -> Bool {
+  match expected {
+    Some(value) => actual == Some(value)
+    None => actual is None || actual == Some("")
+  }
+}
+
+///|
 fn validate_id_token(
   id_token : String,
   issuer : String,
   client_id : String,
-  expected_nonce : String,
+  expected_nonce : String?,
   now_unix_ms : Int64,
 ) -> IdTokenClaims raise {
   guard id_token.split(".").collect()
@@ -166,7 +177,7 @@ fn validate_id_token(
     claims.sub.length() <= 1024 &&
     audience_matches(claims.aud, client_id) &&
     claims.azp.unwrap_or(client_id) == client_id &&
-    claims.nonce == expected_nonce &&
+    expected_nonce_matches(claims.nonce, expected_nonce) &&
     claims.exp.to_int64() > now &&
     claims.exp.to_int64() <= now + 28800L &&
     claims.nbf.unwrap_or(now.to_int()).to_int64() <= now + 5L &&
@@ -286,7 +297,7 @@ async fn complete_oidc_callback(
     token.id_token,
     config.issuer,
     config.client_id(audience),
-    flow.nonce,
+    Some(flow.nonce),
     now_unix_ms,
   )
   let user = verified_userinfo(

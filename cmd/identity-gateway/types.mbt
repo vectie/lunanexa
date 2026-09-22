@@ -102,7 +102,7 @@ priv struct IdTokenClaims {
   exp : Int
   nbf : Int?
   iat : Int?
-  nonce : String
+  nonce : String?
 } derive(FromJson)
 
 ///|

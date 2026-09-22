@@ -174,6 +174,20 @@ sent directly to native port 8080.
   start Authorization Code + PKCE login. The host and audience must agree.
   Unknown, missing, or cross-host audiences fail with `400`; the gateway must
   not accept a caller-selected return URL.
+- `POST /auth/password` with `{"username":"...","password":"...","audience":"operator"|"enterprise"}`
+  performs the provider's resource-owner-password grant server-side and then mints
+  a session through the same path `GET /auth/session` uses, returning the same
+  document and cookie. The host and audience must agree, as for `/auth/oidc/start`.
+  The provider client secret is used only in this gateway's own request and never
+  reaches the browser. Failures return `401 {"error":"invalid-credentials"}` for
+  rejected credentials, `401 {"error":"identity-rejected"}` when the provider
+  accepts the login but the identity is unusable, `503
+  {"error":"identity-provider-unavailable"}` when the issuer cannot be reached,
+  and `429 {"error":"too-many-attempts"}` when one source exceeds the per-source
+  failure bound. No upstream error text, username, or password is echoed.
+  This route exists because this deployment has no TLS yet; it depends on the
+  provider having direct access grants enabled, and both should be turned off
+  once TLS is in place.
 - `GET /auth/session` uses the current host-specific HttpOnly gateway cookie.
   A signed-out or expired session returns `401` and no credential. On the
   first call after OIDC login, the gateway performs one signed loopback

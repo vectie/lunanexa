@@ -11,6 +11,7 @@ fn response_reason(status : Int) -> String {
     404 => "Not Found"
     405 => "Method Not Allowed"
     413 => "Payload Too Large"
+    429 => "Too Many Requests"
     502 => "Bad Gateway"
     503 => "Service Unavailable"
     _ => "Response"
@@ -39,6 +40,11 @@ async fn send_body(
 }
 
 ///|
+fn error_body(code : String) -> String {
+  "{\"error\":\"\{code}\"}"
+}
+
+///|
 async fn send_error(
   connection : @http.ServerConnection,
   status : Int,
@@ -47,7 +53,7 @@ async fn send_error(
   send_body(
     connection,
     status,
-    "{\"error\":\"\{code}\"}",
+    error_body(code),
     "application/json; charset=utf-8",
     headers={ "Cache-Control": "no-store", "Pragma": "no-cache" },
   )
@@ -641,6 +647,10 @@ async fn handle_proxy(
       handle_oidc_start(store, config, request, connection, host, audience)
     "/auth/oidc/callback" =>
       handle_oidc_callback(store, config, request, connection, host, audience)
+    "/auth/password" =>
+      handle_password_login(
+        store, config, request, reader, connection, host, audience,
+      )
     "/auth/session" =>
       handle_browser_session(store, config, request, connection, host, audience)
     "/auth/logout" =>

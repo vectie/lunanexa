@@ -190,14 +190,20 @@ test "ID token claims bind issuer client nonce and lifetime" {
   )
   let token = "\{header}.\{claims}.abcdefghijklmnopqrstuvwxyz0123456789"
   let decoded = validate_id_token(
-    token, "https://106.39.18.146:5006/realms/lunanexa", "lunanexa-operator", "nonce-1",
+    token,
+    "https://106.39.18.146:5006/realms/lunanexa",
+    "lunanexa-operator",
+    Some("nonce-1"),
     1000000L,
   )
   assert_eq(decoded.sub, "subject-1")
   try
     validate_id_token(
-      token, "https://106.39.18.146:5006/realms/lunanexa", "lunanexa-enterprise",
-      "nonce-1", 1000000L,
+      token,
+      "https://106.39.18.146:5006/realms/lunanexa",
+      "lunanexa-enterprise",
+      Some("nonce-1"),
+      1000000L,
     )
   catch {
     _ => ()
