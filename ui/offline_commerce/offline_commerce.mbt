@@ -1215,7 +1215,19 @@ fn operator_actions(
             FulfillVerifiedOrder(order.order_id, order.generation),
           ),
         ),
-        copy(state.locale, "Fulfill after all checks", "全部核验后履约"),
+        if order.technical_acceptance_waiver is Some(_) {
+          copy(
+            state.locale,
+            "Activate limited test access",
+            "开通限时测试权限",
+          )
+        } else {
+          copy(
+            state.locale,
+            "Fulfill after all checks",
+            "全部核验后履约",
+          )
+        },
       ),
     )
   }
@@ -1713,8 +1725,8 @@ fn confirmation_description(
       )
     FulfillVerifiedOrder(_, _) =>
       copy(
-        locale, "Fulfillment creates the entitlement only when every policy-required artifact is scan-passed and independently accepted.",
-        "仅当所有策略要求的材料均通过扫描并经独立审核接受后，履约才会创建权益。",
+        locale, "Activation checks the current order authority and bound resource. Commercial orders require accepted evidence; explicitly waived technical orders remain unsigned and unpaid, with only their bounded test access activated.",
+        "开通前核验当前订单授权与绑定资源。商业订单仍须材料审核通过；明确豁免的技术订单保持未签署、未付款，仅开通已批准的限时测试权限。",
       )
     AuthorizeTechnicalOrder(_, _, _, _, _, _) =>
       copy(

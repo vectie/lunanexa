@@ -1551,14 +1551,13 @@ async fn launch_desktop_client(model : AppModel) -> String {
     "/v1/portal/self/client-handoffs",
     model.token,
     model.subject_ref,
-    body=(
-      {
-        "request_id": random_identifier("desktop-handoff"),
-        "client_id": client.client_id,
-        "project_id": project_id,
-        "order_id": order_id.to_json(),
-        "allowed_models": allowed_models.to_json(),
-      } : Json).stringify(),
+    body=desktop_handoff_payload(
+      random_identifier("desktop-handoff"),
+      client.client_id,
+      project_id,
+      order_id,
+      allowed_models,
+    ).stringify(),
   )
   let launch : DesktopClientHandoffLaunch = @json.from_json(
     @json.parse(response),

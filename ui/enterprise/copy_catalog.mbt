@@ -1080,7 +1080,10 @@ fn enterprise_copy(
       )
     Masterlease => @i18n.copy(locale, "MasterLease", "主租约")
     ContractIsEffective =>
-      @i18n.copy(locale, "Contract is effective.", "合同已生效。")
+      @i18n.copy(
+        locale, "Agreement or deployment-policy access requirements are satisfied; this does not attest a signature or payment.",
+        "已满足协议或部署策略的准入条件；不代表已签署或已付款。",
+      )
     ReviewAndCompleteTheContractTemplate =>
       @i18n.copy(
         locale, "Review and complete the contract template.", "查看并完成合同模板。",
