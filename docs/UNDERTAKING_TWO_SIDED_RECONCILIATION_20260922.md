@@ -2240,6 +2240,18 @@ POST /v1/portal/self/machine-quotes  →  403
   企业侧 `Account & API keys` 显示的也是同一个指纹；
 - 所以操作员要给一个"平台里已经存在的人"开通权限时，**必须去 Keycloak 自己的管理台把这个 UUID 抄出来**。
 
+  **这一条不是加一句文案就能修的**，试过之后如实记下两种改法（都需要动结构）：
+
+  1. 让 `identity_subject_digest` 在 js 目标可用。它现在在 `account` 包里，而
+     `account` 是 `supported_targets = "native"`（里面有 Postgres / 文件存储），
+     `ui` 是 `js+native`，所以**控制台算不出这个摘要**（实测报
+     `Selected backend 'js' is incompatible … 'vectie/lunanexa/ui' requires 'vectie/lunanexa/account'`）。
+     把它挪到一个 `js+native` 的小包，控制台就能**边输入边显示派生引用**，
+     操作员可以拿它跟账户列表里的 `Subject` 核对之后再提交。
+  2. 更彻底：开通权限时**从账户列表里选人**，而不是让操作员重新输入原始 subject。
+     这需要 API 接受 `subject_ref` —— 现在它只收 `identity_subject`，并自己算摘要校验
+     （`api/access_onboarding_http.mbt:103`），所以这条要动接口。
+
 本次走查用的是**合成 subject**（`9f8e7d6c-…`）：包能建、里程碑能推进、状态能变 `Ready`，
 但**没有真人能用这个身份登录**，所以"企业侧得到权限"这一步**没法对它验证** ——
 而这恰好说明了这个字段为什么必须填真值。
