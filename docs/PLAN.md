@@ -1,5 +1,29 @@
 # LunaNexa phased implementation plan
 
+## Active exclusive-delivery program — 2026-09-23
+
+The eight stages in [EXCLUSIVE_NODE_DELIVERY.md](EXCLUSIVE_NODE_DELIVERY.md)
+override historical single-machine order and immediate cache-pruning assumptions
+below. Track actual implementation and deployment separately:
+
+| Stage | Deliverable | Acceptance evidence required |
+| --- | --- | --- |
+| 1 | Deployment inventory and revised contracts | Four-node read-only inventory; migration list |
+| 2 | Atomic durable whole-node reservations | Concurrent tenants, multi-node failure, restart |
+| 3 | Persistent user volumes and idle public cache | Recreate preserves files; in-use cache retained |
+| 4 | H3 model preparation | Hit, missing files, resume, corruption, load failure |
+| 5 | IaaS/PaaS/MaaS runtime integration | Real GPU/container, application and API use |
+| 6 | One-click H3 workspace | Real generation, download, save and reopen |
+| 7 | Public gateway and shared UI progress | External browser, correct tenant and both-side state |
+| 8 | Full undertaking-to-delivery UI campaign | Button log, expiry, isolation and retry evidence |
+
+No row is complete merely because it appears in this table. Implement and test
+coherent stages, then commit and push main to both remotes. Preserve rollback
+artifacts for deployment changes. Do not stop unknown live GPU tasks or extend
+expired test grants. Renew test authority explicitly when physical activation
+is needed. Prioritize the exclusive Spark + H3 + ComfyUI path, then prove the
+other delivery modes to the same standard.
+
 The post-audit implementation contract for durable notifications, operational
 events, hybrid offline commerce, customer machine access and role-safe guide
 diagnostics is [Operations, offline commerce, machine access and guide

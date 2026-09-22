@@ -1,5 +1,29 @@
 # LunaNexa architecture
 
+## Exclusive delivery target
+
+The 2026-09-23 [exclusive-node design](EXCLUSIVE_NODE_DELIVERY.md) is the current
+implementation target. Legacy descriptions below document the existing managed
+and bare-metal paths, not a one-node-per-order product restriction.
+
+Delivery intent joins existing authorization with one durable whole-node
+reservation and one resumable operation:
+
+`authorized → reserving → preparing model → loading model → starting workspace → ready`
+
+IaaS may omit model preparation; MaaS omits application startup. Readiness must
+come from the appropriate runtime response, not handoff creation or Pod phase.
+Failed operations keep their stable identity and completed resources for retry;
+termination closes ingress before stopping workloads and releasing the node set.
+Both browser sites project this same operation, not independent UI state.
+
+Scheduler placement and runtime launch consume the same reservation authority.
+Cache locality ranks only otherwise eligible nodes. Model cache retention is
+independent from user-volume retention and allocation ownership. Public ingress
+ends at the management-host workspace gateway; application/model backends remain
+private. This design introduces no reverse MoonSuite dependency and no new
+container engine or model server.
+
 ## System context
 
 LunaNexa is a boundary between model consumers and hardware. The boundary is
