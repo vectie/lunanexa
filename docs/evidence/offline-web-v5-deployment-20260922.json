@@ -1,0 +1,19 @@
+{
+  "schema": "lunanexa.offline-web-deployment.v1",
+  "date": "2026-09-22",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:19926dc6d97c37beabc7a4f36cb16763fb31627a4e2f6441764423e87c0ac859",
+  "tag": "20260922-offline-v5",
+  "registry_tls_verified_head_http": 200,
+  "registry_manifest_digest_matches": true,
+  "deployments_rolled_out": ["lunanexa-console", "lunanexa-enterprise", "lunanexa-workbench"],
+  "previous_deployment_snapshots_retained_private": true,
+  "public_bundle_url": "http://106.39.18.146:5003/enterprise/enterprise.js",
+  "public_bundle_http": 200,
+  "public_enterprise_sha256": "bd680d3a3881f3604c4acbd789d05b0915b7ea593705be9c402e92713b0f8d8d",
+  "fresh_workspace_bundle_sha256_matches": true,
+  "change": "Use existing MoonBit SHA256 for verified downloads on intentionally HTTP site without crypto.subtle; digest validation remains mandatory",
+  "targeted_js_tests": "70/70 reported by UI implementation agent",
+  "browser_actual_pdf_and_docx_download": "UI agent confirmed both Verified document downloaded messages through real CUA clicks on Generated revision6 technical packet",
+  "identity_routes_or_external_tls_changed": false,
+  "contract_signature_or_payment_created": false
+}

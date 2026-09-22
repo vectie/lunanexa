@@ -20,7 +20,10 @@ async fn relay_fixture() -> RelayFixture {
       @socket.Addr::parse("127.0.0.1:0"),
       reuse_addr=true,
     ),
-    proxy: @socket.TcpServer(@socket.Addr::parse("127.0.0.1:0"), reuse_addr=true),
+    proxy: @socket.TcpServer(
+      @socket.Addr::parse("127.0.0.1:0"),
+      reuse_addr=true,
+    ),
   }
 }
 
@@ -105,8 +108,10 @@ async test "half close forwards the FIN and lets the reply drain" {
   let fixture = relay_fixture()
   let upstream_saw_eof = Ref(false)
   @async.with_task_group() <| group => {
-    relay_group(group, fixture, (connection) => {
-      while connection.read_some(max_len=4096) is Some(_) {}
+    relay_group(group, fixture, connection => {
+      while connection.read_some(max_len=4096) is Some(_) {
+
+      }
       upstream_saw_eof.val = true
       connection.write(b"reply-after-agent-fin")
     })

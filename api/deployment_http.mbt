@@ -103,7 +103,7 @@ fn registry_evidence(
               // any approval granted this way carry no evaluation id, and the
               // policy itself is a deployment-level switch.
               evaluation_passed: !require_evaluation ||
-                passed_evaluation(snapshot, model),
+              passed_evaluation(snapshot, model),
               alias_points_to_model: true,
             })
           }
@@ -166,11 +166,7 @@ async fn ApiService::deployment_planning_context(
   let now = @async.now()
   let snapshot = registry.snapshot()
   {
-    registry: registry_evidence(
-      snapshot,
-      now,
-      registry.requires_evaluation(),
-    ),
+    registry: registry_evidence(snapshot, now, registry.requires_evaluation()),
     nodes: [
       for heartbeat in self.store.heartbeats() => {
         let node = management_node(
@@ -181,7 +177,7 @@ async fn ApiService::deployment_planning_context(
         match self.exclusive_lease_store {
           Some(leases) if leases.node_blocks_managed_placement(
               heartbeat.node_id,
-            ) => { ..node, state: Cordoned }
+            ) => { ..node, state: Cordoned, }
           _ => node
         }
       }

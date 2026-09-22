@@ -1,0 +1,50 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+fn object(j : Json) -> Map[String,Json] raise { guard j is Object(v) else { fail("Expected object") }; v }
+fn array(j : Json) -> Array[Json] raise { guard j is Array(v) else { fail("Expected array") }; v }
+async fn main {
+  guard @env.args() is [_, patch_path, private_dir, kubeconfig, image, revision] else {fail("Usage: deploy-offline-control.mbtx BASE_PATCH PRIVATE_DIR KUBECONFIG PINNED_IMAGE REVISION")}
+  guard !revision.is_empty() && revision.all(c => c is ('a'..='z' | '0'..='9' | '-')) else {fail("Invalid release revision")}
+  guard image.contains("@sha256:") else {fail("An immutable image is required")}
+  let k=["--kubeconfig",kubeconfig,"-n","lunanexa"]
+  let before=@shell.Cmd("kubectl",[..k,"get","deployment","lunanexa-control","-o","json"]).output()
+  before.check()
+  @fs.write_file(private_dir+"/controller-before-"+revision+"-apply.json",before.stdout(),create_mode=CreateNew,permission=0o600)
+  let patch=object(@json.parse(@fs.read_file(patch_path).text()))
+  let spec=object(patch["spec"])
+  let template=object(spec["template"])
+  let pod=object(template["spec"])
+  let containers=array(pod["containers"])
+  guard containers.length()==1 else {fail("Expected only control strategic-merge patch")}
+  let control=object(containers[0])
+  control["image"]=Json::string(image)
+  control["imagePullPolicy"]="IfNotPresent"
+  let approval_ref="docs/evidence/offline-ofl-v2-20260922/operator-approval.md"
+  let scopes : Json = [
+    {"template_id":"youthpolicy-device-undertaking-ofl-v2","version":"v2","locale":"zh-CN","sha256":"sha256:92f0041e2752d684ced68dd09f793ed0aafd795dc92c2f9522ca25c0af4542f7","approval_ref":approval_ref},
+    {"template_id":"offline-quote-v1","version":"1","locale":"zh-CN","sha256":"sha256:19f9f83a92fa37fa59df31b1a4f2ea1966a75986387bd2a4b7d6810ce78c5340","approval_ref":approval_ref},
+  ]
+  let env=array(control["env"])
+  env.push({"name":"LUNANEXA_OFFLINE_APPROVED_TEMPLATES_JSON","value":scopes.stringify(),"valueFrom":null})
+  // Explicitly approved, one-order technical rehearsal only. Ordinary orders
+  // retain their contract/payment/invoice/internal-approval requirements.
+  if revision == "20260922-v4" {
+    let authorization : Json = {
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+      "expires_unix_ms": (@async.now() + 3000000L).to_json(),
+    }
+    env.push({"name":"LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON","value":authorization.stringify(),"valueFrom":null})
+  }
+  control["env"]=Json::array(env)
+  containers[0]=Json::object(control)
+  pod["containers"]=Json::array(containers)
+  template["spec"]=Json::object(pod)
+  template["metadata"]={"annotations":{"lunanexa.io/offline-release":revision}}
+  spec["template"]=Json::object(template)
+  patch["spec"]=Json::object(spec)
+  let output=private_dir+"/controller-"+revision+"-patch.json"
+  @fs.write_file(output,Json::object(patch).stringify(),create_mode=CreateNew,permission=0o600)
+  @shell.Cmd("kubectl",[..k,"patch","deployment","lunanexa-control","--type=strategic","--patch-file="+output,"--dry-run=server","-o","name"]).run()
+  @shell.Cmd("kubectl",[..k,"patch","deployment","lunanexa-control","--type=strategic","--patch-file="+output]).run()
+}

@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+# Required named context: --build-context moonleaf_source=/reviewed/moonleaf
 FROM mirror.gcr.io/library/debian:bookworm-slim AS build-deps
 
 ARG HTTPS_PROXY
@@ -24,11 +26,24 @@ ENV MOON_AR=/usr/local/bin/zig-ar
 
 WORKDIR /src
 COPY . .
-RUN moon build cmd/control --target native --release --jobs 1
+# Copy source allowlists only: never a sibling repository's .git, caches or keys.
+COPY --from=moonleaf_source moon.mod moon.pkg *.mbt README.mbt.md /moonleaf/
+COPY --from=moonleaf_source docx/ /moonleaf/docx/
+COPY --from=moonleaf_source opc/ /moonleaf/opc/
+COPY --from=moonleaf_source pptx/ /moonleaf/pptx/
+COPY --from=moonleaf_source render/ /moonleaf/render/
+COPY --from=moonleaf_source scene/ /moonleaf/scene/
+COPY --from=moonleaf_source xlsx/ /moonleaf/xlsx/
+COPY --from=moonleaf_source xml/ /moonleaf/xml/
+COPY images/control.moon.work /src/moon.work
+RUN moon update && moon build cmd/control --target native --release --jobs 1
 
 FROM lunanexa/runtime-base:bookworm-amd64
 
-COPY --from=build /src/_build/native/release/build/cmd/control/control.exe /usr/local/bin/lunanexa-control
+COPY --from=build /src/_build/native/release/build/vectie/lunanexa/cmd/control/control.exe /usr/local/bin/lunanexa-control
+COPY --from=build /src/assets/contracts /usr/share/lunanexa/assets/contracts
+COPY --from=build /src/assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx /usr/share/lunanexa/contracts/youthpolicy/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx
+ENV LUNANEXA_CONTRACT_ASSETS_ROOT=/usr/share/lunanexa/assets/contracts
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/lunanexa-control"]

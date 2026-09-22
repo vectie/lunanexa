@@ -222,6 +222,7 @@ extern "js" fn lease_clock_promise(expires_unix_ms : Int64) -> @js.Promise =
   #| })
 
 ///|
+
 ///|
 /// A fresh opaque identifier.
 ///
@@ -250,6 +251,7 @@ extern "js" fn random_identifier(prefix : String) -> String =
   #|   const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
   #|   return `${prefix}-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   #| }
+
 ///|
 extern "js" fn request_promise(
   verb : String,

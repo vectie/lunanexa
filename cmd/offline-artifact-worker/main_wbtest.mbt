@@ -193,6 +193,7 @@ async test "PDF finalization binds rendered bytes to exact MoonLeaf source" {
   assert_eq(result.sha256, sha256(pdf))
   assert_true(result.moonleaf_verified)
   assert_true(result.render_verified)
+  assert_eq(result.page_count, Some(manifest.page_or_sheet_count))
   @fs.rmdir(root, recursive=true)
 }
 
@@ -219,9 +220,31 @@ async fn write_manifest_and_job(
 
 ///|
 async fn expect_job_failure(root : String, now : Int64) -> Unit {
-  ignore(run_job(root, "job.json", TestRenderSecret, now)) catch {
+  try run_job(root, "job.json", TestRenderSecret, now) catch {
     Failure(_) => ()
     _ => fail("invalid renderer evidence was accepted")
+  } noraise {
+    _ => fail("invalid renderer evidence was accepted")
+  }
+}
+
+///|
+test "worker rejects every staging namespace collision before writing" {
+  let job = base_job(generation_request(100000L))
+  validate_job(job)
+  for
+    invalid in [
+      { ..job, result_filename: job.render_manifest_filename, },
+      { ..job, prepared_filename: job.render_manifest_filename, },
+      { ..job, render_manifest_filename: job.template_filename, },
+      { ..job, result_filename: job.prepared_filename, },
+      { ..job, prepared_filename: "../outside.docx", },
+    ] {
+    try validate_job(invalid) catch {
+      _ => ()
+    } noraise {
+      _ => fail("unsafe staging namespace accepted")
+    }
   }
 }
 
@@ -262,6 +285,7 @@ async test "worker binds signed render evidence to the customized DOCX" {
   assert_true(result.moonleaf_verified)
   assert_true(result.render_verified)
   assert_true(@fs.exists("\{root}/contract.generated.docx"))
+  assert_eq(result.page_count, Some(manifest.page_or_sheet_count))
   assert_true(@fs.exists("\{root}/result.json"))
   let reopened = @opc.open(
     @fs.read_file("\{root}/contract.generated.docx").binary().to_fixedarray(),

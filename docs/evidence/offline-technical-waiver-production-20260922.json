@@ -1,0 +1,1198 @@
+{
+  "identity": {
+    "account_id": "account-a8a646206b6dd368534b3277",
+    "subject_ref": "subject-a8a646206b6dd368534b3277",
+    "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+    "display_name": "Technical Authority Acceptance",
+    "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
+    "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
+    "roles": [
+      "EnterpriseUser"
+    ],
+    "state": "Active",
+    "created_unix_ms": "1790075211730",
+    "updated_unix_ms": "1790075211730"
+  },
+  "classification": "technical-acceptance-waived-not-paid",
+  "identity_cleanup": {
+    "controller_account_state": "Revoked",
+    "exact_idp_username_remaining": 0,
+    "old_cookie_and_bearer_auth_self_http_status": 401,
+    "four_dedicated_credential_files_deleted": true,
+    "shared_town_operator_untouched_by_this_cleanup": true
+  },
+  "membership_cleanup_limit": {
+    "membership_id": "technical-acceptance-waiver-20260922-member",
+    "attempt_to_set_active_false": "AlreadyExists; current API is create-only",
+    "membership_record_retained_active_field": true,
+    "effective_authority": "none: platform account, IdP identity, workspace user and grant revoked; old session HTTP 401",
+    "direct_database_mutation_used": false
+  },
+  "inference_or_gpu_started": false,
+  "expires_unix_ms": "1790078709035",
+  "grant": {
+    "version": "lunanexa.workspace.v1",
+    "grant_id": "technical-acceptance-waiver-20260922-grant",
+    "user_id": "trial-user-a8a646206b6dd368534b3277",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "access": "Developer",
+    "starts_unix_ms": "1790076909035",
+    "expires_unix_ms": "1790078769035",
+    "state": "GrantActive",
+    "policy_receipt": "administrator-approved-technical-waiver-20260922"
+  },
+  "requested_lease": {
+    "version": "lunanexa.workspace.v1",
+    "lease_id": "technical-acceptance-waiver-20260922-lease",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "subject_ref": "subject-a8a646206b6dd368534b3277",
+    "access": "Developer",
+    "limits": {
+      "max_active_sessions": 1,
+      "max_session_duration_ms": "60000",
+      "capabilities": [
+        {
+          "capability": "TextGenerate",
+          "max_concurrent_requests": 1,
+          "max_requests_per_hour": 1,
+          "max_input_units_per_request": 1,
+          "max_output_units_per_request": 1
+        }
+      ]
+    },
+    "starts_unix_ms": "1790076909035",
+    "expires_unix_ms": "1790078709035",
+    "state": "Requested",
+    "policy_receipt": "administrator-approved-technical-waiver-20260922"
+  },
+  "draft": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "artifact_ids": [],
+    "state": "Draft",
+    "generation": "1",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076912505",
+    "expires_unix_ms": "1790078709035"
+  },
+  "quoted": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "quote": {
+      "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+      "version": "v1",
+      "service_code": "technical-workspace-acceptance",
+      "sla_code": "technical-only",
+      "currency": "CNY",
+      "lines": [
+        {
+          "line_id": "technical-test",
+          "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+          "quantity": "1",
+          "unit": "test",
+          "unit_price": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          },
+          "line_total": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          }
+        }
+      ],
+      "subtotal": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "tax": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "total": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "valid_until_unix_ms": "1790078709035",
+      "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+      "created_unix_ms": "1790076909035"
+    },
+    "artifact_ids": [],
+    "state": "Quoted",
+    "generation": "2",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076913413",
+    "expires_unix_ms": "1790078709035"
+  },
+  "before": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-a8a646206b6dd368534b3277",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-a8a646206b6dd368534b3277",
+      "subject_ref": "subject-a8a646206b6dd368534b3277",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
+      "state": "UserActive",
+      "created_unix_ms": "1790075211730",
+      "identity_receipt": "trial:trial-a8a646206b6dd368534b3277"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-a8a646206b6dd368534b3277",
+        "user_id": "trial-user-a8a646206b6dd368534b3277",
+        "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "starts_unix_ms": "1790075211730",
+        "expires_unix_ms": "1790161611730",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-a8a646206b6dd368534b3277"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-acceptance-waiver-20260922-grant",
+        "user_id": "trial-user-a8a646206b6dd368534b3277",
+        "tenant_ref": "technical-acceptance-waiver-20260922",
+        "access": "Developer",
+        "starts_unix_ms": "1790076909035",
+        "expires_unix_ms": "1790078769035",
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-a8a646206b6dd368534b3277",
+        "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
+        "subject_ref": "subject-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790075211730",
+        "expires_unix_ms": "1790161611730",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-a8a646206b6dd368534b3277"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-acceptance-waiver-20260922-lease",
+        "tenant_ref": "technical-acceptance-waiver-20260922",
+        "subject_ref": "subject-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790076909035",
+        "expires_unix_ms": "1790078709035",
+        "state": "Requested",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922"
+      }
+    ],
+    "authorized": false,
+    "readiness": "LeaseUnavailable",
+    "allowed_models": []
+  },
+  "waived_order": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "quote": {
+      "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+      "version": "v1",
+      "service_code": "technical-workspace-acceptance",
+      "sla_code": "technical-only",
+      "currency": "CNY",
+      "lines": [
+        {
+          "line_id": "technical-test",
+          "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+          "quantity": "1",
+          "unit": "test",
+          "unit_price": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          },
+          "line_total": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          }
+        }
+      ],
+      "subtotal": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "tax": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "total": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "valid_until_unix_ms": "1790078709035",
+      "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+      "created_unix_ms": "1790076909035"
+    },
+    "artifact_ids": [],
+    "technical_acceptance_waiver": {
+      "waiver_id": "technical-acceptance-waiver-order-20260922-waiver",
+      "classification": "technical-acceptance-waived-not-paid",
+      "waived_requirements": [
+        "ExecutedAgreementEvidence",
+        "PaymentEvidence",
+        "InvoiceEvidence",
+        "InternalApproval"
+      ],
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "quote": {
+        "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+        "version": "v1",
+        "service_code": "technical-workspace-acceptance",
+        "sla_code": "technical-only",
+        "currency": "CNY",
+        "lines": [
+          {
+            "line_id": "technical-test",
+            "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+            "quantity": "1",
+            "unit": "test",
+            "unit_price": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            },
+            "line_total": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            }
+          }
+        ],
+        "subtotal": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "tax": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "total": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "valid_until_unix_ms": "1790078709035",
+        "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+        "created_unix_ms": "1790076909035"
+      },
+      "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
+      "grant_id": "technical-acceptance-waiver-20260922-grant",
+      "purchaser_account_id": "account-a8a646206b6dd368534b3277",
+      "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+      "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
+      "identity_verification_method": "actual-oidc-not-commercial-kyc",
+      "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
+      "operator_subject_ref": "subject-62ccd3da9d05ea6c5783a8b8",
+      "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
+      "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+      "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
+      "issued_unix_ms": "1790076926241",
+      "expires_unix_ms": "1790078709035"
+    },
+    "state": "UnderReconciliation",
+    "generation": "3",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076926241",
+    "expires_unix_ms": "1790078709035"
+  },
+  "activation_request": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "quote": {
+      "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+      "version": "v1",
+      "service_code": "technical-workspace-acceptance",
+      "sla_code": "technical-only",
+      "currency": "CNY",
+      "lines": [
+        {
+          "line_id": "technical-test",
+          "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+          "quantity": "1",
+          "unit": "test",
+          "unit_price": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          },
+          "line_total": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          }
+        }
+      ],
+      "subtotal": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "tax": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "total": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "valid_until_unix_ms": "1790078709035",
+      "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+      "created_unix_ms": "1790076909035"
+    },
+    "artifact_ids": [],
+    "technical_acceptance_waiver": {
+      "waiver_id": "technical-acceptance-waiver-order-20260922-waiver",
+      "classification": "technical-acceptance-waived-not-paid",
+      "waived_requirements": [
+        "ExecutedAgreementEvidence",
+        "PaymentEvidence",
+        "InvoiceEvidence",
+        "InternalApproval"
+      ],
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "quote": {
+        "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+        "version": "v1",
+        "service_code": "technical-workspace-acceptance",
+        "sla_code": "technical-only",
+        "currency": "CNY",
+        "lines": [
+          {
+            "line_id": "technical-test",
+            "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+            "quantity": "1",
+            "unit": "test",
+            "unit_price": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            },
+            "line_total": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            }
+          }
+        ],
+        "subtotal": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "tax": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "total": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "valid_until_unix_ms": "1790078709035",
+        "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+        "created_unix_ms": "1790076909035"
+      },
+      "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
+      "grant_id": "technical-acceptance-waiver-20260922-grant",
+      "purchaser_account_id": "account-a8a646206b6dd368534b3277",
+      "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+      "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
+      "identity_verification_method": "actual-oidc-not-commercial-kyc",
+      "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
+      "operator_subject_ref": "subject-62ccd3da9d05ea6c5783a8b8",
+      "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
+      "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+      "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
+      "issued_unix_ms": "1790076926241",
+      "expires_unix_ms": "1790078709035"
+    },
+    "state": "FulfillmentPending",
+    "generation": "4",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076927442",
+    "expires_unix_ms": "1790078709035"
+  },
+  "entitlement_activations": [
+    {
+      "activation_id": "technical-acceptance-waiver-order-20260922-activation",
+      "idempotency_key": "technical-acceptance-waiver-order-20260922-activation",
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "kind": "WorkspaceLease",
+      "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
+      "expected_order_generation": "3",
+      "state": "EntitlementActivationConfirmed",
+      "entitlement_ref": "technical-acceptance-waiver-20260922-lease",
+      "authority_receipt": "offline-authority:0cc741b131a1a64f9d7a533a0bb97511a240f3714c3ffc315f46ea2019add5b7",
+      "requested_by": "subject-62ccd3da9d05ea6c5783a8b8",
+      "requested_unix_ms": "1790076927442",
+      "completed_unix_ms": "1790076931075"
+    }
+  ],
+  "reversals": [
+    {
+      "reversal_id": "technical-acceptance-waiver-order-20260922-reversal",
+      "idempotency_key": "technical-acceptance-waiver-order-20260922-reversal",
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "entitlement_ref": "technical-acceptance-waiver-20260922-lease",
+      "reason": "CustomerCancellation",
+      "expected_order_generation": "5",
+      "state": "ReversalConfirmed",
+      "authority_receipt": "offline-authority:38411a12a2fd1c6d7deeab20b37e65d37046adf711f3b538de146b1f4e0f8cd8",
+      "requested_by": "subject-62ccd3da9d05ea6c5783a8b8",
+      "requested_unix_ms": "1790076951505",
+      "completed_unix_ms": "1790076956395"
+    }
+  ],
+  "fulfilled_order": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "quote": {
+      "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+      "version": "v1",
+      "service_code": "technical-workspace-acceptance",
+      "sla_code": "technical-only",
+      "currency": "CNY",
+      "lines": [
+        {
+          "line_id": "technical-test",
+          "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+          "quantity": "1",
+          "unit": "test",
+          "unit_price": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          },
+          "line_total": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          }
+        }
+      ],
+      "subtotal": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "tax": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "total": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "valid_until_unix_ms": "1790078709035",
+      "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+      "created_unix_ms": "1790076909035"
+    },
+    "artifact_ids": [],
+    "entitlement_ref": "technical-acceptance-waiver-20260922-lease",
+    "technical_acceptance_waiver": {
+      "waiver_id": "technical-acceptance-waiver-order-20260922-waiver",
+      "classification": "technical-acceptance-waived-not-paid",
+      "waived_requirements": [
+        "ExecutedAgreementEvidence",
+        "PaymentEvidence",
+        "InvoiceEvidence",
+        "InternalApproval"
+      ],
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "quote": {
+        "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+        "version": "v1",
+        "service_code": "technical-workspace-acceptance",
+        "sla_code": "technical-only",
+        "currency": "CNY",
+        "lines": [
+          {
+            "line_id": "technical-test",
+            "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+            "quantity": "1",
+            "unit": "test",
+            "unit_price": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            },
+            "line_total": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            }
+          }
+        ],
+        "subtotal": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "tax": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "total": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "valid_until_unix_ms": "1790078709035",
+        "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+        "created_unix_ms": "1790076909035"
+      },
+      "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
+      "grant_id": "technical-acceptance-waiver-20260922-grant",
+      "purchaser_account_id": "account-a8a646206b6dd368534b3277",
+      "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+      "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
+      "identity_verification_method": "actual-oidc-not-commercial-kyc",
+      "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
+      "operator_subject_ref": "subject-62ccd3da9d05ea6c5783a8b8",
+      "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
+      "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+      "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
+      "issued_unix_ms": "1790076926241",
+      "expires_unix_ms": "1790078709035"
+    },
+    "state": "Fulfilled",
+    "generation": "5",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076931075",
+    "expires_unix_ms": "1790078709035"
+  },
+  "active_self": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-a8a646206b6dd368534b3277",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-a8a646206b6dd368534b3277",
+      "subject_ref": "subject-a8a646206b6dd368534b3277",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
+      "state": "UserActive",
+      "created_unix_ms": "1790075211730",
+      "identity_receipt": "trial:trial-a8a646206b6dd368534b3277"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-a8a646206b6dd368534b3277",
+        "user_id": "trial-user-a8a646206b6dd368534b3277",
+        "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "starts_unix_ms": "1790075211730",
+        "expires_unix_ms": "1790161611730",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-a8a646206b6dd368534b3277"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-acceptance-waiver-20260922-grant",
+        "user_id": "trial-user-a8a646206b6dd368534b3277",
+        "tenant_ref": "technical-acceptance-waiver-20260922",
+        "access": "Developer",
+        "starts_unix_ms": "1790076909035",
+        "expires_unix_ms": "1790078769035",
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-a8a646206b6dd368534b3277",
+        "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
+        "subject_ref": "subject-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790075211730",
+        "expires_unix_ms": "1790161611730",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-a8a646206b6dd368534b3277"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-acceptance-waiver-20260922-lease",
+        "tenant_ref": "technical-acceptance-waiver-20260922",
+        "subject_ref": "subject-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790076909035",
+        "expires_unix_ms": "1790078709035",
+        "state": "Active",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922"
+      }
+    ],
+    "active_lease": {
+      "version": "lunanexa.workspace.v1",
+      "lease_id": "technical-acceptance-waiver-20260922-lease",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "subject_ref": "subject-a8a646206b6dd368534b3277",
+      "access": "Developer",
+      "limits": {
+        "max_active_sessions": 1,
+        "max_session_duration_ms": "60000",
+        "capabilities": [
+          {
+            "capability": "TextGenerate",
+            "max_concurrent_requests": 1,
+            "max_requests_per_hour": 1,
+            "max_input_units_per_request": 1,
+            "max_output_units_per_request": 1
+          }
+        ]
+      },
+      "starts_unix_ms": "1790076909035",
+      "expires_unix_ms": "1790078709035",
+      "state": "Active",
+      "policy_receipt": "administrator-approved-technical-waiver-20260922"
+    },
+    "authorized": true,
+    "readiness": "WorkspaceReady",
+    "allowed_models": [
+      "text.qwen"
+    ]
+  },
+  "reversal_request": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "quote": {
+      "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+      "version": "v1",
+      "service_code": "technical-workspace-acceptance",
+      "sla_code": "technical-only",
+      "currency": "CNY",
+      "lines": [
+        {
+          "line_id": "technical-test",
+          "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+          "quantity": "1",
+          "unit": "test",
+          "unit_price": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          },
+          "line_total": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          }
+        }
+      ],
+      "subtotal": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "tax": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "total": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "valid_until_unix_ms": "1790078709035",
+      "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+      "created_unix_ms": "1790076909035"
+    },
+    "artifact_ids": [],
+    "entitlement_ref": "technical-acceptance-waiver-20260922-lease",
+    "technical_acceptance_waiver": {
+      "waiver_id": "technical-acceptance-waiver-order-20260922-waiver",
+      "classification": "technical-acceptance-waived-not-paid",
+      "waived_requirements": [
+        "ExecutedAgreementEvidence",
+        "PaymentEvidence",
+        "InvoiceEvidence",
+        "InternalApproval"
+      ],
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "quote": {
+        "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+        "version": "v1",
+        "service_code": "technical-workspace-acceptance",
+        "sla_code": "technical-only",
+        "currency": "CNY",
+        "lines": [
+          {
+            "line_id": "technical-test",
+            "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+            "quantity": "1",
+            "unit": "test",
+            "unit_price": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            },
+            "line_total": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            }
+          }
+        ],
+        "subtotal": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "tax": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "total": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "valid_until_unix_ms": "1790078709035",
+        "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+        "created_unix_ms": "1790076909035"
+      },
+      "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
+      "grant_id": "technical-acceptance-waiver-20260922-grant",
+      "purchaser_account_id": "account-a8a646206b6dd368534b3277",
+      "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+      "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
+      "identity_verification_method": "actual-oidc-not-commercial-kyc",
+      "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
+      "operator_subject_ref": "subject-62ccd3da9d05ea6c5783a8b8",
+      "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
+      "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+      "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
+      "issued_unix_ms": "1790076926241",
+      "expires_unix_ms": "1790078709035"
+    },
+    "state": "ReversalPending",
+    "generation": "6",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076951505",
+    "expires_unix_ms": "1790078709035"
+  },
+  "revoked_order": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "idempotency_key": "technical-acceptance-waiver-order-20260922",
+    "tenant_ref": "technical-acceptance-waiver-20260922",
+    "organization_id": "technical-acceptance-waiver-20260922",
+    "project_id": "technical-acceptance-waiver-20260922-project",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "selected_service_code": "technical-workspace-acceptance",
+    "selected_sla_code": "technical-only",
+    "policy": {
+      "require_executed_agreement": true,
+      "require_payment": true,
+      "invoice_timing": "InvoiceBeforeFulfillment",
+      "require_identity_verification": true,
+      "require_internal_approval": true
+    },
+    "quote": {
+      "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+      "version": "v1",
+      "service_code": "technical-workspace-acceptance",
+      "sla_code": "technical-only",
+      "currency": "CNY",
+      "lines": [
+        {
+          "line_id": "technical-test",
+          "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+          "quantity": "1",
+          "unit": "test",
+          "unit_price": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          },
+          "line_total": {
+            "minor_units": "0",
+            "currency": "CNY",
+            "scale": 2
+          }
+        }
+      ],
+      "subtotal": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "tax": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "total": {
+        "minor_units": "0",
+        "currency": "CNY",
+        "scale": 2
+      },
+      "valid_until_unix_ms": "1790078709035",
+      "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+      "created_unix_ms": "1790076909035"
+    },
+    "artifact_ids": [],
+    "entitlement_ref": "technical-acceptance-waiver-20260922-lease",
+    "technical_acceptance_waiver": {
+      "waiver_id": "technical-acceptance-waiver-order-20260922-waiver",
+      "classification": "technical-acceptance-waived-not-paid",
+      "waived_requirements": [
+        "ExecutedAgreementEvidence",
+        "PaymentEvidence",
+        "InvoiceEvidence",
+        "InternalApproval"
+      ],
+      "order_id": "technical-acceptance-waiver-order-20260922",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "organization_id": "technical-acceptance-waiver-20260922",
+      "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+      "quote": {
+        "quote_id": "technical-acceptance-waiver-order-20260922-quote",
+        "version": "v1",
+        "service_code": "technical-workspace-acceptance",
+        "sla_code": "technical-only",
+        "currency": "CNY",
+        "lines": [
+          {
+            "line_id": "technical-test",
+            "description": "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; docs/evidence/offline-technical-waiver-20260922.md",
+            "quantity": "1",
+            "unit": "test",
+            "unit_price": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            },
+            "line_total": {
+              "minor_units": "0",
+              "currency": "CNY",
+              "scale": 2
+            }
+          }
+        ],
+        "subtotal": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "tax": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "total": {
+          "minor_units": "0",
+          "currency": "CNY",
+          "scale": 2
+        },
+        "valid_until_unix_ms": "1790078709035",
+        "terms_digest": "sha256:5ffd27dba5d1969296216140e104dfe007255b25c7f3b60f03a63f9d2e05e62c",
+        "created_unix_ms": "1790076909035"
+      },
+      "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
+      "grant_id": "technical-acceptance-waiver-20260922-grant",
+      "purchaser_account_id": "account-a8a646206b6dd368534b3277",
+      "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+      "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
+      "identity_verification_method": "actual-oidc-not-commercial-kyc",
+      "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
+      "operator_subject_ref": "subject-62ccd3da9d05ea6c5783a8b8",
+      "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
+      "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+      "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
+      "issued_unix_ms": "1790076926241",
+      "expires_unix_ms": "1790078709035"
+    },
+    "state": "Revoked",
+    "generation": "7",
+    "created_unix_ms": "1790076912505",
+    "updated_unix_ms": "1790076956395",
+    "expires_unix_ms": "1790078709035"
+  },
+  "revoked_self": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-a8a646206b6dd368534b3277",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-a8a646206b6dd368534b3277",
+      "subject_ref": "subject-a8a646206b6dd368534b3277",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
+      "state": "UserActive",
+      "created_unix_ms": "1790075211730",
+      "identity_receipt": "trial:trial-a8a646206b6dd368534b3277"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-a8a646206b6dd368534b3277",
+        "user_id": "trial-user-a8a646206b6dd368534b3277",
+        "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "starts_unix_ms": "1790075211730",
+        "expires_unix_ms": "1790161611730",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-a8a646206b6dd368534b3277"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-acceptance-waiver-20260922-grant",
+        "user_id": "trial-user-a8a646206b6dd368534b3277",
+        "tenant_ref": "technical-acceptance-waiver-20260922",
+        "access": "Developer",
+        "starts_unix_ms": "1790076909035",
+        "expires_unix_ms": "1790078769035",
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-a8a646206b6dd368534b3277",
+        "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
+        "subject_ref": "subject-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790075211730",
+        "expires_unix_ms": "1790161611730",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-a8a646206b6dd368534b3277"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-acceptance-waiver-20260922-lease",
+        "tenant_ref": "technical-acceptance-waiver-20260922",
+        "subject_ref": "subject-a8a646206b6dd368534b3277",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790076909035",
+        "expires_unix_ms": "1790078709035",
+        "state": "Revoked",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922"
+      }
+    ],
+    "authorized": false,
+    "readiness": "LeaseUnavailable",
+    "allowed_models": []
+  },
+  "actual_dispatcher_activation_and_reversal_complete": true,
+  "grant_cleanup": {
+    "access_grant": {
+      "version": "lunanexa.workspace.v1",
+      "grant_id": "technical-acceptance-waiver-20260922-grant",
+      "user_id": "trial-user-a8a646206b6dd368534b3277",
+      "tenant_ref": "technical-acceptance-waiver-20260922",
+      "access": "Developer",
+      "starts_unix_ms": "1790076909035",
+      "expires_unix_ms": "1790078769035",
+      "state": "GrantRevoked",
+      "policy_receipt": "administrator-approved-technical-waiver-20260922"
+    },
+    "receipt": "workspace-access-revoke:technical-acceptance-waiver-20260922-grant:1790076977715"
+  },
+  "user_cleanup": {
+    "version": "lunanexa.workspace.v1",
+    "user_id": "trial-user-a8a646206b6dd368534b3277",
+    "subject_ref": "subject-a8a646206b6dd368534b3277",
+    "display_name": "Technical Authority Acceptance",
+    "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
+    "state": "UserRevoked",
+    "created_unix_ms": "1790075211730",
+    "identity_receipt": "trial:trial-a8a646206b6dd368534b3277"
+  }
+}

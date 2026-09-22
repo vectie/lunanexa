@@ -90,9 +90,12 @@ pub async fn OfflineCommerceStore::archive_contract_generation(
   docx~ : ContractArchiveObject,
   pdf~ : ContractArchiveObject,
 ) -> Array[@offline.DocumentArtifact] {
-  if template_id != "youthpolicy-device-undertaking-v1" ||
-    !@contracts.valid_identifier(template_version) ||
-    !@contracts.valid_identifier(locale) {
+  let known_template = match (template_id, template_version) {
+    ("youthpolicy-device-undertaking-v1", "v1")
+    | ("youthpolicy-device-undertaking-ofl-v2", "v2") => true
+    _ => false
+  }
+  if !known_template || !@contracts.valid_identifier(locale) {
     raise @offline.OfflineCommerceError::InvalidInput(
       "unsupported contract archive template",
     )

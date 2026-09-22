@@ -23,7 +23,7 @@ Two consequences worth relying on:
 
 ## Using it
 
-```moonbit
+```moonbit nocheck
 let pool = @pgclient.PgPool::connect(url, workers=4)
 let rows = pool.execute("SELECT 1::text AS value")
 ignore(rows.value(0, 0))

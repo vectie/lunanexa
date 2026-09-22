@@ -304,6 +304,58 @@ fn contract_document_error(error : Error) -> HttpReply {
 }
 
 ///|
+fn contract_preview_template_path(
+  manifest : @contractdoc.ContractTemplateManifest,
+  assets_root? : String,
+) -> String {
+  let root = assets_root
+    .unwrap_or(
+      @env.get_env_var("LUNANEXA_CONTRACT_ASSETS_ROOT").unwrap_or(
+        "assets/contracts",
+      ),
+    )
+    .trim_end(chars="/")
+    .to_owned()
+  match manifest.template_id {
+    "youthpolicy-device-undertaking-ofl-v2" =>
+      "\{root}/youthpolicy/undertaking-ofl-v2/\{manifest.fillable_filename}"
+    "youthpolicy-device-undertaking-v1" =>
+      "\{root}/youthpolicy/undertaking-v1/\{manifest.fillable_filename}"
+    _ =>
+      @env.get_env_var("LUNANEXA_CONTRACT_TEMPLATE_PATH").unwrap_or(
+        "\{root}/youthpolicy/v1/\{manifest.fillable_filename}",
+      )
+  }
+}
+
+///|
+/// Catalog retains immutable legacy manifests for existing packets.
+fn contract_document_catalog() -> Array[@contractdoc.ContractTemplateManifest] {
+  [
+    @contractdoc.youthpolicy_remote_lease_manifest(),
+    @contractdoc.undertaking_ofl_manifest(),
+    @contractdoc.undertaking_manifest(),
+  ]
+}
+
+///|
+/// Known immutable quote terms cannot silently change typography/template
+/// edition. Unknown historical digests retain their existing admission rules.
+fn undertaking_quote_matches_template(
+  order : @offline.CommercialOrder,
+  manifest : @contractdoc.ContractTemplateManifest,
+) -> Bool {
+  guard order.quote is Some(quote) else { return false }
+  let old_digest = @contractdoc.undertaking_manifest().sha256
+  let new_digest = @contractdoc.undertaking_ofl_manifest().sha256
+  if quote.terms_digest == old_digest || quote.terms_digest == new_digest {
+    quote.terms_digest == manifest.sha256
+  } else {
+    true
+  }
+}
+
+///|
 async fn moonleaf_contract_preview(
   manifest : @contractdoc.ContractTemplateManifest,
   packet : @contractdoc.ContractPacket,
@@ -316,15 +368,7 @@ async fn moonleaf_contract_preview(
       true,
     )
   }
-  let template_path = if @contractdoc.is_undertaking_template(
-      manifest.template_id,
-    ) {
-    "assets/contracts/youthpolicy/undertaking-v1/\{manifest.fillable_filename}"
-  } else {
-    @env.get_env_var("LUNANEXA_CONTRACT_TEMPLATE_PATH").unwrap_or(
-      "assets/contracts/youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx",
-    )
-  }
+  let template_path = contract_preview_template_path(manifest)
   let template = try
     @fs.read_file(template_path).binary().to_fixedarray()
   catch {
@@ -428,10 +472,7 @@ async fn ApiService::handle_contract_documents(
   if verb == Get &&
     path == "/v1/contract-documents/manifest/catalog" &&
     self.operator_authorized(headers) {
-    return json_reply(
-      200,
-      [manifest, @contractdoc.undertaking_manifest()].to_json(),
-    )
+    return json_reply(200, contract_document_catalog().to_json())
   }
   if verb == Get &&
     path == "/v1/contract-documents/manifest" &&
@@ -920,7 +961,7 @@ async fn ApiService::handle_contract_documents(
               packet_revision=result.expected_revision,
               template_id=packet.template_id,
               template_version=packet.template_version,
-              locale=@contractdoc.undertaking_manifest().locale,
+              locale=@contractdoc.manifest_for_template_id(packet.template_id).locale,
               now_unix_ms=@async.now(),
               docx=docx_storage,
               pdf=pdf_storage,
@@ -997,7 +1038,7 @@ async fn ApiService::handle_contract_documents(
     })
   match (verb, path) {
     (Get, "/v1/contract-documents/manifest/catalog") =>
-      json_reply(200, [manifest, @contractdoc.undertaking_manifest()].to_json())
+      json_reply(200, contract_document_catalog().to_json())
     (Get, "/v1/contract-documents/manifest") =>
       json_reply(200, manifest.to_json())
     (Get, "/v1/contract-documents/self") =>
@@ -1278,10 +1319,11 @@ async fn ApiService::handle_contract_documents(
             order.organization_id == view.membership.organization_id &&
             order.purchaser_subject_ref == subject_ref &&
             undertaking_order_live(order, now) &&
+            undertaking_quote_matches_template(order, manifest) &&
             @offline.undertaking_quote_term(order) is Some(_)
           }) else {
           return api_error(
-            409, "UndertakingOrderRequired", "a live own order with an eligible fixed-tariff quote is required",
+            409, "UndertakingOrderRequired", "a live own order with an eligible fixed-tariff quote matching this template edition is required",
             false,
           )
         }
@@ -1458,6 +1500,28 @@ async fn ApiService::handle_contract_documents(
           404, "ContractPacketNotFound", "contract packet was not found", false,
         )
       }
+      let bridge = self.offline_template_approvals is Some(_) ||
+        self.offline_commerce_store is Some(_)
+      if bridge &&
+        self.offline_contract_generation_gate(packet, @async.now())
+        is Some(denied) {
+        return denied
+      }
+      // A previous cross-store enqueue may have lost its response. Recover the
+      // exact confirmed revision without issuing a second generation revision.
+      if bridge &&
+        packet.state == GenerationRequested &&
+        packet.revision == request.expected_revision + 1L &&
+        packet.values_sha256 == Some(digest) {
+        self.enqueue_offline_contract_packet(packet) catch {
+          _ =>
+            return api_error(
+              503, "ContractGenerationEnqueuePending", "generation was retained and will resume automatically",
+              true,
+            )
+        }
+        return json_reply(202, packet.to_json())
+      }
       let updated = try
         store.request_generation(
           packet_id,
@@ -1470,6 +1534,15 @@ async fn ApiService::handle_contract_documents(
         error => return contract_document_error(error)
       } noraise {
         value => value
+      }
+      if bridge {
+        self.enqueue_offline_contract_packet(updated) catch {
+          _ =>
+            return api_error(
+              503, "ContractGenerationEnqueuePending", "generation was retained and will resume automatically",
+              true,
+            )
+        }
       }
       json_reply(202, updated.to_json())
     }

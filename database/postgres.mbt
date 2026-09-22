@@ -61,7 +61,8 @@ async fn PgOperation::execute(
       self.failed = true
       raise ConnectionUnavailable("database statement timed out")
     }
-    @pgclient.PgError::Closed => raise ConnectionUnavailable("database pool is closed")
+    @pgclient.PgError::Closed =>
+      raise ConnectionUnavailable("database pool is closed")
     _ => {
       self.failed = true
       raise ConnectionUnavailable("database statement failed")
@@ -99,7 +100,7 @@ async fn with_transaction(
     value => value
   }
   if !committed {
-    ignore(connection.execute("ROLLBACK")) catch {
+    try ignore(connection.execute("ROLLBACK")) catch {
       _ => ()
     } noraise {
       _ => ()
@@ -114,7 +115,9 @@ async fn with_transaction(
 
 ///|
 /// Borrows a worker connection from the shared pool.
-async fn PostgresDatabase::begin_operation(self : PostgresDatabase) -> PgOperation {
+async fn PostgresDatabase::begin_operation(
+  self : PostgresDatabase,
+) -> PgOperation {
   let pool = self.work_pool()
   { connection: pool.acquire(), failed: false, }
 }
@@ -163,9 +166,8 @@ async fn PostgresDatabase::make_pool(
   self : PostgresDatabase,
   workers : Int,
 ) -> @pgclient.PgPool {
-  @pgclient.PgPool::connect(self.url, workers=workers) catch {
-    @pgclient.PgError::InvalidArgument(message) =>
-      raise QueryFailed(message)
+  try @pgclient.PgPool::connect(self.url, workers~) catch {
+    @pgclient.PgError::InvalidArgument(message) => raise QueryFailed(message)
     @pgclient.PgError::ConnectionUnavailable(message) =>
       raise ConnectionUnavailable(message)
     @pgclient.PgError::QueryRejected(message) => raise QueryFailed(message)
@@ -218,9 +220,14 @@ pub fn PostgresDatabase::open(
 /// one shared connection, so a slow statement no longer queues every other
 /// request behind it.
 fn worker_count() -> Int {
-  let configured = @env
-    .get_env_var("LUNANEXA_DATABASE_WORKERS")
-    .map(value => @string.parse_int(value) catch { _ => 0 } noraise { v => v })
+  let configured = @env.get_env_var("LUNANEXA_DATABASE_WORKERS")
+    .map(value => {
+      try @string.parse_int(value) catch {
+        _ => 0
+      } noraise {
+        v => v
+      }
+    })
     .unwrap_or(0)
   if configured > 0 && configured <= 32 {
     configured
@@ -336,7 +343,6 @@ pub async fn PostgresDatabase::try_acquire_controller_leadership(
   elect_controller(connection, holder_id)
 }
 
-
 ///|
 /// Runs the election, then drops the session advisory lock when any step after
 /// taking it fails. The lock lives on the leader connection, so a failed
@@ -401,7 +407,7 @@ async fn elect_controller(
   if succeeded {
     Some(elected)
   } else {
-    ignore(connection.execute("ROLLBACK")) catch {
+    try ignore(connection.execute("ROLLBACK")) catch {
       _ => ()
     } noraise {
       _ => ()
@@ -419,11 +425,13 @@ async fn elect_controller(
 /// controller can take over. Runs on the leader connection itself, which is
 /// why it cannot be expressed as `errdefer`: it awaits.
 async fn release_controller_lock(connection : PgOperation) -> Unit {
-  ignore(
-    connection.execute("SELECT pg_advisory_unlock($1::bigint)", parameters=[
-      Some(controller_advisory_lock_id),
-    ]),
-  ) catch {
+  try
+    ignore(
+      connection.execute("SELECT pg_advisory_unlock($1::bigint)", parameters=[
+        Some(controller_advisory_lock_id),
+      ]),
+    )
+  catch {
     _ => ()
   } noraise {
     _ => ()
@@ -571,7 +579,8 @@ pub async fn PostgresDatabase::save_opaque_snapshots(
   })
 }
 
-///| Appends one operational event to the append-only event relation. The event
+///|
+/// Appends one operational event to the append-only event relation. The event
 /// identifier is the primary key, so replaying an already stored event is a
 /// no-op instead of a duplicate row. Operational events intentionally are not
 /// part of `lunanexa.snapshots`: rewriting the whole recent window on every
@@ -609,7 +618,8 @@ pub async fn PostgresDatabase::append_operational_event(
   )
 }
 
-///| Loads the newest bounded operational event window as JSON payloads,
+///|
+/// Loads the newest bounded operational event window as JSON payloads,
 /// oldest-first so a caller can rebuild its in-memory ordering directly. Rows
 /// sharing one millisecond are ordered by event identifier; that tie-break is
 /// stable across restarts but is not necessarily the original arrival order.
@@ -642,15 +652,15 @@ pub async fn PostgresDatabase::load_recent_operational_events(
   events
 }
 
-///| Counts durable operational events.
+///|
+/// Counts durable operational events.
 pub async fn PostgresDatabase::operational_event_count(
   self : PostgresDatabase,
 ) -> Int64 {
   let connection = self.begin_operation()
   defer connection.release()
   let result = run(
-    connection,
-    "SELECT count(*)::text FROM lunanexa.operational_events",
+    connection, "SELECT count(*)::text FROM lunanexa.operational_events",
   )
   guard result.value(0, 0) is Some(value) else {
     raise QueryFailed("operational event count result is empty")
@@ -660,7 +670,8 @@ pub async fn PostgresDatabase::operational_event_count(
   }
 }
 
-///| Deletes operational events outside the newest `keep` window. Callers run
+///|
+/// Deletes operational events outside the newest `keep` window. Callers run
 /// this on open and thereafter on an amortised schedule, because the durable
 /// relation only has to stay bounded, not exactly trimmed on every request.
 pub async fn PostgresDatabase::prune_operational_events(

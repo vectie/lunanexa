@@ -1,0 +1,30 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+async fn main {
+  guard @env.args() is [_, grant_file, evidence_file, artifact_id] else {fail("Usage: verify-offline-customer-download.mbtx PRIVATE_GRANT_JSON EVIDENCE_JSON ARTIFACT_ID")}
+  guard !artifact_id.is_empty() && artifact_id.all(c => c is ('a'..='z' | 'A'..='Z' | '0'..='9' | '-')) else {fail("Invalid artifact ID")}
+  let grant=@json.parse(@fs.read_file(grant_file).text())
+  guard grant is {"session_id":String(id),"transfer_path":String(path),"session_token":String(token),"expected_sha256":String(expected),..} else {
+    if grant is {"error":error,..} {println(error.stringify())}
+    fail("Controller did not issue a download grant")
+  }
+  guard path.has_prefix("/v1/offline-transfers/") && !path.contains("\"") && !token.contains("\"") && !token.contains("\n") else {fail("Unsafe grant")}
+  let remote=["-p","32123","HwHiAiUser@106.39.18.146"]
+  let target="/home/HwHiAiUser/moon-public/secrets/offline-commerce-20260922/customer-"+artifact_id+".bin"
+  let config="silent\nshow-error\nmax-time = 60\nurl = \"http://106.39.18.146:5003"+path+"\"\nheader = \"Authorization: Bearer "+token+"\"\noutput = \""+target+"\"\nwrite-out = \"%{http_code}\"\n"
+  let response=@shell.Cmd("ssh",[..remote,"curl","--config","-"],stdin=Text(config)).output()
+  response.check()
+  guard response.stdout()=="200" else {println("Download HTTP "+response.stdout()); fail("Download failed")}
+  @shell.Cmd("ssh",[..remote,"chmod","600",target]).run()
+  let hash=@shell.Cmd("ssh",[..remote,"sha256sum",target]).output()
+  hash.check()
+  let actual="sha256:"+hash.stdout().split(" ").next().unwrap().to_owned()
+  guard actual==expected else {fail("Downloaded digest mismatch")}
+  let replay=@shell.Cmd("ssh",[..remote,"curl","--config","-"],stdin=Text(config.replace(old=target,new=target+".replay.json"))).output()
+  replay.check()
+  guard replay.stdout()=="409" else {println("Replay HTTP "+replay.stdout()); fail("One-time replay not rejected")}
+  let size=@shell.Cmd("ssh",[..remote,"stat","-c","%s",target]).output()
+  size.check()
+  let evidence : Json={"schema":"lunanexa.offline-customer-download.v1","session_id":id,"artifact_id":artifact_id,"controller_issued_customer_grant":true,"same_origin_public_endpoint":"http://106.39.18.146:5003","download_http":200,"sha256":actual,"byte_count":size.stdout().trim().to_owned(),"replay_http":409,"token_retained_in_evidence":false,"payment_signature_fulfillment_claimed":false}
+  @fs.write_file(evidence_file,evidence.stringify(indent=2))
+  println("Customer download exact digest verified; replay rejected409. Evidence "+evidence_file)
+}

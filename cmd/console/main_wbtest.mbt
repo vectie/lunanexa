@@ -80,7 +80,7 @@ test "console quick-deployment fuzz matches the public intent boundary" {
   let base = @ui.demo_state()
   for length in 0..<=140 {
     let candidate = quick_deployment_intent(
-      { ..base, quick_deployment_id: "a".repeat(length) },
+      { ..base, quick_deployment_id: "a".repeat(length), },
       length.to_int64(),
     )
     assert_eq(candidate is Some(_), length > 0 && length <= 128)
@@ -91,12 +91,12 @@ test "console quick-deployment fuzz matches the public intent boundary" {
       "服务",
     ] {
     assert_true(
-      quick_deployment_intent({ ..base, quick_deployment_id: hostile }, 1L)
+      quick_deployment_intent({ ..base, quick_deployment_id: hostile, }, 1L)
       is None,
     )
   }
   guard quick_deployment_intent(
-      { ..base, quick_deployment_id: "service-1" },
+      { ..base, quick_deployment_id: "service-1", },
       1L,
     )
     is Some(intent) else {
@@ -277,7 +277,7 @@ test "loaded controller state keeps the selected route and locale" {
     ..@ui.default_state(),
     locale: English,
     route: Overview,
-    overview: { ..@ui.default_state().overview, total_nodes: 2 },
+    overview: { ..@ui.default_state().overview, total_nodes: 2, },
   }
   let merged = merge_loaded_console(current, loaded)
   assert_eq(merged.locale, ChineseSimplified)
@@ -463,7 +463,7 @@ test "changing an operator credential clears authenticated UI authority" {
     commercial_organization: "",
     demo_mode: false,
     alerts_window: Today,
-    console: { ..@ui.default_state(), operator_authenticated: true },
+    console: { ..@ui.default_state(), operator_authenticated: true, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -582,7 +582,7 @@ test "unauthenticated operator sees login gate instead of console shell" {
     commercial_organization: "",
     demo_mode: false,
     alerts_window: Today,
-    console: { ..@ui.default_state(), locale: English },
+    console: { ..@ui.default_state(), locale: English, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -755,7 +755,7 @@ test "operator login needs both halves and drops the password once it is used" {
   let (unsubmitted, _) = update_live(model, OperatorLoginSubmitted, emit)
   assert_false(unsubmitted.console.loading)
   let (submitted, _) = update_live(
-    { ..model, login_password: "Wlc123!@1234fsc" },
+    { ..model, login_password: "Wlc123!@1234fsc", },
     OperatorLoginSubmitted,
     emit,
   )
@@ -794,7 +794,7 @@ test "operator login needs both halves and drops the password once it is used" {
 ///|
 test "the gateway's refusal codes choose the operator-facing copy" {
   let refusal = fn(body : String) -> String {
-    password_login_refusal(English, { status: 401, body: body })
+    password_login_refusal(English, { status: 401, body, })
   }
   assert_true(
     refusal("{\"error\":\"invalid-credentials\"}").contains(
@@ -895,7 +895,7 @@ test "demo mode previews exclusive cleanup confirmation without mutation" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..@ui.demo_state(), route: Leases },
+    console: { ..@ui.demo_state(), route: Leases, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -940,7 +940,7 @@ test "demo mode previews every destructive node operation without mutation" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..@ui.demo_state(), route: Nodes },
+    console: { ..@ui.demo_state(), route: Nodes, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -978,7 +978,7 @@ test "demo mode exercises one-click preflight without controller mutation" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..@ui.demo_state(), route: Catalog },
+    console: { ..@ui.demo_state(), route: Catalog, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -1019,7 +1019,7 @@ test "the topology picker submits the admitted CX7 pair for one replica" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..@ui.demo_state(), route: Catalog },
+    console: { ..@ui.demo_state(), route: Catalog, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -1054,10 +1054,7 @@ test "the topology picker submits the admitted CX7 pair for one replica" {
   guard quick_deployment_intent(paired.console, 1000L) is Some(pair) else {
     fail("a CX7 pair intent should be valid")
   }
-  assert_eq(
-    pair.topology_profile,
-    Some(@contracts.cx7_pair_topology_profile),
-  )
+  assert_eq(pair.topology_profile, Some(@contracts.cx7_pair_topology_profile))
   assert_eq(pair.replicas, 1)
   assert_true(pair.to_json().stringify().contains("\"cx7-pair-v1\""))
   let (submitted, _) = update(paired, Console(SubmitQuickDeployment), emit)
@@ -1122,7 +1119,7 @@ test "contract tab and field changes schedule one generation-fenced preview" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..@ui.demo_state(), route: ContractDocuments },
+    console: { ..@ui.demo_state(), route: ContractDocuments, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -1592,7 +1589,7 @@ test "cluster poll failure retries quietly and stops on authorization loss" {
   let (due_stale, _) = update_live(model, ClusterPollDue(4L), emit)
   assert_true(due_stale == model)
   let (signed_out, _) = update_live(
-    { ..model, console: { ..model.console, operator_authenticated: false } },
+    { ..model, console: { ..model.console, operator_authenticated: false, }, },
     ClusterPollDue(5L),
     emit,
   )
@@ -1706,7 +1703,7 @@ test "alert window selection is carried on the operator model" {
     commercial_organization: "",
     demo_mode: false,
     alerts_window: Today,
-    console: { ..@ui.default_state(), operator_authenticated: true },
+    console: { ..@ui.default_state(), operator_authenticated: true, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -1729,7 +1726,7 @@ test "alert window selection is carried on the operator model" {
   )
   assert_eq(widened.alerts_window, AllAlerts)
   // Changing the window is local view state: no controller read is scheduled.
-  assert_true(widened == { ..narrowed, alerts_window: AllAlerts })
+  assert_true(widened == { ..narrowed, alerts_window: AllAlerts, })
 }
 
 ///|
@@ -1744,7 +1741,7 @@ fn deferred_read_test_model(route : @ui.OperatorRoute) -> AppModel {
     commercial_organization: "org-northstar",
     demo_mode: false,
     alerts_window: Today,
-    console: { ..@ui.default_state(), operator_authenticated: true, route },
+    console: { ..@ui.default_state(), operator_authenticated: true, route, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -1806,11 +1803,8 @@ test "page-scoped reads map routes to groups and load each group once" {
     "/v1/model-sources/modelscope/imports",
   ])
   assert_eq(console_read_group_paths(AccessReads, ""), [
-    "/v1/accounts",
-    "/v1/accounts/trial-summary",
-    "/v1/onboarding/access-packages",
-    "/v1/workspace",
-    "/v1/exclusive-node-leases",
+    "/v1/accounts", "/v1/accounts/trial-summary", "/v1/onboarding/access-packages",
+    "/v1/workspace", "/v1/exclusive-node-leases",
   ])
   assert_eq(console_read_group_paths(DeploymentReads, ""), [
     "/v1/assignments", "/v1/service-deployments",
@@ -1819,16 +1813,11 @@ test "page-scoped reads map routes to groups and load each group once" {
   // the snapshot, so the operator's offline-commerce route shows what is
   // blocking the pipeline without a second trip.
   assert_eq(console_read_group_paths(CommerceReads, ""), [
-    "/v1/portal/operator/snapshot",
-    "/v1/offline-commerce/operator/snapshot",
-    "/v1/offline-commerce/operator/readiness",
+    "/v1/portal/operator/snapshot", "/v1/offline-commerce/operator/snapshot", "/v1/offline-commerce/operator/readiness",
   ])
   assert_eq(console_read_group_paths(CommerceReads, "org-northstar"), [
-    "/v1/portal/operator/snapshot",
-    "/v1/offline-commerce/operator/snapshot",
-    "/v1/offline-commerce/operator/readiness",
-    "/v1/commercial/organizations/org-northstar/snapshot",
-    "/v1/commercial/organizations/org-northstar/integrations",
+    "/v1/portal/operator/snapshot", "/v1/offline-commerce/operator/snapshot", "/v1/offline-commerce/operator/readiness",
+    "/v1/commercial/organizations/org-northstar/snapshot", "/v1/commercial/organizations/org-northstar/integrations",
   ])
 
   let model = deferred_read_test_model(Overview)
@@ -1863,7 +1852,7 @@ test "page-scoped reads map routes to groups and load each group once" {
   assert_true(deferred_read_pending(failed, Audit) is Some(AuditReads))
 
   // The read-only demo snapshot never schedules a controller read.
-  let demo = { ..deferred_read_test_model(Audit), demo_mode: true }
+  let demo = { ..deferred_read_test_model(Audit), demo_mode: true, }
   let (demo_opened, _) = update_live(demo, Console(Navigate(Audit)), emit)
   assert_eq(demo_opened.console_read_groups.length(), 0)
 
@@ -2059,7 +2048,7 @@ test "the alerts group replaces only the notification projections" {
   // A later core reload preserves the merged alert list and its counter.
   let (reloaded, _) = update_live(
     merged,
-    Outcome(Loaded({ ..@ui.default_state(), route: Alerts, loading: false })),
+    Outcome(Loaded({ ..@ui.default_state(), route: Alerts, loading: false, })),
     emit,
   )
   assert_eq(reloaded.console.notifications.length(), 2)
@@ -2140,7 +2129,7 @@ test "the models group replaces only the model-import list" {
   // A later core reload preserves the merged import list.
   let (reloaded, _) = update_live(
     merged,
-    Outcome(Loaded({ ..@ui.default_state(), route: Models, loading: false })),
+    Outcome(Loaded({ ..@ui.default_state(), route: Models, loading: false, })),
     emit,
   )
   assert_eq(reloaded.console.model_imports.length(), 1)
@@ -2243,7 +2232,9 @@ test "the deployment group replaces the deployment rows and their operations" {
   // actions that read the operation list still see it.
   let (reloaded, _) = update_live(
     merged,
-    Outcome(Loaded({ ..@ui.default_state(), route: Deployments, loading: false })),
+    Outcome(
+      Loaded({ ..@ui.default_state(), route: Deployments, loading: false, }),
+    ),
     emit,
   )
   assert_eq(reloaded.console.deployments.length(), 1)
@@ -2337,7 +2328,10 @@ test "the access group replaces only the account and workspace rows" {
   assert_true(merged.console_read_groups.contains(AccessReads))
   assert_eq(merged.console.accounts.length(), 1)
   assert_eq(merged.console.accounts[0].display_name, "Alice")
-  assert_eq(merged.console.trial_summary.map(summary => summary.active_trials), Some(2))
+  assert_eq(
+    merged.console.trial_summary.map(summary => summary.active_trials),
+    Some(2),
+  )
   assert_eq(merged.console.users.length(), 1)
   assert_eq(merged.console.users[0].user_id, "user-1")
   assert_eq(merged.console.access_grants.length(), 1)
@@ -2350,7 +2344,7 @@ test "the access group replaces only the account and workspace rows" {
   // A later core reload preserves the merged account and workspace rows.
   let (reloaded, _) = update_live(
     merged,
-    Outcome(Loaded({ ..@ui.default_state(), route: Users, loading: false })),
+    Outcome(Loaded({ ..@ui.default_state(), route: Users, loading: false, })),
     emit,
   )
   assert_eq(reloaded.console.accounts.length(), 1)
@@ -2543,11 +2537,7 @@ test "licence acceptance validates, prefills the citation, and builds the record
   let (rejected, _) = update(cleared, Console(SubmitModelLicense), emit)
   assert_false(rejected.console.loading)
   assert_true(rejected.console.error_message is Some(_))
-  let (dismissed, _) = update(
-    opened,
-    Console(DismissLicenseAcceptance),
-    emit,
-  )
+  let (dismissed, _) = update(opened, Console(DismissLicenseAcceptance), emit)
   assert_eq(dismissed.console.model_license_draft.model_id, "")
 }
 
@@ -2598,7 +2588,11 @@ test "alias promotion defaults to a model-id slug and submits a canary stage" {
   )
   let draft = opened.console.model_alias_draft
   assert_eq(draft.alias_name, "model.minicpm5-1b")
-  let (named, _) = update(opened, Console(AliasNameChanged("text.default")), emit)
+  let (named, _) = update(
+    opened,
+    Console(AliasNameChanged("text.default")),
+    emit,
+  )
   assert_eq(named.console.model_alias_draft.alias_name, "text.default")
   let (submitting, _) = update(named, Console(SubmitAliasPromotion), emit)
   assert_true(submitting.console.loading)
@@ -2630,7 +2624,11 @@ test "runtime registration mirrors the registry's own shape checks" {
     Console(RuntimeNameChanged("text-runtime-v2")),
     emit,
   )
-  let (versioned, _) = update(named, Console(RuntimeVersionChanged("runtime-v2")), emit)
+  let (versioned, _) = update(
+    named,
+    Console(RuntimeVersionChanged("runtime-v2")),
+    emit,
+  )
   let (digested, _) = update(
     versioned,
     Console(RuntimeImageDigestChanged("sha256:not-a-digest")),
@@ -2674,7 +2672,7 @@ test "demo mode previews the onboarding and runtime controls without mutation" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..base, route: Models },
+    console: { ..base, route: Models, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -2689,17 +2687,14 @@ test "demo mode previews the onboarding and runtime controls without mutation" {
     Console(BeginLicenseAcceptance("lunanexa.text.general", "v3")),
     emit,
   )
-  assert_eq(opened.console.model_license_draft.model_id, "lunanexa.text.general")
-  let (submitted, _) = update(
-    opened,
-    Console(SubmitModelLicense),
-    emit,
+  assert_eq(
+    opened.console.model_license_draft.model_id,
+    "lunanexa.text.general",
   )
+  let (submitted, _) = update(opened, Console(SubmitModelLicense), emit)
   assert_eq(
     submitted.console.success_message,
-    Some(
-      "Demo is read-only; no controller operation was sent or persisted.",
-    ),
+    Some("Demo is read-only; no controller operation was sent or persisted."),
   )
   assert_eq(submitted.console.models, base.models)
   assert_eq(
@@ -2832,7 +2827,9 @@ test "the catalog template form prefills from the registry and builds the signed
     Console(TemplateTextChanged(TemplateAcceleratorCount, "65")),
     emit,
   )
-  assert_true(template_registration_body(over_bound.console.template_draft) is None)
+  assert_true(
+    template_registration_body(over_bound.console.template_draft) is None,
+  )
   let (refused, _) = update(
     over_bound,
     Console(SubmitTemplateRegistration),
@@ -2932,13 +2929,15 @@ test "an evaluation capture carries its consent receipt into the body" {
     capability: TextGenerate,
   }
   let (captured, _) = update(
-    { ..model, console: { ..model.console, template_draft: draft }, },
+    { ..model, console: { ..model.console, template_draft: draft, }, },
     Console(TemplateFlagToggled(CaptureForEvaluation)),
     emit,
   )
   assert_true(captured.console.template_draft.capture_for_evaluation)
   // A capture without a receipt is one the planner refuses, so no body is built.
-  assert_true(template_registration_body(captured.console.template_draft) is None)
+  assert_true(
+    template_registration_body(captured.console.template_draft) is None,
+  )
   let (receipted, _) = update(
     captured,
     Console(TemplateTextChanged(TemplateConsentReceipt, "consent:evaluation:1")),
@@ -2977,7 +2976,7 @@ test "demo mode previews the catalog template form without mutation" {
     commercial_organization: "",
     demo_mode: true,
     alerts_window: Today,
-    console: { ..base, route: Catalog },
+    console: { ..base, route: Catalog, },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
     contract_preview_generation: 0L,
@@ -3062,4 +3061,3 @@ test "the interactive catalog view renders the template form for a live operator
   }
   assert_false(button_tag.contains("disabled"))
 }
-

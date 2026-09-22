@@ -168,7 +168,8 @@ fn ObservabilityStore::snapshot_unlocked(
   }
 }
 
-///| The durable projection for the PostgreSQL backend: counters and external
+///|
+/// The durable projection for the PostgreSQL backend: counters and external
 /// export freshness only. Operational events live in their own append-only
 /// relation, so the per-domain snapshot no longer carries the recent window.
 fn ObservabilityStore::counter_snapshot_unlocked(
@@ -322,7 +323,8 @@ pub async fn ObservabilityStore::open(
   store
 }
 
-///| Loads and validates the recent event window from the append-only event
+///|
+/// Loads and validates the recent event window from the append-only event
 /// relation. Each row is validated on its own; the counter cross-checks that
 /// `restore` applies to a self-contained snapshot deliberately do not apply
 /// here, because the counters snapshot and the event relation are written by
@@ -358,7 +360,8 @@ async fn ObservabilityStore::load_event_window(
   events
 }
 
-///| Opens the PostgreSQL-backed store. Operational events are restored from
+///|
+/// Opens the PostgreSQL-backed store. Operational events are restored from
 /// the append-only event relation; the `observability` snapshot supplies the
 /// counters and the external export freshness.
 ///
@@ -413,7 +416,8 @@ pub async fn ObservabilityStore::open_postgres(
   store
 }
 
-///| Writes the durable projection the backend keeps for the store. The file
+///|
+/// Writes the durable projection the backend keeps for the store. The file
 /// backend owns one JSON document and therefore still rewrites the whole
 /// document; the PostgreSQL backend stores events separately and only has to
 /// keep counters and external export freshness in `lunanexa.snapshots`.
@@ -429,7 +433,8 @@ async fn ObservabilityStore::persist(self : ObservabilityStore) -> Unit {
   }
 }
 
-///| Durably records one appended event. The file backend rewrites its single
+///|
+/// Durably records one appended event. The file backend rewrites its single
 /// document, because a local file has no append-only relation.
 ///
 /// The PostgreSQL backend writes the counters projection first and the event

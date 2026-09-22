@@ -1,0 +1,16 @@
+import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+async fn main {
+  guard @env.args() is [_, kubeconfig, backup] else { fail("Usage: close-offline-technical-scope.mbtx KUBECONFIG PRIVATE_BACKUP") }
+  let k=["--kubeconfig",kubeconfig,"-n","lunanexa"]
+  let before=@shell.Cmd("kubectl",[..k,"get","deployment","lunanexa-control","-o","json"]).output()
+  before.check()
+  guard @json.parse(before.stdout()) is {"spec":{"template":{"spec":{"containers":Array(containers),..},..},..},..} else {fail("Invalid controller deployment")}
+  let controls=containers.filter(c => c is {"name":"control",..})
+  guard controls is [{"env":Array(environment),..}] else {fail("Expected one control container")}
+  let entries=environment.filter(e => e is {"name":"LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON",..})
+  guard entries is [{"value":String(raw),..}] && @json.parse(raw) is {"order_id":"technical-acceptance-waiver-order-20260922","purchaser_subject_ref":"subject-a8a646206b6dd368534b3277","user_authorization_ref":"docs/evidence/offline-technical-waiver-20260922.md",..} else {fail("Scope missing or not exact authorized technical order; refusing mutation")}
+  @fs.write_file(backup,before.stdout(),create_mode=CreateNew,permission=0o600)
+  @shell.Cmd("kubectl",[..k,"set","env","deployment/lunanexa-control","--containers=control","LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON-"]).run()
+  @shell.Cmd("kubectl",[..k,"rollout","status","deployment/lunanexa-control","--timeout=120s"]).run()
+  println("One-order technical authorization removed; default disabled configuration restored.")
+}

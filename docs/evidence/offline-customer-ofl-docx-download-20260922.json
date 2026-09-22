@@ -1,0 +1,15 @@
+{
+  "schema": "lunanexa.offline-customer-download.v1",
+  "session_id": "technical-ofl-docx-download-20260922",
+  "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+  "controller_issued_customer_grant": true,
+  "same_origin_public_endpoint": "http://106.39.18.146:5003",
+  "download_http": 200,
+  "sha256": "sha256:6e130dc6badc507b729d99b1fa337dd14a98ac087f1212bff15af12147b9888e",
+  "byte_count": "16041",
+  "replay_http": 409,
+  "controller_persisted_state": "TransferConsumed",
+  "controller_consumed_unix_ms": "1790075574432",
+  "token_retained_in_evidence": false,
+  "payment_signature_fulfillment_claimed": false
+}

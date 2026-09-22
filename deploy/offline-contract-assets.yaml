@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lunanexa-offline-contract-assets
+  namespace: lunanexa
+  labels:
+    app.kubernetes.io/part-of: lunanexa
+    lunanexa.io/contract-assets-profile: "20260922"
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 128Mi
+# Controller consumes this claim readOnly at /usr/share/lunanexa/assets/contracts.
+# Preserve old immutable versions. Publishing files is not legal approval.

@@ -255,8 +255,7 @@ fn load_config() -> GatewayConfig raise {
       }
     }
     None => {
-      guard registration_client_id is None &&
-        registration_client_secret is None else {
+      guard registration_client_id is None && registration_client_secret is None else {
         raise Failure(
           "the registration client id and secret require LUNANEXA_OIDC_ADMIN_ORIGIN",
         )

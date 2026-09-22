@@ -251,6 +251,7 @@ extern "js" fn model_import_poll_promise() -> @js.Promise = "() => new Promise(r
 extern "js" fn cluster_poll_promise() -> @js.Promise = "() => new Promise(resolve => setTimeout(resolve, 5000))"
 
 ///|
+
 ///|
 /// A fresh opaque identifier.
 ///
@@ -279,6 +280,7 @@ extern "js" fn random_identifier(prefix : String) -> String =
   #|   const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
   #|   return `${prefix}-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   #| }
+
 ///|
 extern "js" fn scroll_console_top() -> Unit =
   #| () => {
@@ -474,9 +476,11 @@ extern "js" fn password_login_promise(
 
 ///|
 /// Loads only the checked, field-free MoonLeaf scene shipped with demo assets.
-extern "js" fn demo_contract_preview_promise(undertaking : Bool) -> @js.Promise =
-  #| async undertaking => {
-  #|   const path = undertaking ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
+extern "js" fn demo_contract_preview_promise(
+  template_id : String,
+) -> @js.Promise =
+  #| async templateId => {
+  #|   const path = templateId === "youthpolicy-device-undertaking-ofl-v2" ? "/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json" : templateId === "youthpolicy-device-undertaking-v1" ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
   #|   const response = await fetch(path, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
@@ -697,11 +701,8 @@ fn console_read_group_paths(
     /// read by `Users` and `Leases` and by nothing else.
     AccessReads =>
       [
-        "/v1/accounts",
-        "/v1/accounts/trial-summary",
-        "/v1/onboarding/access-packages",
-        "/v1/workspace",
-        "/v1/exclusive-node-leases",
+        "/v1/accounts", "/v1/accounts/trial-summary", "/v1/onboarding/access-packages",
+        "/v1/workspace", "/v1/exclusive-node-leases",
       ]
     /// Desired assignments and service deployments are read by `Deployments`
     /// and `Catalog` and by nothing else. Assignments are the only source of
@@ -745,8 +746,7 @@ fn prefetch_console_reads(
     endpoint
   }
   let paths = [
-    "/v1/nodes", "/v1/registry", "/v1/scheduler", "/v1/telemetry",
-    "/v1/catalog/templates",
+    "/v1/nodes", "/v1/registry", "/v1/scheduler", "/v1/telemetry", "/v1/catalog/templates",
   ]
   match console_read_group_for_route(route) {
     Some(group) =>
@@ -1112,9 +1112,7 @@ fn append_catalog_template(
   accepted : @deployment.ModelServiceTemplate,
 ) -> Array[@deployment.ModelServiceTemplate] {
   let key = catalog_template_key(accepted)
-  let next = templates.filter(template => {
-    catalog_template_key(template) != key
-  })
+  let next = templates.filter(template => catalog_template_key(template) != key)
   next.push(accepted)
   next
 }
@@ -1138,7 +1136,7 @@ fn quick_deployment_intent(
     version: @contracts.contract_version,
     idempotency_key: "console:\{deployment_id}",
     deployment_id,
-    template: { template_id: template.template_id, version: template.version },
+    template: { template_id: template.template_id, version: template.version, },
     replicas: 1,
     data_class: template.data_policy.classification,
     lease_duration_ms: 86400000L,
@@ -1537,7 +1535,7 @@ fn schedule_deferred_reads(
       let groups = model.console_read_groups.copy()
       groups.set(group, false)
       (
-        { ..model, console_read_groups: groups },
+        { ..model, console_read_groups: groups, },
         deferred_read_command(model, group, emit),
       )
     }
@@ -1845,7 +1843,10 @@ async fn load_console_access_reads(
           node_id: lease.intent.node_id,
           subject_ref: lease.intent.subject_ref,
           unix_username: lease.intent.unix_username,
-          expires_at: format_unix_ms(lease.intent.expires_unix_ms, "Unavailable"),
+          expires_at: format_unix_ms(
+            lease.intent.expires_unix_ms,
+            "Unavailable",
+          ),
           state: "\{Repr(lease.state)}",
           generation: lease.generation,
         }
@@ -2314,7 +2315,7 @@ fn merge_console_group_read(
           }),
         },
       }
-    GroupModels(payload) => { ..current, model_imports: payload.imports }
+    GroupModels(payload) => { ..current, model_imports: payload.imports, }
     GroupAudit(payload) =>
       {
         ..current,
@@ -2325,7 +2326,10 @@ fn merge_console_group_read(
           count: payload.request_count,
           errors: payload.request_errors,
         },
-        overview: { ..current.overview, recent_changes: payload.recent_changes },
+        overview: {
+          ..current.overview,
+          recent_changes: payload.recent_changes,
+        },
       }
     GroupAccess(payload) =>
       {
@@ -2581,7 +2585,7 @@ fn merge_loaded_console(
     qualified_services: current.qualified_services,
     enterprise_lease_requests: current.enterprise_lease_requests,
     nodes: preserve_node_lease_holders(current.nodes, loaded.nodes),
-    offline_commerce: { ..current.offline_commerce, locale: current.locale },
+    offline_commerce: { ..current.offline_commerce, locale: current.locale, },
     contract_documents: {
       ..current.contract_documents,
       locale: current.locale,
@@ -2610,7 +2614,7 @@ fn switch_console_locale(
 
 ///|
 fn switch_app_locale(model : AppModel, locale : @i18n.Locale) -> AppModel {
-  { ..model, console: switch_console_locale(model.console, locale) }
+  { ..model, console: switch_console_locale(model.console, locale), }
 }
 
 ///|
@@ -2719,7 +2723,10 @@ fn operator_contract_command(
         model.endpoint,
         "/v1/contract-documents/operator/packets/\{packet_id}:information",
         model.credential,
-        body=ContractInformationUpdate::{ expected_revision: revision, changes }
+        body=ContractInformationUpdate::{
+            expected_revision: revision,
+            changes,
+          }
           .to_json()
           .stringify(),
       )
@@ -3009,7 +3016,7 @@ fn demo_contract_lifecycle_action(
         (
           packet.close_packet(
             revision,
-            { kind, reason, closed_by: "operator", closed_unix_ms: now },
+            { kind, reason, closed_by: "operator", closed_unix_ms: now, },
             true,
             now,
           ),
@@ -3162,9 +3169,7 @@ fn demo_operator_contract_preview_command(
         is Some(manifest) else {
         fail("contract manifest unavailable")
       }
-      let text : String = demo_contract_preview_promise(
-          @contractdoc.is_undertaking_template(manifest.template_id),
-        )
+      let text : String = demo_contract_preview_promise(manifest.template_id)
         .wait()
         .cast()
       let template : @contractdoc.ContractPreviewTemplate = @json.from_json(
@@ -3211,7 +3216,7 @@ fn schedule_contract_preview(
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
     return (
-      { ..model, console: { ..model.console, contract_documents: documents } },
+      { ..model, console: { ..model.console, contract_documents: documents, }, },
       @rabbita.none,
     )
   }
@@ -3220,7 +3225,7 @@ fn schedule_contract_preview(
   let next = {
     ..model,
     contract_preview_generation: generation,
-    console: { ..model.console, contract_documents: pending },
+    console: { ..model.console, contract_documents: pending, },
   }
   let command = @rabbita.perform(message => emit(message), async fn() noraise {
     try contract_preview_delay_promise(delay_ms).wait() catch {
@@ -3314,9 +3319,7 @@ priv struct PasswordLoginError {
 
 ///|
 fn password_login_error_code(body : String) -> String {
-  try {
-    (@json.from_json(@json.parse(body)) : PasswordLoginError).error
-  } catch {
+  (@json.from_json(@json.parse(body)) : PasswordLoginError).error catch {
     _ => ""
   }
 }
@@ -3329,33 +3332,26 @@ fn password_login_refusal(
   match password_login_error_code(outcome.body) {
     "invalid-credentials" =>
       console_copy(
-        locale,
-        "The username or password was not accepted. Check both and try again.",
+        locale, "The username or password was not accepted. Check both and try again.",
         "用户名或密码不正确，请检查后重试。",
       )
     "identity-rejected" =>
       console_copy(
-        locale,
-        "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
+        locale, "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
         "登录成功，但该身份暂时不可用。请联系平台管理员启用账户。",
       )
     "identity-provider-unavailable" =>
       console_copy(
-        locale,
-        "The identity provider is unavailable. Try again shortly.",
-        "身份提供商当前不可用，请稍后重试。",
+        locale, "The identity provider is unavailable. Try again shortly.", "身份提供商当前不可用，请稍后重试。",
       )
     "too-many-attempts" =>
       console_copy(
-        locale,
-        "Too many failed attempts from this address. Wait five minutes and try again.",
+        locale, "Too many failed attempts from this address. Wait five minutes and try again.",
         "此地址的失败尝试过多，请等待五分钟后再试。",
       )
     _ =>
       console_copy(
-        locale,
-        "The gateway refused the sign-in.",
-        "网关拒绝了本次登录。",
+        locale, "The gateway refused the sign-in.", "网关拒绝了本次登录。",
       )
   }
 }
@@ -3373,11 +3369,9 @@ fn operator_login_command(
 ) -> @rabbita.Cmd {
   @rabbita.perform(message => emit(message), async fn() noraise {
     try {
-      let text : String = password_login_promise(
-        username,
-        password,
-        "operator",
-      ).wait().cast()
+      let text : String = password_login_promise(username, password, "operator")
+        .wait()
+        .cast()
       let outcome : PasswordLoginOutcome = @json.from_json(@json.parse(text))
       if outcome.status != 200 {
         OperatorLoginRefused(locale, password_login_refusal(locale, outcome))
@@ -3393,8 +3387,7 @@ fn operator_login_command(
           OperatorLoginRefused(
             locale,
             console_copy(
-              locale,
-              "The gateway accepted the sign-in but the session it returned is unusable.",
+              locale, "The gateway accepted the sign-in but the session it returned is unusable.",
               "网关已接受登录，但返回的会话不可用。",
             ),
           )
@@ -3405,9 +3398,7 @@ fn operator_login_command(
         OperatorLoginRefused(
           locale,
           console_copy(
-            locale,
-            "The identity gateway could not be reached.",
-            "无法连接身份网关。",
+            locale, "The identity gateway could not be reached.", "无法连接身份网关。",
           ),
         )
     }
@@ -3507,9 +3498,9 @@ fn console_model_row(
   model_id : String,
   version : String,
 ) -> @ui.ModelRow? {
-  state.models.iter().find_first(row => {
-    row.model_id == model_id && row.version == version
-  })
+  state.models
+  .iter()
+  .find_first(row => row.model_id == model_id && row.version == version)
 }
 
 ///|
@@ -3556,8 +3547,8 @@ fn template_draft_for_model(
     return draft
   }
   let signature_ref = if row.artifact_uri.has_prefix(
-    @contracts.model_store_scheme,
-  ) {
+      @contracts.model_store_scheme,
+    ) {
     "\{row.artifact_uri}/\{@contracts.model_store_manifest_name}"
   } else {
     ""
@@ -3606,7 +3597,8 @@ fn template_draft_for_runtime(
   let draft = state.template_draft
   guard @ui.known_runtimes(state)
     .iter()
-    .find_first(runtime => @ui.runtime_key(runtime) == key) is Some(runtime) else {
+    .find_first(runtime => @ui.runtime_key(runtime) == key)
+    is Some(runtime) else {
     return draft
   }
   let capability = if runtime.capabilities.length() > 0 &&
@@ -3663,21 +3655,13 @@ fn json_string_member(text : String, key : String) -> String? {
     .replace_all(old="\\\"", new="\"")
     .replace_all(old="\\\\", new="\\")
   let needle = "\"" + key + "\""
-  guard plain.find(needle) is Some(start) else {
-    return None
-  }
+  guard plain.find(needle) is Some(start) else { return None }
   let after_key = plain[start + needle.length():]
-  guard after_key.find(":") is Some(colon) else {
-    return None
-  }
+  guard after_key.find(":") is Some(colon) else { return None }
   let after_colon = after_key[colon + 1:]
-  guard after_colon.find("\"") is Some(open) else {
-    return None
-  }
+  guard after_colon.find("\"") is Some(open) else { return None }
   let body = after_colon[open + 1:]
-  guard body.find("\"") is Some(close) else {
-    return None
-  }
+  guard body.find("\"") is Some(close) else { return None }
   Some(body[:close].to_owned())
 }
 
@@ -3701,12 +3685,7 @@ fn http_failure_detail(error : Error) -> String {
   // error type is opaque and would hide the control plane's own words.
   let detail = error.to_string()
   match json_string_member(detail, "message") {
-    Some(message) =>
-      if message == "" {
-        detail
-      } else {
-        message
-      }
+    Some(message) => if message == "" { detail } else { message }
     None => detail
   }
 }
@@ -3765,7 +3744,7 @@ fn model_verification_body(row : @ui.ModelRow) -> String {
 
 ///|
 fn model_approval_body(model_id : String, version : String) -> String {
-  ConsoleApprovalRequest::{ model_id, version }.to_json().stringify()
+  ConsoleApprovalRequest::{ model_id, version, }.to_json().stringify()
 }
 
 ///|
@@ -3834,7 +3813,9 @@ fn template_registration_body(draft : @ui.TemplateDraft) -> String? {
     return None
   }
   let retention : @contracts.RetentionPolicy = if draft.capture_for_evaluation {
-    EvaluationCapture(consent_receipt=draft.evaluation_consent_receipt.trim().to_owned())
+    EvaluationCapture(
+      consent_receipt=draft.evaluation_consent_receipt.trim().to_owned(),
+    )
   } else {
     Ephemeral
   }
@@ -4068,8 +4049,10 @@ fn update_live(
       (next, load_command(next, emit))
     }
     GatewaySessionUnavailable => (model, @rabbita.none)
-    LoginUsernameChanged(value) => ({ ..model, login_username: value }, @rabbita.none)
-    LoginPasswordChanged(value) => ({ ..model, login_password: value }, @rabbita.none)
+    LoginUsernameChanged(value) =>
+      ({ ..model, login_username: value, }, @rabbita.none)
+    LoginPasswordChanged(value) =>
+      ({ ..model, login_password: value, }, @rabbita.none)
     OperatorLoginSubmitted => {
       if !operator_login_draft_complete(model) {
         return (model, @rabbita.none)
@@ -4083,7 +4066,15 @@ fn update_live(
           success_message: None,
         },
       }
-      (next, operator_login_command(model.console.locale, model.login_username, model.login_password, emit))
+      (
+        next,
+        operator_login_command(
+          model.console.locale,
+          model.login_username,
+          model.login_password,
+          emit,
+        ),
+      )
     }
     OperatorLoginRefused(dispatched_locale, message) =>
       (
@@ -4114,7 +4105,7 @@ fn update_live(
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false },
+          console: { ..model.console, operator_authenticated: false, },
           console_read_groups: Map([]),
         },
         @rabbita.none,
@@ -4127,23 +4118,27 @@ fn update_live(
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false },
+          console: { ..model.console, operator_authenticated: false, },
           console_read_groups: Map([]),
         },
         @rabbita.none,
       )
     AuditCredentialChanged(value) =>
-      ({ ..model, audit_credential: value }, @rabbita.none)
+      ({ ..model, audit_credential: value, }, @rabbita.none)
     InferenceCredentialChanged(value) =>
-      ({ ..model, inference_credential: value }, @rabbita.none)
+      ({ ..model, inference_credential: value, }, @rabbita.none)
     InferenceSubjectChanged(value) =>
-      ({ ..model, inference_subject_ref: value }, @rabbita.none)
+      ({ ..model, inference_subject_ref: value, }, @rabbita.none)
     CommercialOrganizationChanged(value) => {
       // The commerce read group belongs to the previous organization.
       let groups = model.console_read_groups.copy()
       groups.remove(CommerceReads)
       (
-        { ..model, commercial_organization: value, console_read_groups: groups },
+        {
+          ..model,
+          commercial_organization: value,
+          console_read_groups: groups,
+        },
         @rabbita.none,
       )
     }
@@ -4223,7 +4218,7 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            account_invite: { ..model.console.account_invite, email: value },
+            account_invite: { ..model.console.account_invite, email: value, },
           },
         },
         @rabbita.none,
@@ -4796,7 +4791,7 @@ fn update_live(
       (switch_app_locale(model, locale), @rabbita.none)
     }
     Console(AlertsWindowChanged(window)) =>
-      ({ ..model, alerts_window: window }, @rabbita.none)
+      ({ ..model, alerts_window: window, }, @rabbita.none)
     ContractPreviewDue(generation, request) =>
       if generation != model.contract_preview_generation {
         (model, @rabbita.none)
@@ -4855,7 +4850,7 @@ fn update_live(
       }
       let next = {
         ..model,
-        console: { ..model.console, loading: true, error_message: None },
+        console: { ..model.console, loading: true, error_message: None, },
       }
       (next, load_command(next, emit))
     }
@@ -5147,7 +5142,7 @@ fn update_live(
         // Locale- or session-bound labels came back stale. Drop the read and
         // let the next visit reload it.
         groups.remove(group)
-        ({ ..model, console_read_groups: groups }, @rabbita.none)
+        ({ ..model, console_read_groups: groups, }, @rabbita.none)
       } else {
         groups.set(group, true)
         let next = {
@@ -5175,7 +5170,7 @@ fn update_live(
               // that watches an in-flight download is armed here instead.
               let generation = next.model_import_poll_generation + 1L
               (
-                { ..next, model_import_poll_generation: generation },
+                { ..next, model_import_poll_generation: generation, },
                 model_import_poll_delay_command(generation, emit),
               )
             } else {
@@ -5190,7 +5185,7 @@ fn update_live(
       // the operator keeps their session, and the next visit retries.
       let groups = model.console_read_groups.copy()
       groups.remove(group)
-      ({ ..model, console_read_groups: groups }, @rabbita.none)
+      ({ ..model, console_read_groups: groups, }, @rabbita.none)
     }
     Outcome(ModelAdopted(dispatched_locale, import_id, message)) => {
       let adopted_imports = model.console.model_adopted_imports.filter(value => {
@@ -5622,7 +5617,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ActivateUser(user_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -5828,7 +5823,7 @@ fn update_live(
       )
     Console(DismissConfirmation) =>
       (
-        { ..model, console: { ..model.console, confirmation: None } },
+        { ..model, console: { ..model.console, confirmation: None, }, },
         @rabbita.none,
       )
     Console(AcknowledgeAlert(notification_id, generation)) => {
@@ -5866,7 +5861,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(AssignAlertToSelf(notification_id, generation)) => {
       let body = {
@@ -5906,7 +5901,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SilenceAlert(notification_id, generation)) => {
       let body = {
@@ -5946,7 +5941,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ResolveAlert(notification_id, generation)) => {
       let body = { "expected_generation": generation.to_json() }
@@ -5983,12 +5978,12 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(Refresh) => (model, load_command(model, emit))
     Console(ModelSourceQueryChanged(value)) =>
       (
-        { ..model, console: { ..model.console, model_source_query: value } },
+        { ..model, console: { ..model.console, model_source_query: value, }, },
         @rabbita.none,
       )
     Console(SearchModelSource) => {
@@ -6044,7 +6039,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(DownloadModelSource(model_id)) => {
       let body = { "model_id": model_id, "revision": "master" }
@@ -6090,7 +6085,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RefreshModelLocalDirectories) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -6118,7 +6113,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ModelLocalDirectoryChanged(value)) =>
       (
@@ -6126,7 +6121,10 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            model_local_draft: { ..model.console.model_local_draft, directory: value, },
+            model_local_draft: {
+              ..model.console.model_local_draft,
+              directory: value,
+            },
           },
         },
         @rabbita.none,
@@ -6137,7 +6135,10 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            model_local_draft: { ..model.console.model_local_draft, repository: value, },
+            model_local_draft: {
+              ..model.console.model_local_draft,
+              repository: value,
+            },
           },
         },
         @rabbita.none,
@@ -6148,7 +6149,10 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            model_local_draft: { ..model.console.model_local_draft, revision: value, },
+            model_local_draft: {
+              ..model.console.model_local_draft,
+              revision: value,
+            },
           },
         },
         @rabbita.none,
@@ -6222,7 +6226,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(BeginLicenseAcceptance(model_id, version)) => {
       guard console_model_row(model.console, model_id, version) is Some(row) else {
@@ -6470,11 +6474,7 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            model_alias_draft: {
-              model_id,
-              version,
-              alias_name: existing,
-            },
+            model_alias_draft: { model_id, version, alias_name: existing, },
             model_license_draft: @ui.empty_model_license_draft(),
             error_message: None,
             success_message: None,
@@ -6577,7 +6577,7 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            runtime_draft: { ..model.console.runtime_draft, name: value },
+            runtime_draft: { ..model.console.runtime_draft, name: value, },
           },
         },
         @rabbita.none,
@@ -6588,7 +6588,7 @@ fn update_live(
           ..model,
           console: {
             ..model.console,
-            runtime_draft: { ..model.console.runtime_draft, version: value },
+            runtime_draft: { ..model.console.runtime_draft, version: value, },
           },
         },
         @rabbita.none,
@@ -6906,7 +6906,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RetryModelImport(import_id)) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -6953,7 +6953,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RefreshModelImports) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -6981,7 +6981,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(BeginModelAdoption(import_id)) => {
       guard model.console.operator_authenticated &&
@@ -7180,22 +7180,22 @@ fn update_live(
     }
     Console(OperationChanged(value)) =>
       (
-        { ..model, console: { ..model.console, operation_name: value } },
+        { ..model, console: { ..model.console, operation_name: value, }, },
         @rabbita.none,
       )
     Console(OperationBodyChanged(value)) =>
       (
-        { ..model, console: { ..model.console, operation_body: value } },
+        { ..model, console: { ..model.console, operation_body: value, }, },
         @rabbita.none,
       )
     Console(QuickDeploymentIdChanged(value)) =>
       (
-        { ..model, console: { ..model.console, quick_deployment_id: value } },
+        { ..model, console: { ..model.console, quick_deployment_id: value, }, },
         @rabbita.none,
       )
     Console(QuickTemplateChanged(value)) =>
       (
-        { ..model, console: { ..model.console, quick_template: value } },
+        { ..model, console: { ..model.console, quick_template: value, }, },
         @rabbita.none,
       )
     Console(QuickTopologyChanged(value)) =>
@@ -7211,7 +7211,7 @@ fn update_live(
       )
     Console(PortalNodeChanged(value)) =>
       (
-        { ..model, console: { ..model.console, portal_node_id: value } },
+        { ..model, console: { ..model.console, portal_node_id: value, }, },
         @rabbita.none,
       )
     Console(ApproveEnterpriseLease(request_id, generation)) => {
@@ -7275,7 +7275,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(RejectEnterpriseLease(request_id, generation)) => {
       let body = @portal.LeaseReview::{
@@ -7318,7 +7318,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SubmitQuickDeployment) => {
       guard quick_deployment_intent(model.console, current_unix_ms())
@@ -7372,7 +7372,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SubmitOperation) => {
       let (verb, path, inference) = match model.console.operation_name {
@@ -7437,7 +7437,7 @@ fn update_live(
         return (
           {
             ..model,
-            console: { ..model.console, error_message: Some(message) },
+            console: { ..model.console, error_message: Some(message), },
           },
           @rabbita.none,
         )
@@ -7515,7 +7515,7 @@ fn update_live(
           }
         })
       }
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(DrainNode(node_id))) => {
       let generation = current_unix_ms()
@@ -7557,7 +7557,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(CordonNode(node_id))) => {
       let generation = current_unix_ms()
@@ -7599,7 +7599,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RollbackAlias(alias_name))) => {
       let body : Json = {
@@ -7637,7 +7637,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(StopDeployment(assignment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7670,7 +7670,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RollbackServiceDeployment(deployment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7703,7 +7703,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(DeleteServiceDeployment(deployment_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7736,7 +7736,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(ActivateAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7771,7 +7771,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(SuspendAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7806,7 +7806,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RevokeAccount(account_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7841,7 +7841,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(SetAccountRoles(account_id, roles))) => {
       let body = AccountRolesIntent::{ roles, }.to_json().stringify()
@@ -7878,7 +7878,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(SuspendUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7911,7 +7911,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RevokeUser(user_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7944,7 +7944,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(RevokeAccessGrant(grant_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -7977,7 +7977,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(EndComputeLease(lease_id))) => {
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
@@ -8010,7 +8010,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ConfirmAction(TerminateExclusiveNodeLease(lease_id, generation))) => {
       let body = @nodelease.ExclusiveLeaseTerminationRequest::{
@@ -8050,7 +8050,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(
       ConfirmAction(
@@ -8098,7 +8098,7 @@ fn update_live(
             )
         }
       })
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(OfflineCommerce(Refresh)) => (model, load_command(model, emit))
     Console(OfflineCommerce(RequestArtifactDownload(artifact_id))) =>
@@ -8155,7 +8155,7 @@ fn update_live(
         "已请求生成并验证文档。",
         emit,
       )
-      ({ ..model, console: { ..model.console, loading: true } }, cmd)
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(OfflineCommerce(ConfirmAction(action))) => {
       let now = current_unix_ms()
@@ -8201,7 +8201,7 @@ fn update_live(
           } noraise {
             value => value
           }
-          let value : OfflineQuoteAction = { order_id, quote }
+          let value : OfflineQuoteAction = { order_id, quote, }
           {
             path: "/v1/offline-commerce/operator/quotes",
             body: value.to_json().stringify(),
@@ -8266,13 +8266,13 @@ fn update_live(
               },
             ],
             subtotal: money,
-            tax: { minor_units: 0L, currency: "CNY", scale: 2 },
+            tax: { minor_units: 0L, currency: "CNY", scale: 2, },
             total: money,
             valid_until_unix_ms: valid_until,
             terms_digest,
             created_unix_ms: now,
           }
-          let value : OfflineQuoteAction = { order_id, quote }
+          let value : OfflineQuoteAction = { order_id, quote, }
           ignore(confirmed_actor)
           {
             path: "/v1/offline-commerce/operator/quotes",
@@ -8518,7 +8518,7 @@ fn update_live(
       (
         {
           ..model,
-          console: { ..model.console, contract_documents: next_documents },
+          console: { ..model.console, contract_documents: next_documents, },
         },
         operator_contract_command(model, packet_id, revision, changes, emit),
       )
@@ -8530,7 +8530,7 @@ fn update_live(
       (
         {
           ..model,
-          console: { ..model.console, contract_documents: next_documents },
+          console: { ..model.console, contract_documents: next_documents, },
         },
         @rabbita.none,
       )
@@ -8554,7 +8554,7 @@ fn update_live(
       )
       let next = {
         ..model,
-        console: { ..model.console, contract_documents: next_documents },
+        console: { ..model.console, contract_documents: next_documents, },
       }
       match action {
         RegisterExecution(_)
@@ -9366,73 +9366,71 @@ fn login_view(
             )
           None => @html.nothing
         },
-        @html.form(
-          class="login-form",
-          on_submit=emit(OperatorLoginSubmitted),
-          [
-            @html.div(class="login-field", [
-              @html.label(
-                for_="login-username",
-                console_copy(locale, "Username", "用户名"),
+        @html.form(class="login-form", on_submit=emit(OperatorLoginSubmitted), [
+          @html.div(class="login-field", [
+            @html.label(
+              for_="login-username",
+              console_copy(locale, "Username", "用户名"),
+            ),
+            @html.input(
+              id="login-username",
+              value=model.login_username,
+              auto_complete=On,
+              maxlength=320,
+              attrs=@html.Attrs::build()
+                .disabled(!transport_allowed)
+                .aria_describedby("login-credentials-help"),
+              on_input=emit.map(value => LoginUsernameChanged(value)),
+            ),
+          ]),
+          @html.div(class="login-field", [
+            @html.label(
+              for_="login-password",
+              console_copy(locale, "Password", "密码"),
+            ),
+            @html.input(
+              id="login-password",
+              input_type=Password,
+              value=model.login_password,
+              auto_complete=On,
+              maxlength=256,
+              attrs=@html.Attrs::build().disabled(!transport_allowed),
+              on_input=emit.map(value => LoginPasswordChanged(value)),
+            ),
+            @html.span(
+              id="login-credentials-help",
+              class="login-help",
+              console_copy(
+                locale, "The gateway checks these against the identity provider and returns a short-lived lnxs_ session. The console never sees the password or the provider's client secret.",
+                "网关用这两个字段向身份提供商换取短期 lnxs_ 会话。控制台不会接触密码，也接触不到提供商的客户端密钥。",
               ),
-              @html.input(
-                id="login-username",
-                value=model.login_username,
-                auto_complete=On,
-                maxlength=320,
-                attrs=@html.Attrs::build()
-                  .disabled(!transport_allowed)
-                  .aria_describedby("login-credentials-help"),
-                on_input=emit.map(value => LoginUsernameChanged(value)),
+            ),
+          ]),
+          @html.div(class="login-actions", [
+            @html.span(
+              console_copy(
+                locale, "The console appears only after a successful authenticated load.",
+                "仅在身份验证并成功加载后显示控制台。",
               ),
-            ]),
-            @html.div(class="login-field", [
-              @html.label(
-                for_="login-password",
-                console_copy(locale, "Password", "密码"),
-              ),
-              @html.input(
-                id="login-password",
-                input_type=Password,
-                value=model.login_password,
-                auto_complete=On,
-                maxlength=256,
-                attrs=@html.Attrs::build().disabled(!transport_allowed),
-                on_input=emit.map(value => LoginPasswordChanged(value)),
-              ),
-              @html.span(
-                id="login-credentials-help",
-                class="login-help",
-                console_copy(
-                  locale, "The gateway checks these against the identity provider and returns a short-lived lnxs_ session. The console never sees the password or the provider's client secret.",
-                  "网关用这两个字段向身份提供商换取短期 lnxs_ 会话。控制台不会接触密码，也接触不到提供商的客户端密钥。",
-                ),
-              ),
-            ]),
-            @html.div(class="login-actions", [
-              @html.span(
-                console_copy(
-                  locale, "The console appears only after a successful authenticated load.",
-                  "仅在身份验证并成功加载后显示控制台。",
-                ),
-              ),
-              @html.button(
-                type_="submit",
-                disabled=!transport_allowed ||
-                  !operator_login_draft_complete(model) ||
-                  model.console.loading,
-                if model.console.loading {
-                  console_copy(locale, "Signing in…", "正在登录…")
-                } else {
-                  console_copy(locale, "Sign in", "登录")
-                },
-              ),
-            ]),
-          ],
-        ),
+            ),
+            @html.button(
+              type_="submit",
+              disabled=!transport_allowed ||
+                !operator_login_draft_complete(model) ||
+                model.console.loading,
+              if model.console.loading {
+                console_copy(locale, "Signing in…", "正在登录…")
+              } else {
+                console_copy(locale, "Sign in", "登录")
+              },
+            ),
+          ]),
+        ]),
         @html.div(
           class="login-divider",
-          console_copy(locale, "or use organization sign-in", "或使用组织账户登录"),
+          console_copy(
+            locale, "or use organization sign-in", "或使用组织账户登录",
+          ),
         ),
         if transport_allowed {
           @html.a(
@@ -9451,81 +9449,81 @@ fn login_view(
             ),
           )
         },
-          if localhost_dev_fallback_allowed(model.endpoint) {
-            @html.details(class="login-dev-fallback", [
-              @html.summary(
+        if localhost_dev_fallback_allowed(model.endpoint) {
+          @html.details(class="login-dev-fallback", [
+            @html.summary(
+              console_copy(
+                locale, "Local development token fallback", "本地开发令牌回退",
+              ),
+            ),
+            @html.div(class="login-dev-fields", [
+              @html.p(
+                class="login-dev-warning",
                 console_copy(
-                  locale, "Local development token fallback", "本地开发令牌回退",
+                  locale, "For localhost bootstrap only. Production browsers must use an external identity-provider account session.",
+                  "仅用于本机引导。生产环境浏览器必须使用外部身份提供商账户会话。",
                 ),
               ),
-              @html.div(class="login-dev-fields", [
-                @html.p(
-                  class="login-dev-warning",
+              @html.div(class="login-field", [
+                @html.label(
+                  for_="login-operator-token",
                   console_copy(
-                    locale, "For localhost bootstrap only. Production browsers must use an external identity-provider account session.",
-                    "仅用于本机引导。生产环境浏览器必须使用外部身份提供商账户会话。",
+                    locale, "Static operator token", "静态运维令牌",
                   ),
                 ),
-                @html.div(class="login-field", [
-                  @html.label(
-                    for_="login-operator-token",
-                    console_copy(
-                      locale, "Static operator token", "静态运维令牌",
-                    ),
-                  ),
-                  @html.input(
-                    id="login-operator-token",
-                    input_type=Password,
-                    value=if model.credential.has_prefix("lnxs_") {
-                      ""
-                    } else {
-                      model.credential
-                    },
-                    auto_complete=Off,
-                    on_input=emit.map(value => CredentialChanged(value)),
-                  ),
-                ]),
-                @html.div(class="login-field", [
-                  @html.label(
-                    for_="login-audit-token",
-                    console_copy(
-                      locale, "Static audit token", "静态审计令牌",
-                    ),
-                  ),
-                  @html.input(
-                    id="login-audit-token",
-                    input_type=Password,
-                    value=if model.audit_credential.has_prefix("lnxs_") {
-                      ""
-                    } else {
-                      model.audit_credential
-                    },
-                    auto_complete=Off,
-                    on_input=emit.map(value => AuditCredentialChanged(value)),
-                  ),
-                ]),
-                @html.div(class="login-actions", [
-                  @html.span(
-                    console_copy(
-                      locale, "Static tokens are never stored.", "静态令牌不会被存储。",
-                    ),
-                  ),
-                  @html.button(
-                    type_="button",
-                    disabled=model.credential == "" ||
-                      model.audit_credential == "" ||
-                      model.console.loading,
-                    on_click=emit(Connect),
-                    console_copy(
-                      locale, "Use local fallback", "使用本地回退",
-                    ),
-                  ),
-                ]),
+                @html.input(
+                  id="login-operator-token",
+                  input_type=Password,
+                  value=if model.credential.has_prefix("lnxs_") {
+                    ""
+                  } else {
+                    model.credential
+                  },
+                  auto_complete=Off,
+                  on_input=emit.map(value => CredentialChanged(value)),
+                ),
               ]),
-            ])
-          } else {
-            @html.nothing
-          },
+              @html.div(class="login-field", [
+                @html.label(
+                  for_="login-audit-token",
+                  console_copy(
+                    locale, "Static audit token", "静态审计令牌",
+                  ),
+                ),
+                @html.input(
+                  id="login-audit-token",
+                  input_type=Password,
+                  value=if model.audit_credential.has_prefix("lnxs_") {
+                    ""
+                  } else {
+                    model.audit_credential
+                  },
+                  auto_complete=Off,
+                  on_input=emit.map(value => AuditCredentialChanged(value)),
+                ),
+              ]),
+              @html.div(class="login-actions", [
+                @html.span(
+                  console_copy(
+                    locale, "Static tokens are never stored.", "静态令牌不会被存储。",
+                  ),
+                ),
+                @html.button(
+                  type_="button",
+                  disabled=model.credential == "" ||
+                    model.audit_credential == "" ||
+                    model.console.loading,
+                  on_click=emit(Connect),
+                  console_copy(
+                    locale, "Use local fallback", "使用本地回退",
+                  ),
+                ),
+              ]),
+            ]),
+          ])
+        } else {
+          @html.nothing
+        },
       ]),
     ]),
   ])

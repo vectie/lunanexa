@@ -29,8 +29,8 @@ pub fn bounded_metric_with_settings(
     | "host_memory_used_mib" => sample.value <= limits.maximum_memory_mib
     "accelerator_healthy_count" =>
       sample.value <= limits.maximum_accelerator_count
-    "accelerator_utilization_per_mille"
-    | "host_cpu_utilization_per_mille" => sample.value <= 1000.0
+    "accelerator_utilization_per_mille" | "host_cpu_utilization_per_mille" =>
+      sample.value <= 1000.0
     "accelerator_temperature_celsius" =>
       sample.value <= limits.maximum_temperature_celsius
     "accelerator_power_watts" => sample.value <= limits.maximum_power_watts

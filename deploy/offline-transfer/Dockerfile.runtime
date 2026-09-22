@@ -1,0 +1,17 @@
+# Select Debian 13/trixie by immutable digest; its awscli v2 supports S3
+# conditional PutObject. Pin all package versions to a retained apt snapshot.
+ARG DEBIAN_IMAGE
+FROM ${DEBIAN_IMAGE}
+ARG AWSCLI_VERSION
+ARG CLAMAV_VERSION
+ARG QPDF_VERSION
+ARG UNZIP_VERSION
+ARG CA_CERTIFICATES_VERSION
+RUN test -n "$AWSCLI_VERSION" && test -n "$CLAMAV_VERSION" && \
+    test -n "$QPDF_VERSION" && test -n "$UNZIP_VERSION" && \
+    test -n "$CA_CERTIFICATES_VERSION" && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      "awscli=$AWSCLI_VERSION" "clamav=$CLAMAV_VERSION" \
+      "clamav-freshclam=$CLAMAV_VERSION" "qpdf=$QPDF_VERSION" \
+      "unzip=$UNZIP_VERSION" "ca-certificates=$CA_CERTIFICATES_VERSION"
+ENV AWS_EC2_METADATA_DISABLED=true AWS_PAGER=""

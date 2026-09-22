@@ -18,17 +18,37 @@ pub fn expected_media_type(DocumentArtifactKind) -> Array[String]
 
 pub fn offline_commerce_readiness(Array[OfflineCommerceCapabilityEvidence], Int64) -> OfflineCommerceReadiness
 
+pub fn offline_readiness_material(OfflineReadinessEvidenceDocument) -> String
+
+pub let offline_readiness_maximum_validity_ms : Int64
+
+pub let offline_readiness_schema_version : String
+
+pub fn offline_readiness_signature(OfflineReadinessEvidenceDocument, String) -> String
+
 pub fn pending_offline_commerce_readiness(Int64) -> OfflineCommerceReadiness
 
 pub fn required_evidence(FulfillmentPolicy) -> Array[OfflineEvidenceKind]
 
 pub let snapshot_schema_version : String
 
+pub fn technical_requirement_satisfied(CommercialOrder, OfflineEvidenceKind) -> Bool
+
+pub fn technical_waived_requirements() -> Array[OfflineEvidenceKind]
+
 pub fn undertaking_quote_term(CommercialOrder) -> Int64?
 
 pub fn undertaking_tariff(String) -> Int64?
 
+pub fn undertaking_term_days(String) -> Int64?
+
+pub fn undertaking_term_tier(String) -> UndertakingTermTier?
+
+pub let undertaking_term_tiers : Array[UndertakingTermTier]
+
 pub fn valid_object_ref(String) -> Bool
+
+pub fn valid_readiness_ref(String) -> Bool
 
 pub fn valid_sha256(String) -> Bool
 
@@ -41,6 +61,10 @@ pub fn validate_quote(ImmutableQuote) -> Unit raise OfflineCommerceError
 pub fn validate_reversal(CommercialReversal) -> Unit raise OfflineCommerceError
 
 pub fn validate_reversal_recovery(ReversalRecovery) -> Unit raise OfflineCommerceError
+
+pub fn validate_technical_activation(CommercialOrder, EntitlementActivation, Int64) -> Unit raise OfflineCommerceError
+
+pub fn validate_technical_waiver(CommercialOrder) -> Unit raise OfflineCommerceError
 
 pub fn validate_template(DocumentTemplate) -> Unit raise OfflineCommerceError
 
@@ -86,6 +110,7 @@ pub fn ArtifactGenerationRequest::to_json(Self) -> Json
 pub fn ArtifactGenerationRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ArtifactGenerationResult {
+  page_count : Int?
   request_id : String
   artifact_id : String
   expected_object_ref : String
@@ -156,6 +181,8 @@ pub(all) struct CommercialOrder {
   agreement_ref : String?
   artifact_ids : Array[String]
   entitlement_ref : String?
+  requested_undertaking_term : String?
+  technical_acceptance_waiver : TechnicalAcceptanceWaiver?
   state : OfflineOrderState
   generation : Int64
   created_unix_ms : Int64
@@ -514,6 +541,7 @@ pub(all) struct OfflineCommerceSnapshot {
   orders : Array[CommercialOrder]
   artifacts : Array[DocumentArtifact]
   generation_requests : Array[ArtifactGenerationRequest]
+  generation_plans : Map[String, String]
   upload_grants : Array[EvidenceUploadGrant]
   upload_callbacks : Array[EvidenceUploadCallback]
   reviews : Array[EvidenceReview]
@@ -566,6 +594,19 @@ pub fn OfflineOrderState::from_json(Json, @json.JsonPath) -> Self raise @json.Js
 pub fn OfflineOrderState::not_equal(Self, Self) -> Bool
 pub fn OfflineOrderState::to_json(Self) -> Json
 pub fn OfflineOrderState::to_repr(Self) -> @debug.Repr
+
+pub(all) struct OfflineReadinessEvidenceDocument {
+  schema_version : String
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+  capabilities : Array[OfflineCommerceCapabilityEvidence]
+  signature : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn OfflineReadinessEvidenceDocument::equal(Self, Self) -> Bool
+pub fn OfflineReadinessEvidenceDocument::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn OfflineReadinessEvidenceDocument::not_equal(Self, Self) -> Bool
+pub fn OfflineReadinessEvidenceDocument::to_json(Self) -> Json
+pub fn OfflineReadinessEvidenceDocument::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineTransferDirection {
   UploadTransfer
@@ -743,6 +784,58 @@ pub fn ReversalRecoveryDecision::from_json(Json, @json.JsonPath) -> Self raise @
 pub fn ReversalRecoveryDecision::not_equal(Self, Self) -> Bool
 pub fn ReversalRecoveryDecision::to_json(Self) -> Json
 pub fn ReversalRecoveryDecision::to_repr(Self) -> @debug.Repr
+
+pub(all) struct TechnicalAcceptanceAuthorization {
+  order_id : String
+  purchaser_subject_ref : String
+  user_authorization_ref : String
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TechnicalAcceptanceAuthorization::equal(Self, Self) -> Bool
+pub fn TechnicalAcceptanceAuthorization::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TechnicalAcceptanceAuthorization::not_equal(Self, Self) -> Bool
+pub fn TechnicalAcceptanceAuthorization::to_json(Self) -> Json
+pub fn TechnicalAcceptanceAuthorization::to_repr(Self) -> @debug.Repr
+
+pub(all) struct TechnicalAcceptanceWaiver {
+  waiver_id : String
+  classification : String
+  waived_requirements : Array[OfflineEvidenceKind]
+  order_id : String
+  tenant_ref : String
+  organization_id : String
+  purchaser_subject_ref : String
+  quote : ImmutableQuote
+  authority_target_ref : String
+  grant_id : String
+  purchaser_account_id : String
+  identity_issuer : String
+  identity_receipt : String
+  identity_verification_method : String
+  operator_account_id : String
+  operator_subject_ref : String
+  operator_session_id : String
+  user_authorization_ref : String
+  reason : String
+  issued_unix_ms : Int64
+  expires_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TechnicalAcceptanceWaiver::equal(Self, Self) -> Bool
+pub fn TechnicalAcceptanceWaiver::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TechnicalAcceptanceWaiver::not_equal(Self, Self) -> Bool
+pub fn TechnicalAcceptanceWaiver::to_json(Self) -> Json
+pub fn TechnicalAcceptanceWaiver::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UndertakingTermTier {
+  unit : String
+  days : Int64
+  minor_units : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn UndertakingTermTier::equal(Self, Self) -> Bool
+pub fn UndertakingTermTier::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UndertakingTermTier::not_equal(Self, Self) -> Bool
+pub fn UndertakingTermTier::to_json(Self) -> Json
+pub fn UndertakingTermTier::to_repr(Self) -> @debug.Repr
 
 pub(all) enum UploadGrantState {
   UploadGranted

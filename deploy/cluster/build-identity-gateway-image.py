@@ -99,7 +99,7 @@ def main():
         if not os.path.exists(path):
             sys.exit(f"no binary at {path}")
     if not arguments.sudo_password:
-        sys.exit("no sudo password: pass --sudo-password or set LUNANEXA_SUDO_PASSWORD")
+        sys.exit("missing sudo credentials; pass --sudo-password or set LUNANEXA_SUDO_PASSWORD")
 
     work = arguments.work
     shutil.rmtree(work, ignore_errors=True)

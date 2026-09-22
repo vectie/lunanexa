@@ -363,7 +363,10 @@ test "a multi-node placement takes a mutually named CX7 pair or nothing" {
 
   // Mutual naming: a pair.
   let mutual = @scheduler.place(
-    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Active, peer="node-a2")],
+    [
+      cx7_node("node-a2", Active, peer="node-b2"),
+      cx7_node("node-b2", Active, peer="node-a2"),
+    ],
     multi,
     pair_policy,
   )
@@ -381,7 +384,10 @@ test "a multi-node placement takes a mutually named CX7 pair or nothing" {
 
   // The peer is in the inventory but not schedulable.
   let peer_down = @scheduler.place(
-    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Unreachable, peer="node-a2")],
+    [
+      cx7_node("node-a2", Active, peer="node-b2"),
+      cx7_node("node-b2", Unreachable, peer="node-a2"),
+    ],
     multi,
     pair_policy,
   )
@@ -402,7 +408,10 @@ test "a multi-node placement takes a mutually named CX7 pair or nothing" {
 
   // A profile the policy has not validated is refused even when a pair exists.
   let unvalidated = @scheduler.place(
-    [cx7_node("node-a2", Active, peer="node-b2"), cx7_node("node-b2", Active, peer="node-a2")],
+    [
+      cx7_node("node-a2", Active, peer="node-b2"),
+      cx7_node("node-b2", Active, peer="node-a2"),
+    ],
     multi,
     { ..pair_policy, validated_topology_profiles: [], },
   )
@@ -411,13 +420,13 @@ test "a multi-node placement takes a mutually named CX7 pair or nothing" {
   // No profile at all is refused, and a single-node request is unaffected.
   let no_profile = @scheduler.place(
     [cx7_node("node-a2", Active)],
-    { ..multi, topology_profile: None },
+    { ..multi, topology_profile: None, },
     pair_policy,
   )
   assert_eq(no_profile.selected_pair.length(), 0)
   let single = @scheduler.place(
     [cx7_node("node-a2", Active), cx7_node("node-b2", Active)],
-    { ..multi, multi_node: false, topology_profile: None },
+    { ..multi, multi_node: false, topology_profile: None, },
     pair_policy,
   )
   assert_eq(single.selected_pair.length(), 0)

@@ -18,6 +18,8 @@ pub fn interactive_view(ContractDocumentsState, @cmd.Emit[ContractDocumentsMessa
 
 pub fn render(ContractDocumentsState) -> String
 
+pub let traditional_contract_route_available : Bool
+
 pub fn view(ContractDocumentsState) -> @html.Html
 
 // Errors

@@ -183,17 +183,22 @@ async test "artifact gateway enforces assigned model size and bounded signature 
   let directory = @fs.tmpdir(prefix="lunanexa-artifact-gate-")
   let root = "\{directory}/store"
   assert_true(
-    authorized_artifact_size(root, assignment, "models/model.bin", 14L, signature_limit)
+    authorized_artifact_size(
+      root, assignment, "models/model.bin", 14L, signature_limit,
+    )
     is Some(_),
   )
   assert_true(
-    authorized_artifact_size(root, assignment, "models/model.bin", 15L, signature_limit)
+    authorized_artifact_size(
+      root, assignment, "models/model.bin", 15L, signature_limit,
+    )
     is None,
   )
   assert_true(
     authorized_artifact_size(
       root, assignment, "models/model.bin.sig", signature_limit, signature_limit,
-    ) is Some(_),
+    )
+    is Some(_),
   )
   assert_true(
     authorized_artifact_size(
@@ -202,10 +207,13 @@ async test "artifact gateway enforces assigned model size and bounded signature 
       "models/model.bin.sig",
       signature_limit + 1L,
       signature_limit,
-    ) is None,
+    )
+    is None,
   )
   assert_true(
-    authorized_artifact_size(root, assignment, "models/other.bin", 14L, signature_limit)
+    authorized_artifact_size(
+      root, assignment, "models/other.bin", 14L, signature_limit,
+    )
     is None,
   )
   @fs.rmdir(directory, recursive=true)
@@ -276,30 +284,35 @@ async test "managed revision serves the manifest and only the files it lists" {
       "stepfun/\{@contracts.model_store_manifest_name}",
       manifest_size,
       signature_limit,
-    ) is Some(_),
+    )
+    is Some(_),
   )
   assert_true(
     authorized_artifact_size(
       root, assignment, "stepfun/config.json", 2048L, signature_limit,
-    ) is Some(_),
+    )
+    is Some(_),
   )
   // A declared size that no longer matches what is on disk.
   assert_true(
     authorized_artifact_size(
       root, assignment, "stepfun/config.json", 2049L, signature_limit,
-    ) is None,
+    )
+    is None,
   )
   // Present in the store but absent from the revision manifest.
   assert_true(
     authorized_artifact_size(
       root, assignment, "stepfun/weights.bin", 10L, signature_limit,
-    ) is None,
+    )
+    is None,
   )
   // Outside the revision entirely.
   assert_true(
     authorized_artifact_size(
       root, assignment, "qwen/config.json", 2048L, signature_limit,
-    ) is None,
+    )
+    is None,
   )
   // A manifest whose bytes no longer hash to the signed digest.
   @fs.write_file(
@@ -315,7 +328,8 @@ async test "managed revision serves the manifest and only the files it lists" {
       "stepfun/\{@contracts.model_store_manifest_name}",
       manifest_size,
       signature_limit,
-    ) is None,
+    )
+    is None,
   )
   @fs.rmdir(directory, recursive=true)
 }

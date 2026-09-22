@@ -305,7 +305,7 @@ pub fn place(
       candidates.push(score_node(node, requirements, policy))
       eligible.push(node)
     } else {
-      rejected.push({ node_id: node.node_id, reasons })
+      rejected.push({ node_id: node.node_id, reasons, })
     }
   }
   candidates.sort_by((left, right) => {

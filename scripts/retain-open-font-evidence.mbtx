@@ -1,0 +1,104 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/crypto",
+}
+
+///|
+fn digest(bytes : Bytes) -> String {
+  "sha256:" + @crypto.bytes_to_hex_string(@crypto.sha256(bytes.to_fixedarray()))
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, probe, job, formula_image] else {
+    fail(
+      "usage: retain-open-font-evidence.mbtx REPO PROBE_ROOT JOB_BASENAME FORMULA_PNG",
+    )
+  }
+  guard job.length() == 64 &&
+    job.all(c => c.is_ascii_digit() || (c >= 'a' && c <= 'f')) else {
+    fail("invalid isolated probe job basename")
+  }
+  let output = repo + "/docs/evidence/offline-ofl-v2-20260922"
+  if !@fs.exists(output) {
+    @fs.mkdir(output, recursive=true)
+  }
+  let summary_bytes = @fs.read_file(probe + "/probe-summary.json").binary()
+  let summary = @json.parse(@utf8.decode(summary_bytes))
+  guard summary
+    is {
+      "production_ready": False,
+      "real_worker": True,
+      "real_renderer": True,
+      "real_object_roundtrip": True,
+      "failed_callback_recovered": True,
+      "output_sha256": String(pdf_sha),
+      "template_sha256": String(template_sha),
+      ..
+    } else {
+    fail("probe is not the successful isolated OFL run")
+  }
+  guard pdf_sha ==
+    "sha256:7f47f4fec8dba952bc9dc700e7a5bebb7c42946b2780364c26a3529162740b19" &&
+    template_sha ==
+    "sha256:92f0041e2752d684ced68dd09f793ed0aafd795dc92c2f9522ca25c0af4542f7" else {
+    fail("unexpected accepted template or PDF")
+  }
+  let root = probe + "/" + job
+  guard digest(@fs.read_file(root + "/output.pdf").binary()) == pdf_sha else {
+    fail("PDF changed")
+  }
+  guard digest(@fs.read_file(root + "/template.docx").binary()) == template_sha else {
+    fail("template changed")
+  }
+  let render_bytes = @fs.read_file(root + "/render.json").binary()
+  let receipt = @json.parse(@utf8.decode(render_bytes))
+  guard receipt
+    is {
+      "page_or_sheet_count": Number(4, ..),
+      "visual_evidence": Array(pages),
+      ..
+    } &&
+    pages.length() == 4 else {
+    fail("expected four visual baselines")
+  }
+  for i, page in pages {
+    guard page is { "filename": String(name), "sha256": String(sha), .. } else {
+      fail("invalid page evidence")
+    }
+    guard name == "moonleaf-page-\{i + 1}.png" else {
+      fail("noncanonical page filename")
+    }
+    let bytes = @fs.read_file(root + "/" + name).binary()
+    guard digest(bytes) == sha else { fail("page digest mismatch") }
+    @fs.write_file(output + "/" + name, bytes, create_mode=CreateOrTruncate)
+  }
+  let formula = @fs.read_file(formula_image).binary()
+  guard digest(formula) ==
+    "sha256:8ac38683706386d0b3df903b0afd79abb943c2b30e9327cca01fa0088002d43a" else {
+    fail("formula visual baseline changed")
+  }
+  @fs.write_file(
+    output + "/formula-synthetic-49-times-7.png",
+    formula,
+    create_mode=CreateOrTruncate,
+  )
+  @fs.write_file(
+    output + "/probe-summary.json",
+    summary_bytes,
+    create_mode=CreateOrTruncate,
+  )
+  @fs.write_file(
+    output + "/render-test-only.json",
+    render_bytes,
+    create_mode=CreateOrTruncate,
+  )
+  println(
+    "Retained four digest-verified OFL pages, test-only receipt, successful isolated probe, and synthetic formula baseline",
+  )
+}

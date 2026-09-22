@@ -1,0 +1,17 @@
+{
+  "schema": "lunanexa.offline-web-deployment.v1",
+  "date": "2026-09-22",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:53ceb4bfee88b77b4766ef5959f34c773891c62f8d6e7b203290217df4c435d6",
+  "tag": "20260922-offline-v4",
+  "registry_tls_verified_head_http": 200,
+  "registry_manifest_digest_matches": true,
+  "deployments_rolled_out": ["lunanexa-console", "lunanexa-enterprise", "lunanexa-workbench"],
+  "previous_deployment_snapshots_retained_private": true,
+  "public_bundle_url": "http://106.39.18.146:5003/enterprise/enterprise.js",
+  "public_bundle_http": 200,
+  "public_enterprise_sha256": "d0f7e1816925ae8e94b6cc8e43c11fb8e5795729e70f1fdc775c7e70662c7db6",
+  "fresh_workspace_bundle_sha256_matches": true,
+  "stale_web_v3_was_deployed": false,
+  "identity_routes_or_external_tls_changed": false,
+  "browser_interaction_acceptance": "separate UI agent verification, not inferred from HTTP or hashes"
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "lunanexa.document-policy-change.v1",
+  "recorded_date": "2026-09-22",
+  "authority_kind": "platform-owner-user-instruction",
+  "source": "explicit user instruction in the current deployment conversation",
+  "instruction_verbatim": "双语是个完全错误的evidence，去除。",
+  "change": "Remove the bilingual legal-template prerequisite from current production readiness requirements",
+  "bilingual_template_required": false,
+  "supported_locale_for_this_profile": "zh-CN",
+  "retained_requirements": [
+    "attributable approval source",
+    "exact template identity and version",
+    "immutable source and fillable hashes",
+    "preserved legal text and editable fields",
+    "legitimate exact-profile fonts",
+    "actual rendered-page acceptance"
+  ],
+  "legacy_unverified_fonts_waived": false,
+  "third_party_legal_certification_claimed": false,
+  "named_lawyer_claimed": false,
+  "automatic_all_capabilities_approval": false
+}

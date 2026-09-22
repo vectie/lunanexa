@@ -1,0 +1,9 @@
+# Build the native binary for the runtime architecture before packaging. The
+# source/build dependency gate is described in offline-artifact-worker.md.
+ARG RUNTIME_BASE=lunanexa/runtime-base:bookworm-amd64
+FROM ${RUNTIME_BASE}
+
+COPY _artifacts/lunanexa-offline-artifact-worker /usr/local/bin/lunanexa-offline-artifact-worker
+USER 65532:65532
+WORKDIR /work
+ENTRYPOINT ["/usr/local/bin/lunanexa-offline-artifact-worker"]

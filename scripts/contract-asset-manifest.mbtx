@@ -1,0 +1,39 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/crypto",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root, output] else {
+    fail(
+      "usage: contract-asset-manifest.mbtx CONTRACT_ASSETS_ROOT OUTPUT_SHA256SUMS",
+    )
+  }
+  let files = [
+    "youthpolicy/undertaking-v1/device-use-undertaking.docx", "youthpolicy/undertaking-v1/device-use-undertaking.fillable.docx",
+    "youthpolicy/undertaking-v1/README.md", "youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json",
+    "youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json", "youthpolicy/undertaking-ofl-v2/README.md",
+    "youthpolicy/undertaking-ofl-v2/device-use-undertaking.ofl-v2.fillable.docx",
+    "youthpolicy/undertaking-ofl-v2/device-use-undertaking.ofl-v2.docx", "youthpolicy/undertaking-ofl-v2/render-profile.json",
+    "youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.docx", "youthpolicy/v1/moonleaf-preview-template.v1.json",
+    "youthpolicy/v1/NVIDIA-DGX-Spark-remote-lease-revised.fillable.docx", "offline/quote-v1/README.md",
+    "offline/quote-v1/quote.xlsx",
+  ]
+  let lines = []
+  for name in files {
+    let bytes = @fs.read_file(root + "/" + name).binary()
+    let sha = @crypto.bytes_to_hex_string(@crypto.sha256(bytes.to_fixedarray()))
+    lines.push(sha + "  " + name)
+  }
+  @fs.write_file(
+    output,
+    @utf8.encode(lines.join("\n") + "\n"),
+    create_mode=CreateOrTruncate,
+  )
+  println("Hashed \{files.length()} immutable contract-profile assets")
+}

@@ -163,9 +163,10 @@ async fn managed_revision_size(
   }
   let relative = key[directory.length() + 1:].to_owned()
   guard resolved_artifact_path(
-    root,
-    "\{directory}/\{@contracts.model_store_manifest_name}",
-  ) is Some(manifest_path) else {
+      root,
+      "\{directory}/\{@contracts.model_store_manifest_name}",
+    )
+    is Some(manifest_path) else {
     return None
   }
   let text = try @fs.read_file(manifest_path).text() catch {
@@ -257,9 +258,10 @@ async fn ApiService::managed_revision_attestation(
     return false
   }
   guard resolved_artifact_path(
-    root,
-    "\{directory}/\{@contracts.model_store_manifest_name}",
-  ) is Some(manifest_path) else {
+      root,
+      "\{directory}/\{@contracts.model_store_manifest_name}",
+    )
+    is Some(manifest_path) else {
     return false
   }
   let text = try @fs.read_file(manifest_path).text() catch {

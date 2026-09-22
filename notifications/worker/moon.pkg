@@ -20,6 +20,8 @@ supported_targets = "native"
 
 options(
   link: {
-    "native": { "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl" },
+    "native": {
+      "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",
+    },
   },
 )

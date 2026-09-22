@@ -1,0 +1,413 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+let organization : String = "technical-acceptance-waiver-20260922"
+
+///|
+let subject : String = "subject-a8a646206b6dd368534b3277"
+
+///|
+let order_id : String = "technical-acceptance-waiver-order-20260922"
+
+///|
+let reference : String = "docs/evidence/offline-technical-waiver-20260922.md"
+
+///|
+let private_root : String = "/home/HwHiAiUser/.config/lunanexa-waiver-smoke-20260922"
+
+///|
+fn escape(s : String) -> String {
+  s
+  .replace_all(old="\\", new="\\\\")
+  .replace_all(old="\"", new="\\\"")
+  .replace_all(old="\n", new="\\n")
+}
+
+///|
+async fn remote(args : Array[String], input? : String = "") -> String {
+  let output = @shell.Cmd(
+    "ssh",
+    ["-p", "32123", "HwHiAiUser@106.39.18.146", ..args],
+    stdin=Text(input),
+  ).output()
+  output.check()
+  output.stdout()
+}
+
+///|
+async fn call(
+  token : String,
+  cookie : String,
+  verb : String,
+  path : String,
+  body : Json,
+  expected : Int,
+) -> Json {
+  let config = "silent\nshow-error\nmax-time=30\nrequest=\"" +
+    verb +
+    "\"\nurl=\"http://106.39.18.146:5003" +
+    path +
+    "\"\ncookie=\"" +
+    cookie +
+    "\"\nheader=\"Authorization: Bearer " +
+    token +
+    "\"\nheader=\"Origin: http://106.39.18.146:5003\"\nheader=\"Sec-Fetch-Site: same-origin\"\nheader=\"Sec-Fetch-Dest: empty\"\nheader=\"Content-Type: application/json\"\nheader=\"X-LunaNexa-Organization: " +
+    organization +
+    "\"\nwrite-out=\"\\n%{http_code}\"\n" +
+    (if verb == "GET" {
+      ""
+    } else {
+      "data=\"" + escape(body.stringify()) + "\"\n"
+    })
+  let raw = remote(["curl", "--config", "-"], input=config)
+  guard raw.rev_find("\n") is Some(split) else { fail("missing HTTP status") }
+  let status = raw[split + 1:].trim().to_owned()
+  let result = @json.parse(raw[:split].to_owned())
+  if status != expected.to_string() {
+    @fs.write_file(
+      "/tmp/offline-technical-waiver-error.json",
+      result.stringify(indent=2),
+      permission=0o600,
+    )
+    fail("technical acceptance stopped: " + path + " HTTP " + status)
+  }
+  result
+}
+
+///|
+fn field(value : Json, name : String) -> Json raise {
+  guard value is Object(fields) && fields.get(name) is Some(found) else {
+    fail("missing " + name)
+  }
+  found
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, mode, output_path] else {
+    fail(
+      "usage: qualify-offline-technical-waiver.mbtx prepare|activate|reverse|verify|cleanup EVIDENCE_FILE",
+    )
+  }
+  let cookie = "/home/HwHiAiUser/.config/moontown/offline-acceptance-cookies"
+  let session = @json.parse(
+    remote(
+      ["curl", "--config", "-"],
+      input="silent\nshow-error\nurl=\"http://106.39.18.146:5003/auth/session\"\ncookie=\"" +
+        cookie +
+        "\"\nheader=\"Origin: http://106.39.18.146:5003\"\nheader=\"Sec-Fetch-Site: same-origin\"\nheader=\"Sec-Fetch-Dest: empty\"\n",
+    ),
+  )
+  guard session is { "session_token": String(operator), .. } else {
+    fail("actual operator session unavailable")
+  }
+  let reader = remote(["cat", private_root + "/session-token"])
+    .trim()
+    .to_owned()
+  let reader_cookie = private_root + "/cookies"
+  let identity = call(reader, reader_cookie, "GET", "/v1/auth/self", {}, 200)
+  assert_eq(field(identity, "subject_ref"), subject.to_json())
+  let evidence : Map[String, Json] = if mode == "prepare" || mode == "preflight" {
+    {
+      "identity": identity,
+      "classification": "technical-acceptance-waived-not-paid",
+      "inference_or_gpu_started": false,
+    }
+  } else {
+    guard @json.parse(@fs.read_file(output_path).text()) is Object(values) else {
+      fail("invalid evidence")
+    }
+    values
+  }
+  errdefer @fs.write_file(
+    output_path,
+    evidence.to_json().stringify(indent=2),
+    permission=0o600,
+  )
+  async fn op(verb : String, path : String, body : Json, status : Int) -> Json {
+    call(operator, cookie, verb, path, body, status)
+  }
+  let snapshot = op("GET", "/v1/workspace", {}, 200)
+  guard field(snapshot, "users") is Array(users) &&
+    users
+    .iter()
+    .find_first(u => u is { "subject_ref": String(s), .. } && s == subject)
+    is Some(user) &&
+    field(user, "user_id") is String(user_id) else {
+    fail("unique dedicated OIDC workspace user unavailable")
+  }
+  let grant_id = organization + "-grant"
+  let lease_id = organization + "-lease"
+  if mode == "preflight" {
+    evidence["operator_identity"] = op("GET", "/v1/auth/self", {}, 200)
+    assert_true(
+      field(evidence["operator_identity"], "roles") is Array(roles) &&
+      roles.contains("PlatformOperator".to_json()),
+    )
+  } else if mode == "prepare" {
+    // Remove only this brand-new user's automatic trial so it cannot mask the
+    // observed false -> true -> false transition of the actual dispatcher.
+    guard field(snapshot, "leases") is Array(leases) &&
+      field(snapshot, "access_grants") is Array(grants) else {
+      fail("invalid authority snapshot")
+    }
+    for lease in leases {
+      if lease
+        is {
+          "subject_ref": String(s),
+          "lease_id": String(id),
+          "state": String(state),
+          ..
+        } &&
+        s == subject &&
+        state != "Revoked" &&
+        state != "Expired" {
+        ignore(op("POST", "/v1/workspace/leases/" + id + ":end", {}, 200))
+      }
+    }
+    for grant in grants {
+      if grant
+        is {
+          "user_id": String(u),
+          "grant_id": String(id),
+          "state": String(state),
+          ..
+        } &&
+        u == user_id &&
+        state != "GrantRevoked" &&
+        state != "GrantExpired" {
+        ignore(
+          op("POST", "/v1/workspace/access-grants/" + id + ":revoke", {}, 200),
+        )
+      }
+    }
+    let now = @async.now()
+    let expires = now + 1800000L
+    evidence["expires_unix_ms"] = expires.to_json()
+    evidence["grant"] = op(
+      "POST",
+      "/v1/workspace/access-grants",
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": grant_id,
+        "user_id": user_id,
+        "tenant_ref": organization,
+        "access": "Developer",
+        "starts_unix_ms": now.to_json(),
+        "expires_unix_ms": (expires + 60000L).to_json(),
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922",
+      },
+      201,
+    )
+    evidence["requested_lease"] = op(
+      "POST",
+      "/v1/workspace/leases",
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": lease_id,
+        "tenant_ref": organization,
+        "subject_ref": subject,
+        "access": "Developer",
+        "starts_unix_ms": now.to_json(),
+        "expires_unix_ms": expires.to_json(),
+        "state": "Requested",
+        "policy_receipt": "administrator-approved-technical-waiver-20260922",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1,
+            },
+          ],
+        },
+      },
+      201,
+    )
+    evidence["draft"] = call(
+      reader,
+      reader_cookie,
+      "POST",
+      "/v1/offline-commerce/self/orders",
+      {
+        "order_id": order_id,
+        "idempotency_key": order_id,
+        "project_id": organization + "-project",
+        "selected_service_code": "technical-workspace-acceptance",
+        "selected_sla_code": "technical-only",
+        "expires_unix_ms": expires.to_json(),
+      },
+      201,
+    )
+    let money : Json = { "minor_units": "0", "currency": "CNY", "scale": 2 }
+    let terms = "Noncommercial technical workspace acceptance only; no payment, signing, invoice or GPU inference; " +
+      reference
+    let hash = @shell.Cmd("shasum", ["-a", "256"], stdin=Text(terms)).output()
+    hash.check()
+    evidence["quoted"] = op(
+      "POST",
+      "/v1/offline-commerce/operator/quotes",
+      {
+        "order_id": order_id,
+        "quote": {
+          "quote_id": order_id + "-quote",
+          "version": "v1",
+          "service_code": "technical-workspace-acceptance",
+          "sla_code": "technical-only",
+          "currency": "CNY",
+          "lines": [
+            {
+              "line_id": "technical-test",
+              "description": terms,
+              "quantity": "1",
+              "unit": "test",
+              "unit_price": money,
+              "line_total": money,
+            },
+          ],
+          "subtotal": money,
+          "tax": money,
+          "total": money,
+          "valid_until_unix_ms": expires.to_json(),
+          "created_unix_ms": now.to_json(),
+          "terms_digest": "sha256:" +
+          hash.stdout().split(" ").to_array()[0].to_owned(),
+        },
+      },
+      200,
+    )
+    evidence["before"] = call(
+      reader,
+      reader_cookie,
+      "GET",
+      "/v1/workspace/self",
+      {},
+      200,
+    )
+    assert_eq(field(evidence["before"], "authorized"), false.to_json())
+  } else if mode == "activate" {
+    let quoted = evidence["quoted"]
+    evidence["waived_order"] = op(
+      "POST",
+      "/v1/offline-commerce/operator/technical-acceptance-waivers",
+      {
+        "order_id": order_id,
+        "expected_generation": field(quoted, "generation"),
+        "waiver_id": order_id + "-waiver",
+        "authority_target_ref": lease_id,
+        "grant_id": grant_id,
+        "expires_unix_ms": evidence["expires_unix_ms"],
+        "user_authorization_ref": reference,
+        "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
+      },
+      201,
+    )
+    evidence["activation_request"] = op(
+      "POST",
+      "/v1/offline-commerce/operator/fulfillments",
+      {
+        "order_id": order_id,
+        "expected_generation": field(evidence["waived_order"], "generation"),
+        "activation_id": order_id + "-activation",
+        "idempotency_key": order_id + "-activation",
+        "entitlement_kind": "WorkspaceLease",
+        "authority_target_ref": lease_id,
+      },
+      202,
+    )
+  } else if mode == "reverse" || mode == "verify" {
+    let commercial = op(
+      "GET",
+      "/v1/offline-commerce/operator/snapshot",
+      {},
+      200,
+    )
+    guard field(commercial, "orders") is Array(orders) &&
+      orders
+      .iter()
+      .find_first(o => o is { "order_id": String(id), .. } && id == order_id)
+      is Some(order) else {
+      fail("dedicated order unavailable")
+    }
+    for collection in ["entitlement_activations", "reversals"] {
+      if field(commercial, collection) is Array(values) {
+        evidence[collection] = values
+          .filter(v => v is { "order_id": String(id), .. } && id == order_id)
+          .to_json()
+      }
+    }
+    let self_view = call(
+      reader,
+      reader_cookie,
+      "GET",
+      "/v1/workspace/self",
+      {},
+      200,
+    )
+    if mode == "reverse" {
+      assert_eq(field(order, "state"), "Fulfilled".to_json())
+      assert_eq(field(self_view, "authorized"), true.to_json())
+      assert_eq(
+        field(field(self_view, "active_lease"), "lease_id"),
+        lease_id.to_json(),
+      )
+      evidence["fulfilled_order"] = order
+      evidence["active_self"] = self_view
+      evidence["reversal_request"] = op(
+        "POST",
+        "/v1/offline-commerce/operator/reversals",
+        {
+          "order_id": order_id,
+          "expected_generation": field(order, "generation"),
+          "reversal_id": order_id + "-reversal",
+          "idempotency_key": order_id + "-reversal",
+          "reason": "CustomerCancellation",
+        },
+        202,
+      )
+    } else {
+      assert_eq(field(order, "state"), "Revoked".to_json())
+      assert_eq(field(self_view, "authorized"), false.to_json())
+      evidence["revoked_order"] = order
+      evidence["revoked_self"] = self_view
+      evidence["actual_dispatcher_activation_and_reversal_complete"] = true
+    }
+  } else if mode == "cleanup" {
+    evidence["grant_cleanup"] = op(
+      "POST",
+      "/v1/workspace/access-grants/" + grant_id + ":revoke",
+      {},
+      200,
+    )
+    evidence["user_cleanup"] = op(
+      "POST",
+      "/v1/workspace/users/" + user_id + ":revoke",
+      {},
+      200,
+    )
+  } else {
+    fail("unknown mode")
+  }
+  @fs.write_file(
+    output_path,
+    evidence.to_json().stringify(indent=2),
+    permission=0o600,
+  )
+  println(
+    "Technical acceptance phase " +
+    mode +
+    " verified; evidence retained without credentials",
+  )
+}

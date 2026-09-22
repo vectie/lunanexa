@@ -1,0 +1,14 @@
+{
+  "schema": "lunanexa.offline-pipeline.probe.v1",
+  "production_ready": false,
+  "run_id": "test-only-1790069913499",
+  "real_worker": true,
+  "real_renderer": true,
+  "real_object_roundtrip": true,
+  "failed_callback_recovered": true,
+  "plan_calls": 2,
+  "callback_calls": 2,
+  "output_sha256": "sha256:7f47f4fec8dba952bc9dc700e7a5bebb7c42946b2780364c26a3529162740b19",
+  "template_sha256": "sha256:92f0041e2752d684ced68dd09f793ed0aafd795dc92c2f9522ca25c0af4542f7",
+  "output_byte_count": 10824742
+}

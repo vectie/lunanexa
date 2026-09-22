@@ -1382,7 +1382,8 @@ fn capacity_step(
               // the selection is outside it: Review price simply went grey, and
               // on a trial that is the only visible consequence of picking a
               // longer period. Say which limit was crossed and what to do.
-              if state.self_service.duration_hours > offering.maximum_duration_hours {
+              if state.self_service.duration_hours >
+                offering.maximum_duration_hours {
                 @html.small(
                   class="field-error",
                   "\{state.self_service.duration_hours} \{enterprise_copy(state.locale, LongerThanThisOfferingAllows)}",

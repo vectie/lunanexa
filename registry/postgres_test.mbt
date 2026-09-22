@@ -23,11 +23,10 @@ fn test_database_url() -> String? raise {
   }
   Some(value)
 }
+
 ///|
 async test "model registry uses PostgreSQL in the production adapter" {
-  guard test_database_url() is Some(url) else {
-    return
-  }
+  guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)
   let standby = @database.PostgresDatabase::open(url)
   defer standby.close()

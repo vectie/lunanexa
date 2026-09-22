@@ -365,6 +365,9 @@ pub fn customize_xlsx_template(
     error => raise MoonLeafRejected("\{Repr(error)}")
   }
   let coordinates : Map[String, Unit] = Map([])
+  let source_cells = @xlsx.inspect(@opc.open(bytes)) catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
   for replacement in replacements {
     let key = "\{replacement.sheet_name}:\{replacement.row}:\{replacement.column}"
     if replacement.sheet_name.trim() == "" ||
@@ -376,6 +379,14 @@ pub fn customize_xlsx_template(
       raise InvalidInput("invalid or duplicate XLSX replacement")
     }
     coordinates[key] = ()
+    if source_cells.any(cell => {
+        cell.sheet_name == replacement.sheet_name &&
+        cell.row == replacement.row &&
+        cell.column == replacement.column &&
+        cell.formula is Some(_)
+      }) {
+      raise InvalidInput("XLSX replacement cannot overwrite a formula cell")
+    }
     session = session.set_cell_text(
       replacement.sheet_name,
       replacement.row,
@@ -388,7 +399,44 @@ pub fn customize_xlsx_template(
   let copy = session.save_as_copy() catch {
     error => raise MoonLeafRejected("\{Repr(error)}")
   }
-  let customized = copy.bytes()
+  // Recompute formula caches from the edited source cells before the renderer
+  // signs this exact source. Unsupported formulas fail closed; cached values
+  // are never accepted as proof that a quote has been recalculated.
+  let mut edited_archive = @opc.open(copy.bytes()) catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
+  // Explicitly number-formatted source slots stay numeric after substitution.
+  // General/text slots retain their original text-input semantics.
+  for replacement in replacements {
+    if source_cells.any(cell => {
+        cell.sheet_name == replacement.sheet_name &&
+        cell.row == replacement.row &&
+        cell.column == replacement.column &&
+        cell.display_kind == @xlsx.Number &&
+        cell.resolved_text is None &&
+        cell.raw_value is Some(_)
+      }) {
+      let value = @string.parse_double(replacement.value) catch {
+        _ => raise InvalidInput("number-formatted XLSX input is not numeric")
+      }
+      edited_archive = @xlsx.set_cell_number(
+        edited_archive,
+        replacement.sheet_name,
+        replacement.row,
+        replacement.column,
+        value,
+      ) catch {
+        error => raise MoonLeafRejected("\{Repr(error)}")
+      }
+    }
+  }
+  let recalculated = @xlsx.recalculate(edited_archive) catch {
+    error =>
+      raise MoonLeafRejected("spreadsheet recalculation failed: \{Repr(error)}")
+  }
+  let customized = @opc.save(recalculated) catch {
+    error => raise MoonLeafRejected("\{Repr(error)}")
+  }
   {
     bytes: customized,
     replacement_count: replacements.length(),

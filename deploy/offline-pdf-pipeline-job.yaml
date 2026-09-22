@@ -8,7 +8,7 @@
 #    API using the artifact-worker callback identity.
 #
 # This is a deployment template, not readiness evidence. Keep PdfRenderer and
-# CjkFonts pending until MOONLEAF_RENDERER_IMAGE_DIGEST, bilingual fonts,
+# CjkFonts pending until MOONLEAF_RENDERER_IMAGE_DIGEST, exact-profile licensed fonts,
 # visual baselines, and retained MoonLeaf receipts have been approved and
 # rehearsed. Another office engine is not an allowed substitute.
 apiVersion: batch/v1

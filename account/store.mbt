@@ -1114,10 +1114,9 @@ pub async fn AccountStore::issue_session(
         (left.created_unix_ms - right.created_unix_ms).to_int()
       }
     })
-    for
-      index = 0
-      index <= active_sessions.length() - MaximumActiveSessionsPerAccount
-      index = index + 1 {
+    for index = 0
+        index <= active_sessions.length() - MaximumActiveSessionsPerAccount
+        index = index + 1 {
       let stale = active_sessions[index]
       self.sessions[stale.session_id] = {
         ..stale,

@@ -1,0 +1,42 @@
+{
+  "schema": "lunanexa.offline-controller-deployment.v1",
+  "revision": "20260922-v4",
+  "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-control@sha256:bd2d47d5b449bf5b356fb8473d2801bc9336c81e655710c723b8cdacd652bcf6",
+  "native_release_binary_sha256": "f70d3d2e01e410ad143b2aa4fe53b27cae55c583f3f1ffa4d194c730e9419032",
+  "source_provenance": "LunaNexa frozen uncommitted working-tree snapshot, not a clean release commit; adjacent MoonLeaf main066efc2",
+  "source_sha256": {
+    "contractdoc/preview/preview.mbt": "06f356f3a92ffb261973576918efeb4335c8bd51cbc57ce63d5aaef1c90a07f7",
+    "cmd/control/technical_acceptance.mbt": "60c22ab1ad78f5f61176511d11be20a57f4784e0303725d1efa5ad446872cef1",
+    "commercial/offline/technical_acceptance.mbt": "7022078ee261f0bb6c8643b3853bf026aed833a96b6f02e7eb4e7b881289e524"
+  },
+  "build": "native release optimized, succeeded without errors",
+  "registry_verified_tls_head_http": 200,
+  "registry_exact_digest": true,
+  "initial_pod": "lunanexa-control-54f9fc68bb-w2b2q",
+  "initial_ready_containers": 4,
+  "initial_container_restart_counts": [0, 0, 0, 0],
+  "prior_v3_connection_unavailable_reproduced_at_initial_start": false,
+  "loaded_capabilities_configured_verified": "10/10",
+  "initial_remaining_readiness_blockers": ["ReadinessEntitlementDispatcherSuccessStale"],
+  "entitlement_authority_evidence_sha256": "65472dc307c6158d6843ac032e07b87a17e4d4405227f1621729e251fa575b86",
+  "technical_scope": {
+    "order_id": "technical-acceptance-waiver-order-20260922",
+    "purchaser_subject_ref": "subject-a8a646206b6dd368534b3277",
+    "authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
+    "deployment_window_minutes": 50,
+    "ordinary_order_policy_changed": false,
+    "removal_after_actual_reverse_cleanup": "completed: authorization environment entry removed, default disabled restored, controller rolled out"
+  },
+  "actual_entitlement_acceptance_evidence": "docs/evidence/offline-technical-waiver-production-20260922.json",
+  "final_readiness_blocker_codes": [],
+  "final_pod_after_scope_removal": "lunanexa-control-749d75779c-wgvtc",
+  "final_ready_containers": 4,
+  "final_restart_counts_by_container": {
+    "control": 1,
+    "identity-relay": 0,
+    "runtime-loopback-proxy": 0,
+    "runtime-loopback-proxy-glm": 0
+  },
+  "final_rollout_initial_control_error": "vectie/lunanexa/database.DatabaseError.ConnectionUnavailable; one automatic restart then Ready; underlying connection cause not proven",
+  "scope": "Deployment evidence only; actual activation/reversal and browser preview require their separate receipts"
+}

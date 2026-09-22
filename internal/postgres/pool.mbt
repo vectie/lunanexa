@@ -1,4 +1,3 @@
-
 ///|
 type NativePool
 
@@ -67,7 +66,9 @@ pub fn pool_create(
 ///|
 /// The number of workers the pool actually started. A short pool means the
 /// operating system refused a thread or a pipe.
-///| Stops the workers and closes their connections. Anything session-scoped on
+
+///|
+/// Stops the workers and closes their connections. Anything session-scoped on
 /// those connections, such as an advisory lock, is released here.
 pub fn Pool::shutdown(self : Pool) -> Unit {
   native_pool_shutdown(self.handle)
@@ -99,8 +100,13 @@ pub fn Pool::submit(
   }
   let encoded = encode_parameters(parameters)
   if native_pool_submit(
-      self.handle, index, @utf8.encode(sql), encoded, parameters.length(),
-    ) != 0 {
+      self.handle,
+      index,
+      @utf8.encode(sql),
+      encoded,
+      parameters.length(),
+    ) !=
+    0 {
     raise InvalidParameter("database worker rejected the statement")
   }
 }

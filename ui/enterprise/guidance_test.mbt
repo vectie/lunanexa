@@ -186,9 +186,11 @@ test "a refusal keeps its status so the copy can name the real problem" {
   assert_false(refusal.contains("Refresh and retry"))
   // The connection branch is unchanged.
   assert_true(
-    @enterprise.friendly_failure(English, "Operation", "TypeError: Failed to fetch").contains(
-      "connection did not complete",
-    ),
+    @enterprise.friendly_failure(
+      English,
+      "Operation",
+      "TypeError: Failed to fetch",
+    ).contains("connection did not complete"),
   )
   // A status we do not classify still reads as a plain failure.
   assert_true(
@@ -239,9 +241,11 @@ test "a rental period outside the offering's allowance says so" {
   // The same state at a period inside the allowance says nothing extra.
   let allowed = {
     ..state,
-    self_service: { ..state.self_service, duration_hours: 24 },
+    self_service: { ..state.self_service, duration_hours: 24, },
   }
-  assert_true(@enterprise.self_service_configuration_valid(allowed.self_service))
+  assert_true(
+    @enterprise.self_service_configuration_valid(allowed.self_service),
+  )
   assert_false(
     @enterprise.render(allowed).contains("is longer than this offering allows"),
   )

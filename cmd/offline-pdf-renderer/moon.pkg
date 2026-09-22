@@ -1,0 +1,26 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/process",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/crypto",
+  "vectie/moonleaf/opc",
+  "vectie/moonleaf/render",
+  "vectie/lunanexa/commercial/offline",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
+
+import {
+  "vectie/moonleaf/xml",
+  "vectie/moonleaf/xlsx",
+  "vectie/moonleaf/docx",
+} for "wbtest"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

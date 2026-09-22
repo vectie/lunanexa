@@ -205,8 +205,7 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
         "selected_sla_code": "standard",
         "requested_undertaking_term": "hour",
         "expires_unix_ms": (now + 3600000L).to_json(),
-      } : Json
-    ).stringify(),
+      } : Json).stringify(),
   )
   assert_eq(unknown_tier.status, 400)
   assert_true(unknown_tier.body.contains("InvalidTerm"))
@@ -333,6 +332,7 @@ async test "offline operator route rejects customers and exposes no artifact byt
       artifact_ids: [],
       entitlement_ref: None,
       requested_undertaking_term: None,
+      technical_acceptance_waiver: None,
       state: Draft,
       generation: 1L,
       created_unix_ms: now,
@@ -543,6 +543,7 @@ async test "entitlement callback authority is distinct terminal and idempotent" 
     artifact_ids: [],
     entitlement_ref: None,
     requested_undertaking_term: None,
+    technical_acceptance_waiver: None,
     state: Draft,
     generation: 1L,
     created_unix_ms: now,
@@ -606,6 +607,7 @@ async test "entitlement callback authority is distinct terminal and idempotent" 
       render_verified: true,
       formula_error_count: 0,
       visual_evidence_sha256: "sha256:" + "e".repeat(64),
+      page_count: None,
       completed_unix_ms: now + 2L,
     }),
   )
@@ -882,6 +884,7 @@ async test "offline lifecycle reconciliation emits safe deduplicated customer no
       artifact_ids: [],
       entitlement_ref: None,
       requested_undertaking_term: None,
+      technical_acceptance_waiver: None,
       state: Draft,
       generation: 1L,
       created_unix_ms: now,
@@ -893,7 +896,7 @@ async test "offline lifecycle reconciliation emits safe deduplicated customer no
     store.quote_order(
       "order-notice",
       offline_test_quote("notice", now),
-      "platform-operator",
+      "operator",
       now + 1L,
     ),
   )

@@ -1,0 +1,73 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+async fn hash(path : String) -> String {
+  let result = @shell.Cmd("sha256sum", [path]).output()
+  result.check()
+  result.stdout().split(" ").next().unwrap().to_owned()
+}
+
+async fn size(path : String) -> Int {
+  let result = @shell.Cmd("stat", ["-c", "%s", path]).output()
+  result.check()
+  @string.parse_int(result.stdout().trim())
+}
+
+async fn blob(root : String, name : String, value : Json) -> (String, Int) {
+  let path = root + "/" + name
+  @fs.write_file(path, value.stringify(), create_mode=CreateNew, permission=0o600)
+  let digest = hash(path)
+  let bytes = size(path)
+  @fs.rename(path, root + "/blobs/sha256/" + digest)
+  (digest, bytes)
+}
+
+async fn main {
+  guard @env.args() is [_, rootfs, output, image, entrypoint] else {
+    fail("Usage: package-offline-rootfs.mbtx SECRET_FREE_ROOTFS_TAR NEW_OUTPUT_DIR IMAGE_REFERENCE ENTRYPOINT")
+  }
+  let platform = @shell.Cmd("uname", ["-m"]).output()
+  platform.check()
+  guard platform.stdout().trim() == "x86_64" else { fail("Expected Linux amd64 build host") }
+  @fs.mkdir(output, permission=0o700)
+  @fs.mkdir(output + "/blobs/sha256", recursive=true, permission=0o700)
+  let diff = hash(rootfs)
+  @shell.Cmd("gzip", ["-n", "-k", rootfs]).run()
+  let layer = rootfs + ".gz"
+  let layer_hash = hash(layer)
+  let layer_size = size(layer)
+  @shell.Cmd("cp", [layer, output + "/blobs/sha256/" + layer_hash]).run()
+  let config : Json = {
+    "architecture": "amd64", "os": "linux",
+    "config": {
+      "User": "65532:65532",
+      "Env": ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "AWS_EC2_METADATA_DISABLED=true", "AWS_PAGER="],
+      "Entrypoint": [entrypoint], "WorkingDir": "/tmp",
+    },
+    "rootfs": {"type": "layers", "diff_ids": ["sha256:" + diff]},
+    "history": [{"created_by": "LunaNexa reviewed secret-free runtime snapshot"}],
+  }
+  let (config_hash, config_size) = blob(output, "config.json", config)
+  let manifest : Json = {
+    "schemaVersion": 2, "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {"mediaType": "application/vnd.oci.image.config.v1+json", "digest": "sha256:" + config_hash, "size": config_size},
+    "layers": [{"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "digest": "sha256:" + layer_hash, "size": layer_size}],
+  }
+  let (manifest_hash, manifest_size) = blob(output, "manifest.json", manifest)
+  let index : Json = {
+    "schemaVersion": 2,
+    "manifests": [{"mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": "sha256:" + manifest_hash, "size": manifest_size,
+      "annotations": {"org.opencontainers.image.ref.name": image}, "platform": {"architecture": "amd64", "os": "linux"}}],
+  }
+  @fs.write_file(output + "/index.json", index.stringify(), create_mode=CreateNew)
+  @fs.write_file(output + "/oci-layout", "{\"imageLayoutVersion\":\"1.0.0\"}", create_mode=CreateNew)
+  @shell.Cmd("tar", ["-C", output, "-cf", output + ".oci.tar", "oci-layout", "index.json", "blobs"]).run()
+  println(image + "@sha256:" + manifest_hash)
+  println(output + ".oci.tar")
+}

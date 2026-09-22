@@ -1,0 +1,137 @@
+# Deployment overlay: replace image with the built immutable image digest and
+# provision Secret/ConfigMap/PVC inputs before applying. Never put tokens here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-offline-artifact-dispatcher
+  namespace: lunanexa
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: lunanexa-offline-artifact-dispatcher}
+  template:
+    metadata:
+      labels: {app: lunanexa-offline-artifact-dispatcher}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      serviceAccountName: lunanexa-offline-artifact-dispatcher
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: dispatcher
+          image: REPLACE_WITH_OFFLINE_DISPATCHER_IMAGE_DIGEST
+          command: [/usr/local/bin/offline-dispatcher]
+          envFrom:
+            - configMapRef: {name: lunanexa-offline-dispatcher}
+          env:
+            - name: LUNANEXA_ARTIFACT_WORKER_CALLBACK_TOKEN
+              valueFrom: {secretKeyRef: {name: lunanexa-control-credentials, key: artifact-worker-callback-token}}
+            - name: LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN
+              valueFrom: {secretKeyRef: {name: lunanexa-offline-transfer, key: LUNANEXA_OFFLINE_TRANSFER_ADAPTER_TOKEN}}
+            - {name: LUNANEXA_OFFLINE_DISPATCHER_KIND, value: artifact}
+            - {name: LUNANEXA_OFFLINE_DISPATCHER_STATE_ROOT, value: /state/artifact}
+            - {name: LUNANEXA_OFFLINE_ARTIFACT_EXECUTION_BACKEND, value: kubernetes}
+            - {name: LUNANEXA_KUBECTL_BIN, value: /usr/local/bin/kubectl}
+            - {name: LUNANEXA_OFFLINE_ARTIFACT_JOB_IMAGE, value: REPLACE_WITH_OFFLINE_DISPATCHER_IMAGE_DIGEST}
+            - {name: LUNANEXA_OFFLINE_ARTIFACT_JOB_NAMESPACE, value: lunanexa}
+            - {name: LUNANEXA_OFFLINE_ARTIFACT_STATE_PVC, value: lunanexa-offline-dispatcher-state}
+            - {name: LUNANEXA_OFFLINE_ARTIFACT_FONT_PVC, value: lunanexa-offline-approved-fonts}
+            - {name: LUNANEXA_OFFLINE_ARTIFACT_STATE_SUBPATH, value: artifact}
+            - {name: LUNANEXA_OFFLINE_RENDER_SECRET_NAME, value: lunanexa-offline-render-evidence}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '2', memory: 2Gi}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: tmp, mountPath: /tmp}
+            - {name: trust, mountPath: /etc/lunanexa-trust, readOnly: true}
+            - {name: kube-api-access, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+      volumes:
+        - name: state
+          persistentVolumeClaim: {claimName: lunanexa-offline-dispatcher-state}
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}
+        - name: trust
+          configMap: {name: lunanexa-offline-ca}
+        - name: kube-api-access
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+              - downwardAPI:
+                  items: [{path: namespace, fieldRef: {apiVersion: v1, fieldPath: metadata.namespace}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunanexa-offline-entitlement-dispatcher
+  namespace: lunanexa
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: lunanexa-offline-entitlement-dispatcher}
+  template:
+    metadata:
+      labels: {app: lunanexa-offline-entitlement-dispatcher}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: dispatcher
+          image: REPLACE_WITH_OFFLINE_DISPATCHER_IMAGE_DIGEST
+          command: [/usr/local/bin/offline-dispatcher]
+          envFrom:
+            - configMapRef: {name: lunanexa-offline-dispatcher}
+          env:
+            - name: LUNANEXA_ENTITLEMENT_AUTHORITY_CALLBACK_TOKEN
+              valueFrom: {secretKeyRef: {name: lunanexa-control-credentials, key: entitlement-authority-callback-token}}
+            - {name: LUNANEXA_OFFLINE_DISPATCHER_KIND, value: entitlement}
+            - {name: LUNANEXA_OFFLINE_DISPATCHER_STATE_ROOT, value: /state/entitlement}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: '1', memory: 256Mi}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: trust, mountPath: /etc/lunanexa-trust, readOnly: true}
+      volumes:
+        - name: state
+          persistentVolumeClaim: {claimName: lunanexa-offline-dispatcher-state}
+        - name: trust
+          configMap: {name: lunanexa-offline-ca}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: lunanexa-offline-artifact-dispatcher, namespace: lunanexa}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: lunanexa-offline-artifact-dispatcher, namespace: lunanexa}
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: lunanexa-offline-artifact-dispatcher, namespace: lunanexa}
+subjects:
+  - {kind: ServiceAccount, name: lunanexa-offline-artifact-dispatcher, namespace: lunanexa}
+roleRef: {kind: Role, name: lunanexa-offline-artifact-dispatcher, apiGroup: rbac.authorization.k8s.io}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-offline-artifact-job-isolation, namespace: lunanexa}
+spec:
+  podSelector:
+    matchLabels: {app: lunanexa-offline-artifact-job}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []

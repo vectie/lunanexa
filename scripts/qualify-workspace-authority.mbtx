@@ -1,0 +1,348 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+fn escape(text : String) -> String {
+  text
+  .replace_all(old="\\", new="\\\\")
+  .replace_all(old="\"", new="\\\"")
+  .replace_all(old="\n", new="\\n")
+}
+
+///|
+async fn decode(encoded : String) -> String {
+  let output = @shell.Cmd(
+    "openssl",
+    ["base64", "-d", "-A"],
+    stdin=Text(encoded),
+  ).output()
+  output.check()
+  output.stdout().trim().to_owned()
+}
+
+///|
+async fn call(
+  token : String,
+  verb : String,
+  path : String,
+  body : Json,
+  expected : Int,
+  subject? : String = "",
+) -> Json {
+  let origin = if subject == "" {
+    "http://10.43.192.21:8080"
+  } else {
+    "http://106.39.18.146:5003"
+  }
+  let config = "silent\nshow-error\nnoproxy = \"*\"\nmax-time = 15\nrequest = \"" +
+    verb +
+    "\"\nurl = \"" +
+    origin +
+    path +
+    "\"\nheader = \"Authorization: Bearer " +
+    token +
+    "\"\nheader = \"Content-Type: application/json\"\nwrite-out = \"\\n%{http_code}\"\n" +
+    (if subject == "" {
+      ""
+    } else {
+      "cookie = \"/home/HwHiAiUser/.config/lunanexa-authority-smoke-20260922/cookies\"\nheader = \"Origin: http://106.39.18.146:5003\"\nheader = \"Sec-Fetch-Site: same-origin\"\nheader = \"Sec-Fetch-Dest: empty\"\n"
+    }) +
+    (if verb == "GET" {
+      ""
+    } else {
+      "data = \"" + escape(body.stringify()) + "\"\n"
+    })
+  let result = @shell.Cmd(
+    "ssh",
+    ["-p", "32123", "HwHiAiUser@106.39.18.146", "curl", "--config", "-"],
+    stdin=Text(config),
+  ).output()
+  result.check()
+  let lines = result.stdout().split("\n").to_array()
+  let code = lines[lines.length() - 1].trim()
+  guard code == expected.to_string() else {
+    @fs.write_file(
+      "/tmp/lunanexa-authority-rejected-response.txt",
+      result.stdout(),
+      permission=0o600,
+    )
+    fail("authority endpoint rejected " + path + ": HTTP " + code.to_owned())
+  }
+  @json.parse(lines[0:lines.length() - 1].join("\n"))
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, output_path] else {
+    fail(
+      "usage: qualify-workspace-authority.mbtx NEW_EVIDENCE_OUTPUT; requires the dedicated genuine OIDC qualification session",
+    )
+  }
+  let secrets = @shell.Cmd("ssh", [
+    "-p", "32123", "HwHiAiUser@106.39.18.146", "kubectl", "--kubeconfig=/home/HwHiAiUser/.kube/lunanexa-management",
+    "-n", "lunanexa", "get", "secret", "lunanexa-control-credentials", "-o", "json",
+  ]).output()
+  secrets.check()
+  guard @json.parse(secrets.stdout())
+    is { "data": { "operator-tokens": String(operators), .. }, .. } else {
+    fail("required authority credentials unavailable")
+  }
+  let pair = decode(operators).split(",").to_array()[0].to_owned()
+  guard pair.find("=") is Some(separator) else {
+    fail("invalid operator mapping")
+  }
+  let operator = pair[separator + 1:].to_owned()
+  let session = @shell.Cmd("ssh", [
+    "-p", "32123", "HwHiAiUser@106.39.18.146", "cat", "/home/HwHiAiUser/.config/lunanexa-authority-smoke-20260922/session-token",
+  ]).output()
+  session.check()
+  let reader = session.stdout().trim().to_owned()
+  let now = @async.now()
+  let prefix = "technical-authority-oidc-20260922"
+  let subject = "subject-4464f7644b41a13e27f68a97"
+  let lease_id = prefix + "-lease"
+  let grant_id = prefix + "-grant"
+  let tenant = prefix + "-tenant"
+  let version = "lunanexa.workspace.v1"
+  let identity = call(reader, "GET", "/v1/auth/self", {}, 200, subject~)
+  assert_true(
+    identity
+    is {
+      "subject_ref": String(actual),
+      "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+      ..
+    } &&
+    actual == subject,
+  )
+  guard call(operator, "GET", "/v1/workspace", {}, 200)
+    is {
+      "users": Array(initial_users),
+      "leases": Array(initial_leases),
+      "access_grants": Array(initial_grants),
+      ..
+    } else {
+    fail("initial authority snapshot unavailable")
+  }
+  guard initial_users.filter(user => {
+      user is { "subject_ref": String(actual), .. } && actual == subject
+    })
+    is [user] &&
+    user is { "user_id": String(user_id), .. } else {
+    fail("new OIDC trial user not uniquely bound")
+  }
+  // Only the newly-created qualification subject is touched, never the existing
+  // shared smoke identity or another user's auto-trial.
+  for lease in initial_leases {
+    if lease is { "subject_ref": String(actual), "lease_id": String(id), .. } &&
+      actual == subject {
+      ignore(
+        call(operator, "POST", "/v1/workspace/leases/" + id + ":end", {}, 200),
+      )
+    }
+  }
+  for grant in initial_grants {
+    if grant is { "user_id": String(actual), "grant_id": String(id), .. } &&
+      actual == user_id {
+      ignore(
+        call(
+          operator,
+          "POST",
+          "/v1/workspace/access-grants/" + id + ":revoke",
+          {},
+          200,
+        ),
+      )
+    }
+  }
+  async fn ensure_record(
+    collection : String,
+    field : String,
+    id : String,
+    route : String,
+    value : Json,
+  ) -> Json {
+    let existing = call(operator, "GET", "/v1/workspace", Json::null(), 200)
+    guard existing is Object(fields) &&
+      fields.get(collection) is Some(Array(records)) else {
+      fail("authority snapshot shape unavailable")
+    }
+    for record in records {
+      if record is Object(fields) && fields.get(field) == Some(id.to_json()) {
+        return record
+      }
+    }
+    call(operator, "POST", route, value, 201)
+  }
+  let grant = ensure_record(
+    "access_grants",
+    "grant_id",
+    grant_id,
+    "/v1/workspace/access-grants",
+    {
+      "version": version,
+      "grant_id": grant_id,
+      "user_id": user_id,
+      "tenant_ref": tenant,
+      "access": "Developer",
+      "starts_unix_ms": (now - 1000L).to_json(),
+      "expires_unix_ms": (now + 600000L).to_json(),
+      "state": "GrantActive",
+      "policy_receipt": "administrator-approved-technical-authority-20260922",
+    },
+  )
+  let requested = ensure_record(
+    "leases",
+    "lease_id",
+    lease_id,
+    "/v1/workspace/leases",
+    {
+      "version": version,
+      "lease_id": lease_id,
+      "tenant_ref": tenant,
+      "subject_ref": subject,
+      "access": "Developer",
+      "starts_unix_ms": (now - 1000L).to_json(),
+      "expires_unix_ms": (now + 600000L).to_json(),
+      "state": "Requested",
+      "policy_receipt": "administrator-approved-technical-authority-20260922",
+      "limits": {
+        "max_active_sessions": 1,
+        "max_session_duration_ms": "60000",
+        "capabilities": [
+          {
+            "capability": "TextGenerate",
+            "max_concurrent_requests": 1,
+            "max_requests_per_hour": 1,
+            "max_input_units_per_request": 1,
+            "max_output_units_per_request": 1,
+          },
+        ],
+      },
+    },
+  )
+  let before = call(
+    reader,
+    "GET",
+    "/v1/workspace/self",
+    Json::null(),
+    200,
+    subject~,
+  )
+  assert_true(before is { "authorized": False, .. })
+  let active = call(
+    operator,
+    "POST",
+    "/v1/workspace/leases/" + lease_id + ":activate",
+    {},
+    200,
+  )
+  let enabled = call(
+    reader,
+    "GET",
+    "/v1/workspace/self",
+    Json::null(),
+    200,
+    subject~,
+  )
+  assert_true(
+    enabled
+    is {
+      "authorized": True,
+      "active_lease": { "lease_id": String(actual), .. },
+      ..
+    } &&
+    actual == lease_id,
+  )
+  let ended = call(
+    operator,
+    "POST",
+    "/v1/workspace/leases/" + lease_id + ":end",
+    {},
+    200,
+  )
+  let disabled = call(
+    reader,
+    "GET",
+    "/v1/workspace/self",
+    Json::null(),
+    200,
+    subject~,
+  )
+  assert_true(disabled is { "authorized": False, .. })
+  let revoked = call(
+    operator,
+    "POST",
+    "/v1/workspace/access-grants/" + grant_id + ":revoke",
+    {},
+    200,
+  )
+  let revoked_user = call(
+    operator,
+    "POST",
+    "/v1/workspace/users/" + user_id + ":revoke",
+    {},
+    200,
+  )
+  let final_view = call(
+    reader,
+    "GET",
+    "/v1/workspace/self",
+    Json::null(),
+    200,
+    subject~,
+  )
+  assert_true(final_view is { "authorized": False, .. })
+  let snapshot = call(operator, "GET", "/v1/workspace", Json::null(), 200)
+  guard snapshot
+    is {
+      "users": Array(users),
+      "access_grants": Array(grants),
+      "leases": Array(leases),
+      ..
+    } else {
+    fail("invalid durable authority snapshot")
+  }
+  let evidence : Json = {
+    "kind": "lunanexa.workspace-authority-qualification.v1",
+    "scope": "Fresh genuine OIDC qualification account and dedicated administrator-approved workspace; NOT commercial payment or signed-contract fulfillment",
+    "identity": identity,
+    "inference_or_gpu_work_started": false,
+    "user": user,
+    "grant": grant,
+    "requested": requested,
+    "before": before,
+    "active": active,
+    "enabled": enabled,
+    "ended": ended,
+    "disabled": disabled,
+    "revoked_grant": revoked,
+    "revoked_user": revoked_user,
+    "final_view": final_view,
+    "persisted": {
+      "users": users
+      .filter(value => value is { "user_id": String(id), .. } && id == user_id)
+      .to_json(),
+      "access_grants": grants
+      .filter(value => value is { "grant_id": String(id), .. } && id == grant_id)
+      .to_json(),
+      "leases": leases
+      .filter(value => value is { "lease_id": String(id), .. } && id == lease_id)
+      .to_json(),
+    },
+  }
+  @fs.write_file(
+    output_path,
+    evidence.stringify(indent=2),
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  println(
+    "Dedicated authority lifecycle and true→false authorization verified; all technical access revoked; no inference submitted.",
+  )
+}

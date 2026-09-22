@@ -5,6 +5,7 @@ import {
   "vectie/moonleaf/xlsx",
   "vectie/lunanexa/commercial/offline",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
 }
 
 supported_targets = "native"

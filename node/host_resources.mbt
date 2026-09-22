@@ -105,7 +105,9 @@ pub fn parse_linux_memory_mib(meminfo : String) -> (Int64, Int64?) raise {
   }
   if available is Some(memory_available_mib) {
     guard memory_available_mib <= memory_total_mib else {
-      raise TelemetryCollectorError::MalformedSample("MemAvailable over MemTotal")
+      raise TelemetryCollectorError::MalformedSample(
+        "MemAvailable over MemTotal",
+      )
     }
   }
   (memory_total_mib, available)
@@ -213,11 +215,7 @@ pub fn parse_linux_cpu_times(stat : String) -> (Int64, Int64) raise {
   // cpu + user nice system idle iowait irq softirq steal
   let required_columns = 9
   for line in stat.split("\n") {
-    let fields = line
-      .trim()
-      .split(" ")
-      .filter(field => field != "")
-      .to_array()
+    let fields = line.trim().split(" ").filter(field => field != "").to_array()
     if fields.length() >= required_columns && fields[0] == "cpu" {
       let mut total = 0L
       for index = 1; index <= 8; index = index + 1 {
@@ -251,7 +249,7 @@ pub fn parse_linux_cpu_utilization_per_mille(
     )
   }
   let busy_delta = total_delta - idle_delta
-  ((busy_delta * 1000L) / total_delta).to_int().clamp(min=0, max=1000)
+  (busy_delta * 1000L / total_delta).to_int().clamp(min=0, max=1000)
 }
 
 ///|
@@ -273,8 +271,7 @@ pub async fn collect_linux_host_utilization() -> HostUtilization {
     memory_total_mib,
     memory_available_mib,
     cpu_utilization_per_mille: parse_linux_cpu_utilization_per_mille(
-      first,
-      second,
+      first, second,
     ),
   }
 }

@@ -1,4 +1,3 @@
-
 ///|
 fn model_artifact(
   model_id : String,
@@ -46,33 +45,22 @@ test "registered artifacts are grouped under their model" {
 ///|
 test "the template runtime picker lists each registered runtime once" {
   let demo = @ui.demo_state()
-  let keys = @ui
-    .known_runtimes(demo)
-    .map(runtime => @ui.runtime_key(runtime))
+  let keys = @ui.known_runtimes(demo).map(runtime => @ui.runtime_key(runtime))
   // The roster comes first, then any runtime only a registered template names.
-  assert_eq(
-    keys,
-    [
-      "text-runtime@runtime-v1",
-      "embedding-runtime@runtime-v1",
-      "vision-runtime@runtime-v2",
-    ],
-  )
+  assert_eq(keys, [
+    "text-runtime@runtime-v1", "embedding-runtime@runtime-v1", "vision-runtime@runtime-v2",
+  ])
   // The template's own runtime is already in the roster, so it is not repeated:
   // a picker with two identical entries would let an operator choose a runtime
   // the registry lists once.
   let roster = demo.registered_runtimes.filter(runtime => {
     runtime.name != "text-runtime"
   })
-  let regrouped = @ui
-    .known_runtimes({ ..demo, registered_runtimes: roster, })
-    .map(runtime => @ui.runtime_key(runtime))
-  assert_eq(
-    regrouped,
-    [
-      "embedding-runtime@runtime-v1",
-      "vision-runtime@runtime-v2",
-      "text-runtime@runtime-v1",
-    ],
+  let regrouped = @ui.known_runtimes({ ..demo, registered_runtimes: roster, }).map(runtime => {
+      @ui.runtime_key(runtime)
+    },
   )
+  assert_eq(regrouped, [
+    "embedding-runtime@runtime-v1", "vision-runtime@runtime-v2", "text-runtime@runtime-v1",
+  ])
 }

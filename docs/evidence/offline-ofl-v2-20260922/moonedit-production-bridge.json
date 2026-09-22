@@ -1,0 +1,129 @@
+{
+  "schema": "lunanexa.moonedit-production-bridge.v1",
+  "scope": "technical acceptance only; non-commercial, not signed, no payment or entitlement claim",
+  "controller_image_sha256": "ec18ed94a93176b41b8de1e2b0f8920ee4ef98a12434cb9a9d6fb4abf8eb01df",
+  "worker_image_sha256": "ec1d28986b5ee034ec7125f88ecb82ad4b9b96580ae6cac8763183a6a16aaff4",
+  "entrypoint": "authenticated purchaser MoonEdit :generate; no manually queued artifact requests",
+  "confirmed_values_sha256": "sha256:abdfdb54534665270a44a7f1a624f52a15eb7f1a335e13c7c55248c927176af9",
+  "packet_id": "technical-acceptance-ofl-packet-20260922",
+  "order_id": "technical-acceptance-ofl-order-20260922",
+  "source_template_sha256": "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117",
+  "requested_revision": "5",
+  "generated_revision": "6",
+  "state": "Generated",
+  "exact_click_retry_unchanged": true,
+  "private_generation_plan_projection_empty": true,
+  "generated_unix_ms": "1790075266456",
+  "packet_artifacts": [
+    {
+      "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "sha256": "sha256:6e130dc6badc507b729d99b1fa337dd14a98ac087f1212bff15af12147b9888e",
+      "byte_count": "16041",
+      "page_count": 4,
+      "render_evidence_sha256": "sha256:2e1012e44af3f571b49894bd2385b9d17465f4100a9e20d155f6c07dbe06ecea",
+      "generated_unix_ms": "1790075249257"
+    },
+    {
+      "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "media_type": "application/pdf",
+      "sha256": "sha256:65e70f452ad7dd7029acaf6edde0fad1b4175741209a82c168d3f45d8cf7b543",
+      "byte_count": "10825525",
+      "page_count": 4,
+      "render_evidence_sha256": "sha256:2e1012e44af3f571b49894bd2385b9d17465f4100a9e20d155f6c07dbe06ecea",
+      "generated_unix_ms": "1790075223134"
+    }
+  ],
+  "stored_artifacts": [
+    {
+      "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "order_id": "technical-acceptance-ofl-order-20260922",
+      "organization_id": "technical-acceptance-ofl-20260922",
+      "kind": "PrintReadyContractPdf",
+      "revision": 1,
+      "template_id": "youthpolicy-device-undertaking-ofl-v2",
+      "template_version": "v2",
+      "locale": "zh-CN",
+      "media_type": "application/pdf",
+      "byte_count": "10825525",
+      "sha256": "sha256:65e70f452ad7dd7029acaf6edde0fad1b4175741209a82c168d3f45d8cf7b543",
+      "object_ref": "object://contract-documents/6692cf3505efd587463d09c265255b11544a109e1c27edfef67983d296816ff3/contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "generation_state": "ArtifactGenerated",
+      "scan_state": "ScanPassed",
+      "review_state": "ReviewNotRequired",
+      "submitted_by": "subject-62ccd3da9d05ea6c5783a8b8",
+      "creator_receipt": "moonleaf:9b6a71404bbd93c5c275f4cf407754af2fc9d3323c810146e7af1d56f38c5e66",
+      "created_unix_ms": "1790075223134"
+    },
+    {
+      "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "order_id": "technical-acceptance-ofl-order-20260922",
+      "organization_id": "technical-acceptance-ofl-20260922",
+      "kind": "EditableContractDocx",
+      "revision": 1,
+      "template_id": "youthpolicy-device-undertaking-ofl-v2",
+      "template_version": "v2",
+      "locale": "zh-CN",
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "byte_count": "16041",
+      "sha256": "sha256:6e130dc6badc507b729d99b1fa337dd14a98ac087f1212bff15af12147b9888e",
+      "object_ref": "object://contract-documents/6692cf3505efd587463d09c265255b11544a109e1c27edfef67983d296816ff3/contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "generation_state": "ArtifactGenerated",
+      "scan_state": "ScanPassed",
+      "review_state": "ReviewNotRequired",
+      "submitted_by": "subject-62ccd3da9d05ea6c5783a8b8",
+      "creator_receipt": "moonleaf:4226ccd0d5d062f58686721f334d4ae9609fb50a5f1dbd6f2c492336c997d8d8",
+      "created_unix_ms": "1790075249257"
+    }
+  ],
+  "generation_requests": [
+    {
+      "request_id": "generate-contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "order_id": "technical-acceptance-ofl-order-20260922",
+      "organization_id": "technical-acceptance-ofl-20260922",
+      "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "kind": "PrintReadyContractPdf",
+      "template_id": "youthpolicy-device-undertaking-ofl-v2",
+      "template_version": "v2",
+      "locale": "zh-CN",
+      "expected_object_ref": "object://contract-documents/6692cf3505efd587463d09c265255b11544a109e1c27edfef67983d296816ff3/contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "input_snapshot_sha256": "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117",
+      "requested_by": "subject-62ccd3da9d05ea6c5783a8b8",
+      "requested_unix_ms": "1790075217699"
+    },
+    {
+      "request_id": "generate-contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "order_id": "technical-acceptance-ofl-order-20260922",
+      "organization_id": "technical-acceptance-ofl-20260922",
+      "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "kind": "EditableContractDocx",
+      "template_id": "youthpolicy-device-undertaking-ofl-v2",
+      "template_version": "v2",
+      "locale": "zh-CN",
+      "expected_object_ref": "object://contract-documents/6692cf3505efd587463d09c265255b11544a109e1c27edfef67983d296816ff3/contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "input_snapshot_sha256": "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117",
+      "requested_by": "subject-62ccd3da9d05ea6c5783a8b8",
+      "requested_unix_ms": "1790075217699"
+    }
+  ],
+  "completed_claims": [
+    {
+      "work_id": "artifact:generate-contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+      "worker_kind": "ArtifactDispatcher",
+      "expected_order_generation": "4",
+      "attempt": 1,
+      "claimed_unix_ms": "1790075218927",
+      "retry_after_unix_ms": "1790075278927",
+      "completed_unix_ms": "1790075223134"
+    },
+    {
+      "work_id": "artifact:generate-contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
+      "worker_kind": "ArtifactDispatcher",
+      "expected_order_generation": "5",
+      "attempt": 1,
+      "claimed_unix_ms": "1790075218927",
+      "retry_after_unix_ms": "1790075278927",
+      "completed_unix_ms": "1790075249257"
+    }
+  ]
+}

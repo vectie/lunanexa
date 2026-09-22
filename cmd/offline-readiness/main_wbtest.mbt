@@ -1,4 +1,31 @@
 ///|
+test "readiness signer accepts secret environment without exposing values" {
+  let lookup = name => {
+    if name == "SIGNING_KEY" {
+      Some("k".repeat(64))
+    } else {
+      None
+    }
+  }
+  assert_eq(
+    readiness_secret_argument(["sign", "--secret-env", "SIGNING_KEY"], lookup),
+    "k".repeat(64),
+  )
+  for
+    args in [
+      ["sign", "--secret-env", "MISSING"],
+      ["sign", "--secret-env", "bad=name"],
+      ["sign", "--secret-env", "SIGNING_KEY", "--secret", "legacy"],
+    ] {
+    try readiness_secret_argument(args, lookup) catch {
+      _ => ()
+    } noraise {
+      _ => fail("invalid or ambiguous secret source was accepted")
+    }
+  }
+}
+
+///|
 fn valid_readiness_capabilities() -> Array[
   @offline.OfflineCommerceCapabilityEvidence,
 ] {

@@ -19,6 +19,31 @@ fn undertaking_packet(
 }
 
 ///|
+test "OFL creation option coexists with original packets without silently upgrading them" {
+  let legacy = @contractdoc.undertaking_manifest()
+  let current = @contractdoc.undertaking_ofl_manifest()
+  let state = {
+    ..@contract_documents.default_state(ChineseSimplified),
+    manifest: Some(current),
+    available_manifests: [current, legacy],
+    creation_template_id: current.template_id,
+    packets: [undertaking_packet(InformationDraft)],
+    selected_packet_id: Some("undertaking-ui"),
+    selected_form: Some(MasterLease),
+  }
+  assert_eq(state.current_manifest(), Some(legacy))
+  let html = @contract_documents.render(state)
+  assert_true(html.contains("开源字体新版"))
+  assert_true(html.contains("原版 · 历史订单"))
+  assert_true(
+    html.contains("value=\"youthpolicy-device-undertaking-ofl-v2\" selected"),
+  )
+  let selected = state.update(SelectCreationTemplate(legacy.template_id))
+  assert_eq(selected.creation_template_id, legacy.template_id)
+  assert_eq(selected.current_manifest(), Some(legacy))
+}
+
+///|
 test "undertaking template selection reuses source editor without legacy template leakage" {
   let undertaking = @contractdoc.undertaking_manifest()
   let state = {
@@ -190,7 +215,9 @@ test "both rental routes are listed and the contract route stays disabled while 
   assert_true(html.contains("设备使用承诺函 · 甲方审批"))
   // The contract route is still visible so the choice is discoverable, but
   // carries its unavailability and is never rendered as a selectable entry.
-  assert_true(html.contains("传统租赁合同 · 双方签署（暂未开放）"))
+  assert_true(
+    html.contains("传统租赁合同 · 双方签署（暂未开放）"),
+  )
   assert_false(html.contains("传统租赁合同 · 双方签署</option>"))
   assert_false(@contract_documents.traditional_contract_route_available)
 }

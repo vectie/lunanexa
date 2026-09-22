@@ -22,6 +22,7 @@ test "demo one-time key walkthrough creates no authority and dismissal clears fi
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..portal, route: AccountAccess, api_key_issue_open: true, },
     login_email: "",
     login_password: "",
@@ -64,6 +65,7 @@ test "enterprise demo lease submission never claims an operator mutation" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: LeaseRequests, },
     login_email: "",
     login_password: "",
@@ -93,6 +95,7 @@ test "enterprise contract preview is reactive and generation fenced" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
     login_email: "",
     login_password: "",
@@ -145,6 +148,7 @@ test "demo machine termination mirrors the controller cleanup transition" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
     login_email: "",
     login_password: "",
@@ -197,6 +201,7 @@ test "demo credential redemption is explicit and never contains a secret" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: MachineAccess, },
     login_email: "",
     login_password: "",
@@ -249,6 +254,7 @@ test "enterprise demo renews the selected effective contract packet" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..@enterprise_ui.demo_state(), route: ContractDocuments, },
     login_email: "",
     login_password: "",
@@ -300,6 +306,7 @@ test "signed-out enterprise gate hides application navigation and actions" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: @enterprise_ui.default_state(1000L),
     login_email: "",
     login_password: "",
@@ -338,6 +345,7 @@ test "logout erases account key and one-time secret state and fences stale issue
     session_expires_unix_ms: Some(999999L),
     machine_clock_generation: 2L,
     contract_preview_generation: 3L,
+    contract_poll_generation: 0L,
     portal: {
       ..portal,
       one_time_api_key_secret: Some({
@@ -394,6 +402,7 @@ test "gateway bootstrap remains memory-only and generation fenced" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: @enterprise_ui.default_state(1000L),
     login_email: "",
     login_password: "",
@@ -438,6 +447,7 @@ test "matching browser-session expiry clears the local session" {
     session_expires_unix_ms: Some(1000L),
     machine_clock_generation: 9L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: {
       ..portal,
       machine_access: { ..portal.machine_access, now_unix_ms: 500L, },
@@ -566,6 +576,7 @@ test "enterprise demo checkout requires an explicit provider-link click" {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: { ..portal, route: Costs, },
     login_email: "",
     login_password: "",
@@ -650,6 +661,7 @@ test "authenticated users without a company reach organization self-service" {
     session_expires_unix_ms: Some(100000L),
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal,
     login_email: "",
     login_password: "",
@@ -946,6 +958,7 @@ fn gateway_auth_test_model() -> AppModel {
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: @enterprise_ui.default_state(1000L),
     login_email: "",
     login_password: "",
@@ -957,10 +970,11 @@ fn gateway_auth_test_model() -> AppModel {
 ///|
 test "the gateway's refusal codes choose the customer-facing copy" {
   let refusal = fn(code : String, registering : Bool) -> String {
-    gateway_auth_refusal(English, {
-      status: 401,
-      body: "{\"error\":\"\{code}\"}",
-    }, registering)
+    gateway_auth_refusal(
+      English,
+      { status: 401, body: "{\"error\":\"\{code}\"}", },
+      registering,
+    )
   }
   assert_true(refusal("invalid-credentials", false).contains("not accepted"))
   assert_true(refusal("email-taken", true).contains("already has an account"))
@@ -968,12 +982,12 @@ test "the gateway's refusal codes choose the customer-facing copy" {
   // rather than inventing its own rule.
   assert_true(refusal("password-rejected", true).contains("12 characters"))
   assert_true(
-    refusal("registration-unavailable", true).contains(
-      "platform administrator",
-    ),
+    refusal("registration-unavailable", true).contains("platform administrator"),
   )
   assert_true(refusal("too-many-attempts", false).contains("five minutes"))
-  assert_true(refusal("identity-provider-unavailable", false).contains("unavailable"))
+  assert_true(
+    refusal("identity-provider-unavailable", false).contains("unavailable"),
+  )
   // An unrecognised code still names which action was refused.
   assert_true(refusal("something-else", true).contains("registration"))
   assert_true(refusal("something-else", false).contains("sign-in"))
@@ -986,14 +1000,19 @@ test "the customer gate needs both fields and drops the password once it is used
   let model = gateway_auth_test_model()
   // An incomplete draft cannot be submitted and does not start a connection.
   let (unsubmitted, _) = update(
-    { ..model, login_email: "buyer@example.test" },
+    { ..model, login_email: "buyer@example.test", },
     EnterpriseSignInSubmitted,
     emit,
   )
   assert_false(unsubmitted.connecting)
   // Registration additionally needs a display name.
   let (incomplete_registration, _) = update(
-    { ..model, registering: true, login_email: "buyer@example.test", login_password: "Correct-Horse-9!" },
+    {
+      ..model,
+      registering: true,
+      login_email: "buyer@example.test",
+      login_password: "Correct-Horse-9!",
+    },
     EnterpriseRegistrationSubmitted,
     emit,
   )
@@ -1011,10 +1030,12 @@ test "the customer gate needs both fields and drops the password once it is used
   let (refused, _) = update(
     submitted,
     EnterpriseAuthRefused(
-      English, gateway_auth_refusal(English, {
-        status: 401,
-        body: "{\"error\":\"invalid-credentials\"}",
-      }, false),
+      English,
+      gateway_auth_refusal(
+        English,
+        { status: 401, body: "{\"error\":\"invalid-credentials\"}", },
+        false,
+      ),
     ),
     emit,
   )
@@ -1061,7 +1082,7 @@ test "the registration form asks for a display name the sign-in form does not" {
   let blocked = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(
       app_view(
-        { ..gateway_auth_test_model(), endpoint: "http://106.39.18.146:5002" },
+        { ..gateway_auth_test_model(), endpoint: "http://106.39.18.146:5002", },
         emit,
       ),
     )
@@ -1069,7 +1090,7 @@ test "the registration form asks for a display name the sign-in form does not" {
   assert_true(blocked.contains("blocked on public plain HTTP"))
   let registering = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(
-      app_view({ ..gateway_auth_test_model(), registering: true }, emit),
+      app_view({ ..gateway_auth_test_model(), registering: true, }, emit),
     )
   })
   assert_true(registering.contains("portal-register-name"))

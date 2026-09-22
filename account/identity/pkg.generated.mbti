@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/account/identity"
+
+// Values
+pub fn account_identifier(String, String) -> String
+
+pub fn subject_digest(String, String) -> String
+
+pub fn subject_fingerprint(String, String) -> String
+
+pub fn subject_reference(String, String) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

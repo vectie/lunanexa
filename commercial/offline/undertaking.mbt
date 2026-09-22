@@ -30,11 +30,11 @@ pub extend UndertakingTermTier with FromJson::{from_json}
 /// sides render: `ui/offline_commerce` builds the operator's tariff picker from
 /// it, and the enterprise portal builds the customer's term picker from it.
 pub let undertaking_term_tiers : Array[UndertakingTermTier] = [
-  { unit: "day", days: 1L, minor_units: 4900L },
-  { unit: "week", days: 7L, minor_units: 32200L },
-  { unit: "month", days: 30L, minor_units: 129000L },
-  { unit: "quarter", days: 90L, minor_units: 360000L },
-  { unit: "year", days: 365L, minor_units: 1387000L },
+  { unit: "day", days: 1L, minor_units: 4900L, },
+  { unit: "week", days: 7L, minor_units: 32200L, },
+  { unit: "month", days: 30L, minor_units: 129000L, },
+  { unit: "quarter", days: 90L, minor_units: 360000L, },
+  { unit: "year", days: 365L, minor_units: 1387000L, },
 ]
 
 ///|

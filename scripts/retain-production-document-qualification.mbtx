@@ -1,0 +1,65 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, evidence] else {
+    fail("usage: retain-production-document-qualification.mbtx EVIDENCE_DIR")
+  }
+  let root = "/tmp/lunanexa-production-"
+  for
+    (kind, pages, expected) in [
+      (
+        "docx", 4, "sha256:65e70f452ad7dd7029acaf6edde0fad1b4175741209a82c168d3f45d8cf7b543",
+      ),
+      (
+        "quote", 1, "sha256:c044202b042e94ad0ee4cb7b87a1ebedb3ecc9c46e68e70d08bbdf8453f4c6eb",
+      ),
+    ] {
+    let source = root + kind + "-result/"
+    let result = @fs.read_file(source + "result.json").text()
+    guard @json.parse(result)
+      is {
+        "sha256": String(actual),
+        "verified": True,
+        "render_verified": True,
+        ..
+      } &&
+      actual == expected else {
+      fail("unexpected production qualification result")
+    }
+    for file in ["result.json", "render.json"] {
+      @fs.write_file(
+        evidence + "/production-" + kind + "-" + file,
+        @fs.read_file(source + file).binary(),
+      )
+    }
+    for page in 1..<=pages {
+      let filename = "moonleaf-page-\{page}.png"
+      @fs.write_file(
+        evidence + "/production-" + kind + "-page-\{page}.png",
+        @fs.read_file(source + filename).binary(),
+      )
+    }
+  }
+  let sheet = @shell.Cmd("unzip", [
+    "-p",
+    root + "quote-result/output.xlsx",
+    "xl/worksheets/sheet1.xml",
+  ]).output()
+  sheet.check()
+  for exact in ["<v>72000</v>", "<v>4320</v>", "<f>SUM(B6:B7)</f><v>76320</v>"] {
+    guard sheet.stdout().contains(exact) else {
+      fail("actual formula result mismatch")
+    }
+  }
+  println(
+    "Retained actual production Job evidence; formula checked; no payment, signature or customer fulfillment asserted",
+  )
+}

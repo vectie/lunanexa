@@ -1,0 +1,16 @@
+{
+  "template_id": "youthpolicy-device-undertaking-ofl-v2",
+  "template_version": "v2",
+  "renderer": "moonleaf",
+  "required_fonts": ["Noto Sans SC"],
+  "font_configuration": "assets/fonts/open/noto-sans-sc/font-config.json",
+  "font_license": "SIL Open Font License 1.1",
+  "source_sha256": "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117",
+  "fillable_sha256": "sha256:92f0041e2752d684ced68dd09f793ed0aafd795dc92c2f9522ca25c0af4542f7",
+  "font_sha256": "sha256:c7763f454946833081cc90e73186615f8e1189de9c5e5a5a8752871fd79fddbc",
+  "validated_sample_page_count": 4,
+  "typography_change": "Noto Sans SC Regular throughout; signature paragraph right-aligned without first-line indentation",
+  "legal_text_changed": false,
+  "original_v1_retained": true,
+  "production_rollout_attested": false
+}

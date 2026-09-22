@@ -1,0 +1,48 @@
+{
+  "schema": "lunanexa.offline-transfer.production-evidence.v1",
+  "date": "2026-09-22",
+  "namespace": "lunanexa",
+  "node": "ubuntu",
+  "runtime_r1_digest": "sha256:54fa371d1dbc32c2490aa6dd97bc4909af5c1295b853f99cf105184aee7086ce",
+  "runtime_r2_digest": "sha256:49e6cadff1be5ed2cac0193f5e275d1ac34ce55c4f3cc57c65e6524b34aaa1c8",
+  "registry_r1_r2_push_tls_verified": true,
+  "s3": {
+    "implementation": "SeaweedFS 4.47",
+    "bucket": "lunanexa-offline-commerce",
+    "private_tls_certificate_verified": true,
+    "dedicated_pvc_gib": 40,
+    "chunk_encryption_enabled": true,
+    "encryption_key_separation_claimed": false,
+    "versioning_readback": "Enabled",
+    "retention_readback": {"mode": "GOVERNANCE", "days": 30},
+    "retained_version_delete_without_bypass_denied_on_restored_copy": true,
+    "immutable_retry_and_conflict_rejection_selftest_passed": true,
+    "cold_restart_digest_and_retention_preserved": true,
+    "cold_archive_sha256": "3d76efd4038c63a4b22208e21359e397447cc29660743c8da92fbab583a54af5",
+    "cold_archive_private_host_path": "/home/HwHiAiUser/moon-public/secrets/offline-commerce-20260922/offline-commerce-cold-20260922.tar.gz",
+    "restore_to_separate_pvc_verified_both_templates_and_version_metadata": true,
+    "ha_claimed": false,
+    "offsite_disaster_recovery_claimed": false
+  },
+  "scanner": {
+    "implementation": "ClamAV 1.4.3",
+    "official_daily": 28131,
+    "official_main": 63,
+    "official_bytecode": 339,
+    "docx_scan_passed": true,
+    "xlsx_scan_passed": true,
+    "pdf_scan_and_s3_readback_passed": true,
+    "eicar_detected_exit_code": 1,
+    "empty_database_freshness_failure_exit_code": 2,
+    "stale_database_fixture_claimed": false
+  },
+  "templates": [
+    {"ref": "s3://lunanexa-offline-commerce/templates/youthpolicy-device-undertaking-ofl-v2/v2/fillable.docx", "bytes": 16043, "sha256": "92f0041e2752d684ced68dd09f793ed0aafd795dc92c2f9522ca25c0af4542f7", "version_id": "67286273e2bdd8a12c565b1610eee0b8"},
+    {"ref": "s3://lunanexa-offline-commerce/templates/offline-quote-v1/1/quote.xlsx", "bytes": 2383, "sha256": "19f9f83a92fa37fa59df31b1a4f2ea1966a75986387bd2a4b7d6810ce78c5340", "version_id": "6728626641faadc810f0ad46fc2ac974"}
+  ],
+  "public_edge": {"nginx_config_test": "passed", "health_http_code": 200, "routes": "GET/PUT /v1/offline-transfers/<safe-id> only", "upstream_tls_verification": true, "outer_http_unchanged": true},
+  "capability_negative_tests": {"cross_session_token_denied_http":401,"expired_capability_denied_http":401,"synthetic_adapter_sessions_only":true,"controller_callback_invoked":false,"test_session_files_removed":true,"tenant_account_isolation_claimed":false},
+  "cleanup": {"isolated_restore_pod_pvc_networkpolicy_deleted": true, "private_cold_archive_retained": true, "bootstrap_client_credentials_unmounted": true, "adapter_does_not_receive_controller_session_secret": true},
+  "real_controller_customer_quote_download_evidence": "docs/evidence/offline-customer-quote-download-20260922.json",
+  "remaining": ["OFL document-specific browser acceptance", "scheduled off-node backup policy"]
+}

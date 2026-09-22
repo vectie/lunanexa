@@ -856,7 +856,9 @@ fn field_label(
 
 ///|
 fn preview_font_stack(font : String) -> String {
-  if font.contains("方正小标宋") || font.contains("XiaoBiaoSong") {
+  if font == "Noto Sans SC" {
+    "'Noto Sans SC',sans-serif"
+  } else if font.contains("方正小标宋") || font.contains("XiaoBiaoSong") {
     "'LunaNexa FZ XiaoBiaoSong','\{font}','Songti SC','STSong',serif"
   } else if font.contains("黑体") || font.contains("Hei") {
     "'LunaNexa SimHei','\{font}','Heiti SC','STHeiti','Noto Sans CJK SC','Source Han Sans SC',sans-serif"

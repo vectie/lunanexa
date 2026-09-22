@@ -31,7 +31,7 @@ test "runtime quantities match Kubernetes canonical serialization" {
     let (cpu, memory, expected_cpu, expected_memory) = sample
     let assignment = {
       ..base,
-      resources: { ..base.resources, cpu_millis: cpu, memory_mib: memory },
+      resources: { ..base.resources, cpu_millis: cpu, memory_mib: memory, },
     }
     let rendered = @kubernetes.render_runtime(
       runtime_settings(),
@@ -247,14 +247,14 @@ test "expired mismatched and duplicate GPU assignments fail before resource crea
   let original = runtime_assignment()
   for
     assignment in [
-      { ..original, lease_expires_unix_ms: 1000L },
-      { ..original, node_id: "other" },
-      { ..original, signature: "" },
-      { ..original, devices: ["fake-spark"] },
+      { ..original, lease_expires_unix_ms: 1000L, },
+      { ..original, node_id: "other", },
+      { ..original, signature: "", },
+      { ..original, devices: ["fake-spark"], },
       {
         ..original,
         devices: [original.devices[0], original.devices[0]],
-        resources: { ..original.resources, accelerator_count: 2 },
+        resources: { ..original.resources, accelerator_count: 2, },
       },
     ] {
     try
@@ -305,7 +305,7 @@ test "model mounts cannot escape the verified cache and ingress cannot become pu
     ] {
     try
       @kubernetes.render_runtime(
-        { ..runtime_settings(), controller_addresses: [address] },
+        { ..runtime_settings(), controller_addresses: [address], },
         assignment,
         "/var/lib/lunanexa/models/model",
         assignment.artifact.digest,
@@ -361,7 +361,10 @@ fn environment_value(environment : Array[Json], name : String) -> String? {
 /// fabric. Nothing here is guessed from the peer's side.
 test "a paired runtime renders rank identity, fabric passthrough and a named peer" {
   let head = paired_assignment(0, "192.168.2.179")
-  let settings = { ..runtime_settings(), fabric_address: Some("192.168.2.178") }
+  let settings = {
+    ..runtime_settings(),
+    fabric_address: Some("192.168.2.178"),
+  }
   let resources = @kubernetes.render_runtime(
     settings,
     head,
@@ -435,7 +438,7 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
 
   // The peer takes its rendezvous point from the head, not from itself.
   let worker = @kubernetes.render_runtime(
-    { ..settings, fabric_address: Some("192.168.2.179") },
+    { ..settings, fabric_address: Some("192.168.2.179"), },
     paired_assignment(1, "192.168.2.178"),
     "/var/lib/lunanexa/models/model",
     head.artifact.digest,
@@ -455,10 +458,10 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
   // containers would never find each other, so nothing is rendered.
   for
     unusable in [
-      { ..settings, fabric_address: None },
-      { ..settings, fabric_address: Some("") },
-      { ..settings, fabric_address: Some("10.1.2.3/8") },
-      { ..settings, fabric_address: Some("192.168.2.179") },
+      { ..settings, fabric_address: None, },
+      { ..settings, fabric_address: Some(""), },
+      { ..settings, fabric_address: Some("10.1.2.3/8"), },
+      { ..settings, fabric_address: Some("192.168.2.179"), },
     ] {
     try
       ignore(
@@ -480,16 +483,16 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
   }
   for
     broken in [
-      { ..head, group: Some({ ..head.group.unwrap(), rank: 2 }) },
-      { ..head, group: Some({ ..head.group.unwrap(), world_size: 3 }) },
+      { ..head, group: Some({ ..head.group.unwrap(), rank: 2, }), },
+      { ..head, group: Some({ ..head.group.unwrap(), world_size: 3, }), },
       {
         ..head,
-        group: Some({ ..head.group.unwrap(), peer_endpoint: "127.0.0.1" }),
+        group: Some({ ..head.group.unwrap(), peer_endpoint: "127.0.0.1", }),
       },
-      { ..head, group: Some({ ..head.group.unwrap(), peer_endpoint: "" }) },
+      { ..head, group: Some({ ..head.group.unwrap(), peer_endpoint: "", }), },
       {
         ..head,
-        group: Some({ ..head.group.unwrap(), group_id: "Deployment Pairs" }),
+        group: Some({ ..head.group.unwrap(), group_id: "Deployment Pairs", }),
       },
     ] {
     try
@@ -570,9 +573,7 @@ test "a device-plugin cluster renders a counted resource and keeps the exact dev
   )
   let environment = pod_environment(resources.pod)
   assert_false(
-    environment.any(value => {
-      value is { "name": "LUNANEXA_RANK", .. }
-    }),
+    environment.any(value => value is { "name": "LUNANEXA_RANK", .. }),
   )
   assert_eq(
     environment_value(environment, "NVIDIA_VISIBLE_DEVICES"),
@@ -580,7 +581,11 @@ test "a device-plugin cluster renders a counted resource and keeps the exact dev
   )
 
   // A CPU-only assignment asks for no GPU either way.
-  let cpu_only = { ..assignment, devices: [], resources: { ..assignment.resources, accelerator_count: 0, }, }
+  let cpu_only = {
+    ..assignment,
+    devices: [],
+    resources: { ..assignment.resources, accelerator_count: 0, },
+  }
   let resources = @kubernetes.render_runtime(
     settings,
     cpu_only,
@@ -594,10 +599,10 @@ test "a device-plugin cluster renders a counted resource and keeps the exact dev
 
   for
     unusable in [
-      { ..settings, device_plugin_resource: Some("nvidia.com") },
-      { ..settings, device_plugin_resource: Some("not a resource") },
-      { ..settings, device_plugin_resource: Some("nvidia.com/") },
-      { ..settings, runtime_class_name: Some("Nvidia Class") },
+      { ..settings, device_plugin_resource: Some("nvidia.com"), },
+      { ..settings, device_plugin_resource: Some("not a resource"), },
+      { ..settings, device_plugin_resource: Some("nvidia.com/"), },
+      { ..settings, runtime_class_name: Some("Nvidia Class"), },
     ] {
     try
       ignore(
@@ -648,7 +653,10 @@ test "the runtime accepts its controller by namespace rather than by address" {
             "from": [
               {
                 "namespaceSelector": {
-                  "matchLabels": { "kubernetes.io/metadata.name": "lunanexa", .. },
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "lunanexa",
+                    ..
+                  },
                   ..
                 },
                 ..
@@ -675,7 +683,15 @@ test "the runtime accepts its controller by namespace rather than by address" {
     both.network_policy
     is {
       "spec": {
-        "ingress": [{ "from": [{ .. }, { "ipBlock": { "cidr": "192.168.2.175/32", .. }, .. }], .. }],
+        "ingress": [
+          {
+            "from": [
+              { .. },
+              { "ipBlock": { "cidr": "192.168.2.175/32", .. }, .. },
+            ],
+            ..
+          },
+        ],
         ..
       },
       ..
@@ -687,7 +703,11 @@ test "the runtime accepts its controller by namespace rather than by address" {
   try
     ignore(
       @kubernetes.render_runtime(
-        { ..runtime_settings(), controller_addresses: [], controller_namespace: Some("Not A Namespace"), },
+        {
+          ..runtime_settings(),
+          controller_addresses: [],
+          controller_namespace: Some("Not A Namespace"),
+        },
         assignment,
         "/var/lib/lunanexa/models/model",
         assignment.artifact.digest,

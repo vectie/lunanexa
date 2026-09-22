@@ -12,6 +12,7 @@ test "failed contract operation clears loading so a corrected submission can ret
     session_expires_unix_ms: None,
     machine_clock_generation: 0L,
     contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
     portal: {
       ..@enterprise_ui.demo_state(),
       contract_documents: {

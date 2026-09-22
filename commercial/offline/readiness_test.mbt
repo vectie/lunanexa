@@ -69,7 +69,9 @@ test "the undertaking's tiers are one ordered list both sides can render" {
   let units = @offline.undertaking_term_tiers.map(tier => tier.unit)
   assert_eq(units, ["day", "week", "month", "quarter", "year"])
   // Shortest first, and the days must increase with the price.
-  for index = 1; index < @offline.undertaking_term_tiers.length(); index = index + 1 {
+  for index = 1
+      index < @offline.undertaking_term_tiers.length()
+      index = index + 1 {
     let previous = @offline.undertaking_term_tiers[index - 1]
     let current = @offline.undertaking_term_tiers[index]
     assert_true(previous.days < current.days)

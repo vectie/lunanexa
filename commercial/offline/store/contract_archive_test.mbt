@@ -29,6 +29,8 @@ async fn archive_pair(
   tenant? : String = "tenant-a",
   organization? : String = "org-a",
   subject? : String = "buyer-a",
+  template_id? : String = "youthpolicy-device-undertaking-v1",
+  template_version? : String = "v1",
 ) -> Array[@offline.DocumentArtifact] {
   store.archive_contract_generation(
     tenant_ref=tenant,
@@ -37,13 +39,73 @@ async fn archive_pair(
     order_id="order-a",
     packet_id="packet-a",
     packet_revision=3L,
-    template_id="youthpolicy-device-undertaking-v1",
-    template_version="v1",
+    template_id~,
+    template_version~,
     locale="zh-CN",
     now_unix_ms=2000L,
     docx~,
     pdf~,
   )
+}
+
+///|
+async test "OFL undertaking archive preserves new identity and rejects version substitution" {
+  let directory = @fs.tmpdir(prefix="contract-archive-ofl-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/state.json"
+  let store = @store.OfflineCommerceStore::open(path)
+  ignore(store.create_order(order("order-a")))
+  let docx = archived_object(EditableContractDocx)
+  let pdf = archived_object(PrintReadyContractPdf)
+  let archived = archive_pair(
+    store,
+    docx,
+    pdf,
+    template_id="youthpolicy-device-undertaking-ofl-v2",
+    template_version="v2",
+  )
+  assert_eq(
+    archived[0].template_id,
+    Some("youthpolicy-device-undertaking-ofl-v2"),
+  )
+  assert_eq(archived[1].template_version, Some("v2"))
+  let reopened = @store.OfflineCommerceStore::open(path)
+  assert_eq(
+    archive_pair(
+      reopened,
+      docx,
+      pdf,
+      template_id="youthpolicy-device-undertaking-ofl-v2",
+      template_version="v2",
+    ),
+    archived,
+  )
+  for
+    pair in [
+      ("youthpolicy-device-undertaking-ofl-v2", "v1"),
+      ("youthpolicy-device-undertaking-v1", "v2"),
+      ("unknown-template", "v2"),
+    ] {
+    try
+      archive_pair(
+        reopened,
+        docx,
+        pdf,
+        template_id=pair.0,
+        template_version=pair.1,
+      )
+    catch {
+      @offline.OfflineCommerceError::InvalidInput(_) => ()
+      error => fail("unexpected mismatch rejection: \{Repr(error)}")
+    } noraise {
+      _ => fail("template version substitution was accepted")
+    }
+  }
+  let retained = reopened.snapshot().artifacts
+  assert_eq(retained.length(), archived.length())
+  for artifact in archived {
+    assert_true(retained.contains(artifact))
+  }
 }
 
 ///|

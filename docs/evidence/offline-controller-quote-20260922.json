@@ -1,0 +1,33 @@
+{
+  "schema": "lunanexa.technical-acceptance.observations.v1",
+  "date": "2026-09-22",
+  "scope": "Real controller-created technical quote; not a signed, paid or fulfilled customer order",
+  "order_id": "technical-acceptance-ofl-order-20260922",
+  "organization_id": "technical-acceptance-ofl-20260922",
+  "observed_order_state": "PendingInternalApproval",
+  "observed_generation": "4",
+  "request_id": "technical-acceptance-ofl-quote-request-20260922",
+  "job": "offline-artifact-25e98f9666dcbc5ee5e53e28bb35d0a45ae6e13b",
+  "job_complete": true,
+  "job_duration_seconds": 6,
+  "artifact": {
+    "artifact_id": "technical-acceptance-ofl-quote-artifact-20260922",
+    "kind": "QuoteScheduleXlsx",
+    "byte_count": 2558,
+    "sha256": "e83a8d0ca6f92e0668d35433fa09a5b2cce1d8719631d7b26ca65b35f80c8240",
+    "generation_state": "ArtifactGenerated",
+    "scan_state": "ScanPassed",
+    "review_state": "ReviewNotRequired"
+  },
+  "verified": [
+    "Authenticated controller quote and begin transitions",
+    "Controller generation request consumed by deployed dispatcher",
+    "Kubernetes isolated Job completed",
+    "Scanner result and immutable artifact metadata accepted by controller"
+  ],
+  "not_attested": [
+    "Customer download and replay/cross-tenant denial (separate acceptance)",
+    "Contract execution, payment, finance approval or resource fulfillment",
+    "MoonEdit document generation bridge"
+  ]
+}

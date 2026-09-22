@@ -4,7 +4,7 @@ test "deployment readiness requires matching generation and live heartbeat" {
     version: @contracts.contract_version,
     idempotency_key: "deploy-1",
     deployment_id: "service-1",
-    template: { template_id: "template-1", version: "v1" },
+    template: { template_id: "template-1", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -119,18 +119,18 @@ test "deployment readiness requires matching generation and live heartbeat" {
   assert_false(
     @controller.deployment_operation_ready(
       operation,
-      [{ ..assignment, generation: 1L }],
+      [{ ..assignment, generation: 1L, }],
       [heartbeat],
       1100L,
     ),
   )
   for
     hostile_heartbeat in [
-      { ..heartbeat, state: Cordoned },
-      { ..heartbeat, observed_generation: 1L },
-      { ..heartbeat, controller_epoch: 2L },
-      { ..heartbeat, inventory: { ..heartbeat.inventory, node_id: "node-b" } },
-      { ..heartbeat, timestamp_unix_ms: -20000L },
+      { ..heartbeat, state: Cordoned, },
+      { ..heartbeat, observed_generation: 1L, },
+      { ..heartbeat, controller_epoch: 2L, },
+      { ..heartbeat, inventory: { ..heartbeat.inventory, node_id: "node-b", }, },
+      { ..heartbeat, timestamp_unix_ms: -20000L, },
     ] {
     assert_false(
       @controller.deployment_operation_ready(
@@ -143,9 +143,9 @@ test "deployment readiness requires matching generation and live heartbeat" {
   }
   for
     hostile_assignment in [
-      { ..assignment, signature: "" },
-      { ..assignment, lease_expires_unix_ms: 1100L },
-      { ..assignment, controller_epoch: 2L },
+      { ..assignment, signature: "", },
+      { ..assignment, lease_expires_unix_ms: 1100L, },
+      { ..assignment, controller_epoch: 2L, },
     ] {
     assert_false(
       @controller.deployment_operation_ready(
@@ -173,7 +173,7 @@ test "a paired placement is ready only when both ranks are live" {
     version: @contracts.contract_version,
     idempotency_key: "deploy-2",
     deployment_id: "service-2",
-    template: { template_id: "template-2", version: "v1" },
+    template: { template_id: "template-2", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -195,7 +195,7 @@ test "a paired placement is ready only when both ranks are live" {
         replica_id: "service-2-r2",
         node_id: "node-b",
         devices: ["gpu-0"],
-        group: Some({ ..group, rank: 1, peer_endpoint: "10.0.22.1" }),
+        group: Some({ ..group, rank: 1, peer_endpoint: "10.0.22.1", }),
       },
     ],
     findings: [],
@@ -268,7 +268,7 @@ test "a paired placement is ready only when both ranks are live" {
     ..head,
     assignment_id: "service-2-r2",
     node_id: "node-b",
-    group: Some({ ..group, rank: 1, peer_endpoint: "10.0.22.1" }),
+    group: Some({ ..group, rank: 1, peer_endpoint: "10.0.22.1", }),
   }
   let heartbeat : @contracts.NodeHeartbeat = {
     node_id: "node-a",
@@ -295,7 +295,7 @@ test "a paired placement is ready only when both ranks are live" {
   let peer_heartbeat = {
     ..heartbeat,
     node_id: "node-b",
-    inventory: { ..heartbeat.inventory, node_id: "node-b" },
+    inventory: { ..heartbeat.inventory, node_id: "node-b", },
   }
   assert_true(
     @controller.deployment_operation_ready(
@@ -326,7 +326,7 @@ test "a paired placement is ready only when both ranks are live" {
   assert_false(
     @controller.deployment_operation_ready(
       operation,
-      [head, { ..worker, group: Some(group) }],
+      [head, { ..worker, group: Some(group), }],
       [heartbeat, peer_heartbeat],
       1100L,
     ),

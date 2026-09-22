@@ -66,7 +66,7 @@ fn intent() -> @deployment.ModelServiceIntent {
     version: @contracts.contract_version,
     idempotency_key: "deploy-text-small",
     deployment_id: "text-small-service",
-    template: { template_id: "text-small", version: "v1" },
+    template: { template_id: "text-small", version: "v1", },
     replicas: 1,
     data_class: Internal,
     lease_duration_ms: 60000L,
@@ -169,7 +169,7 @@ test "dedicated preflight is pinned to the controller-reserved node" {
     intent(),
     {
       registry: [evidence],
-      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"] }],
+      nodes: [node_a, { ..node_a, node_id: "node-b", device_ids: ["gpu-b"], }],
       available_secret_refs: ["runtime-token"],
     },
     "node-b",
@@ -228,7 +228,7 @@ test "dedicated preflight cannot waive node eligibility" {
 test "one-click catalog rejects container-managed artifact downloads" {
   let unsupported = {
     ..template(),
-    artifact: { ..template().artifact, uri: "oci://models/model.text:v1" },
+    artifact: { ..template().artifact, uri: "oci://models/model.text:v1", },
   }
   try
     @deployment.validate_template(unsupported, require_signature=false)
@@ -304,12 +304,12 @@ fn cx7_pair_template() -> @deployment.ModelServiceTemplate {
     ..template().runtime,
     supports_multi_node: true,
   }
-  { ..template(), runtime: pair }
+  { ..template(), runtime: pair, }
 }
 
 ///|
 fn cx7_pair_intent() -> @deployment.ModelServiceIntent {
-  { ..intent(), topology_profile: Some(@contracts.cx7_pair_topology_profile) }
+  { ..intent(), topology_profile: Some(@contracts.cx7_pair_topology_profile), }
 }
 
 ///|
@@ -338,7 +338,7 @@ test "a paired placement is gated on the intent and the runtime together" {
   // A profile other than the single admitted one is an invalid intent.
   let other = @deployment.preflight(
     [pair_template],
-    { ..intent(), topology_profile: Some("any-two-nodes") },
+    { ..intent(), topology_profile: Some("any-two-nodes"), },
     cx7_context([]),
   )
   assert_true(other.findings.any(value => value.code == InvalidIntent))
@@ -446,15 +446,11 @@ test "a verified model-store revision is a materializable artifact" {
   }
   @deployment.validate_template(revision)
 
-  let plan = @deployment.preflight(
-    [revision],
-    intent(),
-    {
-      registry: [],
-      nodes: [],
-      available_secret_refs: ["runtime-token"],
-    },
-  )
+  let plan = @deployment.preflight([revision], intent(), {
+    registry: [],
+    nodes: [],
+    available_secret_refs: ["runtime-token"],
+  })
   assert_false(
     plan.findings.any(value => value.code == ArtifactMaterializationUnsupported),
   )
@@ -463,7 +459,10 @@ test "a verified model-store revision is a materializable artifact" {
   // revision whose signature subject is missing.
   for
     unusable in [
-      { ..revision, artifact: { ..revision.artifact, uri: "oci://registry/repo", }, },
+      {
+        ..revision,
+        artifact: { ..revision.artifact, uri: "oci://registry/repo", },
+      },
       {
         ..revision,
         artifact: { ..revision.artifact, uri: "modelstore://owner/../etc", },

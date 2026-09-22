@@ -1,0 +1,47 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, destination] else {
+    fail(
+      "usage: copy-private-contract-font-assets.mbtx REPO_ROOT BROWSER_OUTPUT_ROOT",
+    )
+  }
+  let names = ["FangSong_GB2312.ttf", "FZXiaoBiaoSong-B05S.ttf", "SimHei.ttf"]
+  let output = destination + "/assets/fonts/private"
+  if @env.get_env_var("LUNANEXA_INCLUDE_PRIVATE_CONTRACT_FONTS") != Some("1") {
+    for name in names {
+      guard !@fs.exists(output + "/" + name) else {
+        fail(
+          "stale private font in browser output; use a fresh output directory for the default OFL-only build",
+        )
+      }
+    }
+    return
+  }
+  guard @env.get_env_var("LUNANEXA_PRIVATE_FONT_LICENSE_EVIDENCE")
+    is Some(evidence) else {
+    fail(
+      "private font opt-in requires a license evidence file covering redistribution of all three fonts",
+    )
+  }
+  let license = @fs.read_file(evidence).binary()
+  guard license.length() > 0 && license.length() <= 1048576 else {
+    fail("invalid private font license evidence file")
+  }
+  if !@fs.exists(output) {
+    @fs.mkdir(output, recursive=true)
+  }
+  for name in names {
+    let bytes = @fs.read_file(repo + "/assets/fonts/private/" + name).binary()
+    guard bytes.length() > 0 else { fail("empty private font") }
+    @fs.write_file(output + "/" + name, bytes, create_mode=CreateOrTruncate)
+  }
+  // Evidence is not copied into public assets: it may contain private license data.
+  // Supplying the file is an operator attestation, not automatic legal validation.
+}

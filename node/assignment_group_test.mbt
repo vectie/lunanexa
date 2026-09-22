@@ -1,5 +1,7 @@
 ///|
-fn group_assignment(group : @contracts.AssignmentGroup?) -> @contracts.DesiredAssignment {
+fn group_assignment(
+  group : @contracts.AssignmentGroup?,
+) -> @contracts.DesiredAssignment {
   {
     assignment_id: "assignment-group-1",
     deployment_id: "deployment-group-1",

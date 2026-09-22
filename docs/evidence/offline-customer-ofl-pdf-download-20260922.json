@@ -1,0 +1,18 @@
+{
+  "schema": "lunanexa.offline-customer-download.v1",
+  "session_id": "technical-ofl-pdf-download-20260922",
+  "artifact_id": "contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
+  "controller_issued_customer_grant": true,
+  "same_origin_public_endpoint": "http://106.39.18.146:5003",
+  "download_http": 200,
+  "sha256": "sha256:65e70f452ad7dd7029acaf6edde0fad1b4175741209a82c168d3f45d8cf7b543",
+  "byte_count": "10825525",
+  "replay_http": 409,
+  "controller_persisted_state": "TransferConsumed",
+  "controller_consumed_unix_ms": "1790075575931",
+  "cross_active_organization_http": 403,
+  "cross_active_organization_error": "OfflineCommerceDenied",
+  "cross_organization_membership_created_for_test": false,
+  "token_retained_in_evidence": false,
+  "payment_signature_fulfillment_claimed": false
+}

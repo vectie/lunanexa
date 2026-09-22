@@ -4,6 +4,7 @@
 ///|
 pub extend NodeHeartbeat with ToJson::{to_json}
 
+///|
 pub impl ToJson for NodeHeartbeat with fn to_json(self) {
   let value : Json = {
     "node_id": self.node_id,

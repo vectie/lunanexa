@@ -1,0 +1,590 @@
+{
+  "kind": "lunanexa.workspace-authority-qualification.v1",
+  "scope": "Fresh genuine OIDC qualification account and dedicated administrator-approved workspace; NOT commercial payment or signed-contract fulfillment",
+  "identity": {
+    "account_id": "account-4464f7644b41a13e27f68a97",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "identity_issuer": "https://106.39.18.146:5006/realms/lunanexa",
+    "display_name": "Technical Authority Acceptance",
+    "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+    "identity_receipt": "oidc-registration:4464f7644b41a13e27f68a97",
+    "roles": [
+      "EnterpriseUser"
+    ],
+    "state": "Active",
+    "created_unix_ms": "1790074193433",
+    "updated_unix_ms": "1790074193433"
+  },
+  "inference_or_gpu_work_started": false,
+  "identity_cleanup": {
+    "verified_by": "moontown_live_service dedicated identity cleanup script",
+    "controller_account_state": "Revoked",
+    "exact_idp_username_remaining": 0,
+    "old_cookie_and_bearer_auth_self_http_status": 401,
+    "four_dedicated_private_credential_files_removed": true,
+    "shared_town_smoke_identity_untouched": true
+  },
+  "user": {
+    "version": "lunanexa.workspace.v1",
+    "user_id": "trial-user-4464f7644b41a13e27f68a97",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "display_name": "Technical Authority Acceptance",
+    "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+    "state": "UserActive",
+    "created_unix_ms": "1790074193433",
+    "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+  },
+  "grant": {
+    "version": "lunanexa.workspace.v1",
+    "grant_id": "technical-authority-oidc-20260922-grant",
+    "user_id": "trial-user-4464f7644b41a13e27f68a97",
+    "tenant_ref": "technical-authority-oidc-20260922-tenant",
+    "access": "Developer",
+    "starts_unix_ms": "1790074274424",
+    "expires_unix_ms": "1790074875424",
+    "state": "GrantActive",
+    "policy_receipt": "administrator-approved-technical-authority-20260922"
+  },
+  "requested": {
+    "version": "lunanexa.workspace.v1",
+    "lease_id": "technical-authority-oidc-20260922-lease",
+    "tenant_ref": "technical-authority-oidc-20260922-tenant",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "access": "Developer",
+    "limits": {
+      "max_active_sessions": 1,
+      "max_session_duration_ms": "60000",
+      "capabilities": [
+        {
+          "capability": "TextGenerate",
+          "max_concurrent_requests": 1,
+          "max_requests_per_hour": 1,
+          "max_input_units_per_request": 1,
+          "max_output_units_per_request": 1
+        }
+      ]
+    },
+    "starts_unix_ms": "1790074274424",
+    "expires_unix_ms": "1790074875424",
+    "state": "Requested",
+    "policy_receipt": "administrator-approved-technical-authority-20260922"
+  },
+  "before": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-4464f7644b41a13e27f68a97",
+      "subject_ref": "subject-4464f7644b41a13e27f68a97",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+      "state": "UserActive",
+      "created_unix_ms": "1790074193433",
+      "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-4464f7644b41a13e27f68a97",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-authority-oidc-20260922-grant",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "access": "Developer",
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-authority-oidc-20260922-lease",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "Requested",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "authorized": false,
+    "readiness": "LeaseUnavailable",
+    "allowed_models": []
+  },
+  "active": {
+    "version": "lunanexa.workspace.v1",
+    "lease_id": "technical-authority-oidc-20260922-lease",
+    "tenant_ref": "technical-authority-oidc-20260922-tenant",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "access": "Developer",
+    "limits": {
+      "max_active_sessions": 1,
+      "max_session_duration_ms": "60000",
+      "capabilities": [
+        {
+          "capability": "TextGenerate",
+          "max_concurrent_requests": 1,
+          "max_requests_per_hour": 1,
+          "max_input_units_per_request": 1,
+          "max_output_units_per_request": 1
+        }
+      ]
+    },
+    "starts_unix_ms": "1790074274424",
+    "expires_unix_ms": "1790074875424",
+    "state": "Active",
+    "policy_receipt": "administrator-approved-technical-authority-20260922"
+  },
+  "enabled": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-4464f7644b41a13e27f68a97",
+      "subject_ref": "subject-4464f7644b41a13e27f68a97",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+      "state": "UserActive",
+      "created_unix_ms": "1790074193433",
+      "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-4464f7644b41a13e27f68a97",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-authority-oidc-20260922-grant",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "access": "Developer",
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-authority-oidc-20260922-lease",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "Active",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "active_lease": {
+      "version": "lunanexa.workspace.v1",
+      "lease_id": "technical-authority-oidc-20260922-lease",
+      "tenant_ref": "technical-authority-oidc-20260922-tenant",
+      "subject_ref": "subject-4464f7644b41a13e27f68a97",
+      "access": "Developer",
+      "limits": {
+        "max_active_sessions": 1,
+        "max_session_duration_ms": "60000",
+        "capabilities": [
+          {
+            "capability": "TextGenerate",
+            "max_concurrent_requests": 1,
+            "max_requests_per_hour": 1,
+            "max_input_units_per_request": 1,
+            "max_output_units_per_request": 1
+          }
+        ]
+      },
+      "starts_unix_ms": "1790074274424",
+      "expires_unix_ms": "1790074875424",
+      "state": "Active",
+      "policy_receipt": "administrator-approved-technical-authority-20260922"
+    },
+    "authorized": true,
+    "readiness": "WorkspaceReady",
+    "allowed_models": [
+      "text.qwen"
+    ]
+  },
+  "ended": {
+    "lease": {
+      "version": "lunanexa.workspace.v1",
+      "lease_id": "technical-authority-oidc-20260922-lease",
+      "tenant_ref": "technical-authority-oidc-20260922-tenant",
+      "subject_ref": "subject-4464f7644b41a13e27f68a97",
+      "access": "Developer",
+      "limits": {
+        "max_active_sessions": 1,
+        "max_session_duration_ms": "60000",
+        "capabilities": [
+          {
+            "capability": "TextGenerate",
+            "max_concurrent_requests": 1,
+            "max_requests_per_hour": 1,
+            "max_input_units_per_request": 1,
+            "max_output_units_per_request": 1
+          }
+        ]
+      },
+      "starts_unix_ms": "1790074274424",
+      "expires_unix_ms": "1790074875424",
+      "state": "Revoked",
+      "policy_receipt": "administrator-approved-technical-authority-20260922"
+    },
+    "receipt": "workspace-lease-end:technical-authority-oidc-20260922-lease:1790074287906"
+  },
+  "disabled": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-4464f7644b41a13e27f68a97",
+      "subject_ref": "subject-4464f7644b41a13e27f68a97",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+      "state": "UserActive",
+      "created_unix_ms": "1790074193433",
+      "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-4464f7644b41a13e27f68a97",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-authority-oidc-20260922-grant",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "access": "Developer",
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "GrantActive",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-authority-oidc-20260922-lease",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "Revoked",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "authorized": false,
+    "readiness": "LeaseUnavailable",
+    "allowed_models": []
+  },
+  "revoked_grant": {
+    "access_grant": {
+      "version": "lunanexa.workspace.v1",
+      "grant_id": "technical-authority-oidc-20260922-grant",
+      "user_id": "trial-user-4464f7644b41a13e27f68a97",
+      "tenant_ref": "technical-authority-oidc-20260922-tenant",
+      "access": "Developer",
+      "starts_unix_ms": "1790074274424",
+      "expires_unix_ms": "1790074875424",
+      "state": "GrantRevoked",
+      "policy_receipt": "administrator-approved-technical-authority-20260922"
+    },
+    "receipt": "workspace-access-revoke:technical-authority-oidc-20260922-grant:1790074289975"
+  },
+  "revoked_user": {
+    "version": "lunanexa.workspace.v1",
+    "user_id": "trial-user-4464f7644b41a13e27f68a97",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "display_name": "Technical Authority Acceptance",
+    "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+    "state": "UserRevoked",
+    "created_unix_ms": "1790074193433",
+    "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+  },
+  "final_view": {
+    "version": "lunanexa.workspace.v1",
+    "subject_ref": "subject-4464f7644b41a13e27f68a97",
+    "user": {
+      "version": "lunanexa.workspace.v1",
+      "user_id": "trial-user-4464f7644b41a13e27f68a97",
+      "subject_ref": "subject-4464f7644b41a13e27f68a97",
+      "display_name": "Technical Authority Acceptance",
+      "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+      "state": "UserRevoked",
+      "created_unix_ms": "1790074193433",
+      "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+    },
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "trial-grant-4464f7644b41a13e27f68a97",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "GrantRevoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-authority-oidc-20260922-grant",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "access": "Developer",
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "GrantRevoked",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
+        "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "1800000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 20,
+              "max_input_units_per_request": 16384,
+              "max_output_units_per_request": 2048
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074193433",
+        "expires_unix_ms": "1790160593433",
+        "state": "Revoked",
+        "policy_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      },
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-authority-oidc-20260922-lease",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "Revoked",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "authorized": false,
+    "readiness": "UserUnavailable",
+    "allowed_models": []
+  },
+  "persisted": {
+    "users": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "display_name": "Technical Authority Acceptance",
+        "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
+        "state": "UserRevoked",
+        "created_unix_ms": "1790074193433",
+        "identity_receipt": "trial:trial-4464f7644b41a13e27f68a97"
+      }
+    ],
+    "access_grants": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "grant_id": "technical-authority-oidc-20260922-grant",
+        "user_id": "trial-user-4464f7644b41a13e27f68a97",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "access": "Developer",
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "GrantRevoked",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ],
+    "leases": [
+      {
+        "version": "lunanexa.workspace.v1",
+        "lease_id": "technical-authority-oidc-20260922-lease",
+        "tenant_ref": "technical-authority-oidc-20260922-tenant",
+        "subject_ref": "subject-4464f7644b41a13e27f68a97",
+        "access": "Developer",
+        "limits": {
+          "max_active_sessions": 1,
+          "max_session_duration_ms": "60000",
+          "capabilities": [
+            {
+              "capability": "TextGenerate",
+              "max_concurrent_requests": 1,
+              "max_requests_per_hour": 1,
+              "max_input_units_per_request": 1,
+              "max_output_units_per_request": 1
+            }
+          ]
+        },
+        "starts_unix_ms": "1790074274424",
+        "expires_unix_ms": "1790074875424",
+        "state": "Revoked",
+        "policy_receipt": "administrator-approved-technical-authority-20260922"
+      }
+    ]
+  }
+}

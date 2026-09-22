@@ -1,0 +1,251 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: lunanexa-offline-transfer, namespace: lunanexa}
+data:
+  LUNANEXA_OFFLINE_TRANSFER_PUBLIC_ENDPOINT: /v1/offline-transfers
+  LUNANEXA_OFFLINE_TRANSFER_ADDRESS: 127.0.0.1:8096
+  LUNANEXA_CONTROLLER_ENDPOINT: https://lunanexa-offline-controller.lunanexa.svc:8443
+  LUNANEXA_OFFLINE_S3_ENDPOINT: https://lunanexa-offline-object-store.lunanexa.svc:8443
+  LUNANEXA_OFFLINE_S3_BUCKET: lunanexa-offline-commerce
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-control-offline-private, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-control}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: lunanexa-offline-controller}}}]
+      ports: [{protocol: TCP, port: 8080}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: lunanexa-offline-transfer}}}]
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-identity-edge-offline-private, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-identity-edge}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: lunanexa-offline-transfer}}}]
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: lunanexa-offline-transfer-tls, namespace: lunanexa}
+data:
+  nginx.conf: |
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+    events { worker_connections 128; }
+    http {
+      access_log off;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      fastcgi_temp_path /tmp/fastcgi;
+      uwsgi_temp_path /tmp/uwsgi;
+      scgi_temp_path /tmp/scgi;
+      client_max_body_size 64m;
+      server {
+        listen 8443 ssl;
+        ssl_certificate /tls/tls.crt;
+        ssl_certificate_key /tls/tls.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        location / {
+          proxy_pass http://127.0.0.1:8096;
+          proxy_request_buffering off;
+          proxy_buffering off;
+          proxy_read_timeout 180s;
+          proxy_send_timeout 180s;
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: lunanexa-offline-object-store-tls, namespace: lunanexa}
+data:
+  nginx.conf: |
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+    events { worker_connections 128; }
+    http {
+      access_log off;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      fastcgi_temp_path /tmp/fastcgi;
+      uwsgi_temp_path /tmp/uwsgi;
+      scgi_temp_path /tmp/scgi;
+      client_max_body_size 64m;
+      server {
+        listen 8443 ssl;
+        ssl_certificate /tls/tls.crt;
+        ssl_certificate_key /tls/tls.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        # Adapter credentials cannot reach bucket-admin or deletion operations.
+        location ^~ /lunanexa-offline-commerce/ {
+          limit_except GET PUT HEAD { deny all; }
+          if ($args != "") { return 403; }
+          proxy_pass http://127.0.0.1:8333;
+          proxy_set_header Host $http_host;
+          proxy_request_buffering off;
+          proxy_buffering off;
+          proxy_read_timeout 180s;
+        }
+        location / { return 403; }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: lunanexa-offline-controller-tls, namespace: lunanexa}
+data:
+  nginx.conf: |
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+    events { worker_connections 128; }
+    http {
+      access_log off;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      fastcgi_temp_path /tmp/fastcgi;
+      uwsgi_temp_path /tmp/uwsgi;
+      scgi_temp_path /tmp/scgi;
+      client_max_body_size 64m;
+      server {
+        listen 8443 ssl;
+        ssl_certificate /tls/tls.crt;
+        ssl_certificate_key /tls/tls.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        location / {
+          proxy_pass http://lunanexa-control.lunanexa.svc:8080;
+          proxy_request_buffering off;
+          proxy_buffering off;
+          proxy_read_timeout 180s;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: lunanexa-offline-controller, namespace: lunanexa}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: lunanexa-offline-controller}}
+  template:
+    metadata: {labels: {app: lunanexa-offline-controller}}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+      containers:
+        - name: private-tls
+          image: ${OFFLINE_TRANSFER_IMAGE_DIGEST}
+          command: [nginx, -c, /config/nginx.conf, -g, "daemon off;"]
+          ports: [{containerPort: 8443}]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 20m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          readinessProbe: {tcpSocket: {port: 8443}}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: tls, mountPath: /tls, readOnly: true}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: lunanexa-offline-controller-tls}
+        - name: tls
+          secret: {secretName: lunanexa-offline-controller-tls, defaultMode: 0440}
+        - name: temporary
+          emptyDir: {sizeLimit: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: lunanexa-offline-controller, namespace: lunanexa}
+spec:
+  selector: {app: lunanexa-offline-controller}
+  ports: [{name: https, port: 8443, targetPort: 8443}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: lunanexa-clamav-signatures, namespace: lunanexa}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 2Gi}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: lunanexa-clamav-updater, namespace: lunanexa}
+data:
+  freshclam.conf: |
+    DatabaseDirectory /var/lib/clamav
+    DatabaseMirror database.clamav.net
+    TestDatabases yes
+    Foreground yes
+    Checks 12
+    ConnectTimeout 30
+    ReceiveTimeout 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: lunanexa-clamav-updater, namespace: lunanexa}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: lunanexa-clamav-updater}}
+  template:
+    metadata: {labels: {app: lunanexa-clamav-updater}}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+      containers:
+        - name: updater
+          image: ${OFFLINE_TRANSFER_IMAGE_DIGEST}
+          command: [freshclam, --daemon, --foreground, --config-file=/config/freshclam.conf]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 1Gi}}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: signatures, mountPath: /var/lib/clamav}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: lunanexa-clamav-updater}
+        - name: signatures
+          persistentVolumeClaim: {claimName: lunanexa-clamav-signatures}
+        - name: temporary
+          emptyDir: {sizeLimit: 256Mi}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-offline-transfer-private, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-offline-transfer}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: lunanexa-control}}
+        - podSelector: {matchLabels: {app: lunanexa-offline-artifact-dispatcher}}
+        - podSelector: {matchLabels: {app: lunanexa-enterprise}}
+        - podSelector: {matchLabels: {app: lunanexa-console}}
+        - podSelector: {matchLabels: {app: lunanexa-offline-verifier}}
+        - podSelector: {matchLabels: {app: lunanexa-identity-edge}}
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-offline-controller-private, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-offline-controller}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: lunanexa-offline-transfer}}
+        - podSelector: {matchLabels: {app: lunanexa-offline-artifact-dispatcher}}
+        - podSelector: {matchLabels: {app: lunanexa-offline-entitlement-dispatcher}}
+        - podSelector: {matchLabels: {app: lunanexa-offline-verifier}}
+      ports: [{protocol: TCP, port: 8443}]

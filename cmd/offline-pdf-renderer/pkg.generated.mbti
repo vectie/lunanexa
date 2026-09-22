@@ -1,0 +1,25 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/cmd/offline-pdf-renderer"
+
+import {
+  "moonbitlang/core/json",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+type FontConfiguration derive(ToJson, @json.FromJson)
+
+type FontFile derive(ToJson, @json.FromJson)
+
+type Manifest derive(ToJson)
+
+type RenderJob derive(@json.FromJson)
+
+type VisualEvidence derive(ToJson)
+
+// Type aliases
+
+// Traits

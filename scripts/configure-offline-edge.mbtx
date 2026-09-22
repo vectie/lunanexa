@@ -1,0 +1,41 @@
+import {
+  "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell",
+  "moonbitlang/core/env", "moonbitlang/core/json",
+}
+async fn main {
+  guard @env.args() is [_, root, kubeconfig] else { fail("Usage: configure-offline-edge.mbtx PRIVATE_BACKUP_DIR KUBECONFIG") }
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let current = @shell.Cmd("kubectl", [..k, "get", "configmap", "lunanexa-identity-edge-nginx", "-o", "json"]).output()
+  current.check()
+  @fs.write_file(root + "/edge-config-before.json", current.stdout(), create_mode=CreateNew, permission=0o600)
+  let deployment = @shell.Cmd("kubectl", [..k, "get", "deployment", "lunanexa-identity-edge", "-o", "json"]).output()
+  deployment.check()
+  @fs.write_file(root + "/edge-deployment-before.json", deployment.stdout(), create_mode=CreateNew, permission=0o600)
+  guard @json.parse(current.stdout()) is {"data":{"default.conf":String(config),..},..} else {fail("Missing edge config")}
+  guard !config.contains("/v1/offline-transfers/") else {fail("Already configured; inspect before updating")}
+  let location =
+    #|  location ~ ^/v1/offline-transfers/[A-Za-z0-9_-]+$ {
+    #|    limit_except GET PUT { deny all; }
+    #|    client_max_body_size 64m;
+    #|    proxy_pass https://lunanexa-offline-transfer.lunanexa.svc:8443;
+    #|    proxy_ssl_verify on;
+    #|    proxy_ssl_trusted_certificate /etc/lunanexa/offline-ca/ca.crt;
+    #|    proxy_ssl_server_name on;
+    #|    proxy_ssl_name lunanexa-offline-transfer.lunanexa.svc;
+    #|    proxy_set_header Host lunanexa-offline-transfer.lunanexa.svc;
+    #|    proxy_http_version 1.1;
+    #|    proxy_buffering off;
+    #|    proxy_request_buffering off;
+    #|    proxy_read_timeout 180s;
+    #|    access_log off;
+    #|  }
+    #|
+  let updated = config.replace(old="  location / {", new=location + "  location / {")
+  guard updated != config else {fail("Unexpected edge config shape")}
+  let cm : Json = {"data":{"default.conf":updated}}
+  @fs.write_file(root + "/edge-config-patch.json", cm.stringify(), permission=0o600)
+  let patch : Json = {"spec":{"template":{"spec":{"containers":[{"name":"edge","volumeMounts":[{"name":"offline-ca","mountPath":"/etc/lunanexa/offline-ca","readOnly":true}]}],"volumes":[{"name":"offline-ca","configMap":{"name":"lunanexa-offline-ca"}}]}}}}
+  @fs.write_file(root + "/edge-deployment-patch.json", patch.stringify(), permission=0o600)
+  @shell.Cmd("kubectl", [..k,"patch","configmap","lunanexa-identity-edge-nginx","--type=merge","--patch-file="+root+"/edge-config-patch.json"]).run()
+  @shell.Cmd("kubectl", [..k,"patch","deployment","lunanexa-identity-edge","--type=strategic","--patch-file="+root+"/edge-deployment-patch.json"]).run()
+}

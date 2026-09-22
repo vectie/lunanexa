@@ -275,7 +275,11 @@ async fn flush_lease_observation(
       observation.to_json(),
       headers=node_headers(node_id, token),
     )
-    log_bad_response("POST", "/v1/nodes/\{node_id}/exclusive-lease:observe", response.code)
+    log_bad_response(
+      "POST",
+      "/v1/nodes/\{node_id}/exclusive-lease:observe",
+      response.code,
+    )
     if response.code >= 200 && response.code < 300 {
       lease_guard.acknowledge_observation(observation.receipt)
       (true, true)
@@ -304,7 +308,11 @@ async fn reconcile_exclusive_lease(
       endpoint(base, "/v1/nodes/\{node_id}/exclusive-lease"),
       headers=node_headers(node_id, token),
     )
-    log_bad_response("GET", "/v1/nodes/\{node_id}/exclusive-lease", response.code)
+    log_bad_response(
+      "GET",
+      "/v1/nodes/\{node_id}/exclusive-lease",
+      response.code,
+    )
     if response.code == 200 {
       let lease : @nodelease.ExclusiveNodeLease = @json.from_json(
         @json.parse(body.text()),
@@ -554,7 +562,11 @@ async fn reconcile_once(
     endpoint(base, "/v1/nodes/\{node_id}/directive"),
     headers~,
   )
-  log_bad_response("GET", "/v1/nodes/\{node_id}/directive", directive_response.code)
+  log_bad_response(
+    "GET",
+    "/v1/nodes/\{node_id}/directive",
+    directive_response.code,
+  )
   if directive_response.code == 200 {
     let directive : @contracts.NodeDirective = @json.from_json(
       @json.parse(directive_body.text()),
@@ -569,7 +581,11 @@ async fn reconcile_once(
     endpoint(base, "/v1/nodes/\{node_id}/assignments"),
     headers~,
   )
-  log_bad_response("GET", "/v1/nodes/\{node_id}/assignments", assignment_response.code)
+  log_bad_response(
+    "GET",
+    "/v1/nodes/\{node_id}/assignments",
+    assignment_response.code,
+  )
   if assignment_response.code < 200 || assignment_response.code >= 300 {
     raise Failure::Failure(
       "assignment fetch failed with status \{assignment_response.code}",
@@ -643,9 +659,7 @@ async fn reconcile_once(
   // it is the only honest memory figure there is: NVML reports nothing for those
   // accelerators, and the declared "free" value is a copy of the declared total.
   let mut host_utilization : @node_agent.HostUtilization? = None
-  try
-    @node_agent.collect_linux_host_utilization()
-  catch {
+  try @node_agent.collect_linux_host_utilization() catch {
     _ => ()
   } noraise {
     measured => host_utilization = Some(measured)

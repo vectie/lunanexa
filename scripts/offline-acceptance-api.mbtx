@@ -1,0 +1,147 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+/// Administrative acceptance only: credentials remain in process memory and
+/// curl stdin, never terminal output or command-line arguments.
+async fn main {
+  guard @env.args() is [_, verb, path, body_file, output_file] else {
+    fail(
+      "usage: offline-acceptance-api.mbtx METHOD PATH BODY_FILE_OR_DASH OUTPUT_FILE",
+    )
+  }
+  guard (verb == "GET" || verb == "POST" || verb == "PUT") &&
+    path.has_prefix("/v1/") &&
+    !path.contains("\n") &&
+    !path.contains("\"") else {
+    fail("invalid route")
+  }
+  let remote = ["-p", "32123", "HwHiAiUser@106.39.18.146"]
+  if @env.get_env_var("LUNANEXA_ACCEPTANCE_REFRESH_SMOKE") == Some("1") {
+    let login_file = @shell.Cmd(
+      "ssh",
+      [..remote, "cat", "/home/HwHiAiUser/.config/moontown/smoke-login.json"],
+    ).output()
+    login_file.check()
+    guard @json.parse(login_file.stdout()) is Object(fields) else {
+      fail("invalid smoke login file")
+    }
+    fields["audience"] = "operator"
+    let login_json = fields
+      .to_json()
+      .stringify()
+      .replace_all(old="\\", new="\\\\")
+      .replace_all(old="\"", new="\\\"")
+    let login = @shell.Cmd(
+      "ssh",
+      [..remote, "curl", "--config", "-"],
+      stdin=Text(
+        "silent\nshow-error\nmax-time = 30\nurl = \"http://106.39.18.146:5003/auth/password\"\nrequest = \"POST\"\ncookie-jar = \"/home/HwHiAiUser/.config/moontown/offline-acceptance-cookies\"\nheader = \"Content-Type: application/json\"\nheader = \"Origin: http://106.39.18.146:5003\"\nheader = \"Sec-Fetch-Site: same-origin\"\ndata = \"" +
+        login_json +
+        "\"\n",
+      ),
+    ).output()
+    login.check()
+    guard !(@json.parse(login.stdout()) is { "error": _, .. }) else {
+      fail("smoke login rejected")
+    }
+  }
+  let secret = @shell.Cmd(
+    "ssh",
+    [
+      ..remote, "kubectl", "--kubeconfig=/home/HwHiAiUser/.kube/lunanexa-management",
+      "-n", "lunanexa", "get", "secret", "lunanexa-control-credentials", "-o", "json",
+    ],
+  ).output()
+  secret.check()
+  guard @json.parse(secret.stdout())
+    is { "data": { "operator-tokens": String(encoded), .. }, .. } else {
+    fail("operator credential unavailable")
+  }
+  let decoded = @shell.Cmd(
+    "openssl",
+    ["base64", "-d", "-A"],
+    stdin=Text(encoded),
+  ).output()
+  decoded.check()
+  let pair = decoded.stdout().trim().split(",").to_array()[0]
+  guard pair.find("=") is Some(separator) else {
+    fail("invalid operator authority mapping")
+  }
+  let token = if @env.get_env_var("LUNANEXA_ACCEPTANCE_USE_SMOKE") == Some("1") {
+    let session = @shell.Cmd(
+      "ssh",
+      [..remote, "curl", "--config", "-"],
+      stdin=Text(
+        "silent\nshow-error\nmax-time = 30\nurl = \"http://106.39.18.146:5003/auth/session\"\ncookie = \"/home/HwHiAiUser/.config/moontown/offline-acceptance-cookies\"\nheader = \"Origin: http://106.39.18.146:5003\"\nheader = \"Sec-Fetch-Site: same-origin\"\nheader = \"Sec-Fetch-Dest: empty\"\n",
+      ),
+    ).output()
+    session.check()
+    guard @json.parse(session.stdout())
+      is { "session_token": String(value), .. } else {
+      fail("smoke session unavailable")
+    }
+    value
+  } else {
+    pair[separator + 1:].to_owned()
+  }
+  guard token.length() >= 32 && !token.contains("\n") && !token.contains("\"") else {
+    fail("invalid credential encoding")
+  }
+  let body = if body_file == "-" { "" } else { @fs.read_file(body_file).text() }
+  let escape = fn(s : String) {
+    s
+    .replace_all(old="\\", new="\\\\")
+    .replace_all(old="\"", new="\\\"")
+    .replace_all(old="\n", new="\\n")
+    .replace_all(old="\r", new="\\r")
+  }
+  let smoke = @env.get_env_var("LUNANEXA_ACCEPTANCE_USE_SMOKE") == Some("1")
+  let organization = @env.get_env_var("LUNANEXA_ACCEPTANCE_ORGANIZATION").unwrap_or("technical-acceptance-ofl-20260922")
+  guard !organization.is_empty() && organization.all(c => c is ('a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_')) else {
+    fail("invalid acceptance organization")
+  }
+  let origin = if smoke {
+    "http://106.39.18.146:5003"
+  } else {
+    "http://10.43.192.21:8080"
+  }
+  let config = "silent\nshow-error\nmax-time = 30\nrequest = \"" +
+    verb +
+    "\"\nurl = \"" +
+    origin +
+    path +
+    "\"\nheader = \"Authorization: Bearer " +
+    token +
+    "\"\nheader = \"Content-Type: application/json\"\n" +
+    "header = \"X-LunaNexa-Organization: " + organization + "\"\n" +
+    (if smoke {
+      "cookie = \"/home/HwHiAiUser/.config/moontown/offline-acceptance-cookies\"\nheader = \"Origin: http://106.39.18.146:5003\"\nheader = \"Sec-Fetch-Site: same-origin\"\nheader = \"Sec-Fetch-Dest: empty\"\n"
+    } else {
+      ""
+    }) +
+    (if body == "" { "" } else { "data = \"" + escape(body) + "\"\n" })
+  let status_file = @env.get_env_var("LUNANEXA_ACCEPTANCE_STATUS_FILE")
+  let config = config + (if status_file is Some(_) { "write-out = \"\\n%{http_code}\"\n" } else { "" })
+  let result = @shell.Cmd(
+    "ssh",
+    [..remote, "curl", "--config", "-"],
+    stdin=Text(config),
+  ).output()
+  result.check()
+  let response_text = if status_file is Some(filename) {
+    let raw = result.stdout()
+    guard raw.rev_find("\n") is Some(separator) else {fail("HTTP status missing")}
+    @fs.write_file(filename, raw[separator + 1:].to_owned(), permission=0o600)
+    raw[:separator].to_owned()
+  } else { result.stdout() }
+  let response = @json.parse(response_text)
+  @fs.write_file(output_file, response.stringify(indent=2), permission=0o600)
+  println("API response retained at " + output_file)
+}

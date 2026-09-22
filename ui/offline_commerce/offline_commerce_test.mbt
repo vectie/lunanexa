@@ -23,6 +23,7 @@ fn offline_order(
     artifact_ids: ["artifact-contract"],
     entitlement_ref: None,
     requested_undertaking_term: None,
+    technical_acceptance_waiver: None,
     state,
     generation: 5L,
     created_unix_ms: 1000L,
@@ -291,7 +292,10 @@ test "both sides render the undertaking's tiers from the one list" {
     orders: [offline_order(Draft)],
   })
   assert_true(operator.contains("id=\"undertaking-tariff\""))
-  for label in ["1 day · 49", "7 days · 322", "30 days · 1290", "90 days · 3600", "365 days · 13870"] {
+  for
+    label in [
+      "1 day · 49", "7 days · 322", "30 days · 1290", "90 days · 3600", "365 days · 13870",
+    ] {
     assert_true(customer.contains(label))
     assert_true(operator.contains(label))
   }
@@ -309,6 +313,7 @@ test "opening an order adopts the tier the customer asked for" {
   let requested = {
     ..offline_order(Draft),
     requested_undertaking_term: Some("quarter"),
+    technical_acceptance_waiver: None,
   }
   // The state default is month; opening the order must move the picker to the
   // tier that was actually requested.
@@ -316,7 +321,7 @@ test "opening an order adopts the tier the customer asked for" {
   let opened = base.update(SelectOrder(requested.order_id))
   // No order in the list yet, so the default stands.
   assert_eq(opened.undertaking_term, "month")
-  let with_order = { ..base, orders: [requested] }.update(
+  let with_order = { ..base, orders: [requested], }.update(
     SelectOrder(requested.order_id),
   )
   assert_eq(with_order.undertaking_term, "quarter")
@@ -324,8 +329,11 @@ test "opening an order adopts the tier the customer asked for" {
   let unknown = {
     ..offline_order(Draft),
     requested_undertaking_term: Some("hour"),
+    technical_acceptance_waiver: None,
   }
-  let ignored = { ..base, orders: [unknown] }.update(SelectOrder(unknown.order_id))
+  let ignored = { ..base, orders: [unknown], }.update(
+    SelectOrder(unknown.order_id),
+  )
   assert_eq(ignored.undertaking_term, "month")
 }
 
@@ -339,9 +347,7 @@ test "the undertaking quote confirmation states the amount it freezes" {
   }
   let html = @offline_commerce.render(
     state.update(
-      BeginConfirmation(
-        QuoteUndertakingOrder("order-2026-001", "week", "2"),
-      ),
+      BeginConfirmation(QuoteUndertakingOrder("order-2026-001", "week", "2")),
     ),
   )
   assert_true(html.contains("Freeze this immutable quote?"))
@@ -351,9 +357,7 @@ test "the undertaking quote confirmation states the amount it freezes" {
   // stating a total nobody typed.
   let unparsable = @offline_commerce.render(
     state.update(
-      BeginConfirmation(
-        QuoteUndertakingOrder("order-2026-001", "week", "two"),
-      ),
+      BeginConfirmation(QuoteUndertakingOrder("order-2026-001", "week", "two")),
     ),
   )
   assert_true(unparsable.contains("week × two"))

@@ -39,6 +39,8 @@ pub let snapshot_schema_version : String
 
 pub fn undertaking_manifest() -> ContractTemplateManifest
 
+pub fn undertaking_ofl_manifest() -> ContractTemplateManifest
+
 pub fn validate_field_value(ContractFieldDefinition, String) -> Unit raise ContractDocumentError
 
 pub fn validate_manifest(ContractTemplateManifest) -> Unit raise ContractDocumentError

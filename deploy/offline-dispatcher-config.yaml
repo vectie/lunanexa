@@ -1,0 +1,48 @@
+# Named management-node production profile; no credentials are stored here.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: lunanexa-offline-dispatcher, namespace: lunanexa}
+data:
+  LUNANEXA_CONTROLLER_ENDPOINT: https://lunanexa-offline-controller.lunanexa.svc:8443
+  LUNANEXA_OFFLINE_TRANSFER_OBJECT_ENDPOINT: https://lunanexa-offline-transfer.lunanexa.svc:8443
+  SSL_CERT_FILE: /etc/lunanexa-trust/ca.crt
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-offline-dispatcher-egress, namespace: lunanexa}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [lunanexa-offline-artifact-dispatcher, lunanexa-offline-entitlement-dispatcher]
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector: {matchLabels: {app: lunanexa-offline-controller}}
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-offline-artifact-dispatcher-egress, namespace: lunanexa}
+spec:
+  podSelector:
+    matchLabels: {app: lunanexa-offline-artifact-dispatcher}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: lunanexa-offline-transfer}}
+      ports: [{protocol: TCP, port: 8443}]
+    - to:
+        - ipBlock: {cidr: 10.43.0.1/32}
+      ports: [{protocol: TCP, port: 443}]
+    - to:
+        - ipBlock: {cidr: 192.168.2.175/32}
+      ports: [{protocol: TCP, port: 6443}]

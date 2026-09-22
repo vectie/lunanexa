@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: offline-production-builder
+  namespace: lunanexa-runtime-qualification
+  labels: {app: offline-production-builder}
+spec:
+  automountServiceAccountToken: false
+  nodeSelector: {kubernetes.io/hostname: ubuntu}
+  restartPolicy: Never
+  containers:
+    - name: builder
+      image: dockerproxy.net/library/postgres@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+      imagePullPolicy: Never
+      command: [sleep, "14400"]
+      resources:
+        requests: {cpu: "250m", memory: 512Mi}
+        limits: {cpu: "2", memory: 4Gi}
+      volumeMounts:
+        - {name: output, mountPath: /output}
+        - {name: containerd, mountPath: /run/k3s/containerd/containerd.sock}
+        - {name: k3s, mountPath: /host/k3s, readOnly: true}
+  volumes:
+    - name: output
+      hostPath: {path: /home/HwHiAiUser/offline-production-build.TT3wLN, type: Directory}
+    - name: containerd
+      hostPath: {path: /run/k3s/containerd/containerd.sock, type: Socket}
+    - name: k3s
+      hostPath: {path: /usr/local/bin/k3s, type: File}

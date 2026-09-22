@@ -1,0 +1,73 @@
+{
+  "kind": "lunanexa.offline-dispatcher-production-evidence.v1",
+  "date": "2026-09-22",
+  "namespace": "lunanexa",
+  "node": "ubuntu",
+  "acceptance_complete": true,
+  "acceptance_scope": "Production artifact pipeline and explicit one-order noncommercial waived entitlement activation/reversal; not a paid signed commercial transaction",
+  "real_entitlement_dispatcher_evidence": "docs/evidence/offline-technical-waiver-production-20260922.json",
+  "initial_runtime_image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/offline-runtime@sha256:54fa371d1dbc32c2490aa6dd97bc4909af5c1295b853f99cf105184aee7086ce",
+  "current_runtime_image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/offline-runtime@sha256:ec1d28986b5ee034ec7125f88ecb82ad4b9b96580ae6cac8763183a6a16aaff4",
+  "r3_dispatcher_binary_sha256": "d6397d2da03e84228f03c8975a88f3ac2663b7aef0dd1b4e00cb9a88f2ef4672",
+  "r3_worker_binary_sha256": "b3581fb5758d6ec9de7997a494a0ec73121fcd62c76e929af911c88796bc6427",
+  "real_moonedit_pair_evidence": "docs/evidence/offline-ofl-v2-20260922/moonedit-production-bridge.json",
+  "dispatcher_state_pvc_uid": "c80d2c4b-6afe-4493-ad5a-06c027bde861",
+  "dispatcher_seccomp_revision_binary_sha256": "939c6951d92bb63bff15107b3f2a3d88b59399bd503506d437d8e34327f55b31",
+  "worker_seccomp_profile_sha256": "9be3bd863230443b0c1e9a25ccc1a3fba10f1db0dc64b6b576c7b5b4b3aa8bbe",
+  "actual_runtime_default_baseline_sha256": "250ef62e68bba6e121a0087491e8cd13e46ea778a473105279e5301d592f68a0",
+  "worker_seccomp_profile_path": "/var/lib/kubelet/seccomp/lunanexa/offline-worker.json",
+  "verified": [
+    "Both production dispatchers started on management node with separate durable state roots.",
+    "Actual service-account server admission dry-run accepted the generated Job manifest.",
+    "Actual service-account server admission denied a modified Job mounting the controller state PVC.",
+    "Actual service-account server admission denied a modified Job reading the controller credential Secret.",
+    "Artifact service account cannot directly get Secrets or create pods/exec.",
+    "In-pod standalone kubectl reached the API server and returned actual NotFound for a nonexistent Job.",
+    "CA-verified HTTPS from the dispatcher to private controller proxy succeeded; nonexistent health/live returned404.",
+    "Default-deny NetworkPolicy alone did not block node-local API TLS. This was recorded as a failed isolation assumption, not a pass.",
+    "Worker-only seccomp was derived from an actual RuntimeDefault deny-by-default OCI profile, preserving other rules and allowing socket/socketpair only for AF_UNIX.",
+    "After installation, the same-node API curl probe failed immediately before TLS instead of reaching the API certificate.",
+    "All10 dispatcher native tests passed after the Localhost seccomp change.",
+    "Actual Kubernetes quote qualification Job completed prepare/render/finalize under the AF_UNIX-only seccomp profile, tokenless isolated mount policy, and production OFL font and render evidence secret.",
+    "Actual Kubernetes Chinese OFL-v2 DOCX qualification Job completed prepare/render/finalize with four raster-verified PDF pages under the same production security profile."
+  ],
+  "qualification_jobs": [
+    {
+      "name": "offline-artifact-7b836a8609006da2af5b8a7bb68787c49dd13cc6",
+      "kind": "QuoteScheduleXlsx",
+      "output_sha256": "c044202b042e94ad0ee4cb7b87a1ebedb3ecc9c46e68e70d08bbdf8453f4c6eb",
+      "output_bytes": 2587,
+      "preview_pages": 1,
+      "scope": "Actual runtime qualification, explicitly not a stored commercial order or controller fulfillment receipt"
+    },
+    {
+      "name": "offline-artifact-9e6800d95e087c99e2829a816b5ad3a704b0d4ed",
+      "kind": "PrintReadyContractPdf",
+      "source_sha256": "92f0041e2752d684ced68dd09f793ed0aafd795dc92c2f9522ca25c0af4542f7",
+      "output_sha256": "65e70f452ad7dd7029acaf6edde0fad1b4175741209a82c168d3f45d8cf7b543",
+      "preview_pages": 4,
+      "scope": "Actual OFL-v2 technical qualification, fields explicitly labelled non-commercial and unsigned"
+    }
+  ],
+  "actual_controller_generation": {
+    "request_id": "technical-acceptance-ofl-quote-request-20260922",
+    "artifact_id": "technical-acceptance-ofl-quote-artifact-20260922",
+    "job_name": "offline-artifact-25e98f9666dcbc5ee5e53e28bb35d0a45ae6e13b",
+    "job_duration_seconds": 6,
+    "output_sha256": "e83a8d0ca6f92e0668d35433fa09a5b2cce1d8719631d7b26ca65b35f80c8240",
+    "output_bytes": 2558,
+    "object_ref": "s3://lunanexa-offline-commerce/technical-acceptance/20260922/quote.xlsx",
+    "artifact_pending_journal": null,
+    "callback_acknowledged": true,
+    "scope": "Genuine persisted technical order generation, not a claim of payment or contract signing"
+  },
+  "not_yet_claimed": [
+    "Real technical-order artifact download and durable callback replay.",
+    "Real authorized entitlement activation and reversal.",
+    "Commercial legal or payment acceptance."
+  ],
+  "cleanup": [
+    "Completed worker-seccomp installer Pod deleted; approved host profile and its ConfigMap retained.",
+    "Three disposable network probe Pods deleted after their results were recorded."
+  ]
+}

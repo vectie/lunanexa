@@ -1,0 +1,149 @@
+///|
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/crypto",
+  "vectie/moonleaf/opc",
+  "vectie/moonleaf/xml",
+}
+
+///|
+fn digest(bytes : Bytes) -> String {
+  @crypto.bytes_to_hex_string(@crypto.sha256(bytes.to_fixedarray()))
+}
+
+///|
+fn rewrite(e : @xml.Element) -> @xml.Element raise {
+  if e.local_name() == "p" && e.text_content().has_prefix("承诺单位：") {
+    let children = e.children.map(n => {
+      match n {
+        @xml.Element(p) if p.local_name() == "pPr" => {
+          let props = p.children.filter(n => {
+            match n {
+              @xml.Element(c) =>
+                c.local_name() != "ind" && c.local_name() != "jc"
+              _ => true
+            }
+          })
+          props.push(@xml.Element(@xml.parse("<w:ind w:firstLine=\"0\"/>")))
+          props.push(@xml.Element(@xml.parse("<w:jc w:val=\"right\"/>")))
+          @xml.Element({ ..p, children: props, })
+        }
+        _ => n
+      }
+    })
+    return rewrite_fonts({ ..e, children, })
+  }
+  rewrite_fonts(e)
+}
+
+///|
+fn rewrite_fonts(e : @xml.Element) -> @xml.Element raise {
+  let font_element = e.local_name() == "rFonts" || e.local_name() == "font"
+  let attributes = e.attributes
+    .filter(a => {
+      ![
+        "w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme", "w:csTheme",
+      ].contains(a.name)
+    })
+    .map(a => {
+      let name = a.name
+        .split(":")
+        .to_array()
+        .last()
+        .unwrap_or(a.name[:])
+        .to_owned()
+      if font_element &&
+        ["ascii", "hAnsi", "eastAsia", "cs", "name"].contains(name) {
+        { ..a, value: "Noto Sans SC", }
+      } else {
+        a
+      }
+    })
+  {
+    ..e,
+    attributes,
+    children: e.children.map(n => {
+      match n {
+        @xml.Element(child) => @xml.Element(rewrite(child))
+        _ => n
+      }
+    }),
+  }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo] else {
+    fail("usage: build-open-font-undertaking.mbtx REPO_ROOT")
+  }
+  let source_root = repo + "/assets/contracts/youthpolicy/undertaking-v1"
+  let output = repo + "/assets/contracts/youthpolicy/undertaking-ofl-v2"
+  if !@fs.exists(output) {
+    @fs.mkdir(output, recursive=true)
+  }
+  for
+    (old_name, new_name, expected) in [
+      (
+        "device-use-undertaking.docx", "device-use-undertaking.ofl-v2.docx", "057cdc0cf25b498d4f4ab28b00e5418fece2db73be4fea76951bf0255b73fffe",
+      ),
+      (
+        "device-use-undertaking.fillable.docx", "device-use-undertaking.ofl-v2.fillable.docx",
+        "2035da2e600402e40db697c2134b51ca1d82c76e127e9fb1274d285b0f083af4",
+      ),
+    ] {
+    let source = @fs.read_file(source_root + "/" + old_name).binary()
+    guard digest(source) == expected else {
+      fail("source template digest changed")
+    }
+    let original = @opc.open(source.to_fixedarray())
+    let parts = original.parts.map(part => {
+      if [
+          "word/document.xml", "word/styles.xml", "word/numbering.xml", "word/fontTable.xml",
+        ].contains(part.name) {
+        let tree = @xml.parse(@utf8.decode(Bytes::from_array(part.content)))
+        let updated = if part.name == "word/fontTable.xml" {
+          @xml.parse(
+            "<w:fonts xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:font w:name=\"Noto Sans SC\"><w:family w:val=\"swiss\"/><w:pitch w:val=\"variable\"/></w:font></w:fonts>",
+          )
+        } else {
+          rewrite(tree)
+        }
+        guard tree.text_content() == updated.text_content() else {
+          fail("font rewrite changed document text")
+        }
+        {
+          ..part,
+          content: @utf8.encode(@xml.serialize(updated)).to_fixedarray(),
+        }
+      } else {
+        part
+      }
+    })
+    let revised : @opc.Package = { parts, }
+    let bytes = Bytes::from_array(@opc.save(revised))
+    let reopened = @opc.open(bytes.to_fixedarray())
+    guard reopened.parts.length() == original.parts.length() else {
+      fail("package part loss")
+    }
+    for part in original.parts {
+      if ![
+          "word/document.xml", "word/styles.xml", "word/numbering.xml", "word/fontTable.xml",
+        ].contains(part.name) {
+        guard reopened.part(part.name) == Some(part) else {
+          fail("untouched package part changed")
+        }
+      }
+    }
+    @fs.write_file(output + "/" + new_name, bytes, create_mode=CreateOrTruncate)
+    println(
+      new_name +
+      " sha256:" +
+      digest(bytes) +
+      " bytes=" +
+      bytes.length().to_string(),
+    )
+  }
+}

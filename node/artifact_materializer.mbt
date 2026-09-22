@@ -97,7 +97,9 @@ fn artifact_cosign_arguments(
 }
 
 ///|
-pub extend CosignArtifactSignatureVerifier with ArtifactSignatureVerifier::{verify}
+pub extend CosignArtifactSignatureVerifier with ArtifactSignatureVerifier::{
+  verify,
+}
 
 ///|
 pub impl ArtifactSignatureVerifier for CosignArtifactSignatureVerifier with fn verify(
@@ -451,7 +453,8 @@ fn ArtifactMaterializer::object_url(
   "\{self.endpoint}/\{object_key}"
 }
 
-///| A revision lives under a directory instead of in one object, so every
+///|
+/// A revision lives under a directory instead of in one object, so every
 /// fetch hits `/<directory>/<path>` on the same authenticated artifact route.
 fn managed_revision_directory(uri : String) -> String? {
   guard uri.has_prefix(@contracts.model_store_scheme) else { return None }
@@ -569,7 +572,10 @@ async fn ArtifactMaterializer::download(
   if offset > 0L {
     headers["Range"] = "bytes=\{offset}-"
   }
-  let (response, stream) = @http.get_stream(self.object_url(object_key), headers~)
+  let (response, stream) = @http.get_stream(
+    self.object_url(object_key),
+    headers~,
+  )
   defer stream.close()
   let append = offset > 0L && response.code == 206
   if response.code < 200 || response.code >= 300 {
@@ -696,9 +702,7 @@ fn sha256_of_bytes(bytes : Bytes) -> String {
 }
 
 ///|
-fn managed_revision_manifest_errors(
-  manifest : ManagedRevisionManifest,
-) -> Bool {
+fn managed_revision_manifest_errors(manifest : ManagedRevisionManifest) -> Bool {
   if manifest.schema_version != @contracts.source_manifest_schema_version ||
     manifest.model_id == "" ||
     manifest.model_id.length() > 180 ||
@@ -718,7 +722,8 @@ fn managed_revision_manifest_errors(
   false
 }
 
-///| Read a revision from the management node's model store. The manifest the
+///|
+/// Read a revision from the management node's model store. The manifest the
 /// controller signed is fetched first and must hash to the assigned digest;
 /// every file it lists is then streamed, resumed across restarts, and hashed
 /// to the digest that manifest declares. There is no detached cosign
@@ -825,14 +830,11 @@ async fn ArtifactMaterializer::materialize_revision(
     sync=Full,
   )
   @fs.rename(ready_partial, ready_path, replace=true)
-  {
-    digest: artifact.digest,
-    host_path: root,
-    size_bytes: total,
-  }
+  { digest: artifact.digest, host_path: root, size_bytes: total, }
 }
 
-///| Reuse re-checks the manifest binding and the shape of the tree. Hashing
+///|
+/// Reuse re-checks the manifest binding and the shape of the tree. Hashing
 /// 1.2 TB again on every reconcile would keep a node busy forever; the file
 /// digests were proved when the revision was written and the ready marker is
 /// only written after that proof succeeded.
@@ -889,11 +891,7 @@ async fn verify_materialized_revision(
   if total != artifact.size_bytes {
     raise ArtifactSizeMismatch
   }
-  {
-    digest: artifact.digest,
-    host_path: root,
-    size_bytes: total,
-  }
+  { digest: artifact.digest, host_path: root, size_bytes: total, }
 }
 
 ///|

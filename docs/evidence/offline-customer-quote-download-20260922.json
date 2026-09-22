@@ -1,0 +1,24 @@
+{
+  "schema": "lunanexa.offline-customer-download.v1",
+  "session_id": "technical-quote-download-20260922-v1",
+  "artifact_id": "technical-acceptance-ofl-quote-artifact-20260922",
+  "controller_issued_customer_grant": true,
+  "same_origin_public_endpoint": "http://106.39.18.146:5003",
+  "download_http": 200,
+  "sha256": "sha256:e83a8d0ca6f92e0668d35433fa09a5b2cce1d8719631d7b26ca65b35f80c8240",
+  "replay_http": 409,
+  "byte_count": 2558,
+  "controller_persisted_state": "TransferConsumed",
+  "controller_completion_unix_ms": "1790074183725",
+  "controller_provider_receipt_matches_session_and_digest": true,
+  "cross_tenant_test": {
+    "actor": "same authenticated customer, existing active Developer membership in a different tenant",
+    "target": "the same technical quote artifact",
+    "expected": "no download grant",
+    "http_status": 403,
+    "error_code": "OfflineCommerceDenied",
+    "membership_or_store_modified_for_test": false
+  },
+  "token_retained_in_evidence": false,
+  "payment_signature_fulfillment_claimed": false
+}

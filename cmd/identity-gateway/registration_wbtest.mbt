@@ -41,7 +41,8 @@ test "the created account carries the display name and no required actions" {
   let body = registration_user_body(registration_test_request()).stringify()
   let decoded : Json = @json.parse(body)
   assert_true(
-    decoded is {
+    decoded
+    is {
       "username": String("buyer@example.test"),
       "email": String("buyer@example.test"),
       "firstName": String("Example Buyer"),
@@ -65,9 +66,7 @@ test "the created account carries the display name and no required actions" {
   // have to rotate through a screen this flow cannot render.
   assert_eq(credential.get("type"), Some(Json::string("password")))
   assert_eq(credential.get("temporary"), Some(Json::boolean(false)))
-  assert_eq(
-    credential.get("value"), Some(Json::string("Correct-Horse-9!")),
-  )
+  assert_eq(credential.get("value"), Some(Json::string("Correct-Horse-9!")))
 }
 
 ///|
@@ -95,9 +94,7 @@ test "provider status decides which registration failure the browser sees" {
     registration_failure_response(registration_create_failure(500)),
     (503, "registration-unavailable"),
   )
-  assert_eq(
-    error_body("email-taken"), "{\"error\":\"email-taken\"}",
-  )
+  assert_eq(error_body("email-taken"), "{\"error\":\"email-taken\"}")
 }
 
 ///|
@@ -107,7 +104,8 @@ test "the registration realm is read from the issuer, not configured twice" {
     "lunanexa",
   )
   assert_eq(
-    configured_realm("http://identity.example/realms/tenant-a"), "tenant-a",
+    configured_realm("http://identity.example/realms/tenant-a"),
+    "tenant-a",
   )
   for
     rejected in [
@@ -128,7 +126,9 @@ test "the admin API is addressed only through a configured origin" {
   let config = password_test_config("http://relay:8081")
   // Nothing is configured, so registration must fail closed rather than fall
   // back to a guess about where the provider's admin API lives.
-  try ignore(registration_endpoint(config, "/admin/realms/lunanexa/users")) catch {
+  try
+    ignore(registration_endpoint(config, "/admin/realms/lunanexa/users"))
+  catch {
     _ => ()
   } noraise {
     _ => fail("an unconfigured admin origin must not yield an endpoint")

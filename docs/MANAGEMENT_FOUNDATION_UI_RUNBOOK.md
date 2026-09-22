@@ -48,7 +48,9 @@ unrelated source to the container builder even though the final image does not
 retain them. For a documentation-only release, run
 `scripts/deploy/build-coursebook-image.sh RELEASE_TAG`.
 
-`images/Containerfile.control` supports a normal native amd64 build. When the
+`images/Containerfile.control` supports a native amd64 build with an explicit
+BuildKit `moonleaf_source` named context (see `docs/DEPLOYMENT.md`, image build
+instructions); the local `moon.work` is not copied into the context. When the
 operator workstation is ARM and its amd64 emulator cannot run the MoonBit
 toolchain reliably, build only the `build-deps` stage there, compile the control
 binary in that image on a native amd64 builder, and assemble it with

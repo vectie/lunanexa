@@ -1,0 +1,9 @@
+{
+  "default_family": "Noto Sans SC",
+  "fonts": [{
+    "family": "Noto Sans SC",
+    "filename": "NotoSansSC-Regular.ttf",
+    "sha256": "sha256:c7763f454946833081cc90e73186615f8e1189de9c5e5a5a8752871fd79fddbc",
+    "license_reference": "OFL-1.1:notofonts/noto-cjk@f8d157532fbfaeda587e826d4cd5b21a49186f7c:Sans/LICENSE"
+  }]
+}
