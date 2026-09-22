@@ -167,6 +167,9 @@ priv struct OfflineOrderIntent {
   selected_service_code : String
   selected_sla_code : String
   expires_unix_ms : Int64
+  /// The tier the customer chose, from the same list the operator's tariff
+  /// picker renders. It is a request the operator quotes, not a price.
+  requested_undertaking_term : String?
 } derive(ToJson)
 
 ///|
@@ -2189,6 +2192,11 @@ async fn create_offline_order(model : AppModel) -> @offline.CommercialOrder {
     selected_service_code: commerce.service_code.trim().to_owned(),
     selected_sla_code: commerce.sla_code.trim().to_owned(),
     expires_unix_ms: current_unix_ms() + 2592000000L,
+    requested_undertaking_term: match
+      @offline.undertaking_term_tier(commerce.undertaking_term.trim()) {
+      Some(_) => Some(commerce.undertaking_term.trim())
+      None => None
+    },
   }
   let response = request(
     "POST",

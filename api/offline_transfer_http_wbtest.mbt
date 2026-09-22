@@ -163,6 +163,7 @@ async fn transfer_store_fixture(
     agreement_ref: Some("agreement-transfer"),
     artifact_ids: [],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state: PendingEvidenceUpload,
     generation: 4L,
     created_unix_ms: now,

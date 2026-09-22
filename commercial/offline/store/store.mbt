@@ -253,6 +253,7 @@ fn same_order_intent(
   left.purchaser_subject_ref == right.purchaser_subject_ref &&
   left.selected_service_code == right.selected_service_code &&
   left.selected_sla_code == right.selected_sla_code &&
+  left.requested_undertaking_term == right.requested_undertaking_term &&
   left.policy == right.policy &&
   left.expires_unix_ms == right.expires_unix_ms
 }

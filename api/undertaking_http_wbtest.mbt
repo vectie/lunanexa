@@ -48,6 +48,7 @@ fn undertaking_test_order() -> @offline.CommercialOrder {
     agreement_ref: None,
     artifact_ids: ["signed-a", "payment-a"],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state: UnderReconciliation,
     generation: 1L,
     created_unix_ms: 1000L,

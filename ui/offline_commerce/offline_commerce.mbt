@@ -201,6 +201,7 @@ pub fn demo_state(
     agreement_ref: Some("agreement-capacity-2026"),
     artifact_ids: ["artifact-contract-executed"],
     entitlement_ref: None,
+    requested_undertaking_term: None,
     state: if operator {
       UnderReconciliation
     } else {
@@ -279,7 +280,23 @@ pub fn OfflineCommerceState::update(
   message : OfflineCommerceMessage,
 ) -> OfflineCommerceState {
   match message {
-    SelectOrder(order_id) => { ..self, selected_order_id: Some(order_id), }
+    SelectOrder(order_id) => {
+      // Opening an order adopts the tier the customer asked for, so the
+      // operator's picker starts on the same selection instead of a default
+      // that has nothing to do with the order.
+      let requested = self.orders
+        .iter()
+        .find_first(order => order.order_id == order_id)
+        .bind(order => order.requested_undertaking_term)
+      {
+        ..self,
+        selected_order_id: Some(order_id),
+        undertaking_term: match requested {
+          Some(term) if @offline.undertaking_term_tier(term) is Some(_) => term
+          _ => self.undertaking_term
+        },
+      }
+    }
     ProjectChanged(value) => { ..self, project_id: value, }
     ServiceChanged(value) => { ..self, service_code: value, }
     SlaChanged(value) => { ..self, sla_code: value, }
@@ -381,6 +398,24 @@ fn copy(locale : @i18n.Locale, english : String, chinese : String) -> String {
     chinese
   } else {
     english
+  }
+}
+
+///|
+/// The one rendering of an undertaking tier, used by the operator's tariff
+/// picker and by the enterprise portal's term picker. The prices come from
+/// `@offline.undertaking_term_tiers`, never from a literal here.
+pub fn undertaking_tier_label(
+  locale : @i18n.Locale,
+  tier : @offline.UndertakingTermTier,
+) -> String {
+  let amount = (tier.minor_units / 100L).to_string()
+  if locale.is_chinese() {
+    "\{tier.days} 天 · \{amount} 元"
+  } else if tier.days == 1L {
+    "1 day · \{amount}"
+  } else {
+    "\{tier.days} days · \{amount}"
   }
 }
 
@@ -669,34 +704,46 @@ fn operator_actions(
         @html.select(
           id="undertaking-tariff",
           on_change=text_command(emit, value => UndertakingTermChanged(value)),
+          // Built from the shared tier list, which is also what the customer's
+          // own term picker renders: one definition, so the operator can always
+          // quote the tier the customer chose.
           [
-            @html.option(
-              value="day",
-              selected=state.undertaking_term == "day",
-              copy(state.locale, "1 day · 49", "1 天 · 49 元"),
-            ),
-            @html.option(
-              value="week",
-              selected=state.undertaking_term == "week",
-              copy(state.locale, "7 days · 322", "7 天 · 322 元"),
-            ),
-            @html.option(
-              value="month",
-              selected=state.undertaking_term == "month",
-              copy(state.locale, "30 days · 1290", "30 天 · 1290 元"),
-            ),
-            @html.option(
-              value="quarter",
-              selected=state.undertaking_term == "quarter",
-              copy(state.locale, "90 days · 3600", "90 天 · 3600 元"),
-            ),
-            @html.option(
-              value="year",
-              selected=state.undertaking_term == "year",
-              copy(state.locale, "365 days · 13870", "365 天 · 13870 元"),
-            ),
+            for tier in @offline.undertaking_term_tiers => {
+              @html.option(
+                value=tier.unit,
+                selected=state.undertaking_term == tier.unit,
+                undertaking_tier_label(state.locale, tier),
+              )
+            }
           ],
         ),
+        // The customer's request is shown next to the picker rather than only
+        // pre-filling it, so the operator can see when they are quoting a
+        // different tier than the one that was asked for.
+        match order.requested_undertaking_term {
+          Some(term) =>
+            if @offline.undertaking_term_tier(term) is Some(tier) {
+              @html.p(
+                class="offline-action-note",
+                copy(
+                  state.locale,
+                  "The customer asked for \{undertaking_tier_label(state.locale, tier)}.",
+                  "客户申请的档位是 \{undertaking_tier_label(state.locale, tier)}。",
+                ),
+              )
+            } else {
+              @html.nothing
+            }
+          None =>
+            @html.p(
+              class="offline-action-note",
+              copy(
+                state.locale,
+                "The customer did not ask for a tier; quote the tier you agree with them.",
+                "客户未指定档位；请按双方确认的档位报价。",
+              ),
+            )
+        },
         @html.label(
           for_="undertaking-quantity",
           copy(state.locale, "Number of devices", "设备台数"),
@@ -1207,6 +1254,36 @@ fn create_order_form(
           value=state.sla_code,
           maxlength=160,
           on_input=text_command(emit, value => SlaChanged(value)),
+        ),
+      ]),
+      @html.div(class="offline-field", [
+        @html.label(
+          for_="offline-undertaking-term",
+          copy(state.locale, "Rental tier", "租赁档位"),
+        ),
+        @html.select(
+          id="offline-undertaking-term",
+          on_change=text_command(emit, value => UndertakingTermChanged(value)),
+          // The same list the operator's tariff picker renders. The customer
+          // asks for a tier, the operator quotes that tier; two lists would let
+          // the customer ask for something the operator cannot quote.
+          [
+            for tier in @offline.undertaking_term_tiers => {
+              @html.option(
+                value=tier.unit,
+                selected=state.undertaking_term == tier.unit,
+                undertaking_tier_label(state.locale, tier),
+              )
+            }
+          ],
+        ),
+        @html.span(
+          class="field-help",
+          copy(
+            state.locale,
+            "The fixed undertaking tariff. The operator freezes the quote at this tier; the generated document states its rental dates.",
+            "承诺函固定档位。运营方按此档位冻结报价，生成的文件中会写明实际租期。",
+          ),
         ),
       ]),
     ]),

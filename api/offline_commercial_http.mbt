@@ -11,6 +11,11 @@ priv struct OfflineOrderIntent {
   selected_service_code : String
   selected_sla_code : String
   expires_unix_ms : Int64
+  /// The tier the customer asked for. It is a request, not a price: the
+  /// operator still freezes the quote, and the quote is what the document
+  /// states. It travels on the order so the operator quotes the tier the
+  /// customer actually chose instead of re-picking one.
+  requested_undertaking_term : String?
 } derive(FromJson)
 
 ///| Conservative interim policy. Customer requests cannot weaken commercial,
@@ -1489,6 +1494,15 @@ async fn ApiService::handle_offline_commerce(
           false,
         )
       }
+      // The customer may only ask for a tier the undertaking actually prices;
+      // an unknown unit would be a request the operator could never quote.
+      if intent.requested_undertaking_term is Some(term) &&
+        @offline.undertaking_term_tier(term) is None {
+        return api_error(
+          400, "InvalidTerm", "requested undertaking term is not a fixed tier",
+          false,
+        )
+      }
       let created = try
         store.create_order({
           order_id: intent.order_id,
@@ -1504,6 +1518,7 @@ async fn ApiService::handle_offline_commerce(
           agreement_ref: None,
           artifact_ids: [],
           entitlement_ref: None,
+          requested_undertaking_term: intent.requested_undertaking_term,
           state: Draft,
           generation: 1L,
           created_unix_ms: now,

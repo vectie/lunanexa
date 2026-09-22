@@ -1033,6 +1033,11 @@ pub(all) struct CommercialOrder {
   agreement_ref : String?
   artifact_ids : Array[String]
   entitlement_ref : String?
+  /// The tier the customer asked for, or None for a negotiated quote. It is
+  /// carried on the order so both sides read the same selection: the portal
+  /// records it, the operator's tariff picker defaults to it, and the quote the
+  /// operator freezes is what actually prices the order.
+  requested_undertaking_term : String?
   state : OfflineOrderState
   generation : Int64
   created_unix_ms : Int64
