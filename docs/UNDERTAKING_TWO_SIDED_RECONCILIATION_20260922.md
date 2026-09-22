@@ -1917,3 +1917,92 @@ and requested compute lease as one resumable package"，分 4 步：
 "两侧对帐"里管理侧该按的按钮。**下一步就从这里继续**：
 用它在管理侧把账户配置成有购机/工作区权限，然后回企业侧重新走容量页，
 看 `machine-offerings` 是否从 403 变成 200。
+
+---
+
+## 12. 第二轮 UI 走查（2026-09-22 下午）：纯浏览器，逐步记录
+
+§2–§9 是**第一轮**（当时登录还走 OIDC/令牌框）。这一轮的前提变了：统一登录已上线
+（§11.5），承诺函/合同两条路线已可选（§11.6），企业侧可自助注册。所以整条链要重新走一遍。
+
+**方法**：一个 CDP 驱动脚本（`walk.mjs`）长期持有两个标签页——`portal`（企业侧 5002）与
+`console`（管理侧 4174）——每条命令只做一件事：打开页面、按标签点某个按钮、在下拉里选某项、
+在输入框里打字。每一步都记录：点到的**确切标签**、点击前后的**控件清单（含 disabled）**、
+页面上的**提示文本**、页面自己发出的**网络请求**、以及截图。下面每一步的"按下"都指这个。
+
+### 12.1 走查步骤与结果（截至本轮结束）
+
+| # | 侧 | 按下的东西 | 结果 |
+|---|---|---|---|
+| 1 | 企业 | 登录页 → `Register a new account` → 邮箱/名称/密码 → `Create account` | ✅ `POST /auth/register 201` → 门户渲染（试用租户） |
+| 2 | 管理 | 登录页 → 用户名 `wlc` + 密码 → `Sign in` | ✅ `POST /auth/password 200` → 控制台渲染（节点 4/4） |
+| 3 | 企业 | 导航 `Orders & documents` → 填 `Project ID` → `Create draft order` | ❌ **第一次：完全无反应**（见 12.2） |
+| 3′ | 企业 | 同上（修复后） | ✅ `POST /v1/offline-commerce/self/orders 201` → 出现 `offline-order-0f50a176-…`，状态 `Draft`，并显示 "Draft order created. Pricing and offline controls remain pending." |
+| 4 | 管理 | 待做：`Offline commerce` 里选租期并冻结报价 | ⏳ |
+| 5 | 企业 | 待做：`Contract forms` → 选"设备使用承诺函" → 关联订单 → `Prepare document` | ⏳ |
+| 6 | 企业 | 待做：`Save information` → `Review and confirm` → `Generate exact DOCX + PDF` | ⏳ |
+| 7 | 企业 | 待做：`Upload signed scan` → `Submit for Party A approval` | ⏳ |
+| 8 | 管理 | 待做：`Contract documents` → `Review & approve` | ⏳ |
+| 9 | 管理 | 待做：`Register signed evidence` / 开通权限 | ⏳ |
+| 10 | 企业 | 待做：确认拿到权限 | ⏳ |
+
+### 12.2 本轮抓到的堵点（按严重度）
+
+#### 堵点 A（致命）：企业侧"创建订单草稿"点了没反应，并且把整个 SPA 冻住
+
+- **现象**：`Create draft order` 按钮是 enabled 的，点下去**没有任何网络请求、没有任何提示、页面不变**。
+  更糟的是**此后整个页面再也不响应任何点击**（包括导航和 `Refresh`），直到手动刷新。
+- **定位**：用 CDP 打开 `Runtime.exceptionThrown` 抓浏览器自己的异常，得到：
+
+  ```
+  TypeError: crypto.randomUUID is not a function
+      at random__identifier (enterprise.js)
+      at create__offline_order (…)
+  ```
+
+  `crypto.randomUUID` **只在 secure context 存在**。本部署是明文 HTTP + 可路由地址，
+  所以 `isSecureContext === false`、`crypto.randomUUID === undefined`。
+- **为什么会冻住**：这个 TypeError 不是 LunaNexa 的 `raise` 错误，它是原生 JS 异常，
+  会穿透命令的 `catch`；而命令是在运行时的消息 drain 循环里执行的，异常打断 drain，
+  循环重入标志留在"正在 drain"状态 → **之后所有消息都被丢弃**。
+  页面停留在最后一帧，看起来就是"按钮坏了"。
+- **修复**：`random_identifier` 改用 `crypto.getRandomValues`（不需要 secure context），
+  并加 `Math.random` 兜底，让这个函数**永不抛异常**。控制台与 workbench 用的同一个函数，同样修了。
+- **验证**：新注册的企业在浏览器里点 `Create draft order` → 订单创建成功，
+  id 是真正的随机 UUID（`offline-order-0f50a176-3fdd-466d-9a53-ddd08ba1c48f`）。
+
+#### 堵点 B（严重）：这条路线**没有任何失败反馈通道**
+
+`ui/offline_commerce` 的状态里有 `error_message` / `success_message`，但**视图从来不渲染它们**
+（`ui/contract_documents` 是渲染的）。所以任何被正确转换的失败也都表现为"按钮没反应"。
+已补上 `error_message` / `success_message` / `loading` 三处渲染（`role=alert` / `role=status`）。
+
+#### 堵点 C（严重）：门户 HTML 被浏览器缓存，bundle 更新到不了用户
+
+5002 的 `/enterprise/` 没有任何缓存指令，`index.html` 会被缓存；而 HTML 里带着
+`enterprise.js?v=<digest>`，于是**新 bundle 部署后用户仍加载旧的那份**。
+本轮就实际撞上了：镜像已更新，页面仍在跑上一个 digest。
+已改为 `location = /enterprise/index.html` 上 `Cache-Control: no-store`（控制台页面早就是这么做的）。
+
+#### 堵点 D（已修，属登录链路）：会话数上限把账户锁死
+
+见 §12.3。**同一账户累计 9 次登录（不登出）就会被完全锁死**，控制台和门户同时进不去，
+而且没有任何 UI 能撤销那些会话——因为撤销入口就在进不去的登录之后。
+
+### 12.3 与走查同时修掉的两处（否则走不到第 3 步）
+
+1. **会话上限改为淘汰最久未用**（`account/store.mbt`）。原来第 9 次登录直接 `raise`，
+   经控制面 400 → 网关 503 `identity-session-unavailable`，浏览器只看到"网关拒绝了本次登录"。
+   现在是**淘汰最久未用的一条会话**再签发，上限仍然成立，最新凭据永远可用。
+2. **网关在拒绝会话交换时把状态码打到 stderr**。浏览器仍然只知道
+   `identity-session-unavailable`，但运维日志里现在有 `HTTP 400 {"code":"AccountRejected"}`，
+   不用再去猜 relay / provider / 数据库。
+
+### 12.4 本轮仍未验证 / 未做
+
+- 第 4–10 步（选租期冻结报价 → 拉起承诺函 → 管理侧批准 → 登记签署证据 → 开通权限 → 企业侧拿到权限）
+  **尚未走**。承诺函文件能否真正生成、管理侧批准后企业侧是否真的拿到权限，都还没有实测。
+- 承诺函的价目在 UI 上是否与 §10 的 49/322/1290/3600/13870 一致，本轮只确认了下拉选项的文案。
+- 管理侧 `Offline commerce` 的租期选择是**运营侧**动作（`operator_actions`），
+  不是企业侧动作；也就是说"用户选择时间/租期"在当前实现里是**甲方确认固定档位报价**，
+  企业侧只能提需求。这一点与原任务描述的顺序不同，需要确认是否即为预期。
