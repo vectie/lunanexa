@@ -2304,6 +2304,7 @@ test "the access group replaces only the account and workspace rows" {
       {
         lease_id: "lease-1",
         user_id: "user-1",
+        subject_ref: "subject-1",
         workspace: "org-northstar",
         resource: "1 × dgx-spark",
         started_at: "Unavailable",

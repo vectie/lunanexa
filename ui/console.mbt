@@ -1733,6 +1733,10 @@ pub extend AccessGrantRow with FromJson::{from_json}
 pub(all) struct ComputeLeaseRow {
   lease_id : String
   user_id : String
+  /// The subject this lease belongs to. The guided-setup form matches on it so
+  /// an operator can see which tenants a person already holds before typing a
+  /// tenant of their own.
+  subject_ref : String
   workspace : String
   resource : String
   started_at : String
@@ -2895,6 +2899,7 @@ pub fn demo_state() -> ConsoleState {
       {
         lease_id: "workspace-lease-alice",
         user_id: "user-alice",
+        subject_ref: "subject-alice",
         workspace: "research-main",
         resource: "Text generation · 2 concurrent",
         started_at: "2026-08-12 10:00 UTC",
@@ -2904,6 +2909,7 @@ pub fn demo_state() -> ConsoleState {
       {
         lease_id: "workspace-lease-mina",
         user_id: "user-mina",
+        subject_ref: "subject-mina",
         workspace: "research-pending",
         resource: "Text generation · 1 concurrent",
         started_at: "2026-08-13 08:00 UTC",
@@ -4380,6 +4386,74 @@ fn access_identity_reference(
 }
 
 ///|
+/// What the platform already knows about the person whose subject was just
+/// pasted, shown next to the organization and tenant the operator is about to
+/// type.
+///
+/// Both of those fields are free text, and the customer's own session resolves
+/// its tenant from the membership the self-registration path created
+/// (`trial-tenant-…`), not from whatever is typed here. A package opened on a
+/// different tenant still returns 200, still shows every milestone complete,
+/// and is then invisible to the customer -- `api/client_handoff_http.mbt` checks
+/// `portal_view.membership.tenant_ref`. Listing the tenants the subject already
+/// holds is what makes that mismatch visible before submitting.
+fn access_existing_authority(
+  state : ConsoleState,
+  issuer : String,
+  subject : String,
+  help_id : String,
+) -> @rabbita.Html {
+  if issuer.trim() == "" || subject.trim() == "" {
+    return @html.p(
+      id=help_id,
+      class="field-help",
+      localized(
+        state.locale,
+        "Fill in Identity provider details first; LunaNexa then lists the tenants this subject already holds, so you can reuse the customer's own tenant instead of inventing one.",
+        "请先填写上方「身份提供商详情」；LunaNexa 随后会列出这个主体已有的租户，便于你沿用客户自己的租户，而不是另起一个。",
+      ),
+    )
+  }
+  let subject_ref = @identity.subject_reference(issuer, subject)
+  let account_id = @identity.account_identifier(issuer, subject)
+  let tenants : Array[String] = []
+  for lease in state.compute_leases {
+    if lease.subject_ref == subject_ref && !tenants.contains(lease.workspace) {
+      tenants.push(lease.workspace)
+    }
+  }
+  let account = state.accounts.iter().find_first(value => {
+    value.account_id == account_id
+  })
+  let known = match (account, tenants.length()) {
+    (None, 0) =>
+      localized(
+        state.locale,
+        "LunaNexa holds no account or workspace lease for this subject yet. The organization and tenant below are the ones the package will create.",
+        "LunaNexa 目前没有这个主体的账户或工作区租约。下面的组织与租户将由这个开通包创建。",
+      )
+    _ => {
+      let existing = match account {
+        Some(value) =>
+          "\{value.display_name} · \{value.email} · \{value.subject_ref}"
+        None => subject_ref
+      }
+      let held = if tenants.length() == 0 {
+        localized(state.locale, "no workspace lease", "没有工作区租约")
+      } else {
+        tenants.join(", ")
+      }
+      localized(
+        state.locale,
+        "This subject already exists: \{existing}. Tenants it already holds: \{held}. The customer's own sign-in resolves its tenant from its existing membership, so a package opened on a different tenant will not be visible to them.",
+        "这个主体已经存在：\{existing}。它已有的租户：\{held}。客户自己登录时会按既有会员解析租户，因此在别的租户上开通的包对他不可见。",
+      )
+    }
+  }
+  @html.p(id=help_id, class="field-help", known)
+}
+
+///|
 fn users_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -4647,12 +4721,21 @@ fn users_view(
               value=state.access_package_draft.tenant_ref,
               maxlength=128,
               auto_complete=Off,
+              attrs=@html.Attrs::build().aria_describedby(
+                "access-existing-authority",
+              ),
               on_input=text_command(emit, value => {
                 AccessPackageTenantChanged(value)
               }),
             ),
           ]),
         ]),
+        access_existing_authority(
+          state,
+          state.access_package_draft.identity_issuer,
+          state.access_package_draft.identity_subject,
+          "access-existing-authority",
+        ),
         @html.details(class="access-provider-details", [
           @html.summary(
             localized(

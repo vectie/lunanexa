@@ -213,6 +213,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       {
         lease_id: "lease-1",
         user_id: "user-1",
+        subject_ref: "subject-1",
         workspace: "research-main",
         resource: "Text generation · 2 concurrent",
         started_at: "2026-08-08 12:00 UTC",
@@ -222,6 +223,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       {
         lease_id: "lease-2",
         user_id: "user-2",
+        subject_ref: "subject-2",
         workspace: "research-pending",
         resource: "Text generation · 1 concurrent",
         started_at: "2026-08-09 08:00 UTC",
