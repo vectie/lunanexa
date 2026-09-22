@@ -1827,6 +1827,7 @@ async fn load_console_access_reads(
         {
           lease_id: lease.lease_id,
           user_id: workspace_user_id(workspace.users, lease.subject_ref),
+          subject_ref: lease.subject_ref,
           workspace: lease.tenant_ref,
           resource: workspace_resource(lease.limits),
           started_at: format_unix_ms(lease.starts_unix_ms, "Unavailable"),
