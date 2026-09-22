@@ -1959,7 +1959,7 @@ and requested compute lease as one resumable package"，分 4 步：
 | D | **同一账户第 9 次登录（不登出）就被完全锁死**，控制台和门户同时进不去，且没有任何 UI 能撤销那些会话 | 严重 | ✅ 已修并验证（§12.3） |
 | E | **整条承诺函链的闸门**：`/v1/offline-commerce/operator/quotes → 503 OfflineCommerceNotReady`，17 条 blocker code，能力集为空 | **决定性** | ❌ **不修**：这是 `docs/OFFLINE_COMMERCE.md` 要求的状态，伪造签名就绪证明等于删掉闸门（§12.4） |
 | F | 试用租户被给了**永远只能 403** 的动作（`Review price`），提示却是"重试" | 中 | ✅ 已修并验证（见 §12.14） |
-| G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | 未修（§12.7） |
+| G | 试用租户的租期上限 24 小时只写在下拉下方一句静态小字里 | 轻 | ✅ 已修并验证（见 §12.15） |
 | H | `Provider subject` 字段**没有任何说明**，而平台里**没有任何界面显示**一个人的原始 IdP subject（各处只显示派生指纹），操作员必须去 Keycloak 管理台抄 | 中 | 未修（§12.10） |
 | I | 确认框只写 `week × 1`，**不显示金额**——"冻结不可变报价"这种动作看不到价格 | 轻 | ✅ 已修并验证（见下） |
 
@@ -2414,3 +2414,20 @@ throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response
 
 顺带核对了另外两个前端：**控制台早就是对的**（`HTTP ${response.status}: ${detail}`），
 所以这个缺陷只在企业门户这一侧。测试：`ui/enterprise` 37/37、`cmd/enterprise` 28/28。
+
+### 12.15 堵点 G 已修：租期超出规格上限时明说是哪一条越界
+
+`Rental period` 选 `7 days`（168 小时）或 `30 days` 时，`Review price` 会直接变灰，
+而页面上唯一的解释是下拉下方那句**静态**小字 `0–24 hours allowed` —— 它既没说这是
+**试用/规格**的限制，也没说该怎么办。对试用租户来说，"选长租期"的全部可见后果就是按钮灰掉。
+
+现在同一个位置会多出一行明确的错误（浏览器实测，选 `7 days` 之后）：
+
+```
+168 hours is longer than this offering allows. Pick a shorter period, or ask an operator for a longer order.
+```
+
+同时 `Review price` 仍然是 disabled（规则没变，只是不再沉默）。数字由 `duration_hours`
+与 `offering.maximum_duration_hours` 现场算出，不在文案里写死。
+
+测试：`ui/enterprise` 38/38、`cmd/enterprise` 28/28、`cmd/console` 63/63。
