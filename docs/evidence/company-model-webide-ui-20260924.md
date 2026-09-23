@@ -35,6 +35,9 @@ account and organization; no real customer organization was approved.
    observed, not pressed in this check.
    Enterprise **账户与 API 密钥** now shows a pending-review explanation and
    disables **创建成员邀请** until the company becomes active.
+   Selecting commercial **共享 MaaS** for this pending company also returns
+   to **企业审核待完成** rather than jumping to API-key creation. The separate
+   bounded personal free-trial entry remains available.
 4. Enterprise **WebIDE** displayed the authorized `glm-5.3.flash` model, the
    individual MoonDesk choice, access steps, and one-click progress.
    **打开 MoonDesk / MoonCode** created a fresh one-time handoff and opened the
