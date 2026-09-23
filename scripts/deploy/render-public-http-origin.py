@@ -51,6 +51,13 @@ def checked_origin(value):
     return "%s://%s" % (parts.scheme, parts.netloc)
 
 
+def checked_origins(value):
+    origins = [checked_origin(part) for part in value.split(",")]
+    if len(origins) != len(set(origins)):
+        raise ValueError("origin list contains duplicates")
+    return ",".join(origins)
+
+
 def checked_open_value(value):
     """`*` or an exact origin.
 
@@ -62,7 +69,7 @@ def checked_open_value(value):
     """
     if value == "*":
         return value
-    return checked_origin(value)
+    return checked_origins(value)
 
 
 def render_open(dist, page, value):
@@ -131,7 +138,7 @@ def main():
         if not separator or not page or not origin:
             sys.exit("--origin expects PAGE=ORIGIN, got %s" % entry)
         try:
-            rendered = checked_origin(origin)
+            rendered = checked_origins(origin)
         except ValueError as error:
             sys.exit(str(error))
         render(arguments.dist, page, rendered)

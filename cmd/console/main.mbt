@@ -402,7 +402,7 @@ extern "js" fn format_unix_ms(value : Int64, unavailable : String) -> String =
   #|     return unavailable;
   #|   }
   #|   try {
-  #|     return new Date(milliseconds).toISOString().replace("T", " ").replace(/:\d\d\.\d\d\dZ$/, " UTC");
+  #|     return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date(milliseconds)) + " 北京时间";
   #|   } catch (_) {
   #|     return unavailable;
   #|   }
@@ -9117,8 +9117,23 @@ fn update(
 /// gateway then attaches operator authority to every same-origin request, so
 /// the credential field only needs a marker instead of a real token.
 fn deployment_console_open() -> Bool {
-  let declared = operator_open_origin()
-  declared != "" && (declared == "*" || declared == console_page_origin())
+  operator_open_matches(operator_open_origin(), console_page_origin())
+}
+
+///|
+fn operator_open_matches(declared : String, page_origin : String) -> Bool {
+  if declared == "" || page_origin == "" {
+    return false
+  }
+  if declared == "*" {
+    return true
+  }
+  for candidate in declared.split(",") {
+    if candidate == page_origin {
+      return true
+    }
+  }
+  false
 }
 
 ///|
@@ -9580,8 +9595,8 @@ fn login_view(
           @html.p(
             class="login-transport-warning",
             console_copy(
-              locale, "Administrative login is blocked on public plain HTTP. Use the protected localhost URL or install TLS first.",
-              "公共明文 HTTP 已禁止运维登录。请使用受保护的本机地址，或先部署 TLS。",
+              locale, "This address is not the configured Operator origin. Open the deployment's exact HTTP console address to use auto-login.",
+              "当前地址不是已配置的 Operator 入口。请打开本部署的准确 HTTP 控制台地址使用免登录。",
             ),
           )
         } else if model.endpoint.has_prefix("http://") &&
@@ -9684,7 +9699,7 @@ fn login_view(
             class="login-sso-link",
             attrs=@html.Attrs::build().aria_disabled("true"),
             console_copy(
-              locale, "Organization sign-in requires HTTPS", "组织登录需要 HTTPS",
+              locale, "Open the configured Operator address", "请打开已配置的 Operator 地址",
             ),
           )
         },
@@ -9772,11 +9787,10 @@ fn login_view(
 fn main {
   let locale = @i18n.parse_locale(stored_locale_preference())
   let is_demo = demo_mode()
-  // "*" declares the deployment open for every origin that can reach it; any
-  // other value must match the exact page origin.
+  // "*" declares the deployment open for every origin that can reach it;
+  // otherwise one of the declared exact origins must match the page.
   let open_origin = operator_open_origin()
-  let open_mode = open_origin != "" &&
-    (open_origin == "*" || open_origin == console_page_origin())
+  let open_mode = operator_open_matches(open_origin, console_page_origin())
   apply_console_locale(locale)
   let base_model : AppModel = {
     endpoint: configured_endpoint(),

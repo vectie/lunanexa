@@ -72,11 +72,28 @@ fn two_digits(value : Int64) -> String {
 /// operator/customer projections. This deliberately avoids locale-dependent
 /// host formatting so screenshots, exports, and audit review agree.
 pub fn format_unix_ms_utc(unix_ms : Int64) -> String {
+  format_unix_ms_with_offset(unix_ms, 0L, "UTC")
+}
+
+///|
+/// Formats an instant for all operator and customer-facing timestamps in
+/// Beijing time, independently of the browser or server's local timezone.
+pub fn format_unix_ms_beijing(unix_ms : Int64) -> String {
+  format_unix_ms_with_offset(unix_ms, 28800000L, "北京时间")
+}
+
+///|
+fn format_unix_ms_with_offset(
+  unix_ms : Int64,
+  offset_ms : Int64,
+  zone_label : String,
+) -> String {
   if unix_ms < 0L {
     return "—"
   }
-  let days = unix_ms / 86400000L
-  let day_ms = unix_ms % 86400000L
+  let local_ms = unix_ms + offset_ms
+  let days = local_ms / 86400000L
+  let day_ms = local_ms % 86400000L
   // Inverse of Howard Hinnant's days_from_civil.
   let z = days + 719468L
   let era = if z >= 0L { z / 146097L } else { (z - 146096L) / 146097L }
@@ -100,5 +117,5 @@ pub fn format_unix_ms_utc(unix_ms : Int64) -> String {
   let hour = day_ms / 3600000L
   let minute = day_ms % 3600000L / 60000L
   let second = day_ms % 60000L / 1000L
-  "\{year}-\{two_digits(month)}-\{two_digits(day)} \{two_digits(hour)}:\{two_digits(minute)}:\{two_digits(second)} UTC"
+  "\{year}-\{two_digits(month)}-\{two_digits(day)} \{two_digits(hour)}:\{two_digits(minute)}:\{two_digits(second)} \{zone_label}"
 }

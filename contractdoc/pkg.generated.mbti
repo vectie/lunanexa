@@ -21,6 +21,8 @@ pub fn form_creation_stage(ContractFormKind) -> ContractFormStage
 
 pub fn format_cny_minor_units(Int64) -> String
 
+pub fn format_unix_ms_beijing(Int64) -> String
+
 pub fn format_unix_ms_utc(Int64) -> String
 
 pub fn is_undertaking_template(String) -> Bool

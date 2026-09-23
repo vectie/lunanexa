@@ -33,6 +33,12 @@ test "only a declared open deployment skips the login gate" {
       deployment_console_open()
     }),
   )
+  assert_true(
+    with_console_metas(
+      "http://internal.example:4174,http://console.example:4174",
+      () => deployment_console_open(),
+    ),
+  )
   assert_false(
     with_console_metas("http://other.example:4174", () => {
       deployment_console_open()

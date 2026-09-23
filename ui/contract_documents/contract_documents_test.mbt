@@ -768,7 +768,7 @@ test "operator approvals use a confirmation gate and task inbox" {
   assert_true(html.contains("close:Expired"))
   assert_true(html.contains("CNY 1.00"))
   assert_true(html.contains("sha256:aaaaaaaa"))
-  assert_true(html.contains("1970-01-01 00:00:01 UTC"))
+  assert_true(html.contains("1970-01-01 08:00:01 北京时间"))
 }
 
 ///|

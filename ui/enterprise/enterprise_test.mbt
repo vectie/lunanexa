@@ -77,7 +77,7 @@ test "customer notification inbox is bilingual and keeps opaque receipts" {
   assert_true(english.contains("Disable email"))
   assert_true(english.contains("In-app delivery always remains enabled"))
   assert_true(english.contains("exclusive-lease:demo:5"))
-  assert_true(english.contains("2026-08-09 23:30:00 UTC"))
+  assert_true(english.contains("2026-08-10 07:30:00 北京时间"))
   assert_false(english.contains(">1786318200000<"))
   let chinese = @enterprise.render({
     ..state,

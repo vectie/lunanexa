@@ -2854,7 +2854,7 @@ pub fn demo_state() -> ConsoleState {
         user_id: "user-alice",
         role: Developer,
         scope: "workspace/research-main",
-        expires_at: "2026-08-12 18:00 UTC",
+        expires_at: "2026-08-13 02:00 北京时间",
         state: GrantActive,
       },
     ],
@@ -2865,8 +2865,8 @@ pub fn demo_state() -> ConsoleState {
         subject_ref: "subject-alice",
         workspace: "research-main",
         resource: "Text generation · 2 concurrent",
-        started_at: "2026-08-12 10:00 UTC",
-        expires_at: "2026-08-12 18:00 UTC",
+        started_at: "2026-08-12 18:00 北京时间",
+        expires_at: "2026-08-13 02:00 北京时间",
         state: Active,
       },
       {
@@ -2875,8 +2875,8 @@ pub fn demo_state() -> ConsoleState {
         subject_ref: "subject-mina",
         workspace: "research-pending",
         resource: "Text generation · 1 concurrent",
-        started_at: "2026-08-13 08:00 UTC",
-        expires_at: "2026-08-13 12:00 UTC",
+        started_at: "2026-08-13 16:00 北京时间",
+        expires_at: "2026-08-13 20:00 北京时间",
         state: Requested,
       },
     ],
@@ -4541,8 +4541,16 @@ fn users_view(
                         for session in state.account_sessions => {
                           @html.tr([
                             @html.td(class="mono", session.session_id),
-                            @html.td(session.last_used_unix_ms.to_string()),
-                            @html.td(session.expires_unix_ms.to_string()),
+                            @html.td(
+                              @contractdoc.format_unix_ms_beijing(
+                                session.last_used_unix_ms,
+                              ),
+                            ),
+                            @html.td(
+                              @contractdoc.format_unix_ms_beijing(
+                                session.expires_unix_ms,
+                              ),
+                            ),
                             @html.td(
                               if session.revoked_unix_ms is Some(_) {
                                 status_badge(
@@ -9042,7 +9050,9 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
                 @html.tr([
                   @html.td(
                     class="mono secondary",
-                    detail.timestamp_unix_ms.to_string(),
+                    @contractdoc.format_unix_ms_beijing(
+                      detail.timestamp_unix_ms,
+                    ),
                   ),
                   @html.td(detail.action),
                   @html.td(class="mono", detail.model_selector),
@@ -9243,14 +9253,14 @@ fn notification_delivery_error_label(
 }
 
 ///|
-/// Whole UTC days since the Unix epoch. The alert calendar buckets by UTC day
-/// so one console shows the same day headings in every operator timezone.
+/// Whole Beijing calendar days since the Unix epoch. The fixed UTC+8 offset
+/// keeps alert headings stable across operator browser timezones.
 fn alert_day_index(unix_ms : Int64) -> Int64 {
-  unix_ms / 86400000L
+  (unix_ms + 28800000L) / 86400000L
 }
 
 ///|
-/// First UTC day included by a window, relative to `now_unix_ms`. `AllAlerts`
+/// First Beijing day included by a window, relative to `now_unix_ms`. `AllAlerts`
 /// has no lower bound. The bound is inclusive upward so a clock that is behind
 /// the controller never hides a freshly created alert.
 fn alerts_window_lower_day(
@@ -9288,9 +9298,9 @@ pub fn open_alert_count(rows : Array[NotificationRow]) -> Int {
 }
 
 ///|
-/// UTC calendar day of an alert, for example `2026-09-19`.
+/// Beijing calendar day of an alert, for example `2026-09-19`.
 pub fn alert_day_label(unix_ms : Int64) -> String {
-  let stamp = @contractdoc.format_unix_ms_utc(unix_ms)
+  let stamp = @contractdoc.format_unix_ms_beijing(unix_ms)
   let mut day = stamp
   for part in stamp.split(" ") {
     day = part.to_owned()
@@ -9300,7 +9310,7 @@ pub fn alert_day_label(unix_ms : Int64) -> String {
 }
 
 ///|
-/// Bucket alert rows by UTC day, newest day first. Ordering inside one day is
+/// Bucket alert rows by Beijing day, newest day first. Ordering inside one day is
 /// the caller's ordering.
 pub fn group_alerts_by_day(
   rows : Array[NotificationRow],
@@ -9369,7 +9379,10 @@ fn alert_row(
         },
       ),
     ),
-    @html.td(class="mono secondary", row.created_unix_ms.to_string()),
+    @html.td(
+      class="mono secondary",
+      @contractdoc.format_unix_ms_beijing(row.created_unix_ms),
+    ),
     @html.td(if row.assigned_to == "" { "—" } else { row.assigned_to }),
     @html.td(
       @html.div(class="table-actions", [
@@ -9416,7 +9429,7 @@ fn alert_row(
 }
 
 ///|
-/// Alert table body: one heading row per UTC day, newest day first, then that
+/// Alert table body: one heading row per Beijing day, newest day first, then that
 /// day's incidents in their existing order.
 fn alert_rows_by_day(
   state : ConsoleState,

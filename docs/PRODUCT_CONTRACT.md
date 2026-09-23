@@ -31,6 +31,14 @@ follows confirmed workload termination and cleanup, not merely lease expiry.
 
 ## 1. Purpose
 
+Human-facing operator and customer timestamps and alert calendar grouping use
+Asia/Shanghai (UTC+8). Unix timestamps in storage and API contracts remain
+absolute instants; changing the display zone must never shift an expiry instant
+or a metering event. Date-only contract admission retains its existing UTC
+calendar-day rule until the controller and browser can migrate it together.
+Billing-period timezone remains an explicit commercial setting rather than a
+browser-local default.
+
 LunaNexa turns an explicitly inventoried accelerator fleet into a governed
 model provider. The first named acceptance profile contains the owner's four
 DGX Spark nodes, but that inventory is test input rather than product topology.

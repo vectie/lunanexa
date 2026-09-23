@@ -1839,8 +1839,8 @@ fn packet_editor(
                 event_title(event.kind),
                 copy(
                   state.locale,
-                  "\{@contractdoc.format_unix_ms_utc(event.occurred_unix_ms)} · actor \{event.actor_ref} · revision \{event.revision}",
-                  "\{@contractdoc.format_unix_ms_utc(event.occurred_unix_ms)} · 操作人 \{event.actor_ref} · 版本 \{event.revision}",
+                  "\{@contractdoc.format_unix_ms_beijing(event.occurred_unix_ms)} · actor \{event.actor_ref} · revision \{event.revision}",
+                  "\{@contractdoc.format_unix_ms_beijing(event.occurred_unix_ms)} · 操作人 \{event.actor_ref} · 版本 \{event.revision}",
                 ),
                 event.actor_ref,
                 true,
@@ -2192,7 +2192,7 @@ fn operator_confirmation(
                 ),
                 fact(
                   copy(state.locale, "Requested", "发起时间"),
-                  @contractdoc.format_unix_ms_utc(approval.created_unix_ms),
+                  @contractdoc.format_unix_ms_beijing(approval.created_unix_ms),
                 ),
                 fact(
                   copy(state.locale, "Amount", "合同金额"),
@@ -2613,8 +2613,8 @@ fn governance_task_inbox(
           @html.span(
             copy(
               state.locale,
-              "\{obligation.title} · due \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
-              "\{obligation.title} · 到期 \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
+              "\{obligation.title} · due \{@contractdoc.format_unix_ms_beijing(obligation.due_unix_ms)}",
+              "\{obligation.title} · 到期 \{@contractdoc.format_unix_ms_beijing(obligation.due_unix_ms)}",
             ),
           ),
         ]),
@@ -2818,8 +2818,8 @@ fn customer_governance_status(
                   @html.span(
                     copy(
                       state.locale,
-                      "Requested \{@contractdoc.format_unix_ms_utc(approval.created_unix_ms)} · \{approval.action}",
-                      "发起于 \{@contractdoc.format_unix_ms_utc(approval.created_unix_ms)} · \{approval.action}",
+                      "Requested \{@contractdoc.format_unix_ms_beijing(approval.created_unix_ms)} · \{approval.action}",
+                      "发起于 \{@contractdoc.format_unix_ms_beijing(approval.created_unix_ms)} · \{approval.action}",
                     ),
                   ),
                 ]),
@@ -2882,8 +2882,8 @@ fn customer_governance_status(
                       @html.span(
                         copy(
                           state.locale,
-                          "Due \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
-                          "到期 \{@contractdoc.format_unix_ms_utc(obligation.due_unix_ms)}",
+                          "Due \{@contractdoc.format_unix_ms_beijing(obligation.due_unix_ms)}",
+                          "到期 \{@contractdoc.format_unix_ms_beijing(obligation.due_unix_ms)}",
                         ),
                       ),
                     ]),

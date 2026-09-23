@@ -294,7 +294,7 @@ fn delivery_panel_view(
           @html.p(copy(locale, "Model: ", "模型：") + access.model),
           @html.p(
             copy(locale, "Expires: ", "到期时间：") +
-            @contractdoc.format_unix_ms_utc(access.expires_unix_ms),
+            @contractdoc.format_unix_ms_beijing(access.expires_unix_ms),
           ),
           @html.p(
             "\{access.maximum_requests} " +
@@ -367,7 +367,7 @@ fn delivery_panel_view(
                   "\{option.label} · \{option.node_count} " +
                   copy(locale, "nodes", "台") +
                   " · " +
-                  @contractdoc.format_unix_ms_utc(option.expires_at_ms),
+                  @contractdoc.format_unix_ms_beijing(option.expires_at_ms),
                 )
               }),
             ],
@@ -440,7 +440,7 @@ fn delivery_panel_view(
             ),
             @html.p(
               copy(locale, "Expires: ", "到期时间：") +
-              @contractdoc.format_unix_ms_utc(operation.expires_at_ms),
+              @contractdoc.format_unix_ms_beijing(operation.expires_at_ms),
             ),
             if operation.cache_hit {
               @html.p(
