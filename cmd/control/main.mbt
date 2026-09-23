@@ -1352,6 +1352,12 @@ async fn main {
         trusted_root_path=Some(
           required_environment("LUNANEXA_COSIGN_TRUSTED_ROOT_PATH"),
         ),
+        offline_public_key_paths=match
+          @env.get_env_var("LUNANEXA_COSIGN_OFFLINE_PUBLIC_KEY_PATHS") {
+          Some(value) if value != "" =>
+            value.split(",").map(part => part.to_owned()).collect()
+          _ => []
+        },
       ),
     )
     .with_workspace_directory(
