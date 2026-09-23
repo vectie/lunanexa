@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: comfyui-public-demo
+  namespace: aigc-acceptance-20260915
+  labels:
+    app: comfyui-acceptance
+    lunanexa.io/purpose: anonymous-demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: comfyui-acceptance-ingress
+  namespace: aigc-acceptance-20260915
+spec:
+  podSelector:
+    matchLabels:
+      app: comfyui-acceptance
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 8188
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comfyui-public
+  namespace: aigc-acceptance-20260915
+spec:
+  type: LoadBalancer
+  selector:
+    app: comfyui-acceptance
+  ports:
+    - name: http-ui-5000
+      port: 5000
+      targetPort: 8188
+      nodePort: 30918
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comfyui-acceptance
+  namespace: aigc-acceptance-20260915
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: comfyui-acceptance
+  template:
+    metadata:
+      labels:
+        app: comfyui-acceptance
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: initialize-workspace
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:7c554a7076df577d6ca826d5aa7f2c11b7cbb4630cc41b71c84ab3b2992ec5e7
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/lunanexa-webide-model-proxy
+          env:
+            - name: LUNANEXA_WEBIDE_INITIALIZE
+              value: /workspace
+            - name: LUNANEXA_WEBIDE_INITIAL_MODEL
+              value: test-only.video
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: comfyui
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/comfyui-workspace@sha256:4a48ba086b05c3988694c62c42ac87bfdb4654c536a6bf42650113b15388ed9e
+          imagePullPolicy: IfNotPresent
+          command: [python3, /opt/ComfyUI/main.py]
+          args:
+            - --cpu
+            - --listen
+            - 0.0.0.0
+            - --port
+            - "8188"
+            - --disable-auto-launch
+            - --disable-api-nodes
+            - --disable-all-custom-nodes
+            - --whitelist-custom-nodes
+            - ComfyUI-vLLM-Omni
+            - lunanexa-h3
+            - --user-directory
+            - /workspace/user
+            - --temp-directory
+            - /tmp/comfyui
+            - --input-directory
+            - /workspace/input
+            - --output-directory
+            - /workspace/output
+          env:
+            - name: HOME
+              value: /workspace
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet:
+              path: /system_stats
+              port: 8188
+            periodSeconds: 5
+          volumeMounts:
+            - name: comfyui-vllm-omni-patches
+              mountPath: /opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/comfyui_vllm_omni/utils/api_client.py
+              subPath: api_client.py
+              readOnly: true
+            - name: comfyui-vllm-omni-patches
+              mountPath: /opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/comfyui_vllm_omni/nodes.py
+              subPath: nodes.py
+              readOnly: true
+            - name: comfyui-vllm-omni-patches
+              mountPath: /opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni/comfyui_vllm_omni/utils/video_transport.py
+              subPath: video_transport.py
+              readOnly: true
+            - name: lunanexa-h3-templates
+              mountPath: /opt/ComfyUI/custom_nodes/lunanexa-h3
+              readOnly: true
+            - name: workspace
+              mountPath: /workspace
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: comfyui-vllm-omni-patches
+          configMap:
+            name: comfyui-vllm-omni-patches
+        - name: lunanexa-h3-templates
+          hostPath:
+            path: /data/models/comfyui-templates/lunanexa-h3
+            type: Directory
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: comfyui-public-demo
+        - name: tmp
+          emptyDir:
+            sizeLimit: 2Gi
