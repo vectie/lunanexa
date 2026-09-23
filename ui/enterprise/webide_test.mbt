@@ -25,6 +25,40 @@ test "inactive workspace does not claim a prepared lease is waiting for activati
 }
 
 ///|
+test "one-click connection shows model-first progress and never claims client completion early" {
+  let ready = { ..@enterprise.demo_state(), route: DesktopIde, }
+  let before = @enterprise.render(ready)
+  assert_true(before.contains("One-click connection"))
+  assert_true(before.contains("aria-label=\"Connection progress\""))
+  assert_true(before.contains("aria-valuenow=\"25\""))
+  let issuing = ready.update(LaunchDesktopClient)
+  assert_true(@enterprise.render(issuing).contains("aria-valuenow=\"50\""))
+  assert_true(
+    @enterprise.render(issuing).contains("Issuing a single-use connection"),
+  )
+  let issued = {
+    ..issuing,
+    loading: false,
+    desktop_connect_phase: ClientOpened,
+  }
+  let issued_page = @enterprise.render(issued)
+  assert_true(issued_page.contains("aria-valuenow=\"75\""))
+  assert_true(issued_page.contains("Continue in MoonDesk"))
+  assert_false(issued_page.contains("aria-valuenow=\"100\""))
+  guard ready.desktop_client is Some(client) else {
+    fail("missing demo client")
+  }
+  let blocked = {
+    ..ready,
+    desktop_client: Some({ ..client, models_ready: false, ready: false, }),
+  }
+  assert_true(@enterprise.render(blocked).contains("aria-valuenow=\"0\""))
+  assert_true(
+    @enterprise.render(blocked).contains("Waiting for a serving model"),
+  )
+}
+
+///|
 test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   let demo = @enterprise.demo_state()
   guard demo.desktop_client is Some(desktop) else {
