@@ -540,9 +540,9 @@ fn self_service_text_command(
 ///|
 fn product_label(locale : @i18n.Locale, product : SelfServiceProduct) -> String {
   match product {
-    SharedMaaS => enterprise_copy(locale, SharedMaas)
-    DedicatedMaaS => enterprise_copy(locale, DedicatedMaas)
-    BareGpu => enterprise_copy(locale, BareGpu)
+    SharedMaaS => "MaaS · \{enterprise_copy(locale, SharedMaas)}"
+    DedicatedMaaS => "MaaS · \{enterprise_copy(locale, DedicatedMaas)}"
+    BareGpu => "IaaS · \{enterprise_copy(locale, BareGpu)}"
   }
 }
 
@@ -557,6 +557,7 @@ fn product_card(
 ) -> @rabbita.Html {
   @html.article(class="service-choice", [
     @html.p(class="eyebrow", product_label(state.locale, product)),
+    @html.p(class="service-owner", copy(state.locale, "Owned by the selected company", "归当前选择的企业所有")),
     @html.h3(title),
     @html.p(description),
     @html.p(class="service-outcome", outcome),
@@ -592,6 +593,45 @@ fn product_choices(
         product_card(
           state,
           emit,
+          BareGpu,
+          enterprise_copy(state.locale, RentAGpuWorkspace),
+          enterprise_copy(state.locale, ChooseCapacityAndManageYourOwn),
+          enterprise_copy(state.locale, YouReceiveSshAndWebideAccess),
+        ),
+        @html.article(class="service-choice", [
+          @html.p(class="eyebrow", "PaaS · WebIDE"),
+          @html.h3(
+            copy(
+              state.locale,
+              "Open my personal workspace",
+              "打开我的个人工作台",
+            ),
+          ),
+          @html.p(
+            copy(
+              state.locale,
+              "Your own MoonDesk application and saved work. Your company authorizes its resources; teammates keep separate workspaces.",
+              "MoonDesk 应用与保存的工作归你个人；企业授权资源，同事各自拥有独立工作台。",
+            ),
+          ),
+          @html.p(
+            class="service-outcome",
+            copy(
+              state.locale,
+              "I receive my own WebIDE, using company-authorized models.",
+              "获得个人 WebIDE，使用企业授权的模型。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            on_click=command(emit, Navigate(DesktopIde)),
+            copy(state.locale, "Open WebIDE", "打开 WebIDE"),
+          ),
+        ]),
+        product_card(
+          state,
+          emit,
           SharedMaaS,
           enterprise_copy(state.locale, CallAModelApi),
           enterprise_copy(state.locale, NoMachineSelectionStartWithA),
@@ -604,14 +644,6 @@ fn product_choices(
           enterprise_copy(state.locale, DeployAPrivateModelEndpoint),
           enterprise_copy(state.locale, ChooseAGpuAndApprovedModel),
           enterprise_copy(state.locale, YouReceiveAPrivateEndpoint),
-        ),
-        product_card(
-          state,
-          emit,
-          BareGpu,
-          enterprise_copy(state.locale, RentAGpuWorkspace),
-          enterprise_copy(state.locale, ChooseCapacityAndManageYourOwn),
-          enterprise_copy(state.locale, YouReceiveSshAndWebideAccess),
         ),
       ]),
     ],
@@ -753,6 +785,16 @@ fn organization_step(
                   enterprise_copy(state.locale, VerifyOrganization),
                 ),
               ])
+            Some(value) if value.blocker_code == Some("OperatorReviewPending") =>
+              @html.div(
+                class="notice is-warning",
+                attrs=@html.Attrs::build().role("status").aria_live("polite"),
+                copy(
+                  state.locale,
+                  "Your company registration has been sent to platform administrators for review. No external identity provider is required. Refresh after approval to continue.",
+                  "企业注册已提交平台管理员审核，无需外部认证服务。审核通过后刷新此页继续。",
+                ),
+              )
             Some(value) if value.blocker_code ==
               Some("CommercialProviderUnavailable") =>
               @html.div(

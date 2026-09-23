@@ -114,7 +114,7 @@ async test "self-service organizations are session-bound idempotent and multi-or
   assert_eq(first.verification.unwrap().record, None)
   assert_eq(
     first.verification.unwrap().blocker_code,
-    Some("CommercialProviderUnavailable"),
+    Some("OperatorReviewPending"),
   )
   assert_eq(first.organization.legal_profile.unwrap().country_code, "CN")
   assert_eq(
@@ -591,6 +591,66 @@ async test "self-service organizations are session-bound idempotent and multi-or
   assert_true(
     activated.verification.unwrap().record is Some(record) &&
     record.state == Verified,
+  )
+  let operator_headers = { "Authorization": "Bearer operator-token" }
+  let pending = service.handle(
+    Get,
+    "/v1/commercial/organizations/pending",
+    operator_headers,
+    "",
+  )
+  assert_eq(pending.status, 200)
+  assert_true(pending.body.contains(second.organization.organization_id))
+  assert_eq(
+    service.handle(Get, "/v1/commercial/organizations/pending", headers, "").status,
+    401,
+  )
+  let review_path = "/v1/commercial/organizations/\{second.organization.organization_id}:approve"
+  assert_eq(
+    service.handle(
+      Post,
+      review_path,
+      operator_headers,
+      "{\"expected_legal_name\":\"Wrong Company\"}",
+    ).status,
+    409,
+  )
+  let approval = service.handle(
+    Post,
+    review_path,
+    operator_headers,
+    "{\"expected_legal_name\":\{second.organization.legal_profile.unwrap().legal_name.to_json().stringify()}}",
+  )
+  assert_eq(approval.status, 200)
+  assert_eq(
+    service.commercial_store
+    .organization(second.organization.organization_id)
+    .unwrap().state,
+    Active,
+  )
+  let second_headers = {
+    "Authorization": "Bearer \{session.secret}",
+    "X-LunaNexa-Organization": second.organization.organization_id,
+  }
+  let invitation_issue = service.handle(
+    Post,
+    "/v1/portal/self/invitations",
+    second_headers,
+    "{\"email\":\"new-member@example.invalid\"}",
+  )
+  assert_eq(invitation_issue.status, 201)
+  assert_true(invitation_issue.body.contains("lnxi_"))
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/portal/self/invitations",
+      {
+        "Authorization": "Bearer \{developer_session.secret}",
+        "X-LunaNexa-Organization": first.organization.organization_id,
+      },
+      "{\"email\":\"unauthorized@example.invalid\"}",
+    ).status,
+    403,
   )
   @fs.rmdir(directory, recursive=true)
 }

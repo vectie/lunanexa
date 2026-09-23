@@ -2350,6 +2350,7 @@ test "the access group replaces only the account and workspace rows" {
   let (opened, _) = update_live(model, Console(Navigate(Users)), emit)
   assert_true(opened.console_read_groups.contains(AccessReads))
   let payload : AccessReadPayload = {
+    pending_organizations: [],
     accounts: [
       {
         account_id: "account-1",

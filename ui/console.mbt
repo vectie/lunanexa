@@ -78,6 +78,20 @@ pub extend StorageNodeRow with Eq::{equal, not_equal}
 pub extend StorageNodeRow with FromJson::{from_json}
 
 ///|
+pub(all) struct PendingOrganizationRow {
+  organization_id : String
+  display_name : String
+  legal_name : String
+  country_code : String
+  registration_number : String
+  registered_address : String
+  contact_email : String
+} derive(Eq)
+
+///|
+pub extend PendingOrganizationRow with Eq::{equal, not_equal}
+
+///|
 pub(all) struct ModelRow {
   model_id : String
   version : String
@@ -2032,6 +2046,7 @@ pub(all) struct ConsoleState {
   access_package_draft : AccessPackageDraft
   access_packages : Array[AccessPackageView]
   users : Array[UserAccessRow]
+  pending_organizations : Array[PendingOrganizationRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
   exclusive_node_leases : Array[ExclusiveNodeLeaseRow]
@@ -2153,6 +2168,7 @@ pub(all) enum ConsoleMessage {
   SubmitQuickDeployment
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
+  ApproveOrganization(String, String)
   RejectEnterpriseLease(String, Int64)
   AcknowledgeAlert(String, Int64)
   AssignAlertToSelf(String, Int64)
@@ -2268,6 +2284,7 @@ pub fn default_state() -> ConsoleState {
     },
     access_packages: [],
     users: [],
+    pending_organizations: [],
     access_grants: [],
     compute_leases: [],
     exclusive_node_leases: [],
@@ -2853,6 +2870,7 @@ pub fn demo_state() -> ConsoleState {
         state: "Ready",
       },
     ],
+    pending_organizations: [],
     users: [
       {
         user_id: "user-alice",
@@ -4483,6 +4501,73 @@ fn users_view(
       ),
     ]),
     trial_summary_view(state),
+    @html.section(class="panel", [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.h3(
+            localized(
+              state.locale,
+              "Company registrations awaiting review",
+              "待审核企业注册",
+            ),
+          ),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Review the submitted legal details. Approval activates the company without an external identity provider; it does not grant machines or paid service.",
+              "核对企业提交的法定资料。审核通过即可激活企业，无需外部认证服务；不会自动开通机器或付费服务。",
+            ),
+          ),
+        ]),
+      ]),
+      if state.pending_organizations.length() == 0 {
+        @html.p(
+          class="empty-state compact",
+          localized(
+            state.locale,
+            "No registrations await review.",
+            "暂无待审核企业。",
+          ),
+        )
+      } else {
+        @html.div(
+          class="record-list",
+          [
+            for organization in state.pending_organizations => {
+              @html.article(class="record-card", [
+                @html.div([
+                  @html.h4(organization.display_name),
+                  @html.p(
+                    "\{organization.legal_name} · \{organization.country_code} · \{organization.registration_number}",
+                  ),
+                  @html.p(class="secondary", organization.registered_address),
+                  @html.p(class="secondary", organization.contact_email),
+                  @html.small(class="mono", organization.organization_id),
+                ]),
+                @html.button(
+                  type_="button",
+                  class="primary-button",
+                  disabled=state.loading,
+                  on_click=command(
+                    emit,
+                    ApproveOrganization(
+                      organization.organization_id,
+                      organization.legal_name,
+                    ),
+                  ),
+                  localized(
+                    state.locale,
+                    "Approve company registration",
+                    "审核通过企业注册",
+                  ),
+                ),
+              ])
+            }
+          ],
+        )
+      },
+    ]),
     match state.authenticated_account {
       Some(account) =>
         @html.section(

@@ -21,8 +21,20 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(models.contains("Managed centrally"))
   assert_false(models.contains("/data/models"))
   assert_true(models.contains("Usage &amp; costs"))
+  assert_true(models.contains("IaaS · company machines"))
+  assert_true(models.contains("PaaS · personal applications"))
+  assert_true(models.contains("MaaS · company models"))
   assert_true(models.contains("aria-current=\"page\""))
   assert_true(models.contains("prefers-reduced-motion:reduce"))
+}
+
+///|
+test "company administrator can invite members in UI without sharing a WebIDE" {
+  let state = @enterprise.demo_state()
+  let html = @enterprise.render({ ..state, route: AccountAccess, })
+  assert_true(html.contains("Company members"))
+  assert_true(html.contains("Create member invitation"))
+  assert_true(html.contains("Their WebIDE and chat remain personal"))
 }
 
 ///|
@@ -798,16 +810,16 @@ test "pending organization exposes provider verification or an explicit blocker"
     organizations: [pending],
     self_service: { ..state.self_service, step: Organization, },
   })
-  assert_true(html.contains("Organization verification pending"))
+  assert_true(html.contains("Company approval pending"))
   assert_true(html.contains("Verify organization"))
   assert_true(html.contains("https://verify.example.test/start"))
-  assert_true(html.contains("Refresh verification"))
+  assert_true(html.contains("Refresh approval status"))
   let blocked = {
     ..pending,
     verification: Some({
       required: true,
       record: None,
-      blocker_code: Some("CommercialProviderUnavailable"),
+      blocker_code: Some("OperatorReviewPending"),
     }),
   }
   let blocked_html = @enterprise.render({
@@ -817,7 +829,7 @@ test "pending organization exposes provider verification or an explicit blocker"
     self_service: { ..state.self_service, step: Organization, },
   })
   assert_true(
-    blocked_html.contains("Identity verification provider is unavailable"),
+    blocked_html.contains("sent to platform administrators for review"),
   )
 }
 

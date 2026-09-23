@@ -1313,9 +1313,7 @@ fn enterprise_copy(
     OrganizationReady =>
       @i18n.copy(locale, "Organization ready", "组织已就绪")
     OrganizationVerificationPending =>
-      @i18n.copy(
-        locale, "Organization verification pending", "组织验证待完成",
-      )
+      @i18n.copy(locale, "Company approval pending", "企业审核待完成")
     ThisOrderWillBeOwnedBy =>
       @i18n.copy(
         locale, "This order will be owned by your active organization. Tenant and subject identifiers are derived from your signed-in session.",
@@ -1345,10 +1343,10 @@ fn enterprise_copy(
       )
     Back => @i18n.copy(locale, "Back", "返回")
     RefreshVerification =>
-      @i18n.copy(locale, "Refresh verification", "刷新验证状态")
+      @i18n.copy(locale, "Refresh approval status", "刷新审核状态")
     Continue => @i18n.copy(locale, "Continue", "继续")
     WaitingForVerification =>
-      @i18n.copy(locale, "Waiting for verification", "等待验证")
+      @i18n.copy(locale, "Waiting for approval", "等待审核")
     CreateACompanyOrJoinOne =>
       @i18n.copy(
         locale, "Create a company or join one", "创建公司或加入已有公司",

@@ -427,8 +427,12 @@ Production gate still required:
 - authenticated users may create an individual or company customer organization
   with legal profile, default cost center/project and owner roles, or join an
   existing organization using a one-time email-bound invitation;
-- identity-verification requests are durable provider records; organization
-  activation requires an authenticated provider callback;
+- identity-verification requests are durable provider records when configured;
+  otherwise pending company registrations appear in the operator UI for
+  manual legal-profile review and activation, with an audit reference;
+- the company creator is an OrganizationAdministrator who can invite Developer
+  members from the enterprise UI; WebIDE work remains personal while machine
+  leases and model inference services are company-owned;
 - the enterprise portal supports explicit multi-organization selection and
   propagates `X-LunaNexa-Organization` to every organization-scoped request;
 - live regional bare-machine and dedicated-endpoint SKUs support immutable

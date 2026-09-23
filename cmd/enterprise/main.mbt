@@ -305,6 +305,7 @@ priv struct DesktopClientHandoffLaunch {
 
 ///|
 priv enum Outcome {
+  MemberInvitationIssued(Int64, String)
   OrganizationsLoaded(
     Int64,
     Array[@enterprise_ui.SelfServiceOrganizationView],
@@ -372,6 +373,11 @@ priv enum Outcome {
   ApiKeySecretCopied(Int64)
   Failed(@i18n.Locale, String)
 }
+
+///|
+priv struct IssuedMemberInvitationResponse {
+  secret : String
+} derive(FromJson)
 
 ///|
 priv enum AppMessage {
@@ -4298,6 +4304,50 @@ fn update(
         ({ ..model, portal: next, }, api_key_issue_command(model, emit))
       }
     }
+    Portal(SubmitMemberInvite) => {
+      let email = model.portal.member_invite_email.trim().to_owned()
+      guard !model.demo_mode &&
+        model.token.has_prefix("lnxs_") &&
+        email.contains("@") &&
+        model.portal.membership is Some(membership) &&
+        membership.active &&
+        membership.roles.contains(OrganizationAdministrator) else {
+        return (model, @rabbita.none)
+      }
+      let next = { ..model, portal: model.portal.update(SubmitMemberInvite), }
+      let body = { "email": email.to_json() }.to_json().stringify()
+      let generation = model.session_generation
+      let cmd = @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+        try
+          @json.from_json(
+            @json.parse(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/portal/self/invitations",
+                model.token,
+                model.subject_ref,
+                body~,
+              ),
+            ),
+          )
+        catch {
+          error =>
+            Failed(
+              model.portal.locale,
+              portal_copy(
+                model.portal.locale,
+                "Could not create the invitation: \{error.to_string()}",
+                "无法创建邀请：\{error.to_string()}",
+              ),
+            )
+        } noraise {
+          (issued : IssuedMemberInvitationResponse) =>
+            MemberInvitationIssued(generation, issued.secret)
+        }
+      })
+      (next, cmd)
+    }
     Portal(ConfirmRevokeApiKey(key_id)) => {
       let next = model.portal.update(ConfirmRevokeApiKey(key_id))
       if model.demo_mode {
@@ -5102,6 +5152,30 @@ fn update(
       }
     Portal(portal_message) =>
       ({ ..model, portal: model.portal.update(portal_message), }, @rabbita.none)
+    Outcome(MemberInvitationIssued(generation, secret)) =>
+      if generation != model.session_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              member_invite_email: "",
+              member_invite_secret: Some(secret),
+              member_invite_loading: false,
+              success_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Invitation created. Share the one-time code with the teammate.",
+                  "邀请已创建，请将一次性邀请码发给同事。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
     Outcome(ApiKeyIssued(generation, issued)) =>
       if generation != model.session_generation {
         (model, @rabbita.none)
@@ -6146,6 +6220,7 @@ fn update(
               ),
             },
             loading: false,
+            member_invite_loading: false,
             desktop_connect_phase: if model.portal.desktop_connect_phase ==
               IssuingHandoff {
               ConnectFailed

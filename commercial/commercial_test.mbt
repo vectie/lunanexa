@@ -518,6 +518,52 @@ test "verified identity evidence activates pending organization idempotently" {
 }
 
 ///|
+test "operator-reviewed company registration activates without an external provider" {
+  let store = @commercial.CommercialStore::new()
+  let profile : @commercial.OrganizationLegalProfile = {
+    subject_kind: Company,
+    legal_name: "Reviewed Research Limited",
+    country_code: "CN",
+    registration_number: Some("91310000REVIEW0001"),
+    tax_identifier: None,
+    registered_address: "Beijing",
+    billing_contact: {
+      display_name: "Accounts",
+      email: "accounts@example.invalid",
+      phone: None,
+    },
+  }
+  store.add_organization({
+    organization_id: "org-review",
+    display_name: "Reviewed Research",
+    state: PendingVerification,
+    verification_ref: None,
+    legal_profile: Some(profile),
+    created_unix_ms: 1000L,
+  })
+  let approved = store.approve_organization_registration(
+    "org-review", "operator-approval:evidence-a",
+  )
+  assert_eq(approved.state, Active)
+  assert_eq(
+    store.approve_organization_registration(
+      "org-review", "operator-approval:evidence-a",
+    ),
+    approved,
+  )
+  try
+    store.approve_organization_registration(
+      "org-review", "operator-approval:evidence-b",
+    )
+  catch {
+    InvalidTransition(_) => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("a second review silently replaced the approval evidence")
+  }
+}
+
+///|
 test "formal organization legal profiles validate while legacy snapshots remain readable" {
   let store = @commercial.CommercialStore::new()
   let profile : @commercial.OrganizationLegalProfile = {

@@ -322,6 +322,7 @@ pub fn CommercialStore::add_quota(Self, Quota) -> Unit raise CommercialError
 pub fn CommercialStore::admit(Self, AdmissionRequest) -> AdmissionDecision raise CommercialError
 pub fn CommercialStore::append_adjustment(Self, String, String, String, LedgerEntryKind, FixedMoney, String, Int64) -> LedgerEntry raise CommercialError
 pub fn CommercialStore::approve_commitment(Self, String, String, String, Int64) -> CapacityCommitment raise CommercialError
+pub fn CommercialStore::approve_organization_registration(Self, String, String) -> Organization raise CommercialError
 pub fn CommercialStore::consume_entitlement(Self, EntitlementConsumption) -> IdempotencyResult raise CommercialError
 pub fn CommercialStore::create_agreement(Self, Agreement) -> Unit raise CommercialError
 pub fn CommercialStore::durable_snapshot(Self) -> CommercialDurableSnapshot
