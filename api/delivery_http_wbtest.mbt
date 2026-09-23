@@ -92,3 +92,12 @@ test "delivery routes do not match unrelated enterprise or operator paths" {
   assert_false(delivery_path("/v1/portal/self/client-handoffs"))
   assert_false(delivery_path("/v1/assignments"))
 }
+
+///|
+test "ComfyUI delivery rejects text templates while model API keeps them" {
+  let text = machine_dedicated_template()
+  assert_false(template_supports_delivery_kind(text, Workspace))
+  assert_true(template_supports_delivery_kind(text, ModelApi))
+  let video = { ..text, capability: VideoGenerate, }
+  assert_true(template_supports_delivery_kind(video, Workspace))
+}
