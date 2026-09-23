@@ -524,6 +524,14 @@ fn enterprise_machine_request_allowed(
     authorization.length() <= 4103 else {
     return false
   }
+  if path.has_prefix("/v1/workloads/") {
+    let segments = path["/v1/workloads/".length():].split("/").to_array()
+    return match segments {
+      [workload_id] if workload_id != "" => method_ == Get
+      [workload_id, "cancel"] if workload_id != "" => method_ == Post
+      _ => false
+    }
+  }
   (method_ == Get && path == "/v1/models") ||
   (
     method_ == Post &&
