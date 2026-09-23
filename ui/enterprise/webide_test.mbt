@@ -61,6 +61,52 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
 }
 
 ///|
+test "exclusive ComfyUI is launched only from a delivery and loopback WebIDE explains local app" {
+  let demo = @enterprise.demo_state()
+  guard demo.desktop_client is Some(desktop) else {
+    fail("missing demo client")
+  }
+  let comfy = {
+    ..desktop,
+    client_id: "comfyui",
+    display_name: "ComfyUI",
+    launch_uri: "https://creative.example/connect",
+    ready: true,
+  }
+  let selected = {
+    ..demo,
+    route: DesktopIde,
+    desktop_clients: [desktop, comfy],
+  }.update(SelectWebIde("comfyui"))
+  assert_eq(@enterprise.webide_launch_selection(selected), None)
+  let rendered = @enterprise.render(selected)
+  assert_true(
+    rendered.contains("workspace lease alone does not reserve a machine"),
+  )
+  assert_true(rendered.contains("disabled>Open ComfyUI"))
+  let chinese = @enterprise.render(
+    selected.update(LocaleChanged(ChineseSimplified)),
+  )
+  assert_true(chinese.contains("仅有工作区租约不会预留机器"))
+  assert_true(chinese.contains("通用 WebIDE 交接无法启动它"))
+  let local_desktop = {
+    ..desktop,
+    launch_uri: "http://127.0.0.1:4188/connect",
+    ready: true,
+  }
+  let local_state = {
+    ..demo,
+    route: DesktopIde,
+    desktop_client: Some(local_desktop),
+  }
+  assert_true(
+    @enterprise.render(local_state).contains(
+      "loopback address is not a public website",
+    ),
+  )
+}
+
+///|
 test "WebIDE labels remain escaped and selecting a client clears old notices" {
   let demo = @enterprise.demo_state()
   guard demo.desktop_client is Some(desktop) else {

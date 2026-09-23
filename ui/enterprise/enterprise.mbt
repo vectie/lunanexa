@@ -3082,6 +3082,7 @@ pub fn webide_launch_selection(
   state : EnterpriseState,
 ) -> (String?, String, Array[String])? {
   guard state.desktop_client is Some(client) &&
+    client.client_id != "comfyui" &&
     client.ready &&
     !client.approved_model_aliases.is_empty() else {
     return None
@@ -3170,6 +3171,13 @@ fn desktop_ide_view(
     webide_launch_selection(state) is Some(_)
   let next_action = if state.desktop_client is None {
     enterprise_copy(state.locale, YourOperatorMustFinishDesktopIntegration)
+  } else if state.desktop_client is Some(client) &&
+    client.client_id == "comfyui" {
+    copy(
+      state.locale,
+      "ComfyUI needs an active GPU delivery. Select an authorized resource and published template in Exclusive resource services above, then open it from that delivery. A workspace lease alone does not reserve a machine.",
+      "ComfyUI 需要有效的 GPU 交付。请在上方「独占资源服务」选择已授权资源和已发布模板，再从该交付打开。仅有工作区租约不会预留机器。",
+    )
   } else if !contract_ready {
     enterprise_copy(state.locale, CompleteTheMasterleaseEverythingElseStays)
   } else if !workspace_ready {
@@ -3179,6 +3187,16 @@ fn desktop_ide_view(
   } else if state.webide_order_id is Some(_) &&
     webide_launch_selection(state) is None {
     enterprise_copy(state.locale, TheSelectedPaidEndpointIsUnavailable)
+  } else if state.desktop_client is Some(client) &&
+    (
+      client.launch_uri.contains("127.0.0.1") ||
+      client.launch_uri.contains("localhost")
+    ) {
+    copy(
+      state.locale,
+      "Open the local MoonDesk app on this computer before continuing. This loopback address is not a public website.",
+      "请先在这台电脑上启动 MoonDesk 客户端。此本机地址不是公网网站。",
+    )
   } else {
     enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
   }
@@ -3391,11 +3409,20 @@ fn desktop_ide_view(
           @html.div([
             @html.strong(enterprise_copy(state.locale, OpenWebide)),
             @html.p(
-              copy(
-                state.locale,
-                "One click opens \{name} with a \{lifetime}-second single-use handoff.",
-                "点击一次即可通过 \{lifetime} 秒有效的单次交接打开 \{name}。",
-              ),
+              if state.desktop_client is Some(client) &&
+                client.client_id == "comfyui" {
+                copy(
+                  state.locale,
+                  "Open ComfyUI from an active GPU delivery above; the generic WebIDE handoff cannot start it.",
+                  "请从上方有效的 GPU 交付打开 ComfyUI；通用 WebIDE 交接无法启动它。",
+                )
+              } else {
+                copy(
+                  state.locale,
+                  "One click opens \{name} with a \{lifetime}-second single-use handoff.",
+                  "点击一次即可通过 \{lifetime} 秒有效的单次交接打开 \{name}。",
+                )
+              },
             ),
           ]),
         ]),
