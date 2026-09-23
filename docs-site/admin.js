@@ -54,7 +54,7 @@
   }
   function renderChrome() {
     document.documentElement.lang = state.locale;
-    document.title = `LunaNexa · ${t("title")}`;
+    document.title = `能源谷“创未来”生态街区 · ${t("title")}`;
     $("[data-language-label]").textContent = t("language");
     $("[data-coursebook-link]").textContent = t("coursebook");
     $("[data-kicker]").textContent = t("kicker"); $("[data-title]").textContent = t("title"); $("[data-summary]").textContent = t("summary");
@@ -129,7 +129,7 @@
     }
   }
   function init() {
-    try { state.locale = localStorage.getItem("lunanexa.locale") === "zh-CN" ? "zh-CN" : "en"; } catch { state.locale = "en"; }
+    try { state.locale = localStorage.getItem("lunanexa.locale") === "en" ? "en" : "zh-CN"; } catch { state.locale = "zh-CN"; }
     $("[data-locale]").value = state.locale;
     $("[data-locale]").addEventListener("change", (event) => { state.locale = event.target.value === "zh-CN" ? "zh-CN" : "en"; try { localStorage.setItem("lunanexa.locale", state.locale); } catch { /* optional */ } renderChrome(); refresh(); });
     $("[data-refresh]").addEventListener("click", refresh); renderChrome(); refresh();

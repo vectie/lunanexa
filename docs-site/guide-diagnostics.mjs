@@ -216,7 +216,7 @@ export function buildGuideDiagnostics({
     { code: "Coursebook", health: evidenceMap.coursebook === "available" ? "healthy" : "unavailable", runbook_page_id: "source-ledger" },
     { code: "KnowledgeIndex", health: knowledgeStale ? "stale" : "healthy", runbook_page_id: manifest.diagnostic_runbooks.KnowledgeRevisionStale },
     { code: "GuideAssistant", health: !petEnabled ? "disabled" : assistantHealthy ? "healthy" : "unavailable", runbook_page_id: manifest.diagnostic_runbooks.GuideAdapterUnavailable },
-    { code: "LunaNexaController", health: snapshots?.health?.ok ? "healthy" : "unavailable", runbook_page_id: manifest.diagnostic_runbooks.ControllerUnavailable },
+    { code: "PlatformController", health: snapshots?.health?.ok ? "healthy" : "unavailable", runbook_page_id: manifest.diagnostic_runbooks.ControllerUnavailable },
     { code: "AdministratorDiagnostics", health: adminMissing.length ? "degraded" : "healthy", runbook_page_id: "debug-controller" },
   ];
   const result = {

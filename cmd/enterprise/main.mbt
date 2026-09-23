@@ -6251,7 +6251,7 @@ fn app_view(
           @html.h1(
             id="enterprise-sign-in-title",
             portal_copy(
-              locale, "LunaNexa enterprise access", "LunaNexa 企业访问",
+              locale, "Energy Valley · Create the Future Ecosystem District", "能源谷“创未来”生态街区",
             ),
           ),
           @html.p(

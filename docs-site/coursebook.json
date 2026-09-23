@@ -1,10 +1,10 @@
 {
   "contract_version": "moonbook.repository-coursebook.v1",
   "project": {
-    "name": "LunaNexa",
-    "short_name": "LN",
+    "name": "能源谷“创未来”生态街区",
+    "short_name": "创未来",
     "tagline": "Operate a private GPU fleet as a governed model provider.",
-    "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting LunaNexa.",
+    "description": "A newcomer-friendly coursebook for learning, using, deploying, and troubleshooting 能源谷“创未来”生态街区.",
     "language": "en",
     "revision": "cb3b61b458f6b35a39e13f12501735f5bd34b67b",
     "freshness": "reviewed",
@@ -67,8 +67,8 @@
     {
       "id":"welcome",
       "group_id":"overview",
-      "title":"What is LunaNexa?",
-      "summary":"LunaNexa is the model-as-a-service and GPU-cluster control plane between authorized model consumers and a private hardware fleet. It governs models, nodes, placement, inference, access, evidence, and recovery without turning managed nodes into application servers.",
+      "title":"What is 能源谷“创未来”生态街区?",
+      "summary":"能源谷“创未来”生态街区 is the model-as-a-service and GPU-cluster control plane between authorized model consumers and a private hardware fleet. It governs models, nodes, placement, inference, access, evidence, and recovery without turning managed nodes into application servers.",
       "audience":"New platform operators, infrastructure engineers, and model-service clients",
       "estimated_minutes":7,
       "status":"implemented",
@@ -76,14 +76,14 @@
       "source_ids":["readme","product-contract","implementation-status"],
       "blocks":[
         {"kind":"heading","level":2,"id":"one-sentence-model","text":"The one-sentence mental model"},
-        {"kind":"paragraph","text":"Applications ask for a generic model capability. LunaNexa authenticates and admits that request, selects a ready deployment on an eligible node, invokes an approved serving adapter, and returns normalized output plus auditable usage and timing evidence."},
+        {"kind":"paragraph","text":"Applications ask for a generic model capability. 能源谷“创未来”生态街区 authenticates and admits that request, selects a ready deployment on an eligible node, invokes an approved serving adapter, and returns normalized output plus auditable usage and timing evidence."},
         {"kind":"flow","title":"From demand to governed inference","steps":[
           {"title":"Consumer intent","text":"An authorized client sends a provider-neutral workload envelope."},
           {"title":"Control plane","text":"Policy, quota, lease, model, and capacity checks decide whether work may run."},
           {"title":"Node runtime","text":"A selected DGX runs only an approved, digest-pinned model server."},
           {"title":"Bounded result","text":"The client receives normalized output, usage, timing, status, and a receipt."}
         ]},
-        {"kind":"heading","level":2,"id":"what-it-owns","text":"What LunaNexa owns"},
+        {"kind":"heading","level":2,"id":"what-it-owns","text":"What 能源谷“创未来”生态街区 owns"},
         {"kind":"cards","items":[
           {"title":"Cluster operations","text":"Node enrollment, health, capacity, cordon, drain, reconciliation, and recovery.","href":"architecture"},
           {"title":"Model lifecycle","text":"Artifacts, licenses, evaluations, aliases, deployments, promotion, and rollback.","href":"deployment-flow"},
@@ -91,7 +91,7 @@
           {"title":"Human access","text":"Operator administration, enterprise onboarding, workspace grants and leases, and exclusive-node leases.","href":"access-flow"}
         ]},
         {"kind":"callout","visibility":"advanced","tone":"warning","title":"Tomorrow's deployment is still an acceptance run","text":"The repository has a deployable baseline and extensive simulation evidence. It has not manufactured the missing physical-DGX, production identity, model-license, runtime-image, performance, and named-human acceptance evidence."},
-        {"kind":"checkpoint","question":"What is the most important architectural boundary?","answer":"Application and product decisions stop above LunaNexa. Managed GPU nodes receive only LunaNexa infrastructure, approved runtime containers, signed model artifacts, and bounded telemetry.","revisit_after_days":2}
+        {"kind":"checkpoint","question":"What is the most important architectural boundary?","answer":"Application and product decisions stop above 能源谷“创未来”生态街区. Managed GPU nodes receive only 能源谷“创未来”生态街区 infrastructure, approved runtime containers, signed model artifacts, and bounded telemetry.","revisit_after_days":2}
       ]
     },
     {
@@ -113,7 +113,7 @@
           "Rabbita management console, enterprise portal, developer workbench, and a scoped VS Code extension.",
           "Signed assignments, digest and Cosign checks, strict per-node runtime routing, bounded admission, cancellation, and receipt-bearing failures.",
           "Four-node functional simulation, restart drills, isolation scans, secret scans, response-leak checks, and browser tests.",
-          "A live two-node pilot: one management host and one NVIDIA worker, with all current LunaNexa Pods ready at the observed checkpoint, zero restarts, and ModelScope search available through the protected controller path."
+          "A live two-node pilot: one management host and one NVIDIA worker, with all current 能源谷“创未来”生态街区 Pods ready at the observed checkpoint, zero restarts, and ModelScope search available through the protected controller path."
         ]},
         {"kind":"heading","level":2,"id":"external-gates","text":"External acceptance gates"},
         {"kind":"table","columns":["Gate","Current evidence","Required before production claim"],"rows":[
@@ -132,7 +132,7 @@
       "id":"boundaries",
       "group_id":"overview",
       "title":"Know the trust and product boundaries",
-      "summary":"LunaNexa is deliberately narrow: it manages model capacity and hardware authority. It does not become an application platform, agent runtime, identity provider, secret manager, container registry, object store, or metrics database.",
+      "summary":"能源谷“创未来”生态街区 is deliberately narrow: it manages model capacity and hardware authority. It does not become an application platform, agent runtime, identity provider, secret manager, container registry, object store, or metrics database.",
       "audience":"Architects, security reviewers, and integration developers",
       "estimated_minutes":7,
       "status":"implemented",
@@ -140,23 +140,23 @@
       "source_ids":["product-contract","architecture","security","workspaces"],
       "blocks":[
         {"kind":"heading","level":2,"id":"managed-node-rule","text":"The managed-node rule"},
-        {"kind":"callout","tone":"success","title":"Allowed on a managed DGX","text":"The LunaNexa node agent, an approved model-runtime container, the exact signed model artifacts named by an assignment, host-owned trust material, and bounded infrastructure telemetry."},
+        {"kind":"callout","tone":"success","title":"Allowed on a managed DGX","text":"The 能源谷“创未来”生态街区 node agent, an approved model-runtime container, the exact signed model artifacts named by an assignment, host-owned trust material, and bounded infrastructure telemetry."},
         {"kind":"callout","tone":"danger","title":"Forbidden on a managed DGX","text":"MoonSuite applications, repository checkouts, domain schemas, editor agents, application credentials, arbitrary controller-supplied shell commands, and product-specific workflows."},
         {"kind":"heading","level":2,"id":"payload-distinction","text":"Structural isolation is not payload absence"},
-        {"kind":"paragraph","text":"A model must receive the user content it processes. LunaNexa therefore treats structural isolation as absolute while applying minimization, transport encryption, explicit data classification, no logging by default, and explicit retention policy to inference payloads."},
+        {"kind":"paragraph","text":"A model must receive the user content it processes. 能源谷“创未来”生态街区 therefore treats structural isolation as absolute while applying minimization, transport encryption, explicit data classification, no logging by default, and explicit retention policy to inference payloads."},
         {"kind":"heading","level":2,"id":"workspace-vs-node-lease","text":"Workspace lease versus exclusive-node lease"},
         {"kind":"table","columns":["Contract","Grants","Does not grant"],"rows":[
           ["WorkspaceLease","Time-bounded control-plane admission and generic model capability limits","DGX login, shell, repository checkout, or node filesystem access"],
           ["ExclusiveNodeLease","One named subject, one named DGX, time-bounded host access under a separate guarded lifecycle","Concurrent managed inference placement or an application-level workflow"]
         ]},
-        {"kind":"checkpoint","question":"May the browser workbench install an editor agent on a managed node?","answer":"No. It keeps editing state in the browser/workspace domain and invokes LunaNexa through the provider-neutral workload contract.","revisit_after_days":3}
+        {"kind":"checkpoint","question":"May the browser workbench install an editor agent on a managed node?","answer":"No. It keeps editing state in the browser/workspace domain and invokes 能源谷“创未来”生态街区 through the provider-neutral workload contract.","revisit_after_days":3}
       ]
     },
     {
       "id":"feature-map",
       "group_id":"overview",
       "title":"Tour the feature set",
-      "summary":"LunaNexa is one product with multiple deployable components. The feature map follows operator and client outcomes rather than the source directory tree.",
+      "summary":"能源谷“创未来”生态街区 is one product with multiple deployable components. The feature map follows operator and client outcomes rather than the source directory tree.",
       "audience":"Anyone orienting to the repository",
       "estimated_minutes":9,
       "status":"implemented",
@@ -188,7 +188,7 @@
       "source_ids":["architecture","product-contract"],
       "blocks":[
         {"kind":"flow","title":"Trust-domain overview","steps":[
-          {"title":"Consumers","text":"MoonGate or another authorized client sends the generic LunaNexa contract."},
+          {"title":"Consumers","text":"MoonGate or another authorized client sends the generic 能源谷“创未来”生态街区 contract."},
           {"title":"Management domain","text":"API, scheduler, controller, registry, stores, PostgreSQL, console, enterprise portal, and workbench govern intent."},
           {"title":"Node domain","text":"One protected node agent per explicitly enrolled compute node reconciles signed assignments and supervises approved OCI runtimes."},
           {"title":"Inference result","text":"The selected ready adapter produces bounded output and evidence through the control plane."}
@@ -206,7 +206,7 @@
         ]},
         {"kind":"heading","level":2,"id":"deployment-profile-topology","text":"Topology is explicit deployment-profile data"},
         {"kind":"paragraph","text":"The planned four-Spark campaign is one named acceptance inventory, not a product node-count rule. Single-node serving is the first target. Multi-node sharding stays disabled until the selected network, runtime, model, and topology pass a named benchmark."},
-        {"kind":"callout","tone":"warning","title":"Roles are selected, not inferred","text":"Management and compute may be separate or explicitly co-located. A management label, accelerator, network interface, or SSH route never enrolls compute capacity by itself; a bastion is optional operator networking, not a LunaNexa role."}
+        {"kind":"callout","tone":"warning","title":"Roles are selected, not inferred","text":"Management and compute may be separate or explicitly co-located. A management label, accelerator, network interface, or SSH route never enrolls compute capacity by itself; a bastion is optional operator networking, not a 能源谷“创未来”生态街区 role."}
       ]
     },
     {
@@ -266,7 +266,7 @@
           "Adapter loss becomes RuntimeUnavailable with retryability derived from the failure class."
         ]},
         {"kind":"callout","tone":"warning","title":"Declared size is not trusted","text":"Workspace admission measures UTF-8 bytes of canonical payload JSON and requires the actual size to fit both the request ceiling and lease limit."},
-        {"kind":"checkpoint","question":"Why can LunaNexa retry only before the first streamed output?","answer":"Once output reaches the caller, retrying on another node could duplicate or contradict visible results. Pre-output retry preserves one logical response boundary.","revisit_after_days":3}
+        {"kind":"checkpoint","question":"Why can 能源谷“创未来”生态街区 retry only before the first streamed output?","answer":"Once output reaches the caller, retrying on another node could duplicate or contradict visible results. Pre-output retry preserves one logical response boundary.","revisit_after_days":3}
       ]
     },
     {
@@ -289,7 +289,7 @@
           {"title":"Promote or recover","text":"Operator inspects evidence, promotes, rolls back, or deletes through audited operations."}
         ]},
         {"kind":"heading","level":2,"id":"blocked-operation","text":"Blocked is a durable result"},
-        {"kind":"paragraph","text":"When a prerequisite is missing, LunaNexa does not launch partially. The deployment operation remains durable in Blocked with typed preflight findings. Reusing the same idempotency key returns the same operation rather than creating duplicate assignments."},
+        {"kind":"paragraph","text":"When a prerequisite is missing, 能源谷“创未来”生态街区 does not launch partially. The deployment operation remains durable in Blocked with typed preflight findings. Reusing the same idempotency key returns the same operation rather than creating duplicate assignments."},
         {"kind":"table","columns":["Preflight evidence","Failure prevents"],"rows":[
           ["License acceptance and model approval","Deploying unapproved or unlicensed model bytes"],
           ["Full model digest and detached signature","Launching substituted or corrupted artifacts"],
@@ -305,14 +305,14 @@
       "id":"enrollment-flow",
       "group_id":"concepts",
       "title":"Trace node enrollment and reconciliation",
-      "summary":"Kubernetes registration and LunaNexa enrollment are separate. Each selected placement joins Kubernetes and receives explicit role labels; each selected compute placement then enrolls with one-use bootstrap material and a unique persistent node credential.",
+      "summary":"Kubernetes registration and 能源谷“创未来”生态街区 enrollment are separate. Each selected placement joins Kubernetes and receives explicit role labels; each selected compute placement then enrolls with one-use bootstrap material and a unique persistent node credential.",
       "audience":"Cluster installer",
       "estimated_minutes":12,
       "status":"documented",
       "tags":["node enrollment","heartbeat","certificate","dgx"],
       "source_ids":["deployment","operations","product-contract"],
       "blocks":[
-        {"kind":"table","columns":["Host","Kubernetes action","LunaNexa action"],"rows":[
+        {"kind":"table","columns":["Host","Kubernetes action","能源谷“创未来”生态街区 action"],"rows":[
           ["Management placement","Join the selected Kubernetes distribution; label lunanexa.io/role=management","No compute enrollment unless the same host is separately selected and qualified"],
           ["Compute placement","Join the selected Kubernetes distribution; label lunanexa.io/role=gpu","Enroll once with bootstrap token; retain unique node credential"]
         ]},
@@ -356,7 +356,7 @@
         {"kind":"table","columns":["Delivery","What you receive","What stays separate"],"rows":[["IaaS","An exclusive bare-machine lease and secure access handoff","Commercial agreement, payment and machine cleanup lifecycle"],["PaaS","An isolated WebIDE or ComfyUI workspace with persistent storage","Private-cloud administrator approval is not a machine rental"],["MaaS","A scoped model API, shared or bound to a dedicated order","Model readiness, authorization and usage accounting"]]},
         {"kind":"callout","tone":"info","title":"Your work and your login are different","text":"Workflows, uploads and generated files live in the workspace volume, not the temporary browser session. Reopen the same authorized workspace to continue; a logout or container restart is not a file deletion. Organization/project boundaries, retention policy and explicit deletion still apply. Download important results for your own backup."},
         {"kind":"heading","level":2,"id":"identity-transport","text":"Behind the scenes: identity and authorization"},
-        {"kind":"paragraph","text":"The platform-operated Keycloak identity service stores passwords and handles verification and MFA; the LunaNexa controller does not store those credentials. Account membership, scoped grants, leases and audit receipts remain platform checks. Administrators inspect their technical details; ordinary users should not copy identifiers, sign receipts or configure trust for each launch."},
+        {"kind":"paragraph","text":"The platform-operated Keycloak identity service stores passwords and handles verification and MFA; the 能源谷“创未来”生态街区 controller does not store those credentials. Account membership, scoped grants, leases and audit receipts remain platform checks. Administrators inspect their technical details; ordinary users should not copy identifiers, sign receipts or configure trust for each launch."},
         {"kind":"heading","level":2,"id":"exclusive-access","text":"Behind the scenes: exclusive-machine lifecycle"},
         {"kind":"flow","steps":[
           {"title":"Reserve","text":"One subject and one eligible compute node are bound; managed placement is fenced immediately."},
@@ -397,7 +397,7 @@
       "group_id":"quickstart",
       "title":"Use the management console",
       "summary":"The Rabbita console is the operator surface for cluster posture, nodes, models, deployments, users, grants, leases, policies, requests, benchmarks, and audit evidence. It sends the same typed API mutations used by automation.",
-      "audience":"LunaNexa operator",
+      "audience":"能源谷“创未来”生态街区 operator",
       "estimated_minutes":9,
       "status":"implemented",
       "tags":["console","operator","nodes","models","deployments"],
@@ -410,7 +410,7 @@
           {"title":"Use confirmation boundaries","text":"Cordon, drain, rollback, revoke, suspend, and early lease termination show scope and require explicit confirmation."},
           {"title":"Verify convergence","text":"After a mutation, follow desired state through operation, assignment, node heartbeat, runtime readiness, and audit receipt."}
         ]},
-        {"kind":"image","src":"./images/console-overview.zh-CN.jpg","alt":"The live LunaNexa management console in Simplified Chinese, showing the overview dashboard before a controller is connected.","caption":"Real browser capture of the management console. This disconnected state is intentional: the UI does not invent node or model health before it receives controller data."},
+        {"kind":"image","src":"./images/console-overview.zh-CN.jpg","alt":"The live 能源谷“创未来”生态街区 management console in Simplified Chinese, showing the overview dashboard before a controller is connected.","caption":"Real browser capture of the management console. This disconnected state is intentional: the UI does not invent node or model health before it receives controller data."},
         {"kind":"cards","items":[
           {"title":"Nodes","text":"Health, inventory, labels, workloads, cordon, drain, and lease mode."},
           {"title":"Models","text":"Artifact, license, evaluation, compatibility, aliases, and approval."},
@@ -440,7 +440,7 @@
           {"title":"Invoke explicitly","text":"The client sends a canonical ephemeral request with bounded input/output and a unique workload/idempotency identity."},
           {"title":"Inspect result evidence","text":"Read normalized output, status, usage, timing, and receipt; server rejection remains authoritative if a lease expires mid-session."}
         ]},
-        {"kind":"image","src":"./images/developer-workbench.zh-CN.jpg","alt":"The live LunaNexa developer workbench in Simplified Chinese, showing its access gate and browser-local workspace shell.","caption":"Real browser capture of the developer workbench before a workspace token is provided. The access gate remains separate from the model editor."},
+        {"kind":"image","src":"./images/developer-workbench.zh-CN.jpg","alt":"The live 能源谷“创未来”生态街区 developer workbench in Simplified Chinese, showing its access gate and browser-local workspace shell.","caption":"Real browser capture of the developer workbench before a workspace token is provided. The access gate remains separate from the model editor."},
         {"kind":"heading","level":2,"id":"external-editors","text":"External editors"},
         {"kind":"table","columns":["Client","Current role","Credential boundary"],"rows":[
           ["VS Code extension","Working scoped client over explicitly selected text","Token in SecretStorage, bound to approved origin and machine-scoped settings"],
@@ -454,7 +454,7 @@
       "id":"client-api",
       "group_id":"quickstart",
       "title":"Integrate a provider-neutral client",
-      "summary":"Clients use LunaNexa's canonical workload contract rather than sending application identity or provider-specific assumptions to the cluster. Compatibility APIs are adapters, not the source of truth.",
+      "summary":"Clients use 能源谷“创未来”生态街区's canonical workload contract rather than sending application identity or provider-specific assumptions to the cluster. Compatibility APIs are adapters, not the source of truth.",
       "audience":"Provider-router or application-integration developer",
       "estimated_minutes":10,
       "status":"implemented",
@@ -463,7 +463,7 @@
       "blocks":[
         {"kind":"heading","level":2,"id":"client-responsibilities","text":"Client responsibilities"},
         {"kind":"bullets","items":[
-          "Translate application authority and data policy into the generic WorkloadEnvelope outside LunaNexa.",
+          "Translate application authority and data policy into the generic WorkloadEnvelope outside 能源谷“创未来”生态街区.",
           "Use opaque tenant, workload, correlation, and idempotency values that reveal no product identity.",
           "Select a published model alias or capability, never a repository path or internal node address.",
           "Honor typed retryability, deadlines, cancellation, and receipt-bearing terminal results.",
@@ -477,7 +477,7 @@
       "id":"tomorrow-deployment",
       "group_id":"deployment",
       "title":"Deploy management first, then explicitly selected compute",
-      "summary":"Management, model-data/storage and compute are logical roles. Install and verify the management foundation through the guarded UI first; qualify and enroll only explicitly selected compute afterward. A lab host may carry temporary compute, while a bastion remains optional operator networking rather than a LunaNexa role.",
+      "summary":"Management, model-data/storage and compute are logical roles. Install and verify the management foundation through the guarded UI first; qualify and enroll only explicitly selected compute afterward. A lab host may carry temporary compute, while a bastion remains optional operator networking rather than a 能源谷“创未来”生态街区 role.",
       "audience":"Named deployment operator",
       "estimated_minutes":16,
       "status":"documented",
@@ -499,7 +499,7 @@
         {"kind":"code","language":"text","label":"Management UI fields (references only)","code":"Deployment target: Management foundation\nSSH user and port: selected host login\nPrivate key / known_hosts: absolute operator-machine paths\nManagement Kubernetes node: exact kubectl node name\nManagement SSH host: direct host or operator-owned OpenSSH alias\nKubeconfig / rendered directory: absolute operator-machine paths\nProtected management secret manifest: absolute mode-0600 file path\nConfirmation: leave empty until Preview succeeds"},
         {"kind":"callout","tone":"info","title":"No access-node assumption","text":"Connect directly or use an operator-owned VPN/OpenSSH ProxyJump. A bastion is not registered as management or compute and is not required for daily browser, API or node-agent traffic."},
         {"kind":"callout","tone":"danger","title":"Roles are explicit, never inferred","text":"Accelerator presence does not silently make a management host schedulable. Co-located temporary compute requires a separate qualification and enrollment decision; the planned four-DGX campaign is an explicit acceptance inventory, not a platform node-count invariant."},
-        {"kind":"callout","tone":"danger","title":"Current Ascend 310P3 is not compute-ready","text":"The host device is healthy, but Kubernetes exposes no huawei.com/Ascend resource and LunaNexa telemetry/runtime supervision is still NVIDIA-specific. Compute Preview now fails closed. Do not upgrade CANN or enroll the host until the reviewed runtime, device plugin, LunaNexa adapters, reboot recovery and model evidence all pass."},
+        {"kind":"callout","tone":"danger","title":"Current Ascend 310P3 is not compute-ready","text":"The host device is healthy, but Kubernetes exposes no huawei.com/Ascend resource and 能源谷“创未来”生态街区 telemetry/runtime supervision is still NVIDIA-specific. Compute Preview now fails closed. Do not upgrade CANN or enroll the host until the reviewed runtime, device plugin, 能源谷“创未来”生态街区 adapters, reboot recovery and model evidence all pass."},
         {"kind":"callout","tone":"warning","title":"Use the installer UI within its boundary","text":"The UI starts after hosts join Kubernetes. Preview and verify is read-only and shows only a bounded non-secret resource change plan; a failed or unsummarizable diff blocks changes. For the management-only path, Deploy management foundation requires the scope-specific phrase. The companion accepts no arbitrary shell, browser-pasted private key, kubeadm join token or secret value."},
         {"kind":"heading","level":2,"id":"modelsource-onboarding","text":"Onboard ModelScope models from the protected console"},
         {"kind":"steps","items":[
@@ -536,14 +536,14 @@
           ["SGLang","30000","OpenAI-compatible chat; Responses compatibility must be proven or adapted","1 GPU, TP=1, bfloat16, 0.80 static memory, 8192 context"]
         ]},
         {"kind":"code","language":"sh","label":"Qualification sequence","code":"kubectl apply -f deploy/dgx-spark/runtime-qualification-prerequisites.yaml\nkubectl apply -f RENDERED_VLLM.yaml\nkubectl -n lunanexa-runtime-qualification rollout status deployment/vllm-dgx-spark --timeout=30m\nkubectl -n lunanexa-runtime-qualification logs deployment/vllm-dgx-spark --tail=200"},
-        {"kind":"callout","tone":"danger","title":"Current packaging gap","text":"The LunaNexa materializer currently publishes one verified artifact file, while vLLM/SGLang normally consume a multi-file Hugging Face directory. Production promotion needs a reviewed assignment-bound packaging/extraction adapter that reverifies output before mounting it."},
-        {"kind":"callout","tone":"warning","title":"LunaFlux is a future DGX candidate, not a current runtime","text":"LunaFlux passed physical CUDA inventory and several isolated primitive/kernel fixtures on the temporary RTX 5060 Ti, but it has no promoted Linux/CUDA image digest or complete model/kernel rollout unit. MiniCPM schema compatibility and individual kernel numerics are not end-to-end inference proof. Add a LunaNexa template only after the exact image, launch/model/policy roots, listener, live readiness, model correctness and soak evidence are retained."},
+        {"kind":"callout","tone":"danger","title":"Current packaging gap","text":"The 能源谷“创未来”生态街区 materializer currently publishes one verified artifact file, while vLLM/SGLang normally consume a multi-file Hugging Face directory. Production promotion needs a reviewed assignment-bound packaging/extraction adapter that reverifies output before mounting it."},
+        {"kind":"callout","tone":"warning","title":"LunaFlux is a future DGX candidate, not a current runtime","text":"LunaFlux passed physical CUDA inventory and several isolated primitive/kernel fixtures on the temporary RTX 5060 Ti, but it has no promoted Linux/CUDA image digest or complete model/kernel rollout unit. MiniCPM schema compatibility and individual kernel numerics are not end-to-end inference proof. Add a 能源谷“创未来”生态街区 template only after the exact image, launch/model/policy roots, listener, live readiness, model correctness and soak evidence are retained."},
         {"kind":"heading","level":2,"id":"qualification-evidence","text":"Evidence to retain"},
         {"kind":"bullets","items":[
           "Exact runtime image, model tree/archive, and detached-signature digests.",
           "Cold and warm start, time to first token, p50/p95/p99 latency, tokens per second, and memory pressure.",
           "Malformed input, invalid model, cancellation, concurrency saturation, OOM rejection, process restart, and node drain.",
-          "A successful LunaNexa route and normalized streaming receipt through the approved HTTPS boundary."
+          "A successful 能源谷“创未来”生态街区 route and normalized streaming receipt through the approved HTTPS boundary."
         ]}
       ]
     },
@@ -575,7 +575,7 @@
           "Customer: open Notifications in the enterprise portal, confirm the message belongs to the expected order or lease, follow its safe action, and choose Mark as read.",
           "If email, SMS, or webhook delivery fails, continue with the in-app record and investigate the operator DeliveryDeadLetter alert."
         ]},
-        {"kind":"code","language":"sh","label":"Operator read-only triage (credentials come from the secret provider)","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_MONITORING_TOKEN:?load monitoring authority without printing it}\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/notifications/operator\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/observability/events\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/metrics\""},
+        {"kind":"code","language":"sh","label":"Operator read-only triage (credentials come from the secret provider)","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved 能源谷“创未来”生态街区 API origin}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_MONITORING_TOKEN:?load monitoring authority without printing it}\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/notifications/operator\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/observability/events\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_MONITORING_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/metrics\""},
         {"kind":"heading","level":2,"id":"trigger-model","text":"Recipe 2: correlate events, metrics, alerts, and audit"},
         {"kind":"flow","title":"The trigger model","steps":[
           {"title":"Operational event","text":"The component emits bounded JSON with a stable event code, outcome, component, time, and correlation receipt."},
@@ -594,7 +594,7 @@
           {"title":"Reconcile","text":"A reviewer who did not submit the evidence accepts or rejects the exact digest. Rejection keeps history and requests a replacement revision."},
           {"title":"Fulfill","text":"The operator creates the opaque entitlement only after every policy-required agreement, payment, invoice, identity, and approval item is accepted."}
         ]},
-        {"kind":"code","language":"sh","label":"Customer and operator read-only order checks","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_INFERENCE_TOKEN:?load customer API authority without printing it}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_CLIENT_CERT_PATH:?set the verified client certificate path}\"\n: \"${LUNANEXA_CLIENT_KEY_PATH:?set the protected client key path}\"\n\ncurl --fail-with-body --silent --show-error \\\n  --cert \"$LUNANEXA_CLIENT_CERT_PATH\" --key \"$LUNANEXA_CLIENT_KEY_PATH\" \\\n  -H \"Authorization: Bearer $LUNANEXA_INFERENCE_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/offline-commerce/self/orders\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/offline-commerce/operator/snapshot\""},
+        {"kind":"code","language":"sh","label":"Customer and operator read-only order checks","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved 能源谷“创未来”生态街区 API origin}\"\n: \"${LUNANEXA_INFERENCE_TOKEN:?load customer API authority without printing it}\"\n: \"${LUNANEXA_OPERATOR_TOKEN:?load operator authority without printing it}\"\n: \"${LUNANEXA_CLIENT_CERT_PATH:?set the verified client certificate path}\"\n: \"${LUNANEXA_CLIENT_KEY_PATH:?set the protected client key path}\"\n\ncurl --fail-with-body --silent --show-error \\\n  --cert \"$LUNANEXA_CLIENT_CERT_PATH\" --key \"$LUNANEXA_CLIENT_KEY_PATH\" \\\n  -H \"Authorization: Bearer $LUNANEXA_INFERENCE_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/offline-commerce/self/orders\"\n\ncurl --fail-with-body --silent --show-error \\\n  -H \"Authorization: Bearer $LUNANEXA_OPERATOR_TOKEN\" \\\n  \"$LUNANEXA_ENDPOINT/v1/offline-commerce/operator/snapshot\""},
         {"kind":"callout","tone":"danger","title":"A generated file is not a legal or financial outcome","text":"The PDF is the print copy and the DOCX is an editable source. An upload is not an e-signature, a receipt is not bank settlement, and generated metadata is not a tax invoice. Keep the order paused until the organization's authorized legal and finance reviewers accept the required evidence."},
         {"kind":"heading","level":2,"id":"machine-recipe","text":"Recipe 4: use and end an exclusive-machine lease safely"},
         {"kind":"steps","items":[
@@ -604,8 +604,8 @@
           "Operator: watch Draining, RevokingAccess, and Sanitizing. Do not restore managed scheduling merely because the account disappeared.",
           "Operator: return the node to managed service only after the current sanitization receipt is verified; quarantine and alert on any cleanup failure."
         ]},
-        {"kind":"code","language":"sh","label":"Customer read-only access and notification checks","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved LunaNexa API origin}\"\n: \"${LUNANEXA_INFERENCE_TOKEN:?load customer API authority without printing it}\"\n: \"${LUNANEXA_CLIENT_CERT_PATH:?set the verified client certificate path}\"\n: \"${LUNANEXA_CLIENT_KEY_PATH:?set the protected client key path}\"\n\nfor path in /v1/machine-access/self /v1/notifications/self; do\n  curl --fail-with-body --silent --show-error \\\n    --cert \"$LUNANEXA_CLIENT_CERT_PATH\" --key \"$LUNANEXA_CLIENT_KEY_PATH\" \\\n    -H \"Authorization: Bearer $LUNANEXA_INFERENCE_TOKEN\" \\\n    \"$LUNANEXA_ENDPOINT$path\"\ndone"},
-        {"kind":"callout","tone":"warning","title":"Exclusive does not mean root","text":"The initial offering is an exclusive non-root account with a documented filesystem boundary and rootless containers. It does not grant sudo, management-node access, LunaNexa daemon credentials, another tenant's data, or permission to disable the node-local expiry guard."},
+        {"kind":"code","language":"sh","label":"Customer read-only access and notification checks","code":"set -eu\n: \"${LUNANEXA_ENDPOINT:?set the approved 能源谷“创未来”生态街区 API origin}\"\n: \"${LUNANEXA_INFERENCE_TOKEN:?load customer API authority without printing it}\"\n: \"${LUNANEXA_CLIENT_CERT_PATH:?set the verified client certificate path}\"\n: \"${LUNANEXA_CLIENT_KEY_PATH:?set the protected client key path}\"\n\nfor path in /v1/machine-access/self /v1/notifications/self; do\n  curl --fail-with-body --silent --show-error \\\n    --cert \"$LUNANEXA_CLIENT_CERT_PATH\" --key \"$LUNANEXA_CLIENT_KEY_PATH\" \\\n    -H \"Authorization: Bearer $LUNANEXA_INFERENCE_TOKEN\" \\\n    \"$LUNANEXA_ENDPOINT$path\"\ndone"},
+        {"kind":"callout","tone":"warning","title":"Exclusive does not mean root","text":"The initial offering is an exclusive non-root account with a documented filesystem boundary and rootless containers. It does not grant sudo, management-node access, 能源谷“创未来”生态街区 daemon credentials, another tenant's data, or permission to disable the node-local expiry guard."},
         {"kind":"heading","level":2,"id":"guide-recipe","text":"Recipe 5: use the guide without crossing roles"},
         {"kind":"table","columns":["Surface","Allowed information","Never available"],"rows":[
           ["Public Ask guide","Published coursebook explanations and citations","Live cluster state, private evidence, raw logs, credentials, or operator actions"],
@@ -803,7 +803,7 @@
       "id":"observability-recovery",
       "group_id":"operations",
       "title":"Observe, back up, and recover",
-      "summary":"Operate LunaNexa through bounded metrics, audit events, benchmark evidence, durable snapshots, and a fenced recovery plan. Recovery begins read-only and advances authority only after state and external effects agree.",
+      "summary":"Operate 能源谷“创未来”生态街区 through bounded metrics, audit events, benchmark evidence, durable snapshots, and a fenced recovery plan. Recovery begins read-only and advances authority only after state and external effects agree.",
       "audience":"On-call operator and disaster-recovery owner",
       "estimated_minutes":13,
       "status":"implemented",
@@ -860,7 +860,7 @@
       "blocks":[
         {"kind":"troubleshooting","symptom":"A DGX does not appear or becomes Unreachable.","likely_causes":["Kubernetes node name, LUNANEXA_NODE_ID, and inventory node_id do not match.","Bootstrap material expired, was replayed, or persistent node credential is wrong.","Heartbeat transport, certificate, clock, generation, or replay protection rejected the update.","Node agent is stopped or cannot read protected host material."],"checks":["Verify Kubernetes name and GPU label.","Inspect node-agent service/pod status and bounded logs.","Check certificate expiry, clock, last accepted heartbeat, and controller audit rejection code.","Confirm unique credential files exist with correct ownership without printing their contents."],"resolution":["Correct identity or host material, rotate through the documented certificate/bootstrap path, and wait for a current authenticated heartbeat."],"escalate_when":["Credential reuse or a forged/stale heartbeat is suspected.","A leased node's watchdog or helper is not protected."]},
         {"kind":"troubleshooting","symptom":"A deployment is Blocked or no node is eligible.","likely_causes":["Missing license, evaluation, approval, signature, secret reference, or data-class evidence.","GPU architecture, memory, runtime, model, lease, or node state fails a hard filter.","The node is cordoned, draining, unreachable, exclusively leased, or lacks the exact ready deployment heartbeat."],"checks":["Read typed preflight findings and placement rationale.","Compare desired artifact/runtime digests with the approved alias and live heartbeat.","Inspect accelerator free memory, health, labels, taints, lease mode, and route-map coverage."],"resolution":["Supply the missing reviewed evidence or restore truthful capacity/readiness. Do not edit labels to imitate a ready runtime."],"escalate_when":["The same snapshot produces inconsistent placement or a hard filter is bypassed."]},
-        {"kind":"troubleshooting","symptom":"Invocation ends with RuntimeUnavailable or readiness never converges.","likely_causes":["Artifact size, digest, or signature verification failed.","Digest-pinned image is missing, wrong architecture, substituted, lacks health check, or exits.","Strict node endpoint is absent or TLS/network policy blocks it.","The serving API does not match LunaNexa's configured adapter contract."],"checks":["Inspect materialization and quarantine receipts.","Verify exact OCI identity and image-defined health without exposing credentials.","Probe the runtime from the approved path and compare /health and compatibility endpoint.","Confirm the selected node appears in the strict HTTPS route document."],"resolution":["Fix or requalify the artifact/image/route, then publish a new reviewed template or assignment generation. Do not use mutable tags or generic fallback routing."],"escalate_when":["Digest identity differs across registry, assignment, cache, and runtime.","The runtime leaks internal paths or credentials in its public error."]}
+        {"kind":"troubleshooting","symptom":"Invocation ends with RuntimeUnavailable or readiness never converges.","likely_causes":["Artifact size, digest, or signature verification failed.","Digest-pinned image is missing, wrong architecture, substituted, lacks health check, or exits.","Strict node endpoint is absent or TLS/network policy blocks it.","The serving API does not match 能源谷“创未来”生态街区's configured adapter contract."],"checks":["Inspect materialization and quarantine receipts.","Verify exact OCI identity and image-defined health without exposing credentials.","Probe the runtime from the approved path and compare /health and compatibility endpoint.","Confirm the selected node appears in the strict HTTPS route document."],"resolution":["Fix or requalify the artifact/image/route, then publish a new reviewed template or assignment generation. Do not use mutable tags or generic fallback routing."],"escalate_when":["Digest identity differs across registry, assignment, cache, and runtime.","The runtime leaks internal paths or credentials in its public error."]}
       ]
     },
     {
@@ -988,10 +988,10 @@
         {"kind":"heading","level":2,"id":"buy-build","text":"Integrate infrastructure; build GPU authority"},
         {"kind":"bullets","items":[
           "Use Kubernetes for workload orchestration and established providers for identity, secrets, networking, storage, PostgreSQL, telemetry, payment, invoice and signature.",
-          "LunaNexa owns GPU-specific desired state, model/runtime governance, capacity admission, lease policy, exclusive access fencing, evidence and reconciliation.",
-          "Do not turn LunaNexa into an identity provider, object store, virtual-network implementation, payment gateway, container engine or metrics database."
+          "能源谷“创未来”生态街区 owns GPU-specific desired state, model/runtime governance, capacity admission, lease policy, exclusive access fencing, evidence and reconciliation.",
+          "Do not turn 能源谷“创未来”生态街区 into an identity provider, object store, virtual-network implementation, payment gateway, container engine or metrics database."
         ]},
-        {"kind":"callout","tone":"danger","title":"Commercial wording follows evidence","text":"Until managed-inference Phase 3 is accepted, call LunaNexa an internal platform or deployment candidate. Until dedicated-workspace Phase 4 is accepted, do not issue customer machine credentials. A contract, invoice or UI state cannot override an operational blocker."},
+        {"kind":"callout","tone":"danger","title":"Commercial wording follows evidence","text":"Until managed-inference Phase 3 is accepted, call 能源谷“创未来”生态街区 an internal platform or deployment candidate. Until dedicated-workspace Phase 4 is accepted, do not issue customer machine credentials. A contract, invoice or UI state cannot override an operational blocker."},
         {"kind":"checkpoint","question":"What is the next real milestone?","answer":"Complete the physical four-node internal-pilot campaign. It converts repository and simulation evidence into environment-specific enrollment, runtime, performance, failure, restore and named-human acceptance without yet promising a customer SLA.","revisit_after_days":1}
       ]
     },
@@ -1000,7 +1000,7 @@
       "group_id":"advanced",
       "visibility":"advanced",
       "title":"How this coursebook was produced",
-      "summary":"This separate site is a MoonBook repository-coursebook projection generated from LunaNexa's current documents, source contracts, and tests. Its evidence file records the exact inspected revision, dirty state, source digests, claim status, and known gaps.",
+      "summary":"This separate site is a MoonBook repository-coursebook projection generated from 能源谷“创未来”生态街区's current documents, source contracts, and tests. Its evidence file records the exact inspected revision, dirty state, source digests, claim status, and known gaps.",
       "audience":"Documentation reviewer and future maintainer",
       "estimated_minutes":7,
       "status":"documented",
@@ -1012,23 +1012,23 @@
         {"kind":"heading","level":2,"id":"freshness","text":"Freshness"},
         {"kind":"callout","tone":"info","title":"Current repository release","text":"Source revision cb490f9e passed the complete repository release gate. Physical DGX enrollment, external adapter acceptance, production PostgreSQL, and named human approval remain separate deployment gates and are not implied by this repository release."},
         {"kind":"heading","level":2,"id":"pet","text":"The read-only documentation pet"},
-        {"kind":"paragraph","text":"The Ask guide panel is optional. A same-origin server sends the published coursebook and public evidence projection to MoonClaw's existing read-only Cowork endpoint. The adapter validates a narrow answer schema and known page citations. It cannot edit LunaNexa, run commands, expose gateway details, or substitute for operator authority."},
+        {"kind":"paragraph","text":"The Ask guide panel is optional. A same-origin server sends the published coursebook and public evidence projection to MoonClaw's existing read-only Cowork endpoint. The adapter validates a narrow answer schema and known page citations. It cannot edit 能源谷“创未来”生态街区, run commands, expose gateway details, or substitute for operator authority."},
         {"kind":"heading","level":2,"id":"reference-lessons","text":"Lessons adapted from the Suanli reference"},
         {"kind":"bullets","items":[
           "Stable product-level navigation above a grouped documentation sidebar.",
           "One focused article with a right-side on-page outline.",
           "Search prominent in the global header.",
           "Clear product overview, quickstart, use instructions, FAQ/debugging, best practices, and prebuilt runtime routes.",
-          "LunaNexa adds explicit evidence status, production gaps, trust boundaries, and a source ledger rather than copying Suanli's brand or claims."
+          "能源谷“创未来”生态街区 adds explicit evidence status, production gaps, trust boundaries, and a source ledger rather than copying Suanli's brand or claims."
         ]},
-        {"kind":"checkpoint","question":"What should happen when LunaNexa source changes?","answer":"Re-run the repository evidence scan, update source digests and claim statuses, regenerate coursebook.json, exercise the site and pet states, and review meaning before publishing.","revisit_after_days":7}
+        {"kind":"checkpoint","question":"What should happen when 能源谷“创未来”生态街区 source changes?","answer":"Re-run the repository evidence scan, update source digests and claim statuses, regenerate coursebook.json, exercise the site and pet states, and review meaning before publishing.","revisit_after_days":7}
       ]
     },
     {
       "id": "choose-your-path",
       "group_id": "overview",
       "title": "Choose your path: three service levels, three roles",
-      "summary": "LunaNexa serves three very different people — the administrator running a private GPU cloud, the enterprise user holding leases, and the visitor on a free trial — through three service levels: a model API, managed development environments, and whole-machine rental. Find your row and column; this page points you at the right tutorial.",
+      "summary": "能源谷“创未来”生态街区 serves three very different people — the administrator running a private GPU cloud, the enterprise user holding leases, and the visitor on a free trial — through three service levels: a model API, managed development environments, and whole-machine rental. Find your row and column; this page points you at the right tutorial.",
       "audience": "Anyone opening this coursebook for the first time and wondering which pages are meant for them",
       "estimated_minutes": 5,
       "status": "documented",
@@ -1048,7 +1048,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Documentation makes more sense once you know two things: which service level you are buying, and which chair you sit in. LunaNexa has three of each, and every page in this coursebook sits at one intersection. Spend two minutes on the map below and the rest of the book will feel written for you."
+          "text": "Documentation makes more sense once you know two things: which service level you are buying, and which chair you sit in. 能源谷“创未来”生态街区 has three of each, and every page in this coursebook sits at one intersection. Spend two minutes on the map below and the rest of the book will feel written for you."
         },
         {
           "kind": "heading",
@@ -1067,7 +1067,7 @@
             [
               "Model as a Service",
               "Call approved models through one provider-neutral API or the browser workbench",
-              "Machines, drivers, model files, placement — LunaNexa picks a healthy machine for every request"
+              "Machines, drivers, model files, placement — 能源谷“创未来”生态街区 picks a healthy machine for every request"
             ],
             [
               "Platform as a Service",
@@ -1146,12 +1146,12 @@
           "kind": "callout",
           "tone": "info",
           "title": "One honest difference from public GPU clouds",
-          "text": "LunaNexa is software that runs on your own machines, not a rented slice of someone else's cloud. Every page in this coursebook carries an evidence status — implemented, documented, planned, or simulated — and the readiness page says plainly what still needs physical proof."
+          "text": "能源谷“创未来”生态街区 is software that runs on your own machines, not a rented slice of someone else's cloud. Every page in this coursebook carries an evidence status — implemented, documented, planned, or simulated — and the readiness page says plainly what still needs physical proof."
         },
         {
           "kind": "checkpoint",
           "question": "Which service level may run your own application?",
-          "answer": "Only Infrastructure as a Service — an exclusive machine lease. Managed nodes behind the model API and the development platforms run nothing but the LunaNexa agent, the approved model runtime, and signed model files.",
+          "answer": "Only Infrastructure as a Service — an exclusive machine lease. Managed nodes behind the model API and the development platforms run nothing but the 能源谷“创未来”生态街区 agent, the approved model runtime, and signed model files.",
           "revisit_after_days": 3
         }
       ]
@@ -1357,7 +1357,7 @@
         {
           "kind": "bullets",
           "items": [
-            "Only download models your organization allows you to use — licenses and safety reviews are your team's call, not LunaNexa's.",
+            "Only download models your organization allows you to use — licenses and safety reviews are your team's call, not 能源谷“创未来”生态街区's.",
             "Model files are large: 2–7 GB is normal for a checkpoint.",
             "Copy the direct file link from the model's page on the model hub, not the address of the page itself."
           ]
@@ -1439,7 +1439,7 @@
               "text": "Choose End access early and confirm with Terminate access. This frees the machine for your colleagues immediately."
             },
             {
-              "title": "LunaNexa cleans up",
+              "title": "能源谷“创未来”生态街区 cleans up",
               "text": "Login access is revoked first, then the machine is wiped and the cleanup is verified. Only after this deep clean does the machine return to the shared pool."
             }
           ]
@@ -1448,7 +1448,7 @@
           "kind": "callout",
           "tone": "warning",
           "title": "Expiry erases everything",
-          "text": "When the lease ends — by the clock or by your own hand — your login stops working and the entire machine is sanitized: every model, workflow, and image on it is permanently deleted. LunaNexa does this on purpose, so the next user gets a provably clean machine. Download everything you want to keep first."
+          "text": "When the lease ends — by the clock or by your own hand — your login stops working and the entire machine is sanitized: every model, workflow, and image on it is permanently deleted. 能源谷“创未来”生态街区 does this on purpose, so the next user gets a provably clean machine. Download everything you want to keep first."
         },
         {
           "kind": "checkpoint",
@@ -1481,7 +1481,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Today a managed GPU node is a sealed box: it runs the platform agent, one approved model runtime, and signed model files — and nobody logs in. Many people reasonably ask for a terminal or a JupyterLab notebook on that hardware anyway. This page describes how such interactive access would have to look if LunaNexa ever offers it, and why it has to earn its way in."
+          "text": "Today a managed GPU node is a sealed box: it runs the platform agent, one approved model runtime, and signed model files — and nobody logs in. Many people reasonably ask for a terminal or a JupyterLab notebook on that hardware anyway. This page describes how such interactive access would have to look if 能源谷“创未来”生态街区 ever offers it, and why it has to earn its way in."
         },
         {
           "kind": "callout",
@@ -1505,7 +1505,7 @@
             },
             {
               "title": "Get a fenced seat",
-              "text": "LunaNexa starts a reviewed, containerized session image with no path to the node agent, other tenants, or the model store."
+              "text": "能源谷“创未来”生态街区 starts a reviewed, containerized session image with no path to the node agent, other tenants, or the model store."
             },
             {
               "title": "Work with a clock",
@@ -1559,7 +1559,7 @@
         },
         {
           "kind": "checkpoint",
-          "question": "Why doesn't LunaNexa simply open SSH on managed nodes?",
+          "question": "Why doesn't 能源谷“创未来”生态街区 simply open SSH on managed nodes?",
           "answer": "Because a managed node runs other tenants' models and the platform's own agent. Interactive access must be a fenced, reviewed, expiring workload — like today's exclusive lease — never a shell on the host.",
           "revisit_after_days": 7
         }
@@ -1569,7 +1569,7 @@
       "id": "planned-app-catalog",
       "group_id": "roadmap",
       "title": "Planned: one-click application images and a community catalog",
-      "summary": "The app-store idea, LunaNexa-style: a catalog of reviewed application images — think ComfyUI or JupyterLab — that a user could deploy in one click onto governed capacity, and eventually share back. Not built yet; this page shows the shape it would have and today's alternatives.",
+      "summary": "The app-store idea, 能源谷“创未来”生态街区-style: a catalog of reviewed application images — think ComfyUI or JupyterLab — that a user could deploy in one click onto governed capacity, and eventually share back. Not built yet; this page shows the shape it would have and today's alternatives.",
       "audience": "Users who want one-click applications, and operators deciding what a governed catalog may contain",
       "estimated_minutes": 6,
       "status": "planned",
@@ -1588,7 +1588,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Public GPU clouds make this wonderfully simple: browse a catalog, click an application like ComfyUI, wait a few minutes, open it in the browser. On LunaNexa today you install applications yourself on a leased machine. A reviewed application catalog would close that gap — this page sketches the shape it must have to stay safe."
+          "text": "Public GPU clouds make this wonderfully simple: browse a catalog, click an application like ComfyUI, wait a few minutes, open it in the browser. On 能源谷“创未来”生态街区 today you install applications yourself on a leased machine. A reviewed application catalog would close that gap — this page sketches the shape it must have to stay safe."
         },
         {
           "kind": "callout",
@@ -1612,7 +1612,7 @@
             },
             {
               "title": "Click deploy",
-              "text": "Pick capacity within your lease. LunaNexa runs its normal preflight — policy, capacity, and lease checks — instead of trusting the click."
+              "text": "Pick capacity within your lease. 能源谷“创未来”生态街区 runs its normal preflight — policy, capacity, and lease checks — instead of trusting the click."
             },
             {
               "title": "Wait with visibility",
@@ -1632,13 +1632,13 @@
           "kind": "heading",
           "level": 2,
           "id": "mapping",
-          "text": "From public-cloud habit to the planned LunaNexa shape"
+          "text": "From public-cloud habit to the planned 能源谷“创未来”生态街区 shape"
         },
         {
           "kind": "table",
           "columns": [
             "Public-cloud habit",
-            "Planned LunaNexa shape"
+            "Planned 能源谷“创未来”生态街区 shape"
           ],
           "rows": [
             [
@@ -1647,7 +1647,7 @@
             ],
             [
               "Deploy anywhere",
-              "Capacity within your lease, placed by LunaNexa policy"
+              "Capacity within your lease, placed by 能源谷“创未来”生态街区 policy"
             ],
             [
               "Open a public port",
@@ -1665,8 +1665,8 @@
           "kind": "bullets",
           "items": [
             "Catalog entries are digest-pinned and signed, exactly like model artifacts today — a community image never weakens artifact identity.",
-            "Deployment always passes LunaNexa's own admission; the catalog is a menu, not a bypass.",
-            "LunaNexa remains a model-and-capacity plane: the catalog would be a governed adapter, not a general app-hosting free-for-all."
+            "Deployment always passes 能源谷“创未来”生态街区's own admission; the catalog is a menu, not a bypass.",
+            "能源谷“创未来”生态街区 remains a model-and-capacity plane: the catalog would be a governed adapter, not a general app-hosting free-for-all."
           ]
         },
         {
@@ -1698,7 +1698,7 @@
         {
           "kind": "checkpoint",
           "question": "What would make a future app catalog different from a public image marketplace?",
-          "answer": "Every entry is reviewed, digest-pinned, and signed, and deployment still goes through LunaNexa's own policy and lease checks — the catalog never bypasses admission.",
+          "answer": "Every entry is reviewed, digest-pinned, and signed, and deployment still goes through 能源谷“创未来”生态街区's own policy and lease checks — the catalog never bypasses admission.",
           "revisit_after_days": 7
         }
       ]
@@ -1707,7 +1707,7 @@
       "id": "planned-workload-exposure",
       "group_id": "roadmap",
       "title": "Planned: autostart, public endpoints, and YAML import",
-      "summary": "Three convenience features from public clouds — keeping your app running across restarts, reaching it from the internet, and importing Kubernetes YAML — and the governed shape each one would need before LunaNexa could offer it. None of these exist today; here is the honest why, and what to use instead.",
+      "summary": "Three convenience features from public clouds — keeping your app running across restarts, reaching it from the internet, and importing Kubernetes YAML — and the governed shape each one would need before 能源谷“创未来”生态街区 could offer it. None of these exist today; here is the honest why, and what to use instead.",
       "audience": "Users coming from public clouds who miss these three conveniences, and operators designing their governed replacements",
       "estimated_minutes": 6,
       "status": "planned",
@@ -1732,19 +1732,19 @@
           "kind": "callout",
           "tone": "warning",
           "title": "Not available today",
-          "text": "There is no autostart setting, no public port exposure, and no YAML import. Runtime configuration today is immutable and reviewed, and all traffic enters through the LunaNexa gateway. Note that hosted workspace apps — browser IDE, ComfyUI — are already reachable through that authenticated gateway; what is planned is user-declared exposure for your own workloads."
+          "text": "There is no autostart setting, no public port exposure, and no YAML import. Runtime configuration today is immutable and reviewed, and all traffic enters through the 能源谷“创未来”生态街区 gateway. Note that hosted workspace apps — browser IDE, ComfyUI — are already reachable through that authenticated gateway; what is planned is user-declared exposure for your own workloads."
         },
         {
           "kind": "heading",
           "level": 2,
           "id": "mapping",
-          "text": "From public-cloud habit to the planned LunaNexa shape"
+          "text": "From public-cloud habit to the planned 能源谷“创未来”生态街区 shape"
         },
         {
           "kind": "table",
           "columns": [
             "Public-cloud habit",
-            "Planned LunaNexa shape"
+            "Planned 能源谷“创未来”生态街区 shape"
           ],
           "rows": [
             [
@@ -1773,10 +1773,10 @@
           "steps": [
             {
               "title": "Declare what should run",
-              "text": "Write down what should run and how reachable it should be as profile fields that LunaNexa can check — instead of scripts the platform cannot see into."
+              "text": "Write down what should run and how reachable it should be as profile fields that 能源谷“创未来”生态街区 can check — instead of scripts the platform cannot see into."
             },
             {
-              "title": "LunaNexa renders and verifies",
+              "title": "能源谷“创未来”生态街区 renders and verifies",
               "text": "The platform turns the declaration into enforced state through an established networking provider, and proves the enforcement with evidence."
             },
             {
@@ -1795,7 +1795,7 @@
           "kind": "bullets",
           "items": [
             "Runtime behavior comes from reviewed profiles and immutable images — arbitrary startup commands and daemons stay out.",
-            "Traffic enters via the LunaNexa gateway; direct public port exposure stays rejected.",
+            "Traffic enters via the 能源谷“创未来”生态街区 gateway; direct public port exposure stays rejected.",
             "The expansion plan assigns this work to explicit network profiles and private endpoints in Phase 5, each with enforced-state evidence."
           ]
         },
@@ -1832,7 +1832,7 @@
       "id": "planned-elastic-batch",
       "group_id": "roadmap",
       "title": "Planned: autoscaling and batch job queues",
-      "summary": "Two fleet-scale features — capacity that grows and shrinks by itself, and queues of batch jobs — and why LunaNexa's current product contract deliberately excludes both. This page explains what would have to be proven first, and the predictable-overload behavior you get today.",
+      "summary": "Two fleet-scale features — capacity that grows and shrinks by itself, and queues of batch jobs — and why 能源谷“创未来”生态街区's current product contract deliberately excludes both. This page explains what would have to be proven first, and the predictable-overload behavior you get today.",
       "audience": "Users planning large or bursty workloads, and operators who need to explain the fixed-fleet behavior",
       "estimated_minutes": 6,
       "status": "planned",
@@ -1851,7 +1851,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Autoscaling means the fleet adds or removes machines as demand changes, without a human involved. Batch queues mean you hand over a pile of jobs — render these ten thousand images, process this dataset — and the system works through them while you sleep. Both are real cloud features, and both are deliberately absent from LunaNexa's current contract."
+          "text": "Autoscaling means the fleet adds or removes machines as demand changes, without a human involved. Batch queues mean you hand over a pile of jobs — render these ten thousand images, process this dataset — and the system works through them while you sleep. Both are real cloud features, and both are deliberately absent from 能源谷“创未来”生态街区's current contract."
         },
         {
           "kind": "callout",
@@ -1934,7 +1934,7 @@
       "id": "planned-storage-registry",
       "group_id": "roadmap",
       "title": "Planned: shared storage, an image registry, and model-cache acceleration",
-      "summary": "The storage trio every GPU cloud offers — shared volumes that follow you between machines, a private container image registry, and fast object-storage delivery of model files — mapped onto the LunaNexa boundary. Not available today; this page explains the governed shape each would take and what happens to your files now.",
+      "summary": "The storage trio every GPU cloud offers — shared volumes that follow you between machines, a private container image registry, and fast object-storage delivery of model files — mapped onto the 能源谷“创未来”生态街区 boundary. Not available today; this page explains the governed shape each would take and what happens to your files now.",
       "audience": "Users who need persistent files or faster model delivery, and operators evaluating storage providers",
       "estimated_minutes": 6,
       "status": "planned",
@@ -1953,7 +1953,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Three storage wishes show up together: a shared volume that survives when my machine goes away, a private registry for the images my team builds, and model files that download at object-storage speed. Public clouds bundle all three. LunaNexa's answer is shaped by one rule that comes first: the model store is management-owned, and nothing gets around verification."
+          "text": "Three storage wishes show up together: a shared volume that survives when my machine goes away, a private registry for the images my team builds, and model files that download at object-storage speed. Public clouds bundle all three. 能源谷“创未来”生态街区's answer is shaped by one rule that comes first: the model store is management-owned, and nothing gets around verification."
         },
         {
           "kind": "callout",
@@ -1965,13 +1965,13 @@
           "kind": "heading",
           "level": 2,
           "id": "mapping",
-          "text": "From public-cloud habit to the planned LunaNexa shape"
+          "text": "From public-cloud habit to the planned 能源谷“创未来”生态街区 shape"
         },
         {
           "kind": "table",
           "columns": [
             "Public-cloud habit",
-            "Planned LunaNexa shape"
+            "Planned 能源谷“创未来”生态街区 shape"
           ],
           "rows": [
             [
@@ -1999,7 +1999,7 @@
           "items": [
             "The management node owns the model source of truth; runtimes only ever see verified, node-local artifacts.",
             "Models embedded inside giant images stay rejected — models and runtimes ship and roll independently.",
-            "Storage is consumed through narrow, verified adapters from established providers; LunaNexa does not become an object store."
+            "Storage is consumed through narrow, verified adapters from established providers; 能源谷“创未来”生态街区 does not become an object store."
           ]
         },
         {
@@ -2035,7 +2035,7 @@
       "id": "planned-commerce-identity",
       "group_id": "roadmap",
       "title": "Planned: top-up, invoices, real-name verification, and reserved capacity",
-      "summary": "The business layer of a cloud — paying into a balance, receiving invoices, verifying an organization's identity, reserving capacity ahead of time, and SLA credits — and which parts LunaNexa will ever own. The short answer: evidence and reconciliation yes; money, tax documents, and ID checks stay with external providers.",
+      "summary": "The business layer of a cloud — paying into a balance, receiving invoices, verifying an organization's identity, reserving capacity ahead of time, and SLA credits — and which parts 能源谷“创未来”生态街区 will ever own. The short answer: evidence and reconciliation yes; money, tax documents, and ID checks stay with external providers.",
       "audience": "Team leads planning budgets and procurement, and operators connecting finance or identity systems",
       "estimated_minutes": 7,
       "status": "planned",
@@ -2055,7 +2055,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Sooner or later, using a cloud becomes buying a cloud: putting money in, getting paperwork out, proving who your organization is, and reserving capacity before a big project. This page maps each piece of that business layer to the part LunaNexa would own — and the part that deliberately stays with external providers."
+          "text": "Sooner or later, using a cloud becomes buying a cloud: putting money in, getting paperwork out, proving who your organization is, and reserving capacity before a big project. This page maps each piece of that business layer to the part 能源谷“创未来”生态街区 would own — and the part that deliberately stays with external providers."
         },
         {
           "kind": "callout",
@@ -2078,15 +2078,15 @@
           "rows": [
             [
               "Top-up and payment",
-              "An approved external payment provider moves the money; LunaNexa records only the normalized intent and reconciliation evidence"
+              "An approved external payment provider moves the money; 能源谷“创未来”生态街区 records only the normalized intent and reconciliation evidence"
             ],
             [
               "Invoices",
-              "A reconciled invoice request leaves LunaNexa; the legal tax document is issued by the external invoice system"
+              "A reconciled invoice request leaves 能源谷“创未来”生态街区; the legal tax document is issued by the external invoice system"
             ],
             [
               "Real-name verification",
-              "An external service verifies the organization and authorized signer; LunaNexa stores only a normalized status and opaque evidence references — never ID documents"
+              "An external service verifies the organization and authorized signer; 能源谷“创未来”生态街区 stores only a normalized status and opaque evidence references — never ID documents"
             ],
             [
               "Reserved capacity packs",
@@ -2107,7 +2107,7 @@
         {
           "kind": "bullets",
           "items": [
-            "LunaNexa never becomes a payment gateway, a tax authority, or an identity verifier — those stay with approved providers behind normalized ports.",
+            "能源谷“创未来”生态街区 never becomes a payment gateway, a tax authority, or an identity verifier — those stay with approved providers behind normalized ports.",
             "A contract, invoice, or UI status can never override the operational gates: no commercial record makes an unproven cluster production-ready.",
             "Usage evidence stays immutable and attributable to organization, cost center, project, and lease — the foundation every business feature builds on."
           ]
@@ -2135,8 +2135,8 @@
         },
         {
           "kind": "checkpoint",
-          "question": "Which parts of the business layer will LunaNexa never own?",
-          "answer": "Money movement, tax invoices, and identity verification — those belong to approved external providers. LunaNexa keeps the normalized intent, the evidence, and the reconciliation trail.",
+          "question": "Which parts of the business layer will 能源谷“创未来”生态街区 never own?",
+          "answer": "Money movement, tax invoices, and identity verification — those belong to approved external providers. 能源谷“创未来”生态街区 keeps the normalized intent, the evidence, and the reconciliation trail.",
           "revisit_after_days": 7
         }
       ]
@@ -2145,7 +2145,7 @@
       "id": "planned-chat-playground",
       "group_id": "roadmap",
       "title": "Planned: an in-portal chat playground",
-      "summary": "The simplest possible first call: pick a model, pick your API key, type a message, see the answer — without leaving the portal or writing any code. Public model clouds offer this as an online debugging panel; LunaNexa may add it as a thin layer over the same request contract. Today, the workbench is the way.",
+      "summary": "The simplest possible first call: pick a model, pick your API key, type a message, see the answer — without leaving the portal or writing any code. Public model clouds offer this as an online debugging panel; 能源谷“创未来”生态街区 may add it as a thin layer over the same request contract. Today, the workbench is the way.",
       "audience": "New users who want to verify a model and a key in ten seconds, before writing any integration code",
       "estimated_minutes": 4,
       "status": "planned",
@@ -2164,7 +2164,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "A chat playground is the smallest possible try-it: a panel where you pick a model, pick one of your API keys, type a message, and read the answer. No SDK, no terminal, no setup. It is the feature beginners reach for when they just want to confirm that their key works — and it may come to the LunaNexa portal in exactly that spirit."
+          "text": "A chat playground is the smallest possible try-it: a panel where you pick a model, pick one of your API keys, type a message, and read the answer. No SDK, no terminal, no setup. It is the feature beginners reach for when they just want to confirm that their key works — and it may come to the 能源谷“创未来”生态街区 portal in exactly that spirit."
         },
         {
           "kind": "callout",
@@ -2244,16 +2244,16 @@
     }
   ],
   "suggested_questions": [
-    "What is LunaNexa responsible for?",
+    "What is 能源谷“创未来”生态街区 responsible for?",
     "How does an inference request reach a DGX runtime?",
     "What must we verify before tomorrow's deployment?",
     "Why can a model-service operation become Blocked?",
     "How do I debug a missing node?",
     "What is the difference between a workspace lease and an exclusive-node lease?",
-    "Will LunaNexa add one-click app deployment and autoscaling later?",
-    "Can I try LunaNexa without an invitation or payment?",
+    "Will 能源谷“创未来”生态街区 add one-click app deployment and autoscaling later?",
+    "Can I try 能源谷“创未来”生态街区 without an invitation or payment?",
     "I have never used ComfyUI — how do I run it on a GPU machine?",
-    "What does LunaNexa take care of for me?",
+    "What does 能源谷“创未来”生态街区 take care of for me?",
     "How do people sign in, and how do I create an account?",
     "How does a request reach a model on a GPU machine?",
     "What should I check before the first real deployment?",
