@@ -297,9 +297,11 @@ signed node assignments; nodes never receive the catalog, operator identity,
 or management credentials.
 
 One-click deployment is fail-closed. Unapproved models, unverified artifacts or
-images, failed evaluations, missing license acceptance, missing secret
+images, missing license acceptance, missing secret
 references, incompatible data classes, or insufficient capacity create typed
 preflight blockers rather than partially launching a runtime.
+Evaluation is optional evidence, never a prerequisite for approval or placement;
+the system must not describe an unevaluated model as measured or benchmarked.
 
 The v1 one-click materialization contract keeps stable `s3://bucket/object`
 references. Production nodes resolve them directly against the reviewed

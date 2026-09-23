@@ -158,22 +158,15 @@ registry 里因此有 19 个模型 id。它**不做** license 接受、verificat
    于是任何已采纳的模型都无法注册模板。`validate_template` / preflight 现在承认
    **两种搬运方式**：上游对象存储的 blob + 分离签名，或本控制面模型库里一个**已验证的修订版本**
    （它的 source manifest 就是签名主体，artifact 网关和节点都是这么处理的）。
-2. **批准硬性要求一条通过的评测**（`Evaluated` 状态 + `evaluations[...].passed`），
-   而这一批模型没有任何基准数据，整条链就停在这里。
+2. **评测不再是中间审核门槛**。默认 `LUNANEXA_REQUIRE_MODEL_EVALUATION=0`；
+   许可、制品验证与运维明确批准仍是必要步骤。没有真实评测记录的模型可以批准、
+   提升 alias 并尝试部署，但不能声称已通过评测或达到性能目标。
 
-第 2 条一度按"评测暂时搁置"处理，**现已按要求恢复硬要求**：部署级开关
-`LUNANEXA_REQUIRE_MODEL_EVALUATION` 保持二进制默认值 **1**，
-`deploy/management-foundation/controller-patch.yaml` 里那行显式覆盖已经删除。
-因此准入链在批准处重新被拦住：没有 `Evaluated` 状态和 `evaluations[...].passed` 的模型，
-只能走到 `Verified`，批不了、也提升不了 alias。此前在开关为 0 时写下的那些提升回执，
-其 `evaluation_id` 是**空字符串**——"没有评测背书"这件事留在审计记录里，不会被默认值掩盖，
-所以历史与现状是可区分的。
-
-开关曾关掉时（历史行为，仅作记录）：
+当前默认行为：
 
 - 批准只允许从 `Verified`（真做过校验）进入，`Candidate` 仍然批不了；
-- 这样产生的每一次 alias 提升，回执里的 `evaluation_id` 是**空字符串**——"没有评测背书"
-  这件事写在审计记录里，而不是靠默认值掩盖；
+- 没有评测的 alias 提升，回执里的 `evaluation_id` 是**空字符串**；有真实通过的
+  评测则保留其 ID，不能伪造背书；
 - 计划阶段的证据同样跟随这个策略（否则会出现"批准了却规划不了"的自相矛盾）。
 
 现场结果：**15 个模型**完成 licence → 校验 → 批准 → alias；registry 里 17 个 `Approved`、

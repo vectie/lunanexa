@@ -1589,14 +1589,14 @@ test "model import recovery and adoption preserve every safety gate" {
     model_imports: [verified_managed],
   })
   assert_true(
-    verified_html.contains("Checksum passed; four safety gates remain"),
+    verified_html.contains("Checksum passed; three publication checks remain"),
   )
   assert_true(
     verified_html.contains("Pending · Artifact integrity and provenance"),
   )
   assert_true(verified_html.contains("Pending · License acceptance"))
   assert_true(
-    verified_html.contains("Pending · Evaluation for this exact digest"),
+    !verified_html.contains("Pending · Evaluation for this exact digest"),
   )
   assert_true(verified_html.contains("Pending · Explicit operator approval"))
   // A revision the control plane serves itself is adoptable, exactly like an
@@ -1668,7 +1668,7 @@ test "model import recovery and adoption preserve every safety gate" {
     model_imports: [verified_s3],
   })
   assert_true(
-    chinese_html.contains("校验已通过；仍保留四个安全门"),
+    chinese_html.contains("校验已通过；仍需完成三项发布检查"),
   )
   assert_true(chinese_html.contains("登记为候选模型"))
 }

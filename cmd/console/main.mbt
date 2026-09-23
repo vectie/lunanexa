@@ -6365,8 +6365,8 @@ fn update_live(
             Some(
               console_copy(
                 model.console.locale,
-                "Registration queued. The selected revision or component will be independently checked against ModelScope before it can become a registry candidate; license, signature and evaluation approvals remain required.",
-                "登记已排队。所选版本或组件会独立按魔搭清单校验；成为候选模型后仍需许可证、签名与评测审核。",
+                "Registration queued. The selected revision or component will be checked against ModelScope before it becomes a registry candidate; license acceptance, artifact verification and operator approval remain required. Evaluation is optional.",
+                "登记已排队。所选版本或组件会按魔搭清单校验；成为候选模型后仍需接受许可证、验证制品和运维批准，评测可选。",
               ),
             ),
           )
@@ -7155,8 +7155,8 @@ fn update_live(
               error_message: Some(
                 console_copy(
                   model.console.locale,
-                  "Only a complete, checksum-verified import published to an immutable s3:// URI can be adopted.",
-                  "只有完整、通过校验并发布到不可变 s3:// URI 的导入才能登记。",
+                  "Only a complete, checksum-verified import in immutable S3 or the managed model store can be adopted.",
+                  "只有完整、通过校验且位于不可变 S3 或受管模型库的导入才能登记。",
                 ),
               ),
             },
@@ -7279,8 +7279,8 @@ fn update_live(
               error_message: Some(
                 console_copy(
                   model.console.locale,
-                  "Complete every valid registry field and confirm the import is still checksum-verified at an immutable s3:// URI.",
-                  "请填写全部有效的注册表字段，并确认导入仍已通过校验且位于不可变 s3:// URI。",
+                  "Complete every valid registry field and confirm the import remains checksum-verified in immutable S3 or the managed model store.",
+                  "请填写全部有效的注册表字段，并确认导入仍已通过校验且位于不可变 S3 或受管模型库。",
                 ),
               ),
             },
@@ -7305,8 +7305,8 @@ fn update_live(
             draft.import_id,
             console_copy(
               model.console.locale,
-              "The verified S3 artifact was registered as a Candidate. License, signature, evaluation, and explicit approval are still required.",
-              "已将验证过的 S3 制品登记为候选模型；仍需完成许可证、签名、评测与明确批准。",
+              "The verified import was registered as a Candidate. License acceptance, artifact verification and explicit approval are still required; evaluation is optional.",
+              "已将通过校验的导入登记为候选模型；仍需接受许可证、验证制品并明确批准，评测可选。",
             ),
           )
         } catch {

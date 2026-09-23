@@ -13,7 +13,8 @@ done
 
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-postgres.XXXXXX")
 port=$((30000 + ($$ % 20000)))
-database_url="postgresql://lunanexa@127.0.0.1:$port/postgres?sslmode=disable"
+bootstrap_url="postgresql://lunanexa@127.0.0.1:$port/postgres?sslmode=disable"
+database_url="postgresql://lunanexa@127.0.0.1:$port/lunanexa_test?sslmode=disable"
 started=0
 
 cleanup() {
@@ -30,16 +31,18 @@ pg_ctl -D "$test_directory/data" \
   -o "-h 127.0.0.1 -p $port -k $test_directory" start >/dev/null
 started=1
 
+psql "$bootstrap_url" -v ON_ERROR_STOP=1 \
+  -c 'CREATE DATABASE lunanexa_test' >/dev/null
 psql "$database_url" -v ON_ERROR_STOP=1 \
   -f database/migrations/001_management.sql >/dev/null
 LUNANEXA_DATABASE_URL="$database_url" moon run cmd/database --target native
-test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "4"
+test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "5"
 case "${LUNANEXA_POSTGRES_TEST_SCOPE:-full}" in
   ha)
     test_packages='database store registry node scheduler telemetry deployment/store'
     ;;
   full)
-    test_packages='internal/postgres database account portal/store workspace/directory notifications/store observability commercial/offline/store nodelease/store nodelease/credential/store store registry node scheduler telemetry deployment/store api'
+    test_packages='internal/postgres database account portal/store workspace/directory workspace/client_handoff/store notifications/store observability commercial/offline/store nodelease/store nodelease/credential/store store registry node scheduler telemetry deployment/store api'
     ;;
   *)
     printf '%s\n' 'LUNANEXA_POSTGRES_TEST_SCOPE must be full or ha' >&2

@@ -9,7 +9,7 @@ sign in
 → inspect model identity, license, task, size and source revision
 → start a durable download
 → observe automatically refreshed, resumable progress and exact per-file SHA-256 verification
-→ satisfy LunaNexa signature and evaluation gates
+→ accept the license and verify the artifact in LunaNexa
 → explicitly approve the version
 → expose the approved version or alias to users
 ```
@@ -59,8 +59,10 @@ user visibility still requires:
 
 1. accepted license metadata;
 2. the configured artifact-signature verification gate;
-3. a passing evaluation record for the exact model version; and
-4. an explicit operator approval and, where configured, alias promotion.
+3. an explicit operator approval and, where configured, alias promotion.
+
+An evaluation may be recorded for the exact version, but is not a publication
+prerequisite and must not be presented as passed when no measurement exists.
 
 The UI must show these gates separately. It must never label a checksum-only
 download as signed or deployable.
@@ -106,20 +108,17 @@ model versions. A process restart requeues an in-flight operation, reconstructs
 its counters from the staged files and never carries stale progress forward.
 
 A ModelScope directory is source material, not automatically a LunaNexa
-deployment artifact. The current registry accepts immutable deployable
-artifacts and requires signature/provenance verification, accepted license
-evidence, a passing evaluation, and a qualified runtime/service template. The
-UI therefore shows the four gates and keeps **Approve for users** disabled after
-source checksum verification. Enabling it before the directory has a reviewed
-packaging/materialization contract would falsely promise deployability and is
-not an acceptable shortcut.
+deployment artifact. The registry requires accepted license evidence,
+artifact signature/provenance verification and explicit operator approval.
+The UI shows these three publication checks separately; an adopted version
+also needs a compatible runtime/service template before deployment. A
+checksum-only download cannot bypass the registry checks.
 
-## Adopt a verified object-store import
+## Adopt a verified managed or object-store import
 
-The model itself is never embedded in a LunaNexa image. After an explicitly
-authorized publisher has copied the checksum-verified source directory to the
-deployment's Moongate S3 bucket and recorded an immutable `s3://` artifact URI,
-an operator can adopt that import into the registry:
+The model itself is never embedded in a LunaNexa image. A complete,
+checksum-verified revision in LunaNexa's managed `modelstore://` or an
+authorized immutable `s3://` artifact can be adopted into the registry:
 
 ```http
 POST /v1/model-sources/modelscope/imports/{import_id}:adopt
@@ -136,16 +135,16 @@ Content-Type: application/json
 ```
 
 Adoption succeeds only when the durable import is `Verified`, complete, has a
-valid SHA-256 manifest digest, and points to `s3://`. The model and its pending
+valid SHA-256 manifest digest, and points to `modelstore://` or `s3://`. The model and its pending
 license record are then persisted atomically. The result remains a `Candidate`:
-license acceptance, signature verification, evaluation, explicit approval,
+license acceptance, signature verification, explicit approval,
 alias promotion, and deployment are still separate auditable actions.
 
-The node materializer downloads the immutable object directly from S3 with
-SigV4 through the configured Moongate endpoint. S3 credentials remain on the
-node and are not forwarded to a runtime container. Publishing local model bytes
-is deliberately not an implicit controller action: the exact source path,
-bucket/prefix, endpoint, and transfer authority must be deployment-approved.
+For `s3://`, the node materializer downloads the immutable object directly
+through Moongate with node-local SigV4 credentials. For `modelstore://`, it
+uses the control plane's verified managed revision and artifact transport.
+Neither path embeds model bytes in the controller image or forwards storage
+credentials to the runtime container.
 
 ### Operator console adoption
 
@@ -153,8 +152,8 @@ The **Models** screen keeps durable imports visible after refresh or a new
 operator sign-in; repeating a ModelScope catalog search is not required. An
 **Adopt as Candidate** action is shown only for a complete `Verified` import
 with a valid SHA-256 manifest, declared upstream license, and immutable
-`s3://` artifact URI. Imports that still point at the adapter-local model store
-show the missing S3-publication prerequisite and cannot open the form.
+`s3://` or managed `modelstore://` artifact URI. An import without a supported
+transport cannot open the form.
 
 The adoption form asks only for values the controller cannot infer safely:
 model ID, registry version, pending-license record ID, compatible
@@ -162,9 +161,9 @@ architectures, and minimum accelerator memory. It keeps those values while an
 operator corrects validation or request errors, reports loading and completion
 through accessible status regions, and stacks into a single column on narrow
 screens. A successful response is described as `Candidate` registration—not
-approval or deployment—and the console continues to show the four remaining
-gates: license acceptance, artifact signature/provenance, digest-specific
-evaluation, and explicit operator approval. Alias promotion, runtime
+approval or deployment—and the console continues to show the three remaining
+checks: license acceptance, artifact signature/provenance, and explicit
+operator approval. Optional evaluation, alias promotion, runtime
 qualification, and deployment remain separate later actions.
 
 ## Management deployment
@@ -193,7 +192,7 @@ the catalog.
 
 For `OpenBMB/MiniCPM5-1B`, the current staging evidence pins every file and the
 observed source revision. It may be used to exercise the import UI, but it must
-remain non-user-visible until the signature and evaluation gates have real
+remain non-user-visible until license, signature and operator-approval checks have real
 evidence. See `ASCEND_310P3_TEMPORARY_COMPUTE.md` for the temporary compute
 qualification boundary.
 

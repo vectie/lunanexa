@@ -78,6 +78,28 @@ async test "production account and client handoff snapshots are allowlisted" {
 }
 
 ///|
+async test "controller startup snapshot domains load from a restored PostgreSQL database" {
+  guard test_database_url() is Some(url) else { return }
+  let database = @database.PostgresDatabase::open(url)
+  defer database.close()
+  let domains = [
+    ("control", "lunanexa.store.v1"),
+    ("model_registry", "lunanexa.registry.v1"),
+    ("node_enrollment", "lunanexa.enrollment.v2"),
+    ("scheduler", "lunanexa.scheduler.v2"),
+    ("telemetry", "lunanexa.telemetry.v1"),
+    ("workspace_directory", "lunanexa.workspace.directory.v1"),
+    ("workspace_admissions", "lunanexa.workspace.admissions.v1"),
+    ("deployments", "lunanexa.deployments.v2"),
+    ("exclusive_deliveries", "lunanexa.exclusive-deliveries.v1"),
+  ]
+  for entry in domains {
+    let (domain, version) = entry
+    ignore(database.load_snapshot(domain, version))
+  }
+}
+
+///|
 async test "exclusive delivery snapshot survives database reopen" {
   guard test_database_url() is Some(url) else { return }
   let database = @database.PostgresDatabase::open(url)

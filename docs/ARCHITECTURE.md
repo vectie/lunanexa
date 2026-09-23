@@ -127,7 +127,7 @@ provider-neutral service endpoints. A one-click deployment submits one compact,
 idempotent intent; the controller expands an executable plan into the same
 signed desired assignments used by existing automation.
 
-This layer cannot waive registry, license, verification, evaluation, alias,
+This layer cannot waive registry, license, verification, alias,
 data-class, secret-reference, or capacity requirements. Missing prerequisites
 produce a durable blocked operation with typed findings. See
 `docs/MANAGEMENT_PLANE.md`.
@@ -346,10 +346,9 @@ availability acceptance.
 candidate artifact
 → license and provenance recorded
 → digest verified
-→ evaluation suite run
 → operator approval
 → canary deployment
-→ readiness and benchmark gate
+→ readiness gate; optional evaluation and benchmark evidence
 → controlled promotion
 → observation
 → rollback or stable release

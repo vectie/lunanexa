@@ -28,7 +28,7 @@ async test "PostgreSQL handoffs recover redemption quota and revocation through 
         100003L,
       )
     catch {
-      @database.DatabaseError::QueryFailed(_) => ()
+      @database.DatabaseError::ConnectionUnavailable(_) => ()
       error => fail("unexpected disconnected write error: \{Repr(error)}")
     } noraise {
       _ => fail("closed database accepted revocation")

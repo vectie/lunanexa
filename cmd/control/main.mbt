@@ -706,12 +706,11 @@ async fn main {
     }
     None => None
   }
-  // Evaluation may be shelved for a deployment that is not yet measuring
-  // anything; the default is to require it, and an approval granted without it
-  // is visible in every promotion receipt it produces.
+  // Evaluation is optional evidence, not an intermediate publication gate.
+  // A deployment may explicitly opt back into the strict measured policy.
   let require_model_evaluation = @env.get_env_var(
       "LUNANEXA_REQUIRE_MODEL_EVALUATION",
-    ).unwrap_or("1") ==
+    ).unwrap_or("0") ==
     "1"
   let runtime_endpoint = required_environment("LUNANEXA_RUNTIME_ENDPOINT")
   let mut runtime = @runtimes.OpenAiTextRuntime::new(

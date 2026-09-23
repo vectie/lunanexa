@@ -30,7 +30,7 @@ async test "scheduler capacity and state restore from PostgreSQL" {
   database.close()
   for _ in 0..<2 {
     try scheduler.complete(work.workload_id, 125L) catch {
-      @database.DatabaseError::QueryFailed(_) => ()
+      @database.DatabaseError::ConnectionUnavailable(_) => ()
       error => fail("unexpected disconnected completion error: \{Repr(error)}")
     } noraise {
       _ => fail("closed database accepted completion")

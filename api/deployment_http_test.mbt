@@ -64,6 +64,7 @@ fn management_template() -> @deployment.ModelServiceTemplate {
 async fn management_registry(
   path : String,
   template : @deployment.ModelServiceTemplate,
+  with_evaluation? : Bool = true,
 ) -> @registry.FileRegistry {
   let registry = @registry.FileRegistry::open(path)
   registry.register_runtime(template.runtime)
@@ -99,28 +100,30 @@ async fn management_registry(
     verified_unix_ms: 1L,
     verifier: "test",
   })
-  registry.record_evaluation({
-    evaluation_id: "eval.text.v1",
-    model_id: template.model_id,
-    model_version: template.model_version,
-    suite_version: "suite-v1",
-    passed: true,
-    score: 1.0,
-    benchmark: {
-      profile_id: "profile-v1",
+  if with_evaluation {
+    registry.record_evaluation({
+      evaluation_id: "eval.text.v1",
       model_id: template.model_id,
       model_version: template.model_version,
-      runtime_version: template.runtime.version,
-      hardware_profile: template.architecture,
-      workload_profile: "smoke",
-      p50_ms: 1.0,
-      p95_ms: 2.0,
-      p99_ms: 3.0,
-      throughput_per_second: 1.0,
-      peak_memory_mib: 1024,
-    },
-    evidence_ref: "evaluation-report",
-  })
+      suite_version: "suite-v1",
+      passed: true,
+      score: 1.0,
+      benchmark: {
+        profile_id: "profile-v1",
+        model_id: template.model_id,
+        model_version: template.model_version,
+        runtime_version: template.runtime.version,
+        hardware_profile: template.architecture,
+        workload_profile: "smoke",
+        p50_ms: 1.0,
+        p95_ms: 2.0,
+        p99_ms: 3.0,
+        throughput_per_second: 1.0,
+        peak_memory_mib: 1024,
+      },
+      evidence_ref: "evaluation-report",
+    })
+  }
   ignore(registry.approve(template.model_id, template.model_version, 2L))
   ignore(
     registry.promote(
@@ -167,6 +170,72 @@ fn management_heartbeat(
     timestamp_unix_ms: @async.now(),
     signature: "test",
   }
+}
+
+///|
+async test "deployment plan does not require intermediate model evaluation" {
+  let directory = @fs.tmpdir(prefix="lunanexa-optional-evaluation-")
+  let template = management_template()
+  let durable = @store.FileStore::open("\{directory}/state.json")
+  durable.fence_controller(1L)
+  durable.put_heartbeat(management_heartbeat([]))
+  let registry = management_registry(
+    "\{directory}/registry.json",
+    template,
+    with_evaluation=false,
+  )
+  assert_eq(registry.snapshot().evaluations.length(), 0)
+  let deployments = @deployment_store.FileDeploymentStore::open(
+    "\{directory}/deployments.json",
+    "catalog-secret",
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    template.runtime.version,
+    template.runtime.image_digest,
+    template.artifact.digest,
+    allow_http_loopback=true,
+  )
+  let service = @api.ApiService::with_registry(
+      durable, registry, runtime, "operator-token", "inference-token", "node-token",
+      "0.1.0",
+    )
+    .with_assignment_signing_secret("assignment-secret")
+    .with_deployment_store(deployments, available_secret_refs=["runtime-token"])
+  let headers = { "Authorization": "Bearer operator-token" }
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/catalog/templates",
+      headers,
+      template.to_json().stringify(),
+    ).status,
+    201,
+  )
+  let intent : @deployment.ModelServiceIntent = {
+    version: @contracts.contract_version,
+    idempotency_key: "optional-evaluation-plan",
+    deployment_id: "optional-evaluation-service",
+    template: { template_id: template.template_id, version: template.version, },
+    replicas: 1,
+    data_class: Internal,
+    lease_duration_ms: 60000L,
+    promote_when_ready: false,
+    topology_profile: None,
+  }
+  let reply = service.handle(
+    Post,
+    "/v1/deployment-plans",
+    headers,
+    intent.to_json().stringify(),
+  )
+  assert_eq(reply.status, 200)
+  let plan : @deployment.DeploymentPlan = @json.from_json(
+    @json.parse(reply.body),
+  )
+  assert_true(plan.executable)
+  assert_true(plan.findings.all(value => value.code != EvaluationNotPassed))
 }
 
 ///|

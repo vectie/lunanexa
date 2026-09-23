@@ -3091,7 +3091,7 @@ fn evaluation_evidence_label(locale : @i18n.Locale, value : String) -> String {
   if locale.is_chinese() {
     match value {
       "passed" => "已通过"
-      "missing" => "未记录"
+      "missing" => "未评测（不阻塞）"
       "failed" => "未通过"
       _ => value
     }
@@ -6568,8 +6568,8 @@ fn model_local_registration_form(
           class="field-help",
           localized(
             state.locale,
-            "Choose the whole revision or a FL2VA / Ref2VA component directory. Each gets its own verified manifest and registry identity. The adapter checks every file against ModelScope before registration; later license, signature and evaluation approvals are separate.",
-            "可选择完整版本，或单独选择 FL2VA／Ref2VA 组件目录。每个组件都有独立的校验清单和注册身份。适配器先按魔搭逐文件核对，许可证、签名和评测仍需另行审核。",
+            "Choose the whole revision or a FL2VA / Ref2VA component directory. Each gets its own verified manifest and registry identity. The adapter checks every file against ModelScope before registration; license acceptance, artifact verification and operator approval follow. Evaluation is optional evidence.",
+            "可选择完整版本，或单独选择 FL2VA／Ref2VA 组件目录。每个组件都有独立的校验清单和注册身份。适配器先按魔搭逐文件核对；后续仍需接受许可证、验证制品并由运维人员批准，评测可选。",
           ),
         ),
         @html.div(class="model-local-grid", [
@@ -6672,8 +6672,8 @@ fn model_adoption_form(
         @html.span(
           localized(
             state.locale,
-            "No license, signature, evaluation, approval, alias, or deployment gate was bypassed.",
-            "许可证、签名、评测、批准、别名与部署门槛均未绕过。",
+            "License, artifact verification, operator approval, alias and deployment checks still apply. Evaluation is optional evidence.",
+            "许可证、制品验证、运维批准、别名与部署检查仍然有效；评测是可选证据。",
           ),
         ),
       ],
@@ -6930,8 +6930,8 @@ fn model_adoption_form(
             class="secondary",
             localized(
               state.locale,
-              "Creates Candidate + pending license only. Four safety gates remain.",
-              "仅创建候选模型与待审核许可证；仍保留四个安全门。",
+              "Creates Candidate + pending license only. Three publication checks remain.",
+              "仅创建候选模型与待审核许可证；仍需完成三项发布检查。",
             ),
           ),
           @html.div(class="row-actions", [
@@ -6978,8 +6978,8 @@ fn verified_import_gate(
       @html.strong(
         localized(
           state.locale,
-          "Checksum passed; four safety gates remain",
-          "校验已通过；仍保留四个安全门",
+          "Checksum passed; three publication checks remain",
+          "校验已通过；仍需完成三项发布检查",
         ),
       ),
       @html.span(
@@ -7002,13 +7002,6 @@ fn verified_import_gate(
             state.locale,
             "Pending · Artifact integrity and provenance",
             "待完成 · 制品完整性与来源记录",
-          ),
-        ),
-        @html.li(
-          localized(
-            state.locale,
-            "Pending · Evaluation for this exact digest",
-            "待完成 · 针对此精确摘要的评测",
           ),
         ),
         @html.li(
@@ -7110,8 +7103,8 @@ fn models_view(
         class="section-copy",
         localized(
           state.locale,
-          "Search ModelScope, download an exact revision into the governed model store, verify every declared SHA-256, then complete signature, evaluation, and explicit approval before users can select it.",
-          "从魔搭搜索模型，将精确版本下载到受治理的模型库并验证每个文件的 SHA-256；完成签名、评测与明确批准后，用户才能选择该模型。",
+          "Search ModelScope, download an exact revision into the governed model store, verify every declared SHA-256, then accept its license, verify the artifact and approve it. Evaluation can be recorded later without blocking publication.",
+          "从魔搭搜索模型，将精确版本下载到受治理的模型库并验证每个文件的 SHA-256；接受许可证、验证制品并批准后即可发布。评测可随后记录，不阻塞发布。",
         ),
       ),
       @html.ol(class="deployment-steps model-onboarding-steps", [
@@ -7130,7 +7123,11 @@ fn models_view(
         @html.li([
           @html.span("3"),
           @html.strong(
-            localized(state.locale, "Sign & evaluate", "签名并评测"),
+            localized(
+              state.locale,
+              "License & verification",
+              "许可与制品验证",
+            ),
           ),
         ]),
         @html.li([
@@ -7471,8 +7468,8 @@ fn models_view(
         @html.p(
           localized(
             state.locale,
-            "Search ModelScope above and start a download. Only models that pass signature, evaluation, and explicit approval appear in the user catalog.",
-            "请在上方搜索魔搭并开始下载。只有通过签名、评测与明确批准的模型才会出现在用户模型目录中。",
+            "Search ModelScope above and start a download. Licensed, verified and explicitly approved models can appear in the user catalog; evaluation is optional evidence.",
+            "请在上方搜索魔搭并开始下载。接受许可、验证制品并明确批准后，模型即可进入用户目录；评测是可选证据。",
           ),
         ),
       ])
@@ -7575,8 +7572,8 @@ fn model_item(
           class="secondary",
           localized(
             locale,
-            "Evaluation · \{evaluation_evidence_label(locale, model.evaluation_status)}",
-            "评测 · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+            "Optional evaluation · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+            "可选评测 · \{evaluation_evidence_label(locale, model.evaluation_status)}",
           ),
         ),
       ]),
@@ -7692,8 +7689,8 @@ fn model_license_form_row(
             @html.p(
               class="field-help",
               localized(
-                locale, "Records an accepted licence for this exact model version. Artifact verification, evaluation, and explicit approval remain separate gates.",
-                "为这一精确模型版本记录已接受的许可证。制品验证、评测与明确批准仍是独立的安全门。",
+                locale, "Records an accepted licence for this exact model version. Artifact verification and explicit approval remain separate checks; evaluation is optional.",
+                "为这一精确模型版本记录已接受的许可证。制品验证与明确批准仍需分别完成；评测可选。",
               ),
             ),
             @html.div(class="model-onboarding-grid", [
@@ -8487,8 +8484,8 @@ fn catalog_view(
         class="section-copy",
         localized(
           state.locale,
-          "License, verification, evaluation, alias, secret, data-class and capacity blockers are checked before any assignment is published.",
-          "发布任何分配前都会检查许可证、验证、评测、别名、密钥引用、数据分类与容量阻塞项。",
+          "License, verification, alias, secret, data-class and capacity blockers are checked before any assignment is published. Optional evaluation does not block deployment.",
+          "发布任何分配前都会检查许可证、验证、别名、密钥引用、数据分类与容量阻塞项；可选评测不阻塞部署。",
         ),
       ),
       @html.ol(class="deployment-steps", [
