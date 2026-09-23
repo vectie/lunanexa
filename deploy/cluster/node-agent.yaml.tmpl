@@ -135,6 +135,8 @@ spec:
               subPath: runtime-attestation-key
             - mountPath: /var/lib/lunanexa
               name: state
+            - mountPath: /var/lib/lunanexa/models
+              name: model-cache
             - mountPath: /etc/lunanexa/credentials
               name: credentials
               readOnly: true
@@ -197,6 +199,10 @@ spec:
           hostPath:
             path: /var/lib/lunanexa/node-agent
             type: DirectoryOrCreate
+        - name: model-cache
+          hostPath:
+            path: /var/lib/lunanexa/models
+            type: DirectoryOrCreate
         - name: credentials
           secret:
             defaultMode: 256
@@ -232,7 +238,6 @@ spec:
           projected:
             sources:
               - serviceAccountToken:
-                  audience: https://kubernetes.default.svc
                   expirationSeconds: 3600
                   path: token
               - configMap:
