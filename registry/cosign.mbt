@@ -36,20 +36,34 @@ pub extend SignatureVerificationReceipt with FromJson::{from_json}
 pub struct CosignVerifier {
   binary : String
   public_key_path : String
+  trusted_root_path : String?
 }
 
 ///|
 pub fn CosignVerifier::new(
   binary : String,
   public_key_path : String,
+  trusted_root_path? : String? = None,
 ) -> CosignVerifier raise SignatureVerificationError {
   if !(binary == "/usr/bin/cosign" || binary == "/usr/local/bin/cosign") ||
     !public_key_path.has_prefix("/") ||
     public_key_path.contains("..") ||
-    public_key_path.contains_char('\n') {
+    public_key_path.contains_char('\n') ||
+    (
+      trusted_root_path is Some(path) &&
+      (!path.has_prefix("/") || path.contains("..") || path.contains_char('\n'))
+    ) {
     raise InvalidVerifierConfiguration
   }
-  { binary, public_key_path, }
+  { binary, public_key_path, trusted_root_path, }
+}
+
+///|
+fn CosignVerifier::trusted_root_args(self : CosignVerifier) -> Array[String] {
+  match self.trusted_root_path {
+    Some(path) => ["--trusted-root", path]
+    None => []
+  }
 }
 
 ///|
@@ -85,9 +99,14 @@ pub async fn CosignVerifier::verify_image(
     raise UnsafeVerificationSubject
   }
   let subject = "\{image_ref}@\{digest}"
+  let args = ["verify", "--key", self.public_key_path, "--output", "json"]
+  for arg in self.trusted_root_args() {
+    args.push(arg)
+  }
+  args.push(subject)
   let (status, _, _) = @process.collect_output(
     self.binary,
-    ["verify", "--key", self.public_key_path, "--output", "json", subject],
+    args,
     inherit_env=false,
   )
   if status != 0 {
@@ -122,16 +141,16 @@ pub async fn CosignVerifier::verify_blob(
     raise SubjectDigestMismatch
   }
   let material_flag = @signature.cosign_material_flag(signature_path)
+  let args = ["verify-blob", "--key", self.public_key_path]
+  for arg in self.trusted_root_args() {
+    args.push(arg)
+  }
+  args.push(material_flag)
+  args.push(signature_path)
+  args.push(artifact_path)
   let (status, _, _) = @process.collect_output(
     self.binary,
-    [
-      "verify-blob",
-      "--key",
-      self.public_key_path,
-      material_flag,
-      signature_path,
-      artifact_path,
-    ],
+    args,
     inherit_env=false,
   )
   if status != 0 {

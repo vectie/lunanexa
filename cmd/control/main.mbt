@@ -1350,6 +1350,9 @@ async fn main {
       @registry.CosignVerifier::new(
         required_environment("LUNANEXA_COSIGN_BINARY"),
         required_environment("LUNANEXA_COSIGN_PUBLIC_KEY_PATH"),
+        trusted_root_path=Some(
+          required_environment("LUNANEXA_COSIGN_TRUSTED_ROOT_PATH"),
+        ),
       ),
     )
     .with_workspace_directory(
