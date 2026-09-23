@@ -7,7 +7,7 @@ use that exact same name.
 
 ## Observed deployment, 2026-09-23
 
-Read-only queries against management node `192.168.2.175` found only the
+Initial read-only queries against management node `192.168.2.175` found only the
 `local-path` StorageClass (`rancher.io/local-path`, `WaitForFirstConsumer`,
 reclaim policy `Delete`). All listed PVs were RWO. There were no registered
 CSI drivers. Management had no mounted NFS filesystem and no populated NFS
@@ -15,8 +15,13 @@ export configuration in the inspected output. These observations do **not**
 establish that the separate data node has no export: its address/export and
 capacity have not been verified in this inspection.
 
-No storage driver, NFS service, export, mount, PVC or live workload was changed.
-The current cluster cannot yet demonstrate cross-Spark workspace reopening.
+The scoped gateway storage-read RBAC, management NFS, persistent TCP 2049
+source firewall, upstream NFS CSI driver and non-default
+`lunanexa-workspaces-rwx` StorageClass were subsequently installed. A scratch
+RWX claim bound and two restricted UID 1000 Pods on different Sparks exchanged
+files with matching SHA-256 in both directions. The scratch resources and
+files were cleaned. No existing PVC or live workspace was migrated; public UI
+save/close/reopen acceptance remains pending.
 
 ## Deployment-owned profile
 
@@ -67,7 +72,7 @@ storageclasses. It does not need PV mutation, host mounting, or export creation.
 JSON Patch content type is used only for the PVC ownership CAS; manifests still
 use server-side apply. Existing PVCs are not reapplied during exclusive launch.
 
-The unapplied supplement is
+The installed supplement is
 [`deploy/cluster/webide-storage-read.yaml`](../../deploy/cluster/webide-storage-read.yaml).
 Read-only inspection confirmed the live Deployment uses service account
 `aigc-acceptance-20260915/webide-gateway`; the binding names that exact account.
@@ -78,10 +83,10 @@ alongside HostConfig if the approved profile uses a different name. There are
 no wildcard resources, write verbs, PV listing, Secret access, or impersonation
 in this supplement. Existing namespaced PVC authority is not expanded here.
 
-Apply this supplement only during the authorized deployment step, then verify
-the gateway can get its actual bound PV and perform the name-filtered class
-lookup. This document and checked-in manifest are not evidence that the live
-RBAC has been applied.
+It was applied after server-side dry-run. The gateway service account is
+authorized to list the named `lunanexa-workspaces-rwx` StorageClass. The CSI
+driver and scratch claim now prove the backend; the gateway's real bound-PV
+read and workspace mount still need UI acceptance.
 
 A resourceVersion race may produce Kubernetes HTTP 409 or HTTP 422 for JSON
 Patch. A 422 becomes `StorageBusy` only after a read confirms that the PVC's
@@ -89,24 +94,16 @@ resourceVersion changed from the expected value; unrelated 422 validation
 errors are not mislabeled as another writer. The raw Kubernetes error body is
 never returned to the user.
 
-## Exact next deployment work
+## Remaining deployment work
 
-1. Identify the intended shared-storage host/export and verify available bytes,
-   filesystem durability, backup policy and reachability from all four Sparks.
-   Keep user data in an export separate from immutable model caches.
-2. Install an approved pinned NFS CSI driver (or an existing equivalent RWX
-   provider) and configure `lunanexa-workspaces-rwx` with **Retain** reclaim policy. Set
-   export permissions for the workspace UID/GID 1000 without granting user pods
-   host or storage-administration access. No driver/version is claimed installed.
-3. Add the read-only PV/StorageClass RBAC above; validate a scratch RWX PVC can
-   be mounted sequentially by UID 1000 on two different Sparks and preserves
-   written contents. This infrastructure probe is not customer UI acceptance.
-4. For existing local workspaces, stop the runtime and prove no writer remains.
+1. Define backup, disk alert and recovery procedures for management `/data`;
+   NFS/management is still a single point of failure.
+2. For existing local workspaces, stop the runtime and prove no writer remains.
    Back up the PVC, copy into a distinct new shared PVC, verify file contents
    and ownership, and retain the original. Switching a config does not perform
    this copy. Bind/switch the stable workspace claim only in a documented
    maintenance migration; do not delete the original claim as a shortcut.
-5. Set the gateway's shared profile only after the backend and any necessary
+3. Set the gateway's shared profile only after the backend and any necessary
    migration are ready. Open, save, stop, allocate another Spark and reopen via
    the public portal. Check ComfyUI workflows/results and WebIDE files. Try a
    concurrent delivery and confirm it reports the existing writer instead of
@@ -114,5 +111,6 @@ never returned to the user.
    while preserving the PVC.
 
 Source tests cover profile rendering, CAS ownership, retained claim reuse and
-explicit local-node/profile mismatch. They do not prove NFS reliability,
-physical cross-node persistence or backup recovery.
+explicit local-node/profile mismatch. The scratch Kubernetes probe proves
+cross-node file bytes, not application persistence, NFS restart recovery or
+backup recovery.

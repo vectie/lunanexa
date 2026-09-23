@@ -1,0 +1,24 @@
+[Unit]
+Description=Limit LunaNexa workspace NFS to management and four Spark nodes
+DefaultDependencies=no
+After=local-fs.target
+Before=nfs-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/sbin/iptables -w -N LNX-WORKSPACES
+ExecStart=/usr/sbin/iptables -w -F LNX-WORKSPACES
+ExecStart=/usr/sbin/iptables -w -A LNX-WORKSPACES -s 192.168.2.175/32 -j ACCEPT
+ExecStart=/usr/sbin/iptables -w -A LNX-WORKSPACES -s 192.168.2.176/30 -j ACCEPT
+ExecStart=/usr/sbin/iptables -w -A LNX-WORKSPACES -j DROP
+ExecStart=-/usr/sbin/iptables -w -D INPUT -p tcp --dport 2049 -j LNX-WORKSPACES
+ExecStart=/usr/sbin/iptables -w -I INPUT 1 -p tcp --dport 2049 -j LNX-WORKSPACES
+ExecStart=-/usr/sbin/ip6tables -w -N LNX-WORKSPACES
+ExecStart=/usr/sbin/ip6tables -w -F LNX-WORKSPACES
+ExecStart=/usr/sbin/ip6tables -w -A LNX-WORKSPACES -j DROP
+ExecStart=-/usr/sbin/ip6tables -w -D INPUT -p tcp --dport 2049 -j LNX-WORKSPACES
+ExecStart=/usr/sbin/ip6tables -w -I INPUT 1 -p tcp --dport 2049 -j LNX-WORKSPACES
+
+[Install]
+WantedBy=multi-user.target

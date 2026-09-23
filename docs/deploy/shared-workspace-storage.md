@@ -1,6 +1,10 @@
 # Shared workspace storage: management NFS + upstream CSI
 
-Status, 2026-09-23: preparation implemented and registry indexes verified; **not installed or accepted on the live cluster**. This does not migrate any existing local-path PVC. The prepared backend enables a workspace PVC to reopen on another Spark; it does not make the management disk highly available.
+Status, 2026-09-23: management NFS, dedicated export, persistent TCP 2049
+firewall, upstream CSI driver and non-default RWX StorageClass are installed.
+A disposable two-Spark Kubernetes PVC read/write probe passed. Real workspace
+reopen, tenant isolation and NFS restart acceptance remain pending. This does
+not migrate existing local-path PVCs or make the management disk highly available.
 
 ## Deployment profile
 
@@ -44,11 +48,11 @@ Copy the prepared bundle and repository script/profile to the intended hosts thr
 sudo /absolute/path/to/moon run scripts/prepare-shared-storage.mbtx import-images /absolute/bundle /run/containerd/containerd.sock
 ```
 
-The script calls `ctr --namespace k8s.io images import --digests --base-name ... --platform linux/<architecture>` and imports only the matching architecture. Confirm the pinned references appear in the CRI image inventory before proceeding. Actual cache download and transfer have passed (see evidence); containerd import has not been exercised yet. Direct registry pulls remain possible when nodes have registry access.
+The script calls `ctr --namespace k8s.io images import --digests --base-name ... --platform linux/<architecture>` and imports only the matching architecture. Confirm the pinned references appear in the CRI image inventory before proceeding. Cache download, transfer and import passed on management and all four Spark nodes. The Spark Kubernetes socket is `/run/k3s/containerd/containerd.sock`, not the generic example socket above. Direct registry pulls remain possible when nodes have registry access.
 
 Management uses k3s: its actual socket is `/run/k3s/containerd/containerd.sock` (confirmed through the existing artifact-builder workflow), not the Spark example socket above. The existing `lunanexa-runtime-qualification/offline-production-builder` has `/host/k3s ctr` and its corresponding socket; it may be reused for explicit coordinated image imports without creating another privileged Pod. Do not delete that shared builder.
 
-## Enable host and driver (coordinated maintenance step, NOT run yet)
+## Enable host and driver
 
 On management, from the repository root, with an interactive authorized sudo session (no password in command arguments):
 
@@ -58,6 +62,24 @@ sudo /absolute/path/to/moon run scripts/prepare-shared-storage.mbtx install-serv
 
 This runs `apt-get update`, installs `nfs-kernel-server nfs-common` without rewriting mirrors, creates only the dedicated export directory/configuration, enables NFS and reloads exports. It refuses unexpected existing export ownership/configuration instead of recursively changing permissions. Host firewall must permit NFS v4 TCP 2049 from the five node IPs only; do not expose NFS publicly. The script does not rewrite existing firewall rules.
 
+This host step completed on 2026-09-23. `/data` remains a separate mount with
+about 4.6 TiB available; the export root is UID/GID 1000 mode 0770. UFW is
+inactive, so a dedicated persistent `lunanexa-nfs-firewall.service` and an
+`nfs-server.service` dependency were installed. Its IPv4 chain allows only
+192.168.2.175 and 192.168.2.176–179 on TCP 2049; its IPv6 chain drops that
+port. No other ports are changed. The source files are under `deploy/cluster/`.
+The export ACL additionally names the exact five hosts. A public TCP connect
+to 106.39.18.146:2049 persisted even when management NFS was stopped, while
+RPC v4 reset in both states. That public listener cannot be attributed to this
+service without router inspection, and is not evidence of a public NFS mount.
+
+A direct NFS v4.1 hard mount on Spark `.176` and `.177` succeeded. Each node
+wrote a distinct 4096-byte file as UID/GID 1000; the other node read the same
+SHA-256 (`425b4b1e…ffeec` and `229755d9…0abc8`). Both mounts were unmounted,
+the two test-only files deleted, and their temporary mountpoint directories
+removed. This proves host-level cross-node read/write, not PVC isolation,
+reconnect behavior or a user workspace reopen.
+
 On management with the existing kubeconfig:
 
 ```text
@@ -66,7 +88,17 @@ moon run scripts/prepare-shared-storage.mbtx install-driver /absolute/bundle /ho
 
 This opts in the five named nodes, applies upstream RBAC/CSIDriver, management controller and architecture-specific node DaemonSets, creates the non-default StorageClass and waits for all rollouts. It does not change existing default/local-path StorageClasses, PVCs, workspaces or model-serving workloads. Driver privilege and kubelet mount propagation are confined to kube-system platform components.
 
-Read-only host checks: all four Spark nodes have `/usr/sbin/mount.nfs` and `/lib/modules/7.0.0-1019-nvidia/kernel/fs/nfs/nfs.ko.zst`; .176 has `/usr/bin/ctr` and `/run/containerd/containerd.sock`. Management has `/usr/local/bin/ctr`; inspecting its socket requires elevated permissions. Management NFS tools were not in PATH and non-interactive sudo was denied. Kernel/module presence is not a successful live mount test.
+The controller reached 1/1, the amd64 node DaemonSet 1/1 and all four arm64
+node Pods 3/3. A disposable claim `cross-spark-probe` bound to a dynamically
+provisioned PV with source subdirectory
+`lunanexa-storage-probe-20260923/cross-spark-probe/pvc-45e15abe-2d2d-4995-b5ae-e4d3c5d00a7f`.
+Restricted UID/GID 1000 Pods on Spark `.176` and `.177` mounted it and wrote
+4096-byte files in both directions; opposite-node SHA-256 matched
+`011d8da6…40116` and `10a42b24…1a52`. Only the exact disposable Pods, claim,
+PV, namespace and two retained probe files/directory were removed afterward.
+The production driver, StorageClass, NFS export and image caches remain.
+
+Read-only host checks: all four Spark nodes have `/usr/sbin/mount.nfs` and `/lib/modules/7.0.0-1019-nvidia/kernel/fs/nfs/nfs.ko.zst`; .176 has `/usr/bin/ctr` and `/run/containerd/containerd.sock`. Management has `/usr/local/bin/ctr`; inspecting its socket requires elevated permissions. The management NFS server and firewall are active; the two-node direct-mount probe above now supersedes the earlier kernel-only observation.
 
 ## Isolation and acceptance
 

@@ -12,6 +12,7 @@
   "infrastructure": [
     {"namespace_name":"lunanexa","service_account":"lunanexa-node","label_key":"app","label_value":"lunanexa-node-agent"},
     {"namespace_name":"kube-system","service_account":"default","label_key":"app.kubernetes.io/name","label_value":"nvidia-device-plugin"},
+    {"namespace_name":"kube-system","service_account":"csi-nfs-node-sa","label_key":"app","label_value":"csi-nfs-node-arm64"},
     {"namespace_name":"dra-driver-nvidia-gpu","service_account":"dra-driver-nvidia-gpu-service-account-kubeletplugin","label_key":"dra-driver-nvidia-gpu-component","label_value":"kubelet-plugin"},
     {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-comfyui-public-77e2cfa7"},
     {"namespace_name":"kube-system","service_account":"svclb","label_key":"app","label_value":"svclb-glm53-exl3-a5867a07"},
