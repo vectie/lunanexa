@@ -97,6 +97,23 @@ async fn ApiService::configured_model_allowed(
 }
 
 ///|
+async fn ApiService::serving_client_model_aliases(
+  self : ApiService,
+  approved : Array[String],
+) -> Array[String] {
+  guard self.deployment_store is Some(deployments) else { return approved }
+  let serving = [
+    for operation in deployments.operations() if operation.state == Ready &&
+    operation.endpoint is Some(_) &&
+    operation.plan.template is Some(_) => {
+      let template = operation.plan.template.unwrap()
+      template.model_selector
+    }
+  ]
+  approved.filter(model_alias => serving.contains(model_alias))
+}
+
+///|
 async fn ApiService::handle_client_handoff(
   self : ApiService,
   verb : ApiMethod,
@@ -281,7 +298,9 @@ async fn ApiService::handle_client_handoff(
           }
         None => false
       }
-      let aliases = access_package_approved_aliases(self.registry)
+      let aliases = self.serving_client_model_aliases(
+        access_package_approved_aliases(self.registry),
+      )
       let blockers : Array[String] = []
       if !contract_ready {
         blockers.push("MasterLeaseRequired")
@@ -299,7 +318,7 @@ async fn ApiService::handle_client_handoff(
         })
         let client_blockers = blockers.copy()
         if model_required && aliases.is_empty() {
-          client_blockers.push("ApprovedModelRequired")
+          client_blockers.push("ServingModelRequired")
         }
         (
           {
@@ -335,8 +354,12 @@ async fn ApiService::handle_client_handoff(
           400, "InvalidRequest", "invalid client handoff intent", false,
         )
       }
+      let serving_aliases = self.serving_client_model_aliases(
+        access_package_approved_aliases(self.registry),
+      )
       for model in intent.allowed_models {
-        if !self.configured_model_allowed(model) {
+        if !self.configured_model_allowed(model) ||
+          !serving_aliases.contains(model) {
           return api_error(
             400, "InvalidRequest", "client handoff contains an unavailable model",
             false,

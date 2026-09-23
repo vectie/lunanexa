@@ -48,7 +48,7 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   assert_true(rendered.contains("ComfyUI"))
   assert_true(rendered.contains("aria-pressed=\"true\""))
   assert_true(rendered.contains("disabled>Open ComfyUI"))
-  assert_true(rendered.contains("No model alias is ready yet"))
+  assert_true(rendered.contains("No deployed model is serving yet"))
   assert_false(rendered.contains("href=\"https://creative.example/connect"))
   assert_true(selected.update(SelectWebIde("unregistered")) == selected)
   let loading = { ..selected, loading: true, }

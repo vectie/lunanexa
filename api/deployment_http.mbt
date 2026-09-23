@@ -117,11 +117,20 @@ fn management_node(
   heartbeat : @contracts.NodeHeartbeat,
   now_unix_ms : Int64,
   heartbeat_timeout_ms : Int64,
+  observed_available_memory_mib? : Int? = None,
 ) -> @deployment.ManagementNode {
   let healthy = heartbeat.inventory.accelerators.filter(value => value.healthy)
-  let memory_free_mib = healthy.fold(init=0, (total, accelerator) => {
+  let declared_memory_free_mib = healthy.fold(init=0, (total, accelerator) => {
     total + accelerator.memory_free_mib
   })
+  let memory_free_mib = if heartbeat.inventory.labels.get("lunanexa.gpu.model") ==
+    Some("NVIDIA GB10") {
+    observed_available_memory_mib.map_or(0, available => {
+      declared_memory_free_mib.min(available)
+    })
+  } else {
+    declared_memory_free_mib
+  }
   {
     node_id: heartbeat.node_id,
     state: if now_unix_ms - heartbeat.timestamp_unix_ms > heartbeat_timeout_ms {
@@ -155,6 +164,31 @@ fn management_node(
 }
 
 ///|
+fn observed_available_memory_mib(
+  samples : Array[@contracts.TelemetrySample],
+  node_id : String,
+  now_unix_ms : Int64,
+  maximum_age_ms : Int64,
+) -> Int? {
+  let mut latest : @contracts.TelemetrySample? = None
+  for sample in samples {
+    if sample.node_id == node_id &&
+      sample.deployment_id == "" &&
+      sample.metric == "host_memory_available_mib" &&
+      sample.timestamp_unix_ms <= now_unix_ms &&
+      now_unix_ms - sample.timestamp_unix_ms <= maximum_age_ms &&
+      sample.value >= 0.0 &&
+      sample.value <= 1_048_576.0 &&
+      latest.map_or(true, previous => {
+        sample.timestamp_unix_ms > previous.timestamp_unix_ms
+      }) {
+      latest = Some(sample)
+    }
+  }
+  latest.map(sample => sample.value.to_int())
+}
+
+///|
 async fn ApiService::deployment_planning_context(
   self : ApiService,
 ) -> @deployment.PlanningContext {
@@ -163,6 +197,9 @@ async fn ApiService::deployment_planning_context(
   }
   let now = @async.now()
   let snapshot = registry.snapshot()
+  let telemetry_samples = self.telemetry.map_or([], telemetry => {
+    telemetry.snapshot().samples
+  })
   {
     registry: registry_evidence(snapshot, now, registry.requires_evaluation()),
     nodes: [
@@ -171,6 +208,12 @@ async fn ApiService::deployment_planning_context(
           heartbeat,
           now,
           self.global_settings.control_timing.heartbeat_timeout_ms,
+          observed_available_memory_mib=observed_available_memory_mib(
+            telemetry_samples,
+            heartbeat.node_id,
+            now,
+            self.global_settings.control_timing.heartbeat_timeout_ms,
+          ),
         )
         if self.scheduler is Some(scheduler) &&
           scheduler.node_is_reserved(heartbeat.node_id) {
