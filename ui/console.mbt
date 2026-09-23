@@ -6977,8 +6977,8 @@ fn verified_import_gate(
       @html.span(
         localized(
           state.locale,
-          "Adoption only creates a Candidate from the immutable S3 artifact. It does not package the model or make it deployable.",
-          "登记只会从不可变 S3 制品创建候选模型；不会打包模型，也不会使其可部署。",
+          "Adoption only creates a Candidate from the verified immutable artifact. It does not package the model or make it deployable.",
+          "登记只会从已校验的不可变制品创建候选模型；不会打包模型，也不会使其可部署。",
         ),
       ),
       @html.ul(class="model-approval-checklist", [
@@ -6992,8 +6992,8 @@ fn verified_import_gate(
         @html.li(
           localized(
             state.locale,
-            "Pending · Artifact signature and provenance",
-            "待完成 · 制品签名与来源证明",
+            "Pending · Artifact integrity and provenance",
+            "待完成 · 制品完整性与来源记录",
           ),
         ),
         @html.li(
