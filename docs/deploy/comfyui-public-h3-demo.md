@@ -1,7 +1,10 @@
 # Public H3 ComfyUI demo
 
 `deploy/acceptance/comfyui-public-demo-pvc.yaml` exposes the CPU-only ComfyUI
-frontend on port 5000 without an application login. FL2VA inference runs on
+frontend at `http://203.0.113.10:5005/` without an application login. The
+management-node proxy forwards port 5005 to the internal `comfyui-public`
+ClusterIP Service on port 8188. The former public port 5000 redirects to 5005;
+it is not the ComfyUI entry point. FL2VA inference runs on
 Spark 25e2 (`192.0.2.176`), and Ref2VA runs on Spark 3782
 (`192.0.2.177`). ComfyUI does not mount model weights; its LunaNexa H3
 templates call the model endpoints through the management-node proxy.
