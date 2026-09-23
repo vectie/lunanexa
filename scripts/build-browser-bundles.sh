@@ -20,6 +20,17 @@ cp assets/platform-logo.png "$output_root/assets/platform-logo.png"
 cp assets/platform-logo-light.png "$output_root/assets/platform-logo-light.png"
 cp "$browser_build_root/cmd/console/console.js" "$output_root/console/console.js"
 cp cmd/enterprise/index.html "$output_root/enterprise/index.html"
+if [ -n "${LUNANEXA_ENTERPRISE_PUBLIC_HTTP_ORIGINS:-}" ]; then
+  case "$LUNANEXA_ENTERPRISE_PUBLIC_HTTP_ORIGINS" in
+    *[!a-zA-Z0-9:./,_-]*)
+      printf '%s\n' 'invalid enterprise public HTTP origins' >&2
+      exit 1
+      ;;
+  esac
+  sed "s|name=\"lunanexa-public-http-origin\" content=\"\"|name=\"lunanexa-public-http-origin\" content=\"$LUNANEXA_ENTERPRISE_PUBLIC_HTTP_ORIGINS\"|" \
+    "$output_root/enterprise/index.html" > "$output_root/enterprise/index.html.tmp"
+  mv "$output_root/enterprise/index.html.tmp" "$output_root/enterprise/index.html"
+fi
 cp "$browser_build_root/cmd/enterprise/enterprise.js" "$output_root/enterprise/enterprise.js"
 cp cmd/workbench/index.html "$output_root/workbench/index.html"
 cp "$browser_build_root/cmd/workbench/workbench.js" "$output_root/workbench/workbench.js"
