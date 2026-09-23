@@ -1425,11 +1425,15 @@ test "cluster poll refreshes nodes only for the live generation" {
     cluster_poll_test_row("node-1", Unreachable, "Unassigned"),
     cluster_poll_test_row("node-2", Active, "Unassigned"),
   ]
-  let (stale, _) = update_live(model, Outcome(ClusterPolled(2L, polled)), emit)
+  let (stale, _) = update_live(
+    model,
+    Outcome(ClusterPolled(2L, polled, [])),
+    emit,
+  )
   assert_true(stale == model)
   let (current, _) = update_live(
     model,
-    Outcome(ClusterPolled(3L, polled)),
+    Outcome(ClusterPolled(3L, polled, [])),
     emit,
   )
   assert_eq(current.console.nodes.length(), 2)

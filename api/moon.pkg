@@ -61,6 +61,7 @@ import {
 supported_targets = "native"
 
 options(
+  "native-stub": [ "storage_statvfs.c" ],
   link: {
     "native": {
       "cc-link-flags": "-L/opt/homebrew/lib/postgresql@17 -lpq -pthread -ldl",

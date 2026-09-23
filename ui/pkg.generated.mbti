@@ -441,6 +441,7 @@ pub(all) struct ConsoleState {
   route : OperatorRoute
   overview : OverviewMetrics
   nodes : Array[NodeRow]
+  storage_nodes : Array[StorageNodeRow]
   models : Array[ModelRow]
   deployments : Array[DeploymentRow]
   catalog_templates : Array[@deployment.ModelServiceTemplate]
@@ -1047,6 +1048,20 @@ pub(all) struct RuntimeProfileDraft {
 pub fn RuntimeProfileDraft::equal(Self, Self) -> Bool
 pub fn RuntimeProfileDraft::not_equal(Self, Self) -> Bool
 pub fn RuntimeProfileDraft::to_repr(Self) -> @debug.Repr
+
+pub(all) struct StorageNodeRow {
+  node_id : String
+  state : String
+  total_bytes : Int64?
+  used_bytes : Int64?
+  available_bytes : Int64?
+  total_inodes : Int64?
+  available_inodes : Int64?
+  sampled_at_ms : Int64
+} derive(Eq, @json.FromJson)
+pub fn StorageNodeRow::equal(Self, Self) -> Bool
+pub fn StorageNodeRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn StorageNodeRow::not_equal(Self, Self) -> Bool
 
 pub(all) struct StreamEventView {
   sequence : Int

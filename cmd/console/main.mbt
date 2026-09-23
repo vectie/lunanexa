@@ -768,7 +768,8 @@ fn prefetch_console_reads(
     endpoint
   }
   let paths = [
-    "/v1/nodes", "/v1/registry", "/v1/scheduler", "/v1/telemetry", "/v1/catalog/templates",
+    "/v1/nodes", "/v1/storage-nodes", "/v1/registry", "/v1/scheduler", "/v1/telemetry",
+    "/v1/catalog/templates",
   ]
   match console_read_group_for_route(route) {
     Some(group) =>
@@ -1325,6 +1326,9 @@ async fn load_console(
   let heartbeats : Array[@contracts.NodeHeartbeat] = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/nodes", token)),
   )
+  let storage_nodes : Array[@ui.StorageNodeRow] = @json.from_json(
+    parse_console_json(request("GET", endpoint, "/v1/storage-nodes", token)),
+  )
   let registry : @contracts.RegistryReadContract = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/registry", token)),
   )
@@ -1407,6 +1411,7 @@ async fn load_console(
       recent_changes: -1,
     },
     nodes,
+    storage_nodes,
     models,
     // Owned by the deployment read group.
     deployments: [],
@@ -2480,7 +2485,7 @@ priv enum LoadOutcome {
   ModelLocalDirectoriesLoaded(@i18n.Locale, Array[@ui.ModelLocalDirectoryRow])
   ModelImportsPolled(Int64, Array[@ui.ModelImportRow])
   ModelImportPollFailed(Int64, @i18n.Locale)
-  ClusterPolled(Int64, Array[@ui.NodeRow])
+  ClusterPolled(Int64, Array[@ui.NodeRow], Array[@ui.StorageNodeRow])
   ClusterPollFailed(Int64, Bool)
   DeferredReadLoaded(@i18n.Locale, ConsoleReadGroup, ConsoleGroupRead)
   DeferredReadFailed(ConsoleReadGroup)
@@ -2668,6 +2673,7 @@ fn merge_loaded_console(
     qualified_services: current.qualified_services,
     enterprise_lease_requests: current.enterprise_lease_requests,
     nodes: preserve_node_lease_holders(current.nodes, loaded.nodes),
+    storage_nodes: loaded.storage_nodes,
     offline_commerce: { ..current.offline_commerce, locale: current.locale, },
     contract_documents: {
       ..current.contract_documents,
@@ -4085,6 +4091,11 @@ fn cluster_poll_request_command(
           request("GET", model.endpoint, "/v1/nodes", model.credential),
         ),
       )
+      let storage_nodes : Array[@ui.StorageNodeRow] = @json.from_json(
+        parse_console_json(
+          request("GET", model.endpoint, "/v1/storage-nodes", model.credential),
+        ),
+      )
       let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
         parse_console_json(
           request("GET", model.endpoint, "/v1/telemetry", model.credential),
@@ -4095,7 +4106,7 @@ fn cluster_poll_request_command(
         existing,
         build_node_rows(heartbeats, telemetry, None, model.console.locale),
       )
-      ClusterPolled(generation, nodes)
+      ClusterPolled(generation, nodes, storage_nodes)
     } catch {
       error =>
         ClusterPollFailed(
@@ -5199,7 +5210,7 @@ fn update_live(
           },
         )
       }
-    Outcome(ClusterPolled(generation, nodes)) =>
+    Outcome(ClusterPolled(generation, nodes, storage_nodes)) =>
       if generation != model.cluster_poll_generation ||
         !model.console.operator_authenticated {
         (model, @rabbita.none)
@@ -5210,6 +5221,7 @@ fn update_live(
             console: {
               ..model.console,
               nodes,
+              storage_nodes,
               overview: {
                 ..model.console.overview,
                 active_nodes: nodes.count_if(node => node.state == Active),
