@@ -45,6 +45,8 @@ NAMESPACE = "k8s.io"
 
 
 def sudo(password, command):
+    if os.geteuid() == 0:
+        return subprocess.run(command, capture_output=True, text=True)
     return subprocess.run(
         ["sudo", "-S", "-k"] + command,
         input=password + "\n",
@@ -95,7 +97,7 @@ def main():
     parser.add_argument("--sudo-password", default=os.environ.get("LUNANEXA_SUDO_PASSWORD"))
     arguments = parser.parse_args()
 
-    if not arguments.sudo_password:
+    if not arguments.sudo_password and os.geteuid() != 0:
         sys.exit("no sudo password: pass --sudo-password or set LUNANEXA_SUDO_PASSWORD")
     if not os.path.isdir(arguments.dist):
         sys.exit(f"no bundle at {arguments.dist}; run scripts/build-browser-bundles.sh first")

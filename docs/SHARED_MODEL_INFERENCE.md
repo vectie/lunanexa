@@ -16,8 +16,9 @@ that service without sharing the creator's API secret or WebIDE.
    bound to the delivery ID.
 3. The WebIDE redeems the code and receives its own scoped credential. Its own
    workspace, files, and browser session remain separate from other members.
-   The workspace model proxy forwards that credential to MoonGate; MoonGate
-   transports the member's bearer token to LunaNexa, which performs the live
+   The workspace model proxy forwards that credential to the configured model
+   gateway. When MoonGate is that gateway, it transports the member's bearer
+   token without substituting the service creator's key. LunaNexa performs the live
    delivery, tenant, organization, project, capability, quota, and lease checks.
 4. Each member can also create a one-time delivery API key for API use. That key
    is scoped to the same service but has an independent identity and usage
