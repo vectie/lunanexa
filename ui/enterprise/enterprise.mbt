@@ -2186,7 +2186,7 @@ fn account_access_view(
       @html.div(class="browser-session-row", [
         copy_detail(state, emit, browser_session.session_id),
         @html.span(
-          "\{enterprise_copy(state.locale, Expires)} · \{@contractdoc.format_unix_ms_utc(browser_session.expires_unix_ms)}",
+          "\{enterprise_copy(state.locale, Expires)} · \{@contractdoc.format_unix_ms_beijing(browser_session.expires_unix_ms)}",
         ),
       ])
     }
@@ -2804,7 +2804,7 @@ fn payment_provider_record(
       ),
     ]),
     @html.p(
-      "\{record.provider} · \{record.environment} · \{enterprise_copy(state.locale, Updated)} \{@contractdoc.format_unix_ms_utc(record.updated_unix_ms)}",
+      "\{record.provider} · \{record.environment} · \{enterprise_copy(state.locale, Updated)} \{@contractdoc.format_unix_ms_beijing(record.updated_unix_ms)}",
     ),
     match action_url {
       Some(url) =>
@@ -2940,7 +2940,7 @@ fn costs_view(
               @html.div([
                 @html.dt(enterprise_copy(state.locale, LedgerRevision)),
                 @html.dd(
-                  "\{quote.ledger_entry_count} \{enterprise_copy(state.locale, Entries)} · \{@contractdoc.format_unix_ms_utc(quote.ledger_revision_unix_ms)}",
+                  "\{quote.ledger_entry_count} \{enterprise_copy(state.locale, Entries)} · \{@contractdoc.format_unix_ms_beijing(quote.ledger_revision_unix_ms)}",
                 ),
               ]),
             ]),
@@ -3777,7 +3777,7 @@ fn notifications_view(
                       @html.dt(enterprise_copy(state.locale, Received)),
                       @html.dd(
                         class="mono",
-                        @contractdoc.format_unix_ms_utc(
+                        @contractdoc.format_unix_ms_beijing(
                           record.event.created_unix_ms,
                         ),
                       ),

@@ -112,7 +112,7 @@ pub fn expiry_label(
       "\{minutes}" + enterprise_copy(locale, MRemaining)
     }
   }
-  relative + " · " + @contractdoc.format_unix_ms_utc(expiry)
+  relative + " · " + @contractdoc.format_unix_ms_beijing(expiry)
 }
 
 ///|

@@ -208,7 +208,7 @@ fn resource_delivery_view(
               @html.option(
                 value=lease.key,
                 selected=lease.key == panel.selected_lease,
-                "\{lease.label} · \{@contractdoc.format_unix_ms_utc(lease.expires_unix_ms)}",
+                "\{lease.label} · \{@contractdoc.format_unix_ms_beijing(lease.expires_unix_ms)}",
               )
             }),
           ],
@@ -293,7 +293,7 @@ fn resource_delivery_view(
         @html.li(
           "\{row.request.organization_id} · \{row.request.node_ids.length()} " +
           localized(state.locale, "nodes", "台") +
-          " · \{row.state} · \{@contractdoc.format_unix_ms_utc(row.request.expires_unix_ms)}",
+          " · \{row.state} · \{@contractdoc.format_unix_ms_beijing(row.request.expires_unix_ms)}",
         )
       }),
     ),

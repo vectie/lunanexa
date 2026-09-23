@@ -5650,7 +5650,7 @@ fn update(
               (
                 artifact.order_id,
                 artifact.artifact_id,
-                "v\{artifact.revision} · \{@contractdoc.format_unix_ms_utc(artifact.created_unix_ms)}",
+                "v\{artifact.revision} · \{@contractdoc.format_unix_ms_beijing(artifact.created_unix_ms)}",
                 artifact.created_unix_ms,
               )
             }),

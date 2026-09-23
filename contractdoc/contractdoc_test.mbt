@@ -610,6 +610,14 @@ test "renewal draft requires an effective source with initial-stage forms" {
 test "contract dates and money render stable human-readable values" {
   assert_eq(@contractdoc.format_unix_ms_utc(0L), "1970-01-01 00:00:00 UTC")
   assert_eq(
+    @contractdoc.format_unix_ms_beijing(0L),
+    "1970-01-01 08:00:00 北京时间",
+  )
+  assert_eq(
+    @contractdoc.format_unix_ms_beijing(1789774200000L),
+    "2026-09-19 07:30:00 北京时间",
+  )
+  assert_eq(
     @contractdoc.format_unix_ms_utc(1787184000000L),
     "2026-08-20 00:00:00 UTC",
   )

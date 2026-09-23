@@ -624,7 +624,7 @@ test "unauthenticated operator sees login gate instead of console shell" {
 
 ///|
 #warnings("-alert_unstable")
-test "public plain HTTP renders login landing but blocks credential entry" {
+test "unconfigured public HTTP origin renders login landing but blocks credential entry" {
   let model : AppModel = {
     endpoint: "http://106.39.18.146:4174",
     credential: "operator-secret",
@@ -650,10 +650,10 @@ test "public plain HTTP renders login landing but blocks credential entry" {
     @rabbita.Val::constant(app_view(model, emit))
   })
   assert_true(
-    html.contains("Administrative login is blocked on public plain HTTP"),
+    html.contains("This address is not the configured Operator origin"),
   )
   assert_true(html.contains("disabled"))
-  assert_true(html.contains("Organization sign-in requires HTTPS"))
+  assert_true(html.contains("Open the configured Operator address"))
   assert_false(html.contains("/auth/oidc/start?audience=operator"))
   assert_true(html.contains("login-username"))
   assert_true(html.contains("login-password"))
@@ -1685,11 +1685,11 @@ fn alerts_window_test_row(
 let alerts_window_now_ms : Int64 = 1789808400000L
 
 ///|
-test "alert window narrows the incident calendar to whole UTC days" {
+test "alert window narrows the incident calendar to whole Beijing days" {
   let today = alerts_window_test_row("alert-today", 1789808400000L, Unread)
   let yesterday = alerts_window_test_row(
     "alert-yesterday",
-    1789774200000L,
+    1789745400000L,
     Unread,
   )
   let last_week = alerts_window_test_row(
@@ -1732,11 +1732,26 @@ test "alert window narrows the incident calendar to whole UTC days" {
 }
 
 ///|
+test "Beijing midnight changes the alert day at 16:00 UTC" {
+  let before_midnight = 1789747199000L
+  let after_midnight = 1789747201000L
+  assert_eq(@ui.alert_day_label(before_midnight), "2026-09-18")
+  assert_eq(@ui.alert_day_label(after_midnight), "2026-09-19")
+  let rows = [
+    alerts_window_test_row("previous-day", before_midnight, Unread),
+    alerts_window_test_row("new-day", after_midnight, Unread),
+  ]
+  let visible = @ui.filter_alerts(rows, Today, after_midnight)
+  assert_eq(visible.length(), 1)
+  assert_eq(visible[0].notification_id, "new-day")
+}
+
+///|
 test "alert calendar groups by day newest first and counts only filtered open incidents" {
   let rows = [
     alerts_window_test_row("alert-today-open", 1789808400000L, Unread),
     alerts_window_test_row("alert-today-resolved", 1789808400000L, Resolved),
-    alerts_window_test_row("alert-yesterday-open", 1789774200000L, Acknowledged),
+    alerts_window_test_row("alert-yesterday-open", 1789745400000L, Acknowledged),
   ]
   assert_eq(@ui.alert_day_label(1789808400000L), "2026-09-19")
   let visible = @ui.filter_alerts(rows, AllAlerts, alerts_window_now_ms)
@@ -2457,7 +2472,7 @@ test "the alerts page renders its day calendar for the selected window" {
     route: Alerts,
     notifications: [
       alerts_window_test_row("alert-today", 1789808400000L, Unread),
-      alerts_window_test_row("alert-yesterday", 1789774200000L, Acknowledged),
+      alerts_window_test_row("alert-yesterday", 1789745400000L, Acknowledged),
     ],
   }
   let today_html = @rabbita.render_to_string(() => {

@@ -8,7 +8,7 @@
   },
   "images": {
     "control": "lunanexa-control:20260918",
-    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node:20260921-arm64-r9",
+    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node:20260923-arm64-host-metrics",
     "nodeComment": "Now pulled from the cluster's own registry. The import path remains for the first install, when the registry may be empty."
   },
   "runtime": {
@@ -114,7 +114,7 @@
     "clusterIP": "10.43.216.245",
     "pull": [
       "moon/lunaflux@sha256:bec873094c71e35bdba5497f8ef42845318ff6af5e8bedc873d89a7558aaecbb",
-      "lunanexa/node:20260921-arm64-r9"
+      "lunanexa/node:20260923-arm64-host-metrics"
     ]
   }
 }

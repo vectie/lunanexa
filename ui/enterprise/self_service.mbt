@@ -1543,7 +1543,7 @@ fn quote_step(
               @html.div([
                 @html.dt(enterprise_copy(state.locale, ValidUntil)),
                 @html.dd(
-                  @contractdoc.format_unix_ms_utc(quote.valid_until_unix_ms),
+                  @contractdoc.format_unix_ms_beijing(quote.valid_until_unix_ms),
                 ),
               ]),
               @html.div([

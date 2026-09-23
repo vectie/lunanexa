@@ -4,6 +4,20 @@ test "HTTP opt-in is exact and same-origin only" {
   assert_false(@browser_transport.allows(origin, origin, ""))
   assert_true(@browser_transport.allows(origin, origin, origin))
   assert_true(@browser_transport.allows(origin + "/", origin, origin))
+  assert_true(
+    @browser_transport.allows(
+      origin,
+      origin,
+      "http://internal.example:4174," + origin,
+    ),
+  )
+  assert_false(
+    @browser_transport.allows(
+      "http://internal.example:4174",
+      origin,
+      "http://internal.example:4174," + origin,
+    ),
+  )
   for
     endpoint in [
       "http://other.example:5003",

@@ -19,11 +19,13 @@ set -euo pipefail
 SOURCE="$HOME/src"
 TAG="lunanexa-node:20260920-arm64-r5"
 PROXY=""
+WORK="$HOME/node-image"
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) SOURCE="$2"; shift 2 ;;
     --tag) TAG="$2"; shift 2 ;;
     --proxy) PROXY="$2"; shift 2 ;;
+    --work) WORK="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,8 +43,10 @@ if [ -z "$PROXY" ]; then
 fi
 [ -n "$PROXY" ] && [ -x "$PROXY" ] || { echo "no loopback proxy binary found" >&2; exit 1; }
 
-WORK="$HOME/node-image"
 ROOT="$WORK/rootfs"
+case "$WORK" in
+  ""|/|"$HOME"|"$SOURCE") echo "unsafe image work directory: $WORK" >&2; exit 2 ;;
+esac
 rm -rf "$WORK"
 mkdir -p "$ROOT"/usr/local/bin "$ROOT"/usr/bin "$ROOT"/lib/aarch64-linux-gnu \
   "$ROOT"/usr/lib/aarch64-linux-gnu "$ROOT"/etc/ssl/certs "$ROOT"/data/models \

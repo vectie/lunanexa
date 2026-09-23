@@ -784,9 +784,7 @@ fn order_expiry_label(locale : @i18n.Locale, unix_ms : Int64) -> String {
   if unix_ms <= 0L {
     return copy(locale, "Not set", "未设置")
   }
-  @time.unix(unix_ms / 1000L, zone=@time.utc_zone).to_string() catch {
-    _ => copy(locale, "Invalid expiry time", "到期时间无效")
-  }
+  @contractdoc.format_unix_ms_beijing(unix_ms)
 }
 
 ///|
