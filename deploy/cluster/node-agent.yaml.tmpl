@@ -238,6 +238,10 @@ spec:
           projected:
             sources:
               - serviceAccountToken:
+                  # Use the API server's default audience. A token minted for
+                  # https://kubernetes.default.svc is rejected by this k3s
+                  # cluster (401); its accepted audience is the cluster-local
+                  # issuer, which Kubernetes selects when this field is absent.
                   expirationSeconds: 3600
                   path: token
               - configMap:
