@@ -7144,7 +7144,8 @@ fn update_live(
         model.console.model_imports
         .iter()
         .find_first(import_ => {
-          import_.import_id == import_id && @ui.model_import_adoptable(import_)
+          import_.import_id == import_id &&
+          @ui.model_import_needs_registration(import_, model.console.models)
         })
         is Some(_) else {
         return (
@@ -7266,7 +7267,7 @@ fn update_live(
         .iter()
         .find_first(import_ => {
           import_.import_id == draft.import_id &&
-          @ui.model_import_adoptable(import_)
+          @ui.model_import_needs_registration(import_, model.console.models)
         })
         is Some(_) &&
         model_adoption_intent(draft) is Some(intent) else {

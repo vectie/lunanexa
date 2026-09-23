@@ -6443,6 +6443,33 @@ pub fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
 }
 
 ///|
+/// A verified download and a registry entry describe the same immutable
+/// artifact only when both its transport URI and manifest digest agree.
+fn registered_model_for_import(
+  models : Array[ModelRow],
+  import_ : ModelImportRow,
+) -> ModelRow? {
+  if import_.artifact_uri == "" || import_.manifest_digest == "" {
+    return None
+  }
+  models
+  .iter()
+  .find_first(model => {
+    model.artifact_uri == import_.artifact_uri &&
+    model.artifact_digest == import_.manifest_digest
+  })
+}
+
+///|
+pub fn model_import_needs_registration(
+  import_ : ModelImportRow,
+  models : Array[ModelRow],
+) -> Bool {
+  model_import_adoptable(import_) &&
+  registered_model_for_import(models, import_) is None
+}
+
+///|
 fn model_adoption_identifier_valid(value : String) -> Bool {
   @contracts.valid_identifier(value.trim().to_owned())
 }
@@ -6973,6 +7000,19 @@ fn verified_import_gate(
   import_ : ModelImportRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  if registered_model_for_import(state.models, import_) is Some(model) {
+    return @html.div(class="verified-import-actions", [
+      @html.strong(
+        localized(
+          state.locale,
+          "Already registered in the model registry",
+          "已登记到模型注册表",
+        ),
+      ),
+      @html.span(class="mono", "\{model.model_id}@\{model.version}"),
+      model_state_badge(state.locale, model.state),
+    ])
+  }
   @html.div(class="verified-import-actions", [
     @html.div(class="approval-gate-note", [
       @html.strong(
@@ -7046,6 +7086,7 @@ fn models_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   let detached_imports = state.model_imports.filter(import_ => {
+    registered_model_for_import(state.models, import_) is None &&
     !state.model_source_results.any(candidate => {
       match model_import_for(state.model_imports, candidate.id) {
         Some(visible) => visible.import_id == import_.import_id

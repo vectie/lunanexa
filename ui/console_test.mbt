@@ -1832,6 +1832,75 @@ fn candidate_model_row() -> @ui.ModelRow {
 }
 
 ///|
+test "registered ModelScope artifacts are not offered for adoption again" {
+  let registered : @ui.ModelImportRow = {
+    import_id: "ms-registered-1",
+    source: "modelscope",
+    model_id: "OpenBMB/MiniCPM5-1B",
+    revision: "master",
+    state: Verified,
+    files_total: 1,
+    files_completed: 1,
+    bytes_total: 1024L,
+    bytes_completed: 1024L,
+    manifest_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    artifact_uri: "modelstore://qwen3635ba3bfp8",
+    license: "apache-2.0",
+    local_directory: "qwen3635ba3bfp8",
+    error_code: "",
+    cancel_requested: false,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1100L,
+  }
+  let pending = {
+    ..registered,
+    import_id: "ms-unregistered-2",
+    artifact_uri: "modelstore://different-artifact",
+  }
+  assert_false(
+    @ui.model_import_needs_registration(registered, [candidate_model_row()]),
+  )
+  assert_true(
+    @ui.model_import_needs_registration(pending, [candidate_model_row()]),
+  )
+  let html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    models: [candidate_model_row()],
+    model_imports: [registered, pending],
+  })
+  assert_false(html.contains("ms-registered-1"))
+  assert_true(html.contains("ms-unregistered-2"))
+  assert_true(html.contains("Adopt as Candidate"))
+  let searched = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    models: [candidate_model_row()],
+    model_source_results: [
+      {
+        id: registered.model_id,
+        display_name: "MiniCPM5-1B",
+        description: "small model",
+        downloads: 1L,
+        likes: 1L,
+        license: registered.license,
+        tasks: ["text-generation"],
+        created_at: "",
+        last_modified: "",
+        file_size: registered.bytes_total,
+        params: 1000000000L,
+        tags: [],
+        private: false,
+        gated: false,
+      },
+    ],
+    model_imports: [registered],
+  })
+  assert_true(searched.contains("Already registered in the model registry"))
+  assert_false(searched.contains("Adopt as Candidate"))
+}
+
+///|
 test "candidate rows expose licence, verification, approval and promotion controls" {
   let base = console_state(Models)
   let html = @ui.render({ ..base, models: [candidate_model_row()], })
