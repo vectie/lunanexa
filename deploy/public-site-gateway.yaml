@@ -1,0 +1,173 @@
+# Dedicated HTTPS path-aware gateway. The old IP:port gateway keeps its own
+# deployment, Service and callback URIs throughout the cutover.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: lunanexa-identity-gateway-suanli, namespace: lunanexa}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: lunanexa-identity-gateway-suanli}
+  template:
+    metadata:
+      labels:
+        app: lunanexa-identity-gateway-suanli
+        app.kubernetes.io/part-of: lunanexa
+        lunanexa.io/plane: identity-ingress
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: identity-gateway
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/identity-gateway@sha256:10a1ba7857d4d74a2308c1d6355271dd0502c237a35a8609315c1dcf174e2cdf
+          imagePullPolicy: IfNotPresent
+          ports: [{name: identity-http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: lunanexa-identity-ingress-config}
+          env:
+            - {name: LUNANEXA_OIDC_OPERATOR_REDIRECT_URI, value: "https://suanli.kechuangfuwu.com/mana/auth/oidc/callback"}
+            - {name: LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI, value: "https://suanli.kechuangfuwu.com/user/auth/oidc/callback"}
+            - {name: LUNANEXA_OIDC_OPERATOR_CLIENT_ID, value: lunanexa-operator}
+            - name: LUNANEXA_OIDC_OPERATOR_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: operator-client-secret}}
+            - {name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_ID, value: lunanexa-enterprise}
+            - name: LUNANEXA_OIDC_ENTERPRISE_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: enterprise-client-secret}}
+            - name: LUNANEXA_OIDC_OPERATOR_COOKIE_SECRET
+              valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: operator-cookie-secret}}
+            - name: LUNANEXA_OIDC_ENTERPRISE_COOKIE_SECRET
+              valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: enterprise-cookie-secret}}
+            - name: LUNANEXA_IDENTITY_ASSERTION_SECRET
+              valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: identity-assertion-secret}}
+            - name: LUNANEXA_IDENTITY_GATEWAY_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: lunanexa-database, key: url}}
+            - name: LUNANEXA_OIDC_REALM_REGISTRATION_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: registration-client-secret}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: oidc-provider-ca, mountPath: /var/run/secrets/lunanexa/oidc, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /health, port: identity-http}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: identity-http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: oidc-provider-ca
+          secret:
+            secretName: lunanexa-oidc-provider-ca
+            items: [{key: ca.pem, path: ca.pem}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: lunanexa-identity-gateway-suanli, namespace: lunanexa}
+spec:
+  selector: {app: lunanexa-identity-gateway-suanli}
+  ports: [{name: http, port: 8081, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-gateway-ingress, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-gateway-egress, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: lunanexa-control, lunanexa.io/browser-identity-sidecar: enabled}}
+      ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8081}]
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/part-of: lunanexa, lunanexa.io/plane: console}}
+        - podSelector: {matchLabels: {app.kubernetes.io/part-of: lunanexa, lunanexa.io/plane: enterprise}}
+        - podSelector: {matchLabels: {app.kubernetes.io/part-of: lunanexa, lunanexa.io/plane: workbench}}
+      ports: [{protocol: TCP, port: 8080}]
+    - to:
+        - podSelector: {matchLabels: {app: lunanexa-postgres}}
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: lunanexa-identity}}
+          podSelector: {matchLabels: {app: lunanexa-identity-internal-edge}}
+      ports: [{protocol: TCP, port: 8443}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-to-identity-edge, namespace: lunanexa-identity}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-identity-internal-edge}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: lunanexa}}
+          podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-to-console, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/part-of: lunanexa, lunanexa.io/plane: console}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-to-enterprise, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/part-of: lunanexa, lunanexa.io/plane: enterprise}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-static-assets, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/part-of: lunanexa, lunanexa.io/plane: enterprise}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-to-relay, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-control, lunanexa.io/browser-identity-sidecar: enabled}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}}]
+      ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8081}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-suanli-to-postgres, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: lunanexa-postgres}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: lunanexa-identity-gateway-suanli}}}]
+      ports: [{protocol: TCP, port: 5432}]

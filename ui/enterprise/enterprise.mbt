@@ -1460,7 +1460,7 @@ fn navigation(
     }
   ]
   @html.aside(class="enterprise-sidebar", [
-    @html.a(class="enterprise-brand", href="/enterprise/", [
+    @html.a(class="enterprise-brand", href="./", [
       @html.span(
         class="brand-mark",
         style=[

@@ -82,7 +82,8 @@ fn host_and_audience(
   request : @http.Request,
 ) -> (String, BrowserAudience)? {
   guard header(request.headers, "Host") is Some(host) &&
-    config.host_audience(host) is Some(audience) &&
+    config.browser_audience(host, header(request.headers, "X-Forwarded-Prefix"))
+    is Some(audience) &&
     header(request.headers, "X-Forwarded-Proto") ==
     Some(config.browser_scheme()) else {
     return None
@@ -311,7 +312,11 @@ async fn handle_oidc_callback(
     303,
     "See Other",
     extra_headers={
-      "Location": "/",
+      "Location": if config.operator_host == config.enterprise_host {
+        config.public_ui_path(audience)
+      } else {
+        "/"
+      },
       "Cache-Control": "no-store",
       "Pragma": "no-cache",
       "Content-Length": "0",
@@ -631,10 +636,7 @@ async fn handle_proxy(
   }
   let path = request_path(request.path)
   if request.meth == Get && request.path == "/" {
-    let location = match audience {
-      Operator => "/console/"
-      Enterprise => "/enterprise/"
-    }
+    let location = config.public_ui_path(audience)
     connection.send_response(302, "Found", extra_headers={
       "Location": location,
       "Cache-Control": "no-store",

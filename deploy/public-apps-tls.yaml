@@ -1,0 +1,90 @@
+# Shared-domain front door. The legacy IP:port services remain unchanged while
+# these three site paths are rolled out and verified.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-public-mana-strip, namespace: lunanexa}
+spec:
+  stripPrefix: {prefixes: [/mana]}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-public-user-strip, namespace: lunanexa}
+spec:
+  stripPrefix: {prefixes: [/user]}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-public-console-prefix, namespace: lunanexa}
+spec:
+  addPrefix: {prefix: /console}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-public-enterprise-prefix, namespace: lunanexa}
+spec:
+  addPrefix: {prefix: /enterprise}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-public-mana-slash, namespace: lunanexa}
+spec:
+  redirectRegex:
+    regex: '^https://suanli\.kechuangfuwu\.com/mana$'
+    replacement: 'https://suanli.kechuangfuwu.com/mana/'
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-public-user-slash, namespace: lunanexa}
+spec:
+  redirectRegex:
+    regex: '^https://suanli\.kechuangfuwu\.com/user$'
+    replacement: 'https://suanli.kechuangfuwu.com/user/'
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: lunanexa-public-apps, namespace: lunanexa}
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`suanli.kechuangfuwu.com`) && Path(`/mana`)
+      kind: Rule
+      priority: 110
+      middlewares: [{name: lunanexa-public-mana-slash}]
+      services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    - match: Host(`suanli.kechuangfuwu.com`) && Path(`/user`)
+      kind: Rule
+      priority: 110
+      middlewares: [{name: lunanexa-public-user-slash}]
+      services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    - match: Host(`suanli.kechuangfuwu.com`) && (PathPrefix(`/mana/auth/`) || PathPrefix(`/mana/v1/`))
+      kind: Rule
+      priority: 100
+      middlewares: [{name: lunanexa-public-mana-strip}]
+      services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    - match: Host(`suanli.kechuangfuwu.com`) && (PathPrefix(`/user/auth/`) || PathPrefix(`/user/v1/`))
+      kind: Rule
+      priority: 100
+      middlewares: [{name: lunanexa-public-user-strip}]
+      services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    - match: Host(`suanli.kechuangfuwu.com`) && PathPrefix(`/mana/`)
+      kind: Rule
+      priority: 20
+      middlewares:
+        - {name: lunanexa-public-mana-strip}
+        - {name: lunanexa-public-console-prefix}
+      services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    - match: Host(`suanli.kechuangfuwu.com`) && PathPrefix(`/user/`)
+      kind: Rule
+      priority: 20
+      middlewares:
+        - {name: lunanexa-public-user-strip}
+        - {name: lunanexa-public-enterprise-prefix}
+      services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    - match: Host(`suanli.kechuangfuwu.com`) && PathPrefix(`/assets/`)
+      kind: Rule
+      priority: 20
+      services: [{name: lunanexa-enterprise, port: 8080}]
+  tls:
+    secretName: lunanexa-public-suanli-tls

@@ -51,6 +51,26 @@ test "HTTPS and loopback remain supported without opt-in" {
   assert_false(
     @browser_transport.allows("https://user:secret@platform.example", "", ""),
   )
+  assert_true(
+    @browser_transport.allows(
+      "https://platform.example/mana", "https://platform.example", "",
+    ),
+  )
+  assert_true(
+    @browser_transport.allows(
+      "https://platform.example/user", "https://platform.example", "",
+    ),
+  )
+  assert_false(
+    @browser_transport.allows(
+      "https://other.example/mana", "https://platform.example", "",
+    ),
+  )
+  assert_false(
+    @browser_transport.allows(
+      "https://platform.example/private", "https://platform.example", "",
+    ),
+  )
   assert_false(@browser_transport.endpoint_allowed("http://platform.example"))
 }
 

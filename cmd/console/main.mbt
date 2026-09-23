@@ -236,7 +236,7 @@ priv struct PasswordLoginOutcome {
 
 ///|
 extern "js" fn configured_endpoint() -> String =
-  #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
+  #| () => globalThis.LUNANEXA_API_ENDPOINT || (globalThis.location?.pathname?.startsWith("/mana/") ? `${globalThis.location.origin}/mana` : globalThis.location?.origin || "")
 
 ///|
 extern "js" fn demo_mode() -> Bool =
@@ -328,9 +328,9 @@ extern "js" fn download_json_file(filename : String, content : String) -> Unit =
 extern "js" fn stored_locale_preference() -> String =
   #| () => {
   #|   try {
-  #|     return globalThis.localStorage?.getItem("lunanexa.locale") || "";
+  #|     return globalThis.localStorage?.getItem("lunanexa.locale") || "zh-CN";
   #|   } catch (_) {
-  #|     return "";
+  #|     return "zh-CN";
   #|   }
   #| }
 
@@ -442,7 +442,8 @@ extern "js" fn request_promise(
 ///|
 extern "js" fn gateway_session_promise() -> @js.Promise =
   #| async () => {
-  #|   const response = await fetch("/auth/session", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/mana/") ? "/mana" : "";
+  #|   const response = await fetch(`${prefix}/auth/session`, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
   #|     credentials: "same-origin",
@@ -460,7 +461,8 @@ extern "js" fn gateway_session_promise() -> @js.Promise =
 extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
   #| async csrf => {
   #|   if (!csrf) return;
-  #|   const response = await fetch("/auth/logout", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/mana/") ? "/mana" : "";
+  #|   const response = await fetch(`${prefix}/auth/logout`, {
   #|     method: "POST",
   #|     headers: { "Accept": "application/json", "X-LunaNexa-CSRF": csrf },
   #|     credentials: "same-origin",
@@ -481,7 +483,8 @@ extern "js" fn password_login_promise(
 ) -> @js.Promise =
   #| async (username, password, audience) => {
   #|   if (!username || !password) return JSON.stringify({ status: 0, body: "" });
-  #|   const response = await fetch("/auth/password", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/mana/") ? "/mana" : "";
+  #|   const response = await fetch(`${prefix}/auth/password`, {
   #|     method: "POST",
   #|     headers: { "Accept": "application/json", "Content-Type": "application/json" },
   #|     credentials: "same-origin",
@@ -9689,7 +9692,11 @@ fn login_view(
         ),
         if transport_allowed {
           @html.a(
-            href="/auth/oidc/start?audience=operator",
+            href=if configured_endpoint().has_suffix("/mana") {
+              "/mana/auth/oidc/start?audience=operator"
+            } else {
+              "/auth/oidc/start?audience=operator"
+            },
             class="login-sso-link",
             console_copy(
               locale, "Continue with organization sign-in", "使用组织账户继续",

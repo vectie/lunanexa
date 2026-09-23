@@ -12,7 +12,7 @@
     sourceById: new Map(),
     petPending: false,
     advancedVisible: false,
-    locale: "en",
+    locale: "zh-CN",
     localization: null,
   };
 
@@ -100,7 +100,7 @@
   }
 
   function preferredLocale() {
-    try { return localStorage.getItem(localeStorageKey) === "zh-CN" ? "zh-CN" : "en"; } catch { return "en"; }
+    try { return localStorage.getItem(localeStorageKey) === "en" ? "en" : "zh-CN"; } catch { return "zh-CN"; }
   }
 
   function persistLocale(locale) {

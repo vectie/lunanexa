@@ -156,7 +156,7 @@ test("current reader guides bind named actions to bilingual catalogs and actual 
     assert.equal(action.selector, "data-open-pet");
     assert.equal(action.handler, "openPet");
     assert.equal(zhBook.ui[action.translation_key], action.zh);
-    assert.ok(siteHtml.includes(`<span data-ask-label>${action.en}</span>`));
+    assert.ok(siteHtml.includes(`<span data-ask-label>${action.zh}</span>`));
     assert.ok(siteHtml.includes('type="button" data-open-pet'));
     assert.ok(siteSource.includes('$("[data-open-pet]").addEventListener("click", openPet)'));
     assert.ok(siteSource.includes(`t("${action.translation_key}", "${action.en}")`));

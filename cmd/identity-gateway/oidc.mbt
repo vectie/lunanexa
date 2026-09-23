@@ -40,10 +40,7 @@ fn oidc_transport_url(config : GatewayConfig, url : String) -> String raise {
       guard same_issuer_endpoint(config.issuer, url) else {
         raise Failure("OIDC transport endpoint escaped the configured issuer")
       }
-      let (public_origin, _) = endpoint_origin_and_path(
-        config.issuer,
-        config.browser_secure(),
-      )
+      let (public_origin, _) = endpoint_origin_and_path(config.issuer, false)
       "\{origin}\{url[public_origin.length():]}"
     }
   }
