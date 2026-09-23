@@ -337,9 +337,7 @@ test "all operator routes render from the shared typed state" {
   for route in @ui.all_routes() {
     let html = @ui.render(console_state(route))
     assert_true(
-      html.contains(
-        "能源谷“创未来”街区算力平台 Cluster Operations",
-      ),
+      html.contains("能源谷“创未来”生态街区 Cluster Operations"),
     )
     assert_true(html.contains("class=\"sidebar\""))
     assert_true(html.contains("class=\"workspace-topbar\""))
@@ -909,7 +907,7 @@ test "Simplified Chinese localizes console chrome and preserves opaque data" {
     ),
   })
   assert_true(
-    users.contains("能源谷“创未来”街区算力平台 集群运维"),
+    users.contains("能源谷“创未来”生态街区 集群运维"),
   )
   assert_true(users.contains("跳转到主要内容"))
   assert_true(users.contains("aria-label=\"主导航\""))

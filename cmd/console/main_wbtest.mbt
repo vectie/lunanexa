@@ -498,11 +498,11 @@ test "changing an operator credential clears authenticated UI authority" {
 test "console document titles use the shared locale contract" {
   assert_eq(
     console_document_title(English),
-    "能源谷“创未来”街区算力平台 | Cluster Operations",
+    "能源谷“创未来”生态街区 | Cluster Operations",
   )
   assert_eq(
     console_document_title(ChineseSimplified),
-    "能源谷“创未来”街区算力平台 | 集群运维",
+    "能源谷“创未来”生态街区 | 集群运维",
   )
 }
 

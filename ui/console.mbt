@@ -12161,8 +12161,8 @@ fn console_view(
         attrs=@html.Attrs::build().aria_label(
           localized(
             state.locale,
-            "能源谷“创未来”街区算力平台 Cluster Operations",
-            "能源谷“创未来”街区算力平台 集群运维",
+            "能源谷“创未来”生态街区 Cluster Operations",
+            "能源谷“创未来”生态街区 集群运维",
           ),
         ),
         [
@@ -12181,7 +12181,7 @@ fn console_view(
           @html.div(class="brand-copy", [
             @html.span(
               class="brand-name",
-              "能源谷“创未来”街区算力平台",
+              "能源谷“创未来”生态街区",
             ),
             @html.span(
               class="brand-product",

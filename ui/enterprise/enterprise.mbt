@@ -1474,7 +1474,7 @@ fn navigation(
         ],
       ),
       @html.span([
-        @html.strong("能源谷“创未来”街区算力平台"),
+        @html.strong("能源谷“创未来”生态街区"),
         @html.small(enterprise_copy(state.locale, Enterprise)),
       ]),
     ]),
