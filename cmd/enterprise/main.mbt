@@ -5704,6 +5704,7 @@ fn update(
           portal: {
             ..model.portal,
             loading: false,
+            desktop_connect_phase: ClientOpened,
             success_message: Some(
               portal_copy(
                 model.portal.locale,
@@ -6141,6 +6142,12 @@ fn update(
               ),
             },
             loading: false,
+            desktop_connect_phase: if model.portal.desktop_connect_phase ==
+              IssuingHandoff {
+              ConnectFailed
+            } else {
+              model.portal.desktop_connect_phase
+            },
             provider_requests_loading: false,
             payment_checkout_loading: false,
             self_service: {

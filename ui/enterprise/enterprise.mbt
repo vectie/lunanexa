@@ -54,6 +54,14 @@ pub(all) struct EnterpriseDesktopClient {
 } derive(Debug, Eq)
 
 ///|
+pub(all) enum DesktopConnectPhase {
+  NotStarted
+  IssuingHandoff
+  ClientOpened
+  ConnectFailed
+} derive(Debug, Eq)
+
+///|
 pub(all) struct ApiKeyIssueDraft {
   display_name : String
   model_list_scope : Bool
@@ -192,6 +200,7 @@ pub(all) struct EnterpriseState {
   desktop_client : EnterpriseDesktopClient?
   desktop_clients : Array[EnterpriseDesktopClient]
   webide_order_id : String?
+  desktop_connect_phase : DesktopConnectPhase
   deliveries : DeliveryPanel
   self_service : SelfServiceState
   project_id : String
@@ -298,6 +307,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     desktop_client: None,
     desktop_clients: [],
     webide_order_id: None,
+    desktop_connect_phase: NotStarted,
     deliveries: default_delivery_panel(),
     self_service: default_self_service_state(),
     project_id: "",
@@ -858,6 +868,7 @@ pub fn EnterpriseState::update(
         } else {
           Some(order_id)
         },
+        desktop_connect_phase: NotStarted,
         success_message: None,
         error_message: None,
       }
@@ -874,6 +885,7 @@ pub fn EnterpriseState::update(
           {
             ..self,
             desktop_client: Some(client),
+            desktop_connect_phase: NotStarted,
             success_message: None,
             error_message: None,
           }
@@ -1110,7 +1122,13 @@ pub fn EnterpriseState::update(
     SubmitLease =>
       { ..self, loading: true, success_message: None, error_message: None, }
     LaunchDesktopClient =>
-      { ..self, loading: true, success_message: None, error_message: None, }
+      {
+        ..self,
+        loading: true,
+        desktop_connect_phase: IssuingHandoff,
+        success_message: None,
+        error_message: None,
+      }
     MarkNotificationRead(_, _) => self
     SetNotificationEmail(_, _) =>
       { ..self, loading: true, success_message: None, error_message: None, }
@@ -3129,6 +3147,129 @@ fn webide_orders(state : EnterpriseState) -> Array[SelfServiceOrderView] {
 }
 
 ///|
+fn desktop_connect_progress_view(state : EnterpriseState) -> @rabbita.Html {
+  let client = state.desktop_client
+  let model_ready = client.map_or(false, value => value.models_ready)
+  let access_ready = client.map_or(false, value => value.workspace_ready)
+  let percent = match state.desktop_connect_phase {
+    IssuingHandoff => 50
+    ClientOpened => 75
+    NotStarted | ConnectFailed =>
+      if model_ready && access_ready {
+        25
+      } else {
+        0
+      }
+  }
+  let status = match state.desktop_connect_phase {
+    IssuingHandoff =>
+      copy(
+        state.locale,
+        "Model and access checked. Issuing a single-use connection…",
+        "模型与权限已检查，正在签发一次性连接…",
+      )
+    ClientOpened =>
+      copy(
+        state.locale,
+        "Handoff issued. Continue in MoonDesk to see redemption and MoonGate progress.",
+        "一次性交接已签发。请在 MoonDesk 查看核销与 MoonGate 接通进度。",
+      )
+    ConnectFailed =>
+      copy(
+        state.locale,
+        "Connection stopped. See the error above, then retry from this button.",
+        "连接已停在失败步骤。请查看上方错误，再从此按钮重试。",
+      )
+    NotStarted =>
+      if !model_ready {
+        copy(
+          state.locale,
+          "Waiting for a serving model.",
+          "等待可调用模型。",
+        )
+      } else if !access_ready {
+        copy(
+          state.locale,
+          "Waiting for workspace access.",
+          "等待工作区授权。",
+        )
+      } else {
+        copy(
+          state.locale,
+          "Model and access are ready. Click once to connect.",
+          "模型与权限已就绪。点击一次开始贯通连接。",
+        )
+      }
+  }
+  @html.section(class="workflow-panel", [
+    @html.h2(copy(state.locale, "One-click connection", "一键贯通认证")),
+    @html.p(
+      attrs=@html.Attrs::build().role("status").aria_live("polite"),
+      status,
+    ),
+    @html.span(
+      class="quota-track",
+      attrs=@html.Attrs::build()
+        .role("progressbar")
+        .aria_label(copy(state.locale, "Connection progress", "贯通进度"))
+        .aria_valuemin("0")
+        .aria_valuemax("100")
+        .aria_valuenow(percent.to_string()),
+      [@html.span(class="quota-fill", style=["width:\{percent}%"], "")],
+    ),
+    @html.ol(class="workflow-steps", [
+      @html.li(class=if model_ready { "is-complete" } else { "is-current" }, [
+        @html.span("1"),
+        @html.strong(copy(state.locale, "Serving model", "可调用模型")),
+      ]),
+      @html.li(
+        class=if access_ready {
+          "is-complete"
+        } else if model_ready {
+          "is-current"
+        } else {
+          ""
+        },
+        [
+          @html.span("2"),
+          @html.strong(
+            copy(state.locale, "Account and lease", "账户与租约"),
+          ),
+        ],
+      ),
+      @html.li(
+        class=if state.desktop_connect_phase == ClientOpened {
+          "is-complete"
+        } else if state.desktop_connect_phase == IssuingHandoff {
+          "is-current"
+        } else {
+          ""
+        },
+        [
+          @html.span("3"),
+          @html.strong(
+            copy(state.locale, "One-time handoff", "一次性交接"),
+          ),
+        ],
+      ),
+      @html.li(
+        class=if state.desktop_connect_phase == ClientOpened {
+          "is-current"
+        } else {
+          ""
+        },
+        [
+          @html.span("4"),
+          @html.strong(
+            copy(state.locale, "MoonGate and Code", "MoonGate 与 Code"),
+          ),
+        ],
+      ),
+    ]),
+  ])
+}
+
+///|
 fn desktop_ide_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
@@ -3330,6 +3471,7 @@ fn desktop_ide_view(
         )
       },
     ]),
+    desktop_connect_progress_view(state),
     @html.section(class="workflow-panel", [
       @html.h2(enterprise_copy(state.locale, YourAccessJourney)),
       @html.ul(class="workflow-steps", [
