@@ -64,6 +64,8 @@ pub fn model_alias_slug(String) -> String
 
 pub fn model_import_adoptable(ModelImportRow) -> Bool
 
+pub fn model_import_needs_registration(ModelImportRow, Array[ModelRow]) -> Bool
+
 pub fn model_license_draft_valid(ModelLicenseDraft) -> Bool
 
 pub fn model_local_registration_valid(ConsoleState, ModelLocalRegistrationDraft) -> Bool
