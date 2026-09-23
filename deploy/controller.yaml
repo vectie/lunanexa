@@ -431,6 +431,8 @@ spec:
               value: /usr/bin/cosign
             - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH
               value: /etc/lunanexa/trust/cosign.pub
+            - name: LUNANEXA_COSIGN_TRUSTED_ROOT_PATH
+              value: /etc/lunanexa/trust/sigstore-trusted-root.json
           readinessProbe:
             httpGet:
               path: /ready

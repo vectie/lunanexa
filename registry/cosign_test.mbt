@@ -12,6 +12,18 @@ async test "cosign adapter rejects executable injection and unsafe subjects befo
     "/usr/bin/cosign", "/etc/lunanexa/cosign.pub",
   )
   try
+    @registry.CosignVerifier::new(
+      "/usr/bin/cosign",
+      "/etc/lunanexa/cosign.pub",
+      trusted_root_path=Some("../untrusted-root.json"),
+    )
+  catch {
+    InvalidVerifierConfiguration => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("relative trusted root path was accepted")
+  }
+  try
     verifier.verify_image(
       "-malicious", "sha256:dededededededededededededededededededededededededededededededede",
     )

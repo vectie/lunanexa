@@ -106,8 +106,9 @@ pub fn BenchmarkProfile::to_repr(Self) -> @debug.Repr
 pub struct CosignVerifier {
   binary : String
   public_key_path : String
+  trusted_root_path : String?
 }
-pub fn CosignVerifier::new(String, String) -> Self raise SignatureVerificationError
+pub fn CosignVerifier::new(String, String, trusted_root_path? : String?) -> Self raise SignatureVerificationError
 pub async fn CosignVerifier::verify_blob(Self, String, String, String) -> SignatureVerificationReceipt
 pub async fn CosignVerifier::verify_image(Self, String, String) -> SignatureVerificationReceipt
 
