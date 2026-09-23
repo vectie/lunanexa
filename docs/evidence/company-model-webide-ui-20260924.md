@@ -33,6 +33,8 @@ account and organization; no real customer organization was approved.
 3. Operator `/mana/` → **用户与访问权限** showed the same test organization in
    **待审核企业注册**, with its legal details and **审核通过企业注册** button. The button was
    observed, not pressed in this check.
+   Enterprise **账户与 API 密钥** now shows a pending-review explanation and
+   disables **创建成员邀请** until the company becomes active.
 4. Enterprise **WebIDE** displayed the authorized `glm-5.3.flash` model, the
    individual MoonDesk choice, access steps, and one-click progress.
    **打开 MoonDesk / MoonCode** created a fresh one-time handoff and opened the
