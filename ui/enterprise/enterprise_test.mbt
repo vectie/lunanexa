@@ -338,7 +338,10 @@ test "free trial shows one clear action, limits, and no machine promise" {
   let shared = { ..state, trial: Some(trial), }.update(
     SelfService(SelectProduct(SharedMaaS)),
   )
-  assert_true(shared.self_service.step is Capacity)
+  assert_true(shared.self_service.step is Organization)
+  assert_true(
+    @enterprise.render(shared).contains("Create a company or join one"),
+  )
   let account = @enterprise.render({
     ..state,
     route: AccountAccess,
