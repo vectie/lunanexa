@@ -32,6 +32,7 @@
       "sshUser": "wlc001s",
       "gpuUuid": "GPU-2743aa67-8079-b5a0-8c62-dbc44e36466e",
       "architecture": "nvidia-sm121",
+      "usagePool": "trial",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [
@@ -47,6 +48,7 @@
       "sshUser": "wlc002s",
       "gpuUuid": "GPU-3caf9461-26f7-65c1-4e00-da55afb7a21f",
       "architecture": "nvidia-sm121",
+      "usagePool": "trial",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [
@@ -62,6 +64,8 @@
       "sshUser": "wlc003s",
       "gpuUuid": "GPU-9c3d3cf0-439a-5da2-67e9-20414255879f",
       "architecture": "nvidia-sm121",
+      "usagePool": "enterprise-dedicated",
+      "region": "cn-north-1",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [
@@ -77,6 +81,8 @@
       "sshUser": "wlc004s",
       "gpuUuid": "GPU-5b603331-c778-d6ef-7ffa-7c6b774fe4a6",
       "architecture": "nvidia-sm121",
+      "usagePool": "enterprise-dedicated",
+      "region": "cn-north-1",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [

@@ -48,6 +48,13 @@ async fn ApiService::machine_reserved_managed_nodes(
 /// Trusted node inventory label used to honor the purchased regional SKU.
 let machine_region_label : String = "lunanexa.io/region"
 
+///|
+/// Only the declared enterprise pool may satisfy a paid dedicated SKU.
+let machine_usage_pool_label : String = "lunanexa.io/usage-pool"
+
+///|
+let machine_enterprise_pool : String = "enterprise-dedicated"
+
 ///| Returns controller-enrolled nodes that satisfy the purchased SKU itself.
 
 ///| Missing region labels fail closed; there is no implicit cross-region
@@ -87,6 +94,8 @@ async fn ApiService::machine_offering_nodes(
       now_unix_ms &&
       heartbeat.inventory.labels.get(machine_region_label) ==
       Some(offering.region) &&
+      heartbeat.inventory.labels.get(machine_usage_pool_label) ==
+      Some(machine_enterprise_pool) &&
       healthy_accelerators.length().to_int64() >= offering.accelerator_count &&
       !lease_blocked {
       candidates.push(heartbeat.node_id)

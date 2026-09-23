@@ -98,6 +98,8 @@ def inventory(node, cluster, runtime_names):
             "lunanexa.gpu.model": node.get("gpuModel", "NVIDIA GB10"),
             "lunanexa.gpu.driver": node.get("gpuDriver", "580.178.04"),
             "lunanexa.gpu.compute-capability": node.get("computeCapability", "12.1"),
+            **({"lunanexa.io/usage-pool": node["usagePool"]} if node.get("usagePool") else {}),
+            **({"lunanexa.io/region": node["region"]} if node.get("region") else {}),
             **({"lunanexa.io/cx7-peer": node["fabricPeer"]} if node.get("fabricPeer") else {}),
             **({"lunanexa.io/cx7-address": node["fabricAddress"]} if node.get("fabricAddress") else {}),
         },
