@@ -101,6 +101,7 @@ pub struct ApiService {
   signature_verifier : @registry.CosignVerifier?
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
+  external_text_route : ExternalTextRoute?
   operator_token : String
   retire_bootstrap_operator_token : Bool
   // Token → operator identity map for contract-document operator routes,
@@ -206,6 +207,7 @@ pub fn ApiService::new(
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
+    external_text_route: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -310,6 +312,7 @@ pub fn ApiService::with_registry(
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
+    external_text_route: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -415,6 +418,7 @@ pub fn ApiService::with_services(
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
+    external_text_route: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -522,6 +526,7 @@ pub fn ApiService::with_control_plane(
     signature_verifier: None,
     reconciliation_only: false,
     runtime,
+    external_text_route: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -1881,6 +1886,28 @@ async fn ApiService::schedule_and_admit(
       [],
     )
   }
+  // An externally operated text instance is not a managed Deployment. It is
+  // admitted only for its exact approved alias while its live endpoint proves
+  // both health and the pinned served model. Dedicated paid orders still need
+  // their own Ready managed deployment.
+  if self.external_text_route is Some(route) &&
+    request.model_selector == route.model_alias &&
+    request.tenant_ref == route.tenant_ref &&
+    request.capability == TextGenerate &&
+    required_deployment_id is None &&
+    delivery is None {
+    if !self.external_text_ready() {
+      return (
+        Some(
+          api_error(
+            503, "ExternalModelUnavailable", "external model is not serving", true,
+          ),
+        ),
+        [],
+      )
+    }
+    return (None, [route.node_id])
+  }
   guard registry.scheduling_target(request.model_selector, request.capability)
     is Some(target) else {
     return (
@@ -2077,6 +2104,14 @@ async fn ApiService::invoke_with_bounded_retry(
   request : @contracts.WorkloadEnvelope,
   routing_nodes : Array[String],
 ) -> (@runtimes.RuntimeInvocationResult, String) {
+  if self.external_text_route is Some(route) &&
+    request.model_selector == route.model_alias &&
+    request.tenant_ref == route.tenant_ref {
+    if !self.external_text_ready() {
+      raise Failure::Failure("external model became unavailable")
+    }
+    return (route.runtime.invoke(request), route.node_id)
+  }
   let primary = routing_nodes.get(0).unwrap_or("")
   let alternate = routing_nodes.get(1).unwrap_or(primary)
   let primary_id = if primary == "" { "runtime-default" } else { primary }
@@ -2107,6 +2142,14 @@ async fn ApiService::invoke_stream_with_bounded_retry(
   routing_nodes : Array[String],
   on_chunk : async (Json) -> Unit,
 ) -> (@runtimes.RuntimeInvocationResult, String) {
+  if self.external_text_route is Some(route) &&
+    request.model_selector == route.model_alias &&
+    request.tenant_ref == route.tenant_ref {
+    if !self.external_text_ready() {
+      raise Failure::Failure("external model became unavailable")
+    }
+    return (route.runtime.invoke_stream(request, on_chunk), route.node_id)
+  }
   let primary = routing_nodes.get(0).unwrap_or("")
   let alternate = routing_nodes.get(1).unwrap_or(primary)
   let primary_id = if primary == "" { "runtime-default" } else { primary }
@@ -2709,7 +2752,7 @@ async fn send_compatible_stream_event(
       let payload : Json = {
         "id": context.id,
         "object": "chat.completion.chunk",
-        "created": context.created_unix_seconds.to_json(),
+        "created": Json::number(context.created_unix_seconds.to_double()),
         "model": context.model,
         "choices": [
           {
@@ -2731,7 +2774,7 @@ async fn send_compatible_stream_event(
           let replay_payload : Json = {
             "id": context.id,
             "object": "chat.completion.chunk",
-            "created": context.created_unix_seconds.to_json(),
+            "created": Json::number(context.created_unix_seconds.to_double()),
             "model": context.model,
             "choices": [
               {
@@ -2750,7 +2793,7 @@ async fn send_compatible_stream_event(
       let completed_payload : Json = {
         "id": context.id,
         "object": "chat.completion.chunk",
-        "created": context.created_unix_seconds.to_json(),
+        "created": Json::number(context.created_unix_seconds.to_double()),
         "model": context.model,
         "choices": [
           {

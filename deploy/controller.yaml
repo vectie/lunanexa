@@ -76,6 +76,12 @@ spec:
               value: http://127.0.0.1:4188/?mode=mooncode
             - name: LUNANEXA_PUBLIC_API_BASE_URL
               value: "${LUNANEXA_PUBLIC_API_BASE_URL}"
+            - name: LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: client-launch-catalog
+                  optional: true
             - name: LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS
               value: "120000"
             - name: LUNANEXA_CLIENT_MAXIMUM_REQUESTS
@@ -328,6 +334,12 @@ spec:
                   key: runtime-endpoint
             - name: LUNANEXA_RUNTIME_ENDPOINTS_PATH
               value: /etc/lunanexa/runtime-routes/endpoints.json
+            - name: LUNANEXA_EXTERNAL_TEXT_ROUTE_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: external-text-route
+                  optional: true
             - name: LUNANEXA_RUNTIME_VERSION
               valueFrom:
                 configMapKeyRef:

@@ -1,0 +1,18 @@
+[
+  {
+    "client_id": "desktop-workspace",
+    "display_name": "MoonDesk / MoonCode",
+    "launch_uri": "http://127.0.0.1:4188/?mode=mooncode",
+    "public_api_base_url": "http://106.39.18.146:5002/v1",
+    "handoff_lifetime_ms": "120000",
+    "maximum_requests": "100000"
+  },
+  {
+    "client_id": "comfyui",
+    "display_name": "ComfyUI",
+    "launch_uri": "http://106.39.18.146:5005/",
+    "public_api_base_url": "http://106.39.18.146:5002/v1",
+    "handoff_lifetime_ms": "120000",
+    "maximum_requests": "100000"
+  }
+]

@@ -74,6 +74,7 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
         let received = @json.parse(body.read_all().text())
         let encoded = received.stringify()
         assert_true(encoded.contains("remote-workload-1"))
+        assert_true(encoded.contains("\"model\":\"GLM-5.3-Flash-EXL3\""))
         assert_true(encoded.contains("\"input\":\"hello\""))
         assert_false(encoded.contains("\"input\":{\"prompt\""))
         connection.send_response(200, "OK", extra_headers={
@@ -92,7 +93,7 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
       "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       allow_http_loopback=true,
-    )
+    ).with_served_model_name("GLM-5.3-Flash-EXL3")
     let result = runtime.invoke(remote_request())
     assert_eq(
       result.artifact_digest,

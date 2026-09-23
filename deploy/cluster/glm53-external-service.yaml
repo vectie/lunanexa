@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: glm53-exl3
+  namespace: lunanexa
+  labels:
+    lunanexa.io/usage-pool: enterprise-dedicated
+spec:
+  ports:
+    - name: http
+      port: 8899
+      targetPort: 8888
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: glm53-exl3-enterprise
+  namespace: lunanexa
+  labels:
+    kubernetes.io/service-name: glm53-exl3
+    lunanexa.io/usage-pool: enterprise-dedicated
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 8888
+endpoints:
+  - addresses:
+      - 192.168.2.178
+    conditions:
+      ready: true
+    nodeName: spark-57f5-98a504ed

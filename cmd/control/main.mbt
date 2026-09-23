@@ -6,6 +6,19 @@ fn required_environment(name : String) -> String raise {
   value
 }
 
+///|
+/// Exact external-serving binding supplied by the deployment operator.
+priv struct ExternalTextRouteConfig {
+  model_alias : String
+  tenant_ref : String
+  node_id : String
+  origin : String
+  served_model : String
+  runtime_version : String
+  image_digest : String
+  artifact_digest : String
+} derive(FromJson)
+
 ///| Optional readiness attestations are strict booleans. Typos must not turn
 
 ///|
@@ -1606,6 +1619,22 @@ async fn main {
       )
     }
     None => service
+  }
+  let service = match @env.get_env_var("LUNANEXA_EXTERNAL_TEXT_ROUTE_JSON") {
+    Some(raw) if raw != "" => {
+      let route : ExternalTextRouteConfig = @json.from_json(@json.parse(raw))
+      service.with_external_text_route(
+        route.model_alias,
+        route.tenant_ref,
+        route.node_id,
+        route.origin,
+        route.served_model,
+        route.runtime_version,
+        route.image_digest,
+        route.artifact_digest,
+      )
+    }
+    _ => service
   }
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   let identity_server = @http.Server(

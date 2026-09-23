@@ -113,6 +113,7 @@ pub struct ApiService {
   signature_verifier : @registry.CosignVerifier?
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
+  external_text_route : ExternalTextRoute?
   operator_token : String
   retire_bootstrap_operator_token : Bool
   operator_tokens : Map[String, String]
@@ -199,6 +200,7 @@ pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/s
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
+pub fn ApiService::with_external_text_route(Self, String, String, String, String, String, String, String, String) -> Self raise
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_gpu_container_offering(Self, GpuContainerOffering) -> Self raise
 pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure
@@ -246,6 +248,8 @@ pub fn CancellationReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.
 pub fn CancellationReceipt::not_equal(Self, Self) -> Bool
 pub fn CancellationReceipt::to_json(Self) -> Json
 pub fn CancellationReceipt::to_repr(Self) -> @debug.Repr
+
+type ExternalTextRoute
 
 pub(all) struct GpuContainerOffering {
   template_id : String

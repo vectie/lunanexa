@@ -622,7 +622,7 @@ async fn ApiService::invoke_openai_chat(
   json_reply(200, {
     "id": "chatcmpl-\{request_digest[:32]}",
     "object": "chat.completion",
-    "created": (now / 1000L).to_json(),
+    "created": Json::number((now / 1000L).to_double()),
     "model": value.model,
     "choices": [
       {
@@ -760,9 +760,10 @@ fn openai_workload(
     payload_fields["top_p"] = top_p.to_json()
   }
   let payload = Json::object(payload_fields)
-  let input_units = @utf8.encode(payload.stringify())
-    .length()
-    .clamp(min=1, max=budgets.openai_max_input_units)
+  // Declare the actual canonical byte count. Clamping here understates large
+  // requests and turns a policy refusal into a misleading malformed-envelope
+  // error in workspace admission.
+  let input_units = @utf8.encode(payload.stringify()).length().max(1)
   let request : @contracts.WorkloadEnvelope = {
     version: @contracts.contract_version,
     idempotency_key: idempotency,

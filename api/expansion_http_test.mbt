@@ -172,6 +172,8 @@ async test "OpenAI chat bridges LunaFlux streaming Responses to non-stream conte
     )
     assert_eq(reply.status, 200)
     assert_true(reply.body.contains("\"content\":\"MOON_OK\""))
+    assert_true(reply.body.contains("\"created\":"))
+    assert_false(reply.body.contains("\"created\":\""))
     assert_true(reply.body.contains("\"completion_tokens\":2"))
     runtime_server.close()
   }
@@ -286,6 +288,8 @@ async test "scoped API key preserves WebIDE tools across the streaming chat brid
     )
     let stream = client.read_all().text()
     assert_true(stream.contains("chat.completion.chunk"))
+    assert_true(stream.contains("\"created\":"))
+    assert_false(stream.contains("\"created\":\""))
     assert_true(stream.contains("\"content\":\"hello\""))
     assert_true(stream.contains("\"tool_calls\":["))
     assert_true(stream.contains("\"name\":\"read_file\""))
