@@ -21,10 +21,10 @@ match it exactly when redeeming a handoff.
 ## Prepare, publish, restore
 
 On the management node, run the MoonBit preparation script with the management
-kubeconfig, a **new private directory**, and three pinned image references:
+kubeconfig, a **new private directory**, and four pinned image references:
 
 ```text
-moon run scripts/prepare-exclusive-comfyui.mbtx KUBECONFIG PRIVATE_DIRECTORY GATEWAY_AMD64_IMAGE PROXY_ARM64_IMAGE COMFY_ARM64_IMAGE
+moon run scripts/prepare-exclusive-comfyui.mbtx KUBECONFIG PRIVATE_DIRECTORY CONTROL_AMD64_IMAGE GATEWAY_AMD64_IMAGE PROXY_ARM64_IMAGE COMFY_ARM64_IMAGE
 ```
 
 Preparation reads the current Deployments, ConfigMaps, public Service and both
@@ -34,7 +34,7 @@ It also creates one random observation token in two private Secret manifests.
 The directory must remain mode 0700 and the files mode 0600; do not commit or
 print them. Preparation changes no Kubernetes resources.
 
-Once all three images are available and the combined source gate passes, use:
+Once all four images are available and the combined source gate passes, use:
 
 ```text
 moon run scripts/rollout-exclusive-comfyui.mbtx apply KUBECONFIG PRIVATE_DIRECTORY
