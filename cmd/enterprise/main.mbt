@@ -535,7 +535,7 @@ fn apply_enterprise_locale(locale : @i18n.Locale) -> Unit {
     locale.storage_value(),
     locale.language_tag(),
     portal_copy(
-      locale, "能源谷“创未来”街区算力平台 | Enterprise Portal", "能源谷“创未来”街区算力平台 | 企业门户",
+      locale, "能源谷“创未来”生态街区 | Enterprise Portal", "能源谷“创未来”生态街区 | 企业门户",
     ),
   )
 }
@@ -6247,7 +6247,7 @@ fn app_view(
         class="login-card",
         attrs=@html.Attrs::build().aria_labelledby("enterprise-sign-in-title"),
         [
-          @html.div(class="login-mark", "NX"),
+          @html.div(class="login-mark", "创"),
           @html.h1(
             id="enterprise-sign-in-title",
             portal_copy(

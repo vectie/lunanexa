@@ -674,6 +674,7 @@ test "authenticated users without a company reach organization self-service" {
   })
   assert_true(html.contains("Create company"))
   assert_true(html.contains("Join company"))
+  assert_true(html.contains("能源谷“创未来”生态街区"))
   assert_false(html.contains("LunaNexa enterprise access"))
 }
 

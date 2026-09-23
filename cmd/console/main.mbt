@@ -364,7 +364,7 @@ fn console_copy(
 ///|
 fn console_document_title(locale : @i18n.Locale) -> String {
   console_copy(
-    locale, "能源谷“创未来”街区算力平台 | Cluster Operations", "能源谷“创未来”街区算力平台 | 集群运维",
+    locale, "能源谷“创未来”生态街区 | Cluster Operations", "能源谷“创未来”生态街区 | 集群运维",
   )
 }
 
@@ -9537,7 +9537,7 @@ fn login_view(
             ]),
           ],
         ),
-        @html.strong("能源谷“创未来”街区算力平台"),
+        @html.strong("能源谷“创未来”生态街区"),
       ]),
       @html.div([
         @html.p(
