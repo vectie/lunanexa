@@ -699,11 +699,13 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
           None => false
           Some(lease) =>
             try {
-              let authority = directory.authorize_subject_for_tenant(
+              let authority = directory.authorize_subject_for_tenant_lease(
                 lease.subject_ref,
                 lease.tenant_ref,
+                operation.intent.lease_id,
                 Developer,
                 now,
+                grant_id=operation.intent.authorization_ref,
               )
               authority.lease.lease_id == operation.intent.lease_id
             } catch {

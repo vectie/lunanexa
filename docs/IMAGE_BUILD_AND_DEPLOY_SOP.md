@@ -469,7 +469,7 @@ bash deploy/acceptance/install-comfyui-templates.sh
 | 只写空 `requiredActions: []` 就建 Keycloak 用户 | 建号成功，但立刻登录报 `400 invalid_grant / "Account is not fully set up"` —— realm 的默认 required action 会覆盖空列表 | realm 侧也清掉：`update authentication/required-actions/CONFIGURE_TOTP -r <realm> -s defaultAction=false` |
 | 浏览器 bundle 重新构建后没渲染 HTTP opt-in | 页面能开，但每个输入框和按钮都是灰的，看起来像"没反应" | 构建后跑 `scripts/deploy/render-public-http-origin.py --dist _build/browser-dist --origin <page>=<origin>`；每个页面的 meta 必须等于**它自己的** origin |
 | `cp -a` 把 bundle 拷进 hostPath 给 nginx 用 | 403 Forbidden：`_build` 的权限是 `760`，nginx 用户读不到 | 拷完 `chmod -R a+rX`，目录 755、文件 644 |
-| 只在镜像里更新 bundle，忘了 hostPath 的那份 | 一半页面是新的，另一半还是旧的 | 5002 的 `/enterprise/` 由 hostPath `~/portal-dist` 提供（见 §11），两处都要更新 |
+| 只改管理节点的 `~/portal-dist/enterprise`，未更新 `lunanexa-enterprise` 镜像 | 公网 5002 仍服务旧版 JS | 现网 5002 的 `/enterprise/` 代理到 `lunanexa-enterprise:8080`；构建镜像、推送并按摘要更新该 Deployment（见 §11） |
 
 ---
 
@@ -480,7 +480,7 @@ bash deploy/acceptance/install-comfyui-templates.sh
 | 入口 | 谁在服务 | 更新方式 |
 | --- | --- | --- |
 | `http://<host>:4174/console/` | `operator-4173-proxy`（hostNetwork nginx）→ `lunanexa-console:8080`（`moon/lunanexa-web` 镜像） | 重建 + push web 镜像，`set image deploy/lunanexa-console`，再按上表的 hostNetwork 规则重启 proxy |
-| `http://<host>:5002/enterprise/` | 同一个 proxy 的 5002 server，`root /srv/portal` → **hostPath `~/portal-dist`** | 直接把新的 `enterprise/`、`assets/` 覆盖过去并修权限；不经过镜像 |
+| `http://<host>:5002/enterprise/` | 同一个 proxy 的 5002 server，`proxy_pass http://lunanexa-enterprise:8080` → **`lunanexa-enterprise` Deployment** | 构建 + push web 镜像，按摘要更新 `deploy/lunanexa-enterprise`；以公网 JS 的 SHA-256 对照构建产物 |
 | `http://<host>:5003/console/`（经身份网关） | `lunanexa-identity-gateway` 代理到 `lunanexa-console:8080` | 同第一条 |
 
 另外两条与 4174 有关、容易漏的：

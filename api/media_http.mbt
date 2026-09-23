@@ -370,9 +370,10 @@ async fn ApiService::media_owner_authorized(
         self.workspace_directory is Some(directory) else {
         return false
       }
-      let authorized = directory.authorize_subject_for_tenant(
+      let authorized = directory.authorize_subject_for_tenant_lease(
         owner.subject_ref,
         owner.tenant_ref,
+        lease_id,
         Developer,
         now,
       ) catch {
@@ -425,12 +426,23 @@ async fn ApiService::media_owner_authorized(
   }
   guard self.workspace_directory is Some(directory) else { return false }
   try {
-    let workspace = directory.authorize_subject_for_tenant(
-      owner.subject_ref,
-      owner.tenant_ref,
-      Developer,
-      now,
-    )
+    let workspace = match owner.authority {
+      PrivateWorkspace(lease_id) =>
+        directory.authorize_subject_for_tenant_lease(
+          owner.subject_ref,
+          owner.tenant_ref,
+          lease_id,
+          Developer,
+          now,
+        )
+      DedicatedOrder(_) =>
+        directory.authorize_subject_for_tenant(
+          owner.subject_ref,
+          owner.tenant_ref,
+          Developer,
+          now,
+        )
+    }
     if !workspace.lease.limits.capabilities.any(limit => {
         limit.capability == VideoGenerate &&
         limit.max_concurrent_requests >= 1 &&
@@ -706,10 +718,10 @@ async fn ApiService::media_owner(
       self.workspace_directory is Some(directory) else {
       return None
     }
-    let workspace = directory.authorize_subject_for_tenant(
+    let workspace = directory.authorize_subject_for_tenant_capability(
       authority.subject_ref,
       authority.tenant_ref,
-      Developer,
+      VideoGenerate,
       @async.now(),
     ) catch {
       _ => return None
@@ -916,12 +928,23 @@ async fn ApiService::handle_media(
       guard self.workspace_directory is Some(directory) else {
         raise @media_runtime.RuntimeError::Unauthorized
       }
-      let workspace = directory.authorize_subject_for_tenant(
-        owner.subject_ref,
-        owner.tenant_ref,
-        Developer,
-        @async.now(),
-      )
+      let workspace = match owner.authority {
+        PrivateWorkspace(lease_id) =>
+          directory.authorize_subject_for_tenant_lease(
+            owner.subject_ref,
+            owner.tenant_ref,
+            lease_id,
+            Developer,
+            @async.now(),
+          )
+        DedicatedOrder(_) =>
+          directory.authorize_subject_for_tenant(
+            owner.subject_ref,
+            owner.tenant_ref,
+            Developer,
+            @async.now(),
+          )
+      }
       guard workspace.lease.limits.capabilities
         .filter(limit => limit.capability == VideoGenerate)
         .get(0)

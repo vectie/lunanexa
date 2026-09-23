@@ -66,11 +66,13 @@ async fn ApiService::handle_delivery_access_key(
   }
   let now = @async.now()
   let authorization = try
-    directory.authorize_subject_for_tenant(
+    directory.authorize_subject_for_tenant_lease(
       subject,
       view.membership.tenant_ref,
+      operation.intent.lease_id,
       Developer,
       now,
+      grant_id=operation.intent.authorization_ref,
     )
   catch {
     _ =>

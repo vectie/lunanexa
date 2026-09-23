@@ -448,15 +448,20 @@ fn delivery_panel_view(
                   locale, "Using verified local model cache", "复用已验证本地模型缓存",
                 ),
               )
+            } else if operation.total_bytes is Some(total) && total > 0L {
+              let percent = (operation.transferred_bytes * 100L / total)
+                .clamp(min=0L, max=100L)
+                .to_int()
+              @html.div(class="delivery-transfer-progress", [
+                @html.progress(value=percent, max=100, "\{percent}%"),
+                @html.p(
+                  "\{percent}% · \{operation.transferred_bytes / 1048576L} / \{total / 1048576L} MiB",
+                ),
+              ])
             } else if operation.transferred_bytes > 0L {
               @html.p(
-                match operation.total_bytes {
-                  Some(total) =>
-                    "\{operation.transferred_bytes / 1048576L} / \{total / 1048576L} MiB"
-                  None =>
-                    "\{operation.transferred_bytes / 1048576L} MiB " +
-                    copy(locale, "transferred", "已传输")
-                },
+                "\{operation.transferred_bytes / 1048576L} MiB " +
+                copy(locale, "transferred", "已传输"),
               )
             } else {
               @html.nothing

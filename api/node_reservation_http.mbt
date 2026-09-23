@@ -88,11 +88,13 @@ async fn ApiService::handle_resource_reservation(
     )
   }
   let authority = try
-    directory.authorize_subject_for_tenant(
+    directory.authorize_subject_for_tenant_lease(
       lease.subject_ref,
       request.tenant_ref,
+      request.lease_id,
       Developer,
       now,
+      grant_id=request.authority_ref,
     )
   catch {
     _ =>

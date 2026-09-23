@@ -30,6 +30,8 @@ pub async fn FileWorkspaceDirectory::activate_user(Self, String, Int64) -> @work
 pub async fn FileWorkspaceDirectory::activate_user_with_prior(Self, String, Int64) -> (@workspace.WorkspaceUser, @workspace.WorkspaceUser)
 pub async fn FileWorkspaceDirectory::authorize_subject(Self, String, @workspace.WorkspaceAccess, Int64) -> @workspace.WorkspaceAuthorization
 pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant(Self, String, String, @workspace.WorkspaceAccess, Int64) -> @workspace.WorkspaceAuthorization
+pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant_capability(Self, String, String, @workspace.WorkspaceCapability, Int64) -> @workspace.WorkspaceAuthorization
+pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant_lease(Self, String, String, String, @workspace.WorkspaceAccess, Int64, grant_id? : String) -> @workspace.WorkspaceAuthorization
 pub async fn FileWorkspaceDirectory::create_user(Self, @workspace.WorkspaceUser) -> @workspace.WorkspaceUser
 pub async fn FileWorkspaceDirectory::invite_user(Self, @workspace.WorkspaceUser) -> @workspace.WorkspaceUser
 pub async fn FileWorkspaceDirectory::issue_access_grant(Self, @workspace.WorkspaceAccessGrant, Int64) -> @workspace.WorkspaceAccessGrant
