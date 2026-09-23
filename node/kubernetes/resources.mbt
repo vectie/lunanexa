@@ -374,6 +374,7 @@ pub fn render_runtime(
         },
       },
     },
+    { "name": "runtime-tmp", "emptyDir": { "sizeLimit": "8Gi" } },
   ]
   let mounts : Array[Json] = [
     {
@@ -381,7 +382,15 @@ pub fn render_runtime(
       "mountPath": "/var/lib/lunanexa/model/model",
       "readOnly": true,
     },
+    { "name": "runtime-tmp", "mountPath": "/tmp" },
   ]
+  if !paired {
+    volumes.push({
+      "name": "runtime-shm",
+      "emptyDir": { "medium": "Memory", "sizeLimit": "8Gi" },
+    })
+    mounts.push({ "name": "runtime-shm", "mountPath": "/dev/shm" })
+  }
   let added_capabilities : Array[String] = []
   // Half of a TP group is not isolated from its peer: it must reach the peer's
   // private-fabric address on the same port, so the peer is named explicitly

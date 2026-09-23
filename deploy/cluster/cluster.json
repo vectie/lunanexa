@@ -7,8 +7,8 @@
     "port": 4174
   },
   "images": {
-    "control": "lunanexa-control:20260918",
-    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:85a5464f0f3c6de6a5757a8bf65284a2f446e31c55f74ea1ace3c58df134e48d",
+    "control": "lunanexa-control:20260923-h3-oneclick-r2",
+    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:d6c36ae6dbe8529d9bac2950a60a451ec12de72c4ff380347eac94514621c6a6",
     "nodeComment": "The arm64 node agent is pinned by digest. The import path remains for the first install, when the registry may be empty."
   },
   "runtime": {
@@ -97,8 +97,8 @@
     "comment": "kubelets resolve on the node, not through CoreDNS, so the address of the Service is pinned in /etc/hosts and the CA is installed on every node. The node addresses are not listed in the pull policy because kube-proxy does not masquerade in-cluster sources: the registry sees the node's pod-network address.",
     "publish": [
       {
-        "source": "lunanexa-control:20260918",
-        "target": "moon/lunanexa-control:20260918"
+        "source": "lunanexa-control:20260923-h3-oneclick-r2",
+        "target": "moon/lunanexa-control:20260923-h3-oneclick-r2"
       }
     ],
     "mirrors": {
@@ -108,7 +108,7 @@
     "caOnManagement": "/home/HwHiAiUser/moon-public/trust/registry-20260830/registry-ca.crt",
     "clusterIP": "10.43.216.245",
     "pull": [
-      "lunanexa/node@sha256:85a5464f0f3c6de6a5757a8bf65284a2f446e31c55f74ea1ace3c58df134e48d"
+      "lunanexa/node@sha256:d6c36ae6dbe8529d9bac2950a60a451ec12de72c4ff380347eac94514621c6a6"
     ]
   }
 }

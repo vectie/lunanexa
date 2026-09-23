@@ -36,6 +36,7 @@ pub extend SignatureVerificationReceipt with FromJson::{from_json}
 pub struct CosignVerifier {
   binary : String
   public_key_path : String
+  offline_public_key_paths : Array[String]
   trusted_root_path : String?
 }
 
@@ -44,18 +45,20 @@ pub fn CosignVerifier::new(
   binary : String,
   public_key_path : String,
   trusted_root_path? : String? = None,
+  offline_public_key_paths? : Array[String] = [],
 ) -> CosignVerifier raise SignatureVerificationError {
   if !(binary == "/usr/bin/cosign" || binary == "/usr/local/bin/cosign") ||
-    !public_key_path.has_prefix("/") ||
-    public_key_path.contains("..") ||
-    public_key_path.contains_char('\n') ||
+    ![public_key_path, ..offline_public_key_paths].all(path => {
+      path.has_prefix("/") && !path.contains("..") && !path.contains_char('\n')
+    }) ||
+    offline_public_key_paths.contains(public_key_path) ||
     (
       trusted_root_path is Some(path) &&
       (!path.has_prefix("/") || path.contains("..") || path.contains_char('\n'))
     ) {
     raise InvalidVerifierConfiguration
   }
-  { binary, public_key_path, trusted_root_path, }
+  { binary, public_key_path, offline_public_key_paths, trusted_root_path, }
 }
 
 ///|
@@ -99,25 +102,32 @@ pub async fn CosignVerifier::verify_image(
     raise UnsafeVerificationSubject
   }
   let subject = "\{image_ref}@\{digest}"
-  let args = ["verify", "--key", self.public_key_path, "--output", "json"]
-  for arg in self.trusted_root_args() {
-    args.push(arg)
+  for public_key_path in [self.public_key_path, ..self.offline_public_key_paths] {
+    let args = ["verify", "--key", public_key_path, "--output", "json"]
+    if public_key_path != self.public_key_path {
+      // Internal, explicitly pinned keys sign in a disconnected registry.
+      // The pre-existing primary key keeps transparency-log verification.
+      args.push("--insecure-ignore-tlog")
+    }
+    for arg in self.trusted_root_args() {
+      args.push(arg)
+    }
+    args.push(subject)
+    let (status, _, _) = @process.collect_output(
+      self.binary,
+      args,
+      inherit_env=false,
+    )
+    if status == 0 {
+      return {
+        subject,
+        digest,
+        verifier: "cosign-key:\{public_key_path}",
+        verified: true,
+      }
+    }
   }
-  args.push(subject)
-  let (status, _, _) = @process.collect_output(
-    self.binary,
-    args,
-    inherit_env=false,
-  )
-  if status != 0 {
-    raise SignatureVerificationFailed
-  }
-  {
-    subject,
-    digest,
-    verifier: "cosign-key:\{self.public_key_path}",
-    verified: true,
-  }
+  raise SignatureVerificationFailed
 }
 
 ///|
@@ -141,25 +151,30 @@ pub async fn CosignVerifier::verify_blob(
     raise SubjectDigestMismatch
   }
   let material_flag = @signature.cosign_material_flag(signature_path)
-  let args = ["verify-blob", "--key", self.public_key_path]
-  for arg in self.trusted_root_args() {
-    args.push(arg)
+  for public_key_path in [self.public_key_path, ..self.offline_public_key_paths] {
+    let args = ["verify-blob", "--key", public_key_path]
+    if public_key_path != self.public_key_path {
+      args.push("--insecure-ignore-tlog")
+    }
+    for arg in self.trusted_root_args() {
+      args.push(arg)
+    }
+    args.push(material_flag)
+    args.push(signature_path)
+    args.push(artifact_path)
+    let (status, _, _) = @process.collect_output(
+      self.binary,
+      args,
+      inherit_env=false,
+    )
+    if status == 0 {
+      return {
+        subject: artifact_path,
+        digest,
+        verifier: "cosign-key:\{public_key_path}",
+        verified: true,
+      }
+    }
   }
-  args.push(material_flag)
-  args.push(signature_path)
-  args.push(artifact_path)
-  let (status, _, _) = @process.collect_output(
-    self.binary,
-    args,
-    inherit_env=false,
-  )
-  if status != 0 {
-    raise SignatureVerificationFailed
-  }
-  {
-    subject: artifact_path,
-    digest,
-    verifier: "cosign-key:\{self.public_key_path}",
-    verified: true,
-  }
+  raise SignatureVerificationFailed
 }

@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lunanexa-h3-media-bindings
+  namespace: lunanexa
+data:
+  bindings.json: |
+    [
+      {
+        "template_id": "minimax-h3-fl2va-comfyui",
+        "template_version": "20260923-r2",
+        "node_id": "spark-25e2-3d35c8fd",
+        "origin": "",
+        "profile": {
+          "model": "video.minimax-h3-fl2va",
+          "provider_model": "/var/lib/lunanexa/model/model",
+          "widths": [384, 512, 768],
+          "heights": [256, 448, 512],
+          "maximum_frames": 481,
+          "maximum_fps": 24,
+          "maximum_steps": 20,
+          "sound_supported": true
+        },
+        "runtime_route": { "network": "10.42.0.0", "prefix_length": 16, "port": 8080 }
+      },
+      {
+        "template_id": "minimax-h3-fl2va-comfyui",
+        "template_version": "20260923-r2",
+        "node_id": "spark-3782-feee26eb",
+        "origin": "",
+        "profile": {
+          "model": "video.minimax-h3-fl2va",
+          "provider_model": "/var/lib/lunanexa/model/model",
+          "widths": [384, 512, 768],
+          "heights": [256, 448, 512],
+          "maximum_frames": 481,
+          "maximum_fps": 24,
+          "maximum_steps": 20,
+          "sound_supported": true
+        },
+        "runtime_route": { "network": "10.42.0.0", "prefix_length": 16, "port": 8080 }
+      },
+      {
+        "template_id": "minimax-h3-fl2va-comfyui",
+        "template_version": "20260923-r2",
+        "node_id": "spark-57f5-98a504ed",
+        "origin": "",
+        "profile": {
+          "model": "video.minimax-h3-fl2va",
+          "provider_model": "/var/lib/lunanexa/model/model",
+          "widths": [384, 512, 768],
+          "heights": [256, 448, 512],
+          "maximum_frames": 481,
+          "maximum_fps": 24,
+          "maximum_steps": 20,
+          "sound_supported": true
+        },
+        "runtime_route": { "network": "10.42.0.0", "prefix_length": 16, "port": 8080 }
+      },
+      {
+        "template_id": "minimax-h3-fl2va-comfyui",
+        "template_version": "20260923-r2",
+        "node_id": "spark-368c-0f2ee8b2",
+        "origin": "",
+        "profile": {
+          "model": "video.minimax-h3-fl2va",
+          "provider_model": "/var/lib/lunanexa/model/model",
+          "widths": [384, 512, 768],
+          "heights": [256, 448, 512],
+          "maximum_frames": 481,
+          "maximum_fps": 24,
+          "maximum_steps": 20,
+          "sound_supported": true
+        },
+        "runtime_route": { "network": "10.42.0.0", "prefix_length": 16, "port": 8080 }
+      }
+    ]

@@ -195,7 +195,7 @@ test "managed model revisions mount as directories in Kubernetes" {
     rendered.pod
     is {
       "spec": {
-        "volumes": [{ "hostPath": { "type": String("Directory"), .. }, .. }],
+        "volumes": [{ "hostPath": { "type": String("Directory"), .. }, .. }, ..],
         ..
       },
       ..
@@ -213,7 +213,7 @@ test "managed model revisions mount as directories in Kubernetes" {
     file.pod
     is {
       "spec": {
-        "volumes": [{ "hostPath": { "type": String("File"), .. }, .. }],
+        "volumes": [{ "hostPath": { "type": String("File"), .. }, .. }, ..],
         ..
       },
       ..
@@ -271,6 +271,34 @@ test "runtime rendering binds exact GPU UUID through DRA without bypassing sched
     resources.pod
     is {
       "spec": {
+        "volumes": [
+          { "name": "model", .. },
+          { "name": "runtime-tmp", "emptyDir": { "sizeLimit": "8Gi", .. }, .. },
+          {
+            "name": "runtime-shm",
+            "emptyDir": { "medium": "Memory", "sizeLimit": "8Gi", .. },
+            ..
+          },
+        ],
+        "containers": [
+          {
+            "volumeMounts": [
+              { "name": "model", "readOnly": true, .. },
+              { "name": "runtime-tmp", "mountPath": "/tmp", .. },
+              { "name": "runtime-shm", "mountPath": "/dev/shm", .. },
+            ],
+            ..
+          },
+        ],
+        ..
+      },
+      ..
+    },
+  )
+  assert_true(
+    resources.pod
+    is {
+      "spec": {
         "automountServiceAccountToken": false,
         "restartPolicy": "Never",
         "containers": [
@@ -280,7 +308,7 @@ test "runtime rendering binds exact GPU UUID through DRA without bypassing sched
               "allowPrivilegeEscalation": false,
               ..
             },
-            "volumeMounts": [{ "readOnly": true, .. }],
+            "volumeMounts": [{ "readOnly": true, .. }, ..],
             ..
           },
         ],
@@ -293,6 +321,7 @@ test "runtime rendering binds exact GPU UUID through DRA without bypassing sched
             },
             ..
           },
+          ..,
         ],
         ..
       },
@@ -486,6 +515,7 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
         "dnsPolicy": "ClusterFirstWithHostNet",
         "volumes": [
           { "name": "model", .. },
+          { "name": "runtime-tmp", .. },
           { "name": "infiniband", .. },
           { "name": "shm", .. },
         ],
@@ -497,6 +527,7 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
             },
             "volumeMounts": [
               { "name": "model", .. },
+              { "name": "runtime-tmp", .. },
               { "name": "infiniband", .. },
               { "name": "shm", .. },
             ],

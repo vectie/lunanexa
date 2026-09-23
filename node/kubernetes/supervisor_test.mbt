@@ -339,7 +339,7 @@ async test "an admitted Pod with a changed model mount fails closed" {
     if path.contains("/pods/") {
       guard resource
         is {
-          "spec": { "volumes": [{ "hostPath": Object(mount), .. }], .. },
+          "spec": { "volumes": [{ "hostPath": Object(mount), .. }, ..], .. },
           ..
         } else {
         fail("missing model volume")

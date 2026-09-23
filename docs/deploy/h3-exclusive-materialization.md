@@ -1,6 +1,42 @@
 # H3 exclusive-node materialization
 
-Implementation note, 2026-09-23. This is not a live migration or acceptance record.
+Implementation and rollout note, 2026-09-23. A catalog template and patched
+runtime image now exist, but this document is **not** an end-to-end acceptance
+record until an exclusive-node assignment finishes transfer, model startup,
+video generation, and ComfyUI output retrieval.
+
+## Current rollout checkpoint (2026-09-23)
+
+- FL2VA is registered as `minimax-h3-fl2va@modelscope-57559a67`, with
+  `video.minimax-h3-fl2va` canary alias and component digest
+  `sha256:0964a2d8823de7d0a40d3cfa01acd1aa08c3aec632b9b6c25330a158bbe98e73`.
+- The code-only ARM64 runtime is published at
+  `moon/h3-runtime-serving@sha256:d9f25180c4cb6a2889f19ee66fbf2db54741f1f382b599c0196c4fcf9f95b0d6`.
+  A GPU pod passed `vllm --version`; this does not prove that H3 weights load.
+- The immutable ComfyUI template is `minimax-h3-fl2va-comfyui@20260923-r2`.
+  The node-specific media binding ConfigMap uses that exact version. The
+  enterprise catalog hides the superseded `20260923` revision.
+- Spark `spark-368c-0f2ee8b2` is Ready and was observed idle before the
+  proposed exclusive test. No FL2VA transfer to its verified node cache or
+  successful video response has been recorded yet.
+
+## Workload reset later on 2026-09-23
+
+At the owner's request, all running model, ComfyUI, and per-user WebIDE
+workloads were removed before a fresh acceptance run. The legacy
+`minimaxh3-fl2va`, `minimaxh3-ref2va`, `lunaflux-runtime`,
+`comfyui-acceptance`, `comfyui-z-image-spark`, and two zero-replica WebIDE
+Deployments, plus their workload-facing Services, were deleted. Four Spark
+nodes then reported no GPU compute process; the LunaNexa assignment and
+resource-reservation lists were empty. Account, identity, database, portal,
+controller, node agents, model files, persistent volume claims, and user work
+files were not deleted. This reset does not itself validate the new one-click
+pipeline, and the new H3 template remains catalog-only until a fresh launch.
+
+The observations below explain the migration decisions made earlier that day;
+their imperative “Do not create an enabled template yet” was superseded only
+after the catalog/image prerequisites above were implemented. It is **not**
+evidence that the remaining real transfer and generation checks passed.
 
 ## Read-only deployment observations (2026-09-23)
 

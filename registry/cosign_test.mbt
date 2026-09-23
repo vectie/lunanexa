@@ -9,8 +9,22 @@ async test "cosign adapter rejects executable injection and unsafe subjects befo
     _ => fail("unapproved verifier executable was accepted")
   }
   let verifier = @registry.CosignVerifier::new(
-    "/usr/bin/cosign", "/etc/lunanexa/cosign.pub",
+    "/usr/bin/cosign",
+    "/etc/lunanexa/cosign.pub",
+    offline_public_key_paths=["/etc/lunanexa/h3-cosign.pub"],
   )
+  try
+    @registry.CosignVerifier::new(
+      "/usr/bin/cosign",
+      "/etc/lunanexa/cosign.pub",
+      offline_public_key_paths=["../untrusted.pub"],
+    )
+  catch {
+    InvalidVerifierConfiguration => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("relative additional verifier key was accepted")
+  }
   try
     @registry.CosignVerifier::new(
       "/usr/bin/cosign",

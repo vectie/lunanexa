@@ -431,6 +431,10 @@ spec:
               value: /usr/bin/cosign
             - name: LUNANEXA_COSIGN_PUBLIC_KEY_PATH
               value: /etc/lunanexa/trust/cosign.pub
+            - name: LUNANEXA_COSIGN_OFFLINE_PUBLIC_KEY_PATHS
+              value: /etc/lunanexa/trust/h3-cosign.pub
+            - name: LUNANEXA_MEDIA_BINDINGS_FILE
+              value: /etc/lunanexa/media-bindings/bindings.json
             - name: LUNANEXA_COSIGN_TRUSTED_ROOT_PATH
               value: /etc/lunanexa/trust/sigstore-trusted-root.json
           readinessProbe:
@@ -447,6 +451,9 @@ spec:
               mountPath: /var/lib/lunanexa
             - name: cosign-trust
               mountPath: /etc/lunanexa/trust
+              readOnly: true
+            - name: media-bindings
+              mountPath: /etc/lunanexa/media-bindings
               readOnly: true
             - name: runtime-endpoints
               mountPath: /etc/lunanexa/runtime-routes
@@ -469,6 +476,9 @@ spec:
         - name: cosign-trust
           secret:
             secretName: lunanexa-cosign-trust
+        - name: media-bindings
+          configMap:
+            name: lunanexa-h3-media-bindings
         - name: runtime-endpoints
           configMap:
             name: lunanexa-runtime-endpoints
