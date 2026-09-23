@@ -6,7 +6,10 @@ The image generation part is derived from dougbtv/comfyui-vllm-omni by Doug (@do
 Original source at https://github.com/dougbtv/comfyui-vllm-omni, distributed under the MIT License.
 """
 
+import base64
+import io
 import json
+import wave
 from typing import Any, Callable
 
 import aiohttp
@@ -30,6 +33,19 @@ from .types import AudioFormat
 from .video_transport import run_video_job
 
 logger = get_logger(__name__)
+
+
+def _silent_audio_reference(num_frames: int, fps: int) -> str:
+    """Give image-conditioned Ref2VA its required, silent audio condition."""
+    sample_rate = 16000
+    sample_count = max(1, (num_frames * sample_rate + fps - 1) // fps)
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(b"\0\0" * sample_count)
+    return "data:audio/wav;base64," + base64.b64encode(output.getvalue()).decode("ascii")
 
 
 async def url_json(session: aiohttp.ClientSession, url: str, verb: str = "get", **kwargs) -> dict[str, Any]:
@@ -306,6 +322,14 @@ class VLLMOmniClient:
                 filename=image_filename,
                 content_type="image/png",
             )
+            if model.rsplit("/", 1)[-1].lower() == "ref2va":
+                # MiniMax-H3's image Ref2VA path requires audio even for a
+                # soundless clip. Match the requested video duration with a
+                # silent condition, so the image-only template is runnable.
+                form.add_field(
+                    "audio_reference",
+                    json.dumps({"audio_url": _silent_audio_reference(num_frames, fps)}),
+                )
 
         video_bytes = await run_video_job(
             self.base_url,
