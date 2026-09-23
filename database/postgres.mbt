@@ -119,7 +119,14 @@ async fn PostgresDatabase::begin_operation(
   self : PostgresDatabase,
 ) -> PgOperation {
   let pool = self.work_pool()
-  { connection: pool.acquire(), failed: false, }
+  let connection = pool.acquire() catch {
+    @pgclient.PgError::Closed =>
+      raise ConnectionUnavailable("database pool is closed")
+    @pgclient.PgError::ConnectionUnavailable(message) =>
+      raise ConnectionUnavailable(message)
+    _ => raise ConnectionUnavailable("database pool is unavailable")
+  }
+  { connection, failed: false, }
 }
 
 ///|
@@ -129,7 +136,14 @@ async fn PostgresDatabase::begin_leader_operation(
   self : PostgresDatabase,
 ) -> PgOperation {
   let pool = self.leader_pool()
-  { connection: pool.acquire(), failed: false, }
+  let connection = pool.acquire() catch {
+    @pgclient.PgError::Closed =>
+      raise ConnectionUnavailable("database pool is closed")
+    @pgclient.PgError::ConnectionUnavailable(message) =>
+      raise ConnectionUnavailable(message)
+    _ => raise ConnectionUnavailable("database pool is unavailable")
+  }
+  { connection, failed: false, }
 }
 
 ///|

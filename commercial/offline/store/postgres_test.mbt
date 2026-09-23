@@ -194,7 +194,7 @@ async test "offline commerce PostgreSQL restart preserves state and rolls back c
   }
   for _ in 0..<2 {
     try ignore(transfer_reopened.create_order(disconnected_order)) catch {
-      @database.DatabaseError::QueryFailed(_) => ()
+      @database.DatabaseError::ConnectionUnavailable(_) => ()
       error => fail("unexpected disconnected order error: \{Repr(error)}")
     } noraise {
       _ => fail("closed database accepted a new order")

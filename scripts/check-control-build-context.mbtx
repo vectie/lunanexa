@@ -53,6 +53,17 @@ async fn main {
       "--build-context \"moonleaf_source=${LUNANEXA_MOONLEAF_SOURCE:-$repository_root/../moonleaf}\"",
     ),
   )
+  let cluster_builder = @fs.read_file("deploy/cluster/one-click.sh").text()
+  assert_true(
+    cluster_builder.contains(
+      "_build/native/release/build/vectie/lunanexa/cmd/control/control.exe",
+    ),
+  )
+  assert_false(
+    cluster_builder.contains(
+      "_build/native/release/build/cmd/control/control.exe",
+    ),
+  )
   println(
     "PASS: sensitive exclusions, source allowlist, workspace paths and actual caller contract (no image build performed)",
   )

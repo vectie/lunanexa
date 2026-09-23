@@ -388,16 +388,18 @@ phase_build() {
   fi
   ( cd "${SOURCE_TREE}" && PATH="${moon}:${PATH}" \
       moon build --target native --release cmd/control cmd/loopback-proxy )
-  step "built $(ls -l "${SOURCE_TREE}/_build/native/release/build/cmd/control/control.exe" | awk '{print $5}') bytes"
+  local control_binary="${SOURCE_TREE}/_build/native/release/build/vectie/lunanexa/cmd/control/control.exe"
+  [ -x "${control_binary}" ] || die "fresh control binary missing at ${control_binary}"
+  step "built $(ls -l "${control_binary}" | awk '{print $5}') bytes"
 }
 
 # ---------------------------------------------------------------------- images
 phase_images() {
   note "images"
   step "control image ${CONTROL_IMAGE} from the freshly built binaries"
-  local control_binary="${SOURCE_TREE}/_build/native/release/build/cmd/control/control.exe"
-  local proxy_binary="${SOURCE_TREE}/_build/native/release/build/cmd/loopback-proxy/loopback-proxy.exe"
-  [ -f "${proxy_binary}" ] || proxy_binary="${SOURCE_TREE}/_build/native/release/build/cmd/loopback-proxy/loopback-proxy"
+  local control_binary="${SOURCE_TREE}/_build/native/release/build/vectie/lunanexa/cmd/control/control.exe"
+  local proxy_binary="${SOURCE_TREE}/_build/native/release/build/vectie/lunanexa/cmd/loopback-proxy/loopback-proxy.exe"
+  [ -x "${control_binary}" ] || die "no current control binary; run the build phase first"
   [ -f "${proxy_binary}" ] || die "no loopback proxy binary; run the build phase first"
   mutate python3 "${REPO_ROOT}/deploy/cluster/build-control-image.py" \
     --image "${CONTROL_IMAGE}" \

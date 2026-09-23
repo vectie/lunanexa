@@ -97,11 +97,9 @@ fn registry_evidence(
                 model.artifact.digest,
               ),
               runtime_verified: verified_digest(snapshot, runtime.image_digest),
-              // Under a policy that has shelved evaluation there is no
-              // evaluation gate to satisfy, so evidence reports the gate as
-              // met. It is not a claim that a benchmark ran: the receipts of
-              // any approval granted this way carry no evaluation id, and the
-              // policy itself is a deployment-level switch.
+              // This field describes whether the configured gate is satisfied,
+              // not whether a benchmark ran. Evaluation is optional by default;
+              // real evaluation status and receipt IDs remain separate evidence.
               evaluation_passed: !require_evaluation ||
               passed_evaluation(snapshot, model),
               alias_points_to_model: true,

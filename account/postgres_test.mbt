@@ -70,7 +70,7 @@ async test "invited account registration restores from PostgreSQL" {
     try
       store.set_state(registered.account.account_id, Suspended, 100002L)
     catch {
-      @database.DatabaseError::QueryFailed(_) => ()
+      @database.DatabaseError::ConnectionUnavailable(_) => ()
       error => fail("unexpected disconnected write: \{Repr(error)}")
     } noraise {
       _ => fail("closed database accepted suspension")

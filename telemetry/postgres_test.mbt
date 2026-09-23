@@ -62,7 +62,7 @@ async test "telemetry snapshot restores from PostgreSQL" {
         timestamp_unix_ms: 2000L,
       })
     catch {
-      @database.DatabaseError::QueryFailed(_) => ()
+      @database.DatabaseError::ConnectionUnavailable(_) => ()
       error => fail("unexpected disconnected-write error: \{Repr(error)}")
     } noraise {
       _ => fail("closed database accepted telemetry")

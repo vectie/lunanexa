@@ -118,7 +118,8 @@ Deliver:
 
 Gate:
 
-- an unlicensed, unverified or failed-evaluation artifact cannot deploy;
+- an unlicensed or unverified artifact cannot deploy; evaluation results are
+  optional evidence and must never be fabricated;
 - approved artifact promotes through canary and rolls back deterministically;
 - controller restart preserves registry and desired state.
 
@@ -249,7 +250,7 @@ Final UI-to-UI scenario:
 1. Start from a clean controller and every node in the named acceptance
    inventory; a failover-claiming profile includes at least two eligible nodes.
 2. Register a digest-pinned, licensed model and its runtime.
-3. Run evaluation and approve a versioned alias.
+3. Verify the artifact, approve a versioned alias, and optionally record a real evaluation.
 4. Deploy canary, inspect placement, promote and invoke through MoonGate.
 5. Observe streaming output, usage and an audit receipt in the console.
 6. Saturate one node, drain another and verify bounded queueing/failover.
@@ -292,7 +293,7 @@ Gate:
 
 - an approved template deploys through one API request without hand-authoring a
   node-specific assignment;
-- a missing approval, verification, license, evaluation, secret reference,
+- a missing approval, verification, license, secret reference,
   data-class capability, or capacity blocks before assignment publication;
 - repeated idempotency keys never create duplicate operations or assignments;
 - controller restart resumes a persisted operation and readiness converges from

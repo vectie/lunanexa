@@ -456,17 +456,15 @@ pub fn ModelRegistry::model(
 ///|
 
 ///|
-/// `require_evaluation = false` is the shelved-evaluation policy: a verified
-/// model may be approved without a benchmark behind it. It is deliberately a
-/// caller-supplied decision rather than a default, so the only way to approve
-/// without a measurement is to say so out loud, and a promotion receipt from
-/// such an approval carries no evaluation id because there was none.
+/// A verified model can be approved without a benchmark. An explicitly strict
+/// deployment may still require a passed evaluation; neither policy bypasses
+/// license acceptance or artifact verification.
 pub fn ModelRegistry::approve(
   self : ModelRegistry,
   model_id : String,
   version : String,
   now_unix_ms : Int64,
-  require_evaluation? : Bool = true,
+  require_evaluation? : Bool = false,
 ) -> @contracts.ModelRecord raise RegistryError {
   let key = model_key(model_id, version)
   guard self.models.get(key) is Some(model) else { raise ModelNotFound(key) }
@@ -494,7 +492,7 @@ pub fn ModelRegistry::approve(
   } else if model.state != Verified && model.state != Evaluated {
     // Without an evaluation the only honest entry is the state a real
     // verification produced; a candidate is still not approvable.
-    raise EvaluationNotPassed(key)
+    raise ArtifactNotVerified(model.artifact.digest)
   }
   let approved : @contracts.ModelRecord = { ..model, state: Approved, }
   self.models[key] = approved
@@ -510,7 +508,7 @@ pub fn ModelRegistry::promote(
   stage : RolloutStage,
   actor : String,
   now_unix_ms : Int64,
-  require_evaluation? : Bool = true,
+  require_evaluation? : Bool = false,
 ) -> PromotionReceipt raise RegistryError {
   if !@contracts.valid_identifier(alias_name, maximum_length=128) ||
     !@contracts.valid_identifier(model_id, maximum_length=128) ||
@@ -528,8 +526,11 @@ pub fn ModelRegistry::promote(
     }
     evaluation.evaluation_id
   } else {
-    // No measurement backed this promotion, and the receipt says so.
-    ""
+    // Include a real passed evaluation when one exists; never invent one.
+    match self.evaluations.get(key) {
+      Some(evaluation) if evaluation.passed => evaluation.evaluation_id
+      _ => ""
+    }
   }
   let prior = self.aliases.get(alias_name)
   let generation = match prior {

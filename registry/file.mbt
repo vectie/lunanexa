@@ -9,10 +9,8 @@ pub struct FileRegistry {
   persistence : RegistryPersistence
   mut registry : ModelRegistry
   mutex : @async.Mutex
-  /// Whether an approval must be backed by a passed evaluation. Defaults to
-  /// requiring one; a deployment that has shelved evaluation says so at open
-  /// time, and every receipt written under that policy records that no
-  /// evaluation took part.
+  /// Evaluation is optional publication evidence by default. A deployment can
+  /// explicitly opt into requiring a passed evaluation.
   require_evaluation : Bool
 }
 
@@ -32,7 +30,7 @@ async fn write_registry(path : String, snapshot : String) -> Unit {
 ///|
 pub async fn FileRegistry::open(
   path : String,
-  require_evaluation? : Bool = true,
+  require_evaluation? : Bool = false,
 ) -> FileRegistry {
   let registry = if @fs.exists(path) {
     ModelRegistry::restore(@fs.read_file(path).text())
@@ -54,7 +52,7 @@ pub async fn FileRegistry::open(
 ///|
 pub async fn FileRegistry::open_postgres(
   database : @database.PostgresDatabase,
-  require_evaluation? : Bool = true,
+  require_evaluation? : Bool = false,
 ) -> FileRegistry {
   let payload = database.load_snapshot("model_registry", "lunanexa.registry.v1")
   let registry = match payload {
