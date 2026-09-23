@@ -939,13 +939,21 @@ pub fn EnterpriseState::update(
       }
     SelfService(SelectProduct(product)) => {
       let selected = self.self_service.update(SelectProduct(product))
-      let organization_ready = has_customer_membership(self)
+      let organization_ready = has_customer_membership(self) &&
+        (match self.membership {
+          Some(membership) =>
+            self.organizations.any(value => {
+              value.organization.organization_id == membership.organization_id &&
+              value.organization.state == Active
+            })
+          None => false
+        })
       {
         ..self,
         route: SelfService,
         self_service: {
           ..selected,
-          step: if product == SharedMaaS || organization_ready {
+          step: if organization_ready {
             Capacity
           } else {
             Organization
