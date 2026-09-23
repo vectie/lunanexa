@@ -61,8 +61,13 @@ In the public enterprise portal (`http://106.39.18.146:5002/enterprise/`):
 
 - LunaNexa native MoonBit suite: **1223/1223 passed**; MoonDesk developer-tools
   JavaScript suite: **9/9 passed**; MoonDesk production build completed.
-- GLM `/glm53/health` was HTTP 200 and the runtime advertised
-  `GLM-5.3-Flash-EXL3` during acceptance.
+- Before the final isolation change, GLM `/glm53/health` was HTTP 200 and the
+  runtime advertised `GLM-5.3-Flash-EXL3`. That old unauthenticated public
+  proxy route was then removed from the live `operator-4173-proxy` ConfigMap;
+  `/glm53/health` now returns 404. The operator UI and trial ComfyUI route
+  remained HTTP 200, and an authenticated `glm-5.3.flash` inference request
+  through LunaNexa remained HTTP 200. The model process on `.178/.179` was not
+  stopped or restarted.
 - The test company's legal identity remains pending external verification.
   The UI correctly reports no exclusive-resource authorization. This test does
   not validate purchase, contract, SSH, paid billing, or fully managed
