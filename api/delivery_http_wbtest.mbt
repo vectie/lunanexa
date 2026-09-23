@@ -88,6 +88,26 @@ test "delivery projection reports stage without leaking physical placement" {
   assert_true(replicated.stringify().contains("\"can_manage\":false"))
   let expired = delivery_view({ ..operation, stage: Expired, }, true)
   assert_true(expired is { "stage": String("Expired"), .. })
+  let personal = {
+    ..operation,
+    intent: { ..operation.intent, kind: Workspace, },
+  }
+  let model = { ..operation, intent: { ..operation.intent, kind: ModelApi, }, }
+  assert_false(
+    delivery_visible_to_member(personal, "tenant-a", "organization-a", false),
+  )
+  assert_true(
+    delivery_visible_to_member(personal, "tenant-a", "organization-a", true),
+  )
+  assert_true(
+    delivery_visible_to_member(model, "tenant-a", "organization-a", false),
+  )
+  assert_false(
+    delivery_visible_to_member(model, "tenant-a", "organization-b", true),
+  )
+  assert_false(delivery_manageable_by_member(personal, true, false))
+  assert_true(delivery_manageable_by_member(model, true, false))
+  assert_false(delivery_manageable_by_member(model, false, false))
 }
 
 ///|

@@ -154,6 +154,27 @@ fn delivery_view(operation : @delivery.Operation, can_manage : Bool) -> Json {
 }
 
 ///|
+fn delivery_visible_to_member(
+  operation : @delivery.Operation,
+  tenant_ref : String,
+  organization_id : String,
+  owns_personal_lease : Bool,
+) -> Bool {
+  operation.intent.tenant_id == tenant_ref &&
+  operation.intent.organization_id == organization_id &&
+  (operation.intent.kind == ModelApi || owns_personal_lease)
+}
+
+///|
+fn delivery_manageable_by_member(
+  operation : @delivery.Operation,
+  company_admin : Bool,
+  owns_personal_lease : Bool,
+) -> Bool {
+  owns_personal_lease || (company_admin && operation.intent.kind == ModelApi)
+}
+
+///|
 fn delivery_error(error : Error) -> HttpReply {
   match error {
     @delivery.DeliveryError::NotFound =>
@@ -231,12 +252,7 @@ async fn ApiService::handle_delivery(
   } noraise {
     value => value
   }
-  let owned = deliveries
-    .operations()
-    .filter(operation => {
-      operation.intent.tenant_id == view.membership.tenant_ref &&
-      operation.intent.organization_id == view.membership.organization_id
-    })
+  let company_admin = view.membership.roles.contains(OrganizationAdministrator)
   guard @portal.role_allows(view.membership.roles, Developer) &&
     self.workspace_directory is Some(directory) else {
     return api_error(
@@ -244,34 +260,51 @@ async fn ApiService::handle_delivery(
     )
   }
   let now = @async.now()
-  let _authorization = try
-    directory.authorize_subject_for_tenant(
-      subject,
-      view.membership.tenant_ref,
-      Developer,
-      now,
-    )
-  catch {
-    _ =>
-      return api_error(
-        403, "ActiveLeaseRequired", "active workspace authorization is required",
-        false,
+  let member_leases = directory.snapshot(now).leases
+  let owned = deliveries
+    .operations()
+    .filter(operation => {
+      delivery_visible_to_member(
+        operation,
+        view.membership.tenant_ref,
+        view.membership.organization_id,
+        member_leases.any(lease => {
+          lease.lease_id == operation.intent.lease_id &&
+          lease.subject_ref == subject
+        }),
       )
-  } noraise {
-    value => value
+    })
+  if !company_admin {
+    ignore(
+      directory.authorize_subject_for_tenant(
+        subject,
+        view.membership.tenant_ref,
+        Developer,
+        now,
+      ),
+    ) catch {
+      _ =>
+        return api_error(
+          403, "ActiveLeaseRequired", "active workspace authorization is required",
+          false,
+        )
+    }
   }
   if verb == Get && path == "/v1/portal/self/deliveries" {
-    let leases = directory.snapshot(now).leases
     return json_reply(
       200,
       owned
       .map(operation => {
         delivery_view(
           operation,
-          leases.any(lease => {
-            lease.lease_id == operation.intent.lease_id &&
-            lease.subject_ref == subject
-          }),
+          delivery_manageable_by_member(
+            operation,
+            company_admin,
+            member_leases.any(lease => {
+              lease.lease_id == operation.intent.lease_id &&
+              lease.subject_ref == subject
+            }),
+          ),
         )
       })
       .to_json(),
@@ -489,20 +522,26 @@ async fn ApiService::handle_delivery(
       is Some(operation) else {
       return api_error(404, "NotFound", "delivery was not found", false)
     }
-    let authorized = try {
-      ignore(
-        directory.authorize_subject_for_tenant_lease(
-          subject,
-          view.membership.tenant_ref,
-          operation.intent.lease_id,
-          Developer,
-          now,
-          grant_id=operation.intent.authorization_ref,
-        ),
-      )
+    let authorized = if delivery_manageable_by_member(
+        operation, company_admin, false,
+      ) {
       true
-    } catch {
-      _ => false
+    } else {
+      try {
+        ignore(
+          directory.authorize_subject_for_tenant_lease(
+            subject,
+            view.membership.tenant_ref,
+            operation.intent.lease_id,
+            Developer,
+            now,
+            grant_id=operation.intent.authorization_ref,
+          ),
+        )
+        true
+      } catch {
+        _ => false
+      }
     }
     if !authorized {
       return api_error(404, "NotFound", "delivery was not found", false)

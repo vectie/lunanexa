@@ -557,7 +557,14 @@ fn product_card(
 ) -> @rabbita.Html {
   @html.article(class="service-choice", [
     @html.p(class="eyebrow", product_label(state.locale, product)),
-    @html.p(class="service-owner", copy(state.locale, "Owned by the selected company", "归当前选择的企业所有")),
+    @html.p(
+      class="service-owner",
+      copy(
+        state.locale,
+        "Owned by the selected company",
+        "归当前选择的企业所有",
+      ),
+    ),
     @html.h3(title),
     @html.p(description),
     @html.p(class="service-outcome", outcome),
