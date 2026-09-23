@@ -970,6 +970,8 @@ pub fn EnterpriseState::update(
             membership: Some(value.membership),
             selected_organization_id: Some(organization_id),
             project_id,
+            member_invite_email: "",
+            member_invite_secret: None,
             offline_commerce: {
               ..self.offline_commerce,
               project_id,
@@ -997,6 +999,8 @@ pub fn EnterpriseState::update(
             ..self,
             selected_organization_id: None,
             membership: None,
+            member_invite_email: "",
+            member_invite_secret: None,
             self_service: {
               ..self.self_service,
               quote: None,
@@ -2243,6 +2247,10 @@ fn account_access_view(
       enterprise_copy(state.locale, AccountIdentityIsUnavailable),
     )
   }
+  let company_active = state.organizations.any(value => {
+    value.organization.organization_id == membership.organization_id &&
+    value.organization.state == Active
+  })
   let can_issue = membership.active &&
     @portal.role_allows(membership.roles, Developer) &&
     (match state.trial {
@@ -2397,10 +2405,23 @@ fn account_access_view(
             on_input=text_command(emit, value => MemberInviteEmailChanged(value)),
           ),
         ]),
+        if company_active {
+          @html.nothing
+        } else {
+          @html.p(
+            class="notice is-warning",
+            copy(
+              state.locale,
+              "Company registration is awaiting platform review. You can invite members after approval.",
+              "企业注册正在等待平台管理员审核；审核通过后即可邀请成员。",
+            ),
+          )
+        },
         @html.button(
           type_="button",
           class="primary-button",
-          disabled=state.member_invite_loading ||
+          disabled=!company_active ||
+            state.member_invite_loading ||
             !state.member_invite_email.contains("@"),
           on_click=command(emit, SubmitMemberInvite),
           if state.member_invite_loading {
