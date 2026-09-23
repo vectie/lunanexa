@@ -84,6 +84,8 @@ test "OIDC transport override preserves the public issuer path" {
     oidc_ca_file: None,
     operator_host: "106.39.18.146:5003",
     enterprise_host: "106.39.18.146:5005",
+    alternate_https_port: false,
+    browser_oidc_enabled: true,
     operator_redirect_uri: "https://106.39.18.146:5003/auth/oidc/callback",
     enterprise_redirect_uri: "https://106.39.18.146:5005/auth/oidc/callback",
     operator_client_id: "operator",

@@ -436,7 +436,7 @@ async fn handle_password_login(
     },
     cookies=[
       browser_cookie(
-        config.cookie_name(audience),
+        config.cookie_name_for_host(audience, host),
         cookie_reference,
         (session.expires_unix_ms - now) / 1000L,
         secure=config.browser_secure(),

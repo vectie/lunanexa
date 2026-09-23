@@ -6256,8 +6256,7 @@ fn app_view(
           ),
           @html.p(
             portal_copy(
-              locale, "Sign in with an existing identity or register a new account through the trusted identity ingress.",
-              "使用现有身份登录，或通过受信任的身份入口注册新账户。",
+              locale, "Sign in or create an account on this platform.", "登录或在本平台注册新账户。",
             ),
           ),
           @html.p(
@@ -6275,8 +6274,8 @@ fn app_view(
               )
             } else {
               portal_copy(
-                locale, "Sign in with the address and password you registered. The gateway checks them and hands this page a short-lived session; LunaNexa never stores your password.",
-                "请使用注册时的邮箱和密码登录。网关校验后向前端签发短期会话；LunaNexa 不保存您的密码。",
+                locale, "Sign in with your registered email and password. The platform identity service stores a password hash; this page receives only a short-lived session.",
+                "请使用注册时的邮箱和密码登录。平台身份服务保存密码哈希；此页面只接收短期会话。",
               )
             },
           ),
@@ -6379,23 +6378,27 @@ fn app_view(
               ]),
             ],
           ),
-          @html.div(
-            class="login-divider",
-            portal_copy(
-              locale, "or use organization sign-in", "或使用组织账户登录",
-            ),
-          ),
-          @html.a(
-            class="sso-start",
-            href=if configured_endpoint().has_suffix("/user") {
-              "/user/auth/oidc/start?audience=enterprise"
-            } else {
-              "/auth/oidc/start?audience=enterprise"
-            },
-            portal_copy(
-              locale, "Sign in with the organization identity provider", "使用组织身份提供商登录",
-            ),
-          ),
+          if configured_endpoint().has_suffix("/user") {
+            @html.nothing
+          } else {
+            @html.div(
+              class="login-divider",
+              portal_copy(
+                locale, "or use organization sign-in", "或使用组织账户登录",
+              ),
+            )
+          },
+          if configured_endpoint().has_suffix("/user") {
+            @html.nothing
+          } else {
+            @html.a(
+              class="sso-start",
+              href="/auth/oidc/start?audience=enterprise",
+              portal_copy(
+                locale, "Sign in with the organization identity provider", "使用组织身份提供商登录",
+              ),
+            )
+          },
           if model.connecting {
             @html.p(
               class="bootstrap-status",

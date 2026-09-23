@@ -19,7 +19,7 @@ spec:
       securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: identity-gateway
-          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/identity-gateway@sha256:10a1ba7857d4d74a2308c1d6355271dd0502c237a35a8609315c1dcf174e2cdf
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/identity-gateway@sha256:07adebfd774b90a72421349499ac0625b4f20df3cca6f5e0371da61f976cb56e
           imagePullPolicy: IfNotPresent
           ports: [{name: identity-http, containerPort: 8080}]
           envFrom:
@@ -27,6 +27,8 @@ spec:
           env:
             - {name: LUNANEXA_OIDC_OPERATOR_REDIRECT_URI, value: "https://suanli.kechuangfuwu.com/mana/auth/oidc/callback"}
             - {name: LUNANEXA_OIDC_ENTERPRISE_REDIRECT_URI, value: "https://suanli.kechuangfuwu.com/user/auth/oidc/callback"}
+            - {name: LUNANEXA_BROWSER_ALTERNATE_HTTPS_PORT, value: "8443"}
+            - {name: LUNANEXA_BROWSER_OIDC_ENABLED, value: "false"}
             - {name: LUNANEXA_OIDC_OPERATOR_CLIENT_ID, value: lunanexa-operator}
             - name: LUNANEXA_OIDC_OPERATOR_CLIENT_SECRET
               valueFrom: {secretKeyRef: {name: lunanexa-identity-ingress-credentials, key: operator-client-secret}}

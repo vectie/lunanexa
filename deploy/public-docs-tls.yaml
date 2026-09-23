@@ -1,5 +1,4 @@
-# The shared public domain runs alongside the existing IP:port services.
-# Keep the old routes during the three-site browser acceptance period.
+# The shared public domain is the only public website entry point.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -17,8 +16,8 @@ metadata:
   namespace: lunanexa
 spec:
   redirectRegex:
-    regex: '^https://suanli\.kechuangfuwu\.com/docs$'
-    replacement: 'https://suanli.kechuangfuwu.com/docs/'
+    regex: '^https://suanli\.kechuangfuwu\.com(:8443)?/docs$'
+    replacement: 'https://suanli.kechuangfuwu.com${1}/docs/'
     permanent: true
 ---
 apiVersion: traefik.io/v1alpha1

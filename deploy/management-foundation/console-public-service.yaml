@@ -49,10 +49,9 @@ kind: Service
 metadata:
   name: lunanexa-console-public
   annotations:
-    lunanexa.io/exposure: temporary-plain-http
+    lunanexa.io/exposure: ingress-only
 spec:
-  type: LoadBalancer
-  externalTrafficPolicy: Cluster
+  type: ClusterIP
   selector:
     app: lunanexa-console-public-gateway
   ports:

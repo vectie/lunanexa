@@ -1,5 +1,4 @@
-# Shared-domain front door. The legacy IP:port services remain unchanged while
-# these three site paths are rolled out and verified.
+# Shared-domain front door for both public HTTPS ports (443 and 8443).
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata: {name: lunanexa-public-mana-strip, namespace: lunanexa}
@@ -29,8 +28,8 @@ kind: Middleware
 metadata: {name: lunanexa-public-mana-slash, namespace: lunanexa}
 spec:
   redirectRegex:
-    regex: '^https://suanli\.kechuangfuwu\.com/mana$'
-    replacement: 'https://suanli.kechuangfuwu.com/mana/'
+    regex: '^https://suanli\.kechuangfuwu\.com(:8443)?/mana$'
+    replacement: 'https://suanli.kechuangfuwu.com${1}/mana/'
     permanent: true
 ---
 apiVersion: traefik.io/v1alpha1
@@ -38,8 +37,8 @@ kind: Middleware
 metadata: {name: lunanexa-public-user-slash, namespace: lunanexa}
 spec:
   redirectRegex:
-    regex: '^https://suanli\.kechuangfuwu\.com/user$'
-    replacement: 'https://suanli.kechuangfuwu.com/user/'
+    regex: '^https://suanli\.kechuangfuwu\.com(:8443)?/user$'
+    replacement: 'https://suanli.kechuangfuwu.com${1}/user/'
     permanent: true
 ---
 apiVersion: traefik.io/v1alpha1

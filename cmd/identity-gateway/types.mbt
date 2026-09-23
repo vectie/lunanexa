@@ -34,6 +34,8 @@ priv struct GatewayConfig {
   oidc_ca_file : String?
   operator_host : String
   enterprise_host : String
+  alternate_https_port : Bool
+  browser_oidc_enabled : Bool
   operator_redirect_uri : String
   enterprise_redirect_uri : String
   operator_client_id : String
