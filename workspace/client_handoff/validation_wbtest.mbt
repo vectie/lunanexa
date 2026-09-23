@@ -14,6 +14,31 @@ fn launch_fixture(
 }
 
 ///|
+test "public HTTP API origin needs its own exact deployment allowlist" {
+  let config = launch_fixture(
+    "https://workspace.example/connect", "http://198.51.100.5:5000/v1",
+  )
+  assert_false(valid_client_launch_config(config))
+  assert_true(
+    valid_client_launch_config(config, allowed_http_api_origins=[
+      "http://198.51.100.5:5000",
+    ]),
+  )
+  assert_false(
+    valid_client_launch_config(
+      { ..config, public_api_base_url: "http://198.51.100.5:5001/v1", },
+      allowed_http_api_origins=["http://198.51.100.5:5000"],
+    ),
+  )
+  assert_false(
+    valid_client_launch_config(
+      { ..config, launch_uri: "http://198.51.100.5:5000/connect", },
+      allowed_http_api_origins=["http://198.51.100.5:5000"],
+    ),
+  )
+}
+
+///|
 test "explicit HTTP launch origin does not relax model API or adjacent origins" {
   let allowed = ["http://198.51.100.5:5000"]
   let config = launch_fixture(

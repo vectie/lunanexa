@@ -14,6 +14,40 @@ pub extend ModelScopeTree with Eq::{not_equal, equal}
 pub extend ModelScopeTree with ToJson::{to_json}
 
 ///|
+/// Select only the named upstream component. Local paths are relative to its
+/// own root, while source downloads still use the original upstream prefix.
+pub fn component_tree(
+  tree : ModelScopeTree,
+  component : String,
+) -> ModelScopeTree raise ModelSourceError {
+  if !valid_component(component) {
+    raise InvalidRepositoryPath
+  }
+  let prefix = "\{component}/"
+  let files : Array[ModelScopeFile] = []
+  for file in tree.files {
+    if file.path.has_prefix(prefix) {
+      files.push({ ..file, path: file.path[prefix.length():].to_owned(), })
+    }
+  }
+  if files.length() == 0 {
+    raise InvalidUpstreamResponse
+  }
+  { revision: tree.revision, files, }
+}
+
+///|
+pub fn component_upstream_file(
+  file : ModelScopeFile,
+  component : String,
+) -> ModelScopeFile raise ModelSourceError {
+  if !valid_component(component) || !valid_repository_path(file.path) {
+    raise InvalidRepositoryPath
+  }
+  { ..file, path: "\{component}/\{file.path}", }
+}
+
+///|
 pub struct ModelScopeClient {
   origin : String
 }

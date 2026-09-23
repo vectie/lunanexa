@@ -70,7 +70,13 @@ fn advance(
       }
       { ..operation, model_assignment_generation: Some(generation), }
     }
-    (PreparingModel | LoadingModel | Stopping, ModelReplicaObserved(replica)) => {
+    (
+      PreparingModel
+      | LoadingModel
+      | Ready
+      | Stopping,
+      ModelReplicaObserved(replica),
+    ) => {
       if replica.assignment_id == "" ||
         replica.generation <= 0L ||
         !operation.node_ids.contains(replica.node_id) ||
@@ -95,7 +101,15 @@ fn advance(
       if !found {
         replicas.push(replica)
       }
-      { ..operation, model_replicas: Some(replicas), }
+      {
+        ..operation,
+        model_replicas: Some(replicas),
+        stage: if operation.stage == Ready && !replica.ready {
+          LoadingModel
+        } else {
+          operation.stage
+        },
+      }
     }
     (LoadingModel, ModelResponded(service_id~, digest~)) => {
       if operation.model_replicas is Some(replicas) &&

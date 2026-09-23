@@ -45,6 +45,13 @@ fn WorkspaceHost::resources(
   if container is None && grant.allowed_models.is_empty() {
     raise ControllerRejected
   }
+  if grant.delivery_id is Some(_) &&
+    container is None &&
+    grant.allowed_models.length() != 1 {
+    // A delivery-bound ComfyUI must initialize exactly the model selected by
+    // that delivery, never an arbitrary first entry from a broader grant.
+    raise ControllerRejected
+  }
   let config = self.config
   let meta = metadata(name, config.namespace_name)
   let storage_name = resource_name(@webide.workspace_storage_id(grant))

@@ -13,6 +13,7 @@ fn host_config() -> HostConfig {
     memory_mib: 2048,
     controller_origin: "http://controller.webide.svc:5000",
     model_gateway_origin: "http://model-gateway.webide.svc:5001",
+    public_api_base_url: None,
     trusted_ca_config_map: None,
     controller_port: 5000,
     model_gateway_port: 5001,
@@ -36,6 +37,57 @@ fn proxy_config(controller : String, gateway : String) -> ModelProxyConfig {
     expires_unix_ms: @async.now() + 60000L,
     controller_origin: controller,
     model_gateway_origin: gateway,
+  }
+}
+
+///|
+async test "public catalog API identity is separate from private model transport" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  defer server.close()
+  let config = {
+    ..host_config(),
+    controller_origin: "http://\{server.addr}",
+    public_api_base_url: Some("http://198.51.100.5:5000/v1"),
+  }
+  let host = WorkspaceHost::new(config)
+  let grant = proxy_config(
+    config.controller_origin,
+    config.model_gateway_origin,
+  ).grant()
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true, () => {
+      server.run_forever((_request, _body, connection) => {
+        connection.send_response(200, "OK")
+        let response : Json = {
+          "client_id": grant.client_id,
+          "api_secret": grant.api_secret,
+          "api_base_url": "http://198.51.100.5:5000/v1",
+          "tenant_ref": grant.tenant_ref,
+          "subject_ref": grant.subject_ref,
+          "organization_id": grant.organization_id,
+          "project_id": grant.project_id,
+          "allowed_models": grant.allowed_models,
+          "expires_unix_ms": grant.expires_unix_ms,
+          "one_time": true,
+        }
+        connection.write_string(response.stringify())
+        connection.end_response()
+      })
+    })
+    let redeemed = host.redeem("comfyui", "fixture")
+    assert_eq(redeemed.tenant_ref, grant.tenant_ref)
+    let resources = host.resources(@webide.workspace_id(redeemed), redeemed)
+    assert_true(
+      resources[2].1.stringify().contains(config.model_gateway_origin),
+    )
+    assert_false(resources[2].1.stringify().contains("198.51.100.5"))
+    let legacy = WorkspaceHost::new({ ..config, public_api_base_url: None, })
+    try legacy.redeem("comfyui", "fixture") catch {
+      HostError::ControllerRejected => ()
+      _ => fail("unexpected origin error")
+    } noraise {
+      _ => fail("unconfigured public origin accepted")
+    }
   }
 }
 
@@ -184,14 +236,81 @@ async test "workspace initialization preserves user edits and refuses symlink di
   let root = @fs.tmpdir(prefix="lunanexa-webide-initialize-")
   defer @fs.rmdir(root, recursive=true)
   initialize_workspace(root, "video.h3")
-  let path = root + "/user/default/workflows/LunaNexa Video.json"
+  let path = root + "/user/default/workflows/LunaNexa Video - video.h3.json"
   let initial = @fs.read_file(path).text()
   assert_true(initial.contains("VLLMOmniGenerateVideo"))
   assert_true(initial.contains("http://127.0.0.1:8189/v1"))
   assert_false(initial.contains("api_secret"))
+  let rendered = @json.parse(initial)
+  guard rendered is { "nodes": Array(nodes), "links": Array(links), .. } else {
+    fail("initial workflow has no executable graph")
+  }
+  let generator = nodes
+    .iter()
+    .find_first(node => node is { "type": String("VLLMOmniGenerateVideo"), .. })
+    .unwrap()
+  guard generator
+    is {
+      "widgets_values": Array(
+        [String("http://127.0.0.1:8189/v1"), String("video.h3"), ..]
+      ),
+      ..
+    } else {
+    fail("initial workflow must use the delivery grant model")
+  }
+  assert_true(
+    nodes.any(node => {
+      node is { "type": String("VLLMOmniDiffusionSampling"), .. }
+    }),
+  )
+  assert_true(nodes.any(node => node is { "type": String("SaveVideo"), .. }))
+  assert_true(links.contains(([2, 3, 0, 1, 1, "SAMPLING_PARAMS"] : Json)))
+  assert_true(links.contains(([1, 1, 0, 2, 0, "VIDEO"] : Json)))
+  @fs.write_file(
+    root + "/input/customer.png",
+    "customer input",
+    create_mode=CreateNew,
+  )
+  @fs.write_file(
+    root + "/output/customer.mp4",
+    "customer result",
+    create_mode=CreateNew,
+  )
   @fs.write_file(path, "user-owned-workflow")
   initialize_workspace(root, "video.another-approved-model")
   assert_eq(@fs.read_file(path).text(), "user-owned-workflow")
+  let next = root +
+    "/user/default/workflows/LunaNexa Video - video.another-approved-model.json"
+  guard @json.parse(@fs.read_file(next).text())
+    is { "nodes": Array(next_nodes), .. } else {
+    fail("next delivery must get its own workflow")
+  }
+  assert_true(
+    next_nodes.any(node => {
+      node
+      is {
+        "type": String("VLLMOmniGenerateVideo"),
+        "widgets_values": Array(
+          [
+            String("http://127.0.0.1:8189/v1"),
+            String("video.another-approved-model"),
+            ..,
+          ]
+        ),
+        ..
+      }
+    }),
+  )
+  initialize_workspace(root, "video.another-approved-model")
+  assert_eq(@fs.read_file(path).text(), "user-owned-workflow")
+  assert_eq(
+    @fs.read_file(root + "/input/customer.png").text(),
+    "customer input",
+  )
+  assert_eq(
+    @fs.read_file(root + "/output/customer.mp4").text(),
+    "customer result",
+  )
   let unsafe_root = @fs.tmpdir(prefix="lunanexa-webide-symlink-")
   defer @fs.rmdir(unsafe_root, recursive=true)
   @fs.symlink(target=root + "/user", unsafe_root + "/user")
@@ -201,6 +320,23 @@ async test "workspace initialization preserves user edits and refuses symlink di
   } catch {
     HostError::InvalidConfiguration => ()
     error => fail("Unexpected error: \{error}")
+  }
+}
+
+///|
+test "delivery workspace refuses a broad model scope before creating a ComfyUI pod" {
+  let config = host_config()
+  let host = WorkspaceHost::new(config)
+  let grant = {
+    ..proxy_config(config.controller_origin, config.model_gateway_origin).grant(),
+    delivery_id: Some("delivery-h3"),
+    allowed_models: ["component-fl2va", "unrelated-model"],
+  }
+  try host.resources(@webide.workspace_id(grant), grant) catch {
+    HostError::ControllerRejected => ()
+    _ => fail("Unexpected host error")
+  } noraise {
+    _ => fail("broad delivery model grant was accepted")
   }
 }
 

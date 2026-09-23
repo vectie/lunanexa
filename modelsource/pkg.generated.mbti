@@ -8,11 +8,19 @@ import {
 }
 
 // Values
+pub fn component_import_id(String, String, String) -> String raise ModelSourceError
+
+pub fn component_tree(ModelScopeTree, String) -> ModelScopeTree raise ModelSourceError
+
+pub fn component_upstream_file(ModelScopeFile, String) -> ModelScopeFile raise ModelSourceError
+
 pub fn import_id(String, String) -> String raise ModelSourceError
 
 pub fn local_artifact_uri(String) -> String raise ModelSourceError
 
 pub fn local_directory_entry(String, Int, Int64, Bool) -> Json raise ModelSourceError
+
+pub fn valid_component(String) -> Bool
 
 pub fn valid_local_directory(String) -> Bool
 
@@ -84,7 +92,7 @@ pub struct FileImportStore {
 }
 pub async fn FileImportStore::cancel(Self, String, Int64) -> ImportOperation
 pub async fn FileImportStore::create(Self, ImportRequest, String, Int64) -> ImportOperation
-pub async fn FileImportStore::create_local(Self, ImportRequest, String, String, String, Int64) -> ImportOperation
+pub async fn FileImportStore::create_local(Self, ImportRequest, String, String, String, Int64, component? : String) -> ImportOperation
 pub async fn FileImportStore::get(Self, String) -> ImportOperation?
 pub async fn FileImportStore::list(Self) -> Array[ImportOperation]
 pub async fn FileImportStore::next_queued(Self) -> ImportOperation?
@@ -106,6 +114,7 @@ pub(all) struct ImportOperation {
   artifact_uri : String
   license : String
   local_directory : String
+  component : String
   error_code : String
   cancel_requested : Bool
   created_unix_ms : Int64

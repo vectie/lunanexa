@@ -21,6 +21,7 @@ priv struct LocalRegistrationRequest {
   model_id : String
   revision : String
   directory : String
+  component : String
 } derive(FromJson)
 
 ///|
@@ -101,6 +102,21 @@ async fn read_body(reader : &@io.Reader) -> String {
 ///|
 fn[T : FromJson] decode(body : String) -> T raise {
   @json.from_json(@json.parse(body))
+}
+
+///|
+/// Older consoles omit `component`; keep whole-revision registration wire
+/// compatible while new consoles can request a separately named component.
+fn decode_local_registration(body : String) -> LocalRegistrationRequest raise {
+  let value = @json.parse(body)
+  guard value is Object(fields) else {
+    raise @modelsource.ModelSourceError::InvalidRepositoryPath
+  }
+  let fields = fields.copy()
+  if !fields.contains("component") {
+    fields["component"] = Json::string("")
+  }
+  @json.from_json(Json::object(fields))
 }
 
 ///|
@@ -319,7 +335,12 @@ async fn run_local_registration(
     if !@fs.exists(directory) {
       raise @modelsource.ModelSourceError::FilesystemRejected
     }
-    let tree = client.tree(operation.model_id, operation.revision)
+    let upstream_tree = client.tree(operation.model_id, operation.revision)
+    let tree = if operation.component == "" {
+      upstream_tree
+    } else {
+      @modelsource.component_tree(upstream_tree, operation.component)
+    }
     let mut total = 0L
     for file in tree.files {
       total += file.size
@@ -434,10 +455,15 @@ async fn run_local_registration(
       let staging = "\{path}.lunanexa-restore"
       ensure_directory(parent_path(path), 0o750)
       errdefer (@fs.remove(staging) catch { _ => () })
+      let upstream_file = if operation.component == "" {
+        file
+      } else {
+        @modelsource.component_upstream_file(file, operation.component)
+      }
       client.download_file(
         operation.model_id,
         tree.revision,
-        file,
+        upstream_file,
         staging,
         record_progress,
         () => {
@@ -611,11 +637,12 @@ async fn collect_model_roots(
     if kind != Directory {
       continue
     }
-    if is_model_root(child) {
+    if is_model_root(child) || @fs.exists("\{child}/\{SourceManifestFileName}") {
       found.push(child_relative)
-    } else {
-      collect_model_roots(root, child_relative, depth + 1, found)
     }
+    // A model root can contain separately deliverable submodels. Continue the
+    // bounded walk so FL2VA and Ref2VA are selectable alongside MiniMax-H3.
+    collect_model_roots(root, child_relative, depth + 1, found)
   }
 }
 
@@ -726,7 +753,7 @@ async fn serve(
           (202, created.to_json())
         }
         (Post, "/internal/v1/modelscope/imports:register-local") => {
-          let input : LocalRegistrationRequest = decode(body)
+          let input = decode_local_registration(body)
           if !@modelsource.valid_model_id(input.model_id) {
             raise @modelsource.ModelSourceError::InvalidModelId
           }
@@ -734,6 +761,13 @@ async fn serve(
             raise @modelsource.ModelSourceError::InvalidRevision
           }
           if !@modelsource.valid_local_directory(input.directory) {
+            raise @modelsource.ModelSourceError::InvalidRepositoryPath
+          }
+          if input.component != "" &&
+            (
+              !@modelsource.valid_component(input.component) ||
+              !input.directory.has_suffix("/\{input.component}")
+            ) {
             raise @modelsource.ModelSourceError::InvalidRepositoryPath
           }
           let detail = client.detail(input.model_id)
@@ -746,6 +780,7 @@ async fn serve(
             input.directory,
             model_root,
             @async.now(),
+            component=input.component,
           )
           (202, created.to_json())
         }

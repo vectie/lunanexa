@@ -50,7 +50,10 @@ pub async fn WorkspaceHost::redeem(
     // not silently send a credential to another origin or bypass its gateway.
     if result.client_id != client_id ||
       !result.one_time ||
-      result.api_base_url != self.config.model_gateway_origin + "/v1" {
+      result.api_base_url !=
+      self.config.public_api_base_url.unwrap_or(
+        self.config.model_gateway_origin + "/v1",
+      ) {
       raise HostError::ControllerRejected
     }
     let grant : @webide.Grant = {

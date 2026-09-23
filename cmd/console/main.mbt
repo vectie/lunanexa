@@ -1,4 +1,15 @@
 ///|
+fn model_local_component(directory : String) -> String {
+  if directory.has_suffix("/FL2VA") {
+    "FL2VA"
+  } else if directory.has_suffix("/Ref2VA") {
+    "Ref2VA"
+  } else {
+    ""
+  }
+}
+
+///|
 priv struct BrowserStreamEvent {
   sequence : Int
   kind : String
@@ -6327,6 +6338,7 @@ fn update_live(
           "model_id": draft.repository.trim().to_json(),
           "revision": draft.revision.trim().to_json(),
           "directory": draft.directory.to_json(),
+          "component": model_local_component(draft.directory).to_json(),
         }
         .to_json()
         .stringify()
@@ -6353,8 +6365,8 @@ fn update_live(
             Some(
               console_copy(
                 model.console.locale,
-                "Registration queued. The adapter re-derives every SHA-256 from ModelScope before the revision is verified.",
-                "登记已排队。适配器会先按魔搭清单重新计算每个文件的 SHA-256，校验通过后才标记为已校验。",
+                "Registration queued. The selected revision or component will be independently checked against ModelScope before it can become a registry candidate; license, signature and evaluation approvals remain required.",
+                "登记已排队。所选版本或组件会独立按魔搭清单校验；成为候选模型后仍需许可证、签名与评测审核。",
               ),
             ),
           )

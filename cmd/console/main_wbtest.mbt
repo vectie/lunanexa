@@ -1,4 +1,11 @@
 ///|
+test "console registers H3 components independently of the whole revision" {
+  assert_eq(model_local_component("MiniMax/MiniMax-H3/FL2VA"), "FL2VA")
+  assert_eq(model_local_component("MiniMax/MiniMax-H3/Ref2VA"), "Ref2VA")
+  assert_eq(model_local_component("MiniMax/MiniMax-H3"), "")
+}
+
+///|
 test "console validates only optional opaque loopback subjects" {
   assert_true(optional_subject_is_valid(""))
   assert_true(optional_subject_is_valid("subject:opaque-01"))

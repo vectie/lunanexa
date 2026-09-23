@@ -182,8 +182,8 @@ pub fn ApiService::with_access_store(Self, @access.AccessStore) -> Self
 pub fn ApiService::with_account_store(Self, @account.AccountStore, String) -> Self
 pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
-pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig, allowed_http_launch_origins? : Array[String]) -> Self raise Failure
-pub fn ApiService::with_client_launch_catalog(Self, Array[@client_handoff.ClientLaunchConfig], allowed_http_launch_origins? : Array[String]) -> Self raise Failure
+pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig, allowed_http_launch_origins? : Array[String], allowed_http_api_origins? : Array[String]) -> Self raise Failure
+pub fn ApiService::with_client_launch_catalog(Self, Array[@client_handoff.ClientLaunchConfig], allowed_http_launch_origins? : Array[String], allowed_http_api_origins? : Array[String]) -> Self raise Failure
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_commercial_provider_adapter(Self, String, String, String, String) -> Self raise Failure
 pub fn ApiService::with_contract_approval_threshold(Self, Int64) -> Self

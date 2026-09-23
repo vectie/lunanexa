@@ -8,26 +8,36 @@ enum Persistence {
 pub struct DeliveryStore {
   persistence : Persistence
   mut operations : Array[Operation]
+  mut model_services : Array[ModelService]
   mutex : @async.Mutex
 }
 
 ///|
-fn restore(raw : String) -> Array[Operation] raise {
+fn restore(raw : String) -> Snapshot raise {
   let snapshot : Snapshot = @json.from_json(@json.parse(raw))
   if snapshot.schema_version != "lunanexa.exclusive-deliveries.v1" {
     raise InvalidSnapshot
   }
-  snapshot.operations
+  snapshot
 }
 
 ///|
 pub async fn DeliveryStore::open(path : String) -> DeliveryStore {
-  let operations = if @fs.exists(path) {
+  let snapshot = if @fs.exists(path) {
     restore(@fs.read_file(path).text())
   } else {
-    []
+    {
+      schema_version: "lunanexa.exclusive-deliveries.v1",
+      operations: [],
+      model_services: None,
+    }
   }
-  { persistence: File(path), operations, mutex: Mutex(), }
+  {
+    persistence: File(path),
+    operations: snapshot.operations,
+    model_services: snapshot.model_services.unwrap_or([]),
+    mutex: Mutex(),
+  }
 }
 
 ///|
@@ -37,21 +47,33 @@ pub async fn DeliveryStore::open_postgres(
   let raw = database.load_snapshot(
     "exclusive_deliveries", "lunanexa.exclusive-deliveries.v1",
   )
-  let operations = match raw {
+  let snapshot = match raw {
     Some(raw) => restore(raw)
-    None => []
+    None =>
+      {
+        schema_version: "lunanexa.exclusive-deliveries.v1",
+        operations: [],
+        model_services: None,
+      }
   }
-  { persistence: Postgres(database), operations, mutex: Mutex(), }
+  {
+    persistence: Postgres(database),
+    operations: snapshot.operations,
+    model_services: snapshot.model_services.unwrap_or([]),
+    mutex: Mutex(),
+  }
 }
 
 ///|
 async fn DeliveryStore::commit(
   self : DeliveryStore,
   operations : Array[Operation],
+  model_services? : Array[ModelService],
 ) -> Unit {
   let snapshot : Snapshot = {
     schema_version: "lunanexa.exclusive-deliveries.v1",
     operations,
+    model_services: Some(model_services.unwrap_or(self.model_services)),
   }
   let raw = snapshot.to_json().stringify()
   match self.persistence {
@@ -74,7 +96,9 @@ async fn DeliveryStore::commit(
         raw,
       )
   }
-  self.operations = restore(raw)
+  let restored = restore(raw)
+  self.operations = restored.operations
+  self.model_services = restored.model_services.unwrap_or([])
 }
 
 ///|

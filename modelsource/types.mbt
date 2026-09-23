@@ -100,6 +100,7 @@ pub(all) struct ImportOperation {
   artifact_uri : String
   license : String
   local_directory : String
+  component : String
   error_code : String
   cancel_requested : Bool
   created_unix_ms : Int64
@@ -296,4 +297,33 @@ pub fn import_id(
     @crypto.sha256(@utf8.encode(material)),
   )
   "ms-\{digest[:24]}"
+}
+
+///|
+/// A component is independently verified and admitted; it must not reuse the
+/// whole-revision import identity or another component's registry evidence.
+pub fn component_import_id(
+  model_id : String,
+  revision : String,
+  component : String,
+) -> String raise ModelSourceError {
+  if !valid_model_id(model_id) {
+    raise InvalidModelId
+  }
+  if !valid_revision(revision) {
+    raise InvalidRevision
+  }
+  if !valid_component(component) {
+    raise InvalidRepositoryPath
+  }
+  let material = "modelscope-component|\{model_id}|\{revision}|\{component}"
+  let digest = @crypto.bytes_to_hex_string(
+    @crypto.sha256(@utf8.encode(material)),
+  )
+  "ms-\{digest[:24]}"
+}
+
+///|
+pub fn valid_component(value : String) -> Bool {
+  value == "FL2VA" || value == "Ref2VA"
 }

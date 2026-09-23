@@ -73,6 +73,7 @@ async test "verified S3 import is atomically adopted as gated registry candidate
     artifact_uri: "s3://models/modelscope/ms-0123456789abcdef/lunanexa-source-manifest.json",
     license: "apache-2.0",
     local_directory: "",
+    component: "",
     error_code: "",
     cancel_requested: false,
     created_unix_ms: 1L,

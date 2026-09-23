@@ -31,7 +31,7 @@ RUN moon build cmd/model-source --target native --release --jobs 1
 
 FROM lunanexa/runtime-base:bookworm-amd64
 
-COPY --from=build /src/_build/native/release/build/cmd/model-source/model-source.exe /usr/local/bin/lunanexa-model-source
+COPY --from=build /src/_build/native/release/build/vectie/lunanexa/cmd/model-source/model-source.exe /usr/local/bin/lunanexa-model-source
 
 USER 65532:65532
 EXPOSE 8090

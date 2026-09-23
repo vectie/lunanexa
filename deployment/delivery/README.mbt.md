@@ -29,6 +29,18 @@ IaaS without an approved model mount skips model preparation. IaaS with a model
 mount prepares weights but does not start managed inference. MaaS stops at a
 verified model response and does not create a workspace.
 
+The snapshot also records physical `ModelService` entries with their own runtime
+generation and consumer operation IDs. A delivery joins an existing service
+only when tenant, organization, project, grant, lease, reservation, node set,
+template version and artifact digest match, and the controller confirms each
+replica's current assignment, node heartbeat and model-specific response. A
+consumer retains its own access credential and workspace state. Stopping one
+consumer removes its reference after its workspace has stopped; the final
+consumer triggers physical model drain. A controller epoch change republishes
+the physical assignments and returns consumers to model-loading until the new
+generation responds. Legacy snapshots without service entries retain their
+single-delivery behavior.
+
 `observe`, `retry` and `stop` carry the current generation. Adapter resource names
 must be derived from the stable operation ID, not the observation generation, so
 a crash between adapter success and persisted observation does not duplicate

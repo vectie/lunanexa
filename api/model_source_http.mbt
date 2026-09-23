@@ -68,6 +68,29 @@ fn adopted_import_id(path : String) -> String? {
 }
 
 ///|
+/// During rolling replacement an older adapter may still serve inventory
+/// records without `component`. Those records always mean whole revisions.
+fn decode_model_source_imports(
+  body : String,
+) -> Array[@modelsource.ImportOperation] raise {
+  guard @json.parse(body) is Array(items) else {
+    raise Failure("model-source inventory must be an array")
+  }
+  let normalized : Array[Json] = []
+  for item in items {
+    guard item is Object(fields) else {
+      raise Failure("model-source inventory item must be an object")
+    }
+    let fields = fields.copy()
+    if !fields.contains("component") {
+      fields["component"] = Json::string("")
+    }
+    normalized.push(Json::object(fields))
+  }
+  @json.from_json(Json::array(normalized))
+}
+
+///|
 fn internal_model_source_path(path : String) -> String? {
   let public_prefix = "/v1/model-sources/modelscope"
   let internal_prefix = "/internal/v1/modelscope"
@@ -206,7 +229,7 @@ async fn ApiService::handle_model_source(
       )
     }
     let imports : Array[@modelsource.ImportOperation] = try
-      @json.from_json(@json.parse(imports_reply.body))
+      decode_model_source_imports(imports_reply.body)
     catch {
       _ =>
         return api_error(

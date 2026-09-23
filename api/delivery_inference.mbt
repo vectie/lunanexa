@@ -39,6 +39,14 @@ async fn ApiService::delivery_binding(
   guard self.workspace_directory is Some(directory) else {
     return (None, Some(denied))
   }
+  if operation.model_service_id is Some(service_id) &&
+    deliveries.model_service(service_id) is Some(service) {
+    if service.runtime.stage != Ready ||
+      !service.consumer_ids.contains(operation.operation_id) ||
+      service.runtime.intent.expires_at_ms <= @async.now() {
+      return (None, Some(denied))
+    }
+  }
   let active = try {
     let authorization = directory.authorize_subject_for_tenant(
       authority.subject_ref,
