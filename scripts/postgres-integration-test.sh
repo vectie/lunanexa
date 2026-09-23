@@ -15,6 +15,7 @@ test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-postgres.XXXXXX")
 port=$((30000 + ($$ % 20000)))
 bootstrap_url="postgresql://lunanexa@127.0.0.1:$port/postgres?sslmode=disable"
 database_url="postgresql://lunanexa@127.0.0.1:$port/lunanexa_test?sslmode=disable"
+database_contract_url="postgresql://lunanexa@127.0.0.1:$port/lunanexa_database_test?sslmode=disable"
 started=0
 
 cleanup() {
@@ -33,22 +34,28 @@ started=1
 
 psql "$bootstrap_url" -v ON_ERROR_STOP=1 \
   -c 'CREATE DATABASE lunanexa_test' >/dev/null
+psql "$bootstrap_url" -v ON_ERROR_STOP=1 \
+  -c 'CREATE DATABASE lunanexa_database_test' >/dev/null
 psql "$database_url" -v ON_ERROR_STOP=1 \
   -f database/migrations/001_management.sql >/dev/null
 LUNANEXA_DATABASE_URL="$database_url" moon run cmd/database --target native
 test "$(psql "$database_url" -Atc 'SELECT max(version) FROM lunanexa.schema_migrations')" = "5"
 case "${LUNANEXA_POSTGRES_TEST_SCOPE:-full}" in
   ha)
-    test_packages='database store registry node scheduler telemetry deployment/store'
+    test_packages='store registry node scheduler telemetry deployment/store'
     ;;
   full)
-    test_packages='internal/postgres database account portal/store workspace/directory workspace/client_handoff/store notifications/store observability commercial/offline/store nodelease/store nodelease/credential/store store registry node scheduler telemetry deployment/store api'
+    test_packages='internal/postgres account portal/store workspace/directory workspace/client_handoff/store notifications/store observability commercial/offline/store nodelease/store nodelease/credential/store store registry node scheduler telemetry deployment/store api'
     ;;
   *)
     printf '%s\n' 'LUNANEXA_POSTGRES_TEST_SCOPE must be full or ha' >&2
     exit 1
     ;;
 esac
+# Opaque-domain contract tests deliberately write incompatible fixture schema
+# versions. Keep those fixtures out of the stores' integration database.
+LUNANEXA_TEST_DATABASE_URL="$database_contract_url" \
+  moon test database --target native --deny-warn
 LUNANEXA_TEST_DATABASE_URL="$database_url" \
   moon test $test_packages --target native --deny-warn
 
