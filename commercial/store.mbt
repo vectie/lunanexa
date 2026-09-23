@@ -340,7 +340,7 @@ pub fn CommercialStore::add_organization(
   self.organizations[value.organization_id] = value
 }
 
-///| Promote a pending organization only from authenticated external identity
+///| Promote a pending organization from authenticated external identity
 
 ///| evidence. Replays with the same evidence are idempotent; suspended or
 
@@ -371,6 +371,39 @@ pub fn CommercialStore::record_identity_verification(
   }
   self.organizations[organization_id] = verified
   verified
+}
+
+///|
+/// A platform operator may review the submitted legal profile when no
+/// external identity provider is connected. The evidence is distinct from a
+/// provider callback and never upgrades a rejected, suspended, or closed firm.
+pub fn CommercialStore::approve_organization_registration(
+  self : CommercialStore,
+  organization_id : String,
+  approval_ref : String,
+) -> Organization raise CommercialError {
+  let organization = self.require_organization(organization_id)
+  if !approval_ref.has_prefix("operator-approval:") ||
+    !safe_identifier(approval_ref) {
+    raise InvalidInput("invalid operator approval evidence")
+  }
+  if organization.state == Active &&
+    organization.verification_ref == Some(approval_ref) {
+    return organization
+  }
+  if organization.state != PendingVerification ||
+    organization.legal_profile is None {
+    raise InvalidTransition(
+      "only a pending organization with a legal profile can be approved",
+    )
+  }
+  let approved = {
+    ..organization,
+    state: Active,
+    verification_ref: Some(approval_ref),
+  }
+  self.organizations[organization_id] = approved
+  approved
 }
 
 ///|

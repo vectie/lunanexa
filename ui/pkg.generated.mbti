@@ -394,6 +394,7 @@ pub(all) enum ConsoleMessage {
   SubmitQuickDeployment
   PortalNodeChanged(String)
   ApproveEnterpriseLease(String, Int64)
+  ApproveOrganization(String, String)
   RejectEnterpriseLease(String, Int64)
   AcknowledgeAlert(String, Int64)
   AssignAlertToSelf(String, Int64)
@@ -463,6 +464,7 @@ pub(all) struct ConsoleState {
   access_package_draft : AccessPackageDraft
   access_packages : Array[AccessPackageView]
   users : Array[UserAccessRow]
+  pending_organizations : Array[PendingOrganizationRow]
   access_grants : Array[AccessGrantRow]
   compute_leases : Array[ComputeLeaseRow]
   exclusive_node_leases : Array[ExclusiveNodeLeaseRow]
@@ -878,6 +880,18 @@ pub(all) enum PageReadState {
   Loading
   Failed
 }
+
+pub(all) struct PendingOrganizationRow {
+  organization_id : String
+  display_name : String
+  legal_name : String
+  country_code : String
+  registration_number : String
+  registered_address : String
+  contact_email : String
+} derive(Eq)
+pub fn PendingOrganizationRow::equal(Self, Self) -> Bool
+pub fn PendingOrganizationRow::not_equal(Self, Self) -> Bool
 
 pub(all) struct PolicySummary {
   quota_count : Int

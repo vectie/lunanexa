@@ -182,6 +182,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       identity_verified: false,
     },
     access_packages: [],
+    pending_organizations: [],
     users: [
       {
         user_id: "user-1",
@@ -960,6 +961,28 @@ test "generated labels relocalize while raw placement rationale stays untouched"
     confirmation: None,
   })
   assert_true(chinese_users.contains("从未"))
+}
+
+///|
+test "operator users page reviews pending company registrations" {
+  let html = @ui.render({
+    ..console_state(Users),
+    locale: ChineseSimplified,
+    pending_organizations: [
+      {
+        organization_id: "organization-pending-1",
+        display_name: "测试企业",
+        legal_name: "测试企业有限公司",
+        country_code: "CN",
+        registration_number: "91310000TEST000001",
+        registered_address: "上海市",
+        contact_email: "contact@example.invalid",
+      },
+    ],
+  })
+  assert_true(html.contains("待审核企业注册"))
+  assert_true(html.contains("测试企业有限公司"))
+  assert_true(html.contains("审核通过企业注册"))
 }
 
 ///|

@@ -142,6 +142,14 @@ customer record, or join an existing organization with a one-time invitation.
 Organization verification, membership roles, agreements, budgets, projects and
 orders remain LunaNexa authorities. Multi-organization requests must carry an
 explicit selected organization and fail closed when selection is ambiguous.
+If no external organization-verification provider is configured, a pending
+company appears in the operator's Users & Access review queue. A platform
+operator can approve its submitted legal profile in the UI; this activates
+the company but does not approve any machine, payment or model. The creator
+has `OrganizationAdministrator` authority and can issue one-time,
+email-bound Developer invitations in the enterprise UI. Each member's WebIDE
+and saved application work is personal; machine leases and model endpoints
+belong to the selected company and may be shared under its authorization.
 
 The enterprise portal accepts only tenant-scoped commercial intent. It never
 accepts a node ID, GPU ID, host address or raw access secret. It offers shared

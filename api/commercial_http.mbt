@@ -292,6 +292,37 @@ fn commercial_organization_path(path : String) -> (String, String)? {
 }
 
 ///|
+fn commercial_organization_approval_path(path : String) -> String? {
+  let prefix = "/v1/commercial/organizations/"
+  let suffix = ":approve"
+  if !path.has_prefix(prefix) || !path.has_suffix(suffix) {
+    return None
+  }
+  let organization_id = path[prefix.length():path.length() - suffix.length()].to_owned()
+  if !@contracts.valid_identifier(organization_id) {
+    None
+  } else {
+    Some(organization_id)
+  }
+}
+
+///|
+priv struct OperatorOrganizationApprovalIntent {
+  expected_legal_name : String
+} derive(FromJson)
+
+///|
+fn decode_operator_organization_approval(
+  body : String,
+) -> OperatorOrganizationApprovalIntent? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
 async fn ApiService::persist_commercial_state(self : ApiService) -> Unit {
   guard self.management_database is Some(database) else { return }
   let commercial = self.commercial_store.durable_snapshot()
@@ -335,6 +366,60 @@ async fn ApiService::handle_commercial_management_unlocked(
     return api_error(
       401, "Unauthenticated", "valid operator authority is required", false,
     )
+  }
+  if verb == Get && path == "/v1/commercial/organizations/pending" {
+    return json_reply(
+      200,
+      self.commercial_store.durable_snapshot().commercial.organizations
+      .filter(organization => organization.state == PendingVerification)
+      .to_json(),
+    )
+  }
+  if verb == Post &&
+    commercial_organization_approval_path(path) is Some(organization_id) {
+    guard self.operator_identity(headers) is Some(operator_id) else {
+      return api_error(
+        401, "Unauthenticated", "valid operator authority is required", false,
+      )
+    }
+    guard decode_operator_organization_approval(body) is Some(intent) else {
+      return api_error(
+        400, "InvalidRequest", "invalid organization approval", false,
+      )
+    }
+    guard self.commercial_store.organization(organization_id)
+      is Some(organization) &&
+      organization.legal_profile is Some(profile) &&
+      profile.legal_name == intent.expected_legal_name else {
+      return commercial_rejected(
+        "organization legal profile changed or is absent",
+      )
+    }
+    let approval_ref = "operator-approval:\{digest_hex("\{organization_id}\n\{operator_id}\n\{intent.expected_legal_name}")[:32]}"
+    let before = self.commercial_store.durable_snapshot()
+    let approved = try
+      self.commercial_store.approve_organization_registration(
+        organization_id, approval_ref,
+      )
+    catch {
+      _ =>
+        return commercial_rejected("organization review is no longer pending")
+    } noraise {
+      value => value
+    }
+    self.persist_commercial_state() catch {
+      _ => {
+        ignore(self.commercial_store.replace_from_durable_snapshot(before))
+        return api_error(
+          503, "CommercialPersistenceFailed", "organization approval was rolled back because durable commit failed",
+          true,
+        )
+      }
+    }
+    self.operator_audit_as(
+      operator_id, "organization.registration.approve", organization_id, approval_ref,
+    )
+    return json_reply(200, approved.to_json())
   }
   if verb == Get &&
     commercial_organization_path(path) is Some((organization_id, view)) {

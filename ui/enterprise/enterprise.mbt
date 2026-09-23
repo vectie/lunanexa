@@ -183,6 +183,9 @@ pub(all) struct EnterpriseState {
   api_key_issue_open : Bool
   api_key_revoke_id : String?
   one_time_api_key_secret : OneTimeApiKeySecret?
+  member_invite_email : String
+  member_invite_secret : String?
+  member_invite_loading : Bool
   agreements : Array[@portal.PortalAgreement]
   lease_requests : Array[@portal.EnterpriseLeaseRequest]
   notifications : Array[@notifications.NotificationRecord]
@@ -228,6 +231,9 @@ pub(all) enum EnterpriseMessage {
   ApiKeyLifetimeChanged(Int)
   ApiKeyMaximumRequestsChanged(Int64)
   SubmitApiKeyIssue
+  MemberInviteEmailChanged(String)
+  SubmitMemberInvite
+  DismissMemberInviteSecret
   CopyOneTimeApiKeySecret
   CopyFirstCallExample
   CopyDetail(String)
@@ -285,6 +291,9 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     api_key_issue_open: false,
     api_key_revoke_id: None,
     one_time_api_key_secret: None,
+    member_invite_email: "",
+    member_invite_secret: None,
+    member_invite_loading: false,
     agreements: [],
     lease_requests: [],
     notifications: [],
@@ -1082,6 +1091,15 @@ pub fn EnterpriseState::update(
       }
     SubmitApiKeyIssue =>
       { ..self, loading: true, success_message: None, error_message: None, }
+    MemberInviteEmailChanged(value) => { ..self, member_invite_email: value, }
+    SubmitMemberInvite =>
+      {
+        ..self,
+        member_invite_loading: true,
+        success_message: None,
+        error_message: None,
+      }
+    DismissMemberInviteSecret => { ..self, member_invite_secret: None, }
     CopyOneTimeApiKeySecret
     | CopyFirstCallExample
     | CopyDetail(_)
@@ -1424,22 +1442,57 @@ fn navigation(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  let items = [
-    for
-      route in [
-        EnterpriseRoute::Overview,
-        SelfService,
-        AccountAccess,
-        Agreements,
-        LeaseRequests,
-        MachineAccess,
-        OfflineCommerce,
-        ContractDocuments,
-        Notifications,
-        Costs,
-        Models,
-        DesktopIde,
-      ] => {
+  let items : Array[@rabbita.Html] = []
+  for
+    route in [
+      EnterpriseRoute::Overview,
+      SelfService,
+      MachineAccess,
+      LeaseRequests,
+      OfflineCommerce,
+      DesktopIde,
+      Models,
+      AccountAccess,
+      Agreements,
+      ContractDocuments,
+      Costs,
+      Notifications,
+    ] {
+    let group = match route {
+      Overview => Some(copy(state.locale, "Start", "开始"))
+      MachineAccess =>
+        Some(
+          copy(state.locale, "IaaS · company machines", "IaaS · 企业机器"),
+        )
+      DesktopIde =>
+        Some(
+          copy(
+            state.locale,
+            "PaaS · personal applications",
+            "PaaS · 个人应用",
+          ),
+        )
+      Models =>
+        Some(
+          copy(state.locale, "MaaS · company models", "MaaS · 企业模型"),
+        )
+      Agreements =>
+        Some(copy(state.locale, "Company administration", "企业管理"))
+      _ => None
+    }
+    if group is Some(label) {
+      items.push(
+        @html.p(
+          class="nav-group-label",
+          style=[
+            "grid-column: 1 / -1", "margin: .9rem .65rem .2rem", "color: var(--muted)",
+            "font-size: .72rem", "font-weight: 800",
+          ],
+          label,
+        ),
+      )
+    }
+    items.push(
       @html.button(
         type_="button",
         class=if state.route == route {
@@ -1456,9 +1509,9 @@ fn navigation(
         ),
         on_click=command(emit, Navigate(route)),
         route_label(state.locale, route),
-      )
-    }
-  ]
+      ),
+    )
+  }
   @html.aside(class="enterprise-sidebar", [
     @html.a(class="enterprise-brand", href="./", [
       @html.span(
@@ -2318,6 +2371,72 @@ fn account_access_view(
         )
       },
     ]),
+    if membership.active && membership.roles.contains(OrganizationAdministrator) {
+      @html.section(class="api-key-panel", [
+        @html.div(class="section-heading", [
+          @html.div([
+            @html.h2(copy(state.locale, "Company members", "企业成员")),
+            @html.p(
+              copy(
+                state.locale,
+                "Invite a teammate to this company as a Developer. Their WebIDE and chat remain personal; company models and machines are shared by authorization.",
+                "邀请同事以开发者身份加入企业。各人的 WebIDE 和聊天独立；模型与机器由企业授权共享。",
+              ),
+            ),
+          ]),
+        ]),
+        @html.div(class="field", [
+          @html.label(
+            for_="member-invite-email",
+            copy(state.locale, "Teammate email", "同事邮箱"),
+          ),
+          @html.input(
+            id="member-invite-email",
+            value=state.member_invite_email,
+            maxlength=320,
+            on_input=text_command(emit, value => MemberInviteEmailChanged(value)),
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=state.member_invite_loading ||
+            !state.member_invite_email.contains("@"),
+          on_click=command(emit, SubmitMemberInvite),
+          if state.member_invite_loading {
+            copy(
+              state.locale,
+              "Creating invitation…",
+              "正在创建邀请…",
+            )
+          } else {
+            copy(state.locale, "Create member invitation", "创建成员邀请")
+          },
+        ),
+        match state.member_invite_secret {
+          Some(secret) =>
+            @html.div(class="terms-acceptance", [
+              @html.p(
+                copy(
+                  state.locale,
+                  "Copy this one-time invitation code and send it to the teammate. It will not be displayed again.",
+                  "请复制一次性邀请码并发送给同事；关闭后不再显示。",
+                ),
+              ),
+              @html.code(secret),
+              @html.button(
+                type_="button",
+                class="quiet-button",
+                on_click=command(emit, DismissMemberInviteSecret),
+                copy(state.locale, "Done", "完成"),
+              ),
+            ])
+          None => @html.nothing
+        },
+      ])
+    } else {
+      @html.nothing
+    },
     @html.section(class="api-key-panel", [
       @html.div(class="section-heading", [
         @html.div([

@@ -1477,6 +1477,7 @@ async fn load_console(
     },
     access_packages: [],
     users: [],
+    pending_organizations: [],
     access_grants: [],
     compute_leases: [],
     exclusive_node_leases: [],
@@ -1652,6 +1653,7 @@ priv struct ModelImportReadPayload {
 /// `Leases` pages and by nothing else.
 priv struct AccessReadPayload {
   accounts : Array[@ui.AccountView]
+  pending_organizations : Array[@ui.PendingOrganizationRow]
   trial_summary : @ui.TrialSummary?
   access_packages : Array[@ui.AccessPackageView]
   users : Array[@ui.UserAccessRow]
@@ -1818,6 +1820,11 @@ async fn load_console_access_reads(
   let accounts : Array[@ui.AccountView] = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/accounts", token)),
   )
+  let organizations : Array[@commercial.Organization] = @json.from_json(
+    parse_console_json(
+      request("GET", endpoint, "/v1/commercial/organizations/pending", token),
+    ),
+  )
   let trial_summary : @ui.TrialSummary? = Some(
     @json.from_json(
       parse_console_json(
@@ -1838,8 +1845,25 @@ async fn load_console_access_reads(
       request("GET", endpoint, "/v1/exclusive-node-leases", token),
     ),
   )
+  let pending_organizations : Array[@ui.PendingOrganizationRow] = []
+  for organization in organizations {
+    match organization.legal_profile {
+      Some(profile) =>
+        pending_organizations.push({
+          organization_id: organization.organization_id,
+          display_name: organization.display_name,
+          legal_name: profile.legal_name,
+          country_code: profile.country_code,
+          registration_number: profile.registration_number.unwrap_or(""),
+          registered_address: profile.registered_address,
+          contact_email: profile.billing_contact.email,
+        })
+      None => ()
+    }
+  }
   {
     accounts,
+    pending_organizations,
     trial_summary,
     access_packages,
     users: [
@@ -2409,6 +2433,7 @@ fn merge_console_group_read(
       {
         ..current,
         accounts: payload.accounts,
+        pending_organizations: payload.pending_organizations,
         trial_summary: payload.trial_summary,
         access_packages: payload.access_packages,
         users: payload.users,
@@ -2662,6 +2687,7 @@ fn merge_loaded_console(
     trial_summary: current.trial_summary,
     access_packages: current.access_packages,
     users: current.users,
+    pending_organizations: current.pending_organizations,
     access_grants: current.access_grants,
     compute_leases: current.compute_leases,
     exclusive_node_leases: current.exclusive_node_leases,
@@ -6151,6 +6177,43 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(Refresh) => (model, load_command(model, emit))
+    Console(ApproveOrganization(organization_id, legal_name)) => {
+      let body = { "expected_legal_name": legal_name.to_json() }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/commercial/organizations/\{organization_id}:approve",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Company registration could not be approved. Refresh and review its details again.",
+                "企业注册未能审核通过。请刷新并重新核对资料。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Company registration approved. The customer can refresh and continue.",
+                "企业注册已审核通过；用户刷新后即可继续。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+    }
     Console(ModelSourceQueryChanged(value)) =>
       (
         { ..model, console: { ..model.console, model_source_query: value, }, },
@@ -9065,6 +9128,7 @@ fn update(
           @rabbita.none,
         )
       Console(ApproveEnterpriseLease(_, _))
+      | Console(ApproveOrganization(_, _))
       | Console(RejectEnterpriseLease(_, _)) =>
         (
           {

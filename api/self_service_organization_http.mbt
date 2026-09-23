@@ -41,6 +41,11 @@ priv struct SelfServiceInvitationAcceptanceIntent {
 } derive(FromJson)
 
 ///|
+priv struct SelfServiceInvitationIssueIntent {
+  email : String
+} derive(FromJson)
+
+///|
 priv struct SelfServiceInvitationAcceptanceView {
   invitation : @account.AccountInvitationView
   membership : @portal.EnterpriseMembership
@@ -57,8 +62,14 @@ fn self_service_invitation_accept_path(path : String) -> Bool {
 }
 
 ///|
+fn self_service_invitation_issue_path(path : String) -> Bool {
+  path == "/v1/portal/self/invitations"
+}
+
+///|
 fn self_service_portal_account_path(path : String) -> Bool {
   self_service_organization_path(path) ||
+  self_service_invitation_issue_path(path) ||
   self_service_invitation_accept_path(path)
 }
 
@@ -109,6 +120,17 @@ fn decode_self_service_organization(
 fn decode_self_service_invitation_acceptance(
   body : String,
 ) -> SelfServiceInvitationAcceptanceIntent? {
+  try @json.from_json(@json.parse(body)) catch {
+    _ => None
+  } noraise {
+    value => Some(value)
+  }
+}
+
+///|
+fn decode_self_service_invitation_issue(
+  body : String,
+) -> SelfServiceInvitationIssueIntent? {
   try @json.from_json(@json.parse(body)) catch {
     _ => None
   } noraise {
@@ -177,7 +199,7 @@ fn ApiService::self_service_verification_view(
     } else if self.commercial_provider_adapter_ready() {
       Some("IdentityVerificationQueueRetryRequired")
     } else {
-      Some("CommercialProviderUnavailable")
+      Some("OperatorReviewPending")
     },
   }
 }
@@ -577,6 +599,86 @@ async fn ApiService::accept_self_service_invitation(
 }
 
 ///|
+async fn ApiService::issue_self_service_invitation(
+  self : ApiService,
+  portal : @portal_store.FilePortalStore,
+  account : @account.AccountView,
+  headers : Map[String, String],
+  intent : SelfServiceInvitationIssueIntent,
+) -> HttpReply {
+  guard self.account_store is Some(accounts) else {
+    return api_error(
+      503, "AccountStoreUnavailable", "durable account authority is unavailable",
+      true,
+    )
+  }
+  let view = try
+    portal_view_for_request(portal, account.subject_ref, headers)
+  catch {
+    error => return portal_error_reply(error)
+  } noraise {
+    value => value
+  }
+  guard view.membership.active &&
+    view.membership.roles.contains(OrganizationAdministrator) else {
+    return api_error(
+      403, "OrganizationAdministratorRequired", "company administrator permission is required",
+      false,
+    )
+  }
+  self.commercial_mutex.acquire()
+  let company_active = self.commercial_store
+    .organization(view.membership.organization_id)
+    .map(organization => organization.state == Active)
+    .unwrap_or(false)
+  let project = self.commercial_store.durable_snapshot().commercial.projects
+    .iter()
+    .find_first(project => {
+      project.organization_id == view.membership.organization_id
+    })
+  self.commercial_mutex.release()
+  guard company_active && project is Some(project) else {
+    return api_error(
+      409, "CompanyNotActive", "activate the company and create a project before inviting members",
+      false,
+    )
+  }
+  let email = intent.email.trim().to_lower().to_owned()
+  guard email.contains("@") else {
+    return api_error(
+      400, "InvalidRequest", "enter a valid member email address", false,
+    )
+  }
+  let now = @async.now()
+  let invitation_id = "member-invite-\{digest_hex("\{account.account_id}\n\{email}\n\{now}")[:24]}"
+  let issued = try
+    accounts.issue_invitation(
+      {
+        invitation_id,
+        email,
+        organization_id: view.membership.organization_id,
+        tenant_ref: view.membership.tenant_ref,
+        project_id: project.project_id,
+        created_by: account.subject_ref,
+        expires_unix_ms: now + 604800000L,
+      },
+      now,
+    )
+  catch {
+    error => return account_error(error)
+  } noraise {
+    value => value
+  }
+  self.operator_audit_as(
+    account.subject_ref,
+    "organization.member.invite",
+    invitation_id,
+    "organization:\{view.membership.organization_id}",
+  )
+  json_reply(201, issued.to_json())
+}
+
+///|
 async fn ApiService::handle_self_service_organizations(
   self : ApiService,
   verb : ApiMethod,
@@ -620,6 +722,19 @@ async fn ApiService::handle_self_service_organizations(
         )
       }
       self.accept_self_service_invitation(portal, authorization.account, intent)
+    }
+    (Post, "/v1/portal/self/invitations") => {
+      guard decode_self_service_invitation_issue(body) is Some(intent) else {
+        return api_error(
+          400, "InvalidRequest", "invalid company member invitation", false,
+        )
+      }
+      self.issue_self_service_invitation(
+        portal,
+        authorization.account,
+        headers,
+        intent,
+      )
     }
     _ => api_error(405, "MethodNotAllowed", "method is not allowed", false)
   }
