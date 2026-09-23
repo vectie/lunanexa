@@ -498,6 +498,42 @@ fn enterprise_request_allowed(request : @http.Request, path : String) -> Bool {
 }
 
 ///|
+// Desktop clients redeem a 256-bit, single-use code, then use only their
+// lease-scoped API key for inference. Keep this path separate from cookie
+// sessions and restrict it to the enterprise audience and inference routes.
+fn enterprise_machine_request_allowed(
+  audience : BrowserAudience,
+  method_ : @http.RequestMethod,
+  path : String,
+  headers : Map[String, String],
+) -> Bool {
+  if audience != Enterprise ||
+    header(headers, "Origin") is Some(_) ||
+    header(headers, "Referer") is Some(_) ||
+    header(headers, "Sec-Fetch-Site") is Some(_) ||
+    header(headers, "Sec-Fetch-Mode") is Some(_) ||
+    header(headers, "Sec-Fetch-Dest") is Some(_) {
+    return false
+  }
+  if method_ == Post && path == "/v1/client-handoffs:redeem" {
+    return true
+  }
+  guard header(headers, "Authorization") is Some(authorization) &&
+    authorization.has_prefix("Bearer ") &&
+    authorization.length() > "Bearer ".length() &&
+    authorization.length() <= 4103 else {
+    return false
+  }
+  (method_ == Get && path == "/v1/models") ||
+  (
+    method_ == Post &&
+    [
+      "/v1/chat/completions", "/v1/responses", "/v1/workloads", "/v1/workloads:stream",
+    ].contains(path)
+  )
+}
+
+///|
 fn exact_or_child(path : String, prefix : String) -> Bool {
   path == prefix || path.has_prefix("\{prefix}/")
 }
@@ -669,6 +705,22 @@ async fn handle_proxy(
       handle_logout(store, config, request, reader, connection, host, audience)
     _ if path.has_prefix("/auth/") =>
       send_error(connection, 404, "route-not-found")
+    _ if path.has_prefix("/v1/") &&
+      canonical_api_path(request.path) is Some(canonical) &&
+      enterprise_machine_request_allowed(
+        audience,
+        request.meth,
+        canonical,
+        request.headers,
+      ) =>
+      proxy_request(
+        request,
+        reader,
+        connection,
+        config.control_endpoint,
+        authorization?=header(request.headers, "Authorization"),
+        no_store=true,
+      )
     _ if path.has_prefix("/v1/") =>
       handle_api_proxy(
         store, config, request, reader, connection, host, audience,

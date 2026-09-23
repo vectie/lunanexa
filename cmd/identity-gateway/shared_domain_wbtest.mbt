@@ -76,3 +76,61 @@ test "one HTTPS host keeps management and user sessions in separate paths" {
     "https://identity.internal:8443/realms/lunanexa/.well-known/openid-configuration",
   )
 }
+
+///|
+test "enterprise machine channel only forwards one-time redemption and API-key inference" {
+  let empty : Map[String, String] = Map([])
+  let keyed = { "Authorization": "Bearer lnx_test-only" }
+  assert_true(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Post,
+      "/v1/client-handoffs:redeem",
+      empty,
+    ),
+  )
+  assert_true(
+    enterprise_machine_request_allowed(Enterprise, Get, "/v1/models", keyed),
+  )
+  assert_true(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Post,
+      "/v1/chat/completions",
+      keyed,
+    ),
+  )
+  assert_false(
+    enterprise_machine_request_allowed(
+      Operator,
+      Post,
+      "/v1/client-handoffs:redeem",
+      empty,
+    ),
+  )
+  assert_false(
+    enterprise_machine_request_allowed(Enterprise, Get, "/v1/models", empty),
+  )
+  assert_false(
+    enterprise_machine_request_allowed(Enterprise, Post, "/v1/accounts", keyed),
+  )
+  assert_false(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Post,
+      "/v1/client-handoffs:redeem",
+      { "Origin": "https://attacker.example" },
+    ),
+  )
+  assert_false(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Post,
+      "/v1/chat/completions",
+      {
+        "Authorization": "Bearer lnx_test-only",
+        "Sec-Fetch-Site": "cross-site",
+      },
+    ),
+  )
+}
