@@ -101,3 +101,16 @@ test "ComfyUI delivery rejects text templates while model API keeps them" {
   let video = { ..text, capability: VideoGenerate, }
   assert_true(template_supports_delivery_kind(video, Workspace))
 }
+
+///|
+test "customer one-click catalog selects only the newest template revision" {
+  let first = {
+    ..machine_dedicated_template(),
+    template_id: "h3-comfyui",
+    version: "20260923",
+  }
+  let revised = { ..first, version: "20260923-r2", }
+  let templates = [first, revised]
+  assert_false(latest_delivery_template(first, templates))
+  assert_true(latest_delivery_template(revised, templates))
+}

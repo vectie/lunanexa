@@ -672,3 +672,93 @@ async test "expired held reservation recovers concurrency after restart" {
   )
   @fs.rmdir(temporary, recursive=true)
 }
+
+///|
+async test "exact lease authorization keeps a second live delivery visible" {
+  let temporary = @fs.tmpdir(prefix="lunanexa-workspace-multiple-leases-")
+  let directory = @directory.FileWorkspaceDirectory::open(
+    "\{temporary}/workspace.json",
+    now_unix_ms=1000L,
+  )
+  ignore(directory.create_user(workspace_user("user-1", "subject-1")))
+  ignore(
+    directory.issue_access_grant(
+      access_grant("grant-old", "user-1", Developer, 10000L),
+      1000L,
+    ),
+  )
+  ignore(
+    directory.issue_access_grant(
+      access_grant("grant-new", "user-1", Developer, 20000L),
+      1000L,
+    ),
+  )
+  ignore(
+    directory.issue_lease(
+      workspace_lease("lease-old", "subject-1", Developer, 500L, 10000L, Active),
+      1000L,
+    ),
+  )
+  let new_lease = workspace_lease(
+    "lease-new",
+    "subject-1",
+    Developer,
+    500L,
+    20000L,
+    Active,
+  )
+  ignore(
+    directory.issue_lease(
+      {
+        ..new_lease,
+        limits: {
+          ..new_lease.limits,
+          capabilities: [
+            {
+              capability: VideoGenerate,
+              max_concurrent_requests: 1,
+              max_requests_per_hour: 10,
+              max_input_units_per_request: 8192,
+              max_output_units_per_request: 8192,
+            },
+          ],
+        },
+      },
+      1000L,
+    ),
+  )
+  let selected = directory.authorize_subject_for_tenant_lease(
+    "subject-1",
+    "tenant-opaque-1",
+    "lease-new",
+    Developer,
+    1000L,
+    grant_id="grant-new",
+  )
+  assert_eq(selected.lease.lease_id, "lease-new")
+  assert_eq(selected.access_grant.grant_id, "grant-new")
+  let video = directory.authorize_subject_for_tenant_capability(
+    "subject-1",
+    "tenant-opaque-1",
+    VideoGenerate,
+    1000L,
+  )
+  assert_eq(video.lease.lease_id, "lease-new")
+  let wrong_grant = try {
+    ignore(
+      directory.authorize_subject_for_tenant_lease(
+        "subject-1",
+        "tenant-opaque-1",
+        "lease-new",
+        Developer,
+        11000L,
+        grant_id="grant-old",
+      ),
+    )
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(wrong_grant)
+  @fs.rmdir(temporary, recursive=true)
+}

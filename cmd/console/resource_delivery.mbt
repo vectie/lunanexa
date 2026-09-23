@@ -101,19 +101,16 @@ fn resource_delivery_command(
           is Some(user) else {
           continue
         }
-        guard workspace.access_grants
-          .iter()
-          .find_first(grant => {
-            grant.user_id == user.user_id &&
-            grant.tenant_ref == lease.tenant_ref &&
-            grant.state == GrantActive &&
-            grant.access == Developer &&
-            grant.starts_unix_ms <= now &&
-            grant.expires_unix_ms > now
-          })
-          is Some(grant) else {
-          continue
-        }
+        let grants = workspace.access_grants.filter(grant => {
+          grant.user_id == user.user_id &&
+          grant.tenant_ref == lease.tenant_ref &&
+          grant.state == GrantActive &&
+          grant.access == Developer &&
+          grant.starts_unix_ms <= now &&
+          grant.expires_unix_ms > now
+        })
+        grants.sort_by_key(grant => (grant.expires_unix_ms, grant.grant_id))
+        guard grants.last() is Some(grant) else { continue }
         for membership in portal.memberships {
           if membership.active &&
             membership.subject_ref == lease.subject_ref &&

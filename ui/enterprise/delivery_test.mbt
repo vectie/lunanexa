@@ -69,7 +69,8 @@ test "delivery progress renders truthful cache status and stop confirmation with
     deliveries: panel,
   })
   assert_true(rendered.contains("Preparing model"))
-  assert_true(rendered.contains("1 / 2 MiB"))
+  assert_true(rendered.contains("50% · 1 / 2 MiB"))
+  assert_true(rendered.contains("<progress"))
   assert_true(rendered.contains("2 exclusive nodes"))
   assert_false(rendered.contains("Using verified local model cache"))
   assert_false(rendered.contains("Confirm stop"))

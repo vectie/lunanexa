@@ -63,6 +63,20 @@ fn template_supports_delivery_kind(
 }
 
 ///|
+/// The customer chooser offers the newest immutable revision of each
+/// template. Older revisions remain addressable by operators and existing
+/// deliveries, but must not compete with a corrected one-click profile.
+fn latest_delivery_template(
+  template : @deployment.ModelServiceTemplate,
+  templates : Array[@deployment.ModelServiceTemplate],
+) -> Bool {
+  !templates.any(other => {
+    other.template_id == template.template_id &&
+    other.version.compare(template.version) > 0
+  })
+}
+
+///|
 pub fn ApiService::with_delivery_store(
   self : ApiService,
   delivery_store : @delivery.DeliveryStore,
@@ -225,7 +239,7 @@ async fn ApiService::handle_delivery(
     )
   }
   let now = @async.now()
-  let authorization = try
+  let _authorization = try
     directory.authorize_subject_for_tenant(
       subject,
       view.membership.tenant_ref,
@@ -241,16 +255,36 @@ async fn ApiService::handle_delivery(
   } noraise {
     value => value
   }
-  let reservations = scheduler.snapshot().node_reservations
+  let reservation_candidates = scheduler.snapshot().node_reservations
     .unwrap_or([])
     .filter(value => {
       value.state == Reserved &&
       value.request.tenant_ref == view.membership.tenant_ref &&
       value.request.organization_id == view.membership.organization_id &&
-      value.request.lease_id == authorization.lease.lease_id &&
       value.request.starts_unix_ms <= now &&
       value.request.expires_unix_ms > now
     })
+  let reservations = []
+  for value in reservation_candidates {
+    let authorized = try {
+      ignore(
+        directory.authorize_subject_for_tenant_lease(
+          subject,
+          value.request.tenant_ref,
+          value.request.lease_id,
+          Developer,
+          now,
+          grant_id=value.request.authority_ref,
+        ),
+      )
+      true
+    } catch {
+      _ => false
+    }
+    if authorized {
+      reservations.push(value)
+    }
+  }
   let model_templates = match self.deployment_store {
     Some(catalog) => catalog.templates()
     None => []
@@ -258,6 +292,9 @@ async fn ApiService::handle_delivery(
   if verb == Get && path == "/v1/portal/self/delivery-options" {
     let templates : Array[Json] = []
     for template in model_templates {
+      if !latest_delivery_template(template, model_templates) {
+        continue
+      }
       for kind in [@delivery.DeliveryKind::Workspace, ModelApi] {
         if !template_supports_delivery_kind(template, kind) {
           continue
@@ -363,12 +400,17 @@ async fn ApiService::handle_delivery(
       }
       Some(template.artifact.digest)
     }
-    let expiry = if authorization.lease.expires_unix_ms <
-      reservation.request.expires_unix_ms {
-      authorization.lease.expires_unix_ms
-    } else {
-      reservation.request.expires_unix_ms
-    }
+    let authorization = directory.authorize_subject_for_tenant_lease(
+      subject,
+      view.membership.tenant_ref,
+      reservation.request.lease_id,
+      Developer,
+      now,
+      grant_id=reservation.request.authority_ref,
+    )
+    let expiry = authorization.lease.expires_unix_ms
+      .min(reservation.request.expires_unix_ms)
+      .min(authorization.access_grant.expires_unix_ms)
     let operation = try {
       let created = deliveries.create(
         {
@@ -422,8 +464,25 @@ async fn ApiService::handle_delivery(
     }
     let id = action.split(":").next().unwrap_or("").to_owned()
     guard owned.iter().find_first(value => value.operation_id == id)
-      is Some(operation) &&
-      operation.intent.lease_id == authorization.lease.lease_id else {
+      is Some(operation) else {
+      return api_error(404, "NotFound", "delivery was not found", false)
+    }
+    let authorized = try {
+      ignore(
+        directory.authorize_subject_for_tenant_lease(
+          subject,
+          view.membership.tenant_ref,
+          operation.intent.lease_id,
+          Developer,
+          now,
+          grant_id=operation.intent.authorization_ref,
+        ),
+      )
+      true
+    } catch {
+      _ => false
+    }
+    if !authorized {
       return api_error(404, "NotFound", "delivery was not found", false)
     }
     let action : DeliveryAction = try @json.from_json(@json.parse(body)) catch {

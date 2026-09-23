@@ -48,11 +48,13 @@ async fn ApiService::delivery_binding(
     }
   }
   let active = try {
-    let authorization = directory.authorize_subject_for_tenant(
+    let authorization = directory.authorize_subject_for_tenant_lease(
       authority.subject_ref,
       authority.tenant_ref,
+      operation.intent.lease_id,
       Developer,
       @async.now(),
+      grant_id=operation.intent.authorization_ref,
     )
     authorization.lease.lease_id == operation.intent.lease_id &&
     authorization.access_grant.grant_id == operation.intent.authorization_ref

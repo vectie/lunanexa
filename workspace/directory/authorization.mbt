@@ -211,3 +211,80 @@ pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant(
       raise @workspace.WorkspaceDirectoryError::AccessDenied(LeaseUnavailable)
   }
 }
+
+///|
+/// Resolve the exact lease backing a delivery or reservation. A subject may
+/// hold multiple live leases in one tenant; selecting the first one would
+/// incorrectly hide or revoke a newer delivery.
+pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant_lease(
+  self : FileWorkspaceDirectory,
+  subject_ref : String,
+  tenant_ref : String,
+  lease_id : String,
+  required_access : @workspace.WorkspaceAccess,
+  now_unix_ms : Int64,
+  grant_id? : String,
+) -> @workspace.WorkspaceAuthorization {
+  let snapshot = self.snapshot(now_unix_ms)
+  let user = find_subject_user(snapshot, subject_ref)
+  if user.state != UserActive {
+    raise @workspace.WorkspaceDirectoryError::AccessDenied(UserUnavailable)
+  }
+  let grants = snapshot.access_grants.filter(grant => {
+    grant.user_id == user.user_id &&
+    grant.tenant_ref == tenant_ref &&
+    (grant_id is None || grant_id == Some(grant.grant_id))
+  })
+  if !grants.any(grant => current_grant(grant, required_access, now_unix_ms)) {
+    raise @workspace.WorkspaceDirectoryError::AccessDenied(AccessUnavailable)
+  }
+  let leases = snapshot.leases.filter(lease => {
+    lease.lease_id == lease_id &&
+    lease.subject_ref == subject_ref &&
+    lease.tenant_ref == tenant_ref
+  })
+  match
+    select_authorization(user, grants, leases, required_access, now_unix_ms) {
+    Some(authorization) => authorization
+    None =>
+      raise @workspace.WorkspaceDirectoryError::AccessDenied(LeaseUnavailable)
+  }
+}
+
+///|
+/// Resolve a live lease that actually carries the requested workload budget.
+/// Media endpoints must not mistake a concurrently active text-only lease for
+/// the tenant's video entitlement.
+pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant_capability(
+  self : FileWorkspaceDirectory,
+  subject_ref : String,
+  tenant_ref : String,
+  capability : @workspace.WorkspaceCapability,
+  now_unix_ms : Int64,
+) -> @workspace.WorkspaceAuthorization {
+  let snapshot = self.snapshot(now_unix_ms)
+  let user = find_subject_user(snapshot, subject_ref)
+  if user.state != UserActive {
+    raise @workspace.WorkspaceDirectoryError::AccessDenied(UserUnavailable)
+  }
+  let grants = snapshot.access_grants.filter(grant => {
+    grant.user_id == user.user_id && grant.tenant_ref == tenant_ref
+  })
+  if !grants.any(grant => current_grant(grant, Developer, now_unix_ms)) {
+    raise @workspace.WorkspaceDirectoryError::AccessDenied(AccessUnavailable)
+  }
+  let leases = snapshot.leases.filter(lease => {
+    lease.subject_ref == subject_ref &&
+    lease.tenant_ref == tenant_ref &&
+    lease.limits.capabilities.any(limit => {
+      limit.capability == capability &&
+      limit.max_concurrent_requests >= 1 &&
+      limit.max_requests_per_hour >= 1
+    })
+  })
+  match select_authorization(user, grants, leases, Developer, now_unix_ms) {
+    Some(authorization) => authorization
+    None =>
+      raise @workspace.WorkspaceDirectoryError::AccessDenied(LeaseUnavailable)
+  }
+}

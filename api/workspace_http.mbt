@@ -92,11 +92,22 @@ async fn ApiService::workspace_admit(
     )
   }
   let now = @async.now()
+  guard workspace_capability(request.capability) is Some(capability) else {
+    return (
+      Some(
+        api_error(
+          403, "WorkspaceCapabilityDenied", "the active workspace lease does not authorize this capability",
+          false,
+        ),
+      ),
+      false,
+    )
+  }
   let authorization = try
-    directory.authorize_subject_for_tenant(
+    directory.authorize_subject_for_tenant_capability(
       subject_ref,
       request.tenant_ref,
-      Developer,
+      capability,
       now,
     )
   catch {
@@ -113,8 +124,8 @@ async fn ApiService::workspace_admit(
   } noraise {
     value => value
   }
-  guard workspace_capability(request.capability) is Some(capability) &&
-    @workspace.capability_limit(authorization.lease, capability) is Some(limit) else {
+  guard @workspace.capability_limit(authorization.lease, capability)
+    is Some(limit) else {
     return (
       Some(
         api_error(
