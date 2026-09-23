@@ -1,0 +1,49 @@
+# The public domain is provisioned alongside the existing IP:port services.
+# Keep those services available until the remaining /mana and /user routes have
+# passed browser and authentication tests.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: lunanexa-public-docs-strip
+  namespace: lunanexa
+spec:
+  stripPrefix:
+    prefixes:
+      - /docs
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: lunanexa-public-docs-slash
+  namespace: lunanexa
+spec:
+  redirectRegex:
+    regex: '^https://suanli\.kechuangfuwu\.com/docs$'
+    replacement: 'https://suanli.kechuangfuwu.com/docs/'
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lunanexa-public-docs
+  namespace: lunanexa
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`suanli.kechuangfuwu.com`) && Path(`/docs`)
+      kind: Rule
+      middlewares:
+        - name: lunanexa-public-docs-slash
+      services:
+        - name: lunanexa-coursebook-public
+          port: 4173
+    - match: Host(`suanli.kechuangfuwu.com`) && PathPrefix(`/docs/`)
+      kind: Rule
+      middlewares:
+        - name: lunanexa-public-docs-strip
+      services:
+        - name: lunanexa-coursebook-public
+          port: 4173
+  tls:
+    secretName: lunanexa-public-suanli-tls
