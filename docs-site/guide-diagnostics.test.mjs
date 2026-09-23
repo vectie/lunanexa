@@ -109,7 +109,7 @@ test("stale knowledge and adapter outages remain explicit missing evidence, not 
   });
   assert.equal(result.knowledge.stale, true);
   assert.equal(result.components.find((component) => component.code === "KnowledgeIndex").health, "stale");
-  assert.equal(result.components.find((component) => component.code === "LunaNexaController").health, "unavailable");
+  assert.equal(result.components.find((component) => component.code === "PlatformController").health, "unavailable");
   assert.ok(result.missing_evidence.includes("controller-health"));
   assert.ok(result.missing_evidence.includes("operator-alerts"));
   assert.ok(result.missing_evidence.includes("reconciliation-plan"));

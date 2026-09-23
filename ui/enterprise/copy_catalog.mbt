@@ -604,7 +604,7 @@ fn enterprise_copy(
     ViewTrialApiKey =>
       @i18n.copy(locale, "View trial API key", "查看体验 API 密钥")
     YourLunanexaTenant =>
-      @i18n.copy(locale, "YOUR LUNANEXA TENANT", "您的 LUNANEXA 租户")
+      @i18n.copy(locale, "YOUR PLATFORM TENANT", "您的平台租户")
     NeedAManagedCapacityException =>
       @i18n.copy(
         locale, "Need a managed capacity exception?", "需要受管算力例外？",
@@ -716,8 +716,8 @@ fn enterprise_copy(
       )
     LunanexaStoresOnlyItsHashThis =>
       @i18n.copy(
-        locale, "LunaNexa stores only its hash. This secret cannot be retrieved after you close this dialog.",
-        "LunaNexa 仅存储其哈希值。关闭此对话框后将无法再次获取该密钥。",
+        locale, "The platform stores only its hash. This secret cannot be retrieved after you close this dialog.",
+        "平台仅存储其哈希值。关闭此对话框后将无法再次获取该密钥。",
       )
     Name => @i18n.copy(locale, "Name", "名称")
     KeyId => @i18n.copy(locale, "Key ID", "密钥 ID")
@@ -750,8 +750,8 @@ fn enterprise_copy(
       @i18n.copy(locale, "Identity & membership", "身份与成员资格")
     AuthenticationIsSuppliedByTheTrusted =>
       @i18n.copy(
-        locale, "Authentication is supplied by the trusted ingress. LunaNexa stores only the opaque subject and authorization records.",
-        "身份验证由受信任入口提供。LunaNexa 仅存储不透明主体和授权记录。",
+        locale, "Authentication is supplied by the trusted ingress. The platform stores only the opaque subject and authorization records.",
+        "身份验证由受信任入口提供。平台仅存储不透明主体和授权记录。",
       )
     ActiveMembership =>
       @i18n.copy(locale, "Active membership", "有效成员资格")
@@ -829,8 +829,8 @@ fn enterprise_copy(
     ReviewSign => @i18n.copy(locale, "Review & sign", "审阅并签署")
     LunanexaRequestsAProviderHandoffAnd =>
       @i18n.copy(
-        locale, "LunaNexa requests a provider handoff and never collects signing credentials.",
-        "LunaNexa 仅请求服务商交接，不会收集签署凭据。",
+        locale, "The platform requests a provider handoff and never collects signing credentials.",
+        "平台仅请求服务商交接，不会收集签署凭据。",
       )
     SigningLinkExpired =>
       @i18n.copy(locale, "Signing link expired", "签署链接已过期")
@@ -843,7 +843,7 @@ fn enterprise_copy(
     TheProviderLinkWasBlockedBecause =>
       @i18n.copy(
         locale, "The provider link was blocked because it is not a valid, unexpired HTTPS action.",
-        "服务商链接不是有效且未过期的 HTTPS 操作地址，已被 LunaNexa 阻止。",
+        "服务商链接不是有效且未过期的 HTTPS 操作地址，已被平台阻止。",
       )
     TheProviderLinkIsNoLonger =>
       @i18n.copy(
@@ -953,8 +953,8 @@ fn enterprise_copy(
       )
     AmountCurrencyScaleAndRetrySafe =>
       @i18n.copy(
-        locale, "Amount, currency, scale and retry-safe idempotency are derived from the finalized billing period. You confirm before leaving LunaNexa.",
-        "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生。离开 LunaNexa 前由您确认。",
+        locale, "Amount, currency, scale and retry-safe idempotency are derived from the finalized billing period. You confirm before leaving the platform.",
+        "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生。离开平台前由您确认。",
       )
     RefreshPaymentStatus =>
       @i18n.copy(locale, "Refresh payment status", "刷新支付状态")
@@ -1284,8 +1284,8 @@ fn enterprise_copy(
       )
     ChooseAGpuAndApprovedModel =>
       @i18n.copy(
-        locale, "Choose a GPU and approved model. LunaNexa transfers, deploys, and operates the endpoint.",
-        "选择 GPU 与已批准模型，由 LunaNexa 完成传输、部署与端点运维。",
+        locale, "Choose a GPU and approved model. The platform transfers, deploys, and operates the endpoint.",
+        "选择 GPU 与已批准模型，由平台完成传输、部署与端点运维。",
       )
     YouReceiveAPrivateEndpoint =>
       @i18n.copy(

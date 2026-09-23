@@ -600,7 +600,8 @@ test("administrator guide surface is bilingual, text-only, and absent from the p
     readFile(resolve(siteRoot, "app.js"), "utf8"),
   ]);
   assert.match(html, /data-dashboard hidden/);
-  assert.match(html, /Administrator · Read only/);
+  assert.match(html, /管理员 · 只读/);
+  assert.match(html, /能源谷“创未来”生态街区/);
   assert.match(script, /指南诊断/);
   assert.match(script, /aggregate-alert-codes|Allowed data/);
   assert.match(script, /textContent/);

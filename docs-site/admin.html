@@ -1,30 +1,30 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Role-protected, read-only LunaNexa guide diagnostics for administrators.">
-  <title>LunaNexa · Guide diagnostics</title>
+  <meta name="description" content="Role-protected, read-only platform guide diagnostics for administrators.">
+  <title>能源谷“创未来”生态街区 · Guide diagnostics</title>
   <link rel="stylesheet" href="./admin.css?v=2">
   <script src="./admin.js?v=1" defer></script>
 </head>
 <body>
   <header class="admin-topbar">
-    <a href="./" class="admin-brand"><span>LN</span><strong>LunaNexa</strong></a>
+    <a href="./" class="admin-brand"><span>创</span><strong>能源谷“创未来”生态街区</strong></a>
     <div class="admin-actions">
-      <label><span class="visually-hidden" data-language-label>Language</span><select data-locale><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
-      <a href="./" data-coursebook-link>Coursebook</a>
+      <label><span class="visually-hidden" data-language-label>语言</span><select data-locale><option value="zh-CN" selected>简体中文</option><option value="en">English</option></select></label>
+      <a href="./" data-coursebook-link>使用指南</a>
     </div>
   </header>
   <main>
     <header class="page-heading">
-      <div><small data-kicker>Administrator · Read only</small><h1 data-title>Guide diagnostics</h1><p data-summary>Live, bounded health and evidence for troubleshooting the documentation guide. No commands, prompts, logs, credentials, or tenant records are available here.</p></div>
-      <button type="button" data-refresh><span data-refresh-label>Refresh</span></button>
+      <div><small data-kicker>管理员 · 只读</small><h1 data-title>指南诊断</h1><p data-summary>查看文档指南的实时健康状态和有界证据；这里不提供命令、提示词、日志、凭据或租户记录。</p></div>
+      <button type="button" data-refresh><span data-refresh-label>刷新</span></button>
     </header>
-    <section class="boundary" data-boundary>Authenticated operator view · Aggregate evidence only · Every request is audited</section>
-    <section class="loading" data-loading role="status">Loading role-protected diagnostics…</section>
-    <section class="error" data-error hidden role="alert"><strong data-error-title>Diagnostics are unavailable.</strong><p data-error-message>The operator identity, adapter, or controller evidence could not be verified.</p></section>
+    <section class="boundary" data-boundary>已认证的管理视图 · 仅聚合证据 · 每次请求均审计</section>
+    <section class="loading" data-loading role="status">正在加载受角色保护的诊断信息…</section>
+    <section class="error" data-error hidden role="alert"><strong data-error-title>诊断暂不可用。</strong><p data-error-message>无法验证管理员身份、适配器或控制器证据。</p></section>
     <div data-dashboard hidden>
       <section class="hero-grid">
         <article class="summary-card"><span data-overall-label>Adapter health</span><strong data-adapter-health>—</strong><small data-correlation>—</small></article>
