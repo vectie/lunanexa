@@ -55,11 +55,17 @@ NetworkPolicies, and removes the new Service and Secrets only when their
 ownership labels match this rollout. Review concurrent changes before a late
 manual restore, because the saved snapshots represent the preparation time.
 
-Network isolation remains deny by default. The policy additions allow only
-external traffic to the internal gateway's public port 5000, traffic from that
-gateway to the WebIDE gateway's port 8082, and traffic from the WebIDE gateway
-back to the existing controller and private MoonGate routes. The script does
-not change the namespace default-deny policy.
+Network isolation remains deny by default. The policy additions allow
+external traffic to the internal gateway's public port 5000, its scoped DNS
+lookups through kube-dns and traffic to the WebIDE gateway's port 8082, and
+traffic from the WebIDE gateway back to the existing controller and private
+MoonGate routes. The script does not change the namespace default-deny policy.
+
+On 2026-09-23, the preparation script ran against the live Kubernetes API with
+synthetic pinned references and no apply. All 11 prepared manifests passed
+server dry-run; all eight rollback snapshots passed server replace dry-run.
+The exact temporary directory and generated observation token were removed.
+This is schema/topology preflight, not a live cutover or browser acceptance.
 
 Public browser acceptance must still verify `/connect`, the tenant-bound
 workspace, `/v1` with an issued test credential, file persistence and model

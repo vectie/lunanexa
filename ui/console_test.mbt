@@ -1592,7 +1592,7 @@ test "model import recovery and adoption preserve every safety gate" {
     verified_html.contains("Checksum passed; four safety gates remain"),
   )
   assert_true(
-    verified_html.contains("Pending · Artifact signature and provenance"),
+    verified_html.contains("Pending · Artifact integrity and provenance"),
   )
   assert_true(verified_html.contains("Pending · License acceptance"))
   assert_true(
