@@ -38,10 +38,15 @@ async fn blob(root : String, name : String, value : Json) -> Json {
 
 ///|
 async fn main {
-  guard @env.args() is [_, base, source, plugin, packages, root, image] else {
-    fail(
-      "Usage: package-comfyui-arm64.mbtx BASE_OCI_DIRECTORY COMFYUI_SOURCE PLUGIN_SOURCE PYTHON_PACKAGES NEW_OUTPUT IMAGE",
-    )
+  let (base, source, plugin, packages, root, image, gpu_base) = match @env.args() {
+    [_, base, source, plugin, packages, root, image] =>
+      (base, source, plugin, packages, root, image, false)
+    [_, base, source, plugin, packages, root, image, "--gpu-base"] =>
+      (base, source, plugin, packages, root, image, true)
+    _ =>
+      fail(
+        "Usage: package-comfyui-arm64.mbtx BASE_OCI_DIRECTORY COMFYUI_SOURCE PLUGIN_SOURCE PYTHON_PACKAGES NEW_OUTPUT IMAGE [--gpu-base]",
+      )
   }
   guard hash(plugin + "/comfyui_vllm_omni/utils/video_transport.py") ==
     "b2e10c5c7402ac1fa453c6db28c9c9cf32321d687ef223bf4394deec411367b1" &&
@@ -116,11 +121,21 @@ async fn main {
     plugin + "/.",
     layer + "/opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni",
   ]).run()
-  @shell.Cmd("cp", [
-    "-a",
-    packages + "/.",
-    layer + "/usr/local/lib/python3.12/site-packages",
-  ]).run()
+  let site_packages = layer + "/usr/local/lib/python3.12/site-packages"
+  if gpu_base {
+    // The reviewed dependency bundle contains CPU PyTorch. A GPU runtime base
+    // already owns CUDA PyTorch and its matching torchvision/torchaudio stack;
+    // shadowing those files would silently turn Spark inference back into CPU.
+    @shell.Cmd("rsync", [
+      "-a", "--exclude=/torch", "--exclude=/torch-*.dist-info", "--exclude=/torchgen",
+      "--exclude=/functorch", "--exclude=/torchvision", "--exclude=/torchvision.libs",
+      "--exclude=/torchvision-*.dist-info", "--exclude=/torchaudio",
+      "--exclude=/torchaudio-*.dist-info", "--exclude=/triton",
+      "--exclude=/triton-*.dist-info", packages + "/", site_packages + "/",
+    ]).run()
+  } else {
+    @shell.Cmd("cp", ["-a", packages + "/.", site_packages]).run()
+  }
   let archive = root + "/comfy-layer.tar"
   @shell.Cmd("tar", [
     "--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--mode=u+rwX,go+rX",
@@ -142,10 +157,19 @@ async fn main {
   runtime["User"] = Json::string("1000:1000")
   runtime["WorkingDir"] = Json::string("/opt/ComfyUI")
   runtime["Entrypoint"] = ["python3", "/opt/ComfyUI/main.py"]
-  runtime["Cmd"] = [
-    "--cpu", "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch", "--disable-api-nodes",
-    "--disable-all-custom-nodes", "--whitelist-custom-nodes", "ComfyUI-vLLM-Omni",
-  ]
+  runtime["Cmd"] = if gpu_base {
+    [
+      "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch", "--disable-api-nodes",
+      "--disable-all-custom-nodes", "--whitelist-custom-nodes", "ComfyUI-vLLM-Omni",
+      "--user-directory", "/workspace/user", "--input-directory", "/workspace/input",
+      "--output-directory", "/workspace/output", "--temp-directory", "/workspace/temp",
+    ]
+  } else {
+    [
+      "--cpu", "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch", "--disable-api-nodes",
+      "--disable-all-custom-nodes", "--whitelist-custom-nodes", "ComfyUI-vLLM-Omni",
+    ]
+  }
   let environment = match runtime.get("Env") {
     Some(Array(values)) => values
     _ => []
@@ -153,6 +177,15 @@ async fn main {
   environment.push("PYTHONDONTWRITEBYTECODE=1".to_json())
   environment.push("PYTHONUNBUFFERED=1".to_json())
   environment.push("HOME=/workspace".to_json())
+  if gpu_base {
+    // The CUDA base uses Debian's /usr/bin/python3, whose default search path
+    // is dist-packages rather than the bundled wheel's site-packages path.
+    environment.push(
+      "PYTHONPATH=/usr/local/lib/python3.12/site-packages".to_json(),
+    )
+    environment.push("USER=comfyui".to_json())
+    environment.push("TORCHINDUCTOR_CACHE_DIR=/workspace/torch-cache".to_json())
+  }
   runtime["Env"] = environment.to_json()
   runtime["ExposedPorts"] = { "8188/tcp": {} }
   let labels = match runtime.get("Labels") {

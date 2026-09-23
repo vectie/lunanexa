@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comfyui-z-image-spark
+  namespace: aigc-acceptance-20260915
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: comfyui-z-image-spark
+  template:
+    metadata:
+      labels:
+        app: comfyui-z-image-spark
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        kubernetes.io/hostname: spark-57f5-98a504ed
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: prepare-workspace
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/comfyui-workspace@sha256:ca35f31f1f47308f45b921c19831222cd280e01906752914a2978645df647848
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - mkdir -p /workspace/user /workspace/input /workspace/output /workspace/temp
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: comfyui
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/comfyui-workspace@sha256:ca35f31f1f47308f45b921c19831222cd280e01906752914a2978645df647848
+          imagePullPolicy: IfNotPresent
+          args:
+            - --listen
+            - 0.0.0.0
+            - --port
+            - "8188"
+            - --disable-auto-launch
+            - --disable-api-nodes
+            - --disable-all-custom-nodes
+            - --whitelist-custom-nodes
+            - ComfyUI-vLLM-Omni
+            - --user-directory
+            - /workspace/user
+            - --input-directory
+            - /workspace/input
+            - --output-directory
+            - /workspace/output
+            - --temp-directory
+            - /workspace/temp
+          env:
+            - name: PYTHONPATH
+              value: /usr/local/lib/python3.12/site-packages
+            - name: USER
+              value: comfyui
+            - name: TORCHINDUCTOR_CACHE_DIR
+              value: /workspace/torch-cache
+          ports:
+            - containerPort: 8188
+              name: http
+          resources:
+            requests:
+              cpu: "4"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "16"
+              memory: 110Gi
+              nvidia.com/gpu: "1"
+          startupProbe:
+            httpGet:
+              path: /system_stats
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /system_stats
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: model-files
+              mountPath: /opt/ComfyUI/models/diffusion_models
+              subPath: split_files/diffusion_models
+              readOnly: true
+            - name: model-files
+              mountPath: /opt/ComfyUI/models/text_encoders
+              subPath: split_files/text_encoders
+              readOnly: true
+            - name: model-files
+              mountPath: /opt/ComfyUI/models/vae
+              subPath: split_files/vae
+              readOnly: true
+            - name: model-files
+              mountPath: /opt/ComfyUI/models/loras
+              subPath: split_files/loras
+              readOnly: true
+      volumes:
+        - name: workspace
+          hostPath:
+            path: /home/wlc003s/workspaces/comfyui-z-image-internal
+            type: Directory
+        - name: model-files
+          hostPath:
+            path: /home/wlc003s/models/z_image_turbo
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comfyui-z-image-spark
+  namespace: aigc-acceptance-20260915
+spec:
+  type: ClusterIP
+  selector:
+    app: comfyui-z-image-spark
+  ports:
+    - name: http
+      port: 8188
+      targetPort: http
