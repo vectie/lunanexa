@@ -38,6 +38,8 @@ NSS_MODULES = (
 
 
 def sudo(password, command):
+    if os.geteuid() == 0:
+        return subprocess.run(command, capture_output=True, text=True)
     return subprocess.run(
         ["sudo", "-S", "-k"] + command,
         input=password + "\n",
@@ -92,7 +94,7 @@ def main():
     for path in (arguments.binary, arguments.aux_binary):
         if not os.path.exists(path):
             sys.exit(f"no binary at {path}")
-    if not arguments.sudo_password:
+    if not arguments.sudo_password and os.geteuid() != 0:
         sys.exit("missing sudo credentials; pass --sudo-password or set LUNANEXA_SUDO_PASSWORD")
 
     work = arguments.work
