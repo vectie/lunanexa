@@ -30,12 +30,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-AGENT="$SOURCE/_build/native/release/build/cmd/node/node.exe"
+AGENT="$SOURCE/_build/native/release/build/vectie/lunanexa/cmd/node/node.exe"
 [ -x "$AGENT" ] || { echo "no agent binary at $AGENT; build cmd/node first" >&2; exit 1; }
 if [ -z "$PROXY" ]; then
   for candidate in \
-    "$SOURCE/_build/native/release/build/cmd/loopback-proxy/loopback-proxy" \
-    "$SOURCE/_build/native/release/build/cmd/loopback-proxy/loopback-proxy.exe" \
+    "$SOURCE/_build/native/release/build/vectie/lunanexa/cmd/loopback-proxy/loopback-proxy.exe" \
     "$HOME/lunanexa-loopback-proxy-arm64" \
     "$HOME/lunanexa-loopback-proxy"; do
     [ -x "$candidate" ] && PROXY="$candidate" && break
