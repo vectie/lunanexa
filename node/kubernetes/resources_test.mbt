@@ -173,6 +173,55 @@ fn runtime_assignment() -> @contracts.DesiredAssignment {
 }
 
 ///|
+test "managed model revisions mount as directories in Kubernetes" {
+  let base = runtime_assignment()
+  let revision = {
+    ..base,
+    artifact: {
+      ..base.artifact,
+      uri: "modelstore://models/modelscope/qwen3-0.6b",
+      signature_ref: "modelstore://models/modelscope/qwen3-0.6b/lunanexa-source-manifest.json",
+    },
+  }
+  let rendered = @kubernetes.render_runtime(
+    runtime_settings(),
+    revision,
+    "/var/lib/lunanexa/models/qwen3-0.6b",
+    revision.artifact.digest,
+    revision.artifact.size_bytes,
+    1000L,
+  )
+  assert_true(
+    rendered.pod
+    is {
+      "spec": {
+        "volumes": [{ "hostPath": { "type": String("Directory"), .. }, .. }],
+        ..
+      },
+      ..
+    },
+  )
+  let file = @kubernetes.render_runtime(
+    runtime_settings(),
+    base,
+    "/var/lib/lunanexa/models/model",
+    base.artifact.digest,
+    base.artifact.size_bytes,
+    1000L,
+  )
+  assert_true(
+    file.pod
+    is {
+      "spec": {
+        "volumes": [{ "hostPath": { "type": String("File"), .. }, .. }],
+        ..
+      },
+      ..
+    },
+  )
+}
+
+///|
 test "runtime rendering binds exact GPU UUID through DRA without bypassing scheduling" {
   let assignment = runtime_assignment()
   let resources = @kubernetes.render_runtime(

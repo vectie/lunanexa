@@ -188,7 +188,7 @@ fn metadata(
 }
 
 ///|
-/// Render only a previously verified signed assignment and materialized blob.
+/// Render only a previously verified signed assignment and materialized artifact.
 /// CPU-only assignments are represented honestly with zero accelerators, not
 /// fabricated GPU inventory. This function does not verify signatures or files.
 pub fn render_runtime(
@@ -363,7 +363,16 @@ pub fn render_runtime(
   let volumes : Array[Json] = [
     {
       "name": "model",
-      "hostPath": { "path": artifact_path.to_json(), "type": "File" },
+      "hostPath": {
+        "path": artifact_path.to_json(),
+        "type": if assignment.artifact.uri.has_prefix(
+            @contracts.model_store_scheme,
+          ) {
+          "Directory"
+        } else {
+          "File"
+        },
+      },
     },
   ]
   let mounts : Array[Json] = [
