@@ -425,7 +425,7 @@ priv enum AppMessage {
 
 ///|
 extern "js" fn configured_endpoint() -> String =
-  #| () => globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || ""
+  #| () => globalThis.LUNANEXA_API_ENDPOINT || (globalThis.location?.pathname?.startsWith("/user/") ? `${globalThis.location.origin}/user` : globalThis.location?.origin || "")
 
 ///|
 extern "js" fn configured_docs_url() -> String =
@@ -463,8 +463,8 @@ extern "js" fn demo_mode() -> Bool =
 ///|
 extern "js" fn stored_locale_preference() -> String =
   #| () => {
-  #|   try { return globalThis.localStorage?.getItem("lunanexa.locale") || ""; }
-  #|   catch (_) { return ""; }
+  #|   try { return globalThis.localStorage?.getItem("lunanexa.locale") || "zh-CN"; }
+  #|   catch (_) { return "zh-CN"; }
   #| }
 
 ///|
@@ -678,7 +678,8 @@ extern "js" fn request_promise(
 ///|
 extern "js" fn gateway_session_promise() -> @js.Promise =
   #| async () => {
-  #|   const response = await fetch("/auth/session", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/user/") ? "/user" : "";
+  #|   const response = await fetch(`${prefix}/auth/session`, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
   #|     credentials: "same-origin",
@@ -692,7 +693,8 @@ extern "js" fn gateway_session_promise() -> @js.Promise =
 ///|
 extern "js" fn gateway_logout_promise(csrf_token : String) -> @js.Promise =
   #| async csrfToken => {
-  #|   const response = await fetch("/auth/logout", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/user/") ? "/user" : "";
+  #|   const response = await fetch(`${prefix}/auth/logout`, {
   #|     method: "POST",
   #|     headers: {
   #|       "Accept": "application/json",
@@ -716,7 +718,8 @@ extern "js" fn password_login_promise(
 ) -> @js.Promise =
   #| async (username, password) => {
   #|   if (!username || !password) return JSON.stringify({ status: 0, body: "" });
-  #|   const response = await fetch("/auth/password", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/user/") ? "/user" : "";
+  #|   const response = await fetch(`${prefix}/auth/password`, {
   #|     method: "POST",
   #|     headers: { "Accept": "application/json", "Content-Type": "application/json" },
   #|     credentials: "same-origin",
@@ -739,7 +742,8 @@ extern "js" fn registration_promise(
 ) -> @js.Promise =
   #| async (email, displayName, password) => {
   #|   if (!email || !displayName || !password) return JSON.stringify({ status: 0, body: "" });
-  #|   const response = await fetch("/auth/register", {
+  #|   const prefix = globalThis.location?.pathname?.startsWith("/user/") ? "/user" : "";
+  #|   const response = await fetch(`${prefix}/auth/register`, {
   #|     method: "POST",
   #|     headers: { "Accept": "application/json", "Content-Type": "application/json" },
   #|     credentials: "same-origin",
@@ -6383,7 +6387,11 @@ fn app_view(
           ),
           @html.a(
             class="sso-start",
-            href="/auth/oidc/start?audience=enterprise",
+            href=if configured_endpoint().has_suffix("/user") {
+              "/user/auth/oidc/start?audience=enterprise"
+            } else {
+              "/auth/oidc/start?audience=enterprise"
+            },
             portal_copy(
               locale, "Sign in with the organization identity provider", "使用组织身份提供商登录",
             ),

@@ -7,9 +7,9 @@
     "inspected_at": "2026-09-16T07:08:05Z"
   },
   "sources": [
-    {"id":"readme","path":"README.mbt.md","digest":"sha256:772e4f08bac70cdae9f47cbeebdfc10fe52b0d033297992f39262ffc10d7a066","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:a265296c6e5479b0c6198f04ec37a99a938d5432ae00478b805ffa67d613a854","kind":"product-contract","public":true},
-    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:78bba360ca07bf9eba89efe674ba8209400129701ba843a647a3c3df8d38a4f5","kind":"architecture","public":true},
+    {"id":"readme","path":"README.mbt.md","digest":"sha256:11005dd45ede7e8aa978da171853a2ee777128516a58f6999d541704487f82d7","kind":"overview","public":true},
+    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:718e4b87a9ecedf53146b7c16f38df113cf8e207efa0292f798dedf163b2cd6d","kind":"product-contract","public":true},
+    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:0be54c42eff150973e1caa36433f7ca708faba25258bae714e25554bc06d62aa","kind":"architecture","public":true},
     {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b","kind":"readiness","public":true},
     {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:a29645906fce2a2c801dd209aa3f2a99f6ef29f5894b0d9b6f7bdeec13e1ab28","kind":"deployment","public":true},
     {"id":"platform-identity","path":"docs/PLATFORM_IDENTITY.md","digest":"sha256:8d46fb1218fe1e2a7847fe5a0ef00b5f3e58969ef644a7f2e6dee6816293a3a9","kind":"identity-deployment","public":true},
@@ -26,7 +26,7 @@
     {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:8cb8c5c56271b12ca834a4db3cdcd29648873bada77c641211c2ce6c49874bef","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:70727a770a5dc165e489c7d1f00a4c88f6c4b26af326f9e9a840e60d0a7672af","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:4f7cb7abc92b34f8fac8c4030343c88858ef6317a5e70277fb4beb65a69ab50e","kind":"implementation","public":true},
     {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220","kind":"acceptance-script","public":true},
     {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:d90914886d9306d8a644692638a36b864d701bc30c7c26efec13bfd5d82d91b4","kind":"hardware-qualification","public":true},
     {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:7e76c21f22800ccb6338d1f0567d26e8b42faedd48a9ff8040e834acb07a72f7","kind":"runtime-qualification","public":true},

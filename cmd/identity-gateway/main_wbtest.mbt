@@ -116,6 +116,8 @@ test "OIDC transport override preserves the public issuer path" {
   let http_config = {
     ..config,
     issuer: "http://203.0.113.10:5006/realms/lunanexa",
+    operator_redirect_uri: "http://203.0.113.10:5003/auth/oidc/callback",
+    enterprise_redirect_uri: "http://203.0.113.10:5005/auth/oidc/callback",
   }
   assert_false(http_config.browser_secure())
   let migration = {

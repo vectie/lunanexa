@@ -153,12 +153,20 @@ fn load_config() -> GatewayConfig raise {
   if public_http && oidc_transport_origin is None {
     raise Failure("public HTTP requires a separate HTTPS OIDC transport")
   }
-  validate_browser_endpoint(operator_redirect_uri, public_http)
-  validate_browser_endpoint(enterprise_redirect_uri, public_http)
+  validate_browser_redirects(
+    operator_redirect_uri, enterprise_redirect_uri, public_http,
+  )
   let operator_host = configured_host(operator_redirect_uri)
   let enterprise_host = configured_host(enterprise_redirect_uri)
-  guard operator_host != enterprise_host else {
-    raise Failure("operator and enterprise OIDC hosts must differ")
+  if operator_host == enterprise_host {
+    guard operator_redirect_uri ==
+      "https://\{operator_host}/mana/auth/oidc/callback" &&
+      enterprise_redirect_uri ==
+      "https://\{enterprise_host}/user/auth/oidc/callback" else {
+      raise Failure(
+        "shared OIDC host requires the /mana and /user callback paths",
+      )
+    }
   }
   let operator_client_secret = required_environment(
     "LUNANEXA_OIDC_OPERATOR_CLIENT_SECRET",
@@ -341,6 +349,26 @@ fn validate_browser_endpoint(value : String, public_http : Bool) -> Unit raise {
 }
 
 ///|
+fn validate_browser_redirects(
+  operator_redirect_uri : String,
+  enterprise_redirect_uri : String,
+  public_http : Bool,
+) -> Unit raise {
+  // The existing OIDC issuer can remain on its HTTP migration address while
+  // the new public browser callbacks are served over the shared HTTPS domain.
+  let https_callbacks = operator_redirect_uri.has_prefix("https://") &&
+    enterprise_redirect_uri.has_prefix("https://")
+  validate_browser_endpoint(
+    operator_redirect_uri,
+    public_http && !https_callbacks,
+  )
+  validate_browser_endpoint(
+    enterprise_redirect_uri,
+    public_http && !https_callbacks,
+  )
+}
+
+///|
 fn valid_browser_cookie_name(name : String, public_http : Bool) -> Bool {
   let prefix = if public_http { "lunanexa_http_" } else { "__Host-" }
   name.has_prefix(prefix) &&
@@ -358,7 +386,8 @@ fn valid_browser_cookie_name(name : String, public_http : Bool) -> Bool {
 
 ///|
 fn GatewayConfig::browser_secure(self : GatewayConfig) -> Bool {
-  self.issuer.has_prefix("https://")
+  self.operator_redirect_uri.has_prefix("https://") &&
+  self.enterprise_redirect_uri.has_prefix("https://")
 }
 
 ///|
@@ -375,12 +404,52 @@ fn GatewayConfig::host_audience(
   self : GatewayConfig,
   host : String,
 ) -> BrowserAudience? {
+  if self.operator_host == self.enterprise_host {
+    return None
+  }
   if host == self.operator_host {
     Some(Operator)
   } else if host == self.enterprise_host {
     Some(Enterprise)
   } else {
     None
+  }
+}
+
+///|
+fn GatewayConfig::browser_audience(
+  self : GatewayConfig,
+  host : String,
+  forwarded_prefix : String?,
+) -> BrowserAudience? {
+  if self.operator_host != self.enterprise_host {
+    return self.host_audience(host)
+  }
+  if host != self.operator_host {
+    return None
+  }
+  match forwarded_prefix {
+    Some("/mana") => Some(Operator)
+    Some("/user") => Some(Enterprise)
+    _ => None
+  }
+}
+
+///|
+fn GatewayConfig::public_ui_path(
+  self : GatewayConfig,
+  audience : BrowserAudience,
+) -> String {
+  if self.operator_host == self.enterprise_host {
+    match audience {
+      Operator => "/mana/"
+      Enterprise => "/user/"
+    }
+  } else {
+    match audience {
+      Operator => "/console/"
+      Enterprise => "/enterprise/"
+    }
   }
 }
 

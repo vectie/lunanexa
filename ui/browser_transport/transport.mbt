@@ -10,7 +10,9 @@ pub extern "js" fn allows(
   #| (endpoint, pageOrigin, publicHttpOrigin) => {
   #|   try {
   #|     const url = new URL(endpoint);
-  #|     if (url.username || url.password || url.search || url.hash || url.pathname !== '/') return false;
+  #|     if (url.username || url.password || url.search || url.hash) return false;
+  #|     const sameOriginSite = url.protocol === 'https:' && url.origin === pageOrigin && ['/mana', '/user'].includes(url.pathname);
+  #|     if (url.pathname !== '/' && !sameOriginSite) return false;
   #|     if (url.protocol === 'https:') return true;
   #|     if (url.protocol !== 'http:') return false;
   #|     if (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return true;

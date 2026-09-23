@@ -1,6 +1,5 @@
-# The public domain is provisioned alongside the existing IP:port services.
-# Keep those services available until the remaining /mana and /user routes have
-# passed browser and authentication tests.
+# The shared public domain runs alongside the existing IP:port services.
+# Keep the old routes during the three-site browser acceptance period.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
