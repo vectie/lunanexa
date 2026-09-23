@@ -8,8 +8,8 @@
   },
   "images": {
     "control": "lunanexa-control:20260918",
-    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node:20260923-arm64-host-metrics",
-    "nodeComment": "Now pulled from the cluster's own registry. The import path remains for the first install, when the registry may be empty."
+    "node": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:85a5464f0f3c6de6a5757a8bf65284a2f446e31c55f74ea1ace3c58df134e48d",
+    "nodeComment": "The arm64 node agent is pinned by digest. The import path remains for the first install, when the registry may be empty."
   },
   "runtime": {
     "backend": "kubernetes",
@@ -99,11 +99,6 @@
       {
         "source": "lunanexa-control:20260918",
         "target": "moon/lunanexa-control:20260918"
-      },
-      {
-        "source": "lunanexa-node:20260920-arm64-r5",
-        "target": "lunanexa/node:20260920-arm64-r5",
-        "node": "spark-25e2-3d35c8fd"
       }
     ],
     "mirrors": {
@@ -113,8 +108,7 @@
     "caOnManagement": "/home/HwHiAiUser/moon-public/trust/registry-20260830/registry-ca.crt",
     "clusterIP": "10.43.216.245",
     "pull": [
-      "moon/lunaflux@sha256:bec873094c71e35bdba5497f8ef42845318ff6af5e8bedc873d89a7558aaecbb",
-      "lunanexa/node:20260923-arm64-host-metrics"
+      "lunanexa/node@sha256:85a5464f0f3c6de6a5757a8bf65284a2f446e31c55f74ea1ace3c58df134e48d"
     ]
   }
 }
